@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gruff"
+version = "0.1.0.dev0"
+description = "Python project quality analyser."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Matthew Hansen" }]
+dependencies = [
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "mypy>=1.10",
+    "ruff>=0.5",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+gruff = "gruff.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gruff"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/gruff/py.typed" = "gruff/py.typed"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra -q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["build", "dist", ".venv", ".tox"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gruff"]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+files = ["src/gruff"]
+show_error_codes = true
+
+# gruff's own configuration (dogfooding).
+# All values are optional; defaults live in the rule registry.
+[tool.gruff]
+
+[tool.gruff.paths]
+ignore = []
+
+[tool.gruff.allowlists]
+acceptedAbbreviations = []
+secretPreviews = []
+
+# Per-rule overrides go in [tool.gruff.rules."<rule-id>"]:
+# [tool.gruff.rules."size.file-length"]
+# enabled = true
+# thresholds = { warning = 400, error = 800 }

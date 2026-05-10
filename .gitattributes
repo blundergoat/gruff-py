@@ -1,0 +1,38 @@
+# Normalize text files to LF on commit; let git decide what's text.
+* text=auto eol=lf
+
+# Per-extension overrides (explicit > auto for source/config).
+*.py           text eol=lf
+*.pyi          text eol=lf
+*.sh           text eol=lf
+*.yml          text eol=lf
+*.yaml         text eol=lf
+*.md           text eol=lf
+*.ini          text eol=lf
+*.toml         text eol=lf
+*.cfg          text eol=lf
+*.json         text eol=lf
+.editorconfig  text eol=lf
+
+# Windows-only files: keep CRLF.
+*.bat          text eol=crlf
+*.cmd          text eol=crlf
+*.ps1          text eol=crlf
+
+# Binary files — don't normalize, don't diff.
+*.png          binary
+*.jpg          binary
+*.jpeg         binary
+*.gif          binary
+*.ico          binary
+*.pdf          binary
+*.whl          binary
+*.zip          binary
+*.gz           binary
+*.tar          binary
+*.tar.gz       binary
+*.7z           binary
+*.exe          binary
+*.dll          binary
+*.so           binary
+*.dylib        binary

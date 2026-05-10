@@ -1,0 +1,80 @@
+# ----- Build artifacts -----
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+
+# ----- Python bytecode and shared objects -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# ----- Virtual environments -----
+.venv/
+venv/
+env/
+ENV/
+__pypackages__/
+
+# ----- Local config and secrets (dotenv-style files) -----
+# (Note: NOT a virtualenv. `.env` is almost always a KEY=value file with secrets.)
+.env
+.env.local
+.env.*.local
+.envrc.local
+
+# ----- Coverage and test caches -----
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.pytest_cache/
+.hypothesis/
+coverage.xml
+*.cover
+
+# ----- Type checker / linter / formatter caches -----
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+cython_debug/
+
+# ----- Publishing -----
+.pypirc
+
+# ----- Logs and pip artifacts -----
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ----- IDE / editor -----
+.idea/
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
+*.swp
+*.swo
+.*.swp
+.*.swo
+*~
+*.bak
+
+# ----- OS files -----
+.DS_Store
+Thumbs.db
+
+# ----- Claude Code (per-user overrides; shared .claude/settings.json stays tracked) -----
+.claude/settings.local.json
+
+# ----- Not ignored on purpose (keep tracked) -----
+# uv.lock          → committed: gruff is a CLI app; lock = reproducible installs.
+# gruff-baseline.json, .gruff-history.json → committed: project-level state.
+# .python-version  → if present, used for team Python pinning.
