@@ -32,6 +32,17 @@ class RuleRegistry:
         from gruff.rule.dead_code.unused_private_function_rule import (
             UnusedPrivateFunctionRule,
         )
+        from gruff.rule.naming.boolean_prefix_rule import BooleanPrefixRule
+        from gruff.rule.naming.confusing_name_rule import ConfusingNameRule
+        from gruff.rule.naming.generic_function_rule import GenericFunctionRule
+        from gruff.rule.naming.hungarian_notation_rule import HungarianNotationRule
+        from gruff.rule.naming.identifier_quality_rule import IdentifierQualityRule
+        from gruff.rule.naming.module_name_mismatch_rule import ModuleNameMismatchRule
+        from gruff.rule.naming.parameter_type_name_rule import ParameterTypeNameRule
+        from gruff.rule.naming.short_variable_rule import ShortVariableRule
+        from gruff.rule.naming.test_naming_consistency_rule import (
+            TestNamingConsistencyRule,
+        )
         from gruff.rule.size.attribute_count_rule import AttributeCountRule
         from gruff.rule.size.average_function_length_rule import AverageFunctionLengthRule
         from gruff.rule.size.class_length_rule import ClassLengthRule
@@ -60,6 +71,16 @@ class RuleRegistry:
                 # Dead-code pillar (M04)
                 UnusedPrivateAttributeRule(),
                 UnusedPrivateFunctionRule(),
+                # Naming pillar (M05)
+                BooleanPrefixRule(),
+                ConfusingNameRule(),
+                GenericFunctionRule(),
+                HungarianNotationRule(),
+                IdentifierQualityRule(),
+                ModuleNameMismatchRule(),
+                ParameterTypeNameRule(),
+                ShortVariableRule(),
+                TestNamingConsistencyRule(),
                 # Size pillar (M02)
                 AttributeCountRule(),
                 AverageFunctionLengthRule(),
