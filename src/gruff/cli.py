@@ -18,6 +18,7 @@ from gruff.reporting.json_reporter import JsonReporter
 from gruff.reporting.text_reporter import TextReporter
 from gruff.rule.context import RuleContext
 from gruff.rule.registry import RuleRegistry
+from gruff.scoring.composite_finding_factory import CompositeFindingFactory
 from gruff.scoring.score_calculator import ScoreCalculator
 from gruff.source.discovery import SourceDiscovery
 from gruff.version import VERSION
@@ -76,11 +77,10 @@ def analyse(
 
     if not no_config:
         loader = ConfigLoader(project_root, config)
-        target_path = config_path or (project_root / "pyproject.toml")
         try:
-            config = loader.load(target_path if config_path else None)
-            if target_path.exists():
-                config_loaded_from = str(target_path)
+            config, source = loader.load(config_path)
+            if source is not None:
+                config_loaded_from = str(source)
         except ConfigError as exc:
             diagnostics.append(RunDiagnostic(type="config-error", message=str(exc)))
 
@@ -119,6 +119,10 @@ def analyse(
 
     context = RuleContext(project_root=str(project_root), config=config)
     findings = registry.analyse(units, context)
+    findings = CompositeFindingFactory().synthesise(findings)
+    findings.sort(
+        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
+    )
     score = ScoreCalculator().calculate(findings)
 
     exit_code = _compute_exit_code(findings, diagnostics, fail_threshold)

@@ -1,0 +1,110 @@
+import ast
+
+from gruff.config.analysis_config import AnalysisConfig
+from gruff.config.rule_settings import RuleSettings
+from gruff.parser.analysis_unit import AnalysisUnit
+from gruff.rule.context import RuleContext
+from gruff.rule.waste.unused_import_rule import UnusedImportRule
+from gruff.source.source_file import SourceFile
+
+
+def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
+    tree = ast.parse(source)
+    return AnalysisUnit(
+        file=SourceFile(
+            absolute_path=f"/{display_path}",
+            display_path=display_path,
+            type="python",
+        ),
+        source=source,
+        tree=tree,
+    )
+
+
+def _ctx() -> RuleContext:
+    rule = UnusedImportRule()
+    return RuleContext(
+        project_root="/",
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True)}),
+    )
+
+
+def test_unused_simple_import_fires():
+    src = "import os\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["name"] == "os"
+
+
+def test_used_import_does_not_fire():
+    src = "import os\nprint(os.getcwd())\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_unused_from_import_fires():
+    src = "from os.path import join\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["name"] == "join"
+
+
+def test_used_from_import_does_not_fire():
+    src = "from os.path import join\np = join('a', 'b')\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_aliased_import_uses_alias_name():
+    src = "import numpy as np\nprint(np.array)\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_aliased_import_unused_fires():
+    src = "import numpy as np\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["name"] == "np"
+
+
+def test_dotted_import_binds_top_level():
+    # ``import a.b.c`` binds ``a`` locally.
+    src = "import os.path\nprint(os.path.join('x', 'y'))\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_all_export_suppresses():
+    src = "import os\n__all__ = ['os']\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_noqa_suppresses():
+    src = "import os  # noqa: F401\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_init_py_is_skipped():
+    src = "import os\nimport sys\n"
+    findings = UnusedImportRule().analyse(_unit(src, display_path="pkg/__init__.py"), _ctx())
+    assert findings == []
+
+
+def test_star_import_not_counted():
+    src = "from os import *\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_imported_decorator_used():
+    src = "from functools import lru_cache\n@lru_cache\ndef f(): return 1\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_definition():
+    d = UnusedImportRule().definition()
+    assert d.id == "waste.unused-import"

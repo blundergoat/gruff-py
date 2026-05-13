@@ -1,0 +1,21 @@
+# gruff configuration — `.gruff.yaml` (ADR-006)
+#
+# This file is dogfood: gruff-py uses it when running `gruff analyse src/`
+# against itself. It mirrors the (mostly-empty) `[tool.gruff]` block in
+# `pyproject.toml`. `.gruff.yaml` takes precedence over `pyproject.toml`
+# when both exist.
+
+paths:
+  ignore: []
+
+allowlists:
+  acceptedAbbreviations: []
+  secretPreviews: []
+
+# Per-rule overrides go under `rules.<rule-id>`:
+# rules:
+#   size.file-length:
+#     enabled: true
+#     thresholds:
+#       warning: 400
+#       error: 800

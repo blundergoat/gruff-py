@@ -20,9 +20,65 @@ class RuleRegistry:
 
     @classmethod
     def defaults(cls) -> "RuleRegistry":
+        from gruff.rule.complexity.cognitive_complexity_rule import CognitiveComplexityRule
+        from gruff.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplexityRule
+        from gruff.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
+        from gruff.rule.complexity.maintainability_index_rule import MaintainabilityIndexRule
+        from gruff.rule.complexity.nesting_depth_rule import NestingDepthRule
+        from gruff.rule.complexity.npath_complexity_rule import NPathComplexityRule
+        from gruff.rule.dead_code.unused_private_attribute_rule import (
+            UnusedPrivateAttributeRule,
+        )
+        from gruff.rule.dead_code.unused_private_function_rule import (
+            UnusedPrivateFunctionRule,
+        )
+        from gruff.rule.size.attribute_count_rule import AttributeCountRule
+        from gruff.rule.size.average_function_length_rule import AverageFunctionLengthRule
+        from gruff.rule.size.class_length_rule import ClassLengthRule
         from gruff.rule.size.file_length_rule import FileLengthRule
+        from gruff.rule.size.function_length_rule import FunctionLengthRule
+        from gruff.rule.size.parameter_count_rule import ParameterCountRule
+        from gruff.rule.size.public_method_count_rule import PublicMethodCountRule
+        from gruff.rule.waste.commented_out_code_rule import CommentedOutCodeRule
+        from gruff.rule.waste.empty_class_rule import EmptyClassRule
+        from gruff.rule.waste.empty_function_rule import EmptyFunctionRule
+        from gruff.rule.waste.one_line_function_rule import OneLineFunctionRule
+        from gruff.rule.waste.redundant_variable_rule import RedundantVariableRule
+        from gruff.rule.waste.unreachable_code_rule import UnreachableCodeRule
+        from gruff.rule.waste.unused_import_rule import UnusedImportRule
+        from gruff.rule.waste.unused_parameter_rule import UnusedParameterRule
 
-        return cls([FileLengthRule()])
+        return cls(
+            [
+                # Complexity pillar (M03)
+                CognitiveComplexityRule(),
+                CyclomaticComplexityRule(),
+                HalsteadVolumeRule(),
+                MaintainabilityIndexRule(),
+                NestingDepthRule(),
+                NPathComplexityRule(),
+                # Dead-code pillar (M04)
+                UnusedPrivateAttributeRule(),
+                UnusedPrivateFunctionRule(),
+                # Size pillar (M02)
+                AttributeCountRule(),
+                AverageFunctionLengthRule(),
+                ClassLengthRule(),
+                FileLengthRule(),
+                FunctionLengthRule(),
+                ParameterCountRule(),
+                PublicMethodCountRule(),
+                # Waste pillar (M04)
+                CommentedOutCodeRule(),
+                EmptyClassRule(),
+                EmptyFunctionRule(),
+                OneLineFunctionRule(),
+                RedundantVariableRule(),
+                UnreachableCodeRule(),
+                UnusedImportRule(),
+                UnusedParameterRule(),
+            ]
+        )
 
     def all(self) -> list[Rule]:
         return list(self._rules.values())

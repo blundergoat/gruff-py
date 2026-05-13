@@ -6,6 +6,7 @@ from gruff.config.analysis_config import AnalysisConfig
 from gruff.config.exceptions import ConfigError
 from gruff.config.rule_selection import RuleSelection
 from gruff.config.rule_settings import RuleSettings
+from gruff.config.yaml_loader import load_gruff_yaml
 
 VALID_TOP_LEVEL_KEYS = frozenset(
     {
@@ -35,27 +36,73 @@ class ConfigLoader:
         self._project_root = Path(project_root)
         self._defaults = defaults
 
-    def load(self, config_path: Path | None = None) -> AnalysisConfig:
-        path = config_path if config_path is not None else self._project_root / "pyproject.toml"
+    def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
+        """Load config, honouring `.gruff.yaml` / `pyproject.toml` precedence.
+
+        Returns ``(config, source_path)`` where ``source_path`` is the file the
+        config was loaded from, or ``None`` if no config file was found and
+        defaults are used.
+
+        Precedence:
+
+        1. Explicit *config_path* (format auto-detected by extension).
+        2. ``.gruff.yaml`` in the project root.
+        3. ``pyproject.toml`` ``[tool.gruff]`` in the project root.
+        4. Built-in defaults.
+        """
+        if config_path is not None:
+            return self._load_explicit(config_path)
+
+        yaml_path = self._project_root / ".gruff.yaml"
+        if yaml_path.exists():
+            section = load_gruff_yaml(yaml_path)
+            if not section:
+                return self._defaults, yaml_path
+            self._validate_top_level(section, source=str(yaml_path))
+            return self._apply(section), yaml_path
+
+        toml_path = self._project_root / "pyproject.toml"
+        if toml_path.exists():
+            toml_section = self._load_toml_section(toml_path)
+            if toml_section is None:
+                return self._defaults, None
+            return self._apply(toml_section), toml_path
+
+        return self._defaults, None
+
+    def _load_explicit(self, path: Path) -> tuple[AnalysisConfig, Path | None]:
         if not path.exists():
-            return self._defaults
+            return self._defaults, None
+        if path.suffix in {".yaml", ".yml"}:
+            section = load_gruff_yaml(path)
+            if not section:
+                return self._defaults, path
+            self._validate_top_level(section, source=str(path))
+            return self._apply(section), path
+        toml_section = self._load_toml_section(path)
+        if toml_section is None:
+            return self._defaults, path
+        return self._apply(toml_section), path
+
+    def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
         try:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"Failed to read config file {path}: {exc}") from exc
-
         section = data.get("tool", {}).get("gruff")
         if section is None:
-            return self._defaults
+            return None
         if not isinstance(section, dict):
             raise ConfigError("[tool.gruff] must be a table.")
+        self._validate_top_level(section, source=f"[tool.gruff] in {path}")
+        return section
 
+    @staticmethod
+    def _validate_top_level(section: dict[str, Any], source: str) -> None:
         unknown = set(section.keys()) - VALID_TOP_LEVEL_KEYS
         if unknown:
-            raise ConfigError(f"Unknown [tool.gruff] keys: {sorted(unknown)}")
-
-        return self._apply(section)
+            raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
 
     def _apply(self, section: dict[str, Any]) -> AnalysisConfig:
         config = self._defaults
