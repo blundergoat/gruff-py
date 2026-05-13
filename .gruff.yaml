@@ -12,6 +12,15 @@ allowlists:
   acceptedAbbreviations: []
   secretPreviews: []
 
+selection:
+  tiers: []
+  pillars: []
+  rules: []
+  excludePillars: []
+  excludeRules: []
+
+rules: {}
+
 # Per-rule overrides go under `rules.<rule-id>`:
 # rules:
 #   size.file-length:
