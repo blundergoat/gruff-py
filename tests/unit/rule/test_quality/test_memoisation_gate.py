@@ -1,8 +1,8 @@
-"""M09a gate: scope detection runs exactly once per AnalysisUnit per analyse run.
+"""Scope detection must run exactly once per AnalysisUnit per analyse run.
 
-The milestone's Exit Criterion says the helper MUST memoise. This test diffs the
-``compute_count`` counter before/after invoking all 10 M09a rules on a single
-unit and asserts the delta is 1, not 10. Failing this gate blocks M09b/M09c.
+The helper MUST memoise across rules. This test diffs the ``compute_count``
+counter before/after invoking the full registry on a single unit and asserts
+the delta is 1, not N — proving every test-quality rule shares the cached scope.
 """
 
 from gruff.rule.registry import RuleRegistry
@@ -40,7 +40,7 @@ def test_scope_computed_exactly_once_per_unit():
     registry.analyse([unit], default_ctx())
     after = compute_count()
     # Exactly one scope-map computation for this unit, regardless of how many
-    # M09a rules consumed it.
+    # test-quality rules consumed it.
     assert after - before == 1, f"Expected 1 compute; saw {after - before}"
 
 

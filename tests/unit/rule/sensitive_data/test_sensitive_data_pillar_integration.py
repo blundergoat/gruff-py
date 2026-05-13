@@ -2,7 +2,7 @@
 
 Proves that:
 1. Every shipped sensitive-data rule can fire on its respective shape.
-2. The M01 SourceTextRule routing works for sensitive-data without new wiring:
+2. The SourceTextRule routing works for sensitive-data without new wiring:
    a planted secret in a .json file is detected, and a .py-only rule does NOT
    fire on the same file.
 3. Findings never leak the raw secret — every metadata.preview is redacted.
@@ -43,7 +43,7 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
 
 
 def test_aws_key_fires_on_json_file_via_text_seam():
-    """Audit per M08 task [SAFE]: planted AWS key in a .json file is detected."""
+    """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
     src = '{"region": "us-east-1", "key": "AKIAIOSFODNN7EXAMPLE"}\n'
     findings = RuleRegistry.defaults().analyse(
         [make_unit(src, display_path="aws.json", source_type="text")], default_ctx()
@@ -78,7 +78,7 @@ def test_redact_preview_shape():
 
 
 def test_npm_integrity_style_hashes_suppressed():
-    """package-lock.json content is ignored at the discovery layer (M08 lockfile filter)."""
+    """package-lock.json content is ignored at the discovery layer via the lockfile filter."""
     # We don't have the discovery layer here, but the integration test for that lives in
     # the discovery module. We assert that a high-entropy hash in non-lockfile content
     # still produces a finding (positive control).

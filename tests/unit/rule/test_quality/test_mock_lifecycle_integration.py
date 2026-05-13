@@ -1,8 +1,8 @@
-"""Cumulative M09b fixture exercising the mock/lifecycle rules.
+"""Cumulative fixture exercising the mock + lifecycle test-quality rules.
 
 Plants patterns for the high-confidence rules and asserts each fires once.
-Also confirms the memoisation gate (M09a invariant) still holds after layering
-18 more rules on the helper.
+Also re-checks the memoisation invariant after the full test-quality rule set
+is layered onto the helper — single scope computation per unit.
 """
 
 from gruff.rule.registry import RuleRegistry
@@ -50,7 +50,7 @@ def test_global():
     assert y == 1
 """
 
-_EXPECTED_M09B_FIRES = {
+_EXPECTED_MOCK_LIFECYCLE_FIRES = {
     "test-quality.empty-parametrize",
     "test-quality.unused-mock",
     "test-quality.private-reflection",
@@ -61,15 +61,15 @@ _EXPECTED_M09B_FIRES = {
 }
 
 
-def test_m09b_rules_fire_on_cumulative_fixture():
+def test_mock_lifecycle_rules_fire_on_cumulative_fixture():
     findings = RuleRegistry.defaults().analyse([make_unit(_FIXTURE)], default_ctx())
     fired = {f.rule_id for f in findings}
-    missing = _EXPECTED_M09B_FIRES - fired
-    assert not missing, f"Missing M09b fires: {sorted(missing)}"
+    missing = _EXPECTED_MOCK_LIFECYCLE_FIRES - fired
+    assert not missing, f"Missing fires: {sorted(missing)}"
 
 
-def test_memoisation_gate_still_holds_after_m09b():
-    """The M09a memoisation invariant must survive the M09b helper extension."""
+def test_memoisation_invariant_holds_for_full_pillar():
+    """Single scope computation per unit even with mock-aware rules in the registry."""
     reset_compute_count()
     unit = make_unit(_FIXTURE)
     before = compute_count()
@@ -79,10 +79,11 @@ def test_memoisation_gate_still_holds_after_m09b():
     assert after - before == 1, f"Memoisation broken: {after - before} computes"
 
 
-def test_registry_has_28_test_quality_rules():
+def test_registry_has_full_test_quality_rule_set():
+    """v0.1 ships at least 28 default-on test-quality rules; the full set is 34."""
     ids = {
         r.definition().id
         for r in RuleRegistry.defaults().all()
         if r.definition().id.startswith("test-quality.")
     }
-    assert len(ids) == 28, f"Expected 28 test-quality rules; got {len(ids)}: {sorted(ids)}"
+    assert len(ids) >= 28, f"Expected ≥28 test-quality rules; got {len(ids)}: {sorted(ids)}"

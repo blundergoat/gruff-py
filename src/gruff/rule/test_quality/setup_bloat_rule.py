@@ -1,7 +1,7 @@
 """``test-quality.setup-bloat`` — ``setUp`` / ``setup_method`` / fixture is too long.
 
 A setup that's longer than the typical test signals over-shared state. Default
-threshold: 30 lines. Uses the M02 ``lines_for_size`` helper.
+threshold: 30 lines. Uses the ``lines_for_size`` helper.
 """
 
 import ast

@@ -4,7 +4,7 @@ Best-effort: identify the *target* function from the test's name
 (``test_my_function`` → ``my_function``) and compare line counts. If the test is
 more than 2× the SUT's length, fire.
 
-Uses the M02 ``lines_for_size`` helper per ADR-002 so the metric matches the
+Uses the ``lines_for_size`` helper per ADR-002 so the metric matches the
 size pillar's policy.
 """
 

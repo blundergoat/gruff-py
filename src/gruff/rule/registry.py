@@ -107,6 +107,8 @@ class RuleRegistry:
         from gruff.rule.test_quality.mock_without_expectation_rule import (
             MockWithoutExpectationRule,
         )
+        from gruff.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
+        from gruff.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
         from gruff.rule.test_quality.mystery_guest_rule import MysteryGuestRule
         from gruff.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
         from gruff.rule.test_quality.no_assertions_rule import NoAssertionsRule
@@ -114,6 +116,15 @@ class RuleRegistry:
             ParametrizeAnnotationRule,
         )
         from gruff.rule.test_quality.private_reflection_rule import PrivateReflectionRule
+        from gruff.rule.test_quality.pytest_coverage_source_missing_rule import (
+            PytestCoverageSourceMissingRule,
+        )
+        from gruff.rule.test_quality.pytest_deprecations_not_fatal_rule import (
+            PytestDeprecationsNotFatalRule,
+        )
+        from gruff.rule.test_quality.pytest_strict_config_missing_rule import (
+            PytestStrictConfigMissingRule,
+        )
         from gruff.rule.test_quality.repeated_structure_missing_parametrize_rule import (
             RepeatedStructureMissingParametrizeRule,
         )
@@ -130,6 +141,7 @@ class RuleRegistry:
             TestFunctionTooLongRule,
         )
         from gruff.rule.test_quality.test_longer_than_sut_rule import TestLongerThanSutRule
+        from gruff.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
         from gruff.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
         from gruff.rule.test_quality.trivial_snapshot_rule import TrivialSnapshotRule
         from gruff.rule.test_quality.unused_mock_rule import UnusedMockRule
@@ -144,17 +156,17 @@ class RuleRegistry:
 
         return cls(
             [
-                # Complexity pillar (M03)
+                # Complexity pillar
                 CognitiveComplexityRule(),
                 CyclomaticComplexityRule(),
                 HalsteadVolumeRule(),
                 MaintainabilityIndexRule(),
                 NestingDepthRule(),
                 NPathComplexityRule(),
-                # Dead-code pillar (M04)
+                # Dead-code pillar
                 UnusedPrivateAttributeRule(),
                 UnusedPrivateFunctionRule(),
-                # Documentation pillar (M06)
+                # Documentation pillar
                 MissingClassDocstringRule(),
                 MissingFunctionDocstringRule(),
                 MissingModuleDocstringRule(),
@@ -165,7 +177,7 @@ class RuleRegistry:
                 StaleParamDocRule(),
                 TodoDensityRule(),
                 UselessDocstringRule(),
-                # Naming pillar (M05)
+                # Naming pillar
                 BooleanPrefixRule(),
                 ConfusingNameRule(),
                 GenericFunctionRule(),
@@ -175,7 +187,7 @@ class RuleRegistry:
                 ParameterTypeNameRule(),
                 ShortVariableRule(),
                 TestNamingConsistencyRule(),
-                # Security pillar (M07)
+                # Security pillar
                 DangerousFunctionCallRule(),
                 DisabledSslVerificationRule(),
                 ErrorSuppressionRule(),
@@ -188,7 +200,7 @@ class RuleRegistry:
                 UnsafePickleRule(),
                 VariableImportRule(),
                 WeakCryptoRule(),
-                # Sensitive-data pillar (M08)
+                # Sensitive-data pillar
                 ApiKeyPatternRule(),
                 AwsAccessKeyRule(),
                 DatabaseUrlPasswordRule(),
@@ -198,7 +210,7 @@ class RuleRegistry:
                 PhiPatternRule(),
                 PiiTestFixtureRule(),
                 PrivateKeyRule(),
-                # Test-quality pillar (M09a + M09b)
+                # Test-quality pillar
                 ConditionalLogicRule(),
                 EagerTestRule(),
                 EmptyParametrizeRule(),
@@ -211,11 +223,16 @@ class RuleRegistry:
                 MagicNumberAssertionRule(),
                 MockOnlyTestRule(),
                 MockWithoutExpectationRule(),
+                MockingDomainObjectRule(),
+                MultipleAaaCyclesRule(),
                 MysteryGuestRule(),
                 NamingConsistencyRule(),
                 NoAssertionsRule(),
                 ParametrizeAnnotationRule(),
                 PrivateReflectionRule(),
+                PytestCoverageSourceMissingRule(),
+                PytestDeprecationsNotFatalRule(),
+                PytestStrictConfigMissingRule(),
                 RepeatedStructureMissingParametrizeRule(),
                 SetupBloatRule(),
                 SkippedWithoutReasonRule(),
@@ -224,10 +241,11 @@ class RuleRegistry:
                 TautologicalTypeAssertionRule(),
                 TestFunctionTooLongRule(),
                 TestLongerThanSutRule(),
+                TestdoxReadabilityRule(),
                 TrivialAssertionRule(),
                 TrivialSnapshotRule(),
                 UnusedMockRule(),
-                # Size pillar (M02)
+                # Size pillar
                 AttributeCountRule(),
                 AverageFunctionLengthRule(),
                 ClassLengthRule(),
@@ -235,7 +253,7 @@ class RuleRegistry:
                 FunctionLengthRule(),
                 ParameterCountRule(),
                 PublicMethodCountRule(),
-                # Waste pillar (M04)
+                # Waste pillar
                 CommentedOutCodeRule(),
                 EmptyClassRule(),
                 EmptyFunctionRule(),

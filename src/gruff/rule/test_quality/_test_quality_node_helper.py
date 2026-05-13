@@ -1,7 +1,7 @@
 """Shared scope detection and assertion recognition for the test-quality pillar.
 
-Memoised per-tree so the 10 M09a rules (and the 24 M09b/c rules layered on top)
-share a single AST walk per analyse run, regardless of how many rules read it.
+Memoised per-tree so every test-quality rule shares a single AST walk per
+analyse run, regardless of how many rules read it.
 
 Public surface:
 
@@ -13,7 +13,7 @@ Public surface:
   ``assert <expr>`` (handled separately at the rule level since ``assert`` is a
   statement, not a call).
 - :func:`compute_count` — instrumentation counter (number of times the scope map
-  was computed). The M09a milestone gate test reads this to confirm the helper
+  was computed). The memoisation gate test reads this to confirm the helper
   memoises correctly.
 """
 
@@ -83,8 +83,9 @@ def is_skip_marker(decorator: ast.AST) -> bool:
 def compute_count() -> int:
     """Return the cumulative number of full scope computations performed.
 
-    Test-only instrumentation. The M09a gate test diffs this counter before/after
-    running 10 rules on the same unit and asserts the delta is 1, not 10.
+    Test-only instrumentation. The memoisation gate test diffs this counter
+    before/after running all test-quality rules on the same unit and asserts
+    the delta is 1, not N.
     """
     return _compute_counter["count"]
 
@@ -94,7 +95,7 @@ def reset_compute_count() -> None:
     _compute_counter["count"] = 0
 
 
-# --- Mock-object recognition (M09b extension) -------------------------------
+# --- Mock-object recognition -------------------------------------------------
 
 # Dotted suffixes that identify a call as a mock factory.
 _MOCK_FACTORY_LEAVES: frozenset[str] = frozenset(
@@ -161,7 +162,7 @@ def find_mock_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, 
     return bindings
 
 
-# --- Body walker (used by both M09a and M09b rules) --------------------------
+# --- Body walker -------------------------------------------------------------
 
 
 def walk_test_body(
