@@ -1,0 +1,106 @@
+"""Cumulative security-pillar fixture + safe-equivalent regression set."""
+
+from gruff.rule.registry import RuleRegistry
+from tests.unit.rule.security._helpers import default_ctx, make_unit
+
+_DANGEROUS_FIXTURE = """import hashlib
+import os
+import pickle
+import random
+import requests
+import subprocess
+
+from contextlib import suppress
+from flask import Flask, request
+
+
+app = Flask(__name__)
+
+
+@app.route("/echo")
+def echo():
+    eval(request.args["code"])
+    cmd = request.args["cmd"]
+    subprocess.run(f"rm {cmd}", shell=True)
+    os.system(f"echo {cmd}")
+    body = request.json
+    pickle.loads(body)
+    response = make_response("hi")
+    response.headers[request.args["h"]] = "x"
+    Foo(**request.json)
+    cursor.execute(f"SELECT * FROM t WHERE id = {request.args['id']}")
+    password_hash = hashlib.md5(request.args["password"].encode()).hexdigest()
+    token = random.randint(0, 99999999)
+    requests.get(request.args["url"], verify=False)
+    with suppress(Exception):
+        risky()
+    try:
+        risky()
+    except Exception:
+        pass
+    return response
+"""
+
+_EXPECTED_RULE_IDS = {
+    "security.dangerous-function-call",
+    "security.disabled-ssl-verification",
+    "security.error-suppression",
+    "security.extract-compact-user-input",
+    "security.header-injection",
+    "security.insecure-random",
+    "security.shell-injection",
+    "security.silent-except",
+    "security.sql-concatenation",
+    "security.unsafe-pickle",
+    "security.weak-crypto",
+}
+
+
+def test_every_dangerous_rule_fires():
+    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
+    rule_ids = {f.rule_id for f in findings}
+    missing = _EXPECTED_RULE_IDS - rule_ids
+    assert not missing, f"Missing fires: {sorted(missing)}"
+
+
+_SAFE_FIXTURE = '''import hashlib
+import requests
+import secrets
+import subprocess
+
+
+def process(items):
+    """Safe equivalents — every line is the recommended alternative."""
+    requests.get("https://api.example.com", verify=True)
+    cursor.execute("SELECT * FROM t WHERE id = ?", (items["id"],))
+    digest = hashlib.sha256(items["content"]).hexdigest()
+    token = secrets.token_hex(32)
+    subprocess.run(["ls", "-la"])
+    try:
+        risky()
+    except KeyError:
+        handle_missing()
+    return digest, token
+'''
+
+
+def test_safe_equivalents_emit_no_security_findings():
+    findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], default_ctx())
+    security_findings = [f for f in findings if f.rule_id.startswith("security.")]
+    assert security_findings == [], (
+        f"Safe fixture should not trigger security rules: "
+        f"{[(f.rule_id, f.message) for f in security_findings]}"
+    )
+
+
+def test_security_registry_has_twelve_rules():
+    ids = {
+        rule.definition().id
+        for rule in RuleRegistry.defaults().all()
+        if rule.definition().id.startswith("security.")
+    }
+    assert len(ids) == 12
+    assert _EXPECTED_RULE_IDS.issubset(ids)
+    # The 12th is `security.variable-import`, which the dangerous fixture above
+    # doesn't trigger because the fixture's eval covers the import surface.
+    assert "security.variable-import" in ids

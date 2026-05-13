@@ -20,6 +20,22 @@ TEXT_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+IGNORED_FILENAMES: frozenset[str] = frozenset(
+    {
+        # Python lockfiles / package metadata that routinely contain high-entropy
+        # hashes (sha256 integrity blobs) that look like secrets.
+        "uv.lock",
+        "poetry.lock",
+        "Pipfile.lock",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "composer.lock",
+        "Cargo.lock",
+        "go.sum",
+    }
+)
+
 DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
     ".fleet",
     ".git",
@@ -166,6 +182,8 @@ class SourceDiscovery:
         return "." if text == "." else text
 
     def _source_type(self, path: Path) -> SourceFileType | None:
+        if path.name in IGNORED_FILENAMES:
+            return None
         suffix = path.suffix.lower()
         if suffix in PYTHON_EXTENSIONS:
             return "python"

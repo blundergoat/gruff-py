@@ -32,6 +32,16 @@ class RuleRegistry:
         from gruff.rule.dead_code.unused_private_function_rule import (
             UnusedPrivateFunctionRule,
         )
+        from gruff.rule.docs.missing_class_docstring_rule import MissingClassDocstringRule
+        from gruff.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
+        from gruff.rule.docs.missing_module_docstring_rule import MissingModuleDocstringRule
+        from gruff.rule.docs.missing_param_doc_rule import MissingParamDocRule
+        from gruff.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
+        from gruff.rule.docs.missing_readme_rule import MissingReadmeRule
+        from gruff.rule.docs.missing_return_doc_rule import MissingReturnDocRule
+        from gruff.rule.docs.stale_param_doc_rule import StaleParamDocRule
+        from gruff.rule.docs.todo_density_rule import TodoDensityRule
+        from gruff.rule.docs.useless_docstring_rule import UselessDocstringRule
         from gruff.rule.naming.boolean_prefix_rule import BooleanPrefixRule
         from gruff.rule.naming.confusing_name_rule import ConfusingNameRule
         from gruff.rule.naming.generic_function_rule import GenericFunctionRule
@@ -43,6 +53,33 @@ class RuleRegistry:
         from gruff.rule.naming.test_naming_consistency_rule import (
             TestNamingConsistencyRule,
         )
+        from gruff.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
+        from gruff.rule.security.disabled_ssl_verification_rule import (
+            DisabledSslVerificationRule,
+        )
+        from gruff.rule.security.error_suppression_rule import ErrorSuppressionRule
+        from gruff.rule.security.extract_compact_user_input_rule import (
+            ExtractCompactUserInputRule,
+        )
+        from gruff.rule.security.header_injection_rule import HeaderInjectionRule
+        from gruff.rule.security.insecure_random_rule import InsecureRandomRule
+        from gruff.rule.security.shell_injection_rule import ShellInjectionRule
+        from gruff.rule.security.silent_except_rule import SilentExceptRule
+        from gruff.rule.security.sql_concatenation_rule import SqlConcatenationRule
+        from gruff.rule.security.unsafe_pickle_rule import UnsafePickleRule
+        from gruff.rule.security.variable_import_rule import VariableImportRule
+        from gruff.rule.security.weak_crypto_rule import WeakCryptoRule
+        from gruff.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
+        from gruff.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
+        from gruff.rule.sensitive_data.database_url_password_rule import (
+            DatabaseUrlPasswordRule,
+        )
+        from gruff.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
+        from gruff.rule.sensitive_data.high_entropy_string_rule import HighEntropyStringRule
+        from gruff.rule.sensitive_data.jwt_token_rule import JwtTokenRule
+        from gruff.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
+        from gruff.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
+        from gruff.rule.sensitive_data.private_key_rule import PrivateKeyRule
         from gruff.rule.size.attribute_count_rule import AttributeCountRule
         from gruff.rule.size.average_function_length_rule import AverageFunctionLengthRule
         from gruff.rule.size.class_length_rule import ClassLengthRule
@@ -50,6 +87,52 @@ class RuleRegistry:
         from gruff.rule.size.function_length_rule import FunctionLengthRule
         from gruff.rule.size.parameter_count_rule import ParameterCountRule
         from gruff.rule.size.public_method_count_rule import PublicMethodCountRule
+        from gruff.rule.test_quality.conditional_logic_rule import ConditionalLogicRule
+        from gruff.rule.test_quality.eager_test_rule import EagerTestRule
+        from gruff.rule.test_quality.empty_parametrize_rule import EmptyParametrizeRule
+        from gruff.rule.test_quality.exception_type_only_rule import ExceptionTypeOnlyRule
+        from gruff.rule.test_quality.excessive_mocking_rule import ExcessiveMockingRule
+        from gruff.rule.test_quality.extends_production_class_rule import (
+            ExtendsProductionClassRule,
+        )
+        from gruff.rule.test_quality.global_state_mutation_rule import GlobalStateMutationRule
+        from gruff.rule.test_quality.loop_assertion_without_message_rule import (
+            LoopAssertionWithoutMessageRule,
+        )
+        from gruff.rule.test_quality.loop_in_test_rule import LoopInTestRule
+        from gruff.rule.test_quality.magic_number_assertion_rule import (
+            MagicNumberAssertionRule,
+        )
+        from gruff.rule.test_quality.mock_only_test_rule import MockOnlyTestRule
+        from gruff.rule.test_quality.mock_without_expectation_rule import (
+            MockWithoutExpectationRule,
+        )
+        from gruff.rule.test_quality.mystery_guest_rule import MysteryGuestRule
+        from gruff.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
+        from gruff.rule.test_quality.no_assertions_rule import NoAssertionsRule
+        from gruff.rule.test_quality.parametrize_annotation_rule import (
+            ParametrizeAnnotationRule,
+        )
+        from gruff.rule.test_quality.private_reflection_rule import PrivateReflectionRule
+        from gruff.rule.test_quality.repeated_structure_missing_parametrize_rule import (
+            RepeatedStructureMissingParametrizeRule,
+        )
+        from gruff.rule.test_quality.setup_bloat_rule import SetupBloatRule
+        from gruff.rule.test_quality.skipped_without_reason_rule import (
+            SkippedWithoutReasonRule,
+        )
+        from gruff.rule.test_quality.sleep_in_test_rule import SleepInTestRule
+        from gruff.rule.test_quality.sut_not_called_rule import SutNotCalledRule
+        from gruff.rule.test_quality.tautological_type_assertion_rule import (
+            TautologicalTypeAssertionRule,
+        )
+        from gruff.rule.test_quality.test_function_too_long_rule import (
+            TestFunctionTooLongRule,
+        )
+        from gruff.rule.test_quality.test_longer_than_sut_rule import TestLongerThanSutRule
+        from gruff.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
+        from gruff.rule.test_quality.trivial_snapshot_rule import TrivialSnapshotRule
+        from gruff.rule.test_quality.unused_mock_rule import UnusedMockRule
         from gruff.rule.waste.commented_out_code_rule import CommentedOutCodeRule
         from gruff.rule.waste.empty_class_rule import EmptyClassRule
         from gruff.rule.waste.empty_function_rule import EmptyFunctionRule
@@ -71,6 +154,17 @@ class RuleRegistry:
                 # Dead-code pillar (M04)
                 UnusedPrivateAttributeRule(),
                 UnusedPrivateFunctionRule(),
+                # Documentation pillar (M06)
+                MissingClassDocstringRule(),
+                MissingFunctionDocstringRule(),
+                MissingModuleDocstringRule(),
+                MissingParamDocRule(),
+                MissingRaisesDocRule(),
+                MissingReadmeRule(),
+                MissingReturnDocRule(),
+                StaleParamDocRule(),
+                TodoDensityRule(),
+                UselessDocstringRule(),
                 # Naming pillar (M05)
                 BooleanPrefixRule(),
                 ConfusingNameRule(),
@@ -81,6 +175,58 @@ class RuleRegistry:
                 ParameterTypeNameRule(),
                 ShortVariableRule(),
                 TestNamingConsistencyRule(),
+                # Security pillar (M07)
+                DangerousFunctionCallRule(),
+                DisabledSslVerificationRule(),
+                ErrorSuppressionRule(),
+                ExtractCompactUserInputRule(),
+                HeaderInjectionRule(),
+                InsecureRandomRule(),
+                ShellInjectionRule(),
+                SilentExceptRule(),
+                SqlConcatenationRule(),
+                UnsafePickleRule(),
+                VariableImportRule(),
+                WeakCryptoRule(),
+                # Sensitive-data pillar (M08)
+                ApiKeyPatternRule(),
+                AwsAccessKeyRule(),
+                DatabaseUrlPasswordRule(),
+                HardcodedEnvValueRule(),
+                HighEntropyStringRule(),
+                JwtTokenRule(),
+                PhiPatternRule(),
+                PiiTestFixtureRule(),
+                PrivateKeyRule(),
+                # Test-quality pillar (M09a + M09b)
+                ConditionalLogicRule(),
+                EagerTestRule(),
+                EmptyParametrizeRule(),
+                ExceptionTypeOnlyRule(),
+                ExcessiveMockingRule(),
+                ExtendsProductionClassRule(),
+                GlobalStateMutationRule(),
+                LoopAssertionWithoutMessageRule(),
+                LoopInTestRule(),
+                MagicNumberAssertionRule(),
+                MockOnlyTestRule(),
+                MockWithoutExpectationRule(),
+                MysteryGuestRule(),
+                NamingConsistencyRule(),
+                NoAssertionsRule(),
+                ParametrizeAnnotationRule(),
+                PrivateReflectionRule(),
+                RepeatedStructureMissingParametrizeRule(),
+                SetupBloatRule(),
+                SkippedWithoutReasonRule(),
+                SleepInTestRule(),
+                SutNotCalledRule(),
+                TautologicalTypeAssertionRule(),
+                TestFunctionTooLongRule(),
+                TestLongerThanSutRule(),
+                TrivialAssertionRule(),
+                TrivialSnapshotRule(),
+                UnusedMockRule(),
                 # Size pillar (M02)
                 AttributeCountRule(),
                 AverageFunctionLengthRule(),
