@@ -74,6 +74,8 @@ Thumbs.db
 # ----- Claude Code (per-user overrides; shared .claude/settings.json stays tracked) -----
 .claude/settings.local.json
 
+/node_modules
+
 # ----- Not ignored on purpose (keep tracked) -----
 # uv.lock          → committed: gruff is a CLI app; lock = reproducible installs.
 # gruff-baseline.json, .gruff-history.json → committed: project-level state.

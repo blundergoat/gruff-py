@@ -1,0 +1,26 @@
+{
+  "name": "gruff-py",
+  "version": "1.0.0",
+  "description": "Python project quality analyser. Walks a project tree, applies rules across ten quality pillars (size, complexity, dead-code, waste, naming, documentation, modernisation, security, sensitive-data, test-quality), and emits a scored A–F report.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blundergoat/gruff-py.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/blundergoat/gruff-py/issues"
+  },
+  "homepage": "https://github.com/blundergoat/gruff-py#readme",
+  "dependencies": {
+    "@blundergoat/goat-flow": "^1.6.4"
+  }
+}
