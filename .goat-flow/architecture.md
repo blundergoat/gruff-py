@@ -2,19 +2,23 @@
 
 ## System Overview
 
-gruff-py is a Click-based Python CLI that analyses project files and emits text or JSON quality reports. `src/gruff/cli.py` orchestrates config loading, source discovery, parsing, rule execution, scoring, reporting, and exit-code selection; domain objects live in focused packages under `src/gruff/`.
+gruff-py is a Click-based Python CLI that analyses project files and emits text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF quality reports. It also ships a dependency-free local dashboard server that embeds the HTML report in a full-window browser shell. `src/gruff/cli.py` orchestrates config loading, source discovery, parsing, rule execution, scoring, reporting, display filtering, dashboard startup, and exit-code selection; domain objects live in focused packages under `src/gruff/`.
 
-The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `CompositeFindingFactory`, `ScoreCalculator`, `TextReporter`, and `JsonReporter`. Rules are isolated behind the `Rule` interface so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
+The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `ProjectRuleProtocol`, `CompositeFindingFactory`, `ScoreCalculator`, `FindingDisplayFilter`, `DashboardPageRenderer`, the local dashboard server under `src/gruff/command/`, and the reporter classes under `src/gruff/reporting/`. Rules are isolated behind per-unit and project-level interfaces so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
 
 ## Request Flow
 
-Representative command path: `gruff analyse src/ --format json` enters `src/gruff/cli.py`, builds default rule settings from `RuleRegistry.defaults()`, loads project config via `ConfigLoader` (precedence: `--config <path>`, then `.gruff.yaml` in the project root, then `[tool.gruff]` in `pyproject.toml`), discovers Python and text files with `SourceDiscovery`, parses Python files with `PythonFileParser`, runs enabled rules through `RuleRegistry.analyse()`, calculates a score with `ScoreCalculator`, renders the `AnalysisReport` with `JsonReporter`, and exits with `0`, `1`, or `2` based on diagnostics and `--fail-on`.
+Representative command path: `gruff analyse src/ --format json` enters `src/gruff/cli.py`, builds default rule settings from `RuleRegistry.defaults()`, loads project config via `ConfigLoader` (precedence: `--config <path>`, then `.gruff.yaml` in the project root, then `[tool.gruff]` in `pyproject.toml`), discovers Python and text files with `SourceDiscovery`, parses Python files with `PythonFileParser`, runs enabled per-unit and project-level rules through `RuleRegistry.analyse()`, synthesises composite findings, calculates a score with `ScoreCalculator`, applies display-only filters, renders the `AnalysisReport` with the selected reporter, and exits with `0`, `1`, or `2` based on diagnostics and `--fail-on`.
+
+Dashboard path: `gruff dashboard src/` builds an initial `DashboardState`, starts a stdlib `ThreadingHTTPServer` on loopback by default, serves `/` as a self-contained dark dashboard shell, and serves `/scan` by calling the same `run_analysis()` helper used by `analyse` before rendering `HtmlReporter`. Scan metadata is injected into the iframe report as HTML-safe JSON so the parent shell can show exit code, duration, project root, and the equivalent `gruff analyse --format html` command.
 
 Unknown keys in `[tool.gruff]` or `.gruff.yaml` reject strictly with a `config-error` diagnostic. Parse or config diagnostics are part of the report and force exit code `2`. Findings at or above the selected `FailThreshold` force exit code `1`; clean runs exit `0`.
 
 ## Auth / Trust Boundaries
 
-There is no authentication layer, service account, network request, or long-running server. Trust boundaries are local filesystem inputs: user-supplied paths, `--config`, `pyproject.toml`, and source files read by the CLI.
+There is no authentication layer, service account, or outbound network request. Trust boundaries are local filesystem inputs: user-supplied paths, `--config`, `pyproject.toml`, and source files read by the CLI.
+
+`gruff dashboard` starts a long-running local HTTP server only when explicitly requested. It binds to `127.0.0.1` by default, has no authentication, and should be treated as a local development UI rather than a shared service. Dashboard HTML, iframe metadata, loading frames, and error frames escape interpolated values before rendering.
 
 `.claude/settings.json` and `.claude/hooks/deny-dangerous.sh` protect Claude Code from secret reads/writes and dangerous shell operations during agent sessions. Application runtime does not enforce those agent guardrails.
 
@@ -26,7 +30,7 @@ The compatibility contracts are explicit in `src/gruff/analysis/schema.py` and `
 
 ## Rules And Scoring
 
-`RuleRegistry.defaults()` instantiates the full rule catalogue: 97 rules across 9 active pillars (`size`, `complexity` + `maintainability`, `dead-code` + `waste`, `naming`, `documentation`, `security`, `sensitive-data`, `test-quality`). Each pillar lives under `src/gruff/rule/<pillar>/`. A subset of `test-quality` rules ship default-off and are opted in via `[tool.gruff.rules]`. The `design` pillar carries no per-unit rules — `CompositeFindingFactory` synthesises `design.god-method` findings post-pass when size + complexity overlap on a symbol. `modernisation` is declared in the score model but its rule catalogue is still being built. `AnalysisConfig.from_registry()` snapshots each rule's default settings; selection and per-rule overrides are applied by `ConfigLoader`.
+`RuleRegistry.defaults()` instantiates the full rule catalogue: 98 rules across 10 active pillars (`size`, `complexity` + `maintainability`, `dead-code` + `waste`, `naming`, `documentation`, `security`, `sensitive-data`, `test-quality`, `design`). Each pillar lives under `src/gruff/rule/<pillar>/`. A subset of `test-quality` rules ship default-off and are opted in via `[tool.gruff.rules]`. `ProjectRuleProtocol` handles cross-file rules such as `design.single-implementor-protocol`, while `CompositeFindingFactory` synthesises `design.god-method` findings post-pass when size + complexity overlap on a symbol. `modernisation` is declared in the score model but its rule catalogue is still being built. `AnalysisConfig.from_registry()` snapshots each rule's default settings; selection and per-rule overrides are applied by `ConfigLoader`.
 
 Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.json`/`.ini`/`.conf` text files — the secret/PHI scanners under `sensitive-data.*` use this seam. Several test-quality rules read `pyproject.toml` once per run via `_pytest_config`; scope detection for test-quality rules is memoised through `_test_quality_node_helper` so the catalogue computes per-unit scope exactly once.
 
@@ -34,12 +38,14 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 ## Reporting And Schemas
 
-`JsonReporter` serializes `AnalysisReport.to_dict()` with four-space indentation, slashes escaped, and non-ASCII escaped — byte-equivalent to the PHP reference's `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`-default behaviour. `TextReporter` renders the same report as a console summary.
+`JsonReporter` serializes `AnalysisReport.to_dict()` with four-space indentation, slashes not escaped, and non-ASCII escaped, matching the PHP reference's `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` behaviour for shared keys. `TextReporter`, `HtmlReporter`, `MarkdownReporter`, `GithubAnnotationsReporter`, `HotspotReporter`, and `SarifReporter` render the same `AnalysisReport` for human, CI, and code-scanning consumers.
 
-`OutputFormat` lists future formats (HTML, Markdown, GitHub annotations, SARIF, hotspot), but only `text` and `json` ship in 0.1.0-dev; other choices currently render through `TextReporter`. The `gruff.hotspot.v1` schema is declared in `src/gruff/analysis/schema.py` for cross-impl stability but its reporter has not yet shipped.
+`FindingDisplayFilter` applies display-only filters after scoring and exit-code selection, recording the active filter set under `run.filters`. The `gruff.hotspot.v1` schema is declared in `src/gruff/analysis/schema.py` and emitted by `HotspotReporter`.
 
 ## Deployment / Operations
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `ruff check`, `ruff format --check`, `mypy`, and `pytest`.
 
 Packaging uses Hatchling from `pyproject.toml`; `uv build` emits artifacts under `dist/`. Pre-commit config mirrors the same checks, but its ruff hook auto-fixes, so non-mutating verification should use the explicit CI commands.
+
+The dashboard uses only the Python standard library and inline HTML/CSS/JS. It does not add a frontend build step or runtime asset pipeline.

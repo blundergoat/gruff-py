@@ -12,14 +12,14 @@ The fingerprint algorithm in `src/gruff/finding/fingerprint.py` is deliberately 
 
 The non-obvious failure mode is that "simplifying" JSON encoding, changing slash escaping, expanding hashed fields, or reordering the payload breaks compatibility with gruff-php baselines while most local CLI output still appears normal. Any edit here must run `uv run pytest tests/unit/finding/test_fingerprint.py`.
 
-## Footgun: OutputFormat accepts more formats than reporters implement
+## Footgun: OutputFormat accepted more formats than reporters implemented
 
-**Status:** active | **Created:** 2026-05-13 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-05-13 | **Resolved:** 2026-05-15 | **Evidence:** ACTUAL_MEASURED
 **Tags:** hallucination-risk: high
 
-`src/gruff/finding/output_format.py` lists `html`, `markdown`, `github`, `hotspot`, and `sarif`, and `src/gruff/cli.py` builds Click choices from every enum value. Evidence anchors: `src/gruff/finding/output_format.py` (search: `class OutputFormat`) and `src/gruff/cli.py` (search: `if output is OutputFormat.JSON`).
+Historical trap: `src/gruff/finding/output_format.py` listed `html`, `markdown`, `github`, `hotspot`, and `sarif`, and `src/gruff/cli.py` built Click choices from every enum value, but only JSON dispatched to a non-text reporter.
 
-The non-obvious failure mode is that `gruff analyse --format html` is accepted but currently renders the text reporter with `Format: html`. Do not infer that an enum value has a schema, reporter, or tests until `src/gruff/reporting/` and `tests/integration/test_cli_smoke.py` prove it.
+Resolved in M10: `src/gruff/cli.py` now dispatches every `OutputFormat` to a real reporter under `src/gruff/reporting/`, and `tests/integration/test_cli_smoke.py` plus `tests/unit/reporting/` prove HTML/report-filter behavior. Keep this entry because the broader lesson still applies: do not infer that an enum value has a schema, reporter, or tests until the dispatch and tests prove it.
 
 ## Footgun: Frozen AnalysisConfig is not deeply immutable
 

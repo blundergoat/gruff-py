@@ -1,26 +1,26 @@
 """Click-based CLI entry point for `gruff`."""
 
+import shlex
 import sys
 from pathlib import Path
 
 import click
 
 from gruff.analysis.report import AnalysisReport
-from gruff.analysis.run_diagnostic import RunDiagnostic
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.exceptions import ConfigError
-from gruff.config.loader import ConfigLoader
+from gruff.analysis.runner import run_analysis
+from gruff.command.dashboard_server import DashboardState, create_dashboard_server
 from gruff.finding.fail_threshold import FailThreshold
-from gruff.finding.finding import Finding
 from gruff.finding.output_format import OutputFormat
-from gruff.parser.python_parser import PythonFileParser
+from gruff.finding.pillar import Pillar
+from gruff.finding.severity import Severity
+from gruff.reporting.finding_display_filter import FindingDisplayFilter
+from gruff.reporting.github_annotations_reporter import GithubAnnotationsReporter
+from gruff.reporting.hotspot_reporter import HotspotReporter
+from gruff.reporting.html_reporter import HtmlReporter
 from gruff.reporting.json_reporter import JsonReporter
+from gruff.reporting.markdown_reporter import MarkdownReporter
+from gruff.reporting.sarif_reporter import SarifReporter
 from gruff.reporting.text_reporter import TextReporter
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.scoring.composite_finding_factory import CompositeFindingFactory
-from gruff.scoring.score_calculator import ScoreCalculator
-from gruff.source.discovery import SourceDiscovery
 from gruff.version import VERSION
 
 
@@ -60,6 +60,46 @@ def main() -> None:
     default=False,
     help="Walk into normally-ignored directories.",
 )
+@click.option(
+    "--min-severity",
+    type=click.Choice([s.value for s in Severity]),
+    default=None,
+    help="Minimum severity to display in the selected report format.",
+)
+@click.option(
+    "--include-pillar",
+    multiple=True,
+    type=click.Choice([p.value for p in Pillar]),
+    help="Only display findings for this pillar. Repeat for multiple pillars.",
+)
+@click.option(
+    "--exclude-pillar",
+    multiple=True,
+    type=click.Choice([p.value for p in Pillar]),
+    help="Hide findings for this pillar. Repeat for multiple pillars.",
+)
+@click.option(
+    "--include-rule",
+    multiple=True,
+    help="Only display findings for this rule id. Repeat or pass comma-separated values.",
+)
+@click.option(
+    "--exclude-rule",
+    multiple=True,
+    help="Hide findings for this rule id. Repeat or pass comma-separated values.",
+)
+@click.option(
+    "--report-editor-link",
+    type=click.Choice(["none", "vscode", "phpstorm"]),
+    default="none",
+    help="Editor link style for HTML file:line references.",
+)
+@click.option(
+    "--report-interactive",
+    is_flag=True,
+    default=False,
+    help="Render opt-in interactive HTML finding filters.",
+)
 def analyse(
     paths: tuple[str, ...],
     config_path: Path | None,
@@ -67,101 +107,183 @@ def analyse(
     output_format: str,
     fail_on: str,
     include_ignored: bool,
+    min_severity: str | None,
+    include_pillar: tuple[str, ...],
+    exclude_pillar: tuple[str, ...],
+    include_rule: tuple[str, ...],
+    exclude_rule: tuple[str, ...],
+    report_editor_link: str,
+    report_interactive: bool,
 ) -> None:
     """Analyse one or more paths and emit a report."""
     project_root = Path.cwd()
-    registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry)
-    diagnostics: list[RunDiagnostic] = []
-    config_loaded_from: str | None = None
-
-    if not no_config:
-        loader = ConfigLoader(project_root, config)
-        try:
-            config, source = loader.load(config_path)
-            if source is not None:
-                config_loaded_from = str(source)
-        except ConfigError as exc:
-            diagnostics.append(RunDiagnostic(type="config-error", message=str(exc)))
-
-    fail_threshold = FailThreshold(fail_on)
     output = OutputFormat(output_format)
+    fail_threshold = FailThreshold(fail_on)
+    display_filter = FindingDisplayFilter(
+        min_severity=Severity(min_severity) if min_severity is not None else None,
+        include_pillars=tuple(Pillar(value) for value in _split_repeated_csv(include_pillar)),
+        exclude_pillars=tuple(Pillar(value) for value in _split_repeated_csv(exclude_pillar)),
+        include_rules=_split_repeated_csv(include_rule),
+        exclude_rules=_split_repeated_csv(exclude_rule),
+    )
 
-    discovery = SourceDiscovery(project_root)
-    discovery_result = discovery.discover(
-        list(paths),
+    report = run_analysis(
+        paths=paths,
+        config_path=config_path,
+        no_config=no_config,
+        output=output,
+        fail_threshold=fail_threshold,
         include_ignored=include_ignored,
-        configured_ignore_patterns=config.ignored_path_patterns,
+        project_root=project_root,
+        display_filter=display_filter,
     )
-    for missing in discovery_result.missing_paths:
-        diagnostics.append(
-            RunDiagnostic(type="missing-path", message="path not found", path=missing)
+
+    sys.stdout.write(
+        _render_report(
+            report,
+            output,
+            project_root=str(project_root),
+            report_editor_link=report_editor_link,
+            report_interactive=report_interactive,
         )
-
-    parser = PythonFileParser()
-    units = []
-    files_parsed = 0
-    for source_file in discovery_result.files:
-        unit = parser.parse(source_file)
-        if unit.has_parse_errors():
-            for d in unit.diagnostics:
-                diagnostics.append(
-                    RunDiagnostic(
-                        type="parse-error",
-                        message=d.message,
-                        file_path=source_file.display_path,
-                        line=d.line,
-                    )
-                )
-        else:
-            files_parsed += 1
-        units.append(unit)
-
-    context = RuleContext(project_root=str(project_root), config=config)
-    findings = registry.analyse(units, context)
-    findings = CompositeFindingFactory().synthesise(findings)
-    findings.sort(
-        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
     )
-    score = ScoreCalculator().calculate(findings)
+    sys.exit(report.exit_code)
 
-    exit_code = _compute_exit_code(findings, diagnostics, fail_threshold)
 
-    report = AnalysisReport(
-        tool_version=VERSION,
-        requested_paths=tuple(paths) if paths else (".",),
-        format=output.value,
-        fail_on=fail_threshold.value,
-        files_discovered=len(discovery_result.files),
-        files_parsed=files_parsed,
-        ignored_paths=discovery_result.ignored_paths,
-        missing_paths=discovery_result.missing_paths,
-        diagnostics=tuple(diagnostics),
-        findings=tuple(findings),
-        exit_code=exit_code,
-        config_path=config_loaded_from,
-        score=score,
+@main.command()
+@click.argument("paths", nargs=-1, type=click.Path())
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    show_default=True,
+    help="Host interface for the local dashboard server.",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8765,
+    show_default=True,
+    help="Port for the local dashboard server. Use 0 to select an unused port.",
+)
+@click.option(
+    "--project",
+    "project_root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Project root to analyse from the dashboard.",
+)
+@click.option(
+    "--project-root",
+    "project_root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Alias for --project.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Initial config file shown in the dashboard controls.",
+)
+@click.option("--no-config", is_flag=True, default=False, help="Skip loading any config file.")
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice([f.value for f in FailThreshold]),
+    default="none",
+    help="Initial severity at which analyse scans set non-zero exit code.",
+)
+@click.option(
+    "--include-ignored",
+    is_flag=True,
+    default=False,
+    help="Walk into normally-ignored directories.",
+)
+@click.option(
+    "--report-interactive",
+    is_flag=True,
+    default=False,
+    help="Render opt-in interactive HTML finding filters in dashboard scans.",
+)
+def dashboard(
+    paths: tuple[str, ...],
+    host: str,
+    port: int,
+    project_root: Path | None,
+    config_path: Path | None,
+    no_config: bool,
+    fail_on: str,
+    include_ignored: bool,
+    report_interactive: bool,
+) -> None:
+    """Serve a local browser dashboard for repeated scans."""
+    launch_root = Path.cwd()
+    project = (project_root or launch_root).resolve()
+    if not project.is_dir():
+        raise click.ClickException(f"Project root is not a directory: {project}")
+    if port < 0 or port > 65535:
+        raise click.ClickException("--port must be between 0 and 65535.")
+
+    initial_state = DashboardState(
+        project=str(project),
+        paths=" ".join(shlex.quote(path) for path in (paths or (".",))),
+        fail_on=fail_on,
+        config=str(config_path) if config_path is not None else "",
+        no_config=no_config,
+        include_ignored=include_ignored,
+        report_interactive=report_interactive,
     )
+    server = create_dashboard_server(
+        host=host,
+        port=port,
+        launch_root=launch_root,
+        initial_state=initial_state,
+    )
+    bound_host, actual_port = server.server_address[:2]
+    actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
+    click.echo(f"gruff dashboard serving at http://{actual_host}:{actual_port}/")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        click.echo("gruff dashboard stopped")
+    finally:
+        server.server_close()
 
-    if output is OutputFormat.JSON:
-        click.echo(JsonReporter().render(report), nl=False)
-    else:
-        click.echo(TextReporter().render(report), nl=False)
 
-    sys.exit(exit_code)
+def _render_report(
+    report: AnalysisReport,
+    output: OutputFormat,
+    *,
+    project_root: str,
+    report_editor_link: str,
+    report_interactive: bool,
+) -> str:
+    match output:
+        case OutputFormat.JSON:
+            return JsonReporter().render(report)
+        case OutputFormat.HTML:
+            return HtmlReporter(project_root, report_editor_link, report_interactive).render(report)
+        case OutputFormat.MARKDOWN:
+            return MarkdownReporter().render(report)
+        case OutputFormat.GITHUB:
+            return GithubAnnotationsReporter().render(report)
+        case OutputFormat.HOTSPOT:
+            return HotspotReporter().render(report)
+        case OutputFormat.SARIF:
+            return SarifReporter().render(report)
+        case OutputFormat.TEXT:
+            return TextReporter().render(report)
 
 
-def _compute_exit_code(
-    findings: list[Finding],
-    diagnostics: list[RunDiagnostic],
-    fail_threshold: FailThreshold,
-) -> int:
-    if diagnostics:
-        return 2
-    for finding in findings:
-        if fail_threshold.is_triggered_by(finding.severity):
-            return 1
-    return 0
+def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
+    items: list[str] = []
+    for value in values:
+        for item in value.split(","):
+            stripped = item.strip()
+            if stripped:
+                items.append(stripped)
+    return tuple(dict.fromkeys(items))
 
 
 if __name__ == "__main__":

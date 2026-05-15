@@ -11,6 +11,7 @@ def test_cli_help_lists_analyse_command():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "analyse" in result.output
+    assert "dashboard" in result.output
 
 
 def test_cli_analyse_emits_schema_versioned_json(
@@ -62,6 +63,56 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "gruff " in result.output
     assert "Findings" in result.output
     assert "Score" in result.output
+
+
+def test_cli_analyse_html_format_renders_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "html", "--fail-on", "none", "--no-config", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("<!DOCTYPE html>")
+    assert 'class="paper"' in result.output
+    assert "Format: html" not in result.output
+
+
+def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
+    error_lines = "\n".join(f"x{i} = {i}" for i in range(900)) + "\n"
+    (src / "warning.py").write_text(warning_lines)
+    (src / "error.py").write_text(error_lines)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--min-severity",
+            "error",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["run"]["filters"]["active"] is True
+    assert payload["run"]["filters"]["minSeverity"] == "error"
+    assert {finding["severity"] for finding in payload["findings"]} == {"error"}
 
 
 def test_cli_fail_on_error_exits_1_when_errors_present(
