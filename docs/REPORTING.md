@@ -1,0 +1,109 @@
+# Reporting
+
+`gruff analyse` renders one report per run. All formats are generated from the
+same `AnalysisReport` model.
+
+## Formats
+
+```bash
+gruff analyse src/ --format text
+gruff analyse src/ --format json
+gruff analyse src/ --format html
+gruff analyse src/ --format markdown
+gruff analyse src/ --format github
+gruff analyse src/ --format hotspot
+gruff analyse src/ --format sarif
+```
+
+| Format | Best for |
+|---|---|
+| `text` | Local terminal review |
+| `json` | Automation, snapshots, cross-implementation checks |
+| `html` | Human inspection in a browser |
+| `markdown` | Pull request comments and release notes |
+| `github` | GitHub Actions annotation commands |
+| `hotspot` | File-level offender summaries |
+| `sarif` | Code-scanning upload |
+
+## JSON
+
+JSON reports use schema string `gruff.analysis.v1`.
+
+The top-level shape includes:
+
+- `schemaVersion`
+- `tool`
+- `run`
+- `summary`
+- `ignoredPaths`
+- `missingPaths`
+- `diagnostics`
+- `findings`
+- `score`
+
+The output is stable enough for automation, but the project is still pre-1.0.
+The strongest compatibility promises are schema strings and finding
+fingerprints.
+
+## HTML
+
+HTML reports are self-contained and do not load external fonts, scripts, or
+stylesheets.
+
+```bash
+gruff analyse src/ --format html > gruff-report.html
+```
+
+Enable browser-side finding filters:
+
+```bash
+gruff analyse src/ --format html --report-interactive > gruff-report.html
+```
+
+Enable editor links:
+
+```bash
+gruff analyse src/ --format html --report-editor-link vscode > gruff-report.html
+gruff analyse src/ --format html --report-editor-link phpstorm > gruff-report.html
+```
+
+## GitHub Actions
+
+For annotations:
+
+```yaml
+- name: gruff annotations
+  run: gruff analyse src tests --format github --fail-on warning
+```
+
+For SARIF upload, generate the file first:
+
+```bash
+gruff analyse src tests --format sarif --fail-on none > gruff.sarif
+```
+
+Then upload with GitHub's SARIF upload action in your workflow.
+
+## Display Filters
+
+Display filters are applied after analysis and scoring:
+
+```bash
+gruff analyse src/ --min-severity warning
+gruff analyse src/ --include-pillar security
+gruff analyse src/ --exclude-rule docs.missing-function-docstring
+```
+
+They affect rendered findings and are recorded under `run.filters`. They do not
+change the exit code calculation.
+
+## Exit Codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Run completed and no finding reached the fail threshold |
+| `1` | At least one finding reached the fail threshold |
+| `2` | Diagnostic such as config error, parse error, or missing path |
+
+Use `--fail-on none` for report-only jobs.
+
