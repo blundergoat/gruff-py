@@ -10,8 +10,123 @@ from gruff.cli import main
 def test_cli_help_lists_analyse_command():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert "analyse" in result.output
-    assert "dashboard" in result.output
+    assert result.output.startswith("gruff 0.1.0-dev\n\nUsage:\n  command [options] [arguments]")
+    assert "Available commands:" in result.output
+    for command in (
+        "analyse",
+        "completion",
+        "dashboard",
+        "help",
+        "list",
+        "list-rules",
+        "report",
+        "summary",
+    ):
+        assert command in result.output
+    for option in ("--silent", "--quiet", "--version", "--ansi", "--no-interaction", "--verbose"):
+        assert option in result.output
+
+
+def test_cli_without_command_prints_php_style_menu():
+    result = CliRunner().invoke(main, [])
+
+    assert result.exit_code == 0
+    assert result.output.startswith("gruff 0.1.0-dev\n\nUsage:\n")
+    assert "Options:" in result.output
+    assert "Available commands:" in result.output
+
+
+def test_cli_root_menu_uses_ansi_colours_when_forced():
+    result = CliRunner().invoke(main, ["--ansi"], color=True)
+
+    assert result.exit_code == 0
+    assert "\x1b[33mUsage:\x1b" in result.output
+    assert "\x1b[32manalyse\x1b" in result.output
+
+
+def test_cli_command_help_lists_symfony_style_global_options():
+    result = CliRunner().invoke(main, ["analyse", "--help"])
+    assert result.exit_code == 0
+    for option in ("--silent", "--quiet", "--version", "--ansi", "--no-interaction", "--verbose"):
+        assert option in result.output
+    for option in ("--diff", "--diff-vs", "--baseline", "--generate-baseline"):
+        assert option in result.output
+
+
+def test_cli_list_rules_json_lists_rule_metadata():
+    result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.output)
+    rule = payload["rules"][0]
+    assert {
+        "id",
+        "name",
+        "pillar",
+        "tier",
+        "defaultSeverity",
+        "confidence",
+        "defaultEnabled",
+        "thresholds",
+        "options",
+        "description",
+    } <= set(rule)
+
+
+def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    output = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        main,
+        ["report", "--format", "json", "--output", str(output), "--no-config", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == ""
+    payload = json.loads(output.read_text())
+    assert payload["schemaVersion"] == "gruff.analysis.v1"
+    assert payload["run"]["format"] == "json"
+
+
+def test_cli_summary_json_is_compact_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["summary", "--format", "json", "--no-config", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert "summary" in payload
+    assert "topRules" in payload
+    assert "topFiles" in payload
+
+
+def test_cli_quiet_suppresses_success_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--quiet", "--format", "json", "--fail-on", "none", "--no-config", "src"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == ""
 
 
 def test_cli_analyse_emits_schema_versioned_json(

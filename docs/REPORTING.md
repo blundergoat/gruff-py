@@ -3,6 +3,9 @@
 `gruff analyse` renders one report per run. All formats are generated from the
 same `AnalysisReport` model.
 
+`gruff report` is a convenience wrapper for release artifacts. It runs the same
+analyser and writes an HTML or JSON report to stdout or `--output`.
+
 ## Formats
 
 ```bash
@@ -13,6 +16,7 @@ gruff analyse src/ --format markdown
 gruff analyse src/ --format github
 gruff analyse src/ --format hotspot
 gruff analyse src/ --format sarif
+gruff report src/ --format html --output gruff-report.html
 ```
 
 | Format | Best for |
@@ -24,6 +28,19 @@ gruff analyse src/ --format sarif
 | `github` | GitHub Actions annotation commands |
 | `hotspot` | File-level offender summaries |
 | `sarif` | Code-scanning upload |
+
+## Summary
+
+Use `summary` when CI or a release script needs aggregate counts without
+per-finding output:
+
+```bash
+gruff summary src/ --format text
+gruff summary src/ --format json --top 5
+```
+
+The digest includes file counts, per-pillar counts, top rules, and top file
+offenders.
 
 ## JSON
 
@@ -106,4 +123,3 @@ change the exit code calculation.
 | `2` | Diagnostic such as config error, parse error, or missing path |
 
 Use `--fail-on none` for report-only jobs.
-

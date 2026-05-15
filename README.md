@@ -74,11 +74,19 @@ http://127.0.0.1:8765/
 ## CLI
 
 ```bash
+gruff [GLOBAL OPTIONS] <command>
 gruff analyse [OPTIONS] [PATHS]...
+gruff report [OPTIONS] [PATHS]...
+gruff summary [OPTIONS] [PATHS]...
+gruff list-rules [OPTIONS]
 gruff dashboard [OPTIONS] [PATHS]...
+gruff completion [SHELL]
 ```
 
-Common `analyse` options:
+Global options mirror the gruff-php CLI surface: `--silent`, `--quiet`,
+`--version`, `--ansi` / `--no-ansi`, `--no-interaction`, and `--verbose`.
+
+Common `analyse` and `report` options:
 
 | Option | Meaning |
 |---|---|
@@ -95,6 +103,17 @@ Common `analyse` options:
 | `--min-severity warning` | Display only warning/error findings |
 | `--include-pillar documentation` | Display only selected pillar findings |
 | `--exclude-rule docs.missing-function-docstring` | Hide selected rule findings |
+
+Additional commands:
+
+| Command | Meaning |
+|---|---|
+| `gruff report --format html --output gruff.html` | Render an HTML or JSON report to a file or stdout |
+| `gruff summary --format text` | Print compact per-pillar, top-rule, and top-file counts |
+| `gruff list-rules --format json` | Print registered rule metadata |
+| `gruff list` | List available commands |
+| `gruff help analyse` | Display command help |
+| `gruff completion bash` | Dump a shell completion script |
 
 Exit codes:
 

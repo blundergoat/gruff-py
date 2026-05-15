@@ -19,6 +19,13 @@ schema and fingerprint contracts called out below.
 ### Added
 
 - `gruff analyse [paths...]` Click command.
+- gruff-php-compatible top-level CLI surface with `completion`, `help`,
+  `list`, `list-rules`, `report`, and `summary` commands.
+- Root CLI menu rendering now follows the gruff-php/Symfony layout and ANSI
+  colour treatment.
+- Symfony-style global options accepted by every command:
+  `--silent`, `--quiet`, `--version`, `--ansi` / `--no-ansi`,
+  `--no-interaction`, and `--verbose`.
 - `gruff dashboard [paths...]` local browser dashboard.
 - Optional configuration from `--config`, `.gruff.yaml`, or `[tool.gruff]`.
 - Strict config validation with diagnostics for unknown keys.
@@ -92,4 +99,3 @@ schema and fingerprint contracts called out below.
 - `uv run ruff format --check src tests`
 - `uv run mypy src`
 - `uv run pytest`
-
