@@ -29,8 +29,11 @@ From this repository:
 
 ```bash
 uv sync
-uv run gruff --help
+./bin/gruff-py --help
 ```
+
+The package entry point is still `gruff`, so `uv run gruff --help` is
+equivalent after `uv sync`.
 
 After the package is published:
 

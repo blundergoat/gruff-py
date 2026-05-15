@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+set -eu
+
+PRG="$0"
+while [ -h "$PRG" ]; do
+	SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$PRG")" && pwd)"
+	PRG="$(readlink "$PRG")"
+	case "$PRG" in
+		/*) ;;
+		*) PRG="$SCRIPT_DIR/$PRG" ;;
+	esac
+done
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$PRG")" && pwd)"
+PACKAGE_DIR="$SCRIPT_DIR/.."
+
+if [ -x "$PACKAGE_DIR/.venv/bin/python" ]; then
+	PYTHON="$PACKAGE_DIR/.venv/bin/python"
+elif [ -x "$PACKAGE_DIR/.venv/bin/python3" ]; then
+	PYTHON="$PACKAGE_DIR/.venv/bin/python3"
+else
+	PYTHON="${PYTHON:-python3}"
+fi
+
+PYTHONPATH="$PACKAGE_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+
+exec "$PYTHON" -m gruff "$@"
