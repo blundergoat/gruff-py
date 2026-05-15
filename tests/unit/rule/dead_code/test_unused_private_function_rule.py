@@ -74,6 +74,29 @@ def test_used_private_method_via_self_does_not_fire():
     assert findings == []
 
 
+def test_used_private_method_via_getattr_literal_does_not_fire():
+    src = (
+        "class C:\n"
+        "    def _helper(self):\n        return 1\n"
+        "    def main(self):\n        return getattr(self, '_helper')()\n"
+    )
+    findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_dispatcher_prefix_suppresses_matching_private_methods_only():
+    src = (
+        "class C:\n"
+        "    def main(self, kind):\n"
+        "        return getattr(self, f'_handle_{kind}')()\n"
+        "    def _handle_a(self):\n        return 1\n"
+        "    def _unrelated(self):\n        return 2\n"
+    )
+    findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
+
+    assert [finding.metadata["name"] for finding in findings] == ["_unrelated"]
+
+
 def test_in_all_skipped():
     src = "__all__ = ['_helper']\ndef _helper():\n    pass\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())

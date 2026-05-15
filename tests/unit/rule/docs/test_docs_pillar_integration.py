@@ -8,6 +8,7 @@ double-fires and registry omissions.
 from pathlib import Path
 
 from gruff.config.analysis_config import AnalysisConfig
+from gruff.config.loader import ConfigLoader
 from gruff.rule.context import RuleContext
 from gruff.rule.registry import RuleRegistry
 from tests.unit.rule.docs._helpers import make_unit
@@ -100,3 +101,19 @@ def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
     findings = registry.analyse(units, ctx)
     readme_findings = [f for f in findings if f.rule_id == "docs.missing-readme"]
     assert len(readme_findings) == 1
+
+
+def test_config_can_disable_missing_function_docstring_for_test_paths(tmp_path: Path):
+    (tmp_path / ".gruff.yaml").write_text(
+        "rules:\n  docs.missing-function-docstring:\n    enabled: false\n"
+    )
+    registry = RuleRegistry.defaults()
+    defaults = AnalysisConfig.from_registry(registry)
+    config, _ = ConfigLoader(tmp_path, defaults).load()
+    ctx = RuleContext(project_root=str(tmp_path), config=config)
+
+    findings = registry.analyse(
+        [make_unit("def test_without_doc():\n    pass\n", "tests/test_x.py")], ctx
+    )
+
+    assert "docs.missing-function-docstring" not in {finding.rule_id for finding in findings}

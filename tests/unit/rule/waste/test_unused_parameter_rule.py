@@ -76,6 +76,40 @@ def test_pytest_fixture_does_not_fire():
     assert findings == []
 
 
+def test_rule_interface_method_does_not_fire():
+    src = (
+        "class Rule: ...\n"
+        "class R(Rule):\n"
+        "    def analyse(self, unit, context):\n"
+        "        return []\n"
+    )
+    findings = UnusedParameterRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_http_handler_override_does_not_fire():
+    src = (
+        "class BaseHTTPRequestHandler: ...\n"
+        "class H(BaseHTTPRequestHandler):\n"
+        "    def log_message(self, format, *args):\n"
+        "        return None\n"
+    )
+    findings = UnusedParameterRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_parameter_used_by_nested_closure_does_not_fire():
+    src = (
+        "def create(initial_state):\n"
+        "    class Handler:\n"
+        "        def get(self):\n"
+        "            return initial_state\n"
+        "    return Handler\n"
+    )
+    findings = UnusedParameterRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
 def test_kwonly_unused_fires():
     src = "def f(x, *, key=None):\n    return x\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())

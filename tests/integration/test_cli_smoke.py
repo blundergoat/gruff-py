@@ -115,6 +115,37 @@ def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.Mo
     assert {finding["severity"] for finding in payload["findings"]} == {"error"}
 
 
+def test_cli_applies_configured_secret_preview_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "secrets.py").write_text(
+        "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\nSTRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
+    )
+    (tmp_path / ".gruff.yaml").write_text(
+        "allowlists:\n  secretPreviews:\n    - 'AKIA...MPLE (redacted, 20 chars)'\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "error", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    rule_ids = [finding["ruleId"] for finding in payload["findings"]]
+    previews = [
+        finding["metadata"].get("preview")
+        for finding in payload["findings"]
+        if isinstance(finding.get("metadata"), dict)
+    ]
+    assert "sensitive-data.aws-access-key" not in rule_ids
+    assert "sensitive-data.api-key-pattern" in rule_ids
+    assert "AKIA...MPLE (redacted, 20 chars)" not in previews
+
+
 def test_cli_fail_on_error_exits_1_when_errors_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

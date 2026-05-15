@@ -105,6 +105,37 @@ def test_imported_decorator_used():
     assert findings == []
 
 
+def test_import_used_by_string_annotation_does_not_fire():
+    src = """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gruff.rule.registry import RuleRegistry
+
+
+def f(registry: "RuleRegistry") -> None:
+    return None
+"""
+
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+
+    assert findings == []
+
+
+def test_import_used_by_nested_string_annotation_does_not_fire():
+    src = """
+from gruff.rule.definition import RuleDefinition
+
+
+def f() -> "list[RuleDefinition]":
+    return []
+"""
+
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+
+    assert findings == []
+
+
 def test_definition():
     d = UnusedImportRule().definition()
     assert d.id == "waste.unused-import"

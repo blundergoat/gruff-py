@@ -7,6 +7,7 @@ from gruff.config.rule_settings import RuleSettings
 from gruff.rule.context import RuleContext
 from gruff.rule.registry import RuleRegistry
 from gruff.rule.test_quality._pytest_config import reset_cache
+from gruff.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
 from gruff.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
 from gruff.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
@@ -59,6 +60,18 @@ def test_strict_config_rule_skipped_on_non_test_unit(tmp_path: Path):
     assert PytestStrictConfigMissingRule().analyse(make_unit(_NON_TEST_FIXTURE), ctx) == []
 
 
+def test_all_project_config_rules_skip_non_test_units(tmp_path: Path):
+    ctx = _ctx_with_pyproject(
+        tmp_path,
+        "[tool.pytest.ini_options]\naddopts = '-ra'\n",
+    )
+    unit = make_unit(_NON_TEST_FIXTURE)
+
+    assert PytestStrictConfigMissingRule().analyse(unit, ctx) == []
+    assert PytestDeprecationsNotFatalRule().analyse(unit, ctx) == []
+    assert PytestCoverageSourceMissingRule().analyse(unit, ctx) == []
+
+
 def test_deprecations_not_fatal_emits_when_filterwarnings_silent(tmp_path: Path):
     ctx = _ctx_with_pyproject(
         tmp_path,
@@ -95,7 +108,7 @@ def test_coverage_source_present_skips(tmp_path: Path):
 
 def test_opt_in_rules_default_off():
     """The opt-in test-quality rules must default to enabled=False."""
-    for rule_cls in (MultipleAaaCyclesRule, TestdoxReadabilityRule):
+    for rule_cls in (MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule):
         assert rule_cls().definition().default_enabled is False
 
 

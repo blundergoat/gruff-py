@@ -1,4 +1,6 @@
 import json
+import math
+from typing import Any
 
 from gruff.analysis.report import AnalysisReport
 
@@ -11,4 +13,14 @@ class JsonReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        return json.dumps(report.to_dict(), indent=4) + "\n"
+        return json.dumps(_php_json_value(report.to_dict()), indent=4) + "\n"
+
+
+def _php_json_value(value: Any) -> Any:
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _php_json_value(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_php_json_value(item) for item in value]
+    return value

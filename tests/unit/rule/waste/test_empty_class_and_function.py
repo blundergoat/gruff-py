@@ -56,6 +56,18 @@ def test_abc_marker_class_does_not_fire():
     assert findings == []
 
 
+def test_exception_marker_class_does_not_fire():
+    src = "class ConfigError(Exception):\n    pass\n"
+    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
+    assert findings == []
+
+
+def test_internal_marker_base_class_does_not_fire():
+    src = "from abc import ABC\nclass Rule(ABC): ...\nclass SourceTextRule(Rule):\n    pass\n"
+    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
+    assert findings == []
+
+
 def test_dataclass_with_pass_body_does_not_fire():
     src = "from dataclasses import dataclass\n@dataclass\nclass C:\n    pass\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))

@@ -8,6 +8,7 @@ from gruff.config.loader import ConfigLoader
 from gruff.finding.fail_threshold import FailThreshold
 from gruff.finding.finding import Finding
 from gruff.finding.output_format import OutputFormat
+from gruff.finding.pillar import Pillar
 from gruff.parser.python_parser import PythonFileParser
 from gruff.reporting.finding_display_filter import FindingDisplayFilter
 from gruff.rule.context import RuleContext
@@ -76,6 +77,7 @@ def run_analysis(
     context = RuleContext(project_root=str(project_root), config=config)
     findings = registry.analyse(units, context)
     findings = CompositeFindingFactory().synthesise(findings)
+    findings = _filter_allowed_secret_previews(findings, config)
     findings.sort(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
     )
@@ -113,3 +115,21 @@ def compute_exit_code(
         if fail_threshold.is_triggered_by(finding.severity):
             return 1
     return 0
+
+
+def _filter_allowed_secret_previews(
+    findings: list[Finding],
+    config: AnalysisConfig,
+) -> list[Finding]:
+    if not config.allowed_secret_previews:
+        return findings
+    allowed = set(config.allowed_secret_previews)
+    return [
+        finding
+        for finding in findings
+        if (
+            finding.pillar != Pillar.SENSITIVE_DATA
+            or not isinstance(finding.metadata.get("preview"), str)
+            or finding.metadata["preview"] not in allowed
+        )
+    ]

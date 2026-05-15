@@ -82,7 +82,11 @@ class UnusedPrivateFunctionRule(Rule):
                 continue
 
             scope = parent_cls if parent_cls is not None else unit.tree
-            if _name_referenced_outside_def(node.name, scope, node):
+            if _name_referenced_outside_def(
+                node.name,
+                scope,
+                node,
+            ) or _name_referenced_by_getattr(node.name, scope, node):
                 continue
 
             symbol = qualified_symbol(node, parents)
@@ -133,6 +137,40 @@ def _name_referenced_outside_def(name: str, scope: ast.AST, defining_node: ast.A
         if isinstance(node, ast.Attribute) and node.attr == name:
             return True
     return False
+
+
+def _name_referenced_by_getattr(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
+    for node in ast.walk(scope):
+        if node is defining_node or _is_descendant_of(node, defining_node):
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+            continue
+        if len(node.args) < 2:
+            continue
+        if _getattr_name_matches(name, node.args[1]):
+            return True
+    return False
+
+
+def _getattr_name_matches(name: str, value: ast.AST) -> bool:
+    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+        return value.value == name
+    if isinstance(value, ast.JoinedStr):
+        prefix = _joined_string_static_prefix(value)
+        return len(prefix) >= 3 and name.startswith(prefix)
+    return False
+
+
+def _joined_string_static_prefix(value: ast.JoinedStr) -> str:
+    prefix_parts: list[str] = []
+    for part in value.values:
+        if isinstance(part, ast.FormattedValue):
+            break
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            prefix_parts.append(part.value)
+    return "".join(prefix_parts)
 
 
 def _is_descendant_of(node: ast.AST, ancestor: ast.AST) -> bool:

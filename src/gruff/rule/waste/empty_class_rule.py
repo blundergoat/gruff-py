@@ -48,7 +48,7 @@ class EmptyClassRule(Rule):
                 continue
             if not _is_empty_body(node.body):
                 continue
-            if has_framework_base(node):
+            if has_framework_base(node) or _is_marker_base_subclass(node):
                 continue
             if has_dataclass_decorator(node):
                 continue
@@ -78,3 +78,30 @@ class EmptyClassRule(Rule):
                 ),
             )
         return findings
+
+
+def _is_marker_base_subclass(node: ast.ClassDef) -> bool:
+    return bool(_base_names(node) & {"BaseException", "Exception", "Rule", "SourceTextRule"})
+
+
+def _base_names(node: ast.ClassDef) -> set[str]:
+    names: set[str] = set()
+    for base in node.bases:
+        name = _name_for(base)
+        if name:
+            names.add(name)
+            names.add(name.split(".")[-1])
+    return names
+
+
+def _name_for(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _name_for(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    if isinstance(node, ast.Subscript):
+        return _name_for(node.value)
+    if isinstance(node, ast.Call):
+        return _name_for(node.func)
+    return ""

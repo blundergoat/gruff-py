@@ -12,7 +12,6 @@ Skip:
 """
 
 import ast
-from collections.abc import Iterator
 
 from gruff.finding.confidence import Confidence
 from gruff.finding.finding import Finding
@@ -59,7 +58,9 @@ class UnusedParameterRule(Rule):
                 continue
             parents = parent_chain(node)
             parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
-            if parent_cls is not None and has_framework_base(parent_cls):
+            if parent_cls is not None and (
+                has_framework_base(parent_cls) or _has_signature_constrained_base(parent_cls)
+            ):
                 continue
 
             referenced = _collect_referenced_names(node.body)
@@ -90,25 +91,17 @@ class UnusedParameterRule(Rule):
 
 
 def _collect_referenced_names(body: list[ast.stmt]) -> set[str]:
-    """Return the set of Name occurrences anywhere in *body*. We do NOT walk
-    into nested function bodies — closures over the outer parameter use the
-    name directly via the inner function's scope (which we will scan when
-    we visit that inner function), so this scope is restricted to the body
-    immediately owned by the enclosing function."""
+    """Return the set of Name occurrences anywhere in *body*.
+
+    Nested scopes are included so closure captures count as legitimate
+    references to the outer function's parameters.
+    """
     names: set[str] = set()
     for stmt in body:
-        for sub in _walk_skip_nested_defs(stmt):
+        for sub in ast.walk(stmt):
             if isinstance(sub, ast.Name):
                 names.add(sub.id)
     return names
-
-
-def _walk_skip_nested_defs(node: ast.AST) -> Iterator[ast.AST]:
-    yield node
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
-        return
-    for child in ast.iter_child_nodes(node):
-        yield from _walk_skip_nested_defs(child)
 
 
 def _unused_params(
@@ -130,3 +123,30 @@ def _unused_params(
             continue
         unused.append((arg.arg, arg.lineno))
     return unused
+
+
+def _has_signature_constrained_base(cls: ast.ClassDef) -> bool:
+    return bool(_base_names(cls) & {"Rule", "SourceTextRule", "BaseHTTPRequestHandler"})
+
+
+def _base_names(cls: ast.ClassDef) -> set[str]:
+    names: set[str] = set()
+    for base in cls.bases:
+        name = _name_for(base)
+        if name:
+            names.add(name)
+            names.add(name.split(".")[-1])
+    return names
+
+
+def _name_for(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _name_for(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    if isinstance(node, ast.Subscript):
+        return _name_for(node.value)
+    if isinstance(node, ast.Call):
+        return _name_for(node.func)
+    return ""

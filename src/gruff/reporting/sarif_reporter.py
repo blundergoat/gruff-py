@@ -4,11 +4,16 @@ from typing import Any
 from gruff.analysis.report import AnalysisReport
 from gruff.finding.finding import Finding
 from gruff.finding.severity import Severity
+from gruff.rule.definition import RuleDefinition
+from gruff.rule.registry import RuleRegistry
 
 
 class SarifReporter:
     def render(self, report: AnalysisReport) -> str:
-        rules: dict[str, dict[str, Any]] = {}
+        rules: dict[str, dict[str, Any]] = {
+            rule.definition().id: _rule_metadata(rule.definition())
+            for rule in RuleRegistry.defaults().all()
+        }
         for finding in report.findings:
             rules.setdefault(
                 finding.rule_id,
@@ -48,6 +53,20 @@ class SarifReporter:
             ],
         }
         return json.dumps(payload, indent=4) + "\n"
+
+
+def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
+    return {
+        "id": definition.id,
+        "name": definition.name,
+        "shortDescription": {"text": definition.get_description()},
+        "properties": {
+            "pillar": definition.pillar.value,
+            "severity": definition.default_severity.value,
+            "confidence": definition.confidence.value,
+            "tier": definition.tier.value,
+        },
+    }
 
 
 def _result(finding: Finding, rule_index: int) -> dict[str, Any]:

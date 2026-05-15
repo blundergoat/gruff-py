@@ -104,18 +104,46 @@ def _collect_used_names(tree: ast.AST, candidates: set[str]) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import | ast.ImportFrom):
             continue
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Name) and sub.id in candidates:
-                used.add(sub.id)
-            elif isinstance(sub, ast.Attribute):
-                root: ast.AST = sub
-                while isinstance(root, ast.Attribute):
-                    root = root.value
-                if isinstance(root, ast.Name) and root.id in candidates:
-                    used.add(root.id)
-            if used == candidates:
-                return used
+        if isinstance(node, ast.Name) and node.id in candidates:
+            used.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            root: ast.AST = node
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name) and root.id in candidates:
+                used.add(root.id)
+        if used == candidates:
+            return used
+    for annotation in _iter_annotation_nodes(tree):
+        value = _string_annotation_value(annotation)
+        if value is None:
+            continue
+        try:
+            parsed = ast.parse(value, mode="eval")
+        except SyntaxError:
+            continue
+        used.update(_collect_used_names(parsed, candidates))
+        if used == candidates:
+            return used
     return used
+
+
+def _iter_annotation_nodes(tree: ast.AST) -> list[ast.AST]:
+    annotations: list[ast.AST] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.arg) and node.annotation is not None:
+            annotations.append(node.annotation)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.returns is not None:
+            annotations.append(node.returns)
+        elif isinstance(node, ast.AnnAssign):
+            annotations.append(node.annotation)
+    return annotations
+
+
+def _string_annotation_value(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
 
 
 def _line_has_noqa(source_lines: list[str], lineno: int) -> bool:

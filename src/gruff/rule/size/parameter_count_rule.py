@@ -99,7 +99,7 @@ def _count_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[
     return count
 
 
-def _is_method(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
+def _is_method(_fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
     return any(isinstance(p, ast.ClassDef) for p in parents)
 
 

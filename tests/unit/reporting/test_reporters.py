@@ -109,11 +109,17 @@ def test_hotspot_reporter_uses_hotspot_schema():
 def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
     payload = json.loads(SarifReporter().render(_report()))
     result = payload["runs"][0]["results"][0]
+    rules = {
+        rule["id"]: rule
+        for rule in payload["runs"][0]["tool"]["driver"]["rules"]
+        if isinstance(rule, dict)
+    }
 
     assert payload["version"] == "2.1.0"
     assert result["ruleId"] == "security.dangerous-function-call"
     assert result["partialFingerprints"]["gruffFingerprint"]
-    assert payload["runs"][0]["tool"]["driver"]["rules"][0]["properties"]["pillar"] == "security"
+    assert rules["security.dangerous-function-call"]["properties"]["pillar"] == "security"
+    assert "size.file-length" in rules
 
 
 def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
