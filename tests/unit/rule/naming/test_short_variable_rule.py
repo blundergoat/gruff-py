@@ -1,11 +1,11 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.naming.short_variable_rule import ShortVariableRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.naming.short_variable_rule import ShortVariableRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:

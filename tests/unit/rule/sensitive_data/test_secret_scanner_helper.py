@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data._secret_scanner_helper import (
+from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
     iter_matches,
     redact_preview,

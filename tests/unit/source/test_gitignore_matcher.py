@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from gruff.source.gitignore import GitignoreMatcher
+from gruffpy.source.gitignore import GitignoreMatcher
 
 
 def _write(path: Path, text: str = "") -> None:

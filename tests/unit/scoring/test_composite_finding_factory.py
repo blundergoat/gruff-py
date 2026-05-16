@@ -1,9 +1,9 @@
-from gruff.finding.confidence import Confidence
-from gruff.finding.finding import Finding
-from gruff.finding.pillar import Pillar
-from gruff.finding.rule_tier import RuleTier
-from gruff.finding.severity import Severity
-from gruff.scoring.composite_finding_factory import CompositeFindingFactory
+from gruffpy.finding.confidence import Confidence
+from gruffpy.finding.finding import Finding
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.rule_tier import RuleTier
+from gruffpy.finding.severity import Severity
+from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 
 
 def _f(

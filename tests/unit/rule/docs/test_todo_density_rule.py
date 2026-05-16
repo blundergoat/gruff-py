@@ -1,4 +1,4 @@
-from gruff.rule.docs.todo_density_rule import TodoDensityRule
+from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

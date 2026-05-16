@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
+from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _ENV_SECRET = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1"

@@ -1,6 +1,6 @@
 import ast
 
-from gruff.rule._python_dynamism import (
+from gruffpy.rule._python_dynamism import (
     has_dataclass_decorator,
     has_framework_base,
     has_framework_decorator,

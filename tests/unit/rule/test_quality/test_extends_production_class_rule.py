@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.extends_production_class_rule import (
+from gruffpy.rule.test_quality.extends_production_class_rule import (
     ExtendsProductionClassRule,
 )
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
@@ -31,7 +31,7 @@ def test_non_test_class_skipped():
 def test_production_rule_file_with_test_in_path_skipped():
     src = "class TestFunctionTooLongRule(Rule):\n    pass\n"
     findings = ExtendsProductionClassRule().analyse(
-        make_unit(src, "src/gruff/rule/test_quality/test_function_too_long_rule.py"),
+        make_unit(src, "src/gruffpy/rule/test_quality/test_function_too_long_rule.py"),
         default_ctx(),
     )
     assert findings == []

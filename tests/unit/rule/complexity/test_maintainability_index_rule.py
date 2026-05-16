@@ -1,17 +1,17 @@
 import ast
 import math
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.pillar import Pillar
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity.maintainability_index_rule import (
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity.maintainability_index_rule import (
     MaintainabilityIndexRule,
     maintainability_index_for,
 )
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:

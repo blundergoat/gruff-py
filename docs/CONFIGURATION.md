@@ -8,9 +8,9 @@ terms.
 
 The first matching source wins:
 
-1. `gruff analyse --config <path>`
+1. `gruff-py analyse --config <path>`
 2. `.gruff.yaml` in the project root
-3. `[tool.gruff]` in `pyproject.toml`
+3. `[tool.gruff-py]` in `pyproject.toml`
 4. Built-in defaults from `RuleRegistry.defaults()`
 
 Use `--no-config` to skip all config files.
@@ -49,23 +49,23 @@ rules:
 ## pyproject.toml Example
 
 ```toml
-[tool.gruff]
+[tool.gruff-py]
 minimumPythonVersion = "3.11"
 
-[tool.gruff.paths]
+[tool.gruff-py.paths]
 ignore = ["tests/fixtures/**", "generated/**"]
 
-[tool.gruff.allowlists]
+[tool.gruff-py.allowlists]
 acceptedAbbreviations = ["API", "URL"]
 secretPreviews = ["example-token-prefix"]
 
-[tool.gruff.selection]
+[tool.gruff-py.selection]
 excludeRules = ["docs.missing-module-docstring"]
 
-[tool.gruff.rules."size.file-length"]
+[tool.gruff-py.rules."size.file-length"]
 thresholds = { warning = 500, error = 900 }
 
-[tool.gruff.rules."test-quality.testdox-readability"]
+[tool.gruff-py.rules."test-quality.testdox-readability"]
 enabled = true
 ```
 
@@ -144,4 +144,3 @@ filter what gets rendered. They do not change scoring or the `--fail-on` exit
 calculation.
 
 Use config `selection` when you want to change which rules run.
-

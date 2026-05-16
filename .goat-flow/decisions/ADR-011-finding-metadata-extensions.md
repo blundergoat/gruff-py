@@ -35,7 +35,7 @@ schema and cross-implementation pressure.
 
 | Option | What fails | Why rejected or accepted |
 | --- | --- | --- |
-| Add optional metadata under existing finding metadata | Reporters must handle absent fields. | Proposed: useful without breaking `gruff.analysis.v1`. |
+| Add optional metadata under existing finding metadata | Reporters must handle absent fields. | Proposed: useful without breaking `gruff-py.analysis.v1`. |
 | Add top-level required fields for security/remediation | Non-security rules get meaningless fields; schema migration required. | Rejected for v0.1.x/v0.2 foundation. |
 | Add full dataflow traces now | Requires source/sink path schema and stronger analysis engine. | Rejected for current scope. |
 | Keep metadata out of findings forever | SARIF/reporting lose useful security context. | Rejected: related tools show this context is valuable. |

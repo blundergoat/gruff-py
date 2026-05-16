@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from gruff.cli import main
+from gruffpy.cli import main
 
 
 def _write(path: Path, text: str = "") -> None:

@@ -1,4 +1,4 @@
-from gruff.rule.docs.useless_docstring_rule import UselessDocstringRule
+from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

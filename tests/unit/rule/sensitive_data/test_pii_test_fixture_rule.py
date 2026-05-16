@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
+from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _REAL_EMAIL = "jane.doe" + "@" + "gmail.com"

@@ -5,8 +5,8 @@ counter before/after invoking the full registry on a single unit and asserts
 the delta is 1, not N — proving every test-quality rule shares the cached scope.
 """
 
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._test_quality_node_helper import (
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._test_quality_node_helper import (
     compute_count,
     reset_compute_count,
 )

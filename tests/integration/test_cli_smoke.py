@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from gruff.cli import main
+from gruffpy.cli import main
 
 
 def test_cli_help_lists_analyse_command():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert result.output.startswith("gruff 0.1.0-dev\n\nUsage:\n  command [options] [arguments]")
+    assert result.output.startswith("gruff-py 0.1.0-dev\n\nUsage:\n  command [options] [arguments]")
     assert "Available commands:" in result.output
     for command in (
         "analyse",
@@ -32,7 +32,7 @@ def test_cli_without_command_prints_php_style_menu():
     result = CliRunner().invoke(main, [])
 
     assert result.exit_code == 0
-    assert result.output.startswith("gruff 0.1.0-dev\n\nUsage:\n")
+    assert result.output.startswith("gruff-py 0.1.0-dev\n\nUsage:\n")
     assert "Options:" in result.output
     assert "Available commands:" in result.output
 
@@ -52,6 +52,7 @@ def test_cli_command_help_lists_symfony_style_global_options():
         assert option in result.output
     for option in ("--diff", "--diff-vs", "--baseline", "--generate-baseline"):
         assert option in result.output
+    assert "sarif" in result.output
 
 
 def test_cli_list_rules_json_lists_rule_metadata():
@@ -89,7 +90,7 @@ def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.exit_code == 0, result.output
     assert result.output == ""
     payload = json.loads(output.read_text())
-    assert payload["schemaVersion"] == "gruff.analysis.v1"
+    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
     assert payload["run"]["format"] == "json"
 
 
@@ -133,7 +134,7 @@ def test_cli_metric_calibration_json_is_developer_dump(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["schemaVersion"] == "gruff.metric-calibration.v1"
+    assert payload["schemaVersion"] == "gruff-py.metric-calibration.v1"
     assert payload["run"]["functions"] == 1
     assert {metric["name"] for metric in payload["metrics"]} == {
         "cyclomatic",
@@ -178,8 +179,8 @@ def test_cli_analyse_emits_schema_versioned_json(
     assert result.exit_code == 0, result.output
 
     payload = json.loads(result.output)
-    assert payload["schemaVersion"] == "gruff.analysis.v1"
-    assert payload["tool"]["name"] == "gruff"
+    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["tool"]["name"] == "gruff-py"
     assert payload["summary"]["filesDiscovered"] >= 2
     assert payload["summary"]["filesParsed"] >= 2
 
@@ -197,6 +198,61 @@ def test_cli_analyse_emits_schema_versioned_json(
     assert finding["confidence"] == "high"
 
 
+def test_cli_analyse_sarif_format_is_parseable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "long.py").write_text("\n".join(f"x{i} = {i}" for i in range(900)) + "\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "sarif", "--fail-on", "none", "--no-config", "src"],
+    )
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.output)
+    assert payload["version"] == "2.1.0"
+    assert payload["runs"][0]["tool"]["driver"]["name"] == "gruff-py"
+    assert payload["runs"][0]["results"][0]["partialFingerprints"]["gruffFingerprint"]
+
+
+def test_cli_analyse_sarif_fixture_contract() -> None:
+    fixture = Path("tests/fixtures/complexity")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "sarif",
+            "--fail-on",
+            "none",
+            "--no-config",
+            str(fixture),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.output)
+    run = payload["runs"][0]
+    driver = run["tool"]["driver"]
+    rule_ids = [rule["id"] for rule in driver["rules"]]
+
+    assert payload["version"] == "2.1.0"
+    assert driver["name"] == "gruff-py"
+    assert rule_ids == sorted(rule_ids)
+    assert len(run["results"]) > 0
+    for sarif_result in run["results"]:
+        assert sarif_result["partialFingerprints"]["gruffFingerprint"]
+        assert driver["rules"][sarif_result["ruleIndex"]]["id"] == sarif_result["ruleId"]
+        uri = sarif_result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        assert not uri.startswith("./")
+        assert "\\" not in uri
+    assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
+
+
 def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -207,7 +263,7 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         ["analyse", "--format", "text", "--fail-on", "none", "--no-config", "src"],
     )
     assert result.exit_code == 0, result.output
-    assert "gruff " in result.output
+    assert "gruff-py " in result.output
     assert "Findings" in result.output
     assert "Score" in result.output
 

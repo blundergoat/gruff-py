@@ -1,6 +1,6 @@
 import ast
 
-from gruff.rule.size._lines import lines_for_size, qualified_symbol
+from gruffpy.rule.size._lines import lines_for_size, qualified_symbol
 
 
 def _first_def(source: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:

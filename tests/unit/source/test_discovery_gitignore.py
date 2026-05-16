@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from gruff.source.discovery import SourceDiscovery
+from gruffpy.source.discovery import SourceDiscovery
 
 
 def _write(path: Path, text: str = "") -> None:

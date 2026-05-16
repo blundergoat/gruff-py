@@ -1,4 +1,4 @@
-from gruff.rule.docs._docstring_parser import DocstringStyle, parse_docstring
+from gruffpy.rule.docs._docstring_parser import DocstringStyle, parse_docstring
 
 
 def test_empty_returns_none():
@@ -167,7 +167,7 @@ def test_sphinx_style_multiple_raises():
 def test_extract_docstring_round_trip():
     import ast
 
-    from gruff.rule.docs._docstring_parser import extract_docstring
+    from gruffpy.rule.docs._docstring_parser import extract_docstring
 
     src = '''
 def f(x):
@@ -183,7 +183,7 @@ def f(x):
 def test_extract_docstring_returns_none_when_absent():
     import ast
 
-    from gruff.rule.docs._docstring_parser import extract_docstring
+    from gruffpy.rule.docs._docstring_parser import extract_docstring
 
     src = "def f(x):\n    return x\n"
     module = ast.parse(src)

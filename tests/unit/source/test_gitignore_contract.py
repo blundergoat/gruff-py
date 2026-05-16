@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from gruff.source.gitignore import GitignoreMatcher
+from gruffpy.source.gitignore import GitignoreMatcher
 
 _GIT = shutil.which("git")
 

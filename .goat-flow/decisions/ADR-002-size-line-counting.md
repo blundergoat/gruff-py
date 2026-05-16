@@ -17,7 +17,7 @@ This helper is consumed by every M02 size rule that needs a length number. M03's
 
 ## Context
 
-gruff-php's size pillar (`src/Rule/Size/`) measures **raw line span** because that is the metric a human reader sees when they open a file in an editor: "this method is 70 lines long" includes docstring lines and blank-line breathing room. The cross-implementation contract (`gruff.analysis.v1`, finding fingerprints) means `metadata.lines` MUST be byte-equivalent across gruff-php and gruff-py for the same conceptual symbol; using a different counting policy would silently invalidate every cross-impl baseline.
+gruff-php's size pillar (`src/Rule/Size/`) measures **raw line span** because that is the metric a human reader sees when they open a file in an editor: "this method is 70 lines long" includes docstring lines and blank-line breathing room. The cross-implementation contract (`gruff-py.analysis.v1`, finding fingerprints) means `metadata.lines` MUST be byte-equivalent across gruff-php and gruff-py for the same conceptual symbol; using a different counting policy would silently invalidate every cross-impl baseline.
 
 Python's `ast` exposes `node.end_lineno` reliably on Python ≥3.8 (gruff-py's supported floor is 3.11). The decorator line is the `lineno` of the first decorator in `node.decorator_list` if present.
 
@@ -26,7 +26,7 @@ Python's `ast` exposes `node.end_lineno` reliably on Python ≥3.8 (gruff-py's s
 | Option | What fails | Why rejected or accepted |
 | --- | --- | --- |
 | **Raw line span, decorator → end_lineno** (accepted) | Counts a function with a long docstring as "long" even when the executable body is tiny. | Accepted: matches gruff-php byte-for-byte; matches the metric a code reader sees; deterministic and AST-driven; no false negatives on long docstrings. |
-| Logical lines (executable only) | Diverges from gruff-php; breaks `gruff.analysis.v1` JSON byte-equivalence for `metadata.lines`; makes the LOC term in M03's MI formula non-comparable with radon's LOC; requires a separate "raw" counter anyway for `size.file-length` (already shipped using raw). | Rejected: cross-impl contract violation. |
+| Logical lines (executable only) | Diverges from gruff-php; breaks `gruff-py.analysis.v1` JSON byte-equivalence for `metadata.lines`; makes the LOC term in M03's MI formula non-comparable with radon's LOC; requires a separate "raw" counter anyway for `size.file-length` (already shipped using raw). | Rejected: cross-impl contract violation. |
 | Configurable per-rule | Helper signature complicates; users have to learn a knob; defers the decision into runtime config; risks per-rule drift. | Rejected: no real consumer asks for both modes in v0.1. |
 | Source-text-scanning fallback (split on `\n`) | Bypasses the AST and double-counts continuations / line-continuation backslashes; loses decorator awareness. | Rejected: AST exposes everything we need; fallback is unnecessary on Python ≥3.8. |
 

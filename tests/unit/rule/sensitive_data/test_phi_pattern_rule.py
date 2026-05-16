@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
+from gruffpy.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 

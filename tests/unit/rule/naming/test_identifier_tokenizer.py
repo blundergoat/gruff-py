@@ -1,4 +1,4 @@
-from gruff.rule.naming._identifier_tokenizer import lower_tokens, tokenize
+from gruffpy.rule.naming._identifier_tokenizer import lower_tokens, tokenize
 
 
 def test_empty_returns_empty():

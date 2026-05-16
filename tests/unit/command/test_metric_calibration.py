@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from gruff.command.metric_calibration import (
+from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
     render_metric_calibration_text,
@@ -88,4 +88,4 @@ def test_metric_calibration_payload_is_json_serialisable(tmp_path: Path) -> None
 
     encoded = json.dumps(metric_calibration_payload(report, top=1))
 
-    assert "gruff.metric-calibration.v1" in encoded
+    assert "gruff-py.metric-calibration.v1" in encoded

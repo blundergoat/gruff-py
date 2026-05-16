@@ -1,4 +1,4 @@
-from gruff.rule.security.sql_concatenation_rule import SqlConcatenationRule
+from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

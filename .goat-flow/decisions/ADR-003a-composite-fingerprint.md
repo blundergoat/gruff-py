@@ -6,7 +6,7 @@
 
 ## Decision
 
-A **composite finding** synthesized by `CompositeFindingFactory` is a `Finding` like any other and is fingerprinted by the existing `fingerprint_for(...)` algorithm in `src/gruff/finding/fingerprint.py`. The fields fed into the fingerprint are exactly the same as for per-unit findings — `(ruleId, file, line, endLine, column, symbol)` — encoded with PHP-style slash escaping before SHA-256, truncated to 16 hex characters.
+A **composite finding** synthesized by `CompositeFindingFactory` is a `Finding` like any other and is fingerprinted by the existing `fingerprint_for(...)` algorithm in `src/gruffpy/finding/fingerprint.py`. The fields fed into the fingerprint are exactly the same as for per-unit findings — `(ruleId, file, line, endLine, column, symbol)` — encoded with PHP-style slash escaping before SHA-256, truncated to 16 hex characters.
 
 For `design.god-method` specifically:
 

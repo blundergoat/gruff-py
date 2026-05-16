@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.jwt_token_rule import JwtTokenRule
+from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"

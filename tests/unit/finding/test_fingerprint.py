@@ -7,7 +7,7 @@ the test, which is the point.
 
 import pytest
 
-from gruff.finding.fingerprint import fingerprint_for
+from gruffpy.finding.fingerprint import fingerprint_for
 
 PHP_GROUND_TRUTH = [
     # (rule_id, file, line, end_line, column, symbol, expected_fingerprint)

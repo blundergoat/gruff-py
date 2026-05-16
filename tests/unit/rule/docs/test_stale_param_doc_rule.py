@@ -1,4 +1,4 @@
-from gruff.rule.docs.stale_param_doc_rule import StaleParamDocRule
+from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

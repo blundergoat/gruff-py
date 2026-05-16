@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.magic_number_assertion_rule import MagicNumberAssertionRule
+from gruffpy.rule.test_quality.magic_number_assertion_rule import MagicNumberAssertionRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

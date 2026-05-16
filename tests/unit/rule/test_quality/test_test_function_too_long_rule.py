@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
+from gruffpy.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

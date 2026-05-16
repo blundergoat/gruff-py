@@ -1,4 +1,4 @@
-from gruff.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
+from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

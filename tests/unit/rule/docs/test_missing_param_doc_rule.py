@@ -1,4 +1,4 @@
-from gruff.rule.docs.missing_param_doc_rule import MissingParamDocRule
+from gruffpy.rule.docs.missing_param_doc_rule import MissingParamDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

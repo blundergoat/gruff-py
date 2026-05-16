@@ -27,7 +27,7 @@ Nesting starts at 0 inside a function body. Each entry into a control structure 
 
 ## Context
 
-Cognitive complexity addresses the gap between *cyclomatic* complexity (per-path branching count) and the felt difficulty a human reader experiences when nesting deepens. SonarSource v1.4 is the canonical reference; bandit/ruff/radon do not implement cognitive complexity natively. gruff-php's `complexity.cognitive` mirrors v1.4 byte-for-byte; gruff-py must do the same to keep `gruff.analysis.v1` JSON byte-equivalent.
+Cognitive complexity addresses the gap between *cyclomatic* complexity (per-path branching count) and the felt difficulty a human reader experiences when nesting deepens. SonarSource v1.4 is the canonical reference; bandit/ruff/radon do not implement cognitive complexity natively. gruff-php's `complexity.cognitive` mirrors v1.4 byte-for-byte; gruff-py must do the same to keep `gruff-py.analysis.v1` JSON byte-equivalent.
 
 ## Failure Mode Comparison
 

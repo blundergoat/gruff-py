@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from gruff.config.exceptions import ConfigError
-from gruff.config.yaml_loader import load_gruff_yaml
+from gruffpy.config.exceptions import ConfigError
+from gruffpy.config.yaml_loader import load_gruff_yaml
 
 
 def test_loads_basic_yaml(tmp_path: Path):

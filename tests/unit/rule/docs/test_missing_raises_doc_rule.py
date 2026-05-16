@@ -1,7 +1,7 @@
 import ast
 
-from gruff.rule.docs._helpers import raises_in_body
-from gruff.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
+from gruffpy.rule.docs._helpers import raises_in_body
+from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

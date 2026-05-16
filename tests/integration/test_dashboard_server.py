@@ -5,7 +5,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
 
-from gruff.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
 
 
 def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
@@ -20,14 +20,14 @@ def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
         interactive_scan = _fetch(base_url + "/scan?reportInteractive=1")
 
     assert health == "ok\n"
-    assert "gruff dashboard" in shell
+    assert "gruff-py dashboard" in shell
     assert "controls-toggle" in shell
     assert "controls-panel" in shell
     assert "report-frame" in shell
     assert "Project root" in shell
     assert ".paper" in scan
     assert "gruff-dashboard-meta" in scan
-    assert "gruff analyse --format html --fail-on none -- src" in scan
+    assert "gruff-py analyse --format html --fail-on none -- src" in scan
     assert 'class="finding-filters"' in interactive_scan
     assert "--report-interactive" in interactive_scan
 

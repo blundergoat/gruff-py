@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
+from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 

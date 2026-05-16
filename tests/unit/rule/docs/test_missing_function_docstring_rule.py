@@ -1,4 +1,4 @@
-from gruff.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
+from gruffpy.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 

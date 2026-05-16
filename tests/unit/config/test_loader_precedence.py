@@ -2,9 +2,12 @@
 
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.loader import ConfigLoader
-from gruff.rule.registry import RuleRegistry
+import pytest
+
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.exceptions import ConfigError
+from gruffpy.config.loader import ConfigLoader
+from gruffpy.rule.registry import RuleRegistry
 
 
 def _defaults() -> AnalysisConfig:
@@ -25,7 +28,7 @@ def test_gruff_yaml_wins_over_pyproject_toml(tmp_path: Path):
         "rules:\n  size.file-length:\n    thresholds:\n      warning: 250\n      error: 600\n"
     )
     (tmp_path / "pyproject.toml").write_text(
-        '[tool.gruff.rules."size.file-length"]\n'
+        '[tool.gruff-py.rules."size.file-length"]\n'
         "enabled = true\n"
         "thresholds = { warning = 400, error = 800 }\n"
     )
@@ -37,7 +40,7 @@ def test_gruff_yaml_wins_over_pyproject_toml(tmp_path: Path):
 
 def test_pyproject_used_when_only_pyproject_exists(tmp_path: Path):
     (tmp_path / "pyproject.toml").write_text(
-        '[tool.gruff.rules."size.file-length"]\n'
+        '[tool.gruff-py.rules."size.file-length"]\n'
         "enabled = true\n"
         "thresholds = { warning = 333, error = 999 }\n"
     )
@@ -62,7 +65,7 @@ def test_explicit_yaml_path_overrides_discovery(tmp_path: Path):
 def test_explicit_toml_path_supported(tmp_path: Path):
     explicit = tmp_path / "custom.toml"
     explicit.write_text(
-        '[tool.gruff.rules."size.file-length"]\nthresholds = { warning = 222, error = 444 }\n'
+        '[tool.gruff-py.rules."size.file-length"]\nthresholds = { warning = 222, error = 444 }\n'
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load(explicit)
@@ -95,11 +98,18 @@ def test_yaml_selection_applied(tmp_path: Path):
 def test_yaml_unknown_top_level_key_raises(tmp_path: Path):
     (tmp_path / ".gruff.yaml").write_text("garbage: 1\n")
     loader = ConfigLoader(tmp_path, _defaults())
-    import pytest
-
-    from gruff.config.exceptions import ConfigError
 
     with pytest.raises(ConfigError, match="Unknown gruff keys"):
+        loader.load()
+
+
+def test_legacy_tool_gruff_pyproject_table_is_rejected(tmp_path: Path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.gruff.rules."size.file-length"]\nthresholds = { warning = 222 }\n'
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match=r"Use \[tool\.gruff-py\].*\[tool\.gruff\]"):
         loader.load()
 
 

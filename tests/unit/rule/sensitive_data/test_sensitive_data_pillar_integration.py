@@ -11,7 +11,7 @@ Proves that:
 import json
 import re
 
-from gruff.rule.registry import RuleRegistry
+from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"

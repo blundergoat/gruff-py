@@ -2,23 +2,23 @@
 
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._pytest_config import reset_cache
-from gruff.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
-from gruff.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
-from gruff.rule.test_quality.pytest_coverage_source_missing_rule import (
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._pytest_config import reset_cache
+from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
+from gruffpy.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
+from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
 )
-from gruff.rule.test_quality.pytest_deprecations_not_fatal_rule import (
+from gruffpy.rule.test_quality.pytest_deprecations_not_fatal_rule import (
     PytestDeprecationsNotFatalRule,
 )
-from gruff.rule.test_quality.pytest_strict_config_missing_rule import (
+from gruffpy.rule.test_quality.pytest_strict_config_missing_rule import (
     PytestStrictConfigMissingRule,
 )
-from gruff.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
+from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _TEST_FIXTURE = "def test_something():\n    assert 1 + 1 == 2\n"

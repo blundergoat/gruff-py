@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2026-05-16
-**Ticket/Context:** Self-analysis of gruff-py surfaced findings in directories whose contents the project intentionally excludes from version control. The hardcoded `DEFAULT_IGNORED_DIRECTORIES` in `src/gruff/source/discovery.py` is not aligned with the project's existing source-of-truth for what counts as "the codebase": its `.gitignore`.
+**Ticket/Context:** Self-analysis of gruff-py surfaced findings in directories whose contents the project intentionally excludes from version control. The hardcoded `DEFAULT_IGNORED_DIRECTORIES` in `src/gruffpy/source/discovery.py` is not aligned with the project's existing source-of-truth for what counts as "the codebase": its `.gitignore`.
 
 ## Decision
 
@@ -12,7 +12,7 @@ The layered ignore semantics become:
 
 1. **Default-ignored directories** (built-in list of caches, venvs, vendored deps). Unchanged. Always-on unless `--include-ignored` is passed.
 2. **Gitignore exclusions** (new). Read from the project's `.gitignore` files. Default-on unless `--include-ignored` is passed.
-3. **Configured ignore patterns** (`paths.ignore` in `.gruff.yaml` / `[tool.gruff.paths]`). Unchanged. Layered on top.
+3. **Configured ignore patterns** (`paths.ignore` in `.gruff.yaml` / `[tool.gruff-py.paths]`). Unchanged. Layered on top.
 
 A path is scanned iff it passes all three filters. `--include-ignored` continues to bypass the first two; the third stays user-controlled and is not overridden by the flag.
 
@@ -42,8 +42,8 @@ The trade-off is mainly about the security/sensitive-data pillars. Today those r
 - A gitignore matcher is added to the runtime. Preference is for a maintained library (`pathspec`) over a hand-rolled implementation, because gitignore syntax (negation, anchored patterns, trailing-slash directory matches, nested files, `**` wildcards) is easy to get subtly wrong. Crosses the Ask First dependency boundary in `CLAUDE.md`.
 - `SourceDiscovery.discover` continues to expose `include_ignored`, and `--include-ignored` on the CLI continues to mean "scan default-ignored paths too." The flag is extended to also bypass gitignore. The same flag controls both because users who want to scan local-only files virtually always want to scan caches too.
 - `paths.ignore` in `.gruff.yaml` is unchanged and not bypassed by `--include-ignored` — it remains the user's explicit, intentional exclusion list.
-- Cross-impl note: gruff-php and gruff-ts use the same `.gruff.yaml` config shape (ADR-006). If they do not honor `.gitignore`, the same project will produce different file sets between implementations. This is acceptable for findings (the cross-impl contract is `gruff.analysis.v1` / `gruff.baseline.v1` / fingerprints, not "same files in the report"), but the divergence should be surfaced in their respective decision logs so the implementations converge over time.
-- The JSON schemas (`gruff.analysis.v1`, `gruff.baseline.v1`) and finding fingerprints are unaffected — this changes which files reach the rules, not what the rules emit.
+- Cross-impl note: gruff-php and gruff-ts use the same `.gruff.yaml` config shape (ADR-006). If they do not honor `.gitignore`, the same project will produce different file sets between implementations. This is acceptable for findings (the cross-impl contract is `gruff-py.analysis.v1` / `gruff-py.baseline.v1` / fingerprints, not "same files in the report"), but the divergence should be surfaced in their respective decision logs so the implementations converge over time.
+- The JSON schemas (`gruff-py.analysis.v1`, `gruff-py.baseline.v1`) and finding fingerprints are unaffected — this changes which files reach the rules, not what the rules emit.
 
 ## Cross-implementation Tracking
 

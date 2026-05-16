@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.private_key_rule import PrivateKeyRule
+from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 

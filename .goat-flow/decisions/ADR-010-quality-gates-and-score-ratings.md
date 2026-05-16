@@ -15,7 +15,7 @@ The gate layer must stay separate from:
 
 - `ScoreCalculator`, which computes numeric scores;
 - `--fail-on`, which exits based on finding severity;
-- finding fingerprints and `gruff.analysis.v1`, which should not change just
+- finding fingerprints and `gruff-py.analysis.v1`, which should not change just
   because a gate is evaluated.
 
 Score/rating bands may be added for aggregate and pillar scores, but any formula

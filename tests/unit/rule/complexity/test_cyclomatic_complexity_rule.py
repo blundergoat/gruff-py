@@ -1,16 +1,16 @@
 import ast
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity.cyclomatic_complexity_rule import (
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity.cyclomatic_complexity_rule import (
     CyclomaticComplexityRule,
     cyclomatic_for,
 )
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 RADON_GROUND_TRUTH = {
     "simple": 1,

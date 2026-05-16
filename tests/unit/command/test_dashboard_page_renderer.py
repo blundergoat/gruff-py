@@ -1,7 +1,7 @@
 import json
 import re
 
-from gruff.command.dashboard_page_renderer import DashboardPageRenderer
+from gruffpy.command.dashboard_page_renderer import DashboardPageRenderer
 
 
 def _state(**overrides: str) -> dict[str, str]:
@@ -57,7 +57,7 @@ def test_inject_dashboard_metadata_embeds_valid_html_safe_json_payload():
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
         project_root='/tmp/<project>&"quoted"',
-        command=["gruff", "analyse", "--format", "html", "path with spaces"],
+        command=["gruff-py", "analyse", "--format", "html", "path with spaces"],
         exit_code=2,
         duration_ms=345,
     )
@@ -69,7 +69,7 @@ def test_inject_dashboard_metadata_embeds_valid_html_safe_json_payload():
     assert payload["exitCode"] == 2
     assert payload["durationMs"] == 345
     assert payload["projectRoot"] == '/tmp/<project>&"quoted"'
-    assert payload["command"] == "gruff analyse --format html 'path with spaces'"
+    assert payload["command"] == "gruff-py analyse --format html 'path with spaces'"
 
 
 def _metadata_payload(html: str) -> dict[str, object]:

@@ -5,8 +5,8 @@ Also re-checks the memoisation invariant after the full test-quality rule set
 is layered onto the helper — single scope computation per unit.
 """
 
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._test_quality_node_helper import (
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._test_quality_node_helper import (
     compute_count,
     reset_compute_count,
 )

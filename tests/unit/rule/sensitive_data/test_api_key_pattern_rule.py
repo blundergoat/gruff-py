@@ -1,4 +1,4 @@
-from gruff.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
+from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"

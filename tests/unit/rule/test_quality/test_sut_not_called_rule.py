@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.sut_not_called_rule import SutNotCalledRule
+from gruffpy.rule.test_quality.sut_not_called_rule import SutNotCalledRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

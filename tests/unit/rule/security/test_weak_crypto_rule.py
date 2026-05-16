@@ -1,4 +1,4 @@
-from gruff.rule.security.weak_crypto_rule import WeakCryptoRule
+from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

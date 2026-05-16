@@ -1,11 +1,11 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
-from gruff.rule.registry import RuleRegistry
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str) -> AnalysisUnit:

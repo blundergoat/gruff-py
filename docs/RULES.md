@@ -151,7 +151,7 @@ gruff-py `0.1` registers 98 rules in `RuleRegistry.defaults()`.
 Run all defaults:
 
 ```bash
-gruff analyse src/
+gruff-py analyse src/
 ```
 
 Disable a rule:
@@ -179,4 +179,3 @@ rules:
       warning: 500
       error: 900
 ```
-

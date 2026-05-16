@@ -1,11 +1,11 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.waste.unused_import_rule import UnusedImportRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.waste.unused_import_rule import UnusedImportRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
@@ -110,7 +110,7 @@ def test_import_used_by_string_annotation_does_not_fire():
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from gruff.rule.registry import RuleRegistry
+    from gruffpy.rule.registry import RuleRegistry
 
 
 def f(registry: "RuleRegistry") -> None:
@@ -124,7 +124,7 @@ def f(registry: "RuleRegistry") -> None:
 
 def test_import_used_by_nested_string_annotation_does_not_fire():
     src = """
-from gruff.rule.definition import RuleDefinition
+from gruffpy.rule.definition import RuleDefinition
 
 
 def f() -> "list[RuleDefinition]":

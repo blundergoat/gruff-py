@@ -8,8 +8,7 @@ Use this checklist before publishing `0.1`.
 - Update `pyproject.toml` `project.version`.
 - Confirm `pyproject.toml` license metadata matches `LICENSE.md`.
 - Add project URLs in `pyproject.toml` before PyPI publication if desired.
-- Confirm the package name `gruff` is available or decide on a different
-  published name.
+- Confirm the package name `gruff-py` is available before publishing.
 
 ## Documentation
 
@@ -49,9 +48,9 @@ Smoke-test the built wheel in a clean environment before publishing.
 
 ## Compatibility Checks
 
-- Confirm `gruff.analysis.v1` has not changed unexpectedly.
-- Confirm `gruff.hotspot.v1` has not changed unexpectedly.
-- Confirm `gruff.baseline.v1` remains reserved for cross-implementation use.
+- Confirm `gruff-py.analysis.v1` has not changed unexpectedly.
+- Confirm `gruff-py.hotspot.v1` has not changed unexpectedly.
+- Confirm `gruff-py.baseline.v1` remains reserved for cross-implementation use.
 - Confirm fingerprint golden tests pass.
 - Confirm report format names are documented and implemented.
 
@@ -67,4 +66,3 @@ uv publish
 ```
 
 Use TestPyPI first if this is the first public package upload.
-

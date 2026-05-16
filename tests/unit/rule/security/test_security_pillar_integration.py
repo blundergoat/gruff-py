@@ -1,6 +1,6 @@
 """Cumulative security-pillar fixture + safe-equivalent regression set."""
 
-from gruff.rule.registry import RuleRegistry
+from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 _DANGEROUS_FIXTURE = """import hashlib

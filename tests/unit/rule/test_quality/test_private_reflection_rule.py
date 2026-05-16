@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.private_reflection_rule import PrivateReflectionRule
+from gruffpy.rule.test_quality.private_reflection_rule import PrivateReflectionRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

@@ -6,7 +6,7 @@
 
 ## Decision
 
-gruff-py's documentation pillar parses docstrings using **`docstring-parser`** (PyPI, MIT, pure Python, 22 KB wheel, zero runtime dependencies, ships `py.typed`). The library is wrapped behind one in-tree helper, `src/gruff/rule/docs/_docstring_parser.py`, that exposes a `ParsedDocstring` dataclass normalising Google / NumPy / Sphinx-`:param:` output into a single shape consumed by `docs.missing-param-doc`, `docs.missing-return-doc`, `docs.missing-raises-doc`, and `docs.stale-param-doc`.
+gruff-py's documentation pillar parses docstrings using **`docstring-parser`** (PyPI, MIT, pure Python, 22 KB wheel, zero runtime dependencies, ships `py.typed`). The library is wrapped behind one in-tree helper, `src/gruffpy/rule/docs/_docstring_parser.py`, that exposes a `ParsedDocstring` dataclass normalising Google / NumPy / Sphinx-`:param:` output into a single shape consumed by `docs.missing-param-doc`, `docs.missing-return-doc`, `docs.missing-raises-doc`, and `docs.stale-param-doc`.
 
 Style auto-detection sequence inside the wrapper: try the library's Google parser, then NumPy, then Sphinx (`epydoc`/`rest`). If all three fail, the wrapper returns `None` and the field-mismatch rules emit zero findings for that docstring (they require parsable input — presence-only checks like `docs.missing-function-docstring` are unaffected).
 
@@ -38,7 +38,7 @@ The verified 22 KB wheel removes the install-size argument that initially looked
 ## Consequences
 
 - `pyproject.toml` `[project] dependencies` gains `docstring-parser>=0.15,<1`. This crosses an Ask First boundary per `CLAUDE.md`; the dep change happens as a separate, explicitly-approved follow-up to landing this ADR. The lower bound 0.15 is the first release with the stable `Style.AUTO` API used by the wrapper; the `<1` upper bound is a SemVer-style guard against a hypothetical 1.0 API rewrite.
-- `src/gruff/rule/docs/_docstring_parser.py` is the only file that imports `docstring_parser`. A grep test in `tests/integration/` enforces the import isolation; rule modules import from the wrapper only.
+- `src/gruffpy/rule/docs/_docstring_parser.py` is the only file that imports `docstring_parser`. A grep test in `tests/integration/` enforces the import isolation; rule modules import from the wrapper only.
 - The wrapper's `ParsedDocstring` dataclass is a frozen, slotted value object (consistent with gruff-py's value-object pattern per the design-decisions memory). Fields: `summary`, `description`, `params` (tuple of `DocstringField`), `returns` (`DocstringField | None`), `raises` (tuple), `style` (enum of `google | numpy | sphinx | unknown`).
 - If the auto-detection sequence returns `unknown`, field-mismatch rules (`missing-param-doc`, `missing-return-doc`, `missing-raises-doc`, `stale-param-doc`) skip the function and emit no findings. Presence-only rules (`missing-module-docstring`, `missing-class-docstring`, `missing-function-docstring`, `useless-docstring`, `todo-density`, `missing-readme`) are unaffected.
 

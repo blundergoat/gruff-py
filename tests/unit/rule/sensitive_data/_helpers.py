@@ -4,11 +4,11 @@ Builds text-typed AnalysisUnit fixtures so the SourceTextRule subclasses
 operate on ``unit.source`` (the tree is None, as the registry expects).
 """
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.source.source_file import SourceFile, SourceFileType
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile, SourceFileType
 
 
 def make_unit(

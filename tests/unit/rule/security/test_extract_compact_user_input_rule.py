@@ -1,4 +1,4 @@
-from gruff.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
+from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from gruff.parser.python_parser import PythonFileParser
-from gruff.source.source_file import SourceFile
+from gruffpy.parser.python_parser import PythonFileParser
+from gruffpy.source.source_file import SourceFile
 
 
 def test_ast_value_error_is_reported_as_parse_diagnostic(

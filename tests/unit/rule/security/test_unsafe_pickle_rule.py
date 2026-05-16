@@ -1,4 +1,4 @@
-from gruff.rule.security.unsafe_pickle_rule import UnsafePickleRule
+from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

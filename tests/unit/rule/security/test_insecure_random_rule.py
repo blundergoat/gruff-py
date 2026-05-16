@@ -1,4 +1,4 @@
-from gruff.rule.security.insecure_random_rule import InsecureRandomRule
+from gruffpy.rule.security.insecure_random_rule import InsecureRandomRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

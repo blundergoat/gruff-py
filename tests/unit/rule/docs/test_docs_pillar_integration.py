@@ -7,10 +7,10 @@ double-fires and registry omissions.
 
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.loader import ConfigLoader
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.loader import ConfigLoader
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.docs._helpers import make_unit
 
 # Source crafted to trigger every docs rule at least once.
