@@ -49,7 +49,7 @@ class ExtendsProductionClassRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         if unit.tree is None:
             return []
-        if "test" not in unit.file.display_path.lower():
+        if not _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
         findings: list[Finding] = []
@@ -99,3 +99,11 @@ def _base_name(node: ast.AST) -> str | None:
             return node.attr
         return f"{prefix}.{node.attr}"
     return None
+
+
+def _is_test_file(display_path: str) -> bool:
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

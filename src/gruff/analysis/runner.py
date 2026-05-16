@@ -1,3 +1,5 @@
+"""End-to-end pipeline (`run_analysis`) shared by `gruff analyse` and the dashboard `/scan`."""
+
 from pathlib import Path
 
 from gruff.analysis.report import AnalysisReport

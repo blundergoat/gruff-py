@@ -1,3 +1,5 @@
+"""Renders an AnalysisReport as a SARIF 2.1.0 log for code-scanning consumers."""
+
 import json
 from typing import Any
 

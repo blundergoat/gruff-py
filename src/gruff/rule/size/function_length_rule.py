@@ -1,3 +1,5 @@
+"""``size.function-length`` — long functions are harder to test and safely modify."""
+
 import ast
 
 from gruff.finding.confidence import Confidence

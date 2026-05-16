@@ -1,3 +1,5 @@
+"""Composite ``ScoreReport`` carrying the grade, pillars, top offenders, and metrics."""
+
 from dataclasses import dataclass
 from typing import Any
 

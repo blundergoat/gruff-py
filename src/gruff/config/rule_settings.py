@@ -1,3 +1,5 @@
+"""Per-rule configuration overrides (enabled flag, thresholds, free-form options)."""
+
 from dataclasses import dataclass, field
 from typing import Any
 

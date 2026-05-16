@@ -1,3 +1,5 @@
+"""How reliable a rule's heuristic signal is (low/medium/high)."""
+
 from enum import StrEnum
 
 

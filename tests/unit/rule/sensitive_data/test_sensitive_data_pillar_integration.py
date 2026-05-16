@@ -14,8 +14,11 @@ import re
 from gruff.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
+_AWS_KEY = "AKIA" + "1234567890ABCDEF"
+_AWS_KEY_PREVIEW = "AKIA...CDEF"
+
 _DANGEROUS_FIXTURE = (
-    "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+    f"AWS_KEY = '{_AWS_KEY}'\n"
     "STRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
     "JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdef123456abcdef'\n"
     "DB = 'postgresql://admin:s3cret!@db.example.com/myapp'\n"
@@ -44,7 +47,7 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
 
 def test_aws_key_fires_on_json_file_via_text_seam():
     """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
-    src = '{"region": "us-east-1", "key": "AKIAIOSFODNN7EXAMPLE"}\n'
+    src = f'{{"region": "us-east-1", "key": "{_AWS_KEY}"}}\n'
     findings = RuleRegistry.defaults().analyse(
         [make_unit(src, display_path="aws.json", source_type="text")], default_ctx()
     )
@@ -58,18 +61,18 @@ def test_aws_key_fires_on_json_file_via_text_seam():
 def test_redaction_in_json_output_never_leaks_raw_secret():
     """Every emitted finding's metadata.preview is redacted; the raw secret never
     appears in the serialised JSON."""
-    src = "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+    src = f"AWS_KEY = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws_findings = [f for f in findings if f.rule_id == "sensitive-data.aws-access-key"]
     assert len(aws_findings) == 1
     payload = json.dumps(aws_findings[0].to_dict())
-    assert "AKIAIOSFODNN7EXAMPLE" not in payload
-    assert "AKIA...MPLE" in payload
+    assert _AWS_KEY not in payload
+    assert _AWS_KEY_PREVIEW in payload
 
 
 def test_redact_preview_shape():
     """Preview matches `first4...last4 (redacted, N chars)` for secrets ≥ 8 chars."""
-    src = "key = 'AKIAIOSFODNN7EXAMPLE'\n"
+    src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
     assert re.match(

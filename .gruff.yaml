@@ -6,7 +6,8 @@
 # when both exist.
 
 paths:
-  ignore: []
+  ignore:
+    - 'tests/fixtures/**'
 
 allowlists:
   acceptedAbbreviations: []

@@ -13,6 +13,7 @@ authors = [{ name = "Matthew Hansen" }]
 dependencies = [
     "click>=8.1",
     "docstring-parser>=0.15,<1",
+    "pathspec>=0.12",
     "pyyaml>=6.0",
 ]
 
@@ -37,7 +38,11 @@ packages = ["src/gruff"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra -q"
+addopts = "-ra -q --strict-config --strict-markers"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/gruff"]
 
 [tool.ruff]
 line-length = 100

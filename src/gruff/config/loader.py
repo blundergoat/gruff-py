@@ -1,3 +1,5 @@
+"""Loads ``.gruff.yaml`` and ``pyproject.toml`` config into an ``AnalysisConfig``."""
+
 import tomllib
 from pathlib import Path
 from typing import Any

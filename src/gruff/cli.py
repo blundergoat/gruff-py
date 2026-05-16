@@ -473,7 +473,7 @@ def _color_setting(ctx: click.Context) -> bool | None:
     "--include-ignored",
     is_flag=True,
     default=False,
-    help="Include files under default ignored directories.",
+    help="Scan files under default-ignored directories and .gitignore exclusions.",
 )
 @click.option(
     "--min-severity",
@@ -623,7 +623,7 @@ def analyse(
     "--include-ignored",
     is_flag=True,
     default=False,
-    help="Include files under default ignored directories.",
+    help="Scan files under default-ignored directories and .gitignore exclusions.",
 )
 @click.option(
     "--project-root",
@@ -758,7 +758,7 @@ def list_rules(rule_format: str) -> None:
     "--include-ignored",
     is_flag=True,
     default=False,
-    help="Include files under default ignored directories.",
+    help="Scan files under default-ignored directories and .gitignore exclusions.",
 )
 @click.option(
     "--min-severity",
@@ -869,7 +869,7 @@ def report(
     "--include-ignored",
     is_flag=True,
     default=False,
-    help="Include files under default ignored directories.",
+    help="Scan files under default-ignored directories and .gitignore exclusions.",
 )
 @_global_command_options
 def summary(

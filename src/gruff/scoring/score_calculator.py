@@ -1,3 +1,5 @@
+"""Converts findings into the per-pillar / per-file / composite scores in a ``ScoreReport``."""
+
 from gruff.finding.confidence import Confidence
 from gruff.finding.finding import Finding
 from gruff.finding.severity import Severity

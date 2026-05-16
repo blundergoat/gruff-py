@@ -1,3 +1,5 @@
+"""``size.class-length`` — large classes often mix too many responsibilities."""
+
 import ast
 
 from gruff.finding.confidence import Confidence

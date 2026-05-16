@@ -1,3 +1,5 @@
+"""Renders an AnalysisReport as a ``gruff.hotspot.v1`` JSON hotspot map."""
+
 import json
 
 from gruff.analysis.report import AnalysisReport

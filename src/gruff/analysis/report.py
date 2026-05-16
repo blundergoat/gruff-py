@@ -1,3 +1,5 @@
+"""``AnalysisReport`` — the value object reporters consume; serialises to ``gruff.analysis.v1``."""
+
 from dataclasses import dataclass
 from typing import Any
 

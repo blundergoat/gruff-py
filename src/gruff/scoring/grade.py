@@ -1,3 +1,5 @@
+"""Numeric score paired with the letter grade derived from gruff's grade bands."""
+
 from dataclasses import dataclass
 
 

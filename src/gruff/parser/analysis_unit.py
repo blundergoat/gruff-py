@@ -1,3 +1,5 @@
+"""The parsed-source bundle (AST + diagnostics) that rules receive as input."""
+
 import ast
 from dataclasses import dataclass
 

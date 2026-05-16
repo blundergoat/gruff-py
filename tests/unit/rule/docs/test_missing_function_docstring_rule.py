@@ -14,6 +14,31 @@ def test_function_without_docstring_emits():
     assert findings[0].symbol == "f"
 
 
+def test_pytest_function_without_docstring_in_test_file_skipped():
+    src = "def test_service_returns_value():\n    assert service() == 1\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), default_ctx()
+    )
+    assert findings == []
+
+
+def test_pytest_method_without_docstring_in_test_file_skipped():
+    src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), default_ctx()
+    )
+    assert findings == []
+
+
+def test_test_named_function_without_docstring_in_production_file_emits():
+    src = "def test_service_returns_value():\n    return service()\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "src/service_helpers.py"), default_ctx()
+    )
+    assert len(findings) == 1
+    assert findings[0].symbol == "test_service_returns_value"
+
+
 def test_private_function_skipped():
     src = "def _helper():\n    return 1\n"
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []

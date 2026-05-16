@@ -1,3 +1,5 @@
+"""``size.average-function-length`` — classes with several long average functions strain readers."""
+
 import ast
 
 from gruff.finding.confidence import Confidence
@@ -10,6 +12,8 @@ from gruff.rule.context import RuleContext
 from gruff.rule.definition import RuleDefinition
 from gruff.rule.rule import Rule
 from gruff.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+
+_MIN_METHODS = 3
 
 
 class AverageFunctionLengthRule(Rule):
@@ -45,7 +49,7 @@ class AverageFunctionLengthRule(Rule):
                 for child in node.body
                 if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
             ]
-            if not methods:
+            if len(methods) < _MIN_METHODS:
                 continue
 
             avg = sum(lines_for_size(m) for m in methods) / len(methods)

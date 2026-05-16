@@ -1,3 +1,5 @@
+"""``size.parameter-count`` — too many parameters make calls error-prone."""
+
 import ast
 
 from gruff.finding.confidence import Confidence

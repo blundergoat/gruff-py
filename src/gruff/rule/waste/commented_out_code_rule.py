@@ -3,15 +3,16 @@
 Two-stage heuristic:
 
 1. A cheap regex pre-filter rejects most comment styles ("TODO:", english
-   prose, license headers, etc.) without invoking the compiler.
-2. Remaining candidates go through ``compile(..., mode='exec')`` — if the
-   compiler accepts it, the comment is flagged.
+   prose, license headers, etc.) without invoking the parser.
+2. Remaining candidates go through ``ast.parse`` — if the parser accepts
+   them, the comment is flagged.
 
 Confidence: LOW. False positives are easy on prose comments that happen to
 look like valid Python (``# x is the same as y``). Use the per-rule
 suppression knob (TBD) when needed.
 """
 
+import ast
 import re
 
 from gruff.finding.confidence import Confidence
@@ -121,10 +122,10 @@ def _compiles(candidate: str) -> bool:
     if not dedented:
         return False
     # Try top-level first; if it fails, wrap in a function so `return`,
-    # `yield`, `continue`, `break` can compile too.
+    # `yield`, `continue`, `break` parse too.
     for wrap in (dedented, f"def __probe__():\n    {dedented}"):
         try:
-            compile(wrap + "\n", "<commented-out>", "exec")
+            ast.parse(wrap + "\n")
         except (SyntaxError, ValueError):
             continue
         return True

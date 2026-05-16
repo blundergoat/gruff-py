@@ -1,3 +1,5 @@
+"""Severity levels emitted by rules and reported by the CLI."""
+
 from enum import StrEnum
 
 

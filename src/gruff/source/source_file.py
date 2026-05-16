@@ -1,3 +1,5 @@
+"""Lightweight handle for a discovered source file (path + classification)."""
+
 from dataclasses import dataclass
 from typing import Literal
 

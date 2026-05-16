@@ -1,3 +1,5 @@
+"""Release-tier marker rules use to gate themselves against gruff versions."""
+
 from enum import StrEnum
 
 

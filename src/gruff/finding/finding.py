@@ -1,3 +1,5 @@
+"""The single ``Finding`` value object emitted by every rule."""
+
 from dataclasses import dataclass, field
 from typing import Any
 

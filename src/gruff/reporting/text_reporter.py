@@ -1,3 +1,5 @@
+"""Renders an AnalysisReport as plain text for terminal output."""
+
 from gruff.analysis.report import AnalysisReport
 from gruff.analysis.run_diagnostic import RunDiagnostic
 from gruff.finding.finding import Finding

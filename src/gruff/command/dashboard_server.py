@@ -1,3 +1,5 @@
+"""Local HTTP server backing ``gruff dashboard`` — serves the shell and `/scan` results."""
+
 import shlex
 import time
 from dataclasses import dataclass

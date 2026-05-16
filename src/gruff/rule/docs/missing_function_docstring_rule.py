@@ -1,8 +1,9 @@
 """``docs.missing-function-docstring`` — public function/method without a docstring.
 
 Public = the name does not start with ``_``. Dunder methods, abstract methods,
-``@typing.overload`` stubs, and ``@<name>.setter``/``@<name>.deleter`` methods
-are exempt. ``@property`` getters require a docstring like any public method.
+pytest-style ``test_*`` functions in test files, ``@typing.overload`` stubs,
+and ``@<name>.setter``/``@<name>.deleter`` methods are exempt. ``@property``
+getters require a docstring like any public method.
 """
 
 import ast
@@ -49,6 +50,8 @@ class MissingFunctionDocstringRule(Rule):
                 continue
             if not is_public(node.name) or is_dunder(node.name):
                 continue
+            if node.name.startswith("test_") and _is_test_file(unit.file.display_path):
+                continue
             if extract_docstring(node) is not None:
                 continue
             if is_abstract_method(node):
@@ -82,3 +85,11 @@ class MissingFunctionDocstringRule(Rule):
                 ),
             )
         return findings
+
+
+def _is_test_file(display_path: str) -> bool:
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

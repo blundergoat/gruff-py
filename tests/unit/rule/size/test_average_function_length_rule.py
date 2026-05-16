@@ -38,21 +38,35 @@ def test_class_with_short_methods_emits_no_finding():
 
 def test_class_with_long_methods_emits_warning():
     body = "\n".join(["        x = 1"] * 8)
-    source = f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n"
+    source = (
+        f"class C:\n    def a(self):\n{body}\n"
+        f"    def b(self):\n{body}\n"
+        f"    def c(self):\n{body}\n"
+    )
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.WARNING
-    assert f.metadata["methodCount"] == 2
+    assert f.metadata["methodCount"] == 3
     assert f.metadata["averageLines"] == 9.0  # each method is 9 lines (def + 8 body)
 
 
 def test_class_above_error_threshold_emits_error():
     body = "\n".join(["        x = 1"] * 25)
-    source = f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n"
+    source = (
+        f"class C:\n    def a(self):\n{body}\n"
+        f"    def b(self):\n{body}\n"
+        f"    def c(self):\n{body}\n"
+    )
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
+
+
+def test_class_with_one_long_method_emits_nothing():
+    body = "\n".join(["        x = 1"] * 25)
+    source = f"class C:\n    def a(self):\n{body}\n"
+    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20)) == []
 
 
 def test_class_with_no_methods_emits_nothing():
@@ -60,14 +74,11 @@ def test_class_with_no_methods_emits_nothing():
     assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20)) == []
 
 
-def test_nested_class_evaluated_separately():
+def test_nested_class_with_too_few_methods_skipped():
     body = "\n".join(["            x = 1"] * 10)
     source = f"class Outer:\n    class Inner:\n        def m(self):\n{body}\n"
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
-    # Outer has no direct methods; Inner has one 11-line method, > warning 5
-    symbols = {f.symbol for f in findings}
-    assert "Outer.Inner" in symbols
-    assert "Outer" not in symbols
+    assert findings == []
 
 
 def test_definition_uses_default_thresholds():

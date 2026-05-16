@@ -46,10 +46,8 @@ _HUNGARIAN_PREFIXES: frozenset[str] = frozenset(
         "num",
         "arr",
         "lst",
-        "list",
         "dict",
         "tup",
-        "set",
         "obj",
         "ptr",
     }

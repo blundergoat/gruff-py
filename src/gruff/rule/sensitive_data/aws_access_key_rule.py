@@ -2,7 +2,8 @@
 
 Pattern: ``AKIA`` + 16 uppercase alphanumeric chars. AWS access key IDs are
 20-character strings starting with ``AKIA`` (long-term keys) or ``ASIA``
-(session tokens). Both shapes fire.
+(session tokens). Both shapes fire, except documentation placeholders ending
+in ``EXAMPLE``.
 """
 
 from gruff.finding.confidence import Confidence
@@ -21,6 +22,7 @@ from gruff.rule.sensitive_data._secret_scanner_helper import (
 )
 
 _PATTERN = compile_pattern(r"(?:AKIA|ASIA)[A-Z0-9]{16}")
+_DOCUMENTATION_SUFFIX = "EXAMPLE"
 
 
 class AwsAccessKeyRule(SourceTextRule):
@@ -40,6 +42,8 @@ class AwsAccessKeyRule(SourceTextRule):
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):
+            if match.raw.upper().endswith(_DOCUMENTATION_SUFFIX):
+                continue
             findings.append(
                 Finding(
                     rule_id=definition.id,

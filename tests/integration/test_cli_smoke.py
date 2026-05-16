@@ -236,11 +236,13 @@ def test_cli_applies_configured_secret_preview_allowlist(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    aws_preview = "AKIA...CDEF (redacted, 20 chars)"
     (src / "secrets.py").write_text(
-        "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\nSTRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
+        f"AWS_KEY = '{aws_key}'\nSTRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
     )
     (tmp_path / ".gruff.yaml").write_text(
-        "allowlists:\n  secretPreviews:\n    - 'AKIA...MPLE (redacted, 20 chars)'\n"
+        f"allowlists:\n  secretPreviews:\n    - '{aws_preview}'\n"
     )
 
     result = CliRunner().invoke(
@@ -258,7 +260,7 @@ def test_cli_applies_configured_secret_preview_allowlist(
     ]
     assert "sensitive-data.aws-access-key" not in rule_ids
     assert "sensitive-data.api-key-pattern" in rule_ids
-    assert "AKIA...MPLE (redacted, 20 chars)" not in previews
+    assert aws_preview not in previews
 
 
 def test_cli_fail_on_error_exits_1_when_errors_present(

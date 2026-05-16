@@ -1,3 +1,5 @@
+"""Frozen value object holding the resolved analyser configuration for one run."""
+
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 

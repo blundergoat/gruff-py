@@ -1,3 +1,5 @@
+"""Reads source files from disk and turns them into ``AnalysisUnit`` objects."""
+
 import ast
 
 from gruff.parser.analysis_unit import AnalysisUnit, ParseDiagnostic

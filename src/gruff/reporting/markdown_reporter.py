@@ -1,3 +1,5 @@
+"""Renders an AnalysisReport as a human-readable Markdown summary."""
+
 import json
 from collections import defaultdict
 

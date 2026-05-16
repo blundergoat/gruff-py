@@ -1,3 +1,5 @@
+"""Renders findings as GitHub Actions workflow annotations."""
+
 from gruff.analysis.report import AnalysisReport
 from gruff.finding.finding import Finding
 

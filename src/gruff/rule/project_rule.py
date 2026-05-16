@@ -1,3 +1,5 @@
+"""Protocol for rules that examine the whole project rather than one unit at a time."""
+
 from typing import Protocol, runtime_checkable
 
 from gruff.finding.finding import Finding

@@ -1,3 +1,5 @@
+"""``size.attribute-count`` — too many attributes signal an unfocused class."""
+
 import ast
 
 from gruff.finding.confidence import Confidence

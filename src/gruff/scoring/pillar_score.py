@@ -1,3 +1,5 @@
+"""Score and finding counts aggregated to a single pillar (size, complexity, ...)."""
+
 from dataclasses import dataclass
 from typing import Any
 

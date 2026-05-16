@@ -1,3 +1,5 @@
+"""Indexed catalogue of every built-in rule, keyed by rule id."""
+
 import json
 from collections.abc import Iterable
 

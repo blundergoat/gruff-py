@@ -1,3 +1,5 @@
+"""Per-file score summary used by the top-offenders section of a report."""
+
 from dataclasses import dataclass
 from typing import Any
 

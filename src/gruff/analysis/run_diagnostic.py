@@ -1,3 +1,5 @@
+"""Non-finding diagnostics surfaced alongside findings (e.g. parse errors, config notes)."""
+
 from dataclasses import dataclass
 from typing import Any
 

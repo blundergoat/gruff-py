@@ -1,3 +1,5 @@
+"""``size.file-length`` — very large files slow navigation and review."""
+
 from gruff.finding.confidence import Confidence
 from gruff.finding.finding import Finding
 from gruff.finding.pillar import Pillar

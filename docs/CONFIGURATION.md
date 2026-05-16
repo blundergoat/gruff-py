@@ -116,15 +116,26 @@ Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
 
 ## Ignored Paths
 
-gruff-py skips dependency, build, cache, generated, and VCS directories by
-default, including `.git`, `.venv`, `node_modules`, `vendor`, `dist`, `build`,
-`htmlcov`, `__pycache__`, and common tool caches.
+Source discovery applies three layers of exclusions, in order:
 
-It also skips lockfiles that commonly contain high-entropy hashes, such as
-`uv.lock`, `poetry.lock`, `package-lock.json`, `composer.lock`, `Cargo.lock`,
-and `go.sum`.
+1. **Default-ignored directories.** gruff-py skips dependency, build, cache,
+   generated, and VCS directories: `.git`, `.venv`, `node_modules`, `vendor`,
+   `dist`, `build`, `htmlcov`, `__pycache__`, and common tool caches. It also
+   skips lockfiles that commonly contain high-entropy hashes, such as
+   `uv.lock`, `poetry.lock`, `package-lock.json`, `composer.lock`,
+   `Cargo.lock`, and `go.sum`.
+2. **`.gitignore` exclusions.** Any path the project's `.gitignore` files
+   (root plus nested) exclude is skipped by default. Nested `.gitignore`
+   files override their parents; negation patterns (`!keep.py`) are honored.
+   `.git/info/exclude` and the user's global gitignore are not consulted.
+3. **Configured `paths.ignore` patterns.** Project-relative globs declared
+   in your config layer on top of the previous two.
 
-Use `--include-ignored` when you intentionally want to scan those paths.
+`--include-ignored` bypasses layers 1 and 2 (default-ignored directories
+**and** `.gitignore`). It does not bypass layer 3 — `paths.ignore` is your
+explicit, intentional exclusion list and remains active.
+
+Projects without a `.gitignore` are scanned as before.
 
 ## Display Filters Are Not Config Selection
 

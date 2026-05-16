@@ -53,10 +53,28 @@ def test_arr_items_fires():
     assert len(findings) == 1
 
 
+def test_lst_items_fires():
+    src = "lst_items = []\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
 def test_dict_users_fires():
     src = "dict_users = {}\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
+
+
+def test_list_verb_name_does_not_fire():
+    src = "def list_commands():\n    return []\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_set_verb_name_does_not_fire():
+    src = "def set_status(value):\n    return value\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
 
 
 def test_parameter_name_fires():

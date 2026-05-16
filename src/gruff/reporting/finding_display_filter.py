@@ -1,3 +1,5 @@
+"""Reporter-side filter that applies ``--min-severity`` / pillar selection."""
+
 from dataclasses import dataclass
 
 from gruff.finding.finding import Finding

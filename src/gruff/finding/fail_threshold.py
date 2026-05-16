@@ -1,3 +1,5 @@
+"""Minimum severity that triggers a non-zero CLI exit, controlled by ``--fail-on``."""
+
 from enum import StrEnum
 
 from gruff.finding.severity import Severity

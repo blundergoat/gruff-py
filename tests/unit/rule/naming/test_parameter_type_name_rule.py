@@ -82,6 +82,31 @@ def test_optional_unwrapped():
     assert findings[0].metadata["expected"] == "user"
 
 
+def test_collection_plural_name_skipped():
+    src = "def f(findings: list[Finding]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_collection_plural_last_token_skipped():
+    src = "from collections.abc import Sequence\ndef f(units: Sequence[AnalysisUnit]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_optional_collection_plural_name_skipped():
+    src = "from typing import Optional\ndef f(findings: Optional[list[Finding]]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_collection_unrelated_name_still_fires():
+    src = "def f(values: list[Finding]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["expected"] == "finding"
+
+
 def test_no_annotation_does_not_fire():
     src = "def f(x): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())

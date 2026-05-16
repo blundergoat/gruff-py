@@ -1,3 +1,5 @@
+"""Per-run context passed to every rule (project root + resolved config)."""
+
 from dataclasses import dataclass
 
 from gruff.config.analysis_config import AnalysisConfig

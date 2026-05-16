@@ -1,3 +1,5 @@
+"""Abstract base class every per-file rule implements."""
+
 import abc
 
 from gruff.finding.finding import Finding

@@ -1,3 +1,5 @@
+"""Static metadata describing a rule (id, pillar, tier, defaults)."""
+
 import re
 from dataclasses import dataclass, field
 from typing import Any

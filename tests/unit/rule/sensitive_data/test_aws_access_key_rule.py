@@ -1,18 +1,33 @@
 from gruff.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
+_AKIA_KEY = "AKIA" + "1234567890ABCDEF"
+_ASIA_KEY = "ASIA" + "1234567890ABCDEF"
+
 
 def test_akia_emits():
-    src = "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+    src = f"AWS_KEY = '{_AKIA_KEY}'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
-    assert "AKIA...MPLE" in findings[0].metadata["preview"]
+    assert "AKIA...CDEF" in findings[0].metadata["preview"]
 
 
 def test_asia_session_token_emits():
-    src = "key = 'ASIAIOSFODNN7EXAMPLE'\n"
+    src = f"key = '{_ASIA_KEY}'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
+
+
+def test_documentation_example_key_skipped():
+    src = "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+    findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
+    assert findings == []
+
+
+def test_documentation_example_session_key_skipped():
+    src = "key = 'ASIAIOSFODNN7EXAMPLE'\n"
+    findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
+    assert findings == []
 
 
 def test_too_short_skipped():
@@ -21,7 +36,7 @@ def test_too_short_skipped():
 
 
 def test_finding_in_json_text_file():
-    src = '{"awsKey": "AKIAIOSFODNN7EXAMPLE"}\n'
+    src = f'{{"awsKey": "{_AKIA_KEY}"}}\n'
     findings = AwsAccessKeyRule().analyse(
         make_unit(src, "config.json", source_type="text"), default_ctx()
     )
@@ -29,6 +44,6 @@ def test_finding_in_json_text_file():
 
 
 def test_line_number_resolved():
-    src = "first\nsecond\nthird AKIAIOSFODNN7EXAMPLE\n"
+    src = f"first\nsecond\nthird {_AKIA_KEY}\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert findings[0].line == 3

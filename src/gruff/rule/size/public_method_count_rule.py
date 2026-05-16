@@ -1,3 +1,5 @@
+"""``size.public-method-count`` — too many public methods widen the maintenance surface."""
+
 import ast
 
 from gruff.finding.confidence import Confidence

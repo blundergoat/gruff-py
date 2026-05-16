@@ -1,3 +1,5 @@
+"""Renders an AnalysisReport as ``gruff.analysis.v1`` JSON byte-compatible with gruff-php."""
+
 import json
 import math
 from typing import Any

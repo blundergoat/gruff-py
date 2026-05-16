@@ -39,6 +39,20 @@ _TRIM_SUFFIXES: tuple[str, ...] = (
     "Provider",
 )
 _DEFAULT_IGNORED: tuple[str, ...] = ("id", "ctx", "url", "ip", "io", "ui")
+_COLLECTION_TYPES: frozenset[str] = frozenset(
+    {
+        "list",
+        "set",
+        "tuple",
+        "frozenset",
+        "Sequence",
+        "Iterable",
+        "Collection",
+        "Mapping",
+        "MutableMapping",
+    }
+)
+_WRAPPER_TYPES: frozenset[str] = frozenset({"Optional", "Union", "Annotated"})
 
 
 class ParameterTypeNameRule(Rule):
@@ -84,6 +98,10 @@ class ParameterTypeNameRule(Rule):
                 # Accept the short form when the parameter name is a prefix
                 # of the expected canonical form (e.g. ``repo`` of ``repository``).
                 if expected.startswith(arg.arg) and len(arg.arg) >= 2:
+                    continue
+                if _is_collection_annotation(arg.annotation) and _matches_plural(
+                    arg.arg, expected
+                ):
                     continue
                 # Accept when the param name shares at least one token with
                 # the type name — ``unit: AnalysisUnit`` (param `unit` shares
@@ -149,6 +167,55 @@ def _expected_name(annotation: ast.expr) -> str | None:
             trimmed = trimmed[: -len(suffix)]
             break
     return _to_snake(trimmed)
+
+
+def _is_collection_annotation(annotation: ast.expr) -> bool:
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return _is_collection_annotation(annotation.left) or _is_collection_annotation(
+            annotation.right
+        )
+    if not isinstance(annotation, ast.Subscript):
+        return False
+    outer = _annotation_type_name(annotation.value)
+    if outer in _COLLECTION_TYPES:
+        return True
+    if outer in _WRAPPER_TYPES:
+        return _contains_collection(annotation.slice)
+    return False
+
+
+def _contains_collection(annotation: ast.expr) -> bool:
+    if _is_collection_annotation(annotation):
+        return True
+    if isinstance(annotation, ast.Tuple):
+        return any(_contains_collection(elt) for elt in annotation.elts)
+    return False
+
+
+def _annotation_type_name(annotation: ast.expr) -> str | None:
+    if isinstance(annotation, ast.Name):
+        return annotation.id
+    if isinstance(annotation, ast.Attribute):
+        return annotation.attr
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        return annotation.value
+    return None
+
+
+def _matches_plural(param_name: str, expected: str) -> bool:
+    if param_name == _pluralize(expected):
+        return True
+    param_tokens = set(lower_tokens(param_name))
+    expected_tokens = expected.split("_")
+    return _pluralize(expected_tokens[-1]) in param_tokens
+
+
+def _pluralize(name: str) -> str:
+    if name.endswith("y") and (len(name) < 2 or name[-2] not in "aeiou"):
+        return f"{name[:-1]}ies"
+    if name.endswith(("s", "x", "z", "ch", "sh")):
+        return f"{name}es"
+    return f"{name}s"
 
 
 def _to_snake(camel: str) -> str:

@@ -1,8 +1,11 @@
+"""Walks a project root and produces the list of ``SourceFile``s the rules will see."""
+
 import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from gruff.source.gitignore import GitignoreMatcher
 from gruff.source.source_file import SourceFile, SourceFileType
 
 PYTHON_EXTENSIONS: frozenset[str] = frozenset({".py"})
@@ -80,6 +83,7 @@ class SourceDiscoveryResult:
 class SourceDiscovery:
     def __init__(self, project_root: str | Path) -> None:
         self._project_root = Path(project_root).resolve()
+        self._gitignore = GitignoreMatcher.from_root(self._project_root)
 
     def discover(
         self,
@@ -102,6 +106,9 @@ class SourceDiscovery:
                 ignored.append(self._display_path(absolute))
                 continue
             if not include_ignored and self._is_default_ignored(absolute):
+                ignored.append(self._display_path(absolute))
+                continue
+            if not include_ignored and self._is_gitignored(absolute):
                 ignored.append(self._display_path(absolute))
                 continue
 
@@ -134,14 +141,19 @@ class SourceDiscovery:
             except OSError:
                 continue
             for entry in entries:
+                is_dir = entry.is_dir()
                 if self._is_configured_ignored(entry, patterns):
                     ignored_paths.append(self._display_path(entry))
                     continue
                 if not include_ignored and self._is_default_ignored(entry):
-                    if entry.is_dir():
+                    if is_dir:
                         ignored_paths.append(self._display_path(entry))
                     continue
-                if entry.is_dir():
+                if not include_ignored and self._is_gitignored(entry, is_dir=is_dir):
+                    if is_dir:
+                        ignored_paths.append(self._display_path(entry))
+                    continue
+                if is_dir:
                     stack.append(entry)
                 elif entry.is_file() and self._source_type(entry) is not None:
                     yield entry
@@ -214,6 +226,16 @@ class SourceDiscovery:
             return False
         display = self._display_path(path).replace("\\", "/")
         return any(_matches_pattern(display, p) for p in patterns)
+
+    def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
+        if not self._gitignore.has_rules():
+            return False
+        if is_dir is None:
+            try:
+                is_dir = path.is_dir()
+            except OSError:
+                is_dir = False
+        return self._gitignore.is_ignored(path, is_dir=is_dir)
 
 
 def _matches_pattern(display_path: str, pattern: str) -> bool:

@@ -1,3 +1,5 @@
+"""Tier/pillar/rule inclusion-exclusion selectors applied to the rule registry."""
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 

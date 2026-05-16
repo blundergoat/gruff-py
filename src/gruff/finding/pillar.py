@@ -1,3 +1,5 @@
+"""Top-level quality dimensions a rule contributes to (size, complexity, ...)."""
+
 from enum import StrEnum
 
 

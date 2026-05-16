@@ -1,3 +1,5 @@
+"""Supported output renderings for ``gruff analyse`` (text, json, html, ...)."""
+
 from enum import StrEnum
 
 
