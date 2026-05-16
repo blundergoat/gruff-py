@@ -66,9 +66,35 @@ class MissingParamDocRule(Rule):
 
             parents = parent_chain(node)
             symbol = qualified_symbol(node, parents)
-            for param in params:
-                if param in documented:
-                    continue
+            missing = [param for param in params if param not in documented]
+            if not missing:
+                continue
+            if not documented:
+                findings.append(
+                    Finding(
+                        rule_id=definition.id,
+                        message=(
+                            f"Function {symbol!r} has no docstring entries for "
+                            f"{len(missing)} parameter(s)."
+                        ),
+                        file_path=unit.file.display_path,
+                        line=node.lineno,
+                        severity=definition.default_severity,
+                        pillar=definition.pillar,
+                        tier=definition.tier,
+                        confidence=definition.confidence,
+                        end_line=node.end_lineno,
+                        symbol=symbol,
+                        remediation=(
+                            "Document the function parameters "
+                            "(Google ``Args:``, NumPy ``Parameters``, or Sphinx ``:param:``)."
+                        ),
+                        secondary_pillars=definition.secondary_pillars,
+                        metadata={"parameters": missing, "style": parsed.style.value},
+                    ),
+                )
+                continue
+            for param in missing:
                 findings.append(
                     Finding(
                         rule_id=definition.id,

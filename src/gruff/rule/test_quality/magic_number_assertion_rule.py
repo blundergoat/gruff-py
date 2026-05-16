@@ -85,7 +85,10 @@ class MagicNumberAssertionRule(Rule):
 
 def _magic_numbers(expr: ast.expr, allowed: frozenset[int]) -> list[int]:
     out: list[int] = []
+    ignored = _len_count_constants(expr)
     for node in ast.walk(expr):
+        if node in ignored:
+            continue
         if (
             isinstance(node, ast.Constant)
             and isinstance(node.value, int)
@@ -94,3 +97,33 @@ def _magic_numbers(expr: ast.expr, allowed: frozenset[int]) -> list[int]:
         ):
             out.append(node.value)
     return out
+
+
+def _len_count_constants(expr: ast.expr) -> set[ast.Constant]:
+    ignored: set[ast.Constant] = set()
+    for node in ast.walk(expr):
+        if not isinstance(node, ast.Compare):
+            continue
+        if len(node.ops) != 1 or len(node.comparators) != 1:
+            continue
+        if not isinstance(node.ops[0], ast.Eq | ast.NotEq):
+            continue
+        left = node.left
+        right = node.comparators[0]
+        if _is_len_call(left) and _is_int_constant(right):
+            ignored.add(right)
+        elif _is_int_constant(left) and _is_len_call(right):
+            ignored.add(left)
+    return ignored
+
+
+def _is_len_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "len"
+
+
+def _is_int_constant(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    )
