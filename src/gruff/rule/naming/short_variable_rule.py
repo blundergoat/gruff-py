@@ -7,7 +7,9 @@ Allowed by default: ``i``, ``j``, ``k``, ``n``, ``m``, ``x``, ``y``, ``z``,
 Scope: local assignments (Assign / AnnAssign). Function parameters are
 intentionally NOT scanned — single-char params are common in math-flavoured
 code (``def f(x, y, z): ...``) and the parameter rule lives in
-``naming.parameter-type-name``.
+``naming.parameter-type-name``. Test files are exempt; assertion fixtures and
+table-driven rule tests routinely use tiny local placeholders where this
+low-confidence style warning is noisy.
 """
 
 import ast
@@ -41,6 +43,8 @@ class ShortVariableRule(Rule):
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         if unit.tree is None:
+            return []
+        if _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
@@ -104,3 +108,11 @@ class ShortVariableRule(Rule):
                 metadata={"identifier": name},
             ),
         )
+
+
+def _is_test_file(display_path: str) -> bool:
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

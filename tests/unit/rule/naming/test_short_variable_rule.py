@@ -8,13 +8,13 @@ from gruff.rule.naming.short_variable_rule import ShortVariableRule
 from gruff.source.source_file import SourceFile
 
 
-def _unit(source: str) -> AnalysisUnit:
+def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
             child.parent = parent  # type: ignore[attr-defined]
     return AnalysisUnit(
-        file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
+        file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
         source=source,
         tree=tree,
     )
@@ -34,6 +34,12 @@ def test_q_variable_fires():
     src = "q = 1\n"
     findings = ShortVariableRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
+
+
+def test_short_variable_in_test_file_is_skipped():
+    src = "def test_example():\n    d = {}\n    assert d == {}\n"
+    findings = ShortVariableRule().analyse(_unit(src, display_path="tests/test_example.py"), _ctx())
+    assert findings == []
 
 
 def test_i_does_not_fire():
