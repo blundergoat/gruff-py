@@ -44,3 +44,46 @@ def test_len_threshold_assertion_still_emits():
     findings = MagicNumberAssertionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["numbers"] == [8]
+
+
+def test_rule_threshold_metadata_assertion_skipped():
+    src = (
+        "def test_foo():\n"
+        "    assert definition.default_thresholds == {'warning': 15, 'error': 30}\n"
+    )
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_finding_metric_metadata_assertion_skipped():
+    src = "def test_foo():\n    assert finding.metadata['threshold'] == 2000\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_finding_metric_threshold_comparison_skipped():
+    src = "def test_foo():\n    assert finding.metadata['halsteadVolume'] > 2000\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_metric_summary_assertion_skipped():
+    src = "def test_foo():\n    assert metrics['cyclomatic']['max'] == 12\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_report_metadata_assertion_skipped():
+    src = "def test_foo():\n    assert payload['durationMs'] == 345\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_metric_helper_assertion_skipped():
+    src = "def test_foo():\n    assert cognitive_for(fn) == 6\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_threshold_helper_arguments_skipped():
+    src = "def test_foo():\n    assert Rule().analyse(unit, _ctx(warning=5, error=20)) == []\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_source_line_assertion_skipped():
+    src = "def test_foo():\n    assert [m.line for m in matches] == [2, 4]\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []

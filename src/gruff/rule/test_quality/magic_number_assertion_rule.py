@@ -48,6 +48,82 @@ _DEFAULT_ALLOWED: frozenset[int] = frozenset(
         504,
     }
 )
+_ANALYSER_METRIC_KEYS: frozenset[str] = frozenset(
+    {
+        "attributes",
+        "averageLines",
+        "cognitive",
+        "complexity",
+        "count",
+        "depth",
+        "durationMs",
+        "endLine",
+        "error",
+        "errorCrossings",
+        "errorThreshold",
+        "filesDiscovered",
+        "filesParsed",
+        "findings",
+        "functions",
+        "halsteadLength",
+        "halsteadVolume",
+        "halsteadVocabulary",
+        "ignored",
+        "line",
+        "lines",
+        "maintainabilityIndex",
+        "max",
+        "measuredValue",
+        "methodCount",
+        "min",
+        "missing",
+        "npath",
+        "parameters",
+        "parseErrors",
+        "p50",
+        "p90",
+        "p95",
+        "publicMethods",
+        "threshold",
+        "thresholds",
+        "total",
+        "warning",
+        "warningCrossings",
+        "warningThreshold",
+    }
+)
+_ANALYSER_METRIC_ATTRIBUTES: frozenset[str] = frozenset(
+    {
+        "column",
+        "default_thresholds",
+        "distinct_operands",
+        "distinct_operators",
+        "end_line",
+        "end_lineno",
+        "files_discovered",
+        "files_parsed",
+        "function_count",
+        "length",
+        "line",
+        "lineno",
+        "metadata",
+        "thresholds",
+        "total_operands",
+        "total_operators",
+        "vocabulary",
+        "volume",
+    }
+)
+_ANALYSER_METRIC_HELPERS: frozenset[str] = frozenset(
+    {
+        "cognitive_for",
+        "cyclomatic_for",
+        "halstead_for",
+        "lines_for_size",
+        "maintainability_index_for",
+        "npath_for",
+    }
+)
 
 
 class MagicNumberAssertionRule(Rule):
@@ -108,7 +184,11 @@ class MagicNumberAssertionRule(Rule):
 
 def _magic_numbers(expr: ast.expr, allowed: frozenset[int]) -> list[int]:
     out: list[int] = []
-    ignored = _len_count_constants(expr)
+    ignored = (
+        _len_count_constants(expr)
+        | _analyser_metric_constants(expr)
+        | _threshold_keyword_constants(expr)
+    )
     for node in ast.walk(expr):
         if node in ignored:
             continue
@@ -138,6 +218,63 @@ def _len_count_constants(expr: ast.expr) -> set[ast.Constant]:
         elif _is_int_constant(left) and _is_len_call(right):
             ignored.add(left)
     return ignored
+
+
+def _analyser_metric_constants(expr: ast.expr) -> set[ast.Constant]:
+    ignored: set[ast.Constant] = set()
+    for node in ast.walk(expr):
+        if not isinstance(node, ast.Compare):
+            continue
+        operands = [node.left, *node.comparators]
+        for left, right in zip(operands, operands[1:], strict=False):
+            if _is_analyser_metric_expression(left):
+                ignored.update(_int_constants(right))
+            if _is_analyser_metric_expression(right):
+                ignored.update(_int_constants(left))
+    return ignored
+
+
+def _threshold_keyword_constants(expr: ast.expr) -> set[ast.Constant]:
+    ignored: set[ast.Constant] = set()
+    for node in ast.walk(expr):
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg in {"warning", "error", "threshold"}:
+                ignored.update(_int_constants(keyword.value))
+    return ignored
+
+
+def _is_analyser_metric_expression(expr: ast.AST) -> bool:
+    if isinstance(expr, ast.Call) and _call_name(expr) in _ANALYSER_METRIC_HELPERS:
+        return True
+    for node in ast.walk(expr):
+        if isinstance(node, ast.Attribute) and node.attr in _ANALYSER_METRIC_ATTRIBUTES:
+            return True
+        if isinstance(node, ast.Subscript):
+            key = _string_key(node.slice)
+            if key in _ANALYSER_METRIC_KEYS:
+                return True
+    return False
+
+
+def _int_constants(expr: ast.AST) -> set[ast.Constant]:
+    return {node for node in ast.walk(expr) if _is_int_constant(node)}
+
+
+def _call_name(call: ast.Call) -> str:
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return ""
+
+
+def _string_key(node: ast.AST) -> str:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return ""
 
 
 def _is_len_call(node: ast.AST) -> bool:
