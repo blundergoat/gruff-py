@@ -32,9 +32,7 @@ def _git_check_ignored(repo: Path, target: Path) -> bool:
         return True
     if result.returncode == 1:
         return False
-    raise RuntimeError(
-        f"git check-ignore failed with rc={result.returncode}: {result.stderr!r}"
-    )
+    raise RuntimeError(f"git check-ignore failed with rc={result.returncode}: {result.stderr!r}")
 
 
 def _init_repo(root: Path) -> None:
@@ -58,6 +56,8 @@ _PROBES: tuple[tuple[str, bool], ...] = (
     ("pkg/.gitignore", False),
     ("pkg/keep.bin", False),
     ("pkg/noise.bin", False),
+    ("vendor", True),
+    ("vendor/keep.py", False),
     ("anchored/build", True),
     ("anchored/build/out.py", False),
     ("docs/notes.md", False),
@@ -79,11 +79,13 @@ def corpus(tmp_path: Path) -> Path:
                 "build/",
                 "/anchored/build/",
                 "**/temp/",
+                "vendor/",
                 "",
             ]
         ),
     )
     _write(tmp_path / "pkg" / ".gitignore", "noise.bin\nkeep.bin\n")
+    _write(tmp_path / "vendor" / ".gitignore", "!keep.py\n")
 
     _write(tmp_path / "app.py")
     _write(tmp_path / "ignored.bin")
@@ -94,6 +96,7 @@ def corpus(tmp_path: Path) -> Path:
     _write(tmp_path / "pkg" / "build" / "out.py")
     _write(tmp_path / "pkg" / "keep.bin")
     _write(tmp_path / "pkg" / "noise.bin")
+    _write(tmp_path / "vendor" / "keep.py")
     (tmp_path / "anchored" / "build").mkdir(parents=True)
     _write(tmp_path / "anchored" / "build" / "out.py")
     _write(tmp_path / "docs" / "notes.md")

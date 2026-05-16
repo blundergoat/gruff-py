@@ -9,7 +9,7 @@ def test_postgres_with_password_emits():
 
 
 def test_mongodb_with_password_emits():
-    src = "MONGO = 'mongodb+srv://user:realSecret123" "@cluster.mongodb.net'\n"
+    src = "MONGO = 'mongodb+srv://user:realSecret123@cluster.mongodb.net'\n"
     findings = DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

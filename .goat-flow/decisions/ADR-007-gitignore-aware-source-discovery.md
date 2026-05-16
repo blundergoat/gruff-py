@@ -1,6 +1,6 @@
 # ADR-007: Gitignore-aware source discovery
 
-**Status:** Proposed
+**Status:** Implemented
 **Date:** 2026-05-16
 **Ticket/Context:** Self-analysis of gruff-py surfaced findings in directories whose contents the project intentionally excludes from version control. The hardcoded `DEFAULT_IGNORED_DIRECTORIES` in `src/gruff/source/discovery.py` is not aligned with the project's existing source-of-truth for what counts as "the codebase": its `.gitignore`.
 
@@ -44,6 +44,13 @@ The trade-off is mainly about the security/sensitive-data pillars. Today those r
 - `paths.ignore` in `.gruff.yaml` is unchanged and not bypassed by `--include-ignored` — it remains the user's explicit, intentional exclusion list.
 - Cross-impl note: gruff-php and gruff-ts use the same `.gruff.yaml` config shape (ADR-006). If they do not honor `.gitignore`, the same project will produce different file sets between implementations. This is acceptable for findings (the cross-impl contract is `gruff.analysis.v1` / `gruff.baseline.v1` / fingerprints, not "same files in the report"), but the divergence should be surfaced in their respective decision logs so the implementations converge over time.
 - The JSON schemas (`gruff.analysis.v1`, `gruff.baseline.v1`) and finding fingerprints are unaffected — this changes which files reach the rules, not what the rules emit.
+
+## Cross-implementation Tracking
+
+gruff-php and gruff-ts should either adopt the same layered discovery semantics
+or explicitly document why their source-discovery boundary differs. Until then,
+shared config can still produce different file sets across implementations even
+when report schemas and fingerprints remain compatible.
 
 ## Reversibility
 

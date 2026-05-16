@@ -39,9 +39,7 @@ def test_class_with_short_methods_emits_no_finding():
 def test_class_with_long_methods_emits_warning():
     body = "\n".join(["        x = 1"] * 8)
     source = (
-        f"class C:\n    def a(self):\n{body}\n"
-        f"    def b(self):\n{body}\n"
-        f"    def c(self):\n{body}\n"
+        f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n    def c(self):\n{body}\n"
     )
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
@@ -54,9 +52,7 @@ def test_class_with_long_methods_emits_warning():
 def test_class_above_error_threshold_emits_error():
     body = "\n".join(["        x = 1"] * 25)
     source = (
-        f"class C:\n    def a(self):\n{body}\n"
-        f"    def b(self):\n{body}\n"
-        f"    def c(self):\n{body}\n"
+        f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n    def c(self):\n{body}\n"
     )
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1

@@ -103,9 +103,7 @@ class ParameterTypeNameRule(Rule):
                 # of the expected canonical form (e.g. ``repo`` of ``repository``).
                 if expected.startswith(arg.arg) and len(arg.arg) >= 2:
                     continue
-                if _is_collection_annotation(arg.annotation) and _matches_plural(
-                    arg.arg, expected
-                ):
+                if _is_collection_annotation(arg.annotation) and _matches_plural(arg.arg, expected):
                     continue
                 # Accept when the param name shares at least one token with
                 # the type name — ``unit: AnalysisUnit`` (param `unit` shares

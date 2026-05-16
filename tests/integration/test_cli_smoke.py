@@ -239,9 +239,7 @@ def test_cli_applies_configured_secret_preview_allowlist(
     aws_key = "AKIA" + "1234567890ABCDEF"
     aws_preview = "AKIA...CDEF (redacted, 20 chars)"
     stripe_key = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
-    (src / "secrets.py").write_text(
-        f"AWS_KEY = '{aws_key}'\nSTRIPE = '{stripe_key}'\n"
-    )
+    (src / "secrets.py").write_text(f"AWS_KEY = '{aws_key}'\nSTRIPE = '{stripe_key}'\n")
     (tmp_path / ".gruff.yaml").write_text(
         f"allowlists:\n  secretPreviews:\n    - '{aws_preview}'\n"
     )

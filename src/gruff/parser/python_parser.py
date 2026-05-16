@@ -33,6 +33,13 @@ class PythonFileParser:
                     ParseDiagnostic(message=str(exc.msg or "syntax error"), line=exc.lineno),
                 ),
             )
+        except ValueError as exc:
+            return AnalysisUnit(
+                file=source_file,
+                source=source,
+                tree=None,
+                diagnostics=(ParseDiagnostic(message=str(exc) or "parse error"),),
+            )
 
         _attach_parents(tree)
         return AnalysisUnit(file=source_file, source=source, tree=tree)

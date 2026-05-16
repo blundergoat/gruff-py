@@ -61,11 +61,24 @@ class GitignoreMatcher:
         except (ValueError, OSError):
             return False
 
-        decision: bool | None = self._evaluate(self.root, resolved, is_dir, None)
+        applicable_dirs = [self.root]
         current_dir = self.root
         for part in rel.parts[:-1]:
-            current_dir = current_dir / part
-            decision = self._evaluate(current_dir, resolved, is_dir, decision)
+            ancestor = current_dir / part
+            ancestor_decision = None
+            for gitignore_dir in applicable_dirs:
+                ancestor_decision = self._evaluate(
+                    gitignore_dir, ancestor, is_dir=True, prior=ancestor_decision
+                )
+            if ancestor_decision is True:
+                return True
+            current_dir = ancestor
+            if current_dir in self._specs_by_dir:
+                applicable_dirs.append(current_dir)
+
+        decision: bool | None = None
+        for gitignore_dir in applicable_dirs:
+            decision = self._evaluate(gitignore_dir, resolved, is_dir, decision)
         return decision is True
 
     def _evaluate(

@@ -91,15 +91,15 @@ def raises_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     Walks control-flow blocks but stops at nested function/lambda boundaries so
     a wrapped helper's ``raise`` does not trigger the outer rule.
     """
-
-    def visit(node: ast.AST) -> bool:
+    stack: list[ast.AST] = list(fn.body)
+    while stack:
+        node = stack.pop()
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
-            return False
+            continue
         if isinstance(node, ast.Raise):
             return True
-        return any(visit(child) for child in ast.iter_child_nodes(node))
-
-    return any(visit(stmt) for stmt in fn.body)
+        stack.extend(ast.iter_child_nodes(node))
+    return False
 
 
 def _decorator_name(decorator: ast.AST) -> str:

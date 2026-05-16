@@ -102,7 +102,7 @@ Common `analyse` and `report` options:
 | `--format sarif` | SARIF 2.1.0 code-scanning output |
 | `--fail-on error` | Exit non-zero for findings at or above the threshold |
 | `--no-config` | Ignore `.gruff.yaml` and `[tool.gruff]` |
-| `--include-ignored` | Walk normally ignored directories |
+| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--min-severity warning` | Display only warning/error findings |
 | `--include-pillar documentation` | Display only selected pillar findings |
 | `--exclude-rule docs.missing-function-docstring` | Hide selected rule findings |

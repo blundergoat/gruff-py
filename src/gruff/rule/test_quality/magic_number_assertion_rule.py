@@ -6,6 +6,7 @@ rule's ``allowed_numbers`` option.
 """
 
 import ast
+from typing import TypeGuard
 
 from gruff.finding.confidence import Confidence
 from gruff.finding.finding import Finding
@@ -121,7 +122,7 @@ def _is_len_call(node: ast.AST) -> bool:
     return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "len"
 
 
-def _is_int_constant(node: ast.AST) -> bool:
+def _is_int_constant(node: ast.AST) -> TypeGuard[ast.Constant]:
     return (
         isinstance(node, ast.Constant)
         and isinstance(node.value, int)

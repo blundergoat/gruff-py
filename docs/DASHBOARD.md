@@ -43,7 +43,7 @@ gruff dashboard [PATHS]...
 | `--config <path>` | Initial config path |
 | `--no-config` | Skip config loading |
 | `--fail-on <severity>` | Initial fail threshold |
-| `--include-ignored` | Scan normally ignored directories |
+| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--report-interactive` | Enable HTML finding filters |
 
 ## HTTP Routes
@@ -62,4 +62,3 @@ binds to `127.0.0.1` by default.
 
 Only bind to a non-loopback host when you understand the risk of exposing local
 project paths and static-analysis output on your network.
-
