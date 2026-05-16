@@ -8,13 +8,13 @@ from gruff.rule.naming.parameter_type_name_rule import ParameterTypeNameRule
 from gruff.source.source_file import SourceFile
 
 
-def _unit(source: str) -> AnalysisUnit:
+def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
             child.parent = parent  # type: ignore[attr-defined]
     return AnalysisUnit(
-        file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
+        file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
         source=source,
         tree=tree,
     )
@@ -47,6 +47,12 @@ def test_x_userservice_fires():
     assert findings[0].metadata["expected"] == "user"
 
 
+def test_test_file_skipped():
+    src = "def test_f(x: UserService): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src, "tests/test_user.py"), _ctx())
+    assert findings == []
+
+
 def test_repository_repository_does_not_fire():
     src = "def f(repository: Repository): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
@@ -55,6 +61,12 @@ def test_repository_repository_does_not_fire():
 
 def test_ignored_parameter_name():
     src = "def f(id: UserId): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_private_parameter_name_skipped():
+    src = "def f(_param: Parameter): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -96,6 +108,24 @@ def test_collection_plural_last_token_skipped():
 
 def test_optional_collection_plural_name_skipped():
     src = "from typing import Optional\ndef f(findings: Optional[list[Finding]]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_any_annotation_skipped():
+    src = "from typing import Any\ndef f(value: Any): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_ast_attribute_annotation_skipped():
+    src = "import ast\ndef f(node: ast.If): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_path_role_name_skipped():
+    src = "from pathlib import Path\ndef f(project_root: Path): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert findings == []
 

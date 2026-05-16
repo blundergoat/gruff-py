@@ -8,6 +8,7 @@ constant values, hash to the same shape. They're candidates for
 import ast
 import collections
 import hashlib
+from typing import Any
 
 from gruff.finding.confidence import Confidence
 from gruff.finding.finding import Finding
@@ -87,8 +88,19 @@ def _shape_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     parts: list[str] = []
     for node in ast.walk(fn):
         if isinstance(node, ast.Constant):
-            parts.append(f"Const:{type(node.value).__name__}")
+            parts.append(_constant_shape(node.value))
+        elif isinstance(node, ast.Name):
+            parts.append(f"Name:{node.id}")
+        elif isinstance(node, ast.Attribute):
+            parts.append(f"Attribute:{node.attr}")
         else:
             parts.append(type(node).__name__)
     blob = "|".join(parts).encode()
     return hashlib.sha1(blob).hexdigest()
+
+
+def _constant_shape(value: Any) -> str:
+    if isinstance(value, str) and ("\n" in value or len(value) > 80):
+        digest = hashlib.sha1(value.encode()).hexdigest()
+        return f"Const:str:{digest}"
+    return f"Const:{type(value).__name__}"

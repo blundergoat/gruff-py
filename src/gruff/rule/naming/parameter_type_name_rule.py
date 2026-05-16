@@ -38,7 +38,9 @@ _TRIM_SUFFIXES: tuple[str, ...] = (
     "Adapter",
     "Provider",
 )
-_DEFAULT_IGNORED: tuple[str, ...] = ("id", "ctx", "url", "ip", "io", "ui")
+_DEFAULT_IGNORED: tuple[str, ...] = ("id", "ctx", "url", "ip", "io", "ui", "fn")
+_IGNORED_TYPE_NAMES: frozenset[str] = frozenset({"Any"})
+_PATH_ROLE_TOKENS: frozenset[str] = frozenset({"path", "root", "file", "dir", "directory"})
 _COLLECTION_TYPES: frozenset[str] = frozenset(
     {
         "list",
@@ -72,6 +74,8 @@ class ParameterTypeNameRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         if unit.tree is None:
             return []
+        if _is_test_file(unit.file.display_path):
+            return []
         definition = self.definition()
         settings = context.settings_for(definition)
         configured = settings.options.get("ignoredParameterNames", list(_DEFAULT_IGNORED))
@@ -88,7 +92,7 @@ class ParameterTypeNameRule(Rule):
             ):
                 if arg.annotation is None:
                     continue
-                if arg.arg in ignored or arg.arg in {"self", "cls"}:
+                if arg.arg.startswith("_") or arg.arg in ignored or arg.arg in {"self", "cls"}:
                     continue
                 expected = _expected_name(arg.annotation)
                 if expected is None:
@@ -108,6 +112,8 @@ class ParameterTypeNameRule(Rule):
                 # `unit` with `analysis_unit`) is fine. Only fire when the
                 # param name has NO semantic overlap with the type.
                 if _shares_token(arg.arg, expected):
+                    continue
+                if _shares_path_role(arg.arg, expected):
                     continue
                 findings.append(
                     Finding(
@@ -153,10 +159,14 @@ def _expected_name(annotation: ast.expr) -> str | None:
         name = annotation.id
     elif isinstance(annotation, ast.Attribute):
         # x.y.Foo -> Foo
+        if _root_name(annotation) == "ast":
+            return None
         name = annotation.attr
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
         name = annotation.value
     else:
+        return None
+    if name in _IGNORED_TYPE_NAMES:
         return None
     if not name or not name[0].isupper():
         return None
@@ -202,6 +212,15 @@ def _annotation_type_name(annotation: ast.expr) -> str | None:
     return None
 
 
+def _root_name(annotation: ast.Attribute) -> str | None:
+    value = annotation.value
+    while isinstance(value, ast.Attribute):
+        value = value.value
+    if isinstance(value, ast.Name):
+        return value.id
+    return None
+
+
 def _matches_plural(param_name: str, expected: str) -> bool:
     if param_name == _pluralize(expected):
         return True
@@ -236,3 +255,15 @@ def _shares_token(param_name: str, expected: str) -> bool:
     param_tokens = {t for t in lower_tokens(param_name) if len(t) > 1}
     expected_tokens = {t for t in expected.split("_") if len(t) > 1}
     return bool(param_tokens & expected_tokens)
+
+
+def _shares_path_role(param_name: str, expected: str) -> bool:
+    return expected == "path" and bool(set(lower_tokens(param_name)) & _PATH_ROLE_TOKENS)
+
+
+def _is_test_file(display_path: str) -> bool:
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

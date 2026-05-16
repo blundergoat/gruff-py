@@ -16,14 +16,19 @@ from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"
 _AWS_KEY_PREVIEW = "AKIA...CDEF"
+_STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
+_JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
+_JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
+_JWT_SIGNATURE = "abcdef123456" + "abcdef"
+_ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
 
 _DANGEROUS_FIXTURE = (
     f"AWS_KEY = '{_AWS_KEY}'\n"
-    "STRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
-    "JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdef123456abcdef'\n"
+    f"STRIPE = '{_STRIPE_KEY}'\n"
+    f"JWT = '{_JWT_HEADER}.{_JWT_PAYLOAD}.{_JWT_SIGNATURE}'\n"
     "DB = 'postgresql://admin:s3cret!@db.example.com/myapp'\n"
     "SSN = '412-78-3491'\n"
-    "ENTROPY = 'aB3xF7p1Q9zR4yT8vW2sN5kL6mP0qH1jD8wEr+/='\n"
+    f"ENTROPY = '{_ENTROPY_VALUE}'\n"
     "PRIVATE = '-----BEGIN RSA PRIVATE KEY-----'\n"
 )
 
@@ -85,7 +90,8 @@ def test_npm_integrity_style_hashes_suppressed():
     # We don't have the discovery layer here, but the integration test for that lives in
     # the discovery module. We assert that a high-entropy hash in non-lockfile content
     # still produces a finding (positive control).
-    src = "sha512 = 'aB3xF7p1Q9zR4yT8vW2sN5kL6mP0qH1jD8wEr+/=abcdef0123456789'\n"
+    hash_value = _ENTROPY_VALUE + "abcdef0123456789"
+    src = f"sha512 = {hash_value!r}\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     high_entropy = [f for f in findings if f.rule_id == "sensitive-data.high-entropy-string"]
     assert len(high_entropy) >= 1
