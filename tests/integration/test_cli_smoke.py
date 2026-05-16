@@ -23,6 +23,7 @@ def test_cli_help_lists_analyse_command():
         "summary",
     ):
         assert command in result.output
+    assert "metric-calibration" not in result.output
     for option in ("--silent", "--quiet", "--version", "--ansi", "--no-interaction", "--verbose"):
         assert option in result.output
 
@@ -110,6 +111,37 @@ def test_cli_summary_json_is_compact_digest(
     assert "summary" in payload
     assert "topRules" in payload
     assert "topFiles" in payload
+
+
+def test_cli_metric_calibration_json_is_developer_dump(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text(
+        "def sample(value):\n"
+        "    if value > 0 and value < 10:\n"
+        "        return value + 1\n"
+        "    return value - 1\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["metric-calibration", "--format", "json", "--no-config", "--top", "1", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schemaVersion"] == "gruff.metric-calibration.v1"
+    assert payload["run"]["functions"] == 1
+    assert {metric["name"] for metric in payload["metrics"]} == {
+        "cyclomatic",
+        "npath",
+        "halsteadVolume",
+        "maintainabilityIndex",
+    }
+    assert payload["top"]["cyclomatic"][0]["symbol"] == "sample"
 
 
 def test_cli_quiet_suppresses_success_output(

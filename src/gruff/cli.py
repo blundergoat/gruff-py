@@ -16,6 +16,11 @@ from click.shell_completion import get_completion_class
 from gruff.analysis.report import AnalysisReport
 from gruff.analysis.runner import run_analysis
 from gruff.command.dashboard_server import DashboardState, create_dashboard_server
+from gruff.command.metric_calibration import (
+    build_metric_calibration_report,
+    metric_calibration_payload,
+    render_metric_calibration_text,
+)
 from gruff.finding.fail_threshold import FailThreshold
 from gruff.finding.output_format import OutputFormat
 from gruff.finding.pillar import Pillar
@@ -902,6 +907,69 @@ def summary(
     else:
         _write_stdout(_summary_text(analysis_report, top))
     sys.exit(analysis_report.exit_code)
+
+
+@main.command("metric-calibration", hidden=True)
+@click.argument("paths", nargs=-1, type=click.Path())
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Path to a gruff YAML config file (.yaml or .yml).",
+)
+@click.option(
+    "--no-config",
+    is_flag=True,
+    default=False,
+    help="Skip auto-applying the default .gruff.yaml file for this run.",
+)
+@click.option(
+    "--format",
+    "calibration_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format: text or json.",
+)
+@click.option(
+    "--top",
+    type=int,
+    default=10,
+    show_default=True,
+    help="How many top functions to list for each metric.",
+)
+@click.option(
+    "--include-ignored",
+    is_flag=True,
+    default=False,
+    help="Scan files under default-ignored directories and .gitignore exclusions.",
+)
+@_global_command_options
+def metric_calibration(
+    paths: tuple[str, ...],
+    config_path: Path | None,
+    no_config: bool,
+    calibration_format: str,
+    top: int,
+    include_ignored: bool,
+) -> None:
+    """Print developer-only complexity metric distributions."""
+    if top < 1:
+        raise click.ClickException("--top must be greater than 0.")
+    report = build_metric_calibration_report(
+        paths=paths,
+        config_path=config_path,
+        no_config=no_config,
+        include_ignored=include_ignored,
+        project_root=Path.cwd(),
+    )
+    if calibration_format == "json":
+        _write_stdout(json.dumps(metric_calibration_payload(report, top=top), indent=4))
+        _write_stdout("\n")
+    else:
+        _write_stdout(render_metric_calibration_text(report, top=top))
+    sys.exit(2 if report.has_input_errors() else 0)
 
 
 @main.command("list")
