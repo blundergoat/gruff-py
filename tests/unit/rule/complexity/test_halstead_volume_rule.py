@@ -27,7 +27,7 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 2000, error: int = 5000) -> RuleContext:
+def _ctx(warning: int = 180, error: int = 400) -> RuleContext:
     rule = HalsteadVolumeRule()
     config = AnalysisConfig(
         rules={
@@ -104,7 +104,7 @@ def test_nested_function_not_included():
 
 def test_huge_function_emits_finding():
     # Force vocabulary and length high with both BinOps and Compares.
-    # Volume well over the 2000 threshold -> finding (may be warning OR error).
+    # Volume well over the error threshold -> finding.
     pairs = "\n".join(
         f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}"
         for i in range(60)
@@ -112,14 +112,14 @@ def test_huge_function_emits_finding():
     src = f"def f():\n{pairs}\n"
     findings = HalsteadVolumeRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity in (Severity.WARNING, Severity.ERROR)
-    assert findings[0].metadata["halsteadVolume"] > 2000
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].metadata["halsteadVolume"] > 400
 
 
 def test_definition_uses_default_thresholds():
     d = HalsteadVolumeRule().definition()
     assert d.id == "complexity.halstead-volume"
-    assert d.default_thresholds == {"warning": 2000, "error": 5000}
+    assert d.default_thresholds == {"warning": 180, "error": 400}
 
 
 def test_radon_delta_within_threshold():

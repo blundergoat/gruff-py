@@ -31,7 +31,7 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 55, error: int = 35) -> RuleContext:
+def _ctx(warning: int = 80, error: int = 70) -> RuleContext:
     rule = MaintainabilityIndexRule()
     config = AnalysisConfig(
         rules={
@@ -79,11 +79,11 @@ def test_complex_function_lowers_mi():
         body_lines.append(f"        x = a{i} - b{i}")
     src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
     mi = maintainability_index_for(_first_fn(src))
-    assert mi < 55.0  # below default warning
+    assert mi < 80.0  # below default warning
 
 
 def test_warning_finding_emitted_for_low_mi():
-    # Construct a function with MI between 35 and 55.
+    # Construct a function below the default warning threshold.
     body_lines = []
     for i in range(20):
         body_lines.append(f"    if a{i} > b{i}:")
@@ -126,4 +126,4 @@ def test_definition_uses_default_thresholds():
     d = MaintainabilityIndexRule().definition()
     assert d.id == "complexity.maintainability-index"
     assert d.pillar == Pillar.MAINTAINABILITY  # NOT complexity!
-    assert d.default_thresholds == {"warning": 55, "error": 35}
+    assert d.default_thresholds == {"warning": 80, "error": 70}

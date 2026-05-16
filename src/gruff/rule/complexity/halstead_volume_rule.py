@@ -29,7 +29,7 @@ class HalsteadVolumeRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 2000, "error": 5000},
+            default_thresholds={"warning": 180, "error": 400},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

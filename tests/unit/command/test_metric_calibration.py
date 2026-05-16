@@ -45,7 +45,7 @@ def test_metric_calibration_report_summarises_function_metrics(tmp_path: Path) -
     assert metrics["cyclomatic"]["p50"] == 2
     assert metrics["cyclomatic"]["max"] == 3
     assert metrics["npath"]["count"] == 2
-    assert metrics["halsteadVolume"]["warningThreshold"] == 2000
+    assert metrics["halsteadVolume"]["warningThreshold"] == 180
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
     top = payload["top"]  # type: ignore[index]

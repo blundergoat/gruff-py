@@ -7,8 +7,8 @@ Consumes Halstead volume (`_halstead.halstead_for`), cyclomatic complexity
 helper (`gruff.rule.size._lines.lines_for_size`) — ADR-002 requires the
 LOC term to share the helper, not be re-derived locally.
 
-Lower MI = worse; the rule emits when MI < threshold (default warning=55,
-error=35). Pillar: ``maintainability`` so this metric surfaces separately
+Lower MI = worse; the rule emits when MI < threshold (default warning=80,
+error=70). Pillar: ``maintainability`` so this metric surfaces separately
 from per-function complexity.
 """
 
@@ -40,7 +40,7 @@ class MaintainabilityIndexRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 55, "error": 35},
+            default_thresholds={"warning": 80, "error": 70},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
