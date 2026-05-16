@@ -76,7 +76,9 @@ class NPathComplexityRule(Rule):
             symbol = qualified_symbol(fn, parents)
             metadata: dict[str, int | float | bool | str] = {
                 "npath": np_capped,
+                "measuredValue": np_capped,
                 "threshold": threshold,
+                "thresholdDirection": "above",
                 "thresholdType": severity.value,
             }
             if np_raw >= _NPATH_CAP:

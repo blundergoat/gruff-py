@@ -14,6 +14,16 @@ from gruff.rule.context import RuleContext
 from gruff.rule.registry import RuleRegistry
 from gruff.source.source_file import SourceFile
 
+SIZE_RULE_IDS = {
+    "size.file-length",
+    "size.class-length",
+    "size.function-length",
+    "size.average-function-length",
+    "size.parameter-count",
+    "size.attribute-count",
+    "size.public-method-count",
+}
+
 # Edge fixture: small but exercises the patterns called out in M02
 # Assumptions (decorators counted, multi-line sigs counted, nested
 # def/class emit independent findings, async included, dataclass fields
@@ -185,16 +195,7 @@ def _default_ctx() -> RuleContext:
 def test_registry_defaults_contains_all_seven_size_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
-    expected_size = {
-        "size.file-length",
-        "size.class-length",
-        "size.function-length",
-        "size.average-function-length",
-        "size.parameter-count",
-        "size.attribute-count",
-        "size.public-method-count",
-    }
-    assert expected_size.issubset(ids)
+    assert SIZE_RULE_IDS.issubset(ids)
 
 
 def test_registry_defaults_sorted_alphabetically_by_id():
@@ -232,6 +233,45 @@ def test_cumulative_fixture_findings_carry_symbol_and_metadata_lines():
         assert f.symbol  # qualified name
         assert "lines" in f.metadata
         assert isinstance(f.metadata["lines"], int)
+
+
+def test_size_threshold_findings_carry_standard_threshold_metadata():
+    registry = RuleRegistry.defaults()
+    rules: dict[str, RuleSettings] = {}
+    for rule in registry.all():
+        definition = rule.definition()
+        thresholds = {"warning": 0, "error": 9999} if definition.id in SIZE_RULE_IDS else {}
+        rules[definition.id] = RuleSettings(
+            enabled=definition.id in SIZE_RULE_IDS,
+            thresholds=thresholds,
+        )
+    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+    unit = _make_unit(
+        """
+class Example:
+    field = 1
+
+    def method(self, one, two):
+        value = one + two
+        return value
+
+    def second(self):
+        return 2
+
+    def third(self):
+        return 3
+"""
+    )
+
+    findings = registry.analyse([unit], ctx)
+    size_findings = [finding for finding in findings if finding.rule_id in SIZE_RULE_IDS]
+
+    assert SIZE_RULE_IDS.issubset({finding.rule_id for finding in size_findings})
+    for finding in size_findings:
+        assert isinstance(finding.metadata["measuredValue"], int | float)
+        assert finding.metadata["threshold"] == 0
+        assert finding.metadata["thresholdDirection"] == "above"
+        assert finding.metadata["thresholdType"] == "warning"
 
 
 def test_nested_inner_function_emits_independent_finding():

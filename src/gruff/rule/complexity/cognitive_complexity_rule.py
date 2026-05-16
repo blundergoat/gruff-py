@@ -87,7 +87,9 @@ class CognitiveComplexityRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "cognitive": score,
+                        "measuredValue": score,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

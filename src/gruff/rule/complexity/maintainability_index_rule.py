@@ -86,7 +86,9 @@ class MaintainabilityIndexRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "maintainabilityIndex": round(mi, 2),
+                        "measuredValue": round(mi, 2),
                         "threshold": threshold,
+                        "thresholdDirection": "below",
                         "thresholdType": severity.value,
                     },
                 ),

@@ -91,7 +91,9 @@ class NestingDepthRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "depth": depth,
+                        "measuredValue": depth,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

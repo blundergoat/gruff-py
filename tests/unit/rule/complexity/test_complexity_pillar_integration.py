@@ -10,6 +10,15 @@ from gruff.rule.registry import RuleRegistry
 from gruff.scoring.composite_finding_factory import CompositeFindingFactory
 from gruff.source.source_file import SourceFile
 
+COMPLEXITY_RULE_IDS = {
+    "complexity.cognitive",
+    "complexity.cyclomatic",
+    "complexity.halstead-volume",
+    "complexity.maintainability-index",
+    "complexity.nesting-depth",
+    "complexity.npath",
+}
+
 COMPLEXITY_FIXTURE = '''
 """Fixture exercising the M03 complexity rules."""
 
@@ -113,15 +122,7 @@ def _default_ctx() -> RuleContext:
 def test_registry_defaults_includes_all_six_complexity_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
-    expected_complexity = {
-        "complexity.cognitive",
-        "complexity.cyclomatic",
-        "complexity.halstead-volume",
-        "complexity.maintainability-index",
-        "complexity.nesting-depth",
-        "complexity.npath",
-    }
-    assert expected_complexity.issubset(ids)
+    assert COMPLEXITY_RULE_IDS.issubset(ids)
 
 
 def test_complexity_rules_emit_findings_on_fixture():
@@ -133,6 +134,49 @@ def test_complexity_rules_emit_findings_on_fixture():
     assert "complexity.cyclomatic" in rule_ids
     assert "complexity.cognitive" in rule_ids
     assert "complexity.nesting-depth" in rule_ids
+
+
+def test_complexity_threshold_findings_carry_standard_threshold_metadata():
+    registry = RuleRegistry.defaults()
+    rules: dict[str, RuleSettings] = {}
+    for rule in registry.all():
+        definition = rule.definition()
+        if definition.id == "complexity.maintainability-index":
+            thresholds = {"warning": 101, "error": 0}
+        elif definition.id in COMPLEXITY_RULE_IDS:
+            thresholds = {"warning": 0, "error": 9999}
+        else:
+            thresholds = {}
+        rules[definition.id] = RuleSettings(
+            enabled=definition.id in COMPLEXITY_RULE_IDS,
+            thresholds=thresholds,
+        )
+    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+    unit = _make_unit(
+        """
+def sample(a, b):
+    if a + 1 > b - 1:
+        if a and b:
+            return a * b
+    return a + b
+"""
+    )
+
+    findings = registry.analyse([unit], ctx)
+    complexity_findings = [
+        finding for finding in findings if finding.rule_id in COMPLEXITY_RULE_IDS
+    ]
+
+    assert COMPLEXITY_RULE_IDS.issubset({finding.rule_id for finding in complexity_findings})
+    for finding in complexity_findings:
+        assert isinstance(finding.metadata["measuredValue"], int | float)
+        if finding.rule_id == "complexity.maintainability-index":
+            assert finding.metadata["threshold"] == 101
+            assert finding.metadata["thresholdDirection"] == "below"
+        else:
+            assert finding.metadata["threshold"] == 0
+            assert finding.metadata["thresholdDirection"] == "above"
+        assert finding.metadata["thresholdType"] == "warning"
 
 
 def test_design_god_method_synthesises_on_overlap():

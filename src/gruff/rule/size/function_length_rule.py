@@ -82,7 +82,9 @@ class FunctionLengthRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "lines": line_count,
+                        "measuredValue": line_count,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

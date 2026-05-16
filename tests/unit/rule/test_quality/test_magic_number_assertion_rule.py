@@ -19,6 +19,11 @@ def test_zero_and_one_skipped():
     assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
 
 
+def test_common_small_expected_counts_skipped():
+    src = "def test_foo():\n    assert count == 2\n    assert other == 3\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
 def test_named_constant_skipped():
     src = "MAX = 42\ndef test_foo():\n    assert result == MAX\n"
     assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []

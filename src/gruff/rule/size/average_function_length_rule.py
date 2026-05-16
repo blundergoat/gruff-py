@@ -88,8 +88,10 @@ class AverageFunctionLengthRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "averageLines": round(avg, 2),
+                        "measuredValue": round(avg, 2),
                         "methodCount": len(methods),
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

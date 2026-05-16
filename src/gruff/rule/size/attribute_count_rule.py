@@ -75,7 +75,9 @@ class AttributeCountRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "attributes": count,
+                        "measuredValue": count,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

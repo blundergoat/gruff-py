@@ -15,6 +15,7 @@ from gruff.parser.analysis_unit import AnalysisUnit
 from gruff.rule.context import RuleContext
 from gruff.rule.definition import RuleDefinition
 from gruff.rule.docs._docstring_parser import extract_docstring
+from gruff.rule.docs._helpers import is_test_file
 from gruff.rule.rule import Rule
 
 
@@ -35,6 +36,8 @@ class MissingModuleDocstringRule(Rule):
         if not isinstance(unit.tree, ast.Module):
             return []
         if not unit.tree.body:
+            return []
+        if is_test_file(unit.file.display_path):
             return []
         if extract_docstring(unit.tree) is not None:
             return []

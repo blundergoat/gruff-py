@@ -1,7 +1,7 @@
 """``test-quality.magic-number-assertion`` — assertion against an unexplained numeric literal.
 
 Default allowlist: HTTP status codes (200, 201, 204, 301, 302, 400, 401, 403,
-404, 409, 422, 429, 500, 502, 503, 504) and 0 / 1 / -1. Configurable via the
+404, 409, 422, 429, 500, 502, 503, 504) and -1 through 3. Configurable via the
 rule's ``allowed_numbers`` option.
 """
 
@@ -24,7 +24,29 @@ from gruff.rule.test_quality._test_quality_node_helper import (
 )
 
 _DEFAULT_ALLOWED: frozenset[int] = frozenset(
-    {-1, 0, 1, 200, 201, 204, 301, 302, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504}
+    {
+        -1,
+        0,
+        1,
+        2,
+        3,
+        200,
+        201,
+        204,
+        301,
+        302,
+        400,
+        401,
+        403,
+        404,
+        409,
+        422,
+        429,
+        500,
+        502,
+        503,
+        504,
+    }
 )
 
 

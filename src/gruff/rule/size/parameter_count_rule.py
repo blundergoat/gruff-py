@@ -77,7 +77,9 @@ class ParameterCountRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "parameters": count,
+                        "measuredValue": count,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

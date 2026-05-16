@@ -22,7 +22,12 @@ from gruff.rule._python_dynamism import (
 from gruff.rule.context import RuleContext
 from gruff.rule.definition import RuleDefinition
 from gruff.rule.docs._docstring_parser import extract_docstring
-from gruff.rule.docs._helpers import is_dunder, is_property_setter_or_deleter, is_public
+from gruff.rule.docs._helpers import (
+    is_dunder,
+    is_property_setter_or_deleter,
+    is_public,
+    is_test_file,
+)
 from gruff.rule.rule import Rule
 from gruff.rule.size._lines import parent_chain, qualified_symbol
 
@@ -50,7 +55,7 @@ class MissingFunctionDocstringRule(Rule):
                 continue
             if not is_public(node.name) or is_dunder(node.name):
                 continue
-            if node.name.startswith("test_") and _is_test_file(unit.file.display_path):
+            if node.name.startswith("test_") and is_test_file(unit.file.display_path):
                 continue
             if extract_docstring(node) is not None:
                 continue
@@ -85,11 +90,3 @@ class MissingFunctionDocstringRule(Rule):
                 ),
             )
         return findings
-
-
-def _is_test_file(display_path: str) -> bool:
-    normalized = display_path.replace("\\", "/").lower()
-    name = normalized.rsplit("/", 1)[-1]
-    if normalized.startswith("tests/") or "/tests/" in normalized:
-        return True
-    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

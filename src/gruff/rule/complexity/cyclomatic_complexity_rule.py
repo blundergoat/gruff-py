@@ -93,7 +93,9 @@ class CyclomaticComplexityRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "complexity": cc,
+                        "measuredValue": cc,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

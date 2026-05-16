@@ -25,6 +25,15 @@ def is_public(name: str) -> bool:
     return not name.startswith("_")
 
 
+def is_test_file(display_path: str) -> bool:
+    """True when *display_path* points at a conventional Python test file."""
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")
+
+
 def is_property_getter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """True if *fn* carries an ``@property`` decorator."""
     return any(_decorator_name(d).split(".")[-1] == "property" for d in fn.decorator_list)

@@ -74,7 +74,9 @@ class PublicMethodCountRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "publicMethods": count,
+                        "measuredValue": count,
                         "threshold": threshold,
+                        "thresholdDirection": "above",
                         "thresholdType": severity.value,
                     },
                 ),

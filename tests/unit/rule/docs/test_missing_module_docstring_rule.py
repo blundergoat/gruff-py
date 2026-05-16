@@ -15,6 +15,14 @@ def test_module_without_docstring_emits_one_finding():
     assert findings[0].line == 1
 
 
+def test_test_module_without_docstring_skipped():
+    src = "def test_f():\n    pass\n"
+    findings = MissingModuleDocstringRule().analyse(
+        make_unit(src, display_path="tests/test_example.py"), default_ctx()
+    )
+    assert findings == []
+
+
 def test_empty_module_skipped():
     findings = MissingModuleDocstringRule().analyse(make_unit(""), default_ctx())
     assert findings == []
