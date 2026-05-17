@@ -50,31 +50,49 @@ class BooleanPrefixRule(Rule):
         findings: list[Finding] = []
 
         for node in ast.walk(unit.tree):
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                if _is_dunder(node.name):
-                    continue
-                if _has_override_decorator(node):
-                    continue
-                if not _has_bool_return(node):
-                    continue
-                if _has_boolean_prefix(node.name):
-                    continue
-                findings.append(
-                    self._finding(unit, definition, node.name, node.lineno, kind="function"),
-                )
-            elif (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and _is_bool_annotation(node.annotation)
-                and not _has_boolean_prefix(node.target.id)
-                and not _is_dunder(node.target.id)
-            ):
-                findings.append(
-                    self._finding(
-                        unit, definition, node.target.id, node.target.lineno, kind="attribute"
-                    )
-                )
+            finding = self._finding_for_node(unit, definition, node)
+            if finding is not None:
+                findings.append(finding)
         return findings
+
+    def _finding_for_node(
+        self,
+        unit: AnalysisUnit,
+        definition: RuleDefinition,
+        node: ast.AST,
+    ) -> Finding | None:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            return self._function_finding(unit, definition, node)
+        if isinstance(node, ast.AnnAssign):
+            return self._attribute_finding(unit, definition, node)
+        return None
+
+    def _function_finding(
+        self,
+        unit: AnalysisUnit,
+        definition: RuleDefinition,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> Finding | None:
+        if _is_dunder(node.name) or _has_override_decorator(node):
+            return None
+        if not _has_bool_return(node) or _has_boolean_prefix(node.name):
+            return None
+        return self._finding(unit, definition, node.name, node.lineno, kind="function")
+
+    def _attribute_finding(
+        self,
+        unit: AnalysisUnit,
+        definition: RuleDefinition,
+        node: ast.AnnAssign,
+    ) -> Finding | None:
+        if not isinstance(node.target, ast.Name):
+            return None
+        name = node.target.id
+        if _is_dunder(name) or _has_boolean_prefix(name):
+            return None
+        if not _is_bool_annotation(node.annotation):
+            return None
+        return self._finding(unit, definition, name, node.target.lineno, kind="attribute")
 
     def _finding(
         self,
@@ -132,20 +150,15 @@ def _has_bool_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _is_bool_annotation(annotation: ast.expr) -> bool:
-    if isinstance(annotation, ast.Name) and annotation.id == "bool":
+    if _is_bool_name(annotation):
         return True
     if isinstance(annotation, ast.Constant) and annotation.value == "bool":
         return True
-    if isinstance(annotation, ast.Subscript):
-        # Optional[bool], Union[bool, None], etc.
-        for child in ast.walk(annotation):
-            if isinstance(child, ast.Name) and child.id == "bool":
-                return True
-    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
-        for child in ast.walk(annotation):
-            if isinstance(child, ast.Name) and child.id == "bool":
-                return True
-    return False
+    return any(_is_bool_name(child) for child in ast.walk(annotation))
+
+
+def _is_bool_name(node: ast.AST) -> bool:
+    return isinstance(node, ast.Name) and node.id == "bool"
 
 
 def _strip_lead(name: str) -> str:

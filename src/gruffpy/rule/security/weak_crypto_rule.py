@@ -44,39 +44,52 @@ class WeakCryptoRule(Rule):
         definition = self.definition()
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.Call):
+            candidate = _weak_crypto_call(node)
+            if candidate is None:
                 continue
-            target = call_target_name(node)
-            if target is None:
-                continue
-            algorithm = _weak_algorithm(target)
-            if algorithm is None:
-                continue
-            if not _has_security_context_smell(node):
-                continue
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"`hashlib.{algorithm}` used in a security-smelling context — "
-                        f"prefer SHA-256+ or a password-hashing KDF."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    remediation=(
-                        "Use ``hashlib.sha256``/``sha512`` for content hashing or "
-                        "``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"algorithm": algorithm},
-                ),
-            )
+            call, algorithm = candidate
+            findings.append(_finding_for_call(definition, unit.file.display_path, call, algorithm))
         return findings
+
+
+def _weak_crypto_call(node: ast.AST) -> tuple[ast.Call, str] | None:
+    if not isinstance(node, ast.Call):
+        return None
+    target = call_target_name(node)
+    if target is None:
+        return None
+    algorithm = _weak_algorithm(target)
+    if algorithm is None or not _has_security_context_smell(node):
+        return None
+    return node, algorithm
+
+
+def _finding_for_call(
+    definition: RuleDefinition,
+    file_path: str,
+    call: ast.Call,
+    algorithm: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"`hashlib.{algorithm}` used in a security-smelling context — "
+            f"prefer SHA-256+ or a password-hashing KDF."
+        ),
+        file_path=file_path,
+        line=call.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=call.end_lineno,
+        remediation=(
+            "Use ``hashlib.sha256``/``sha512`` for content hashing or "
+            "``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"algorithm": algorithm},
+    )
 
 
 def _weak_algorithm(target: str) -> str | None:
@@ -91,18 +104,27 @@ def _weak_algorithm(target: str) -> str | None:
 
 def _has_security_context_smell(call: ast.Call) -> bool:
     """True when *call* arguments or enclosing assignment target smell security."""
+    return _has_security_smelling_argument(call) or _has_security_smelling_parent(call)
+
+
+def _has_security_smelling_argument(call: ast.Call) -> bool:
     for arg in call.args:
         for node in ast.walk(arg):
             if isinstance(node, ast.Name) and has_security_smell(node.id):
                 return True
+    return False
+
+
+def _has_security_smelling_parent(call: ast.Call) -> bool:
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
-            for target in parent.targets:
-                if isinstance(target, ast.Name) and has_security_smell(target.id):
-                    return True
-            return False
+            return _has_security_smelling_target(parent.targets)
         if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
             return bool(has_security_smell(parent.name))
         parent = getattr(parent, "parent", None)
     return False
+
+
+def _has_security_smelling_target(targets: list[ast.expr]) -> bool:
+    return any(isinstance(target, ast.Name) and has_security_smell(target.id) for target in targets)

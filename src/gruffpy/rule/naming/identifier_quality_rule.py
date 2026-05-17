@@ -1,7 +1,8 @@
 """Placeholder/generic identifier patterns.
 
 Flags names that signal "I'll rename this later" — ``temp``, ``temp1``,
-``foo``, ``bar``, ``baz``, ``result1``, ``data2``, ``thing``, ``stuff``.
+``foo``, ``bar``, ``baz``, ``result1``, ``data2``, ``thing``, ``stuff``,
+``todo``.
 
 Detection uses the identifier tokenizer:
 
@@ -25,8 +26,9 @@ from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 
 _PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
-    {"temp", "foo", "bar", "baz", "qux", "thing", "stuff", "todo"}
+    {"temp", "foo", "bar", "baz", "qux", "thing", "stuff"}
 )
+_EXACT_PLACEHOLDER_TOKENS: frozenset[str] = frozenset({"todo"})
 _NUMBERED_BASES: frozenset[str] = frozenset({"result", "data", "value", "item", "var", "x"})
 
 
@@ -59,23 +61,39 @@ class IdentifierQualityRule(Rule):
                     continue
                 seen.add((name, lineno))
                 findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=f"Identifier {name!r} is a placeholder ({pattern}).",
-                        file_path=unit.file.display_path,
-                        line=lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=lineno,
-                        symbol=name,
-                        remediation=("Rename to something descriptive of the value or role."),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={"identifier": name, "pattern": pattern},
-                    ),
+                    _finding_for_identifier(
+                        definition,
+                        unit.file.display_path,
+                        name,
+                        lineno,
+                        pattern,
+                    )
                 )
         return findings
+
+
+def _finding_for_identifier(
+    definition: RuleDefinition,
+    file_path: str,
+    name: str,
+    lineno: int,
+    pattern: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=f"Identifier {name!r} is a placeholder ({pattern}).",
+        file_path=file_path,
+        line=lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=lineno,
+        symbol=name,
+        remediation="Rename to something descriptive of the value or role.",
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"identifier": name, "pattern": pattern},
+    )
 
 
 def _placeholder_pattern(name: str) -> str | None:
@@ -84,33 +102,53 @@ def _placeholder_pattern(name: str) -> str | None:
     tokens = lower_tokens(name)
     if not tokens:
         return None
-    first = tokens[0]
-    if first in _PLACEHOLDER_TOKENS:
-        return f"placeholder token {first!r}"
+    if _is_exact_placeholder(tokens) or _has_placeholder_prefix(tokens):
+        return f"placeholder token {tokens[0]!r}"
     # numbered placeholder: result1, data42, value2
-    if first in _NUMBERED_BASES and len(tokens) >= 2 and tokens[1].isdigit():
-        return f"numbered placeholder {first!r}+{tokens[1]!r}"
+    if _is_numbered_placeholder(tokens):
+        return f"numbered placeholder {tokens[0]!r}+{tokens[1]!r}"
     return None
+
+
+def _is_exact_placeholder(tokens: list[str]) -> bool:
+    return len(tokens) == 1 and tokens[0] in _EXACT_PLACEHOLDER_TOKENS
+
+
+def _has_placeholder_prefix(tokens: list[str]) -> bool:
+    return tokens[0] in _PLACEHOLDER_TOKENS
+
+
+def _is_numbered_placeholder(tokens: list[str]) -> bool:
+    return len(tokens) >= 2 and tokens[0] in _NUMBERED_BASES and tokens[1].isdigit()
 
 
 def _identifiers_in(node: ast.AST) -> list[tuple[str, int]]:
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-        result: list[tuple[str, int]] = [(node.name, node.lineno)]
-        for arg in list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs):
-            result.append((arg.arg, arg.lineno))
-        return result
+        return [(node.name, node.lineno), *_argument_identifiers(node.args)]
     if isinstance(node, ast.ClassDef):
         return [(node.name, node.lineno)]
     if isinstance(node, ast.Assign):
-        out: list[tuple[str, int]] = []
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                out.append((target.id, target.lineno))
-            elif isinstance(target, ast.Tuple | ast.List):
-                for elt in target.elts:
-                    if isinstance(elt, ast.Name):
-                        out.append((elt.id, elt.lineno))
-        return out
-    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        return [(node.target.id, node.target.lineno)]
+        return _assignment_identifiers(node.targets)
+    if isinstance(node, ast.AnnAssign):
+        return _target_identifiers(node.target)
+    return []
+
+
+def _argument_identifiers(arguments: ast.arguments) -> list[tuple[str, int]]:
+    all_args = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
+    return [(arg.arg, arg.lineno) for arg in all_args]
+
+
+def _assignment_identifiers(targets: list[ast.expr]) -> list[tuple[str, int]]:
+    identifiers: list[tuple[str, int]] = []
+    for target in targets:
+        identifiers.extend(_target_identifiers(target))
+    return identifiers
+
+
+def _target_identifiers(target: ast.expr) -> list[tuple[str, int]]:
+    if isinstance(target, ast.Name):
+        return [(target.id, target.lineno)]
+    if isinstance(target, ast.Tuple | ast.List):
+        return [(elt.id, elt.lineno) for elt in target.elts if isinstance(elt, ast.Name)]
     return []

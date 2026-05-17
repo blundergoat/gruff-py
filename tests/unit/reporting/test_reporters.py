@@ -136,6 +136,7 @@ def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
     rule_ids = [rule["id"] for rule in rule_list]
     rules = {rule["id"]: rule for rule in rule_list if isinstance(rule, dict)}
 
+    assert result["ruleId"] in rules
     _assert_sarif_driver_metadata(payload, driver, rule_ids)
     _assert_sarif_result_contract(result, rule_ids)
     _assert_sarif_rule_metadata(rules)

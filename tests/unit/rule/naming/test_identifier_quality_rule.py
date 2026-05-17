@@ -100,6 +100,12 @@ def test_result_without_number_does_not_fire():
     assert findings == []
 
 
+def test_todo_domain_name_does_not_fire():
+    src = "class TodoDensityRule: pass\n"
+    findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
 def test_definition():
     d = IdentifierQualityRule().definition()
     assert d.id == "naming.identifier-quality"

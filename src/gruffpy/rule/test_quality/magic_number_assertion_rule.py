@@ -228,9 +228,9 @@ def _analyser_metric_constants(expr: ast.expr) -> set[ast.Constant]:
         operands = [node.left, *node.comparators]
         for left, right in zip(operands, operands[1:], strict=False):
             if _is_analyser_metric_expression(left):
-                ignored.update(_int_constants(right))
+                ignored.update(_integer_constants(right))
             if _is_analyser_metric_expression(right):
-                ignored.update(_int_constants(left))
+                ignored.update(_integer_constants(left))
     return ignored
 
 
@@ -241,7 +241,7 @@ def _threshold_keyword_constants(expr: ast.expr) -> set[ast.Constant]:
             continue
         for keyword in node.keywords:
             if keyword.arg in {"warning", "error", "threshold"}:
-                ignored.update(_int_constants(keyword.value))
+                ignored.update(_integer_constants(keyword.value))
     return ignored
 
 
@@ -258,7 +258,7 @@ def _is_analyser_metric_expression(expr: ast.AST) -> bool:
     return False
 
 
-def _int_constants(expr: ast.AST) -> set[ast.Constant]:
+def _integer_constants(expr: ast.AST) -> set[ast.Constant]:
     return {node for node in ast.walk(expr) if _is_int_constant(node)}
 
 

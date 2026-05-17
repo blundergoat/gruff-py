@@ -80,6 +80,14 @@ class SourceDiscoveryResult:
         return bool(self.missing_paths)
 
 
+@dataclass(frozen=True, slots=True)
+class _IgnoreDecision:
+    """Whether a path should be skipped, plus the optional summary path."""
+
+    is_ignored: bool
+    display_path: str | None = None
+
+
 class SourceDiscovery:
     """Walks a project root and emits the ``SourceFile`` set rules should see.
 
@@ -104,27 +112,16 @@ class SourceDiscovery:
         ignored: list[str] = []
 
         for raw_path in requested:
-            absolute = self._absolute_path(raw_path)
-            if not absolute.exists():
-                missing.append(raw_path)
-                continue
-            is_ignored, ignored_path = self._ignore_decision(
-                absolute,
+            found_paths, missing_path = self._discover_requested_paths(
+                raw_path,
                 include_ignored=include_ignored,
                 patterns=patterns,
-                record_file=True,
+                ignored=ignored,
             )
-            if is_ignored:
-                if ignored_path is not None:
-                    ignored.append(ignored_path)
-                continue
-
-            if absolute.is_file():
-                self._add_file(absolute, files)
-                continue
-            if absolute.is_dir():
-                for found in self._walk(absolute, include_ignored, patterns, ignored):
-                    self._add_file(found, files)
+            if missing_path is not None:
+                missing.append(missing_path)
+            for found_path in found_paths:
+                self._add_file(found_path, files)
 
         sorted_files = tuple(files[k] for k in sorted(files))
         return SourceDiscoveryResult(
@@ -132,6 +129,35 @@ class SourceDiscovery:
             missing_paths=tuple(sorted(missing)),
             ignored_paths=tuple(sorted(set(ignored))),
         )
+
+    def _discover_requested_paths(
+        self,
+        raw_path: str,
+        *,
+        include_ignored: bool,
+        patterns: list[str],
+        ignored: list[str],
+    ) -> tuple[Iterable[Path], str | None]:
+        absolute = self._absolute_path(raw_path)
+        if not absolute.exists():
+            return (), raw_path
+
+        decision = self._ignore_decision(
+            absolute,
+            include_ignored=include_ignored,
+            patterns=patterns,
+            record_file=True,
+        )
+        if decision.is_ignored:
+            if decision.display_path is not None:
+                ignored.append(decision.display_path)
+            return (), None
+
+        if absolute.is_file():
+            return (absolute,), None
+        if absolute.is_dir():
+            return self._walk(absolute, include_ignored, patterns, ignored), None
+        return (), None
 
     def _walk(
         self,
@@ -143,27 +169,42 @@ class SourceDiscovery:
         stack: list[Path] = [directory]
         while stack:
             current = stack.pop()
-            try:
-                entries = sorted(current.iterdir())
-            except OSError:
-                continue
-            for entry in entries:
+            for entry in self._directory_entries(current):
                 is_dir = entry.is_dir()
-                is_ignored, ignored_path = self._ignore_decision(
-                    entry,
-                    include_ignored=include_ignored,
-                    patterns=patterns,
-                    is_dir=is_dir,
-                    record_file=False,
-                )
-                if is_ignored:
-                    if ignored_path is not None:
-                        ignored_paths.append(ignored_path)
+                if self._should_skip_entry(entry, include_ignored, patterns, is_dir, ignored_paths):
                     continue
                 if is_dir:
                     stack.append(entry)
                 elif entry.is_file() and self._source_type(entry) is not None:
                     yield entry
+
+    @staticmethod
+    def _directory_entries(directory: Path) -> list[Path]:
+        try:
+            return sorted(directory.iterdir())
+        except OSError:
+            return []
+
+    def _should_skip_entry(
+        self,
+        path: Path,
+        include_ignored: bool,
+        patterns: list[str],
+        is_dir: bool,
+        ignored_paths: list[str],
+    ) -> bool:
+        decision = self._ignore_decision(
+            path,
+            include_ignored=include_ignored,
+            patterns=patterns,
+            is_dir=is_dir,
+            record_file=False,
+        )
+        if not decision.is_ignored:
+            return False
+        if decision.display_path is not None:
+            ignored_paths.append(decision.display_path)
+        return True
 
     def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
         canonical = self._canonical(path)
@@ -242,19 +283,17 @@ class SourceDiscovery:
         patterns: list[str],
         is_dir: bool | None = None,
         record_file: bool,
-    ) -> tuple[bool, str | None]:
+    ) -> _IgnoreDecision:
         display_path = self._display_path(path)
         if self._is_configured_ignored(path, patterns):
-            return True, display_path
+            return _IgnoreDecision(True, display_path)
         if include_ignored:
-            return False, None
+            return _IgnoreDecision(False)
         if is_dir is None:
             is_dir = path.is_dir()
-        if self._is_default_ignored(path):
-            return True, display_path if record_file or is_dir else None
-        if self._is_gitignored(path, is_dir=is_dir):
-            return True, display_path if record_file or is_dir else None
-        return False, None
+        if not self._is_default_ignored(path) and not self._is_gitignored(path, is_dir=is_dir):
+            return _IgnoreDecision(False)
+        return _IgnoreDecision(True, display_path if record_file or is_dir else None)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
         if is_dir is None:
