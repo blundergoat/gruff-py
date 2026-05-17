@@ -104,6 +104,15 @@ def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract()
             assert docs.threshold_direction in {"above", "below"}
 
 
+def test_selected_security_rules_publish_taxonomy_metadata() -> None:
+    docs = documentation_for_rule("security.sql-concatenation")
+    assert docs.security_metadata["cwe"] == ["CWE-89"]
+    assert docs.to_payload()["security"]["securitySeverity"] == "high"
+
+    yaml_docs = documentation_for_rule("security.unsafe-yaml-load")
+    assert yaml_docs.security_metadata["cwe"] == ["CWE-502"]
+
+
 def _concrete_rule_classes() -> list[type[Any]]:
     classes: list[type[Any]] = []
     for module_info in pkgutil.walk_packages(gruffpy.rule.__path__, gruffpy.rule.__name__ + "."):

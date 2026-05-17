@@ -104,6 +104,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     )
     for definition in definitions:
         lines.extend(_rule_detail_lines(definition))
+    lines.extend(_suppression_lines())
     lines.extend(_choosing_rules_lines())
     return "\n".join(lines).rstrip() + "\n"
 
@@ -190,6 +191,8 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         lines.append(f"- Threshold direction: `{docs.threshold_direction}`")
     if docs.formula_provenance:
         lines.append(f"- Formula provenance: {docs.formula_provenance}")
+    if docs.security_metadata:
+        lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
     lines.extend(
         [
             f"- Bad example: {docs.bad_example}",
@@ -207,6 +210,37 @@ def _inline_mapping(mapping: dict[str, Any]) -> str:
 
 def _inline_list(values: tuple[str, ...]) -> str:
     return ", ".join(f"`{value}`" for value in values)
+
+
+def _suppression_lines() -> list[str]:
+    return [
+        "## Suppressing Findings",
+        "",
+        "Use explicit gruff rule ids when a finding is a known false positive.",
+        "Suppressions are applied after rule execution and before scoring/reporting.",
+        "",
+        "Suppress one rule on the same line:",
+        "",
+        "```python",
+        "import os  # gruff: disable=waste.unused-import",
+        "```",
+        "",
+        "Suppress one or more rules on the next physical line:",
+        "",
+        "```python",
+        "# gruff: disable-next=security.dangerous-function-call,security.variable-import",
+        "eval(payload)",
+        "```",
+        "",
+        "Suppress one or more rules for the current file:",
+        "",
+        "```python",
+        "# gruff: disable-file=size.file-length",
+        "```",
+        "",
+        "`# noqa` remains rule-local compatibility behavior and is not a global gruff suppression.",
+        "",
+    ]
 
 
 def _choosing_rules_lines() -> list[str]:

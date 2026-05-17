@@ -20,6 +20,8 @@ from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 from gruffpy.scoring.score_calculator import ScoreCalculator
 from gruffpy.source.discovery import SourceDiscovery
 from gruffpy.source.source_file import SourceFile
+from gruffpy.suppression.filter import apply_suppressions
+from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.version import VERSION
 
 
@@ -54,8 +56,12 @@ def run_analysis(
     diagnostics.extend(parse_diagnostics)
 
     context = RuleContext(project_root=str(project_root), config=config)
+    suppressions_by_file = _parse_suppressions(units, registry)
+    diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
     findings = registry.analyse(units, context)
+    findings = apply_suppressions(findings, suppressions_by_file)
     findings = CompositeFindingFactory().synthesise(findings)
+    findings = apply_suppressions(findings, suppressions_by_file)
     findings = _filter_allowed_secret_previews(findings, config)
     findings.sort(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
@@ -135,6 +141,39 @@ def _missing_path_diagnostics(missing_paths: tuple[str, ...]) -> list[RunDiagnos
         RunDiagnostic(type="missing-path", message="path not found", path=missing)
         for missing in missing_paths
     ]
+
+
+def _parse_suppressions(
+    units: list[AnalysisUnit],
+    registry: RuleRegistry,
+) -> dict[str, ParsedSuppressions]:
+    known_rule_ids = {rule.definition().id for rule in registry.all()}
+    known_rule_ids.add(CompositeFindingFactory.GOD_METHOD_RULE_ID)
+    return {
+        unit.file.display_path: parse_suppressions(
+            unit.source,
+            known_rule_ids=frozenset(known_rule_ids),
+        )
+        for unit in units
+        if unit.source
+    }
+
+
+def _suppression_diagnostics(
+    suppressions_by_file: dict[str, ParsedSuppressions],
+) -> list[RunDiagnostic]:
+    diagnostics: list[RunDiagnostic] = []
+    for file_path, suppressions in suppressions_by_file.items():
+        diagnostics.extend(
+            RunDiagnostic(
+                type=diagnostic.type,
+                message=diagnostic.message,
+                file_path=file_path,
+                line=diagnostic.line,
+            )
+            for diagnostic in suppressions.diagnostics
+        )
+    return diagnostics
 
 
 def compute_exit_code(

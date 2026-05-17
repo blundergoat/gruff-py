@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 98 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 99 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -15,7 +15,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 10 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 12 | Heuristic AST-level dangerous patterns |
+| `security` | 13 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -91,6 +91,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `security.silent-except`
 - `security.sql-concatenation`
 - `security.unsafe-pickle`
+- `security.unsafe-yaml-load`
 - `security.variable-import`
 - `security.weak-crypto`
 
@@ -598,6 +599,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `security.disabled-ssl-verification` protects the security pillar by flagging disabled ssl verification before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported disabled ssl verification directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-295']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.disabled-ssl-verification` leaves disabled ssl verification unaddressed.
 - Good example: Code that satisfies `security.disabled-ssl-verification` makes disabled ssl verification explicit or simpler.
 
@@ -696,6 +698,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `security.sql-concatenation` protects the security pillar by flagging sql concatenation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported sql concatenation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.sql-concatenation` leaves sql concatenation unaddressed.
 - Good example: Code that satisfies `security.sql-concatenation` makes sql concatenation explicit or simpler.
 
@@ -712,6 +715,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `security.unsafe-pickle` leaves unsafe pickle deserialisation unaddressed.
 - Good example: Code that satisfies `security.unsafe-pickle` makes unsafe pickle deserialisation explicit or simpler.
+
+### `security.unsafe-yaml-load`
+
+- Name: Unsafe YAML load
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.unsafe-yaml-load` protects the security pillar by flagging unsafe yaml load before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported unsafe yaml load directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-502']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.unsafe-yaml-load` leaves unsafe yaml load unaddressed.
+- Good example: Code that satisfies `security.unsafe-yaml-load` makes unsafe yaml load explicit or simpler.
 
 ### `security.variable-import`
 
@@ -738,6 +756,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `security.weak-crypto` protects the security pillar by flagging weak cryptographic hash before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported weak cryptographic hash directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
 - Bad example: Code that triggers `security.weak-crypto` leaves weak cryptographic hash unaddressed.
 - Good example: Code that satisfies `security.weak-crypto` makes weak cryptographic hash explicit or simpler.
 
@@ -1584,6 +1603,32 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Bad example: Code that triggers `waste.unused-parameter` leaves unused parameter unaddressed.
 - Good example: Code that satisfies `waste.unused-parameter` makes unused parameter explicit or simpler.
+
+## Suppressing Findings
+
+Use explicit gruff rule ids when a finding is a known false positive.
+Suppressions are applied after rule execution and before scoring/reporting.
+
+Suppress one rule on the same line:
+
+```python
+import os  # gruff: disable=waste.unused-import
+```
+
+Suppress one or more rules on the next physical line:
+
+```python
+# gruff: disable-next=security.dangerous-function-call,security.variable-import
+eval(payload)
+```
+
+Suppress one or more rules for the current file:
+
+```python
+# gruff: disable-file=size.file-length
+```
+
+`# noqa` remains rule-local compatibility behavior and is not a global gruff suppression.
 
 ## Choosing Rules
 

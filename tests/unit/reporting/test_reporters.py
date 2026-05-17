@@ -278,6 +278,36 @@ def test_sarif_reporter_projects_optional_native_finding_metadata():
     assert properties["metadata"] == {"target": "eval", "count": 2}
 
 
+def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
+    finding = _finding(
+        rule_id="security.sql-concatenation",
+        message="SQL placeholder is quoted.",
+        metadata={
+            "target": "cursor.execute",
+            "cwe": ["CWE-89"],
+            "owasp": ["A03:2021-Injection"],
+            "securitySeverity": "high",
+            "sourceLabel": "quoted-placeholder",
+            "sinkLabel": "sql-execution",
+        },
+    )
+    fingerprint = finding.fingerprint()
+
+    payload = json.loads(SarifReporter().render(_report((finding,))))
+    run = payload["runs"][0]
+    rules = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}
+    result = run["results"][0]
+
+    assert rules["security.sql-concatenation"]["properties"]["documentation"]["security"] == {
+        "cwe": ["CWE-89"],
+        "owasp": ["A03:2021-Injection"],
+        "securitySeverity": "high",
+    }
+    assert result["properties"]["metadata"]["securitySeverity"] == "high"
+    assert result["properties"]["metadata"]["sourceLabel"] == "quoted-placeholder"
+    assert result["partialFingerprints"]["gruffFingerprint"] == fingerprint
+
+
 def test_sarif_reporter_does_not_emit_stale_contract_keys():
     rendered = SarifReporter().render(_report())
     stale_keys = (

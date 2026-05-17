@@ -9,6 +9,7 @@ import pickle
 import random
 import requests
 import subprocess
+import yaml
 
 from contextlib import suppress
 from flask import Flask, request
@@ -25,6 +26,7 @@ def echo():
     os.system(f"echo {cmd}")
     body = request.json
     pickle.loads(body)
+    yaml.unsafe_load(body)
     response = make_response("hi")
     response.headers[request.args["h"]] = "x"
     Foo(**request.json)
@@ -52,6 +54,7 @@ _EXPECTED_RULE_IDS = {
     "security.silent-except",
     "security.sql-concatenation",
     "security.unsafe-pickle",
+    "security.unsafe-yaml-load",
     "security.weak-crypto",
 }
 
@@ -67,11 +70,13 @@ _SAFE_FIXTURE = '''import hashlib
 import requests
 import secrets
 import subprocess
+import yaml
 
 
 def process(items):
     """Safe equivalents — every line is the recommended alternative."""
     requests.get("https://api.example.com", verify=True)
+    yaml.safe_load(items["yaml"])
     cursor.execute("SELECT * FROM t WHERE id = ?", (items["id"],))
     digest = hashlib.sha256(items["content"]).hexdigest()
     token = secrets.token_hex(32)
@@ -93,14 +98,14 @@ def test_safe_equivalents_emit_no_security_findings():
     )
 
 
-def test_security_registry_has_twelve_rules():
+def test_security_registry_has_thirteen_rules():
     ids = {
         rule.definition().id
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 12
+    assert len(ids) == 13
     assert _EXPECTED_RULE_IDS.issubset(ids)
-    # The 12th is `security.variable-import`, which the dangerous fixture above
+    # The 13th is `security.variable-import`, which the dangerous fixture above
     # doesn't trigger because the fixture's eval covers the import surface.
     assert "security.variable-import" in ids

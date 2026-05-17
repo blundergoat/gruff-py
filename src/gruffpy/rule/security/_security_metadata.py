@@ -1,0 +1,46 @@
+"""Security taxonomy helpers for rule and finding metadata."""
+
+from typing import Any
+
+_RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
+    "security.sql-concatenation": {
+        "cwe": ["CWE-89"],
+        "owasp": ["A03:2021-Injection"],
+        "securitySeverity": "high",
+    },
+    "security.disabled-ssl-verification": {
+        "cwe": ["CWE-295"],
+        "owasp": ["A02:2021-Cryptographic Failures"],
+        "securitySeverity": "high",
+    },
+    "security.unsafe-yaml-load": {
+        "cwe": ["CWE-502"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "high",
+    },
+    "security.weak-crypto": {
+        "cwe": ["CWE-327", "CWE-916"],
+        "owasp": ["A02:2021-Cryptographic Failures"],
+        "securitySeverity": "medium",
+    },
+}
+
+
+def rule_security_metadata(rule_id: str) -> dict[str, Any]:
+    """Return optional security taxonomy for a built-in rule."""
+    return dict(_RULE_SECURITY_METADATA.get(rule_id, {}))
+
+
+def finding_security_metadata(
+    rule_id: str,
+    *,
+    source_label: str = "",
+    sink_label: str = "",
+) -> dict[str, Any]:
+    """Return JSON-ready security metadata for an individual finding."""
+    metadata = rule_security_metadata(rule_id)
+    if source_label:
+        metadata["sourceLabel"] = source_label
+    if sink_label:
+        metadata["sinkLabel"] = sink_label
+    return metadata

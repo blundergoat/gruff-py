@@ -18,6 +18,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.security._security_metadata import finding_security_metadata
 from gruffpy.rule.security._security_node_helper import (
     call_keyword,
     call_target_name,
@@ -46,47 +47,205 @@ class DisabledSslVerificationRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.Call):
-                continue
-            target = call_target_name(node)
-            if target is None:
-                continue
-            reason = _ssl_verification_disabled_reason(target, node)
-            if reason is None:
-                continue
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=f"{reason} disables TLS certificate verification.",
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    remediation=(
-                        "Use a properly verified TLS context. If you need a custom trust "
-                        "store, configure CA bundles instead of disabling verification."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"target": target, "reason": reason},
-                ),
+        visitor = _DisabledSslVerificationVisitor(unit, definition)
+        visitor.visit(unit.tree)
+        return visitor.findings
+
+
+class _DisabledSslVerificationVisitor(ast.NodeVisitor):
+    def __init__(self, unit: AnalysisUnit, definition: RuleDefinition) -> None:
+        self._unit = unit
+        self._definition = definition
+        self._false_aliases: set[str] = set()
+        self.findings: list[Finding] = []
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self._visit_scope_body(node.body, false_aliases=set())
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_scope_body(node.body, false_aliases=set())
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_scope_body(node.body, false_aliases=set())
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_scope_body(node.body, false_aliases=set())
+
+    def visit_Call(self, node: ast.Call) -> None:
+        target = call_target_name(node)
+        if target is not None:
+            reason, source_label = _ssl_verification_disabled_reason(
+                target,
+                node,
+                self._false_aliases,
             )
-        return findings
+            if reason is not None:
+                self.findings.append(
+                    _finding(
+                        self._unit,
+                        self._definition,
+                        node,
+                        target,
+                        reason,
+                        source_label,
+                    )
+                )
+        self.generic_visit(node)
+
+    def _visit_scope_body(self, body: list[ast.stmt], false_aliases: set[str]) -> None:
+        aliases = set(false_aliases)
+        for stmt in body:
+            if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                aliases.discard(stmt.name)
+                self.visit(stmt)
+                continue
+            if isinstance(stmt, ast.Assign):
+                self._visit_with_aliases(stmt.value, aliases)
+                self._record_assignment(stmt.targets, stmt.value, aliases)
+                continue
+            if isinstance(stmt, ast.AnnAssign):
+                if stmt.value is not None:
+                    self._visit_with_aliases(stmt.value, aliases)
+                self._record_assignment([stmt.target], stmt.value, aliases)
+                continue
+            if isinstance(stmt, ast.AugAssign):
+                self._visit_with_aliases(stmt.value, aliases)
+                for name in _target_names(stmt.target):
+                    aliases.discard(name)
+                continue
+            if isinstance(stmt, ast.If):
+                self._visit_with_aliases(stmt.test, aliases)
+                self._visit_scope_body(stmt.body, set(aliases))
+                self._visit_scope_body(stmt.orelse, set(aliases))
+                aliases.difference_update(_assigned_names(stmt))
+                continue
+            if isinstance(stmt, ast.For | ast.AsyncFor | ast.While | ast.Try):
+                self._visit_branching_statement(stmt, aliases)
+                aliases.difference_update(_assigned_names(stmt))
+                continue
+            self._visit_with_aliases(stmt, aliases)
+
+    def _visit_branching_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        if isinstance(stmt, ast.For | ast.AsyncFor):
+            self._visit_with_aliases(stmt.iter, aliases)
+            self._visit_scope_body(stmt.body, set(aliases))
+            self._visit_scope_body(stmt.orelse, set(aliases))
+            return
+        if isinstance(stmt, ast.While):
+            self._visit_with_aliases(stmt.test, aliases)
+            self._visit_scope_body(stmt.body, set(aliases))
+            self._visit_scope_body(stmt.orelse, set(aliases))
+            return
+        if isinstance(stmt, ast.Try):
+            self._visit_scope_body(stmt.body, set(aliases))
+            for handler in stmt.handlers:
+                self._visit_scope_body(handler.body, set(aliases))
+            self._visit_scope_body(stmt.orelse, set(aliases))
+            self._visit_scope_body(stmt.finalbody, set(aliases))
+
+    def _visit_with_aliases(self, node: ast.AST, aliases: set[str]) -> None:
+        previous = self._false_aliases
+        self._false_aliases = aliases
+        try:
+            self.visit(node)
+        finally:
+            self._false_aliases = previous
+
+    @staticmethod
+    def _record_assignment(
+        targets: list[ast.expr],
+        value: ast.expr | None,
+        aliases: set[str],
+    ) -> None:
+        assigned = {name for target in targets for name in _target_names(target)}
+        if value is not None and is_false_constant(value):
+            aliases.update(assigned)
+            return
+        aliases.difference_update(assigned)
 
 
-def _ssl_verification_disabled_reason(target: str, call: ast.Call) -> str | None:
+def _ssl_verification_disabled_reason(
+    target: str,
+    call: ast.Call,
+    false_aliases: set[str],
+) -> tuple[str | None, str]:
     if target.startswith("requests."):
         last = target.split(".")[-1]
         if last in _REQUESTS_METHODS:
             verify = call_keyword(call, "verify")
             if verify is not None and is_false_constant(verify):
-                return f"`{target}(verify=False)`"
+                return f"`{target}(verify=False)`", "literal-false"
+            if isinstance(verify, ast.Name) and verify.id in false_aliases:
+                return f"`{target}(verify={verify.id})`", "literal-false-origin"
     if target in {"ssl._create_unverified_context", "_create_unverified_context"}:
-        return "`ssl._create_unverified_context()`"
+        return "`ssl._create_unverified_context()`", "unverified-context"
     if target in {"urllib3.disable_warnings", "disable_warnings"}:
-        return "`urllib3.disable_warnings()`"
-    return None
+        return "`urllib3.disable_warnings()`", "warning-suppression"
+    return None, ""
+
+
+def _finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.Call,
+    target: str,
+    reason: str,
+    source_label: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=f"{reason} disables TLS certificate verification.",
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        remediation=(
+            "Use a properly verified TLS context. If you need a custom trust "
+            "store, configure CA bundles instead of disabling verification."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={
+            "target": target,
+            "reason": reason,
+            **finding_security_metadata(
+                definition.id,
+                source_label=source_label,
+                sink_label="tls-verification",
+            ),
+        },
+    )
+
+
+def _target_names(target: ast.expr) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, ast.Tuple | ast.List):
+        return {name for item in target.elts for name in _target_names(item)}
+    return set()
+
+
+def _assigned_names(node: ast.AST) -> set[str]:
+    collector = _AssignedNameCollector()
+    collector.visit(node)
+    return collector.names
+
+
+class _AssignedNameCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Store):
+            self.names.add(node.id)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)

@@ -68,6 +68,7 @@ selection:
   - security.silent-except
   - security.sql-concatenation
   - security.unsafe-pickle
+  - security.unsafe-yaml-load
   - security.variable-import
   - security.weak-crypto
   - sensitive-data.api-key-pattern
@@ -334,6 +335,9 @@ rules:
     enabled: true
   # Pickle deserialization can execute attacker-controlled code.
   security.unsafe-pickle:
+    enabled: true
+  # Unsafe PyYAML loaders can construct attacker-controlled objects.
+  security.unsafe-yaml-load:
     enabled: true
   # Dynamic imports from variables can load unexpected code.
   security.variable-import:

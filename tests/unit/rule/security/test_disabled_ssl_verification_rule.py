@@ -34,3 +34,38 @@ def test_requests_post_verify_zero_emits():
     src = "import requests\nrequests.post('https://x', verify=0)\n"
     findings = DisabledSslVerificationRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
+
+
+def test_requests_verify_false_same_scope_alias_emits():
+    src = "import requests\nverify = False\nrequests.get('https://x', verify=verify)\n"
+    findings = DisabledSslVerificationRule().analyse(make_unit(src), default_ctx())
+
+    assert len(findings) == 1
+    assert findings[0].metadata["sourceLabel"] == "literal-false-origin"
+    assert findings[0].metadata["sinkLabel"] == "tls-verification"
+
+
+def test_requests_verify_zero_same_scope_alias_emits():
+    src = "import requests\nverify_cert = 0\nrequests.post('https://x', verify=verify_cert)\n"
+    findings = DisabledSslVerificationRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_requests_verify_dynamic_alias_skipped():
+    src = "import requests\nverify = config.verify_tls\nrequests.get('https://x', verify=verify)\n"
+    assert DisabledSslVerificationRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_requests_verify_reassigned_alias_skipped():
+    src = (
+        "import requests\n"
+        "verify = False\n"
+        "verify = config.verify_tls\n"
+        "requests.get('https://x', verify=verify)\n"
+    )
+    assert DisabledSslVerificationRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_requests_verify_outer_scope_alias_skipped_inside_function():
+    src = "import requests\nverify = False\ndef fetch(url):\n    requests.get(url, verify=verify)\n"
+    assert DisabledSslVerificationRule().analyse(make_unit(src), default_ctx()) == []

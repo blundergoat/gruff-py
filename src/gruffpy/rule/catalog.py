@@ -1,7 +1,7 @@
 """First-party catalog for built-in rules and their documentation metadata."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from gruffpy.finding.confidence import Confidence
@@ -37,6 +37,7 @@ from gruffpy.rule.naming.short_variable_rule import ShortVariableRule
 from gruffpy.rule.naming.test_naming_consistency_rule import TestNamingConsistencyRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.security._security_metadata import rule_security_metadata
 from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
@@ -47,6 +48,7 @@ from gruffpy.rule.security.shell_injection_rule import ShellInjectionRule
 from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
+from gruffpy.rule.security.unsafe_yaml_load_rule import UnsafeYamlLoadRule
 from gruffpy.rule.security.variable_import_rule import VariableImportRule
 from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
@@ -160,6 +162,7 @@ class RuleDocs:
     formula_provenance: str = ""
     threshold_direction: str = ""
     threshold_metadata_keys: tuple[str, ...] = ()
+    security_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, Any]:
         """Return JSON-ready docs metadata.
@@ -181,6 +184,8 @@ class RuleDocs:
             payload["thresholdDirection"] = self.threshold_direction
         if self.threshold_metadata_keys:
             payload["thresholdMetadataKeys"] = list(self.threshold_metadata_keys)
+        if self.security_metadata:
+            payload["security"] = dict(self.security_metadata)
         return payload
 
 
@@ -223,6 +228,7 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
         formula_provenance=_FORMULA_PROVENANCE.get(definition.id, ""),
         threshold_direction=_threshold_direction(definition),
         threshold_metadata_keys=_threshold_metadata_keys(definition),
+        security_metadata=rule_security_metadata(definition.id),
     )
 
 
@@ -310,6 +316,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(SilentExceptRule),
     _entry(SqlConcatenationRule),
     _entry(UnsafePickleRule),
+    _entry(UnsafeYamlLoadRule),
     _entry(VariableImportRule),
     _entry(WeakCryptoRule),
     _entry(ApiKeyPatternRule),
