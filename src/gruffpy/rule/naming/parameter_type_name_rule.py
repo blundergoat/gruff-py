@@ -133,9 +133,16 @@ def _is_acceptable_parameter_name(arg: ast.arg, expected: str) -> bool:
         return True
     if expected.startswith(arg.arg) and len(arg.arg) >= 2:
         return True
-    if _is_collection_annotation(arg.annotation) and _has_plural_match(arg.arg, expected):
+    annotation = arg.annotation
+    if (
+        annotation is not None
+        and _is_collection_annotation(annotation)
+        and _has_plural_match(arg.arg, expected)
+    ):
         return True
-    return _has_shared_token(arg.arg, expected) or _has_shared_path_role(arg.arg, expected)
+    if _has_shared_token(arg.arg, expected):
+        return True
+    return _has_shared_path_role(arg.arg, expected)
 
 
 def _parameter_mismatch_finding(

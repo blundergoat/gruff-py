@@ -103,7 +103,9 @@ def _function_length_finding(
 
 
 def _start_line(node: FunctionNode) -> int:
-    decorators = getattr(node, "decorator_list", None) or []
+    if isinstance(node, ast.Lambda):
+        return node.lineno
+    decorators = node.decorator_list
     if decorators:
         return min(node.lineno, *(decorator.lineno for decorator in decorators))
     return node.lineno

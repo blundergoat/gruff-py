@@ -19,6 +19,7 @@ Confidence: MEDIUM. False positives are still possible on metaprogramming
 """
 
 import ast
+from collections.abc import Container
 from dataclasses import dataclass
 
 from gruffpy.finding.confidence import Confidence
@@ -89,7 +90,7 @@ class UnusedPrivateFunctionRule(Rule):
 def _private_function_candidate(
     node: ast.AST,
     tree: ast.AST,
-    all_names: set[str],
+    all_names: Container[str],
 ) -> _PrivateFunctionCandidate | None:
     if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return None
@@ -110,7 +111,7 @@ def _should_skip_private_function(
     node: FunctionNode,
     parents: list[ast.AST],
     parent_cls: ast.ClassDef | None,
-    all_names: set[str],
+    all_names: Container[str],
 ) -> bool:
     return (
         not _is_private(node.name)

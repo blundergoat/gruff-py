@@ -19,6 +19,7 @@ from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 from gruffpy.scoring.score_calculator import ScoreCalculator
 from gruffpy.source.discovery import SourceDiscovery
+from gruffpy.source.source_file import SourceFile
 from gruffpy.version import VERSION
 
 
@@ -103,7 +104,7 @@ def _load_analysis_config(
 
 
 def _parse_sources(
-    source_files: tuple,
+    source_files: tuple[SourceFile, ...],
 ) -> tuple[list[AnalysisUnit], int, list[RunDiagnostic]]:
     parser = PythonFileParser()
     units: list[AnalysisUnit] = []

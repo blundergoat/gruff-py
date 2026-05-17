@@ -101,7 +101,7 @@ def _class_length_finding(
 
 
 def _start_line(node: ast.ClassDef) -> int:
-    decorators = getattr(node, "decorator_list", None) or []
+    decorators = node.decorator_list
     if decorators:
         return min(node.lineno, *(decorator.lineno for decorator in decorators))
     return node.lineno
