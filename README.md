@@ -211,6 +211,21 @@ make check
 Note that `make check` uses the `lint` target, which runs `ruff check --fix`.
 Use the explicit commands above when you need non-mutating release verification.
 
+### Performance harness
+
+`scripts/test-performance.sh` runs a fixed workload matrix (cold-start,
+analyse on `src/`/`tests/`, reporter variants, synthetic 100/1000-file
+fixtures) with median/p95/min/max wall-clock, peak RSS via
+`/usr/bin/time -v`, and per-rule cost attribution from `cProfile`. Baselines
+live under `scripts/performance-baselines/<host>.json`; pass `--baseline` to
+fail the script on regressions.
+
+```bash
+make perf-quick    # CI smoke: cold-start + analyse-src vs baseline
+make perf          # full suite vs baseline
+make perf-baseline # overwrite the linux-x86_64 baseline with the current run
+```
+
 ## Project Docs
 
 - [Changelog](CHANGELOG.md)
