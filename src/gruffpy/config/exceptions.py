@@ -2,4 +2,4 @@
 
 
 class ConfigError(Exception):
-    pass
+    """Raised when a config file cannot be parsed or contains invalid keys/values."""

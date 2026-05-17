@@ -12,6 +12,8 @@ from gruffpy.version import TOOL_NAME
 
 
 class DashboardPageRenderer:
+    """Builds the self-contained HTML shell served by the local dashboard."""
+
     def dashboard_html(self, state: dict[str, str]) -> str:
         scan_url = "/scan?" + urlencode(state)
         return (

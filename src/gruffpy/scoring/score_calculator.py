@@ -38,6 +38,8 @@ FILE_PENALTY_MULTIPLIER: float = 5.0
 
 
 class ScoreCalculator:
+    """Computes pillar grades, the composite score, and top-offender file scores from findings."""
+
     def calculate(
         self,
         findings: list[Finding],

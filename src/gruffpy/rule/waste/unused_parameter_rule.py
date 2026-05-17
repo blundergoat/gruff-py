@@ -12,6 +12,7 @@ Skip:
 """
 
 import ast
+from typing import NamedTuple
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -29,6 +30,13 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+
+
+class _UnusedParameter(NamedTuple):
+    function: ast.FunctionDef | ast.AsyncFunctionDef
+    parents: list[ast.AST]
+    arg_name: str
+    arg_lineno: int
 
 
 class UnusedParameterRule(Rule):
@@ -49,15 +57,13 @@ class UnusedParameterRule(Rule):
             return []
         definition = self.definition()
         return [
-            _unused_parameter_finding(unit, definition, node, parents, arg_name, arg_lineno)
-            for node, parents, arg_name, arg_lineno in _unused_parameters(unit.tree)
+            _unused_parameter_finding(unit, definition, candidate)
+            for candidate in _unused_parameters(unit.tree)
         ]
 
 
-def _unused_parameters(
-    tree: ast.AST,
-) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST], str, int]]:
-    findings: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST], str, int]] = []
+def _unused_parameters(tree: ast.AST) -> list[_UnusedParameter]:
+    findings: list[_UnusedParameter] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
@@ -66,7 +72,14 @@ def _unused_parameters(
             continue
         referenced = _collect_referenced_names(node.body)
         for arg_name, arg_lineno in _unused_params(node, referenced):
-            findings.append((node, parents, arg_name, arg_lineno))
+            findings.append(
+                _UnusedParameter(
+                    function=node,
+                    parents=parents,
+                    arg_name=arg_name,
+                    arg_lineno=arg_lineno,
+                )
+            )
     return findings
 
 
@@ -87,22 +100,20 @@ def _should_skip_unused_parameter_check(
 def _unused_parameter_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    parents: list[ast.AST],
-    arg_name: str,
-    arg_lineno: int,
+    candidate: _UnusedParameter,
 ) -> Finding:
-    symbol = qualified_symbol(node, parents)
+    symbol = qualified_symbol(candidate.function, candidate.parents)
+    arg_name = candidate.arg_name
     return Finding(
         rule_id=definition.id,
         message=(f"Parameter {arg_name!r} in {symbol!r} is never referenced."),
         file_path=unit.file.display_path,
-        line=arg_lineno,
+        line=candidate.arg_lineno,
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
-        end_line=node.end_lineno,
+        end_line=candidate.function.end_lineno,
         symbol=symbol,
         remediation=(
             f"Remove the parameter or rename it to ``_{arg_name}`` "

@@ -37,6 +37,8 @@ TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
 
 
 class ConfigLoader:
+    """Resolves the active ``AnalysisConfig`` from `.gruff.yaml` / `pyproject.toml` / defaults."""
+
     def __init__(self, project_root: str | Path, analysis_config: AnalysisConfig) -> None:
         self._project_root = Path(project_root)
         self._defaults = analysis_config

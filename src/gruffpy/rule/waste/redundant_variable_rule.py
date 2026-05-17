@@ -7,6 +7,7 @@ nested function scopes are scanned for the name; matches are conservative.
 """
 
 import ast
+from typing import NamedTuple
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -18,6 +19,13 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+
+
+class _RedundantReturn(NamedTuple):
+    function: ast.FunctionDef | ast.AsyncFunctionDef
+    assign: ast.Assign
+    ret: ast.Return
+    name: str
 
 
 class RedundantVariableRule(Rule):
@@ -38,27 +46,25 @@ class RedundantVariableRule(Rule):
             return []
         definition = self.definition()
         return [
-            _redundant_variable_finding(unit, definition, node, assign, ret, name)
-            for node, assign, ret, name in _redundant_variables(unit.tree)
+            _redundant_variable_finding(unit, definition, candidate)
+            for candidate in _redundant_variables(unit.tree)
         ]
 
 
-def _redundant_variables(
-    tree: ast.AST,
-) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.Assign, ast.Return, str]]:
-    findings: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.Assign, ast.Return, str]] = []
+def _redundant_variables(tree: ast.AST) -> list[_RedundantReturn]:
+    findings: list[_RedundantReturn] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         candidate = _redundant_variable(node)
         if candidate is not None:
-            findings.append((node, *candidate))
+            findings.append(candidate)
     return findings
 
 
 def _redundant_variable(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> tuple[ast.Assign, ast.Return, str] | None:
+) -> _RedundantReturn | None:
     body = node.body
     if len(body) < 2:
         return None
@@ -72,7 +78,7 @@ def _redundant_variable(
     name = assign.targets[0].id
     if _is_name_used_elsewhere(name, body[:-2]):
         return None
-    return assign, ret, name
+    return _RedundantReturn(function=node, assign=assign, ret=ret, name=name)
 
 
 def _has_redundant_return_shape(assign: ast.stmt, ret: ast.stmt) -> bool:
@@ -88,12 +94,10 @@ def _has_redundant_return_shape(assign: ast.stmt, ret: ast.stmt) -> bool:
 def _redundant_variable_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    assign: ast.Assign,
-    ret: ast.Return,
-    name: str,
+    candidate: _RedundantReturn,
 ) -> Finding:
-    symbol = qualified_symbol(node, parent_chain(node))
+    symbol = qualified_symbol(candidate.function, parent_chain(candidate.function))
+    name = candidate.name
     return Finding(
         rule_id=definition.id,
         message=(
@@ -101,12 +105,12 @@ def _redundant_variable_finding(
             f"and immediately returned; inline the expression."
         ),
         file_path=unit.file.display_path,
-        line=assign.lineno,
+        line=candidate.assign.lineno,
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
-        end_line=ret.end_lineno,
+        end_line=candidate.ret.end_lineno,
         symbol=symbol,
         remediation=f"Replace `{name} = expr` + `return {name}` with `return expr`.",
         secondary_pillars=definition.secondary_pillars,

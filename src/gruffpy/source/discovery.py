@@ -81,6 +81,12 @@ class SourceDiscoveryResult:
 
 
 class SourceDiscovery:
+    """Walks a project root and emits the ``SourceFile`` set rules should see.
+
+    Honours ``.gitignore``, default-ignored directories, and any
+    ``configured_ignore_patterns`` passed at discovery time.
+    """
+
     def __init__(self, project_root: str | Path) -> None:
         self._project_root = Path(project_root).resolve()
         self._gitignore = GitignoreMatcher.from_root(self._project_root)
