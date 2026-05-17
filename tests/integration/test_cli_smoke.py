@@ -72,7 +72,9 @@ def test_cli_list_rules_json_lists_rule_metadata():
         "thresholds",
         "options",
         "description",
+        "documentation",
     } <= set(rule)
+    assert {"rationale", "fixGuidance", "confidenceRationale"} <= set(rule["documentation"])
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

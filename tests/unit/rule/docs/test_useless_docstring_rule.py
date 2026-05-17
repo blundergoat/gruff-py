@@ -7,6 +7,31 @@ def test_pure_restatement_emits():
     findings = UselessDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "process"
+    assert findings[0].metadata["reason"] == "restates the signature without adding intent"
+
+
+def test_thin_function_docstring_emits():
+    src = 'def parse_config(path):\n    """Parse config."""\n    return path\n'
+    findings = UselessDocstringRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].symbol == "parse_config"
+    assert findings[0].metadata["kind"] == "function"
+
+
+def test_thin_module_docstring_emits():
+    src = '"""Module docstring."""\n\nVALUE = 1\n'
+    findings = UselessDocstringRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].symbol == "<module>"
+    assert findings[0].metadata["kind"] == "module"
+
+
+def test_thin_class_docstring_emits():
+    src = 'class AnalysisReport:\n    """Report."""\n    pass\n'
+    findings = UselessDocstringRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].symbol == "AnalysisReport"
+    assert findings[0].metadata["kind"] == "class"
 
 
 def test_descriptive_summary_skipped():
@@ -14,6 +39,24 @@ def test_descriptive_summary_skipped():
         "def get_name(self):\n"
         '    """Return the rule\'s stable identifier as configured in defaults()."""\n'
         "    return self._name\n"
+    )
+    assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_descriptive_module_docstring_skipped():
+    src = (
+        '"""Builds the serialisable analysis report payload returned by CLI and API callers."""\n'
+        "\n"
+        "VALUE = 1\n"
+    )
+    assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_descriptive_class_docstring_skipped():
+    src = (
+        "class AnalysisReport:\n"
+        '    """Immutable analysis payload shared by reporters and exit-code handling."""\n'
+        "    pass\n"
     )
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 

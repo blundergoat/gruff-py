@@ -25,7 +25,7 @@ class RuleRegistry:
 
     @classmethod
     def defaults(cls) -> "RuleRegistry":
-        from gruffpy.rule.builtins import default_rules
+        from gruffpy.rule.catalog import default_rules
 
         return cls(default_rules())
 

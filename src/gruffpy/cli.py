@@ -49,6 +49,7 @@ from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.reporting.markdown_reporter import MarkdownReporter
 from gruffpy.reporting.sarif_reporter import SarifReporter
 from gruffpy.reporting.text_reporter import TextReporter
+from gruffpy.rule.catalog import documentation_for_rule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import TOOL_NAME, VERSION
@@ -577,6 +578,7 @@ def _format_count_rows(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
+    documentation = documentation_for_rule(definition.id)
     return {
         "id": definition.id,
         "name": definition.name,
@@ -588,6 +590,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "thresholds": dict(definition.default_thresholds),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
+        "documentation": documentation.to_payload(),
     }
 
 

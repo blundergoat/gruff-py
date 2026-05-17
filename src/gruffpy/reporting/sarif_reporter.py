@@ -7,6 +7,7 @@ from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
+from gruffpy.rule.catalog import documentation_for_rule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import TOOL_NAME
@@ -47,18 +48,20 @@ class SarifReporter:
 
 
 def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
+    documentation = documentation_for_rule(definition.id)
     return {
         "id": definition.id,
         "name": definition.name,
         "shortDescription": {"text": definition.get_description()},
-        "fullDescription": {"text": definition.get_description()},
-        "help": {"text": definition.get_description()},
+        "fullDescription": {"text": documentation.rationale},
+        "help": {"text": f"{documentation.rationale}\n\n{documentation.fix_guidance}"},
         "properties": {
             "pillar": definition.pillar.value,
             "tier": definition.tier.value,
             "defaultSeverity": definition.default_severity.value,
             "confidence": definition.confidence.value,
             "defaultEnabled": definition.default_enabled,
+            "documentation": documentation.to_payload(),
             **(
                 {"secondaryPillars": [pillar.value for pillar in definition.secondary_pillars]}
                 if definition.secondary_pillars

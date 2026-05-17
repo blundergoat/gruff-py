@@ -178,6 +178,7 @@ def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
     assert rules["security.dangerous-function-call"]["properties"]["pillar"] == "security"
     assert rules["security.dangerous-function-call"]["properties"]["defaultSeverity"] == "error"
     assert rules["security.dangerous-function-call"]["properties"]["defaultEnabled"] is True
+    assert "documentation" in rules["security.dangerous-function-call"]["properties"]
     assert "size.file-length" in rules
 
 

@@ -1,7 +1,7 @@
 # gruff-py — common dev tasks.
 # Everything runs through `uv` so the venv is auto-managed.
 
-.PHONY: help install test lint format typecheck check dev perf perf-quick perf-baseline clean precommit-install precommit-run
+.PHONY: help install test lint format typecheck docs-check check dev perf perf-quick perf-baseline clean precommit-install precommit-run
 
 help:
 	@echo "gruff-py — dev targets:"
@@ -10,7 +10,8 @@ help:
 	@echo "  lint               Run ruff check (with --fix)"
 	@echo "  format             Run ruff format"
 	@echo "  typecheck          Run mypy on src/"
-	@echo "  check              lint + typecheck + test"
+	@echo "  docs-check         Verify generated rule docs"
+	@echo "  check              lint + typecheck + docs-check + test"
 	@echo "  dev                Run gruff against its own src/ (dogfood)"
 	@echo "  perf               Run scripts/test-performance.sh full suite"
 	@echo "  perf-quick         Run scripts/test-performance.sh --quick (CI smoke)"
@@ -35,7 +36,10 @@ format:
 typecheck:
 	uv run mypy src
 
-check: lint typecheck test
+docs-check:
+	uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+
+check: lint typecheck docs-check test
 
 dev:
 	uv run gruff-py analyse src/

@@ -1,9 +1,9 @@
 """``docs.missing-class-docstring`` — ``class Foo`` without a docstring.
 
 Exempts Protocols, ABCs, TypedDicts, NamedTuples, Enum-like bases, and
-``@dataclass``-decorated classes when ``class_dataclass_exempt`` is set
-in the rule's options (default true — dataclasses usually document fields
-via ``Attributes:`` on the class but many use them as plain DTOs).
+``@dataclass``-decorated classes only when ``class_dataclass_exempt`` is set
+in the rule's options (default false). Public dataclasses carry project-facing
+schema and invariants, so open-source consumers still need class-level context.
 """
 
 import ast
@@ -34,7 +34,7 @@ class MissingClassDocstringRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
-            default_options={"class_dataclass_exempt": True},
+            default_options={"class_dataclass_exempt": False},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

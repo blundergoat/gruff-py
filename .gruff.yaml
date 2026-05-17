@@ -194,7 +194,7 @@ rules:
   docs.missing-class-docstring:
     enabled: true
     options:
-      class_dataclass_exempt: true
+      class_dataclass_exempt: false
   # Functions need docstrings to state behavior beyond the name.
   docs.missing-function-docstring:
     enabled: true
@@ -224,6 +224,11 @@ rules:
   # Empty or restated docstrings make useful documentation harder to find.
   docs.useless-docstring:
     enabled: true
+    options:
+      min_summary_words:
+        module: 6
+        class: 4
+        function: 4
   # Boolean names should read like predicates at call sites.
   naming.boolean-prefix:
     enabled: true

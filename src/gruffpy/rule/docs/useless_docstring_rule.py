@@ -1,10 +1,13 @@
-"""``docs.useless-docstring`` — docstring that just restates the signature.
+"""``docs.useless-docstring`` — docstring without enough useful context.
 
-Heuristic: the docstring summary, after stop-word and generic-verb removal,
-contains only tokens that appear in the function name or its parameter names.
-Conservative — flags short single-sentence summaries only. Dunder methods are
-exempt because constructors and other framework hooks often have one-liners
-by convention.
+Heuristics:
+
+- public function summary restates the function name/signature;
+- module/class/function summary is too thin after removing generic words.
+
+Conservative — docstrings with a description body or structured Params /
+Returns / Raises sections are accepted. Dunder methods are exempt because
+constructors and other framework hooks often have one-liners by convention.
 """
 
 import ast
@@ -46,6 +49,7 @@ _STOP_WORDS: frozenset[str] = frozenset(
         "by",
         "do",
         "does",
+        "docstring",
         "for",
         "from",
         "get",
@@ -55,6 +59,8 @@ _STOP_WORDS: frozenset[str] = frozenset(
         "into",
         "is",
         "it",
+        "method",
+        "module",
         "of",
         "on",
         "or",
@@ -68,6 +74,7 @@ _STOP_WORDS: frozenset[str] = frozenset(
         "that",
         "the",
         "this",
+        "thing",
         "to",
         "value",
         "values",
@@ -76,15 +83,23 @@ _STOP_WORDS: frozenset[str] = frozenset(
 )
 
 _MAX_CONTENT_WORDS = 5
+_MIN_CONTENT_WORDS = {
+    "module": 6,
+    "class": 4,
+    "function": 4,
+}
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+DocstringNode = ast.Module | ast.ClassDef | FunctionNode
 
 
 @dataclass(frozen=True, slots=True)
 class _UselessDocstring:
-    node: FunctionNode
+    node: DocstringNode
+    kind: str
     symbol: str
     summary: str
+    reason: str
 
 
 class UselessDocstringRule(Rule):
@@ -98,37 +113,50 @@ class UselessDocstringRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_options={"min_summary_words": dict(_MIN_CONTENT_WORDS)},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         if unit.tree is None:
             return []
         definition = self.definition()
+        settings = context.settings_for(definition)
+        min_words = _min_summary_words(settings.options.get("min_summary_words"))
         return [
             _useless_docstring_finding(unit, definition, candidate)
-            for candidate in _useless_docstrings(unit.tree)
+            for candidate in _useless_docstrings(unit.tree, min_words=min_words)
         ]
 
 
-def _useless_docstrings(tree: ast.AST) -> list[_UselessDocstring]:
+def _min_summary_words(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return dict(_MIN_CONTENT_WORDS)
+    minimums = dict(_MIN_CONTENT_WORDS)
+    for key in minimums:
+        configured = value.get(key)
+        if isinstance(configured, int) and not isinstance(configured, bool) and configured > 0:
+            minimums[key] = configured
+    return minimums
+
+
+def _useless_docstrings(tree: ast.AST, *, min_words: dict[str, int]) -> list[_UselessDocstring]:
     candidates: list[_UselessDocstring] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        summary = _useless_summary(node)
-        if summary is not None:
-            candidates.append(
-                _UselessDocstring(
-                    node=node,
-                    symbol=qualified_symbol(node, parent_chain(node)),
-                    summary=summary,
-                )
-            )
+        candidate = _useless_docstring(node, min_words=min_words)
+        if candidate is not None:
+            candidates.append(candidate)
     return candidates
 
 
-def _useless_summary(node: FunctionNode) -> str | None:
-    if _should_skip_useless_docstring_check(node):
+def _useless_docstring(
+    node: DocstringNode,
+    *,
+    min_words: dict[str, int],
+) -> _UselessDocstring | None:
+    kind = _docstring_kind(node)
+    if kind is None or _should_skip_useless_docstring_check(node):
         return None
     text = extract_docstring(node)
     if text is None:
@@ -138,18 +166,56 @@ def _useless_summary(node: FunctionNode) -> str | None:
         return None
     if parsed.description or parsed.params or parsed.returns or parsed.raises:
         return None
-    if _is_signature_restatement(node, parsed.summary):
-        return parsed.summary
+    reason = _useless_reason(node, kind, parsed.summary, min_words=min_words)
+    if reason is None:
+        return None
+    return _UselessDocstring(
+        node=node,
+        kind=kind,
+        symbol=_docstring_symbol(node),
+        summary=parsed.summary,
+        reason=reason,
+    )
+
+
+def _docstring_kind(node: DocstringNode) -> str | None:
+    if isinstance(node, ast.Module):
+        return "module"
+    if isinstance(node, ast.ClassDef):
+        return "class"
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return "function"
     return None
 
 
-def _should_skip_useless_docstring_check(node: FunctionNode) -> bool:
+def _should_skip_useless_docstring_check(node: DocstringNode) -> bool:
+    if isinstance(node, ast.Module):
+        return False
+    if isinstance(node, ast.ClassDef):
+        return is_dunder(node.name)
     return (
         not is_public(node.name)
         or is_dunder(node.name)
         or is_overload_stub(node)
         or is_property_setter_or_deleter(node)
     )
+
+
+def _useless_reason(
+    node: DocstringNode,
+    kind: str,
+    summary: str,
+    *,
+    min_words: dict[str, int],
+) -> str | None:
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_signature_restatement(
+        node, summary
+    ):
+        return "restates the signature without adding intent"
+    content_word_count = len(_content_words(summary))
+    if content_word_count < min_words[kind]:
+        return f"has only {content_word_count} descriptive word(s)"
+    return None
 
 
 def _is_signature_restatement(node: FunctionNode, summary: str) -> bool:
@@ -164,6 +230,12 @@ def _parameter_tokens(node: FunctionNode) -> set[str]:
     return {token for name in signature_param_names(node) for token in lower_tokens(name)}
 
 
+def _docstring_symbol(node: DocstringNode) -> str:
+    if isinstance(node, ast.Module):
+        return "<module>"
+    return qualified_symbol(node, parent_chain(node))
+
+
 def _useless_docstring_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
@@ -172,21 +244,32 @@ def _useless_docstring_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"Function {candidate.symbol!r} docstring restates the signature "
-            "without adding intent."
+            f"{candidate.kind.capitalize()} {candidate.symbol!r} docstring "
+            f"{candidate.reason}."
         ),
         file_path=unit.file.display_path,
-        line=candidate.node.lineno,
+        line=_docstring_line(candidate.node),
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
-        end_line=candidate.node.end_lineno,
+        end_line=_docstring_end_line(candidate.node),
         symbol=candidate.symbol,
-        remediation=("Describe what the function is *for*, not what its identifier already says."),
+        remediation=(
+            "Write a concise open-source-facing docstring that explains purpose, "
+            "contract, and any non-obvious behavior."
+        ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"summary": candidate.summary},
+        metadata={"summary": candidate.summary, "kind": candidate.kind, "reason": candidate.reason},
     )
+
+
+def _docstring_line(node: DocstringNode) -> int:
+    return getattr(node, "lineno", 1)
+
+
+def _docstring_end_line(node: DocstringNode) -> int | None:
+    return getattr(node, "end_lineno", None)
 
 
 def _content_words(summary: str) -> list[str]:
