@@ -33,6 +33,8 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
+_CYCLOMATIC_CACHE_ATTR = "_gruffpy_cyclomatic_complexity"
+
 
 class CyclomaticComplexityRule(Rule):
     ID = "complexity.cyclomatic"
@@ -109,9 +111,14 @@ def cyclomatic_for(fn: FunctionLike) -> int:
     Radon-aligned: base 1, plus decision points enumerated in the module
     docstring. Nested function bodies are skipped.
     """
+    cached = getattr(fn, _CYCLOMATIC_CACHE_ATTR, None)
+    if isinstance(cached, int):
+        return cached
+
     count = 1
     for node in body_nodes(fn):
         count += _increment_for(node)
+    setattr(fn, _CYCLOMATIC_CACHE_ATTR, count)
     return count
 
 

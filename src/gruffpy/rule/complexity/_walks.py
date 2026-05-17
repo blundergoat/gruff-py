@@ -9,15 +9,26 @@ nested-def boundary.
 
 import ast
 from collections.abc import Iterator
+from typing import cast
 
 FunctionLike = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
+_FUNCTION_CACHE_ATTR = "_gruffpy_function_nodes"
 
 
 def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
     """Yield every function-like node in *tree*, in document order."""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
-            yield node
+    cached = getattr(tree, _FUNCTION_CACHE_ATTR, None)
+    if isinstance(cached, tuple):
+        yield from cast(tuple[FunctionLike, ...], cached)
+        return
+
+    functions = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
+    )
+    setattr(tree, _FUNCTION_CACHE_ATTR, functions)
+    yield from functions
 
 
 def body_nodes(fn: FunctionLike) -> Iterator[ast.AST]:

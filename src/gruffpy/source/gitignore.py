@@ -6,41 +6,36 @@ from pathlib import Path
 from pathspec import GitIgnoreSpec
 
 
-def _load_specs(root: Path) -> dict[Path, GitIgnoreSpec]:
-    specs: dict[Path, GitIgnoreSpec] = {}
-    if not root.exists():
-        return specs
-    for gitignore in root.rglob(".gitignore"):
-        if not gitignore.is_file():
-            continue
-        try:
-            content = gitignore.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        try:
-            parent = gitignore.parent.resolve()
-        except OSError:
-            continue
-        specs[parent] = GitIgnoreSpec.from_lines(content.splitlines())
-    return specs
+def _load_spec(directory: Path) -> GitIgnoreSpec | None:
+    gitignore = directory / ".gitignore"
+    if not gitignore.is_file():
+        return None
+    try:
+        content = gitignore.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return GitIgnoreSpec.from_lines(content.splitlines())
 
 
 @dataclass(frozen=True, slots=True)
 class GitignoreMatcher:
     """Resolves whether a path is gitignored under a given project root.
 
-    Loads every reachable ``.gitignore`` once at construction and applies
-    them with git's nested-gitignore precedence: deeper files override
-    shallower ones, and the deepest matching pattern decides.
+    Loads ``.gitignore`` files on demand as paths are checked and applies them
+    with git's nested-gitignore precedence: deeper files override shallower
+    ones, and the deepest matching pattern decides.
     """
 
     root: Path
     _specs_by_dir: dict[Path, GitIgnoreSpec] = field(default_factory=dict)
+    _loaded_dirs: set[Path] = field(default_factory=set)
 
     @classmethod
     def from_root(cls, root: Path) -> "GitignoreMatcher":
         resolved = root.resolve() if root.exists() else root
-        return cls(root=resolved, _specs_by_dir=_load_specs(resolved))
+        matcher = cls(root=resolved)
+        matcher._ensure_loaded(resolved)
+        return matcher
 
     def has_rules(self) -> bool:
         return bool(self._specs_by_dir)
@@ -51,9 +46,6 @@ class GitignoreMatcher:
         ``is_dir`` should be set when the path refers to a directory so
         trailing-slash patterns like ``build/`` match correctly.
         """
-        if not self._specs_by_dir:
-            return False
-
         abs_path = path if path.is_absolute() else self.root / path
         try:
             resolved = abs_path.resolve()
@@ -73,6 +65,7 @@ class GitignoreMatcher:
             if ancestor_is_ignored is True:
                 return True
             current_dir = ancestor
+            self._ensure_loaded(current_dir)
             if current_dir in self._specs_by_dir:
                 applicable_dirs.append(current_dir)
 
@@ -104,3 +97,11 @@ class GitignoreMatcher:
         if result.include is None:
             return prior
         return bool(result.include)
+
+    def _ensure_loaded(self, directory: Path) -> None:
+        if directory in self._loaded_dirs:
+            return
+        self._loaded_dirs.add(directory)
+        spec = _load_spec(directory)
+        if spec is not None:
+            self._specs_by_dir[directory] = spec

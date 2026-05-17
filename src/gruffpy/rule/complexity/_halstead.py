@@ -51,6 +51,9 @@ class HalsteadMetrics:
         return self.length * math.log2(self.vocabulary)
 
 
+_HALSTEAD_CACHE_ATTR = "_gruffpy_halstead_metrics"
+
+
 def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
     """Compute Halstead metrics for *fn*'s body.
 
@@ -59,6 +62,10 @@ def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
     Constants in statements (``return x``, ``x = 1``) do NOT contribute —
     matching radon's expression-focused interpretation.
     """
+    cached = getattr(fn, _HALSTEAD_CACHE_ATTR, None)
+    if isinstance(cached, HalsteadMetrics):
+        return cached
+
     operators: list[str] = []
     operands: list[str] = []
 
@@ -67,12 +74,14 @@ def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
     for stmt in body:
         _walk_stmt(stmt, operators, operands)
 
-    return HalsteadMetrics(
+    metrics = HalsteadMetrics(
         distinct_operators=len(set(operators)),
         distinct_operands=len(set(operands)),
         total_operators=len(operators),
         total_operands=len(operands),
     )
+    setattr(fn, _HALSTEAD_CACHE_ATTR, metrics)
+    return metrics
 
 
 def _walk_stmt(node: ast.AST, operators: list[str], operands: list[str]) -> None:

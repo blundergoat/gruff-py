@@ -19,6 +19,7 @@ Confidence: MEDIUM. False positives are still possible on metaprogramming
 """
 
 import ast
+from collections import Counter
 from collections.abc import Container
 from dataclasses import dataclass
 
@@ -51,6 +52,14 @@ class _PrivateFunctionCandidate:
     scope: ast.AST
 
 
+@dataclass(frozen=True, slots=True)
+class _ReferenceCounts:
+    names: Counter[str]
+    attributes: Counter[str]
+    getattr_names: Counter[str]
+    getattr_prefixes: Counter[str]
+
+
 class UnusedPrivateFunctionRule(Rule):
     ID = "dead-code.unused-private-function"
 
@@ -71,17 +80,18 @@ class UnusedPrivateFunctionRule(Rule):
         all_names = module_all_names(unit.tree)
 
         findings: list[Finding] = []
+        scope_references: dict[int, _ReferenceCounts] = {}
         for raw_node in ast.walk(unit.tree):
             candidate = _private_function_candidate(raw_node, unit.tree, all_names)
             if candidate is None:
                 continue
-            if _is_name_referenced_outside_def(
-                candidate.node.name,
-                candidate.scope,
-                candidate.node,
-            ) or _is_name_referenced_by_getattr(
-                candidate.node.name, candidate.scope, candidate.node
-            ):
+            scope_key = id(candidate.scope)
+            references = scope_references.get(scope_key)
+            if references is None:
+                references = _collect_references(candidate.scope)
+                scope_references[scope_key] = references
+            own_references = _collect_references(candidate.node)
+            if _has_external_reference(candidate.node.name, references, own_references):
                 continue
             findings.append(_unused_private_function_finding(unit, definition, candidate))
         return findings
@@ -159,44 +169,53 @@ def _is_dunder(name: str) -> bool:
     return name.startswith("__") and name.endswith("__") and len(name) > 4
 
 
-def _is_name_referenced_outside_def(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
-    """Return True if *name* appears as a Name/Attribute within *scope*
-    anywhere except inside *defining_node* itself (which contains the name
-    on its own ``name`` field — not a reference)."""
-    for node in ast.walk(scope):
-        if node is defining_node:
-            continue
-        if _is_descendant_of(node, defining_node):
-            continue
-        if isinstance(node, ast.Name) and node.id == name:
-            return True
-        if isinstance(node, ast.Attribute) and node.attr == name:
-            return True
-    return False
+def _collect_references(root: ast.AST) -> _ReferenceCounts:
+    references = _ReferenceCounts(
+        names=Counter(),
+        attributes=Counter(),
+        getattr_names=Counter(),
+        getattr_prefixes=Counter(),
+    )
+    for node in ast.walk(root):
+        if isinstance(node, ast.Name):
+            references.names[node.id] += 1
+        elif isinstance(node, ast.Attribute):
+            references.attributes[node.attr] += 1
+        elif isinstance(node, ast.Call):
+            _collect_getattr_reference(node, references)
+    return references
 
 
-def _is_name_referenced_by_getattr(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
-    for node in ast.walk(scope):
-        if node is defining_node or _is_descendant_of(node, defining_node):
-            continue
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
-            continue
-        if len(node.args) < 2:
-            continue
-        if _does_getattr_name_match(name, node.args[1]):
-            return True
-    return False
+def _collect_getattr_reference(node: ast.Call, references: _ReferenceCounts) -> None:
+    if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+        return
+    if len(node.args) < 2:
+        return
+    name_arg = node.args[1]
+    if isinstance(name_arg, ast.Constant) and isinstance(name_arg.value, str):
+        references.getattr_names[name_arg.value] += 1
+        return
+    if isinstance(name_arg, ast.JoinedStr):
+        prefix = _joined_string_static_prefix(name_arg)
+        if len(prefix) >= 3:
+            references.getattr_prefixes[prefix] += 1
 
 
-def _does_getattr_name_match(name: str, value: ast.AST) -> bool:
-    if isinstance(value, ast.Constant) and isinstance(value.value, str):
-        return value.value == name
-    if isinstance(value, ast.JoinedStr):
-        prefix = _joined_string_static_prefix(value)
-        return len(prefix) >= 3 and name.startswith(prefix)
-    return False
+def _has_external_reference(
+    name: str,
+    scope: _ReferenceCounts,
+    defining_node: _ReferenceCounts,
+) -> bool:
+    if scope.names[name] > defining_node.names[name]:
+        return True
+    if scope.attributes[name] > defining_node.attributes[name]:
+        return True
+    if scope.getattr_names[name] > defining_node.getattr_names[name]:
+        return True
+    return any(
+        name.startswith(prefix) and count > defining_node.getattr_prefixes[prefix]
+        for prefix, count in scope.getattr_prefixes.items()
+    )
 
 
 def _joined_string_static_prefix(value: ast.JoinedStr) -> str:
@@ -207,12 +226,3 @@ def _joined_string_static_prefix(value: ast.JoinedStr) -> str:
         if isinstance(part, ast.Constant) and isinstance(part.value, str):
             prefix_parts.append(part.value)
     return "".join(prefix_parts)
-
-
-def _is_descendant_of(node: ast.AST, ancestor: ast.AST) -> bool:
-    current = getattr(node, "parent", None)
-    while current is not None:
-        if current is ancestor:
-            return True
-        current = getattr(current, "parent", None)
-    return False

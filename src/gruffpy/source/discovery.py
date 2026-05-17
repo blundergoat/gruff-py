@@ -257,8 +257,6 @@ class SourceDiscovery:
         return False, None
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
-        if not self._gitignore.has_rules():
-            return False
         if is_dir is None:
             try:
                 is_dir = path.is_dir()
