@@ -19,6 +19,10 @@ from gruffpy.rule.security._security_node_helper import call_keyword, call_targe
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
+_SKIP_DECORATOR_LEAVES: frozenset[str] = frozenset(
+    {"skip", "skipif", "skipIf", "skipUnless"}
+)
+
 
 class SkippedWithoutReasonRule(Rule):
     ID = "test-quality.skipped-without-reason"
@@ -71,29 +75,43 @@ def _skip_decorator_without_reason(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> ast.expr | None:
     for decorator in fn.decorator_list:
-        if isinstance(decorator, ast.Call):
-            target = call_target_name(decorator)
-            if target is None:
-                continue
-            leaf = target.split(".")[-1]
-            if leaf not in {"skip", "skipif", "skipIf", "skipUnless"}:
-                continue
-            reason = call_keyword(decorator, "reason") or _string_first_arg(decorator)
-            if reason is None:
-                return decorator
-            if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
-                if not reason.value.strip():
-                    return decorator
-                continue
-            continue  # Non-literal reason — assume the user wrote something.
-        # Bare ``@pytest.mark.skip`` without parentheses → no reason ever supplied.
-        target = _decorator_name(decorator)
-        if target is None:
-            continue
-        leaf = target.split(".")[-1]
-        if leaf == "skip":
+        if _is_skip_call_without_reason(decorator) or _is_bare_skip_decorator(decorator):
             return decorator
     return None
+
+
+def _is_skip_call_without_reason(decorator: ast.expr) -> bool:
+    if not isinstance(decorator, ast.Call):
+        return False
+    if _skip_call_leaf(decorator) is None:
+        return False
+    reason = call_keyword(decorator, "reason") or _string_first_arg(decorator)
+    return _is_missing_reason(reason)
+
+
+def _skip_call_leaf(call: ast.Call) -> str | None:
+    target = call_target_name(call)
+    if target is None:
+        return None
+    leaf = target.split(".")[-1]
+    return leaf if leaf in _SKIP_DECORATOR_LEAVES else None
+
+
+def _is_missing_reason(reason: ast.expr | None) -> bool:
+    if reason is None:
+        return True
+    if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
+        return not reason.value.strip()
+    return False
+
+
+def _is_bare_skip_decorator(decorator: ast.expr) -> bool:
+    if isinstance(decorator, ast.Call):
+        return False
+    target = _decorator_name(decorator)
+    if target is None:
+        return False
+    return target.split(".")[-1] == "skip"
 
 
 def _string_first_arg(call: ast.Call) -> ast.expr | None:

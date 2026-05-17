@@ -77,8 +77,14 @@ _PATH_PROBES: tuple[_PathProbe, ...] = (
 @pytest.fixture
 def corpus(tmp_path: Path) -> Path:
     """Create a representative gitignore corpus in *tmp_path* and return its root."""
+    _write_probe_paths(tmp_path)
+    _write_gitignore_files(tmp_path)
+    return tmp_path
+
+
+def _write_gitignore_files(root: Path) -> None:
     _write(
-        tmp_path / ".gitignore",
+        root / ".gitignore",
         "\n".join(
             [
                 "*.bin",
@@ -91,29 +97,19 @@ def corpus(tmp_path: Path) -> Path:
             ]
         ),
     )
-    _write(tmp_path / "pkg" / ".gitignore", "noise.bin\nkeep.bin\n")
-    _write(tmp_path / "vendor" / ".gitignore", "!keep.py\n")
+    _write(root / "pkg" / ".gitignore", "noise.bin\nkeep.bin\n")
+    _write(root / "vendor" / ".gitignore", "!keep.py\n")
 
-    _write(tmp_path / "app.py")
-    _write(tmp_path / "ignored.bin")
-    _write(tmp_path / "keep.bin")
-    (tmp_path / "build").mkdir()
-    _write(tmp_path / "build" / "out.py")
-    (tmp_path / "pkg" / "build").mkdir(parents=True)
-    _write(tmp_path / "pkg" / "build" / "out.py")
-    _write(tmp_path / "pkg" / "keep.bin")
-    _write(tmp_path / "pkg" / "noise.bin")
-    _write(tmp_path / "vendor" / "keep.py")
-    (tmp_path / "anchored" / "build").mkdir(parents=True)
-    _write(tmp_path / "anchored" / "build" / "out.py")
-    _write(tmp_path / "docs" / "notes.md")
-    (tmp_path / "docs" / "temp").mkdir(parents=True)
-    _write(tmp_path / "docs" / "temp" / "cache.txt")
-    (tmp_path / "a" / "temp").mkdir(parents=True)
-    _write(tmp_path / "a" / "temp" / "file.py")
-    (tmp_path / "b" / "deep" / "temp").mkdir(parents=True)
-    _write(tmp_path / "b" / "deep" / "temp" / "file.py")
-    return tmp_path
+
+def _write_probe_paths(root: Path) -> None:
+    for probe in _PATH_PROBES:
+        if probe.rel.endswith(".gitignore"):
+            continue
+        target = root / probe.rel
+        if probe.is_dir:
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            _write(target)
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is not available on PATH")

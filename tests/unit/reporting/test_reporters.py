@@ -1,4 +1,6 @@
 import json
+from dataclasses import dataclass, replace
+from typing import Any
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.finding.confidence import Confidence
@@ -16,36 +18,41 @@ from gruffpy.reporting.sarif_reporter import SarifReporter
 from gruffpy.scoring.score_calculator import ScoreCalculator
 
 
-def _finding(
-    *,
-    rule_id: str = "security.dangerous-function-call",
-    message: str = "Dangerous call to eval().",
-    file_path: str = "src/app.py",
-    line: int | None = 12,
-    severity: Severity = Severity.ERROR,
-    pillar: Pillar = Pillar.SECURITY,
-    end_line: int | None = None,
-    column: int | None = None,
-    symbol: str | None = None,
-    remediation: str | None = None,
-    secondary_pillars: tuple[Pillar, ...] = (),
-    metadata: dict[str, object] | None = None,
-) -> Finding:
+@dataclass(frozen=True, slots=True)
+class _FindingSpec:
+    """Finding factory inputs for reporter tests."""
+
+    rule_id: str = "security.dangerous-function-call"
+    message: str = "Dangerous call to eval()."
+    file_path: str = "src/app.py"
+    line: int | None = 12
+    severity: Severity = Severity.ERROR
+    pillar: Pillar = Pillar.SECURITY
+    end_line: int | None = None
+    column: int | None = None
+    symbol: str | None = None
+    remediation: str | None = None
+    secondary_pillars: tuple[Pillar, ...] = ()
+    metadata: dict[str, object] | None = None
+
+
+def _finding(**overrides: Any) -> Finding:
+    spec = replace(_FindingSpec(), **overrides)
     return Finding(
-        rule_id=rule_id,
-        message=message,
-        file_path=file_path,
-        line=line,
-        severity=severity,
-        pillar=pillar,
+        rule_id=spec.rule_id,
+        message=spec.message,
+        file_path=spec.file_path,
+        line=spec.line,
+        severity=spec.severity,
+        pillar=spec.pillar,
         tier=RuleTier.V01,
         confidence=Confidence.HIGH,
-        end_line=end_line,
-        column=column,
-        symbol=symbol,
-        remediation=remediation,
-        secondary_pillars=secondary_pillars,
-        metadata=metadata if metadata is not None else {"target": "eval"},
+        end_line=spec.end_line,
+        column=spec.column,
+        symbol=spec.symbol,
+        remediation=spec.remediation,
+        secondary_pillars=spec.secondary_pillars,
+        metadata=spec.metadata if spec.metadata is not None else {"target": "eval"},
     )
 
 
@@ -129,11 +136,25 @@ def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
     rule_ids = [rule["id"] for rule in rule_list]
     rules = {rule["id"]: rule for rule in rule_list if isinstance(rule, dict)}
 
+    _assert_sarif_driver_metadata(payload, driver, rule_ids)
+    _assert_sarif_result_contract(result, rule_ids)
+    _assert_sarif_rule_metadata(rules)
+    _assert_sarif_shared_contract(payload)
+
+
+def _assert_sarif_driver_metadata(
+    payload: dict[str, Any],
+    driver: dict[str, Any],
+    rule_ids: list[str],
+) -> None:
     assert payload["version"] == "2.1.0"
     assert driver["name"] == "gruff-py"
     assert driver["semanticVersion"] == "0.1.0-test"
     assert "informationUri" not in driver
     assert rule_ids == sorted(rule_ids)
+
+
+def _assert_sarif_result_contract(result: dict[str, Any], rule_ids: list[str]) -> None:
     assert result["ruleId"] == "security.dangerous-function-call"
     assert result["ruleIndex"] == rule_ids.index("security.dangerous-function-call")
     assert result["level"] == "error"
@@ -142,6 +163,9 @@ def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
     assert result["locations"][0]["physicalLocation"]["region"]["startLine"] == 12
     assert result["partialFingerprints"]["gruffFingerprint"] == _report().findings[0].fingerprint()
     assert result["properties"]["metadata"]["target"] == "eval"
+
+
+def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
     assert set(rules["security.dangerous-function-call"]) == {
         "id",
         "name",
@@ -154,6 +178,9 @@ def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
     assert rules["security.dangerous-function-call"]["properties"]["defaultSeverity"] == "error"
     assert rules["security.dangerous-function-call"]["properties"]["defaultEnabled"] is True
     assert "size.file-length" in rules
+
+
+def _assert_sarif_shared_contract(payload: dict[str, Any]) -> None:
     assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
     assert payload["runs"][0]["properties"]["score"] == _report().score.composite.score
     assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff-py.analysis.v1"

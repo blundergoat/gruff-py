@@ -101,19 +101,50 @@ def _collect_used_names(tree: ast.AST, candidates: set[str]) -> set[str]:
     """Return the subset of *candidates* that appear as Name/Attribute roots
     anywhere in *tree* outside of import statements themselves."""
     used: set[str] = set()
+    _collect_direct_used_names(tree, candidates, used)
+    if used == candidates:
+        return used
+    _collect_string_annotation_used_names(tree, candidates, used)
+    return used
+
+
+def _collect_direct_used_names(
+    tree: ast.AST,
+    candidates: set[str],
+    used: set[str],
+) -> None:
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import | ast.ImportFrom):
-            continue
-        if isinstance(node, ast.Name) and node.id in candidates:
-            used.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            root: ast.AST = node
-            while isinstance(root, ast.Attribute):
-                root = root.value
-            if isinstance(root, ast.Name) and root.id in candidates:
-                used.add(root.id)
-        if used == candidates:
-            return used
+        name = _candidate_use_name(node)
+        if name is not None and name in candidates:
+            used.add(name)
+            if used == candidates:
+                return
+
+
+def _candidate_use_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Import | ast.ImportFrom):
+        return None
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return _attribute_root_name(node)
+    return None
+
+
+def _attribute_root_name(node: ast.Attribute) -> str | None:
+    root: ast.AST = node
+    while isinstance(root, ast.Attribute):
+        root = root.value
+    if isinstance(root, ast.Name):
+        return root.id
+    return None
+
+
+def _collect_string_annotation_used_names(
+    tree: ast.AST,
+    candidates: set[str],
+    used: set[str],
+) -> None:
     for annotation in _iter_annotation_nodes(tree):
         value = _string_annotation_value(annotation)
         if value is None:
@@ -124,8 +155,7 @@ def _collect_used_names(tree: ast.AST, candidates: set[str]) -> set[str]:
             continue
         used.update(_collect_used_names(parsed, candidates))
         if used == candidates:
-            return used
-    return used
+            return
 
 
 def _iter_annotation_nodes(tree: ast.AST) -> list[ast.AST]:

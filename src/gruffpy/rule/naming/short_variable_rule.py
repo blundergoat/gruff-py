@@ -47,67 +47,100 @@ class ShortVariableRule(Rule):
         if _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
-        settings = context.settings_for(definition)
-        configured = settings.options.get("acceptedShortNames", list(_DEFAULT_ACCEPTED))
-        if not isinstance(configured, list) or not all(isinstance(s, str) for s in configured):
-            configured = list(_DEFAULT_ACCEPTED)
-        accepted = frozenset(configured)
+        accepted = _accepted_short_names(context, definition)
+        return _short_variable_findings(unit, definition, accepted)
 
-        findings: list[Finding] = []
-        seen: set[tuple[str, int]] = set()
-        for node in ast.walk(unit.tree):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        self._maybe_emit(
-                            target.id, target.lineno, accepted, definition, unit, findings, seen
-                        )
-                    elif isinstance(target, ast.Tuple | ast.List):
-                        for elt in target.elts:
-                            if isinstance(elt, ast.Name):
-                                self._maybe_emit(
-                                    elt.id, elt.lineno, accepted, definition, unit, findings, seen
-                                )
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                self._maybe_emit(
-                    node.target.id, node.target.lineno, accepted, definition, unit, findings, seen
-                )
-        return findings
 
-    def _maybe_emit(
-        self,
-        name: str,
-        lineno: int,
-        accepted: frozenset[str],
-        definition: RuleDefinition,
-        unit: AnalysisUnit,
-        findings: list[Finding],
-        seen: set[tuple[str, int]],
-    ) -> None:
-        if (name, lineno) in seen:
-            return
-        if len(name) != 1:
-            return
-        if name in accepted:
-            return
-        seen.add((name, lineno))
-        findings.append(
-            Finding(
-                rule_id=definition.id,
-                message=f"Variable {name!r} is single-character; prefer a descriptive name.",
-                file_path=unit.file.display_path,
-                line=lineno,
-                severity=definition.default_severity,
-                pillar=definition.pillar,
-                tier=definition.tier,
-                confidence=definition.confidence,
-                end_line=lineno,
-                symbol=name,
-                remediation=f"Rename {name!r} or add it to ``acceptedShortNames`` if intentional.",
-                secondary_pillars=definition.secondary_pillars,
-                metadata={"identifier": name},
-            ),
-        )
+def _accepted_short_names(
+    context: RuleContext,
+    definition: RuleDefinition,
+) -> frozenset[str]:
+    settings = context.settings_for(definition)
+    configured = settings.options.get("acceptedShortNames", list(_DEFAULT_ACCEPTED))
+    if not isinstance(configured, list) or not all(isinstance(s, str) for s in configured):
+        configured = list(_DEFAULT_ACCEPTED)
+    return frozenset(configured)
+
+
+def _short_variable_findings(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    accepted: frozenset[str],
+) -> list[Finding]:
+    assert unit.tree is not None
+    findings: list[Finding] = []
+    seen: set[tuple[str, int]] = set()
+    for name, lineno in _assigned_names(unit.tree):
+        if _should_report_short_name(name, lineno, accepted, seen):
+            findings.append(_short_variable_finding(unit, definition, name, lineno))
+    return findings
+
+
+def _assigned_names(tree: ast.AST) -> list[tuple[str, int]]:
+    names: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        names.extend(_assignment_names(node))
+    return names
+
+
+def _assignment_names(node: ast.AST) -> list[tuple[str, int]]:
+    if isinstance(node, ast.Assign):
+        return _assign_target_names(node)
+    if isinstance(node, ast.AnnAssign):
+        return _target_names(node.target)
+    return []
+
+
+def _assign_target_names(node: ast.Assign) -> list[tuple[str, int]]:
+    names: list[tuple[str, int]] = []
+    for target in node.targets:
+        names.extend(_target_names(target))
+    return names
+
+
+def _target_names(target: ast.AST) -> list[tuple[str, int]]:
+    if isinstance(target, ast.Name):
+        return [(target.id, target.lineno)]
+    if isinstance(target, ast.Tuple | ast.List):
+        return [(elt.id, elt.lineno) for elt in target.elts if isinstance(elt, ast.Name)]
+    return []
+
+
+def _should_report_short_name(
+    name: str,
+    lineno: int,
+    accepted: frozenset[str],
+    seen: set[tuple[str, int]],
+) -> bool:
+    if (name, lineno) in seen:
+        return False
+    if len(name) != 1 or name in accepted:
+        return False
+    seen.add((name, lineno))
+    return True
+
+
+def _short_variable_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    name: str,
+    lineno: int,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=f"Variable {name!r} is single-character; prefer a descriptive name.",
+        file_path=unit.file.display_path,
+        line=lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=lineno,
+        symbol=name,
+        remediation=f"Rename {name!r} or add it to ``acceptedShortNames`` if intentional.",
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"identifier": name},
+    )
 
 
 def _is_test_file(display_path: str) -> bool:

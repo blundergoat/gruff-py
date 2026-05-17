@@ -116,21 +116,25 @@ class SutNotCalledRule(Rule):
 
 
 def _has_sut_call(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    for node in walk_test_body(fn):
-        if not isinstance(node, ast.Call):
-            continue
-        if is_assertion_call(node):
-            continue
-        target = call_target_name(node)
-        if target is None:
-            return True  # Dynamic call — give the benefit of the doubt.
-        leaf = target.split(".")[-1]
-        root = target.split(".")[0]
-        if root in {"pytest", "unittest", "mock"}:
-            continue
-        if leaf in _FRAMEWORK_LEAVES or leaf in _MOCK_LEAVES or leaf in _BUILTIN_LEAVES:
-            continue
-        if leaf.startswith("assert"):
-            continue
+    return any(_is_sut_call(node) for node in walk_test_body(fn))
+
+
+def _is_sut_call(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if is_assertion_call(node):
+        return False
+    target = call_target_name(node)
+    if target is None:
         return True
-    return False
+    return not _is_ignored_call_target(target)
+
+
+def _is_ignored_call_target(target: str) -> bool:
+    leaf = target.split(".")[-1]
+    root = target.split(".")[0]
+    if root in {"pytest", "unittest", "mock"}:
+        return True
+    if leaf in _FRAMEWORK_LEAVES or leaf in _MOCK_LEAVES or leaf in _BUILTIN_LEAVES:
+        return True
+    return leaf.startswith("assert")

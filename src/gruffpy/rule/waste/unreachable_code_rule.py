@@ -1,7 +1,7 @@
 """Statements after a terminator (return/raise/continue/break) in the same block."""
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -14,6 +14,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 
 _TERMINATORS = (ast.Return, ast.Raise, ast.Continue, ast.Break)
+_BlockHandler = Callable[[ast.AST], Iterator[list[ast.stmt]]]
 
 
 class UnreachableCodeRule(Rule):
@@ -74,23 +75,53 @@ def _iter_blocks(tree: ast.AST) -> Iterator[list[ast.stmt]]:
     for/while bodies + orelse, try body + handlers + orelse + finalbody,
     match cases, with/AsyncWith bodies."""
     for node in ast.walk(tree):
-        if isinstance(
-            node,
-            ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module,
-        ):
-            if hasattr(node, "body") and isinstance(node.body, list):
-                yield node.body
-        elif isinstance(node, ast.If | ast.For | ast.AsyncFor | ast.While):
-            yield node.body
-            yield node.orelse
-        elif isinstance(node, ast.Try):
-            yield node.body
-            for handler in node.handlers:
-                yield handler.body
-            yield node.orelse
-            yield node.finalbody
-        elif isinstance(node, ast.With | ast.AsyncWith):
-            yield node.body
-        elif isinstance(node, ast.Match):
-            for case in node.cases:
-                yield case.body
+        handler = _BLOCK_HANDLERS.get(type(node))
+        if handler is not None:
+            yield from handler(node)
+
+
+def _body_block(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module)
+    yield node.body
+
+
+def _body_and_orelse_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    assert isinstance(node, ast.If | ast.For | ast.AsyncFor | ast.While)
+    yield node.body
+    yield node.orelse
+
+
+def _try_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    assert isinstance(node, ast.Try)
+    yield node.body
+    for handler in node.handlers:
+        yield handler.body
+    yield node.orelse
+    yield node.finalbody
+
+
+def _with_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    assert isinstance(node, ast.With | ast.AsyncWith)
+    yield node.body
+
+
+def _match_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    assert isinstance(node, ast.Match)
+    for case in node.cases:
+        yield case.body
+
+
+_BLOCK_HANDLERS: dict[type[ast.AST], _BlockHandler] = {
+    ast.Module: _body_block,
+    ast.FunctionDef: _body_block,
+    ast.AsyncFunctionDef: _body_block,
+    ast.ClassDef: _body_block,
+    ast.If: _body_and_orelse_blocks,
+    ast.For: _body_and_orelse_blocks,
+    ast.AsyncFor: _body_and_orelse_blocks,
+    ast.While: _body_and_orelse_blocks,
+    ast.Try: _try_blocks,
+    ast.With: _with_blocks,
+    ast.AsyncWith: _with_blocks,
+    ast.Match: _match_blocks,
+}

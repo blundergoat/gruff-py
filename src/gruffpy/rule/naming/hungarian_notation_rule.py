@@ -109,30 +109,53 @@ class HungarianNotationRule(Rule):
 
 def _identifiers_in(node: ast.AST) -> list[tuple[str, int]]:
     """Return ``(name, lineno)`` pairs for identifiers *node* introduces."""
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-        result: list[tuple[str, int]] = [(node.name, node.lineno)]
-        # Parameters
-        all_args = list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
-        for arg in all_args:
-            result.append((arg.arg, arg.lineno))
-        if node.args.vararg is not None:
-            result.append((node.args.vararg.arg, node.args.vararg.lineno))
-        if node.args.kwarg is not None:
-            result.append((node.args.kwarg.arg, node.args.kwarg.lineno))
-        return result
-    if isinstance(node, ast.Assign):
-        out: list[tuple[str, int]] = []
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                out.append((target.id, target.lineno))
-            elif isinstance(target, ast.Tuple | ast.List):
-                for elt in target.elts:
-                    if isinstance(elt, ast.Name):
-                        out.append((elt.id, elt.lineno))
-        return out
-    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        return [(node.target.id, node.target.lineno)]
+    handler = _IDENTIFIER_HANDLERS.get(type(node))
+    return handler(node) if handler is not None else []
+
+
+def _function_identifiers(node: ast.AST) -> list[tuple[str, int]]:
+    assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    result: list[tuple[str, int]] = [(node.name, node.lineno)]
+    all_args = list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
+    result.extend((arg.arg, arg.lineno) for arg in all_args)
+    if node.args.vararg is not None:
+        result.append((node.args.vararg.arg, node.args.vararg.lineno))
+    if node.args.kwarg is not None:
+        result.append((node.args.kwarg.arg, node.args.kwarg.lineno))
+    return result
+
+
+def _assign_identifiers(node: ast.AST) -> list[tuple[str, int]]:
+    assert isinstance(node, ast.Assign)
+    out: list[tuple[str, int]] = []
+    for target in node.targets:
+        out.extend(_target_identifiers(target))
+    return out
+
+
+def _annassign_identifiers(node: ast.AST) -> list[tuple[str, int]]:
+    assert isinstance(node, ast.AnnAssign)
+    return _target_identifiers(node.target)
+
+
+def _target_identifiers(node: ast.AST) -> list[tuple[str, int]]:
+    if isinstance(node, ast.Name):
+        return [(node.id, node.lineno)]
+    if isinstance(node, ast.Tuple | ast.List):
+        return [
+            (elt.id, elt.lineno)
+            for elt in node.elts
+            if isinstance(elt, ast.Name)
+        ]
     return []
+
+
+_IDENTIFIER_HANDLERS = {
+    ast.FunctionDef: _function_identifiers,
+    ast.AsyncFunctionDef: _function_identifiers,
+    ast.Assign: _assign_identifiers,
+    ast.AnnAssign: _annassign_identifiers,
+}
 
 
 def _has_hungarian_prefix(name: str) -> bool:
