@@ -82,7 +82,7 @@ class CommentedOutCodeRule(Rule):
             if not _CODE_LIKE.search(line):
                 continue
             candidate = _strip_comment_prefix(line)
-            if not _compiles(candidate):
+            if not _is_valid_python(candidate):
                 continue
             findings.append(
                 Finding(
@@ -116,7 +116,7 @@ def _strip_comment_prefix(line: str) -> str:
     return indent + body
 
 
-def _compiles(candidate: str) -> bool:
+def _is_valid_python(candidate: str) -> bool:
     """Return True if *candidate* parses as Python (top-level or function-body)."""
     dedented = candidate.lstrip()
     if not dedented:

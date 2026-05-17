@@ -41,42 +41,56 @@ class DangerousFunctionCallRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.Call):
-                continue
-            target = call_target_name(node)
-            if target is None:
-                continue
+        return [
+            _dangerous_call_finding(unit, definition, node, kind)
+            for node, kind in _dangerous_calls(unit.tree)
+        ]
 
-            kind: str | None = None
-            if target in _UNCONDITIONAL_DANGEROUS:
-                kind = target
-            elif target == "__import__":
-                first = node.args[0] if node.args else None
-                if first is not None and not is_string_literal(first):
-                    kind = "__import__"
-            if kind is None:
-                continue
 
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(f"Dangerous call to `{kind}()` — arbitrary code execution surface."),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    remediation=(
-                        "Replace with structured deserialisation or an explicit dispatch "
-                        "table. If you genuinely need dynamic code, isolate it in a "
-                        "sandboxed subprocess."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"target": kind},
-                ),
-            )
-        return findings
+def _dangerous_calls(tree: ast.AST) -> list[tuple[ast.Call, str]]:
+    findings: list[tuple[ast.Call, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        kind = _dangerous_call_kind(node)
+        if kind is not None:
+            findings.append((node, kind))
+    return findings
+
+
+def _dangerous_call_kind(node: ast.Call) -> str | None:
+    target = call_target_name(node)
+    if target in _UNCONDITIONAL_DANGEROUS:
+        return target
+    if target != "__import__":
+        return None
+    first = node.args[0] if node.args else None
+    if first is not None and not is_string_literal(first):
+        return "__import__"
+    return None
+
+
+def _dangerous_call_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.Call,
+    kind: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Dangerous call to `{kind}()` — arbitrary code execution surface."),
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        remediation=(
+            "Replace with structured deserialisation or an explicit dispatch "
+            "table. If you genuinely need dynamic code, isolate it in a "
+            "sandboxed subprocess."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"target": kind},
+    )

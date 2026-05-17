@@ -21,8 +21,8 @@ class FindingDisplayFilter:
     include_rules: tuple[str, ...] = ()
     exclude_rules: tuple[str, ...] = ()
 
-    def apply(self, findings: list[Finding] | tuple[Finding, ...]) -> list[Finding]:
-        return [finding for finding in findings if self.allows(finding)]
+    def filter_findings(self, findings: list[Finding] | tuple[Finding, ...]) -> list[Finding]:
+        return [finding for finding in findings if self.is_allowed(finding)]
 
     def is_active(self) -> bool:
         return (
@@ -43,7 +43,7 @@ class FindingDisplayFilter:
             "excludeRules": list(self.exclude_rules),
         }
 
-    def allows(self, finding: Finding) -> bool:
+    def is_allowed(self, finding: Finding) -> bool:
         if (
             self.min_severity is not None
             and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]

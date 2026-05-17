@@ -48,38 +48,52 @@ class MissingClassDocstringRule(Rule):
         )
 
         findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            if is_dunder(node.name):
-                continue
-            if extract_docstring(node) is not None:
-                continue
-            if has_framework_base(node):
-                continue
-            if dataclass_exempt and has_dataclass_decorator(node):
-                continue
-
-            parents = parent_chain(node)
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=f"Class {symbol!r} has no docstring.",
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Add a docstring describing the class's role and any "
-                        "non-obvious invariants."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={},
-                ),
-            )
+        for node in _undocumented_classes(unit.tree, dataclass_exempt=bool(dataclass_exempt)):
+            findings.append(_missing_class_docstring_finding(unit, definition, node))
         return findings
+
+
+def _undocumented_classes(tree: ast.AST, *, dataclass_exempt: bool) -> list[ast.ClassDef]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and _should_report_missing_class_docstring(node, dataclass_exempt=dataclass_exempt)
+    ]
+
+
+def _should_report_missing_class_docstring(
+    node: ast.ClassDef,
+    *,
+    dataclass_exempt: bool,
+) -> bool:
+    if is_dunder(node.name):
+        return False
+    if extract_docstring(node) is not None:
+        return False
+    if has_framework_base(node):
+        return False
+    return not (dataclass_exempt and has_dataclass_decorator(node))
+
+
+def _missing_class_docstring_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.ClassDef,
+) -> Finding:
+    symbol = qualified_symbol(node, parent_chain(node))
+    return Finding(
+        rule_id=definition.id,
+        message=f"Class {symbol!r} has no docstring.",
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=("Add a docstring describing the class's role and any non-obvious invariants."),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )

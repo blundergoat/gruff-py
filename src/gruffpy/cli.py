@@ -5,7 +5,7 @@ import os
 import shlex
 import sys
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -38,82 +38,158 @@ from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import TOOL_NAME, VERSION
 
 _F = TypeVar("_F", bound=Callable[..., Any])
+ClickDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]
 
 
 class GruffGroup(click.Group):
+    """Root command group with the custom Symfony-style help screen."""
+
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        """Write the root help menu.
+
+        Args:
+            ctx: Active Click context.
+            formatter: Click formatter receiving the rendered help.
+        """
         formatter.write(_root_menu(ctx))
 
 
 @dataclass(slots=True)
 class CliState:
-    silent: bool = False
-    quiet: bool = False
-    ansi: bool | None = None
-    no_interaction: bool = False
+    is_silent: bool = False
+    is_quiet: bool = False
+    should_use_ansi: bool | None = None
+    is_interaction_disabled: bool = False
     verbosity: int = 0
 
     @property
-    def suppress_output(self) -> bool:
-        return self.silent or self.quiet
+    def should_suppress_output(self) -> bool:
+        """Return whether user-facing output should be suppressed.
+
+        Returns:
+            True when either silent or quiet mode is active.
+        """
+        return self.is_silent or self.is_quiet
 
 
-@click.group(
-    name=TOOL_NAME,
-    cls=GruffGroup,
-    context_settings={"help_option_names": ["-h", "--help"]},
-    invoke_without_command=True,
+@dataclass(frozen=True, slots=True)
+class _AnalysisCliRequest:
+    paths: tuple[str, ...]
+    config_path: Path | None
+    should_skip_config: bool
+    output: OutputFormat
+    fail_on: FailThreshold
+    report_editor_link: str
+    should_render_interactive: bool
+    should_include_ignored: bool
+    min_severity: str | None
+    include_pillar: tuple[str, ...]
+    exclude_pillar: tuple[str, ...]
+    include_rule: tuple[str, ...]
+    exclude_rule: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _DashboardCliRequest:
+    paths: tuple[str, ...]
+    project_root: Path | None
+    host: str
+    port: int
+    fail_on: str
+    config_path: Path | None
+    should_skip_config: bool
+    should_include_ignored: bool
+    should_render_interactive: bool
+
+
+_ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    cast(ClickDecorator, click.pass_context),
+    cast(
+        ClickDecorator,
+        click.option(
+            "-v",
+            "--verbose",
+            count=True,
+            help="Increase message verbosity. Use -v, -vv, or -vvv.",
+        ),
+    ),
+    cast(
+        ClickDecorator,
+        click.option(
+            "-n",
+            "--no-interaction",
+            is_flag=True,
+            help="Do not ask any interactive question.",
+        ),
+    ),
+    cast(
+        ClickDecorator,
+        click.option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output."),
+    ),
+    cast(
+        ClickDecorator,
+        click.version_option(
+            VERSION,
+            "-V",
+            "--version",
+            prog_name=TOOL_NAME,
+            message=f"{TOOL_NAME} %(version)s",
+        ),
+    ),
+    cast(
+        ClickDecorator,
+        click.option(
+            "-q",
+            "--quiet",
+            is_flag=True,
+            help="Only errors are displayed. All other output is suppressed.",
+        ),
+    ),
+    cast(ClickDecorator, click.option("--silent", is_flag=True, help="Do not output any message.")),
+    cast(
+        ClickDecorator,
+        click.group(
+            name=TOOL_NAME,
+            cls=GruffGroup,
+            context_settings={"help_option_names": ["-h", "--help"]},
+            invoke_without_command=True,
+        ),
+    ),
 )
-@click.option("--silent", is_flag=True, help="Do not output any message.")
-@click.option(
-    "-q",
-    "--quiet",
-    is_flag=True,
-    help="Only errors are displayed. All other output is suppressed.",
-)
-@click.version_option(
-    VERSION,
-    "-V",
-    "--version",
-    prog_name=TOOL_NAME,
-    message=f"{TOOL_NAME} %(version)s",
-)
-@click.option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output.")
-@click.option(
-    "-n",
-    "--no-interaction",
-    is_flag=True,
-    help="Do not ask any interactive question.",
-)
-@click.option(
-    "-v",
-    "--verbose",
-    count=True,
-    help="Increase message verbosity. Use -v, -vv, or -vvv.",
-)
-@click.pass_context
-def main(
-    ctx: click.Context,
-    silent: bool,
-    quiet: bool,
-    ansi: bool | None,
-    no_interaction: bool,
-    verbose: int,
-) -> None:
-    """gruff-py - Python project quality analyser."""
+
+
+def _root_command(function: _F) -> _F:
+    wrapped: Callable[..., Any] = function
+    for decorator in _ROOT_COMMAND_DECORATORS:
+        wrapped = decorator(wrapped)
+    return cast(_F, wrapped)
+
+
+@_root_command
+def main(ctx: click.Context, **kwargs: Any) -> None:
+    """gruff-py - Python project quality analyser.
+
+    Args:
+        ctx: Active Click context.
+        kwargs: Click-supplied root options.
+    """
+    ansi = cast(bool | None, kwargs["ansi"])
     if ansi is not None:
         ctx.color = ansi
     ctx.obj = CliState(
-        silent=silent,
-        quiet=quiet,
-        ansi=ansi,
-        no_interaction=no_interaction,
-        verbosity=verbose,
+        is_silent=cast(bool, kwargs["silent"]),
+        is_quiet=cast(bool, kwargs["quiet"]),
+        should_use_ansi=ansi,
+        is_interaction_disabled=cast(bool, kwargs["no_interaction"]),
+        verbosity=cast(int, kwargs["verbose"]),
     )
     if ctx.invoked_subcommand is None:
-        if not _state(ctx).suppress_output:
-            click.echo(_root_menu(ctx), color=_echo_color(ctx), nl=False)
+        if not _state(ctx).should_suppress_output:
+            click.echo(_root_menu(ctx), color=_should_use_color(ctx), nl=False)
         ctx.exit(0)
+
+
+main = cast(click.Group, main)
 
 
 def _state(ctx: click.Context | None = None) -> CliState:
@@ -125,165 +201,11 @@ def _state(ctx: click.Context | None = None) -> CliState:
     return CliState()
 
 
-def _global_command_options(function: _F) -> _F:
-    decorators: Iterable[Callable[[_F], _F]] = (
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "--silent",
-                is_flag=True,
-                expose_value=False,
-                callback=_silent_callback,
-                help="Do not output any message.",
-            ),
-        ),
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "-q",
-                "--quiet",
-                is_flag=True,
-                expose_value=False,
-                callback=_quiet_callback,
-                help="Only errors are displayed. All other output is suppressed.",
-            ),
-        ),
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "-V",
-                "--version",
-                is_flag=True,
-                expose_value=False,
-                is_eager=True,
-                callback=_command_version_callback,
-                help="Display this application version.",
-            ),
-        ),
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "--ansi/--no-ansi",
-                default=None,
-                expose_value=False,
-                callback=_ansi_callback,
-                help="Force or disable ANSI output.",
-            ),
-        ),
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "-n",
-                "--no-interaction",
-                is_flag=True,
-                expose_value=False,
-                callback=_no_interaction_callback,
-                help="Do not ask any interactive question.",
-            ),
-        ),
-        cast(
-            Callable[[_F], _F],
-            click.option(
-                "-v",
-                "--verbose",
-                count=True,
-                expose_value=False,
-                callback=_verbose_callback,
-                help="Increase message verbosity. Use -v, -vv, or -vvv.",
-            ),
-        ),
-    )
+def _apply_decorators(function: _F, decorators: Iterable[ClickDecorator]) -> _F:
+    wrapped: Callable[..., Any] = function
     for decorator in decorators:
-        function = decorator(function)
-    return function
-
-
-def _analysis_compat_options(function: _F) -> _F:
-    decorators: Iterable[Callable[[_F], _F]] = (
-        _ignored_path_option(
-            "--infection-report", "Path to a full Infection JSON report to ingest."
-        ),
-        _ignored_flag_option(
-            "--infection-run", "Run Infection before ingesting --infection-report."
-        ),
-        _ignored_string_option(
-            "--infection-bin", "Infection executable for --infection-run.", "infection"
-        ),
-        _ignored_path_option("--infection-config", "Path to infection.json5 for --infection-run."),
-        _ignored_string_option(
-            "--infection-test-framework-options",
-            "Options passed to Infection/PHPUnit for --infection-run.",
-        ),
-        _ignored_path_option(
-            "--mutation-baseline",
-            "Path to a baseline Infection JSON report for MSI diff mode.",
-        ),
-        _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
-        _ignored_string_option(
-            "--diff",
-            "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
-        ),
-        _ignored_string_option(
-            "--diff-vs",
-            "Compare current findings against a base Git ref.",
-        ),
-        _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
-        _ignored_path_option(
-            "--paths-relative-to",
-            "Normalize absolute finding paths relative to this directory for reports.",
-        ),
-        _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-        _ignored_path_option(
-            "--baseline",
-            "Suppress findings that match a gruff baseline JSON file. "
-            'Defaults to "gruff-baseline.json".',
-        ),
-        _ignored_path_option(
-            "--generate-baseline",
-            "Write current findings to a gruff baseline JSON file. "
-            'Defaults to "gruff-baseline.json".',
-        ),
-        _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
-    )
-    for decorator in decorators:
-        function = decorator(function)
-    return function
-
-
-def _report_compat_options(function: _F) -> _F:
-    decorators: Iterable[Callable[[_F], _F]] = (
-        _ignored_path_option(
-            "--infection-report", "Path to a full Infection JSON report to ingest."
-        ),
-        _ignored_path_option(
-            "--mutation-baseline",
-            "Path to a baseline Infection JSON report for MSI diff mode.",
-        ),
-        _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
-        _ignored_string_option(
-            "--diff",
-            "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
-        ),
-        _ignored_string_option(
-            "--diff-vs",
-            "Compare current findings against a base Git ref.",
-        ),
-        _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
-        _ignored_path_option(
-            "--paths-relative-to",
-            "Normalize absolute finding paths relative to this directory for reports.",
-        ),
-        _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-        _ignored_path_option(
-            "--baseline",
-            "Suppress findings that match a gruff baseline JSON file. "
-            'Defaults to "gruff-baseline.json".',
-        ),
-        _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
-    )
-    for decorator in decorators:
-        function = decorator(function)
-    return function
+        wrapped = decorator(wrapped)
+    return cast(_F, wrapped)
 
 
 def _ignored_flag_option(name: str, help_text: str) -> Callable[[_F], _F]:
@@ -314,23 +236,23 @@ def _ignored_int_option(name: str, help_text: str) -> Callable[[_F], _F]:
 
 def _silent_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     if value:
-        _state(ctx).silent = True
+        _state(ctx).is_silent = True
 
 
 def _quiet_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     if value:
-        _state(ctx).quiet = True
+        _state(ctx).is_quiet = True
 
 
 def _ansi_callback(ctx: click.Context, _param: click.Parameter, value: bool | None) -> None:
     if value is not None:
         ctx.color = value
-        _state(ctx).ansi = value
+        _state(ctx).should_use_ansi = value
 
 
 def _no_interaction_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     if value:
-        _state(ctx).no_interaction = True
+        _state(ctx).is_interaction_disabled = True
 
 
 def _verbose_callback(ctx: click.Context, _param: click.Parameter, value: int) -> None:
@@ -344,63 +266,634 @@ def _command_version_callback(ctx: click.Context, _param: click.Parameter, value
         ctx.exit()
 
 
+def _option(*param_decls: str, **attrs: Any) -> ClickDecorator:
+    return cast(ClickDecorator, click.option(*param_decls, **attrs))
+
+
+def _argument(*param_decls: str, **attrs: Any) -> ClickDecorator:
+    return cast(ClickDecorator, click.argument(*param_decls, **attrs))
+
+
+def _command(*args: Any, **attrs: Any) -> ClickDecorator:
+    return cast(ClickDecorator, cast(click.Group, main).command(*args, **attrs))
+
+
+def _pass_context(function: _F) -> _F:
+    return cast(_F, click.pass_context(function))
+
+
+def _analyse_command(function: _F) -> _F:
+    return _apply_decorators(function, _ANALYSE_COMMAND_DECORATORS)
+
+
+def _dashboard_command(function: _F) -> _F:
+    return _apply_decorators(function, _DASHBOARD_COMMAND_DECORATORS)
+
+
+def _list_rules_command(function: _F) -> _F:
+    return _apply_decorators(function, _LIST_RULES_COMMAND_DECORATORS)
+
+
+def _report_command(function: _F) -> _F:
+    return _apply_decorators(function, _REPORT_COMMAND_DECORATORS)
+
+
+def _summary_command(function: _F) -> _F:
+    return _apply_decorators(function, _SUMMARY_COMMAND_DECORATORS)
+
+
+def _metric_calibration_command(function: _F) -> _F:
+    return _apply_decorators(function, _METRIC_CALIBRATION_COMMAND_DECORATORS)
+
+
+def _list_command(function: _F) -> _F:
+    return _apply_decorators(function, _LIST_COMMAND_DECORATORS)
+
+
+def _help_command_decorator(function: _F) -> _F:
+    return _apply_decorators(function, _HELP_COMMAND_DECORATORS)
+
+
+def _completion_command(function: _F) -> _F:
+    return _apply_decorators(function, _COMPLETION_COMMAND_DECORATORS)
+
+
+_GLOBAL_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    _option(
+        "--silent",
+        is_flag=True,
+        expose_value=False,
+        callback=_silent_callback,
+        help="Do not output any message.",
+    ),
+    _option(
+        "-q",
+        "--quiet",
+        is_flag=True,
+        expose_value=False,
+        callback=_quiet_callback,
+        help="Only errors are displayed. All other output is suppressed.",
+    ),
+    _option(
+        "-V",
+        "--version",
+        is_flag=True,
+        expose_value=False,
+        is_eager=True,
+        callback=_command_version_callback,
+        help="Display this application version.",
+    ),
+    _option(
+        "--ansi/--no-ansi",
+        default=None,
+        expose_value=False,
+        callback=_ansi_callback,
+        help="Force or disable ANSI output.",
+    ),
+    _option(
+        "-n",
+        "--no-interaction",
+        is_flag=True,
+        expose_value=False,
+        callback=_no_interaction_callback,
+        help="Do not ask any interactive question.",
+    ),
+    _option(
+        "-v",
+        "--verbose",
+        count=True,
+        expose_value=False,
+        callback=_verbose_callback,
+        help="Increase message verbosity. Use -v, -vv, or -vvv.",
+    ),
+)
+
+_ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
+    _ignored_path_option("--infection-report", "Path to a full Infection JSON report to ingest."),
+    _ignored_flag_option("--infection-run", "Run Infection before ingesting --infection-report."),
+    _ignored_string_option(
+        "--infection-bin", "Infection executable for --infection-run.", "infection"
+    ),
+    _ignored_path_option("--infection-config", "Path to infection.json5 for --infection-run."),
+    _ignored_string_option(
+        "--infection-test-framework-options",
+        "Options passed to Infection/PHPUnit for --infection-run.",
+    ),
+    _ignored_path_option(
+        "--mutation-baseline",
+        "Path to a baseline Infection JSON report for MSI diff mode.",
+    ),
+    _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
+    _ignored_string_option(
+        "--diff",
+        "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
+    ),
+    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
+    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _ignored_path_option(
+        "--paths-relative-to",
+        "Normalize absolute finding paths relative to this directory for reports.",
+    ),
+    _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
+    _ignored_path_option(
+        "--baseline",
+        "Suppress findings that match a gruff baseline JSON file. "
+        'Defaults to "gruff-baseline.json".',
+    ),
+    _ignored_path_option(
+        "--generate-baseline",
+        "Write current findings to a gruff baseline JSON file. "
+        'Defaults to "gruff-baseline.json".',
+    ),
+    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+)
+
+_REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
+    _ignored_path_option("--infection-report", "Path to a full Infection JSON report to ingest."),
+    _ignored_path_option(
+        "--mutation-baseline",
+        "Path to a baseline Infection JSON report for MSI diff mode.",
+    ),
+    _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
+    _ignored_string_option(
+        "--diff",
+        "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
+    ),
+    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
+    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _ignored_path_option(
+        "--paths-relative-to",
+        "Normalize absolute finding paths relative to this directory for reports.",
+    ),
+    _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
+    _ignored_path_option(
+        "--baseline",
+        "Suppress findings that match a gruff baseline JSON file. "
+        'Defaults to "gruff-baseline.json".',
+    ),
+    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+)
+
+_ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    *_ANALYSIS_COMPAT_DECORATORS,
+    _option(
+        "--exclude-rule",
+        multiple=True,
+        help="Hide these comma-separated rule IDs or repeated values.",
+    ),
+    _option(
+        "--include-rule",
+        multiple=True,
+        help="Display only these comma-separated rule IDs or repeated values.",
+    ),
+    _option(
+        "--exclude-pillar",
+        multiple=True,
+        type=click.Choice([p.value for p in Pillar]),
+        help="Hide these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--include-pillar",
+        multiple=True,
+        type=click.Choice([p.value for p in Pillar]),
+        help="Display only these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--min-severity",
+        type=click.Choice([s.value for s in Severity]),
+        default=None,
+        help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan files under default-ignored directories and .gitignore exclusions.",
+    ),
+    _option(
+        "--report-interactive",
+        is_flag=True,
+        default=False,
+        help="Render opt-in interactive HTML finding filters.",
+    ),
+    _option(
+        "--report-editor-link",
+        type=click.Choice(["vscode", "phpstorm", "none"]),
+        default="none",
+        show_default=True,
+        help="Editor link style for HTML file:line references: vscode, phpstorm, or none.",
+    ),
+    _option(
+        "--fail-on",
+        "fail_on",
+        type=click.Choice([f.value for f in FailThreshold]),
+        default="error",
+        show_default=True,
+        help="Finding severity that fails the run: advisory, warning, error, or none.",
+    ),
+    _option(
+        "--format",
+        "output_format",
+        type=click.Choice([f.value for f in OutputFormat]),
+        default="text",
+        show_default=True,
+        help="Output format: text, json, html, markdown, github, hotspot, or sarif.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML config file (.yaml or .yml).",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command(),
+)
+
+_DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--report-interactive",
+        is_flag=True,
+        default=False,
+        help="Render opt-in interactive HTML finding filters in dashboard scans.",
+    ),
+    _option(
+        "--project-root",
+        "project_root",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Alias for --project.",
+    ),
+    _option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan files under default-ignored directories and .gitignore exclusions.",
+    ),
+    _option(
+        "--no-baseline",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        help="Skip auto-applying the default baseline file for dashboard scans.",
+    ),
+    _option(
+        "--baseline",
+        type=click.Path(path_type=Path),
+        default=None,
+        expose_value=False,
+        help='Initial gruff baseline JSON path. Defaults to "gruff-baseline.json".',
+    ),
+    _option(
+        "--diff",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        help="Start the dashboard in diff-only scan mode.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff.yaml file for dashboard scans.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Initial gruff YAML config path (.yaml or .yml).",
+    ),
+    _option(
+        "--fail-on",
+        "fail_on",
+        type=click.Choice([f.value for f in FailThreshold]),
+        default="none",
+        show_default=True,
+        help="Finding severity that fails the scan: advisory, warning, error, or none.",
+    ),
+    _option(
+        "--scan-timeout",
+        type=int,
+        default=120,
+        show_default=True,
+        expose_value=False,
+        help="Seconds to allow each refresh scan. Use 0 to disable.",
+    ),
+    _option(
+        "--port",
+        type=int,
+        default=8765,
+        show_default=True,
+        help="Port for the dashboard server.",
+    ),
+    _option(
+        "--host",
+        default="127.0.0.1",
+        show_default=True,
+        help="Host for the dashboard server.",
+    ),
+    _option(
+        "--project",
+        "project_root",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Initial project root for scans.",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command(),
+)
+
+_LIST_RULES_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--format",
+        "rule_format",
+        type=click.Choice(["table", "json"]),
+        default="table",
+        show_default=True,
+        help="Output format: table or json.",
+    ),
+    _command("list-rules"),
+)
+
+_REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    *_REPORT_COMPAT_DECORATORS,
+    _option(
+        "--exclude-rule",
+        multiple=True,
+        help="Hide these comma-separated rule IDs or repeated values.",
+    ),
+    _option(
+        "--include-rule",
+        multiple=True,
+        help="Display only these comma-separated rule IDs or repeated values.",
+    ),
+    _option(
+        "--exclude-pillar",
+        multiple=True,
+        type=click.Choice([p.value for p in Pillar]),
+        help="Hide these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--include-pillar",
+        multiple=True,
+        type=click.Choice([p.value for p in Pillar]),
+        help="Display only these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--min-severity",
+        type=click.Choice([s.value for s in Severity]),
+        default=None,
+        help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan files under default-ignored directories and .gitignore exclusions.",
+    ),
+    _option(
+        "--report-interactive",
+        is_flag=True,
+        default=False,
+        help="Render opt-in interactive HTML finding filters.",
+    ),
+    _option(
+        "--report-editor-link",
+        type=click.Choice(["vscode", "phpstorm", "none"]),
+        default="none",
+        show_default=True,
+        help="Editor link style for HTML file:line references: vscode, phpstorm, or none.",
+    ),
+    _option(
+        "--fail-on",
+        "fail_on",
+        type=click.Choice([f.value for f in FailThreshold]),
+        default="none",
+        show_default=True,
+        help="Finding severity that fails the scan: advisory, warning, error, or none.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML config file (.yaml or .yml).",
+    ),
+    _option(
+        "--output",
+        "output_path",
+        type=click.Path(path_type=Path),
+        help="Write the report to this file.",
+    ),
+    _option(
+        "--format",
+        "report_format",
+        type=click.Choice(["html", "json"]),
+        default="html",
+        show_default=True,
+        help="Report format: html or json.",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command(),
+)
+
+_SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan files under default-ignored directories and .gitignore exclusions.",
+    ),
+    _option(
+        "--top",
+        type=int,
+        default=10,
+        show_default=True,
+        help="How many top rules and file offenders to list.",
+    ),
+    _option(
+        "--format",
+        "summary_format",
+        type=click.Choice(["text", "json"]),
+        default="text",
+        show_default=True,
+        help="Output format: text or json.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML config file (.yaml or .yml).",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command(),
+)
+
+_METRIC_CALIBRATION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan files under default-ignored directories and .gitignore exclusions.",
+    ),
+    _option(
+        "--top",
+        type=int,
+        default=10,
+        show_default=True,
+        help="How many top functions to list for each metric.",
+    ),
+    _option(
+        "--format",
+        "calibration_format",
+        type=click.Choice(["text", "json"]),
+        default="text",
+        show_default=True,
+        help="Output format: text or json.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML config file (.yaml or .yml).",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command("metric-calibration", hidden=True),
+)
+
+_LIST_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    _pass_context,
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option("--short", is_flag=True, help="Skip describing command arguments."),
+    _option(
+        "--format",
+        "list_format",
+        type=click.Choice(["txt", "xml", "json", "md"]),
+        default="txt",
+        show_default=True,
+        help="The output format.",
+    ),
+    _option("--raw", is_flag=True, help="Output raw command list."),
+    _argument("namespace", required=False),
+    _command("list"),
+)
+
+_HELP_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    _pass_context,
+    *_GLOBAL_COMMAND_DECORATORS,
+    _argument("command_name", required=False),
+    _command("help"),
+)
+
+_COMPLETION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    _pass_context,
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option("--debug", is_flag=True, help="Tail the completion debug log."),
+    _argument("shell", required=False),
+    _command(),
+)
+
+
 def _root_menu(ctx: click.Context) -> str:
     return "\n".join(
         [
-            f"{TOOL_NAME} {_style(VERSION, 'green', ctx)}",
-            "",
-            _section("Usage:", ctx),
-            "  command [options] [arguments]",
-            "",
-            _section("Options:", ctx),
-            _option_line(
-                "-h, --help",
-                "Display help for the given command. When no command is given display help for the "
-                f"{_style('list', 'green', ctx)} command",
-                ctx,
-            ),
-            _option_line("    --silent", "Do not output any message", ctx),
-            _option_line(
-                "-q, --quiet",
-                "Only errors are displayed. All other output is suppressed",
-                ctx,
-            ),
-            _option_line("-V, --version", "Display this application version", ctx),
-            _option_line(
-                "    --ansi|--no-ansi",
-                "Force (or disable --no-ansi) ANSI output",
-                ctx,
-            ),
-            _option_line(
-                "-n, --no-interaction",
-                "Do not ask any interactive question",
-                ctx,
-            ),
-            _option_line(
-                "-v|vv|vvv, --verbose",
-                "Increase the verbosity of messages: 1 for normal output, 2 for more "
-                "verbose output and 3 for debug",
-                ctx,
-            ),
-            "",
-            _section("Available commands:", ctx),
-            _command_line("analyse", "Run gruff-py analysis.", ctx),
-            _command_line("completion", "Dump the shell completion script", ctx),
-            _command_line("dashboard", "Serve the local gruff-py dashboard.", ctx),
-            _command_line("help", "Display help for a command", ctx),
-            _command_line("list", "List commands", ctx),
-            _command_line("list-rules", "List gruff-py rule metadata.", ctx),
-            _command_line("report", "Render a gruff-py report to stdout or a file.", ctx),
-            _command_line(
-                "summary",
-                "Print a compact digest of a scan: per-pillar finding counts, top rules, and top "
-                "file offenders. Runs the analyser once and renders only the summary; no "
-                "per-finding spam.",
-                ctx,
-            ),
+            *_root_menu_header(ctx),
+            *_root_menu_options(ctx),
+            *_root_menu_commands(ctx),
             "",
         ]
     )
+
+
+def _root_menu_header(ctx: click.Context) -> list[str]:
+    return [
+        f"{TOOL_NAME} {_style(VERSION, 'green', ctx)}",
+        "",
+        _section("Usage:", ctx),
+        "  command [options] [arguments]",
+        "",
+    ]
+
+
+def _root_menu_options(ctx: click.Context) -> list[str]:
+    return [
+        _section("Options:", ctx),
+        _option_line(
+            "-h, --help",
+            "Display help for the given command. When no command is given display help for the "
+            f"{_style('list', 'green', ctx)} command",
+            ctx,
+        ),
+        _option_line("    --silent", "Do not output any message", ctx),
+        _option_line(
+            "-q, --quiet",
+            "Only errors are displayed. All other output is suppressed",
+            ctx,
+        ),
+        _option_line("-V, --version", "Display this application version", ctx),
+        _option_line("    --ansi|--no-ansi", "Force (or disable --no-ansi) ANSI output", ctx),
+        _option_line("-n, --no-interaction", "Do not ask any interactive question", ctx),
+        _option_line(
+            "-v|vv|vvv, --verbose",
+            "Increase the verbosity of messages: 1 for normal output, 2 for more "
+            "verbose output and 3 for debug",
+            ctx,
+        ),
+        "",
+    ]
+
+
+def _root_menu_commands(ctx: click.Context) -> list[str]:
+    return [
+        _section("Available commands:", ctx),
+        _command_line("analyse", "Run gruff-py analysis.", ctx),
+        _command_line("completion", "Dump the shell completion script", ctx),
+        _command_line("dashboard", "Serve the local gruff-py dashboard.", ctx),
+        _command_line("help", "Display help for a command", ctx),
+        _command_line("list", "List commands", ctx),
+        _command_line("list-rules", "List gruff-py rule metadata.", ctx),
+        _command_line("report", "Render a gruff-py report to stdout or a file.", ctx),
+        _command_line(
+            "summary",
+            "Print a compact digest of a scan: per-pillar finding counts, top rules, and top "
+            "file offenders. Runs the analyser once and renders only the summary; no "
+            "per-finding spam.",
+            ctx,
+        ),
+    ]
 
 
 def _section(label: str, ctx: click.Context) -> str:
@@ -416,275 +909,55 @@ def _command_line(name: str, description: str, ctx: click.Context) -> str:
 
 
 def _style(text: str, color: str, ctx: click.Context) -> str:
-    if _color_setting(ctx) is False:
+    if _should_use_color(ctx) is False:
         return text
     return click.style(text, fg=color)
 
 
-def _echo_color(ctx: click.Context) -> bool | None:
-    return _color_setting(ctx)
-
-
-def _color_setting(ctx: click.Context) -> bool | None:
+def _should_use_color(ctx: click.Context) -> bool | None:
     params = getattr(ctx, "params", {})
     if "ansi" in params:
         value = params["ansi"]
         if isinstance(value, bool):
             return value
     state = _state(ctx)
-    if state.ansi is not None:
-        return state.ansi
+    if state.should_use_ansi is not None:
+        return state.should_use_ansi
     return ctx.color
 
 
-@main.command()
-@click.argument("paths", nargs=-1, type=click.Path())
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to a gruff YAML config file (.yaml or .yml).",
-)
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Skip auto-applying the default .gruff.yaml file for this run.",
-)
-@click.option(
-    "--format",
-    "output_format",
-    type=click.Choice([f.value for f in OutputFormat]),
-    default="text",
-    show_default=True,
-    help="Output format: text, json, html, markdown, github, hotspot, or sarif.",
-)
-@click.option(
-    "--fail-on",
-    "fail_on",
-    type=click.Choice([f.value for f in FailThreshold]),
-    default="error",
-    show_default=True,
-    help="Finding severity that fails the run: advisory, warning, error, or none.",
-)
-@click.option(
-    "--report-editor-link",
-    type=click.Choice(["vscode", "phpstorm", "none"]),
-    default="none",
-    show_default=True,
-    help="Editor link style for HTML file:line references: vscode, phpstorm, or none.",
-)
-@click.option(
-    "--report-interactive",
-    is_flag=True,
-    default=False,
-    help="Render opt-in interactive HTML finding filters.",
-)
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan files under default-ignored directories and .gitignore exclusions.",
-)
-@click.option(
-    "--min-severity",
-    type=click.Choice([s.value for s in Severity]),
-    default=None,
-    help="Display only findings at or above advisory, warning, or error.",
-)
-@click.option(
-    "--include-pillar",
-    multiple=True,
-    type=click.Choice([p.value for p in Pillar]),
-    help="Display only these comma-separated pillars or repeated values.",
-)
-@click.option(
-    "--exclude-pillar",
-    multiple=True,
-    type=click.Choice([p.value for p in Pillar]),
-    help="Hide these comma-separated pillars or repeated values.",
-)
-@click.option(
-    "--include-rule",
-    multiple=True,
-    help="Display only these comma-separated rule IDs or repeated values.",
-)
-@click.option(
-    "--exclude-rule",
-    multiple=True,
-    help="Hide these comma-separated rule IDs or repeated values.",
-)
-@_analysis_compat_options
-@_global_command_options
-def analyse(
-    paths: tuple[str, ...],
-    config_path: Path | None,
-    no_config: bool,
-    output_format: str,
-    fail_on: str,
-    report_editor_link: str,
-    report_interactive: bool,
-    include_ignored: bool,
-    min_severity: str | None,
-    include_pillar: tuple[str, ...],
-    exclude_pillar: tuple[str, ...],
-    include_rule: tuple[str, ...],
-    exclude_rule: tuple[str, ...],
-) -> None:
-    """Run gruff analysis."""
-    output = OutputFormat(output_format)
-    report = _run_analysis_for_cli(
-        paths=paths,
-        config_path=config_path,
-        no_config=no_config,
-        output=output,
-        fail_on=FailThreshold(fail_on),
-        include_ignored=include_ignored,
-        min_severity=min_severity,
-        include_pillar=include_pillar,
-        exclude_pillar=exclude_pillar,
-        include_rule=include_rule,
-        exclude_rule=exclude_rule,
-    )
+@_analyse_command
+def analyse(**kwargs: Any) -> None:
+    """Run gruff analysis.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+    """
+    request = _analysis_request(kwargs, output_key="output_format")
+    report = _run_analysis_for_cli(request)
     _write_stdout(
         _render_report(
             report,
-            output,
+            request.output,
             project_root=str(Path.cwd()),
-            report_editor_link=report_editor_link,
-            report_interactive=report_interactive,
+            report_editor_link=request.report_editor_link,
+            report_interactive=request.should_render_interactive,
         )
     )
     sys.exit(report.exit_code)
 
 
-@main.command()
-@click.argument("paths", nargs=-1, type=click.Path())
-@click.option(
-    "--project",
-    "project_root",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Initial project root for scans.",
-)
-@click.option(
-    "--host",
-    default="127.0.0.1",
-    show_default=True,
-    help="Host for the dashboard server.",
-)
-@click.option(
-    "--port",
-    type=int,
-    default=8765,
-    show_default=True,
-    help="Port for the dashboard server.",
-)
-@click.option(
-    "--scan-timeout",
-    type=int,
-    default=120,
-    show_default=True,
-    expose_value=False,
-    help="Seconds to allow each refresh scan. Use 0 to disable.",
-)
-@click.option(
-    "--fail-on",
-    "fail_on",
-    type=click.Choice([f.value for f in FailThreshold]),
-    default="none",
-    show_default=True,
-    help="Finding severity that fails the scan: advisory, warning, error, or none.",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Initial gruff YAML config path (.yaml or .yml).",
-)
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Skip auto-applying the default .gruff.yaml file for dashboard scans.",
-)
-@click.option(
-    "--diff",
-    is_flag=True,
-    default=False,
-    expose_value=False,
-    help="Start the dashboard in diff-only scan mode.",
-)
-@click.option(
-    "--baseline",
-    type=click.Path(path_type=Path),
-    default=None,
-    expose_value=False,
-    help='Initial gruff baseline JSON path. Defaults to "gruff-baseline.json".',
-)
-@click.option(
-    "--no-baseline",
-    is_flag=True,
-    default=False,
-    expose_value=False,
-    help="Skip auto-applying the default baseline file for dashboard scans.",
-)
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan files under default-ignored directories and .gitignore exclusions.",
-)
-@click.option(
-    "--project-root",
-    "project_root",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Alias for --project.",
-)
-@click.option(
-    "--report-interactive",
-    is_flag=True,
-    default=False,
-    help="Render opt-in interactive HTML finding filters in dashboard scans.",
-)
-@_global_command_options
-def dashboard(
-    paths: tuple[str, ...],
-    project_root: Path | None,
-    host: str,
-    port: int,
-    fail_on: str,
-    config_path: Path | None,
-    no_config: bool,
-    include_ignored: bool,
-    report_interactive: bool,
-) -> None:
-    """Serve the local gruff-py dashboard."""
-    launch_root = Path.cwd()
-    project = (project_root or launch_root).resolve()
-    if not project.is_dir():
-        raise click.ClickException(f"Project root is not a directory: {project}")
-    if port < 0 or port > 65535:
-        raise click.ClickException("--port must be between 0 and 65535.")
+@_dashboard_command
+def dashboard(**kwargs: Any) -> None:
+    """Serve the local gruff-py dashboard.
 
-    initial_state = DashboardState(
-        project=str(project),
-        paths=" ".join(shlex.quote(path) for path in (paths or (".",))),
-        fail_on=fail_on,
-        config=str(config_path) if config_path is not None else "",
-        no_config=no_config,
-        include_ignored=include_ignored,
-        report_interactive=report_interactive,
-    )
-    server = create_dashboard_server(
-        host=host,
-        port=port,
-        launch_root=launch_root,
-        initial_state=initial_state,
-    )
+    Args:
+        kwargs: Click-supplied arguments and options.
+
+    Raises:
+        click.ClickException: If the project root or port is invalid.
+    """
+    server = _dashboard_server(_dashboard_request(kwargs))
     bound_host, actual_port = server.server_address[:2]
     actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
     _write_stdout(f"{TOOL_NAME} dashboard serving at http://{actual_host}:{actual_port}/\n")
@@ -696,18 +969,38 @@ def dashboard(
         server.server_close()
 
 
-@main.command("list-rules")
-@click.option(
-    "--format",
-    "rule_format",
-    type=click.Choice(["table", "json"]),
-    default="table",
-    show_default=True,
-    help="Output format: table or json.",
-)
-@_global_command_options
+def _dashboard_server(request: _DashboardCliRequest) -> Any:
+    launch_root = Path.cwd()
+    project = (request.project_root or launch_root).resolve()
+    if not project.is_dir():
+        raise click.ClickException(f"Project root is not a directory: {project}")
+    if request.port < 0 or request.port > 65535:
+        raise click.ClickException("--port must be between 0 and 65535.")
+
+    initial_state = DashboardState(
+        project=str(project),
+        paths=" ".join(shlex.quote(path) for path in (request.paths or (".",))),
+        fail_on=request.fail_on,
+        config=str(request.config_path) if request.config_path is not None else "",
+        no_config=request.should_skip_config,
+        include_ignored=request.should_include_ignored,
+        report_interactive=request.should_render_interactive,
+    )
+    return create_dashboard_server(
+        host=request.host,
+        port=request.port,
+        launch_root=launch_root,
+        initial_state=initial_state,
+    )
+
+
+@_list_rules_command
 def list_rules(rule_format: str) -> None:
-    """List gruff rule metadata."""
+    """List gruff rule metadata.
+
+    Args:
+        rule_format: Output format, either ``table`` or ``json``.
+    """
     definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     if rule_format == "json":
         _write_stdout(json.dumps({"rules": [_rule_payload(d) for d in definitions]}, indent=4))
@@ -716,129 +1009,22 @@ def list_rules(rule_format: str) -> None:
     _write_stdout(_format_rule_table(definitions))
 
 
-@main.command()
-@click.argument("paths", nargs=-1, type=click.Path())
-@click.option(
-    "--format",
-    "report_format",
-    type=click.Choice(["html", "json"]),
-    default="html",
-    show_default=True,
-    help="Report format: html or json.",
-)
-@click.option(
-    "--output",
-    "output_path",
-    type=click.Path(path_type=Path),
-    help="Write the report to this file.",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to a gruff YAML config file (.yaml or .yml).",
-)
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Skip auto-applying the default .gruff.yaml file for this run.",
-)
-@click.option(
-    "--fail-on",
-    "fail_on",
-    type=click.Choice([f.value for f in FailThreshold]),
-    default="none",
-    show_default=True,
-    help="Finding severity that fails the scan: advisory, warning, error, or none.",
-)
-@click.option(
-    "--report-editor-link",
-    type=click.Choice(["vscode", "phpstorm", "none"]),
-    default="none",
-    show_default=True,
-    help="Editor link style for HTML file:line references: vscode, phpstorm, or none.",
-)
-@click.option(
-    "--report-interactive",
-    is_flag=True,
-    default=False,
-    help="Render opt-in interactive HTML finding filters.",
-)
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan files under default-ignored directories and .gitignore exclusions.",
-)
-@click.option(
-    "--min-severity",
-    type=click.Choice([s.value for s in Severity]),
-    default=None,
-    help="Display only findings at or above advisory, warning, or error.",
-)
-@click.option(
-    "--include-pillar",
-    multiple=True,
-    type=click.Choice([p.value for p in Pillar]),
-    help="Display only these comma-separated pillars or repeated values.",
-)
-@click.option(
-    "--exclude-pillar",
-    multiple=True,
-    type=click.Choice([p.value for p in Pillar]),
-    help="Hide these comma-separated pillars or repeated values.",
-)
-@click.option(
-    "--include-rule",
-    multiple=True,
-    help="Display only these comma-separated rule IDs or repeated values.",
-)
-@click.option(
-    "--exclude-rule",
-    multiple=True,
-    help="Hide these comma-separated rule IDs or repeated values.",
-)
-@_report_compat_options
-@_global_command_options
-def report(
-    paths: tuple[str, ...],
-    report_format: str,
-    output_path: Path | None,
-    config_path: Path | None,
-    no_config: bool,
-    fail_on: str,
-    report_editor_link: str,
-    report_interactive: bool,
-    include_ignored: bool,
-    min_severity: str | None,
-    include_pillar: tuple[str, ...],
-    exclude_pillar: tuple[str, ...],
-    include_rule: tuple[str, ...],
-    exclude_rule: tuple[str, ...],
-) -> None:
-    """Render a gruff-py report to stdout or a file."""
-    output = OutputFormat(report_format)
-    analysis_report = _run_analysis_for_cli(
-        paths=paths,
-        config_path=config_path,
-        no_config=no_config,
-        output=output,
-        fail_on=FailThreshold(fail_on),
-        include_ignored=include_ignored,
-        min_severity=min_severity,
-        include_pillar=include_pillar,
-        exclude_pillar=exclude_pillar,
-        include_rule=include_rule,
-        exclude_rule=exclude_rule,
-    )
+@_report_command
+def report(**kwargs: Any) -> None:
+    """Render a gruff-py report to stdout or a file.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+    """
+    request = _analysis_request(kwargs, output_key="report_format")
+    output_path = cast(Path | None, kwargs["output_path"])
+    analysis_report = _run_analysis_for_cli(request)
     rendered = _render_report(
         analysis_report,
-        output,
+        request.output,
         project_root=str(Path.cwd()),
-        report_editor_link=report_editor_link,
-        report_interactive=report_interactive,
+        report_editor_link=request.report_editor_link,
+        report_interactive=request.should_render_interactive,
     )
     if output_path is not None:
         output_path.write_text(rendered)
@@ -847,66 +1033,22 @@ def report(
     sys.exit(analysis_report.exit_code)
 
 
-@main.command()
-@click.argument("paths", nargs=-1, type=click.Path())
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to a gruff YAML config file (.yaml or .yml).",
-)
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Skip auto-applying the default .gruff.yaml file for this run.",
-)
-@click.option(
-    "--format",
-    "summary_format",
-    type=click.Choice(["text", "json"]),
-    default="text",
-    show_default=True,
-    help="Output format: text or json.",
-)
-@click.option(
-    "--top",
-    type=int,
-    default=10,
-    show_default=True,
-    help="How many top rules and file offenders to list.",
-)
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan files under default-ignored directories and .gitignore exclusions.",
-)
-@_global_command_options
-def summary(
-    paths: tuple[str, ...],
-    config_path: Path | None,
-    no_config: bool,
-    summary_format: str,
-    top: int,
-    include_ignored: bool,
-) -> None:
-    """Print a compact digest of a scan."""
+@_summary_command
+def summary(**kwargs: Any) -> None:
+    """Print a compact digest of a scan.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+
+    Raises:
+        click.ClickException: If ``--top`` is less than 1.
+    """
+    top = cast(int, kwargs["top"])
+    summary_format = cast(str, kwargs["summary_format"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
     analysis_report = _run_analysis_for_cli(
-        paths=paths,
-        config_path=config_path,
-        no_config=no_config,
-        output=OutputFormat.JSON if summary_format == "json" else OutputFormat.TEXT,
-        fail_on=FailThreshold.NONE,
-        include_ignored=include_ignored,
-        min_severity=None,
-        include_pillar=(),
-        exclude_pillar=(),
-        include_rule=(),
-        exclude_rule=(),
+        _summary_analysis_request(kwargs, summary_format=summary_format)
     )
     if summary_format == "json":
         _write_stdout(json.dumps(_summary_payload(analysis_report, top), indent=4))
@@ -916,59 +1058,25 @@ def summary(
     sys.exit(analysis_report.exit_code)
 
 
-@main.command("metric-calibration", hidden=True)
-@click.argument("paths", nargs=-1, type=click.Path())
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to a gruff YAML config file (.yaml or .yml).",
-)
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Skip auto-applying the default .gruff.yaml file for this run.",
-)
-@click.option(
-    "--format",
-    "calibration_format",
-    type=click.Choice(["text", "json"]),
-    default="text",
-    show_default=True,
-    help="Output format: text or json.",
-)
-@click.option(
-    "--top",
-    type=int,
-    default=10,
-    show_default=True,
-    help="How many top functions to list for each metric.",
-)
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan files under default-ignored directories and .gitignore exclusions.",
-)
-@_global_command_options
-def metric_calibration(
-    paths: tuple[str, ...],
-    config_path: Path | None,
-    no_config: bool,
-    calibration_format: str,
-    top: int,
-    include_ignored: bool,
-) -> None:
-    """Print developer-only complexity metric distributions."""
+@_metric_calibration_command
+def metric_calibration(**kwargs: Any) -> None:
+    """Print developer-only complexity metric distributions.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+
+    Raises:
+        click.ClickException: If ``--top`` is less than 1.
+    """
+    top = cast(int, kwargs["top"])
+    calibration_format = cast(str, kwargs["calibration_format"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
     report = build_metric_calibration_report(
-        paths=paths,
-        config_path=config_path,
-        no_config=no_config,
-        include_ignored=include_ignored,
+        paths=cast(tuple[str, ...], kwargs["paths"]),
+        config_path=cast(Path | None, kwargs["config_path"]),
+        no_config=cast(bool, kwargs["no_config"]),
+        include_ignored=cast(bool, kwargs["include_ignored"]),
         project_root=Path.cwd(),
     )
     if calibration_format == "json":
@@ -979,20 +1087,7 @@ def metric_calibration(
     sys.exit(2 if report.has_input_errors() else 0)
 
 
-@main.command("list")
-@click.argument("namespace", required=False)
-@click.option("--raw", is_flag=True, help="Output raw command list.")
-@click.option(
-    "--format",
-    "list_format",
-    type=click.Choice(["txt", "xml", "json", "md"]),
-    default="txt",
-    show_default=True,
-    help="The output format.",
-)
-@click.option("--short", is_flag=True, help="Skip describing command arguments.")
-@_global_command_options
-@click.pass_context
+@_list_command
 def list_commands(
     ctx: click.Context,
     namespace: str | None,
@@ -1000,50 +1095,30 @@ def list_commands(
     list_format: str,
     short: bool,
 ) -> None:
-    """List commands."""
+    """List available CLI commands in the requested format.
+
+    Args:
+        ctx: Active Click context.
+        namespace: Optional command namespace prefix to list.
+        raw: Whether to print only command names.
+        list_format: Output format.
+        short: Whether to omit descriptions where supported.
+    """
     rows = _command_rows(_root_group(ctx), namespace)
-    if raw:
-        _write_stdout("".join(f"{name}\n" for name, _help in rows))
-        return
-    if list_format == "json":
-        _write_stdout(
-            json.dumps(
-                {
-                    "commands": [
-                        {"name": name, "description": help_text} for name, help_text in rows
-                    ]
-                },
-                indent=4,
-            )
-            + "\n"
-        )
-        return
-    if list_format == "xml":
-        commands = "".join(
-            f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>'
-            for name, help_text in rows
-        )
-        _write_stdout(f"<commands>{commands}</commands>\n")
-        return
-    if list_format == "md":
-        lines = ["# gruff commands", ""]
-        for name, help_text in rows:
-            lines.append(f"- `{name}`" if short or not help_text else f"- `{name}` - {help_text}")
-        _write_stdout("\n".join(lines) + "\n")
-        return
-    width = max((len(name) for name, _help in rows), default=0)
-    lines = ["Available commands:"]
-    for name, help_text in rows:
-        lines.append(f"  {name:<{width}}  {'' if short else help_text}".rstrip())
-    _write_stdout("\n".join(lines) + "\n")
+    _write_stdout(_render_command_rows(rows, raw=raw, list_format=list_format, short=short))
 
 
-@main.command("help")
-@click.argument("command_name", required=False)
-@_global_command_options
-@click.pass_context
+@_help_command_decorator
 def help_command(ctx: click.Context, command_name: str | None) -> None:
-    """Display help for a command."""
+    """Display root help or help for one command.
+
+    Args:
+        ctx: Active Click context.
+        command_name: Optional command name to inspect.
+
+    Raises:
+        click.ClickException: If the requested command is unknown.
+    """
     root = _root_group(ctx)
     if command_name is None:
         _write_stdout(ctx.find_root().get_help() + "\n")
@@ -1055,13 +1130,18 @@ def help_command(ctx: click.Context, command_name: str | None) -> None:
         _write_stdout(command.get_help(command_ctx) + "\n")
 
 
-@main.command()
-@click.argument("shell", required=False)
-@click.option("--debug", is_flag=True, help="Tail the completion debug log.")
-@_global_command_options
-@click.pass_context
+@_completion_command
 def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
-    """Dump the shell completion script."""
+    """Dump the shell completion script.
+
+    Args:
+        ctx: Active Click context.
+        shell: Optional shell name.
+        debug: Whether completion debug logs were requested.
+
+    Raises:
+        click.ClickException: If the shell is unsupported or debug mode is requested.
+    """
     if debug:
         raise click.ClickException("Completion debug logs are not implemented in gruff-py.")
     resolved_shell = shell or _detect_shell()
@@ -1076,34 +1156,79 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
         _write_stdout("\n")
 
 
-def _run_analysis_for_cli(
+def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _AnalysisCliRequest:
+    return _AnalysisCliRequest(
+        paths=cast(tuple[str, ...], kwargs["paths"]),
+        config_path=cast(Path | None, kwargs["config_path"]),
+        should_skip_config=cast(bool, kwargs["no_config"]),
+        output=OutputFormat(cast(str, kwargs[output_key])),
+        fail_on=FailThreshold(cast(str, kwargs["fail_on"])),
+        report_editor_link=cast(str, kwargs["report_editor_link"]),
+        should_render_interactive=cast(bool, kwargs["report_interactive"]),
+        should_include_ignored=cast(bool, kwargs["include_ignored"]),
+        min_severity=cast(str | None, kwargs["min_severity"]),
+        include_pillar=cast(tuple[str, ...], kwargs["include_pillar"]),
+        exclude_pillar=cast(tuple[str, ...], kwargs["exclude_pillar"]),
+        include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
+        exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
+    )
+
+
+def _summary_analysis_request(
+    kwargs: Mapping[str, Any],
     *,
-    paths: tuple[str, ...],
-    config_path: Path | None,
-    no_config: bool,
-    output: OutputFormat,
-    fail_on: FailThreshold,
-    include_ignored: bool,
-    min_severity: str | None,
-    include_pillar: tuple[str, ...],
-    exclude_pillar: tuple[str, ...],
-    include_rule: tuple[str, ...],
-    exclude_rule: tuple[str, ...],
-) -> AnalysisReport:
+    summary_format: str,
+) -> _AnalysisCliRequest:
+    return _AnalysisCliRequest(
+        paths=cast(tuple[str, ...], kwargs["paths"]),
+        config_path=cast(Path | None, kwargs["config_path"]),
+        should_skip_config=cast(bool, kwargs["no_config"]),
+        output=OutputFormat.JSON if summary_format == "json" else OutputFormat.TEXT,
+        fail_on=FailThreshold.NONE,
+        report_editor_link="none",
+        should_render_interactive=False,
+        should_include_ignored=cast(bool, kwargs["include_ignored"]),
+        min_severity=None,
+        include_pillar=(),
+        exclude_pillar=(),
+        include_rule=(),
+        exclude_rule=(),
+    )
+
+
+def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
+    return _DashboardCliRequest(
+        paths=cast(tuple[str, ...], kwargs["paths"]),
+        project_root=cast(Path | None, kwargs["project_root"]),
+        host=cast(str, kwargs["host"]),
+        port=cast(int, kwargs["port"]),
+        fail_on=cast(str, kwargs["fail_on"]),
+        config_path=cast(Path | None, kwargs["config_path"]),
+        should_skip_config=cast(bool, kwargs["no_config"]),
+        should_include_ignored=cast(bool, kwargs["include_ignored"]),
+        should_render_interactive=cast(bool, kwargs["report_interactive"]),
+    )
+
+
+def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     display_filter = FindingDisplayFilter(
-        min_severity=Severity(min_severity) if min_severity is not None else None,
-        include_pillars=tuple(Pillar(value) for value in _split_repeated_csv(include_pillar)),
-        exclude_pillars=tuple(Pillar(value) for value in _split_repeated_csv(exclude_pillar)),
-        include_rules=_split_repeated_csv(include_rule),
-        exclude_rules=_split_repeated_csv(exclude_rule),
+        min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
+        include_pillars=tuple(
+            Pillar(value) for value in _split_repeated_csv(request.include_pillar)
+        ),
+        exclude_pillars=tuple(
+            Pillar(value) for value in _split_repeated_csv(request.exclude_pillar)
+        ),
+        include_rules=_split_repeated_csv(request.include_rule),
+        exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
     return run_analysis(
-        paths=paths,
-        config_path=config_path,
-        no_config=no_config,
-        output=output,
-        fail_threshold=fail_on,
-        include_ignored=include_ignored,
+        paths=request.paths,
+        config_path=request.config_path,
+        no_config=request.should_skip_config,
+        output=request.output,
+        fail_threshold=request.fail_on,
+        include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,
     )
@@ -1240,7 +1365,7 @@ def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _write_stdout(text: str) -> None:
-    if not _state().suppress_output:
+    if not _state().should_suppress_output:
         sys.stdout.write(text)
 
 
@@ -1261,6 +1386,57 @@ def _command_rows(group: click.Group, namespace: str | None) -> list[tuple[str, 
             continue
         rows.append((name, command.get_short_help_str(limit=100)))
     return rows
+
+
+def _render_command_rows(
+    rows: list[tuple[str, str]],
+    *,
+    raw: bool,
+    list_format: str,
+    short: bool,
+) -> str:
+    if raw:
+        return "".join(f"{name}\n" for name, _help in rows)
+    if list_format == "json":
+        return _command_rows_json(rows)
+    if list_format == "xml":
+        return _command_rows_xml(rows)
+    if list_format == "md":
+        return _command_rows_markdown(rows, short)
+    return _command_rows_text(rows, short)
+
+
+def _command_rows_json(rows: list[tuple[str, str]]) -> str:
+    return (
+        json.dumps(
+            {"commands": [{"name": name, "description": help_text} for name, help_text in rows]},
+            indent=4,
+        )
+        + "\n"
+    )
+
+
+def _command_rows_xml(rows: list[tuple[str, str]]) -> str:
+    commands = "".join(
+        f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>'
+        for name, help_text in rows
+    )
+    return f"<commands>{commands}</commands>\n"
+
+
+def _command_rows_markdown(rows: list[tuple[str, str]], short: bool) -> str:
+    lines = ["# gruff commands", ""]
+    for name, help_text in rows:
+        lines.append(f"- `{name}`" if short or not help_text else f"- `{name}` - {help_text}")
+    return "\n".join(lines) + "\n"
+
+
+def _command_rows_text(rows: list[tuple[str, str]], short: bool) -> str:
+    width = max((len(name) for name, _help in rows), default=0)
+    lines = ["Available commands:"]
+    for name, help_text in rows:
+        lines.append(f"  {name:<{width}}  {'' if short else help_text}".rstrip())
+    return "\n".join(lines) + "\n"
 
 
 def _detect_shell() -> str:

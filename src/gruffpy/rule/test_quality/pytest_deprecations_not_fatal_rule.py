@@ -37,7 +37,7 @@ class PytestDeprecationsNotFatalRule(Rule):
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []
         config = read_pytest_config(context.project_root)
-        if not config.exists or config.deprecations_are_errors():
+        if not config.is_present or config.has_deprecations_as_errors():
             return []
         definition = self.definition()
         return [

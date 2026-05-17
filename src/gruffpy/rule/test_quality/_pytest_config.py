@@ -18,12 +18,12 @@ class PytestConfig:
     addopts: tuple[str, ...] = ()
     filterwarnings: tuple[str, ...] = ()
     coverage_source: tuple[str, ...] = ()
-    exists: bool = False
+    is_present: bool = False
 
     def has_strict_config(self) -> bool:
         return "--strict-config" in self.addopts or "--strict-markers" in self.addopts
 
-    def deprecations_are_errors(self) -> bool:
+    def has_deprecations_as_errors(self) -> bool:
         return (
             any(
                 line.startswith("error") and "DeprecationWarning" in line
@@ -71,14 +71,14 @@ def _read(project_root: str) -> PytestConfig:
     coverage_section = tool.get("coverage", {}).get("run", {})
 
     addopts = _split_str(pytest_section.get("addopts"))
-    filterwarnings = _str_list(pytest_section.get("filterwarnings"))
-    coverage_source = _str_list(coverage_section.get("source"))
+    filterwarnings = _string_list(pytest_section.get("filterwarnings"))
+    coverage_source = _string_list(coverage_section.get("source"))
 
     return PytestConfig(
         addopts=tuple(addopts),
         filterwarnings=tuple(filterwarnings),
         coverage_source=tuple(coverage_source),
-        exists=True,
+        is_present=True,
     )
 
 
@@ -91,7 +91,7 @@ def _split_str(value: object) -> list[str]:
     return []
 
 
-def _str_list(value: object) -> list[str]:
+def _string_list(value: object) -> list[str]:
     """Coerce a TOML value to a list of strings."""
     if isinstance(value, list):
         return [str(item) for item in value]

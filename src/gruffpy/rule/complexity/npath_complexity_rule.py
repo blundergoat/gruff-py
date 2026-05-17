@@ -19,7 +19,7 @@ definitions are scored independently.
 """
 
 import ast
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -34,6 +34,7 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 _NPATH_CAP = 5000
+NPathHandler = Callable[[ast.AST], int]
 
 
 class NPathComplexityRule(Rule):
@@ -74,7 +75,7 @@ class NPathComplexityRule(Rule):
 
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
-            metadata: dict[str, int | float | bool | str] = {
+            metadata: dict[str, object] = {
                 "npath": np_capped,
                 "measuredValue": np_capped,
                 "threshold": threshold,
@@ -129,50 +130,83 @@ def _npath_of(stmts: Iterable[ast.AST]) -> int:
 
 
 def _npath_stmt(node: ast.AST) -> int:
-    if isinstance(node, ast.If):
-        cond_paths = _condition_paths(node.test)
-        then_paths = _npath_of(node.body)
-        if node.orelse:
-            if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
-                # elif chain
-                else_paths = _npath_stmt(node.orelse[0])
-            else:
-                else_paths = _npath_of(node.orelse)
-        else:
-            else_paths = 1
-        return cond_paths + then_paths + else_paths
-
-    if isinstance(node, ast.For | ast.AsyncFor):
-        return _npath_of(node.body) + _expression_boolops(node.iter) + 1
-
-    if isinstance(node, ast.While):
-        return _npath_of(node.body) + _condition_paths(node.test) + 1
-
-    if isinstance(node, ast.Try):
-        result = _npath_of(node.body)
-        for handler in node.handlers:
-            result += _npath_of(handler.body)
-        for stmt in node.orelse:
-            result *= _npath_stmt(stmt)
-        for stmt in node.finalbody:
-            result *= _npath_stmt(stmt)
-        return result + 1
-
-    if isinstance(node, ast.Match):
-        total = 0
-        for case in node.cases:
-            total += _npath_of(case.body)
-        return total + 1
-
-    if isinstance(node, ast.With | ast.AsyncWith):
-        return _npath_of(node.body)
-
-    # Nested function / class — does not contribute to outer NPATH.
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
-        return 1
-
-    # Linear statement. Include boolops in the expression if any.
+    handler = _npath_handler(node)
+    if handler is not None:
+        return handler(node)
     return 1 + _expression_boolops(node)
+
+
+def _npath_handler(node: ast.AST) -> NPathHandler | None:
+    return _NPATH_HANDLERS.get(type(node))
+
+
+def _npath_if(node: ast.AST) -> int:
+    assert isinstance(node, ast.If)
+    return _condition_paths(node.test) + _npath_of(node.body) + _npath_else(node.orelse)
+
+
+def _npath_else(orelse: list[ast.stmt]) -> int:
+    if not orelse:
+        return 1
+    if len(orelse) == 1 and isinstance(orelse[0], ast.If):
+        return _npath_stmt(orelse[0])
+    return _npath_of(orelse)
+
+
+def _npath_for(node: ast.AST) -> int:
+    assert isinstance(node, ast.For | ast.AsyncFor)
+    return _npath_of(node.body) + _expression_boolops(node.iter) + 1
+
+
+def _npath_while(node: ast.AST) -> int:
+    assert isinstance(node, ast.While)
+    return _npath_of(node.body) + _condition_paths(node.test) + 1
+
+
+def _npath_try(node: ast.AST) -> int:
+    assert isinstance(node, ast.Try)
+    result = _npath_of(node.body)
+    for handler in node.handlers:
+        result += _npath_of(handler.body)
+    for stmt in node.orelse:
+        result *= _npath_stmt(stmt)
+    for stmt in node.finalbody:
+        result *= _npath_stmt(stmt)
+    return result + 1
+
+
+def _npath_match(node: ast.AST) -> int:
+    assert isinstance(node, ast.Match)
+    total = 0
+    for case in node.cases:
+        total += _npath_of(case.body)
+    return total + 1
+
+
+def _npath_with(node: ast.AST) -> int:
+    assert isinstance(node, ast.With | ast.AsyncWith)
+    return _npath_of(node.body)
+
+
+def _npath_nested_scope(node: ast.AST) -> int:
+    assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef)
+    return 1
+
+
+_NPATH_HANDLERS: dict[type[ast.AST], NPathHandler] = {
+    ast.If: _npath_if,
+    ast.For: _npath_for,
+    ast.AsyncFor: _npath_for,
+    ast.While: _npath_while,
+    ast.Try: _npath_try,
+    ast.Match: _npath_match,
+    ast.With: _npath_with,
+    ast.AsyncWith: _npath_with,
+    ast.FunctionDef: _npath_nested_scope,
+    ast.AsyncFunctionDef: _npath_nested_scope,
+    ast.Lambda: _npath_nested_scope,
+    ast.ClassDef: _npath_nested_scope,
+}
 
 
 def _condition_paths(test: ast.expr) -> int:

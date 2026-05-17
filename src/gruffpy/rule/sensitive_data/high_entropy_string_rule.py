@@ -47,7 +47,7 @@ class HighEntropyStringRule(SourceTextRule):
         findings: list[Finding] = []
         for match in _CANDIDATE_RE.finditer(unit.source):
             candidate = match.group(0)
-            if _looks_benign(candidate):
+            if _is_benign_literal(candidate):
                 continue
             if shannon_entropy(candidate) < _ENTROPY_THRESHOLD:
                 continue
@@ -78,7 +78,7 @@ class HighEntropyStringRule(SourceTextRule):
         return findings
 
 
-def _looks_benign(candidate: str) -> bool:
+def _is_benign_literal(candidate: str) -> bool:
     """Best-effort screen against common false-positive shapes."""
     if len(candidate) < _MIN_LENGTH:
         return True

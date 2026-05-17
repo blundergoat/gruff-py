@@ -74,7 +74,7 @@ def signature_param_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[st
     return names
 
 
-def returns_none_only(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def has_none_only_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """True when *fn*'s return annotation is exactly ``None``.
 
     Used by ``docs.missing-return-doc`` to skip void-typed functions.
@@ -94,7 +94,7 @@ def has_return_annotation(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return fn.returns is not None
 
 
-def raises_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """True when *fn*'s body contains at least one ``raise`` statement.
 
     Walks control-flow blocks but stops at nested function/lambda boundaries so

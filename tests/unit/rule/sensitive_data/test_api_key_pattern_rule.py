@@ -21,7 +21,8 @@ def test_github_personal_token_emits():
 
 
 def test_slack_bot_token_emits():
-    src = "SLACK_TOKEN = 'xoxb-12345678-abcdef-mySlackToken'\n"
+    token = "xoxb-" + "12345678" + "-abcdef-" + "mySlackToken"
+    src = f"SLACK_TOKEN = {token!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["vendor"] == "slack"

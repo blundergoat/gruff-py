@@ -1,7 +1,5 @@
 """Developer-only metric distribution dump for threshold calibration."""
 
-from __future__ import annotations
-
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -11,6 +9,7 @@ from typing import Literal
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
+from gruffpy.parser.analysis_unit import ParseDiagnostic
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.complexity._halstead import halstead_for
 from gruffpy.rule.complexity._walks import FunctionLike, iter_functions
@@ -30,7 +29,8 @@ from gruffpy.rule.complexity.npath_complexity_rule import (
 )
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
-from gruffpy.source.discovery import SourceDiscovery
+from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
+from gruffpy.source.source_file import SourceFile
 from gruffpy.version import TOOL_NAME, VERSION
 
 MetricName = Literal["cyclomatic", "npath", "halsteadVolume", "maintainabilityIndex"]
@@ -52,6 +52,11 @@ class MetricDiagnostic:
     line: int | None = None
 
     def to_payload(self) -> dict[str, object]:
+        """Serialise the diagnostic.
+
+        Returns:
+            JSON-ready diagnostic fields.
+        """
         payload: dict[str, object] = {
             "type": self.type,
             "message": self.message,
@@ -78,11 +83,19 @@ class FunctionMetricRow:
     symbol: str
     cyclomatic: int
     npath: int
-    npath_capped: bool
+    is_npath_capped: bool
     halstead_volume: float
     maintainability_index: float
 
     def value_for(self, metric: MetricName) -> float:
+        """Return one metric value for this row.
+
+        Args:
+            metric: Metric name to read.
+
+        Returns:
+            Numeric value for the requested metric.
+        """
         match metric:
             case "cyclomatic":
                 return float(self.cyclomatic)
@@ -94,6 +107,14 @@ class FunctionMetricRow:
                 return self.maintainability_index
 
     def to_payload(self, metric: MetricName) -> dict[str, object]:
+        """Serialise the row for a primary metric.
+
+        Args:
+            metric: Metric that should appear as the row's top-level value.
+
+        Returns:
+            JSON-ready row payload.
+        """
         return {
             "filePath": self.file_path,
             "line": self.line,
@@ -103,7 +124,7 @@ class FunctionMetricRow:
             "metrics": {
                 "cyclomatic": self.cyclomatic,
                 "npath": self.npath,
-                "npathCapped": self.npath_capped,
+                "npathCapped": self.is_npath_capped,
                 "halsteadVolume": _rounded(self.halstead_volume),
                 "maintainabilityIndex": _rounded(self.maintainability_index),
             },
@@ -125,6 +146,11 @@ class MetricSummary:
     error_crossings: int
 
     def to_payload(self) -> dict[str, object]:
+        """Serialise this metric summary.
+
+        Returns:
+            JSON-ready summary payload.
+        """
         return {
             "name": self.metric,
             "count": self.count,
@@ -155,12 +181,27 @@ class MetricCalibrationReport:
 
     @property
     def function_count(self) -> int:
+        """Count parsed function rows.
+
+        Returns:
+            Number of parsed functions with metric rows.
+        """
         return len(self.rows)
 
     def parse_error_count(self) -> int:
+        """Count parse-error diagnostics.
+
+        Returns:
+            Number of parse errors collected during parsing.
+        """
         return sum(1 for diagnostic in self.diagnostics if diagnostic.type == "parse-error")
 
     def has_input_errors(self) -> bool:
+        """Return whether the report contains input-level errors.
+
+        Returns:
+            True when missing paths or diagnostics are present.
+        """
         return bool(self.missing_paths or self.diagnostics)
 
 
@@ -172,55 +213,33 @@ def build_metric_calibration_report(
     include_ignored: bool,
     project_root: Path,
 ) -> MetricCalibrationReport:
-    """Build metric distributions using the same source discovery as analysis."""
-    registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry)
-    diagnostics: list[MetricDiagnostic] = []
-    config_loaded_from: str | None = None
+    """Build metric distributions using the same discovery as analysis.
 
-    if not no_config:
-        loader = ConfigLoader(project_root, config)
-        try:
-            config, source = loader.load(config_path)
-            if source is not None:
-                config_loaded_from = str(source)
-        except ConfigError as exc:
-            diagnostics.append(MetricDiagnostic(type="config-error", message=str(exc)))
+    Args:
+        paths: Paths requested by the user.
+        config_path: Explicit configuration path, if one was provided.
+        no_config: Whether default configuration loading should be skipped.
+        include_ignored: Whether discovery should include normally ignored files.
+        project_root: Root directory used to resolve relative paths.
 
-    discovery = SourceDiscovery(project_root)
-    discovery_result = discovery.discover(
-        list(paths),
-        include_ignored=include_ignored,
-        configured_ignore_patterns=config.ignored_path_patterns,
+    Returns:
+        Complete calibration report with rows, summaries, and diagnostics.
+    """
+    config, config_loaded_from, diagnostics = _load_metric_config(
+        project_root=project_root,
+        config_path=config_path,
+        no_config=no_config,
     )
-    for missing in discovery_result.missing_paths:
-        diagnostics.append(
-            MetricDiagnostic(type="missing-path", message="path not found", path=missing)
-        )
+    discovery_result = _discover_metric_sources(
+        paths=paths,
+        include_ignored=include_ignored,
+        project_root=project_root,
+        config=config,
+    )
+    diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
 
-    parser = PythonFileParser()
-    files_parsed = 0
-    rows: list[FunctionMetricRow] = []
-    for source_file in discovery_result.files:
-        unit = parser.parse(source_file)
-        if unit.has_parse_errors():
-            for diagnostic in unit.diagnostics:
-                diagnostics.append(
-                    MetricDiagnostic(
-                        type="parse-error",
-                        message=diagnostic.message,
-                        path=source_file.display_path,
-                        line=diagnostic.line,
-                    )
-                )
-            continue
-
-        files_parsed += 1
-        if unit.tree is None:
-            continue
-
-        for fn in iter_functions(unit.tree):
-            rows.append(_metric_row(source_file.display_path, fn))
+    files_parsed, rows, parse_diagnostics = _collect_metric_rows(discovery_result.files)
+    diagnostics.extend(parse_diagnostics)
 
     thresholds = _metric_thresholds(config)
     summaries = tuple(_summary_for(metric, rows, thresholds[metric]) for metric in METRIC_ORDER)
@@ -242,6 +261,15 @@ def metric_calibration_payload(
     *,
     top: int,
 ) -> dict[str, object]:
+    """Build the JSON calibration payload.
+
+    Args:
+        report: Metric calibration report to serialise.
+        top: Number of top rows to include per metric.
+
+    Returns:
+        JSON-ready calibration payload.
+    """
     return {
         "schemaVersion": "gruff-py.metric-calibration.v1",
         "tool": {
@@ -268,6 +296,15 @@ def metric_calibration_payload(
 
 
 def render_metric_calibration_text(report: MetricCalibrationReport, *, top: int) -> str:
+    """Render a text calibration report.
+
+    Args:
+        report: Metric calibration report to render.
+        top: Number of top rows to include per metric.
+
+    Returns:
+        Human-readable calibration report.
+    """
     lines = [
         f"{TOOL_NAME} {report.tool_version} metric calibration",
         (
@@ -280,55 +317,9 @@ def render_metric_calibration_text(report: MetricCalibrationReport, *, top: int)
     if report.config_path is not None:
         lines.append(f"Config: {report.config_path}")
 
-    if report.diagnostics:
-        lines.extend(["", "Diagnostics:"])
-        for diagnostic in report.diagnostics:
-            location = ""
-            if diagnostic.path is not None:
-                location = f" {diagnostic.path}"
-                if diagnostic.line is not None:
-                    location = f"{location}:{diagnostic.line}"
-            lines.append(f"  {diagnostic.type}{location}: {diagnostic.message}")
-
-    lines.extend(
-        [
-            "",
-            "Metric distributions:",
-            (
-                f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'max':>8} "
-                f"{'warning':>12} {'error':>12}"
-            ),
-        ]
-    )
-    for summary in report.summaries:
-        warning = _crossing_label(
-            summary.threshold_direction,
-            summary.warning_threshold,
-            summary.warning_crossings,
-        )
-        error = _crossing_label(
-            summary.threshold_direction,
-            summary.error_threshold,
-            summary.error_crossings,
-        )
-        lines.append(
-            f"  {summary.metric:<24} {_format_optional(summary.minimum):>8} "
-            f"{_format_optional(summary.p50):>8} {_format_optional(summary.p90):>8} "
-            f"{_format_optional(summary.maximum):>8} {warning:>12} {error:>12}"
-        )
-
-    for metric in METRIC_ORDER:
-        rows = top_rows(report, metric, top)
-        lines.extend(["", f"Top {metric}:"])
-        if not rows:
-            lines.append("  none")
-            continue
-        for row in rows:
-            lines.append(
-                f"  {row.file_path}:{row.line} {row.symbol} "
-                f"{metric}={_format_number(row.value_for(metric))}"
-            )
-
+    _append_diagnostics(lines, report.diagnostics)
+    _append_distribution(lines, report.summaries)
+    _append_top_rows(lines, report, top)
     return "\n".join(lines) + "\n"
 
 
@@ -337,6 +328,16 @@ def top_rows(
     metric: MetricName,
     top: int,
 ) -> tuple[FunctionMetricRow, ...]:
+    """Select rows with the most noteworthy values for one metric.
+
+    Args:
+        report: Metric calibration report containing all rows.
+        metric: Metric to sort by.
+        top: Maximum number of rows to return.
+
+    Returns:
+        Ordered rows for the requested metric.
+    """
     threshold = _threshold_for_metric(report.summaries, metric)
     if threshold == "above":
         ordered = sorted(
@@ -351,6 +352,147 @@ def top_rows(
     return tuple(ordered[:top])
 
 
+def _load_metric_config(
+    *,
+    project_root: Path,
+    config_path: Path | None,
+    no_config: bool,
+) -> tuple[AnalysisConfig, str | None, list[MetricDiagnostic]]:
+    registry = RuleRegistry.defaults()
+    config = AnalysisConfig.from_registry(registry)
+    if no_config:
+        return config, None, []
+
+    loader = ConfigLoader(project_root, config)
+    try:
+        loaded_config, source = loader.load(config_path)
+    except ConfigError as exc:
+        return config, None, [MetricDiagnostic(type="config-error", message=str(exc))]
+    return loaded_config, str(source) if source is not None else None, []
+
+
+def _discover_metric_sources(
+    *,
+    paths: tuple[str, ...],
+    include_ignored: bool,
+    project_root: Path,
+    config: AnalysisConfig,
+) -> SourceDiscoveryResult:
+    discovery = SourceDiscovery(project_root)
+    return discovery.discover(
+        list(paths),
+        include_ignored=include_ignored,
+        configured_ignore_patterns=config.ignored_path_patterns,
+    )
+
+
+def _missing_path_diagnostics(missing_paths: Sequence[str]) -> list[MetricDiagnostic]:
+    return [
+        MetricDiagnostic(type="missing-path", message="path not found", path=missing)
+        for missing in missing_paths
+    ]
+
+
+def _collect_metric_rows(
+    files: Sequence[SourceFile],
+) -> tuple[int, list[FunctionMetricRow], list[MetricDiagnostic]]:
+    parser = PythonFileParser()
+    files_parsed = 0
+    rows: list[FunctionMetricRow] = []
+    diagnostics: list[MetricDiagnostic] = []
+    for source_file in files:
+        unit = parser.parse(source_file)
+        if unit.has_parse_errors():
+            diagnostics.extend(_parse_error_diagnostics(source_file, unit.diagnostics))
+            continue
+        files_parsed += 1
+        if unit.tree is not None:
+            rows.extend(
+                _metric_row(source_file.display_path, fn) for fn in iter_functions(unit.tree)
+            )
+    return files_parsed, rows, diagnostics
+
+
+def _parse_error_diagnostics(
+    source_file: SourceFile,
+    diagnostics: Sequence[ParseDiagnostic],
+) -> list[MetricDiagnostic]:
+    return [
+        MetricDiagnostic(
+            type="parse-error",
+            message=diagnostic.message,
+            path=source_file.display_path,
+            line=diagnostic.line,
+        )
+        for diagnostic in diagnostics
+    ]
+
+
+def _append_diagnostics(lines: list[str], diagnostics: Sequence[MetricDiagnostic]) -> None:
+    if not diagnostics:
+        return
+    lines.extend(["", "Diagnostics:"])
+    for diagnostic in diagnostics:
+        lines.append(f"  {diagnostic.type}{_diagnostic_location(diagnostic)}: {diagnostic.message}")
+
+
+def _diagnostic_location(diagnostic: MetricDiagnostic) -> str:
+    if diagnostic.path is None:
+        return ""
+    if diagnostic.line is None:
+        return f" {diagnostic.path}"
+    return f" {diagnostic.path}:{diagnostic.line}"
+
+
+def _append_distribution(lines: list[str], summaries: Sequence[MetricSummary]) -> None:
+    lines.extend(
+        [
+            "",
+            "Metric distributions:",
+            (
+                f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'max':>8} "
+                f"{'warning':>12} {'error':>12}"
+            ),
+        ]
+    )
+    lines.extend(_summary_line(summary) for summary in summaries)
+
+
+def _summary_line(summary: MetricSummary) -> str:
+    warning = _crossing_label(
+        summary.threshold_direction,
+        summary.warning_threshold,
+        summary.warning_crossings,
+    )
+    error = _crossing_label(
+        summary.threshold_direction,
+        summary.error_threshold,
+        summary.error_crossings,
+    )
+    return (
+        f"  {summary.metric:<24} {_format_optional(summary.minimum):>8} "
+        f"{_format_optional(summary.p50):>8} {_format_optional(summary.p90):>8} "
+        f"{_format_optional(summary.maximum):>8} {warning:>12} {error:>12}"
+    )
+
+
+def _append_top_rows(lines: list[str], report: MetricCalibrationReport, top: int) -> None:
+    for metric in METRIC_ORDER:
+        rows = top_rows(report, metric, top)
+        lines.extend(["", f"Top {metric}:"])
+        if not rows:
+            lines.append("  none")
+            continue
+        lines.extend(_top_row_line(row, metric) for row in rows)
+
+
+def _top_row_line(row: FunctionMetricRow, metric: MetricName) -> str:
+    return (
+        f"  {row.file_path}:{row.line} {row.symbol} "
+        f"{metric}={_format_number(row.value_for(metric))}"
+    )
+
+
 def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
     halstead = halstead_for(fn)
     npath_raw = npath_for(fn)
@@ -362,7 +504,7 @@ def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
         symbol=qualified_symbol(fn, parent_chain(fn)),
         cyclomatic=cyclomatic_for(fn),
         npath=npath_capped,
-        npath_capped=npath_raw >= _NPATH_CAP,
+        is_npath_capped=npath_raw >= _NPATH_CAP,
         halstead_volume=halstead.volume,
         maintainability_index=maintainability_index_for(fn),
     )

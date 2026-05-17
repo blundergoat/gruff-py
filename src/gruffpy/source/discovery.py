@@ -102,14 +102,15 @@ class SourceDiscovery:
             if not absolute.exists():
                 missing.append(raw_path)
                 continue
-            if self._is_configured_ignored(absolute, patterns):
-                ignored.append(self._display_path(absolute))
-                continue
-            if not include_ignored and self._is_default_ignored(absolute):
-                ignored.append(self._display_path(absolute))
-                continue
-            if not include_ignored and self._is_gitignored(absolute):
-                ignored.append(self._display_path(absolute))
+            is_ignored, ignored_path = self._ignore_decision(
+                absolute,
+                include_ignored=include_ignored,
+                patterns=patterns,
+                record_file=True,
+            )
+            if is_ignored:
+                if ignored_path is not None:
+                    ignored.append(ignored_path)
                 continue
 
             if absolute.is_file():
@@ -142,16 +143,16 @@ class SourceDiscovery:
                 continue
             for entry in entries:
                 is_dir = entry.is_dir()
-                if self._is_configured_ignored(entry, patterns):
-                    ignored_paths.append(self._display_path(entry))
-                    continue
-                if not include_ignored and self._is_default_ignored(entry):
-                    if is_dir:
-                        ignored_paths.append(self._display_path(entry))
-                    continue
-                if not include_ignored and self._is_gitignored(entry, is_dir=is_dir):
-                    if is_dir:
-                        ignored_paths.append(self._display_path(entry))
+                is_ignored, ignored_path = self._ignore_decision(
+                    entry,
+                    include_ignored=include_ignored,
+                    patterns=patterns,
+                    is_dir=is_dir,
+                    record_file=False,
+                )
+                if is_ignored:
+                    if ignored_path is not None:
+                        ignored_paths.append(ignored_path)
                     continue
                 if is_dir:
                     stack.append(entry)
@@ -225,7 +226,29 @@ class SourceDiscovery:
         if not patterns:
             return False
         display = self._display_path(path).replace("\\", "/")
-        return any(_matches_pattern(display, p) for p in patterns)
+        return any(_is_pattern_match(display, p) for p in patterns)
+
+    def _ignore_decision(
+        self,
+        path: Path,
+        *,
+        include_ignored: bool,
+        patterns: list[str],
+        is_dir: bool | None = None,
+        record_file: bool,
+    ) -> tuple[bool, str | None]:
+        display_path = self._display_path(path)
+        if self._is_configured_ignored(path, patterns):
+            return True, display_path
+        if include_ignored:
+            return False, None
+        if is_dir is None:
+            is_dir = path.is_dir()
+        if self._is_default_ignored(path):
+            return True, display_path if record_file or is_dir else None
+        if self._is_gitignored(path, is_dir=is_dir):
+            return True, display_path if record_file or is_dir else None
+        return False, None
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
         if not self._gitignore.has_rules():
@@ -238,7 +261,7 @@ class SourceDiscovery:
         return self._gitignore.is_ignored(path, is_dir=is_dir)
 
 
-def _matches_pattern(display_path: str, pattern: str) -> bool:
+def _is_pattern_match(display_path: str, pattern: str) -> bool:
     normalised_pattern = pattern.replace("\\", "/").strip("/")
     normalised_path = display_path.strip("/")
     if normalised_pattern == normalised_path:

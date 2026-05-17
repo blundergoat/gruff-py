@@ -3,21 +3,24 @@ from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 
 def test_rsa_header_emits():
-    src = "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n"
+    header = "-----BEGIN RSA " + "PRIVATE KEY-----"
+    footer = "-----END RSA " + "PRIVATE KEY-----"
+    src = f"{header}\nMIIE...\n{footer}\n"
     findings = PrivateKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_openssh_header_emits():
-    src = (
-        "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk=\n-----END OPENSSH PRIVATE KEY-----\n"
-    )
+    header = "-----BEGIN OPENSSH " + "PRIVATE KEY-----"
+    footer = "-----END OPENSSH " + "PRIVATE KEY-----"
+    src = f"{header}\nb3BlbnNzaC1rZXk=\n{footer}\n"
     findings = PrivateKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_ec_header_emits():
-    src = "-----BEGIN EC PRIVATE KEY-----\nMHcCAQ...\n"
+    header = "-----BEGIN EC " + "PRIVATE KEY-----"
+    src = f"{header}\nMHcCAQ...\n"
     findings = PrivateKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

@@ -321,7 +321,7 @@ def test_display_filter_applies_minimum_severity_and_rule_filters():
         exclude_rules=("security.dangerous-function-call",),
     )
 
-    assert display_filter.apply(findings) == []
+    assert display_filter.filter_findings(findings) == []
     assert display_filter.to_dict() == {
         "active": True,
         "minSeverity": "warning",

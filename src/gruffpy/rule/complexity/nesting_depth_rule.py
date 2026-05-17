@@ -112,41 +112,59 @@ def nesting_depth_for(fn: FunctionLike) -> int:
 
 
 def _walk(node: ast.AST, current: int) -> int:
-    # Stop at nested function/class scopes
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+    if _is_scope_boundary(node):
         return current
-    if isinstance(node, _NESTING_KINDS):
-        current += 1
-        # Walk body (and handlers/orelse) at the new depth
-        deepest = current
-        if isinstance(node, ast.Try):
-            for stmt in node.body:
-                deepest = max(deepest, _walk(stmt, current))
-            for handler in node.handlers:
-                for stmt in handler.body:
-                    deepest = max(deepest, _walk(stmt, current))
-            for stmt in node.orelse:
-                deepest = max(deepest, _walk(stmt, current))
-            for stmt in node.finalbody:
-                deepest = max(deepest, _walk(stmt, current))
-            return deepest
-        if isinstance(node, ast.Match):
-            for case in node.cases:
-                for stmt in case.body:
-                    deepest = max(deepest, _walk(stmt, current))
-            return deepest
-        # if / for / while / with: body + (orelse if present)
-        body = getattr(node, "body", []) or []
-        for stmt in body:
-            deepest = max(deepest, _walk(stmt, current))
-        orelse = getattr(node, "orelse", None) or []
-        for stmt in orelse:
-            deepest = max(deepest, _walk(stmt, current))
-        return deepest
-    # Non-nesting node: descend
+    if not isinstance(node, _NESTING_KINDS):
+        return _deepest_child(node, current)
+
+    nested = current + 1
+    if isinstance(node, ast.Try):
+        return _walk_try(node, nested)
+    if isinstance(node, ast.Match):
+        return _walk_match(node, nested)
+    return _walk_body_and_orelse(node, nested)
+
+
+def _is_scope_boundary(node: ast.AST) -> bool:
+    return isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda)
+
+
+def _deepest_child(node: ast.AST, current: int) -> int:
     deepest = current
     for child in ast.iter_child_nodes(node):
         deepest = max(deepest, _walk(child, current))
+    return deepest
+
+
+def _walk_try(node: ast.Try, current: int) -> int:
+    deepest = _deepest_in_statements(node.body, current)
+    for handler in node.handlers:
+        deepest = max(deepest, _deepest_in_statements(handler.body, current))
+    deepest = max(deepest, _deepest_in_statements(node.orelse, current))
+    return max(deepest, _deepest_in_statements(node.finalbody, current))
+
+
+def _walk_match(node: ast.Match, current: int) -> int:
+    deepest = current
+    for case in node.cases:
+        deepest = max(deepest, _deepest_in_statements(case.body, current))
+    return deepest
+
+
+def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
+    body = getattr(node, "body", []) or []
+    orelse = getattr(node, "orelse", None) or []
+    return max(
+        current,
+        _deepest_in_statements(body, current),
+        _deepest_in_statements(orelse, current),
+    )
+
+
+def _deepest_in_statements(statements: list[ast.stmt], current: int) -> int:
+    deepest = current
+    for stmt in statements:
+        deepest = max(deepest, _walk(stmt, current))
     return deepest
 
 

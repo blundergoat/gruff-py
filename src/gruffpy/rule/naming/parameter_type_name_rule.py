@@ -17,6 +17,7 @@ they want to keep (e.g. ``id``, ``ctx``).
 
 import ast
 import re
+from dataclasses import dataclass
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -56,6 +57,15 @@ _COLLECTION_TYPES: frozenset[str] = frozenset(
 )
 _WRAPPER_TYPES: frozenset[str] = frozenset({"Optional", "Union", "Annotated"})
 
+FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+@dataclass(frozen=True, slots=True)
+class _ParameterMismatch:
+    name: str
+    expected: str
+    line: int
+
 
 class ParameterTypeNameRule(Rule):
     ID = "naming.parameter-type-name"
@@ -78,103 +88,135 @@ class ParameterTypeNameRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        configured = settings.options.get("ignoredParameterNames", list(_DEFAULT_IGNORED))
-        if not isinstance(configured, list) or not all(isinstance(s, str) for s in configured):
-            configured = list(_DEFAULT_IGNORED)
-        ignored = frozenset(configured)
+        ignored = _ignored_parameter_names(settings.options.get("ignoredParameterNames"))
+        return [
+            _parameter_mismatch_finding(unit, definition, mismatch)
+            for mismatch in _parameter_mismatches(unit.tree, ignored)
+        ]
 
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            for arg in (
-                list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
-            ):
-                if arg.annotation is None:
-                    continue
-                if arg.arg.startswith("_") or arg.arg in ignored or arg.arg in {"self", "cls"}:
-                    continue
-                expected = _expected_name(arg.annotation)
-                if expected is None:
-                    continue
-                if arg.arg == expected:
-                    continue
-                # Accept the short form when the parameter name is a prefix
-                # of the expected canonical form (e.g. ``repo`` of ``repository``).
-                if expected.startswith(arg.arg) and len(arg.arg) >= 2:
-                    continue
-                if _is_collection_annotation(arg.annotation) and _matches_plural(arg.arg, expected):
-                    continue
-                # Accept when the param name shares at least one token with
-                # the type name — ``unit: AnalysisUnit`` (param `unit` shares
-                # `unit` with `analysis_unit`) is fine. Only fire when the
-                # param name has NO semantic overlap with the type.
-                if _shares_token(arg.arg, expected):
-                    continue
-                if _shares_path_role(arg.arg, expected):
-                    continue
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=(
-                            f"Parameter {arg.arg!r} annotated as a complex type; "
-                            f"prefer the canonical name ``{expected}``."
-                        ),
-                        file_path=unit.file.display_path,
-                        line=arg.lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=arg.lineno,
-                        symbol=arg.arg,
-                        remediation=f"Rename ``{arg.arg}`` to ``{expected}``.",
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={
-                            "parameter": arg.arg,
-                            "expected": expected,
-                        },
-                    ),
-                )
-        return findings
+
+def _ignored_parameter_names(configured: object) -> frozenset[str]:
+    if not isinstance(configured, list) or not all(isinstance(name, str) for name in configured):
+        return frozenset(_DEFAULT_IGNORED)
+    return frozenset(configured)
+
+
+def _parameter_mismatches(tree: ast.AST, ignored: frozenset[str]) -> list[_ParameterMismatch]:
+    mismatches: list[_ParameterMismatch] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for arg in _function_parameters(node):
+            expected = _expected_parameter_name(arg, ignored)
+            if expected is not None:
+                mismatches.append(_ParameterMismatch(arg.arg, expected, arg.lineno))
+    return mismatches
+
+
+def _function_parameters(node: FunctionNode) -> list[ast.arg]:
+    return list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
+
+
+def _expected_parameter_name(arg: ast.arg, ignored: frozenset[str]) -> str | None:
+    if arg.annotation is None:
+        return None
+    if arg.arg.startswith("_") or arg.arg in ignored or arg.arg in {"self", "cls"}:
+        return None
+    expected = _expected_name(arg.annotation)
+    if expected is None or _is_acceptable_parameter_name(arg, expected):
+        return None
+    return expected
+
+
+def _is_acceptable_parameter_name(arg: ast.arg, expected: str) -> bool:
+    if arg.arg == expected:
+        return True
+    if expected.startswith(arg.arg) and len(arg.arg) >= 2:
+        return True
+    if _is_collection_annotation(arg.annotation) and _has_plural_match(arg.arg, expected):
+        return True
+    return _has_shared_token(arg.arg, expected) or _has_shared_path_role(arg.arg, expected)
+
+
+def _parameter_mismatch_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    mismatch: _ParameterMismatch,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"Parameter {mismatch.name!r} annotated as a complex type; "
+            f"prefer the canonical name ``{mismatch.expected}``."
+        ),
+        file_path=unit.file.display_path,
+        line=mismatch.line,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=mismatch.line,
+        symbol=mismatch.name,
+        remediation=f"Rename ``{mismatch.name}`` to ``{mismatch.expected}``.",
+        secondary_pillars=definition.secondary_pillars,
+        metadata={
+            "parameter": mismatch.name,
+            "expected": mismatch.expected,
+        },
+    )
 
 
 def _expected_name(annotation: ast.expr) -> str | None:
     """Return the canonical snake_case name for *annotation*, or None when the
     annotation is not a single Title-cased class-like name."""
     if isinstance(annotation, ast.Subscript):
-        # Unwrap one level: Optional[Foo] -> Foo, list[Foo] -> Foo
         return _expected_name(annotation.slice)
     if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
-        # T | None -> T
-        for side in (annotation.left, annotation.right):
-            if isinstance(side, ast.Constant) and side.value is None:
-                continue
-            if isinstance(side, ast.Name) and side.id == "None" or side is None:
-                continue
-            return _expected_name(side)
-    if isinstance(annotation, ast.Name):
-        name = annotation.id
-    elif isinstance(annotation, ast.Attribute):
-        # x.y.Foo -> Foo
-        if _root_name(annotation) == "ast":
-            return None
-        name = annotation.attr
-    elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value
-    else:
+        return _union_expected_name(annotation)
+
+    name = _simple_annotation_name(annotation)
+    if name is None:
         return None
     if name in _IGNORED_TYPE_NAMES:
         return None
     if not name or not name[0].isupper():
         return None
-    # Trim trailing role suffix
+    return _to_snake(_trim_role_suffix(name))
+
+
+def _union_expected_name(annotation: ast.BinOp) -> str | None:
+    for side in (annotation.left, annotation.right):
+        if _is_none_annotation(side):
+            continue
+        return _expected_name(side)
+    return None
+
+
+def _is_none_annotation(annotation: ast.expr) -> bool:
+    if isinstance(annotation, ast.Constant) and annotation.value is None:
+        return True
+    return isinstance(annotation, ast.Name) and annotation.id == "None"
+
+
+def _simple_annotation_name(annotation: ast.expr) -> str | None:
+    if isinstance(annotation, ast.Name):
+        return annotation.id
+    if isinstance(annotation, ast.Attribute):
+        if _root_name(annotation) == "ast":
+            return None
+        return annotation.attr
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        return annotation.value
+    return None
+
+
+def _trim_role_suffix(name: str) -> str:
     trimmed = name
     for suffix in _TRIM_SUFFIXES:
         if trimmed.endswith(suffix) and len(trimmed) > len(suffix):
             trimmed = trimmed[: -len(suffix)]
             break
-    return _to_snake(trimmed)
+    return trimmed
 
 
 def _is_collection_annotation(annotation: ast.expr) -> bool:
@@ -188,15 +230,15 @@ def _is_collection_annotation(annotation: ast.expr) -> bool:
     if outer in _COLLECTION_TYPES:
         return True
     if outer in _WRAPPER_TYPES:
-        return _contains_collection(annotation.slice)
+        return _has_collection_annotation(annotation.slice)
     return False
 
 
-def _contains_collection(annotation: ast.expr) -> bool:
+def _has_collection_annotation(annotation: ast.expr) -> bool:
     if _is_collection_annotation(annotation):
         return True
     if isinstance(annotation, ast.Tuple):
-        return any(_contains_collection(elt) for elt in annotation.elts)
+        return any(_has_collection_annotation(elt) for elt in annotation.elts)
     return False
 
 
@@ -219,7 +261,7 @@ def _root_name(annotation: ast.Attribute) -> str | None:
     return None
 
 
-def _matches_plural(param_name: str, expected: str) -> bool:
+def _has_plural_match(param_name: str, expected: str) -> bool:
     if param_name == _pluralize(expected):
         return True
     param_tokens = set(lower_tokens(param_name))
@@ -242,7 +284,7 @@ def _to_snake(camel: str) -> str:
     return out.lower()
 
 
-def _shares_token(param_name: str, expected: str) -> bool:
+def _has_shared_token(param_name: str, expected: str) -> bool:
     """True when *param_name* shares a semantic token with *expected*.
 
     Both inputs are tokenised; if the lowercase token set of *param_name*
@@ -255,7 +297,7 @@ def _shares_token(param_name: str, expected: str) -> bool:
     return bool(param_tokens & expected_tokens)
 
 
-def _shares_path_role(param_name: str, expected: str) -> bool:
+def _has_shared_path_role(param_name: str, expected: str) -> bool:
     return expected == "path" and bool(set(lower_tokens(param_name)) & _PATH_ROLE_TOKENS)
 
 

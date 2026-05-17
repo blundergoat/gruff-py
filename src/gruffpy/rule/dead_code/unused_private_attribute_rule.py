@@ -46,48 +46,71 @@ class UnusedPrivateAttributeRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for cls in ast.walk(unit.tree):
-            if not isinstance(cls, ast.ClassDef):
-                continue
-            if has_framework_base(cls) or has_dataclass_decorator(cls):
-                continue
-
-            assigned, read = _scan_class_self_attrs(cls)
-            property_names = _collect_property_names(cls)
-            for name, (_target, attr) in assigned.items():
-                if not name.startswith("_"):
-                    continue
-                if name in read:
-                    continue
-                # @property backing fields: `self._x` paired with @property `x`
-                # (or `_x` -> `x` convention)
-                bare = name.lstrip("_")
-                if bare in property_names:
-                    continue
-
-                parents = parent_chain(cls)
-                class_symbol = qualified_symbol(cls, parents)
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=(f"Class {class_symbol!r} assigns {name!r} but never reads it."),
-                        file_path=unit.file.display_path,
-                        line=attr.lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=attr.end_lineno,
-                        symbol=f"{class_symbol}.{name}",
-                        remediation=(
-                            "Remove the assignment or read the attribute somewhere "
-                            "in the class body."
-                        ),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={"attribute": name},
-                    ),
-                )
+        for cls in _candidate_classes(unit.tree):
+            findings.extend(_unused_attribute_findings(unit, definition, cls))
         return findings
+
+
+def _candidate_classes(tree: ast.AST) -> list[ast.ClassDef]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and not has_framework_base(node)
+        and not has_dataclass_decorator(node)
+    ]
+
+
+def _unused_attribute_findings(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    cls: ast.ClassDef,
+) -> list[Finding]:
+    assigned, read = _scan_class_self_attrs(cls)
+    property_names = _collect_property_names(cls)
+    parents = parent_chain(cls)
+    class_symbol = qualified_symbol(cls, parents)
+    return [
+        _unused_attribute_finding(unit, definition, class_symbol, name, attr)
+        for name, (_target, attr) in assigned.items()
+        if _is_unused_private_attribute(name, read, property_names)
+    ]
+
+
+def _is_unused_private_attribute(
+    name: str,
+    read: set[str],
+    property_names: set[str],
+) -> bool:
+    if not name.startswith("_"):
+        return False
+    if name in read:
+        return False
+    return name.lstrip("_") not in property_names
+
+
+def _unused_attribute_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    class_symbol: str,
+    name: str,
+    attr: ast.Attribute,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Class {class_symbol!r} assigns {name!r} but never reads it."),
+        file_path=unit.file.display_path,
+        line=attr.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=attr.end_lineno,
+        symbol=f"{class_symbol}.{name}",
+        remediation=("Remove the assignment or read the attribute somewhere in the class body."),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"attribute": name},
+    )
 
 
 def _scan_class_self_attrs(
@@ -117,9 +140,13 @@ def _collect_property_names(cls: ast.ClassDef) -> set[str]:
     for stmt in cls.body:
         if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        for d in stmt.decorator_list:
-            d_str = _decorator_repr(d)
-            if d_str == "property" or d_str.endswith(".setter") or d_str.endswith(".getter"):
+        for decorator in stmt.decorator_list:
+            decorator_name = _decorator_repr(decorator)
+            if (
+                decorator_name == "property"
+                or decorator_name.endswith(".setter")
+                or decorator_name.endswith(".getter")
+            ):
                 names.add(stmt.name)
     return names
 

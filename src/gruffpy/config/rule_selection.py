@@ -15,19 +15,21 @@ class RuleSelection:
     exclude_pillars: tuple[str, ...] = ()
     exclude_rules: tuple[str, ...] = ()
 
-    def allows(self, definition: "RuleDefinition") -> bool:
-        included = not self.tiers and not self.pillars and not self.rules
-        if not included and definition.tier.value in self.tiers:
-            included = True
-        if not included and definition.pillar.value in self.pillars:
-            included = True
-        if not included and definition.id in self.rules:
-            included = True
-        if not included:
+    def is_allowed(self, definition: "RuleDefinition") -> bool:
+        if not self._is_included(definition):
             return False
         if definition.pillar.value in self.exclude_pillars:
             return False
         return definition.id not in self.exclude_rules
+
+    def _is_included(self, definition: "RuleDefinition") -> bool:
+        if not self.tiers and not self.pillars and not self.rules:
+            return True
+        return (
+            definition.tier.value in self.tiers
+            or definition.pillar.value in self.pillars
+            or definition.id in self.rules
+        )
 
     def to_dict(self) -> dict[str, list[str]]:
         return {

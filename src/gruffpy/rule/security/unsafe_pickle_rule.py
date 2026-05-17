@@ -65,13 +65,13 @@ def _unsafe_pickle_label(call: ast.Call, target: str | None) -> str | None:
     if (
         target is not None
         and target in _UNSAFE_LOAD_TARGETS
-        and not _first_arg_is_safe_literal(call)
+        and not _has_safe_literal_first_arg(call)
     ):
         return target
     return _unpickler_load_label(call)
 
 
-def _first_arg_is_safe_literal(call: ast.Call) -> bool:
+def _has_safe_literal_first_arg(call: ast.Call) -> bool:
     if not call.args:
         return False
     first = call.args[0]

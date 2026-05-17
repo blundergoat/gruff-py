@@ -37,7 +37,7 @@ class PytestCoverageSourceMissingRule(Rule):
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []
         config = read_pytest_config(context.project_root)
-        if not config.exists or config.has_coverage_source():
+        if not config.is_present or config.has_coverage_source():
             return []
         definition = self.definition()
         return [

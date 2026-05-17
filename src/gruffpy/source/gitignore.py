@@ -65,23 +65,23 @@ class GitignoreMatcher:
         current_dir = self.root
         for part in rel.parts[:-1]:
             ancestor = current_dir / part
-            ancestor_decision = None
+            ancestor_is_ignored = None
             for gitignore_dir in applicable_dirs:
-                ancestor_decision = self._evaluate(
-                    gitignore_dir, ancestor, is_dir=True, prior=ancestor_decision
+                ancestor_is_ignored = self._is_ignored_by_spec(
+                    gitignore_dir, ancestor, is_dir=True, prior=ancestor_is_ignored
                 )
-            if ancestor_decision is True:
+            if ancestor_is_ignored is True:
                 return True
             current_dir = ancestor
             if current_dir in self._specs_by_dir:
                 applicable_dirs.append(current_dir)
 
-        decision: bool | None = None
+        is_ignored: bool | None = None
         for gitignore_dir in applicable_dirs:
-            decision = self._evaluate(gitignore_dir, resolved, is_dir, decision)
-        return decision is True
+            is_ignored = self._is_ignored_by_spec(gitignore_dir, resolved, is_dir, is_ignored)
+        return is_ignored is True
 
-    def _evaluate(
+    def _is_ignored_by_spec(
         self,
         gitignore_dir: Path,
         abs_path: Path,

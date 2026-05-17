@@ -45,77 +45,98 @@ class OneLineFunctionRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if has_framework_decorator(node):
-                continue
-            if is_abstract_method(node) or is_overload_stub(node):
-                continue
-            body = node.body
-            if len(body) != 1:
-                continue
-            stmt = body[0]
-            if not isinstance(stmt, ast.Return) or not isinstance(stmt.value, ast.Call):
-                continue
-            call = stmt.value
-            if not _args_match_passthrough(node, call):
-                continue
-
-            parents = parent_chain(node)
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} is a thin wrapper that forwards its arguments "
-                        "to a single call with no other work."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Inline the wrapped call or remove the wrapper if it's not "
-                        "needed for typing / dispatch / monkey-patching."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={},
-                ),
-            )
-        return findings
+        return [
+            _one_line_function_finding(unit, definition, node)
+            for node in _one_line_functions(unit.tree)
+        ]
 
 
-def _args_match_passthrough(fn: ast.FunctionDef | ast.AsyncFunctionDef, call: ast.Call) -> bool:
+def _one_line_functions(tree: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and _is_one_line_passthrough(node)
+    ]
+
+
+def _is_one_line_passthrough(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    if has_framework_decorator(node) or is_abstract_method(node) or is_overload_stub(node):
+        return False
+    if len(node.body) != 1:
+        return False
+    stmt = node.body[0]
+    return (
+        isinstance(stmt, ast.Return)
+        and isinstance(stmt.value, ast.Call)
+        and _has_passthrough_args(node, stmt.value)
+    )
+
+
+def _one_line_function_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Finding:
+    symbol = qualified_symbol(node, parent_chain(node))
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"Function {symbol!r} is a thin wrapper that forwards its arguments "
+            "to a single call with no other work."
+        ),
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            "Inline the wrapped call or remove the wrapper if it's not "
+            "needed for typing / dispatch / monkey-patching."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )
+
+
+def _has_passthrough_args(fn: ast.FunctionDef | ast.AsyncFunctionDef, call: ast.Call) -> bool:
     """True if *call*'s positional args and kwargs forward *fn*'s signature
     one-for-one (same names in same order; no extra args, no extra kwargs)."""
     args = fn.args
     expected_positional = [arg.arg for arg in args.posonlyargs + args.args]
-    # Methods: ignore the implicit `self`/`cls` if present (still forwarded).
     if expected_positional and expected_positional[0] in {"self", "cls"}:
         expected_positional = expected_positional[1:]
+    return (
+        _has_positional_passthrough(expected_positional, call)
+        and _has_keyword_passthrough(args.kwonlyargs, call)
+        and _has_matching_vararg_forward(args.vararg, call)
+    )
 
+
+def _has_positional_passthrough(expected_positional: list[str], call: ast.Call) -> bool:
     if len(call.args) != len(expected_positional):
         return False
     for name, passed in zip(expected_positional, call.args, strict=True):
         if not (isinstance(passed, ast.Name) and passed.id == name):
             return False
+    return True
 
-    expected_kw = [k.arg for k in args.kwonlyargs]
-    call_kw_names = [k.arg for k in call.keywords if k.arg is not None]
+
+def _has_keyword_passthrough(expected_keywords: list[ast.arg], call: ast.Call) -> bool:
+    expected_kw = [keyword.arg for keyword in expected_keywords]
+    call_kw_names = [keyword.arg for keyword in call.keywords if keyword.arg is not None]
     if sorted(expected_kw) != sorted(call_kw_names):
         return False
-    for k in call.keywords:
-        if k.arg is None:
+    for keyword in call.keywords:
+        if keyword.arg is None:
             return False
-        if not (isinstance(k.value, ast.Name) and k.value.id == k.arg):
+        if not (isinstance(keyword.value, ast.Name) and keyword.value.id == keyword.arg):
             return False
+    return True
 
-    has_vararg = args.vararg is not None
-    call_starred = any(isinstance(a, ast.Starred) for a in call.args)
-    return has_vararg == call_starred
+
+def _has_matching_vararg_forward(vararg: ast.arg | None, call: ast.Call) -> bool:
+    return (vararg is not None) == any(isinstance(arg, ast.Starred) for arg in call.args)

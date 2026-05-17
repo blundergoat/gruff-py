@@ -29,9 +29,8 @@ def project_with_gitignored_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     return tmp_path
 
 
-def test_gitignored_file_does_not_appear_in_findings(
-    project_with_gitignored_finding: Path,
-) -> None:
+@pytest.mark.usefixtures("project_with_gitignored_finding")
+def test_gitignored_file_does_not_appear_in_findings() -> None:
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--no-config", "."],
@@ -42,9 +41,8 @@ def test_gitignored_file_does_not_appear_in_findings(
     assert not any("vendor/third_party.py" in p for p in paths), paths
 
 
-def test_include_ignored_surfaces_gitignored_findings(
-    project_with_gitignored_finding: Path,
-) -> None:
+@pytest.mark.usefixtures("project_with_gitignored_finding")
+def test_include_ignored_surfaces_gitignored_findings() -> None:
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--no-config", "--include-ignored", "."],

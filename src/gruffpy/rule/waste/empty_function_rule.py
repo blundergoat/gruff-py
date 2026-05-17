@@ -42,40 +42,58 @@ class EmptyFunctionRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if not _is_empty_body(node.body):
-                continue
-            parents = parent_chain(node)
-            if is_abstract_method(node):
-                continue
-            if is_overload_stub(node):
-                continue
-            if is_protocol_method_stub(node, parents):
-                continue
-            if has_framework_decorator(node):
-                continue
+        return [
+            _empty_function_finding(unit, definition, node, parents)
+            for node, parents in _empty_functions(unit.tree)
+        ]
 
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=f"Function {symbol!r} has an empty body.",
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Implement the function, delete it, or mark it as abstract/overload."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={},
-                ),
-            )
-        return findings
+
+def _empty_functions(
+    tree: ast.AST,
+) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]]:
+    candidates: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        parents = parent_chain(node)
+        if _should_report_empty_function(node, parents):
+            candidates.append((node, parents))
+    return candidates
+
+
+def _should_report_empty_function(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    parents: list[ast.AST],
+) -> bool:
+    if not _is_empty_body(node.body):
+        return False
+    return not (
+        is_abstract_method(node)
+        or is_overload_stub(node)
+        or is_protocol_method_stub(node, parents)
+        or has_framework_decorator(node)
+    )
+
+
+def _empty_function_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    parents: list[ast.AST],
+) -> Finding:
+    symbol = qualified_symbol(node, parents)
+    return Finding(
+        rule_id=definition.id,
+        message=f"Function {symbol!r} has an empty body.",
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=("Implement the function, delete it, or mark it as abstract/overload."),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )

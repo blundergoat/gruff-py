@@ -19,7 +19,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import (
     call_target_name,
-    name_smells_security,
+    has_security_smell,
 )
 
 _RANDOM_METHODS: frozenset[str] = frozenset(
@@ -63,7 +63,7 @@ class InsecureRandomRule(Rule):
                 continue
             if not _is_random_call(target):
                 continue
-            if not _context_smells_security(node):
+            if not _has_security_context_smell(node):
                 continue
             findings.append(
                 Finding(
@@ -96,14 +96,14 @@ def _is_random_call(target: str) -> bool:
     return False
 
 
-def _context_smells_security(call: ast.Call) -> bool:
+def _has_security_context_smell(call: ast.Call) -> bool:
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
             return any(
-                isinstance(t, ast.Name) and name_smells_security(t.id) for t in parent.targets
+                isinstance(t, ast.Name) and has_security_smell(t.id) for t in parent.targets
             )
         if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
-            return name_smells_security(parent.name)
+            return has_security_smell(parent.name)
         parent = getattr(parent, "parent", None)
     return False

@@ -10,7 +10,7 @@ def _write(path: Path, text: str = "") -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _display_paths(result_files: tuple, root: Path) -> set[str]:
+def _display_paths(result_files: tuple) -> set[str]:
     return {sf.display_path for sf in result_files}
 
 
@@ -19,7 +19,7 @@ def test_no_gitignore_means_discovery_unchanged(tmp_path: Path) -> None:
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
-    assert "src/app.py" in _display_paths(result.files, tmp_path)
+    assert "src/app.py" in _display_paths(result.files)
 
 
 def test_gitignored_file_is_excluded_from_discovery(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_gitignored_file_is_excluded_from_discovery(tmp_path: Path) -> None:
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "src/app.py" in paths
     assert "src/secret.py" not in paths
 
@@ -41,7 +41,7 @@ def test_gitignored_directory_is_reported_in_ignored_paths(tmp_path: Path) -> No
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "src/app.py" in paths
     assert "build/out.py" not in paths
     assert "build" in result.ignored_paths
@@ -54,7 +54,7 @@ def test_include_ignored_bypasses_gitignore(tmp_path: Path) -> None:
 
     result = SourceDiscovery(tmp_path).discover(["."], include_ignored=True)
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "src/app.py" in paths
     assert "build/out.py" in paths
 
@@ -69,7 +69,7 @@ def test_configured_patterns_apply_even_with_include_ignored(tmp_path: Path) -> 
         configured_ignore_patterns=["tests/fixtures/**"],
     )
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "src/app.py" in paths
     assert "tests/fixtures/fixture.py" not in paths
 
@@ -82,7 +82,7 @@ def test_nested_gitignore_negation_re_includes_file(tmp_path: Path) -> None:
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "pkg/keep.gen.py" in paths
     assert "pkg/ignored.gen.py" not in paths
 
@@ -94,8 +94,8 @@ def test_explicit_gitignored_path_is_skipped_unless_include_ignored(tmp_path: Pa
     default = SourceDiscovery(tmp_path).discover(["secret.py"])
     forced = SourceDiscovery(tmp_path).discover(["secret.py"], include_ignored=True)
 
-    assert "secret.py" not in _display_paths(default.files, tmp_path)
-    assert "secret.py" in _display_paths(forced.files, tmp_path)
+    assert "secret.py" not in _display_paths(default.files)
+    assert "secret.py" in _display_paths(forced.files)
 
 
 def test_gitignored_directory_descent_is_skipped(tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_gitignored_directory_descent_is_skipped(tmp_path: Path) -> None:
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
-    paths = _display_paths(result.files, tmp_path)
+    paths = _display_paths(result.files)
     assert "src/app.py" in paths
     assert not any(p.startswith("vendor/") for p in paths)
 

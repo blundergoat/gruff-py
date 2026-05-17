@@ -37,9 +37,9 @@ TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
 
 
 class ConfigLoader:
-    def __init__(self, project_root: str | Path, defaults: AnalysisConfig) -> None:
+    def __init__(self, project_root: str | Path, analysis_config: AnalysisConfig) -> None:
         self._project_root = Path(project_root)
-        self._defaults = defaults
+        self._defaults = analysis_config
 
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
         """Load config, honouring `.gruff.yaml` / `pyproject.toml` precedence.
@@ -64,14 +64,14 @@ class ConfigLoader:
             if not section:
                 return self._defaults, yaml_path
             self._validate_top_level(section, source=str(yaml_path))
-            return self._apply(section), yaml_path
+            return self._apply_config_section(section), yaml_path
 
         toml_path = self._project_root / "pyproject.toml"
         if toml_path.exists():
             toml_section = self._load_toml_section(toml_path)
             if toml_section is None:
                 return self._defaults, None
-            return self._apply(toml_section), toml_path
+            return self._apply_config_section(toml_section), toml_path
 
         return self._defaults, None
 
@@ -83,11 +83,11 @@ class ConfigLoader:
             if not section:
                 return self._defaults, path
             self._validate_top_level(section, source=str(path))
-            return self._apply(section), path
+            return self._apply_config_section(section), path
         toml_section = self._load_toml_section(path)
         if toml_section is None:
             return self._defaults, path
-        return self._apply(toml_section), path
+        return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
         try:
@@ -112,7 +112,7 @@ class ConfigLoader:
         if unknown:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
 
-    def _apply(self, section: dict[str, Any]) -> AnalysisConfig:
+    def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
         config = self._defaults
 
         if "minimumPythonVersion" in section:
@@ -120,14 +120,15 @@ class ConfigLoader:
                 _parse_python_version(section["minimumPythonVersion"])
             )
 
-        if "paths" in section:
-            config = self._apply_paths(config, section["paths"])
-        if "allowlists" in section:
-            config = self._apply_allowlists(config, section["allowlists"])
-        if "selection" in section:
-            config = self._apply_selection(config, section["selection"])
-        if "rules" in section:
-            config = self._apply_rules(config, section["rules"])
+        applicators = (
+            ("paths", self._apply_paths),
+            ("allowlists", self._apply_allowlists),
+            ("selection", self._apply_selection),
+            ("rules", self._apply_rules),
+        )
+        for key, applicator in applicators:
+            if key in section:
+                config = applicator(config, section[key])
 
         return config
 
@@ -185,39 +186,68 @@ class ConfigLoader:
         if not isinstance(rules, dict):
             raise ConfigError("[tool.gruff-py.rules] must be a table.")
         for rule_id, rule_section in rules.items():
-            if not isinstance(rule_section, dict):
-                raise ConfigError(f'[tool.gruff-py.rules."{rule_id}"] must be a table.')
-            unknown = set(rule_section.keys()) - VALID_RULE_KEYS
-            if unknown:
-                raise ConfigError(
-                    f'Unknown keys in [tool.gruff-py.rules."{rule_id}"]: {sorted(unknown)}'
-                )
-            if rule_id not in config.rules:
-                raise ConfigError(f'Unknown rule id "{rule_id}".')
-            existing = config.rules[rule_id]
-            enabled = bool(rule_section.get("enabled", existing.enabled))
-            thresholds = dict(existing.thresholds)
-            if "thresholds" in rule_section:
-                overrides = rule_section["thresholds"]
-                if not isinstance(overrides, dict):
-                    raise ConfigError(f'thresholds in rule "{rule_id}" must be a table.')
-                for key, value in overrides.items():
-                    if not isinstance(value, (int, float)) or isinstance(value, bool):
-                        raise ConfigError(
-                            f'threshold "{key}" in rule "{rule_id}" must be a number.'
-                        )
-                    thresholds[key] = value
-            options = dict(existing.options)
-            if "options" in rule_section:
-                overrides = rule_section["options"]
-                if not isinstance(overrides, dict):
-                    raise ConfigError(f'options in rule "{rule_id}" must be a table.')
-                options.update(overrides)
+            _validate_rule_section(config, rule_id, rule_section)
+            rule_settings = config.rules[rule_id]
             config = config.with_rule_settings(
                 rule_id,
-                RuleSettings(enabled=enabled, thresholds=thresholds, options=options),
+                RuleSettings(
+                    enabled=_is_rule_enabled(rule_settings, rule_section),
+                    thresholds=_merged_thresholds(rule_id, rule_settings, rule_section),
+                    options=_merged_options(rule_id, rule_settings, rule_section),
+                ),
             )
         return config
+
+
+def _validate_rule_section(
+    config: AnalysisConfig,
+    rule_id: str,
+    rule_section: dict[str, Any],
+) -> None:
+    if not isinstance(rule_section, dict):
+        raise ConfigError(f'[tool.gruff-py.rules."{rule_id}"] must be a table.')
+    unknown = set(rule_section.keys()) - VALID_RULE_KEYS
+    if unknown:
+        raise ConfigError(f'Unknown keys in [tool.gruff-py.rules."{rule_id}"]: {sorted(unknown)}')
+    if rule_id not in config.rules:
+        raise ConfigError(f'Unknown rule id "{rule_id}".')
+
+
+def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) -> bool:
+    return bool(rule_section.get("enabled", rule_settings.enabled))
+
+
+def _merged_thresholds(
+    rule_id: str,
+    rule_settings: RuleSettings,
+    rule_section: dict[str, Any],
+) -> dict[str, int | float]:
+    thresholds = dict(rule_settings.thresholds)
+    if "thresholds" not in rule_section:
+        return thresholds
+    overrides = rule_section["thresholds"]
+    if not isinstance(overrides, dict):
+        raise ConfigError(f'thresholds in rule "{rule_id}" must be a table.')
+    for key, value in overrides.items():
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ConfigError(f'threshold "{key}" in rule "{rule_id}" must be a number.')
+        thresholds[key] = value
+    return thresholds
+
+
+def _merged_options(
+    rule_id: str,
+    rule_settings: RuleSettings,
+    rule_section: dict[str, Any],
+) -> dict[str, Any]:
+    options = dict(rule_settings.options)
+    if "options" not in rule_section:
+        return options
+    overrides = rule_section["options"]
+    if not isinstance(overrides, dict):
+        raise ConfigError(f'options in rule "{rule_id}" must be a table.')
+    options.update(overrides)
+    return options
 
 
 def _parse_python_version(value: Any) -> tuple[int, int]:

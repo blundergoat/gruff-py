@@ -52,42 +52,56 @@ class ExtendsProductionClassRule(Rule):
         if not _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            if not node.name.startswith("Test"):
-                continue
-            for base in node.bases:
-                base_name = _base_name(base)
-                if base_name is None or base_name in _TESTING_BASES:
-                    continue
-                if base_name.split(".")[-1] in _TESTING_BASES:
-                    continue
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=(
-                            f"Test class {node.name!r} extends production class {base_name!r}."
-                        ),
-                        file_path=unit.file.display_path,
-                        line=node.lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=node.end_lineno,
-                        symbol=node.name,
-                        remediation=(
-                            "Test via the public API, not by subclassing the SUT. If you need "
-                            "test-only behaviour, compose rather than inherit."
-                        ),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={"base": base_name},
-                    ),
-                )
-                break
-        return findings
+        return [
+            _extends_production_class_finding(unit, definition, node, base_name)
+            for node, base_name in _production_subclasses(unit.tree)
+        ]
+
+
+def _production_subclasses(tree: ast.AST) -> list[tuple[ast.ClassDef, str]]:
+    findings: list[tuple[ast.ClassDef, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            base_name = _production_base_name(node)
+            if base_name is not None:
+                findings.append((node, base_name))
+    return findings
+
+
+def _production_base_name(node: ast.ClassDef) -> str | None:
+    for base in node.bases:
+        base_name = _base_name(base)
+        if base_name is None or base_name in _TESTING_BASES:
+            continue
+        if base_name.split(".")[-1] not in _TESTING_BASES:
+            return base_name
+    return None
+
+
+def _extends_production_class_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.ClassDef,
+    base_name: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Test class {node.name!r} extends production class {base_name!r}."),
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=node.name,
+        remediation=(
+            "Test via the public API, not by subclassing the SUT. If you need "
+            "test-only behaviour, compose rather than inherit."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"base": base_name},
+    )
 
 
 def _base_name(node: ast.AST) -> str | None:

@@ -49,9 +49,12 @@ class _TypeReference:
 
 
 class SingleImplementorProtocolRule:
+    """Detect Protocol/ABC abstractions that only have one useful implementor."""
+
     ID = "design.single-implementor-protocol"
 
     def definition(self) -> RuleDefinition:
+        """Return rule metadata."""
         return RuleDefinition(
             id=self.ID,
             name="Single-implementor Protocol/ABC",
@@ -66,6 +69,7 @@ class SingleImplementorProtocolRule:
         )
 
     def analyse_project(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
+        """Analyse the whole project for unnecessary abstractions."""
         settings = context.settings_for(self.definition())
         external_bases = {
             base.lower() for base in settings.string_list_option("externalProtocolBases")
@@ -83,41 +87,75 @@ class SingleImplementorProtocolRule:
         }
         extended_abstractions = _extended_abstractions(abstractions, abstraction_names)
         references = _collect_type_references(eligible_units)
-        findings: list[Finding] = []
+        return _findings_for_abstractions(
+            abstractions=abstractions,
+            extended_abstractions=extended_abstractions,
+            classes=classes,
+            external_bases=external_bases,
+            references=references,
+        )
 
-        for abstraction in sorted(abstractions, key=lambda item: item.fqn):
-            if (
-                abstraction.fqn in extended_abstractions
-                or abstraction.simple_name in extended_abstractions
-            ):
-                continue
-            implementors = [
-                info
-                for info in classes
-                if info.fqn != abstraction.fqn
-                and not _is_internal_abstraction(info, external_bases)
-                and any(_matches_name(base, abstraction) for base in info.bases)
-            ]
-            if len(implementors) != 1:
-                continue
-            implementor = implementors[0]
-            external_usage_count = sum(
-                1
-                for reference in references
-                if _matches_reference(reference.name, abstraction)
-                and reference.owner_class_fqn
-                not in {
-                    abstraction.fqn,
-                    abstraction.simple_name,
-                    implementor.fqn,
-                    implementor.simple_name,
-                }
-            )
-            if external_usage_count != 0:
-                continue
+
+def _findings_for_abstractions(
+    *,
+    abstractions: list[_ClassInfo],
+    extended_abstractions: set[str],
+    classes: list[_ClassInfo],
+    external_bases: set[str],
+    references: list[_TypeReference],
+) -> list[Finding]:
+    findings: list[Finding] = []
+    for abstraction in sorted(abstractions, key=lambda item: item.fqn):
+        if _is_extended_abstraction(abstraction, extended_abstractions):
+            continue
+        implementors = _implementors_for(abstraction, classes, external_bases)
+        if len(implementors) != 1:
+            continue
+        implementor = implementors[0]
+        external_usage_count = _external_usage_count(abstraction, implementor, references)
+        if external_usage_count == 0:
             findings.append(_finding_for(abstraction, implementor, external_usage_count))
+    return findings
 
-        return findings
+
+def _is_extended_abstraction(abstraction: _ClassInfo, extended_abstractions: set[str]) -> bool:
+    return (
+        abstraction.fqn in extended_abstractions
+        or abstraction.simple_name in extended_abstractions
+    )
+
+
+def _implementors_for(
+    abstraction: _ClassInfo,
+    classes: list[_ClassInfo],
+    external_bases: set[str],
+) -> list[_ClassInfo]:
+    return [
+        info
+        for info in classes
+        if info.fqn != abstraction.fqn
+        and not _is_internal_abstraction(info, external_bases)
+        and any(_is_matching_name(base, abstraction) for base in info.bases)
+    ]
+
+
+def _external_usage_count(
+    abstraction: _ClassInfo,
+    implementor: _ClassInfo,
+    references: list[_TypeReference],
+) -> int:
+    local_names = {
+        abstraction.fqn,
+        abstraction.simple_name,
+        implementor.fqn,
+        implementor.simple_name,
+    }
+    return sum(
+        1
+        for reference in references
+        if _is_matching_name(reference.name, abstraction)
+        and reference.owner_class_fqn not in local_names
+    )
 
 
 def _finding_for(
@@ -221,28 +259,34 @@ def _collect_type_references(units: list[AnalysisUnit]) -> list[_TypeReference]:
 
 
 class _AnnotationVisitor(ast.NodeVisitor):
+    """Collect type annotation references while tracking the owning class."""
+
     def __init__(self, module: str, references: list[_TypeReference]) -> None:
         self.module = module
         self.references = references
         self.class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Visit a class without traversing nested owner state incorrectly."""
         self.class_stack.append(node.name)
         for stmt in node.body:
             self.visit(stmt)
         self.class_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Record function annotations and then inspect its body."""
         self._record_function_annotations(node)
         for stmt in node.body:
             self.visit(stmt)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Record async function annotations and then inspect its body."""
         self._record_function_annotations(node)
         for stmt in node.body:
             self.visit(stmt)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """Record an annotated assignment."""
         self._record_annotation(node.annotation)
         self.generic_visit(node)
 
@@ -279,33 +323,75 @@ class _AnnotationVisitor(ast.NodeVisitor):
 
 
 def _annotation_names(node: ast.AST) -> set[str]:
-    if isinstance(node, ast.Name):
-        return {node.id}
-    if isinstance(node, ast.Attribute):
-        name = _name_for(node)
-        return {name, _leaf(name)} if name else set()
-    if isinstance(node, ast.Subscript):
-        return _annotation_names(node.value) | _annotation_names(node.slice)
-    if isinstance(node, ast.BinOp):
-        return _annotation_names(node.left) | _annotation_names(node.right)
-    if isinstance(node, ast.Tuple | ast.List):
-        result: set[str] = set()
-        for element in node.elts:
-            result.update(_annotation_names(element))
-        return result
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return {node.value}
-    return set()
+    handler = _ANNOTATION_NAME_HANDLERS.get(type(node))
+    if handler is None:
+        return set()
+    return handler(node)
 
 
-def _matches_name(name: str, abstraction: _ClassInfo) -> bool:
+def _name_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.Name)
+    return {node.id}
+
+
+def _attribute_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.Attribute)
+    return _attribute_annotation_names(node)
+
+
+def _subscript_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.Subscript)
+    return _annotation_names(node.value) | _annotation_names(node.slice)
+
+
+def _binop_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.BinOp)
+    return _annotation_names(node.left) | _annotation_names(node.right)
+
+
+def _tuple_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.Tuple)
+    return _sequence_annotation_names(node.elts)
+
+
+def _list_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.List)
+    return _sequence_annotation_names(node.elts)
+
+
+def _constant_annotation_names(node: ast.AST) -> set[str]:
+    assert isinstance(node, ast.Constant)
+    return {node.value} if isinstance(node.value, str) else set()
+
+
+_ANNOTATION_NAME_HANDLERS = {
+    ast.Name: _name_annotation_names,
+    ast.Attribute: _attribute_names,
+    ast.Subscript: _subscript_annotation_names,
+    ast.BinOp: _binop_annotation_names,
+    ast.Tuple: _tuple_annotation_names,
+    ast.List: _list_annotation_names,
+    ast.Constant: _constant_annotation_names,
+}
+
+
+def _attribute_annotation_names(node: ast.Attribute) -> set[str]:
+    name = _name_for(node)
+    return {name, _leaf(name)} if name else set()
+
+
+def _sequence_annotation_names(elements: list[ast.expr]) -> set[str]:
+    result: set[str] = set()
+    for element in elements:
+        result.update(_annotation_names(element))
+    return result
+
+
+def _is_matching_name(name: str, abstraction: _ClassInfo) -> bool:
     return (
-        name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
+        name in {abstraction.fqn, abstraction.simple_name}
+        or _leaf(name) == abstraction.simple_name
     )
-
-
-def _matches_reference(name: str, abstraction: _ClassInfo) -> bool:
-    return _matches_name(name, abstraction)
 
 
 def _name_for(node: ast.AST) -> str:

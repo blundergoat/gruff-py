@@ -48,46 +48,69 @@ class UnusedParameterRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if has_framework_decorator(node):
-                continue
-            if is_abstract_method(node) or is_overload_stub(node):
-                continue
-            parents = parent_chain(node)
-            parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
-            if parent_cls is not None and (
-                has_framework_base(parent_cls) or _has_signature_constrained_base(parent_cls)
-            ):
-                continue
+        return [
+            _unused_parameter_finding(unit, definition, node, parents, arg_name, arg_lineno)
+            for node, parents, arg_name, arg_lineno in _unused_parameters(unit.tree)
+        ]
 
-            referenced = _collect_referenced_names(node.body)
-            unused = _unused_params(node, referenced)
-            for arg_name, arg_lineno in unused:
-                symbol = qualified_symbol(node, parents)
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=(f"Parameter {arg_name!r} in {symbol!r} is never referenced."),
-                        file_path=unit.file.display_path,
-                        line=arg_lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=node.end_lineno,
-                        symbol=symbol,
-                        remediation=(
-                            f"Remove the parameter or rename it to ``_{arg_name}`` "
-                            "to signal it is intentionally unused."
-                        ),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={"parameter": arg_name},
-                    ),
-                )
-        return findings
+
+def _unused_parameters(
+    tree: ast.AST,
+) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST], str, int]]:
+    findings: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST], str, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        parents = parent_chain(node)
+        if _should_skip_unused_parameter_check(node, parents):
+            continue
+        referenced = _collect_referenced_names(node.body)
+        for arg_name, arg_lineno in _unused_params(node, referenced):
+            findings.append((node, parents, arg_name, arg_lineno))
+    return findings
+
+
+def _should_skip_unused_parameter_check(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    parents: list[ast.AST],
+) -> bool:
+    if has_framework_decorator(node):
+        return True
+    if is_abstract_method(node) or is_overload_stub(node):
+        return True
+    parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
+    if parent_cls is None:
+        return False
+    return has_framework_base(parent_cls) or _has_signature_constrained_base(parent_cls)
+
+
+def _unused_parameter_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    parents: list[ast.AST],
+    arg_name: str,
+    arg_lineno: int,
+) -> Finding:
+    symbol = qualified_symbol(node, parents)
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Parameter {arg_name!r} in {symbol!r} is never referenced."),
+        file_path=unit.file.display_path,
+        line=arg_lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            f"Remove the parameter or rename it to ``_{arg_name}`` "
+            "to signal it is intentionally unused."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"parameter": arg_name},
+    )
 
 
 def _collect_referenced_names(body: list[ast.stmt]) -> set[str]:

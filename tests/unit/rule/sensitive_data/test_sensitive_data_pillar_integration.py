@@ -21,15 +21,18 @@ _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
 _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
 _JWT_SIGNATURE = "abcdef123456" + "abcdef"
 _ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
+_DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
+_SSN = "412" + "-78-" + "3491"
+_PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
 
 _DANGEROUS_FIXTURE = (
     f"AWS_KEY = '{_AWS_KEY}'\n"
     f"STRIPE = '{_STRIPE_KEY}'\n"
     f"JWT = '{_JWT_HEADER}.{_JWT_PAYLOAD}.{_JWT_SIGNATURE}'\n"
-    "DB = 'postgresql://admin:s3cret!@db.example.com/myapp'\n"
-    "SSN = '412-78-3491'\n"
+    f"DB = '{_DB_URL}'\n"
+    f"SSN = '{_SSN}'\n"
     f"ENTROPY = '{_ENTROPY_VALUE}'\n"
-    "PRIVATE = '-----BEGIN RSA PRIVATE KEY-----'\n"
+    f"PRIVATE = '{_PRIVATE_KEY_HEADER}'\n"
 )
 
 _EXPECTED_RULE_IDS = {

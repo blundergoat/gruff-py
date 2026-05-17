@@ -11,6 +11,7 @@ from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.pillar import Pillar
+from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.rule.context import RuleContext
@@ -33,18 +34,12 @@ def run_analysis(
     display_filter: FindingDisplayFilter,
 ) -> AnalysisReport:
     registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry)
-    diagnostics: list[RunDiagnostic] = []
-    config_loaded_from: str | None = None
-
-    if not no_config:
-        loader = ConfigLoader(project_root, config)
-        try:
-            config, source = loader.load(config_path)
-            if source is not None:
-                config_loaded_from = str(source)
-        except ConfigError as exc:
-            diagnostics.append(RunDiagnostic(type="config-error", message=str(exc)))
+    config, config_loaded_from, diagnostics = _load_analysis_config(
+        project_root=project_root,
+        config_path=config_path,
+        no_config=no_config,
+        registry=registry,
+    )
 
     discovery = SourceDiscovery(project_root)
     discovery_result = discovery.discover(
@@ -52,29 +47,10 @@ def run_analysis(
         include_ignored=include_ignored,
         configured_ignore_patterns=config.ignored_path_patterns,
     )
-    for missing in discovery_result.missing_paths:
-        diagnostics.append(
-            RunDiagnostic(type="missing-path", message="path not found", path=missing)
-        )
+    diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
 
-    parser = PythonFileParser()
-    units = []
-    files_parsed = 0
-    for source_file in discovery_result.files:
-        unit = parser.parse(source_file)
-        if unit.has_parse_errors():
-            for diagnostic in unit.diagnostics:
-                diagnostics.append(
-                    RunDiagnostic(
-                        type="parse-error",
-                        message=diagnostic.message,
-                        file_path=source_file.display_path,
-                        line=diagnostic.line,
-                    )
-                )
-        else:
-            files_parsed += 1
-        units.append(unit)
+    units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
+    diagnostics.extend(parse_diagnostics)
 
     context = RuleContext(project_root=str(project_root), config=config)
     findings = registry.analyse(units, context)
@@ -86,7 +62,7 @@ def run_analysis(
     score = ScoreCalculator().calculate(findings)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
-    display_findings = display_filter.apply(findings)
+    display_findings = display_filter.filter_findings(findings)
 
     return AnalysisReport(
         tool_version=VERSION,
@@ -104,6 +80,60 @@ def run_analysis(
         score=score,
         filters=display_filter,
     )
+
+
+def _load_analysis_config(
+    *,
+    project_root: Path,
+    config_path: Path | None,
+    no_config: bool,
+    registry: RuleRegistry,
+) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic]]:
+    config = AnalysisConfig.from_registry(registry)
+    if no_config:
+        return config, None, []
+
+    loader = ConfigLoader(project_root, config)
+    try:
+        loaded_config, source = loader.load(config_path)
+    except ConfigError as exc:
+        return config, None, [RunDiagnostic(type="config-error", message=str(exc))]
+
+    return loaded_config, str(source) if source is not None else None, []
+
+
+def _parse_sources(
+    source_files: tuple,
+) -> tuple[list[AnalysisUnit], int, list[RunDiagnostic]]:
+    parser = PythonFileParser()
+    units: list[AnalysisUnit] = []
+    diagnostics: list[RunDiagnostic] = []
+    files_parsed = 0
+
+    for source_file in source_files:
+        unit = parser.parse(source_file)
+        units.append(unit)
+        if not unit.has_parse_errors():
+            files_parsed += 1
+            continue
+        diagnostics.extend(
+            RunDiagnostic(
+                type="parse-error",
+                message=diagnostic.message,
+                file_path=source_file.display_path,
+                line=diagnostic.line,
+            )
+            for diagnostic in unit.diagnostics
+        )
+
+    return units, files_parsed, diagnostics
+
+
+def _missing_path_diagnostics(missing_paths: tuple[str, ...]) -> list[RunDiagnostic]:
+    return [
+        RunDiagnostic(type="missing-path", message="path not found", path=missing)
+        for missing in missing_paths
+    ]
 
 
 def compute_exit_code(

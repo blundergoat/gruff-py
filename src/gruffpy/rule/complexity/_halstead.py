@@ -21,9 +21,12 @@ this matches radon's expression-focused interpretation.
 
 import ast
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from gruffpy.rule.complexity._walks import FunctionLike
+
+OperandCollector = Callable[[ast.AST, list[str], list[str]], None]
 
 
 @dataclass(frozen=True)
@@ -95,33 +98,70 @@ def _collect_operands(node: ast.AST, operators: list[str], operands: list[str]) 
     operands. Nested operator nodes contribute their own operators and their
     own operands; nested non-operator nodes (Calls, Subscripts, etc.) are
     treated as opaque operand atoms via their constituent Names/Constants."""
+    operator_collector = _operator_collector(node)
+    if operator_collector is not None:
+        operator_collector(node, operators, operands)
+        return
+    if _has_collected_direct_operand(node, operands):
+        return
+    if _has_collected_opaque_operand(node, operands):
+        return
+    for child in ast.iter_child_nodes(node):
+        _collect_operands(child, operators, operands)
+
+
+def _operator_collector(node: ast.AST) -> OperandCollector | None:
     if isinstance(node, ast.BinOp):
-        operators.append(type(node.op).__name__)
-        _collect_operands(node.left, operators, operands)
-        _collect_operands(node.right, operators, operands)
-        return
+        return _collect_binop_operands
     if isinstance(node, ast.UnaryOp):
-        operators.append(type(node.op).__name__)
-        _collect_operands(node.operand, operators, operands)
-        return
+        return _collect_unary_operands
     if isinstance(node, ast.BoolOp):
-        operators.append(type(node.op).__name__)
-        for value in node.values:
-            _collect_operands(value, operators, operands)
-        return
+        return _collect_boolop_operands
     if isinstance(node, ast.Compare):
-        for op in node.ops:
-            operators.append(type(op).__name__)
-        _collect_operands(node.left, operators, operands)
-        for comparator in node.comparators:
-            _collect_operands(comparator, operators, operands)
-        return
+        return _collect_compare_operands
+    return None
+
+
+def _collect_binop_operands(node: ast.AST, operators: list[str], operands: list[str]) -> None:
+    assert isinstance(node, ast.BinOp)
+    operators.append(type(node.op).__name__)
+    _collect_operands(node.left, operators, operands)
+    _collect_operands(node.right, operators, operands)
+
+
+def _collect_unary_operands(node: ast.AST, operators: list[str], operands: list[str]) -> None:
+    assert isinstance(node, ast.UnaryOp)
+    operators.append(type(node.op).__name__)
+    _collect_operands(node.operand, operators, operands)
+
+
+def _collect_boolop_operands(node: ast.AST, operators: list[str], operands: list[str]) -> None:
+    assert isinstance(node, ast.BoolOp)
+    operators.append(type(node.op).__name__)
+    for value in node.values:
+        _collect_operands(value, operators, operands)
+
+
+def _collect_compare_operands(node: ast.AST, operators: list[str], operands: list[str]) -> None:
+    assert isinstance(node, ast.Compare)
+    for op in node.ops:
+        operators.append(type(op).__name__)
+    _collect_operands(node.left, operators, operands)
+    for comparator in node.comparators:
+        _collect_operands(comparator, operators, operands)
+
+
+def _has_collected_direct_operand(node: ast.AST, operands: list[str]) -> bool:
     if isinstance(node, ast.Name):
         operands.append(node.id)
-        return
+        return True
     if isinstance(node, ast.Constant):
         operands.append(repr(node.value))
-        return
+        return True
+    return False
+
+
+def _has_collected_opaque_operand(node: ast.AST, operands: list[str]) -> bool:
     # Call / Subscript / Attribute / Tuple / etc. — treat as opaque operand
     # atoms keyed by their `ast.unparse` representation. This matches radon's
     # behaviour: ``f(x) + g(x)`` contributes 2 operand atoms, not 4.
@@ -130,6 +170,5 @@ def _collect_operands(node: ast.AST, operators: list[str], operands: list[str]) 
             operands.append(ast.unparse(node))
         except Exception:  # pragma: no cover — defensive
             operands.append(type(node).__name__)
-        return
-    for child in ast.iter_child_nodes(node):
-        _collect_operands(child, operators, operands)
+        return True
+    return False

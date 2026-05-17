@@ -96,11 +96,11 @@ def _shape_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
         else:
             parts.append(type(node).__name__)
     blob = "|".join(parts).encode()
-    return hashlib.sha1(blob).hexdigest()
+    return hashlib.sha256(blob).hexdigest()
 
 
 def _constant_shape(value: Any) -> str:
     if isinstance(value, str) and ("\n" in value or len(value) > 80):
-        digest = hashlib.sha1(value.encode()).hexdigest()
+        digest = hashlib.sha256(value.encode()).hexdigest()
         return f"Const:str:{digest}"
     return f"Const:{type(value).__name__}"

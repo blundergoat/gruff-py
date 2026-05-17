@@ -1,0 +1,39 @@
+from pathlib import Path
+from typing import Any
+
+from gruffpy.config.yaml_loader import load_gruff_yaml
+from gruffpy.rule.registry import RuleRegistry
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_repo_gruff_yaml_references_all_builtin_rules_and_pillars() -> None:
+    data = load_gruff_yaml(_PROJECT_ROOT / ".gruff.yaml")
+    definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
+
+    assert data["selection"]["tiers"] == _unique(
+        definition.tier.value for definition in definitions
+    )
+    assert data["selection"]["pillars"] == _unique(
+        definition.pillar.value for definition in definitions
+    )
+    assert data["selection"]["rules"] == [definition.id for definition in definitions]
+    assert set(data["rules"]) == {definition.id for definition in definitions}
+
+    for definition in definitions:
+        section = data["rules"][definition.id]
+        assert section["enabled"] is definition.default_enabled
+        assert section.get("thresholds", {}) == _plain(definition.default_thresholds)
+        assert section.get("options", {}) == _plain(definition.default_options)
+
+
+def _unique(values: Any) -> list[str]:
+    return list(dict.fromkeys(values))
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_plain(item) for item in value]
+    return value

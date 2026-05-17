@@ -1,6 +1,6 @@
 import ast
 
-from gruffpy.rule.docs._helpers import raises_in_body
+from gruffpy.rule.docs._helpers import has_raise_in_body
 from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
@@ -49,4 +49,4 @@ def test_deep_expression_tree_does_not_overflow_raise_search():
         node = ast.UnaryOp(op=ast.Not(), operand=node)
     fn.body = [ast.Expr(value=node)]
 
-    assert raises_in_body(fn) is False
+    assert has_raise_in_body(fn) is False

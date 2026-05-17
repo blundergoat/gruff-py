@@ -112,7 +112,7 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
     if finding.metadata:
         properties["metadata"] = dict(finding.metadata)
 
-    result = {
+    return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index,
         "level": _level(finding.severity),
@@ -125,7 +125,6 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
         "partialFingerprints": {"gruffFingerprint": finding.fingerprint()},
         "properties": properties,
     }
-    return result
 
 
 def _physical_location(finding: Finding) -> dict[str, Any]:

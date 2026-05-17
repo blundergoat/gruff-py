@@ -42,42 +42,54 @@ class EmptyClassRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            if not _is_empty_body(node.body):
-                continue
-            if has_framework_base(node) or _is_marker_base_subclass(node):
-                continue
-            if has_dataclass_decorator(node):
-                continue
-            if has_framework_decorator(node):
-                continue
+        return [
+            _empty_class_finding(unit, definition, node)
+            for node in _empty_classes(unit.tree)
+        ]
 
-            parents = parent_chain(node)
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=f"Class {symbol!r} has an empty body.",
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Delete the class, or implement it; "
-                        "if it's a marker base, extend Protocol/ABC."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={},
-                ),
-            )
-        return findings
+
+def _empty_classes(tree: ast.AST) -> list[ast.ClassDef]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and _should_report_empty_class(node)
+    ]
+
+
+def _should_report_empty_class(node: ast.ClassDef) -> bool:
+    if not _is_empty_body(node.body):
+        return False
+    return not (
+        has_framework_base(node)
+        or _is_marker_base_subclass(node)
+        or has_dataclass_decorator(node)
+        or has_framework_decorator(node)
+    )
+
+
+def _empty_class_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.ClassDef,
+) -> Finding:
+    symbol = qualified_symbol(node, parent_chain(node))
+    return Finding(
+        rule_id=definition.id,
+        message=f"Class {symbol!r} has an empty body.",
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            "Delete the class, or implement it; if it's a marker base, extend Protocol/ABC."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )
 
 
 def _is_marker_base_subclass(node: ast.ClassDef) -> bool:

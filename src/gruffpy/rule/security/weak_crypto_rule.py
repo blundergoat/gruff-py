@@ -19,7 +19,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import (
     call_target_name,
-    name_smells_security,
+    has_security_smell,
 )
 
 _WEAK_ALGORITHMS: frozenset[str] = frozenset({"md5", "sha1"})
@@ -52,7 +52,7 @@ class WeakCryptoRule(Rule):
             algorithm = _weak_algorithm(target)
             if algorithm is None:
                 continue
-            if not _context_smells_security(node):
+            if not _has_security_context_smell(node):
                 continue
             findings.append(
                 Finding(
@@ -89,20 +89,20 @@ def _weak_algorithm(target: str) -> str | None:
     return None
 
 
-def _context_smells_security(call: ast.Call) -> bool:
+def _has_security_context_smell(call: ast.Call) -> bool:
     """True when *call* arguments or enclosing assignment target smell security."""
     for arg in call.args:
         for node in ast.walk(arg):
-            if isinstance(node, ast.Name) and name_smells_security(node.id):
+            if isinstance(node, ast.Name) and has_security_smell(node.id):
                 return True
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
             for target in parent.targets:
-                if isinstance(target, ast.Name) and name_smells_security(target.id):
+                if isinstance(target, ast.Name) and has_security_smell(target.id):
                     return True
             return False
         if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
-            return bool(name_smells_security(parent.name))
+            return bool(has_security_smell(parent.name))
         parent = getattr(parent, "parent", None)
     return False

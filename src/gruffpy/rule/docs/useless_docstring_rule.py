@@ -9,6 +9,7 @@ by convention.
 
 import ast
 import re
+from dataclasses import dataclass
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -76,6 +77,15 @@ _STOP_WORDS: frozenset[str] = frozenset(
 
 _MAX_CONTENT_WORDS = 5
 
+FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+@dataclass(frozen=True, slots=True)
+class _UselessDocstring:
+    node: FunctionNode
+    symbol: str
+    summary: str
+
 
 class UselessDocstringRule(Rule):
     ID = "docs.useless-docstring"
@@ -94,63 +104,89 @@ class UselessDocstringRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if not is_public(node.name) or is_dunder(node.name):
-                continue
-            if is_overload_stub(node) or is_property_setter_or_deleter(node):
-                continue
-            text = extract_docstring(node)
-            if text is None:
-                continue
-            parsed = parse_docstring(text)
-            if parsed is None:
-                continue
-            summary = parsed.summary
-            if not summary:
-                continue
-            if parsed.description or parsed.params or parsed.returns or parsed.raises:
-                # The docstring has content beyond a one-line summary — not useless.
-                continue
+        return [
+            _useless_docstring_finding(unit, definition, candidate)
+            for candidate in _useless_docstrings(unit.tree)
+        ]
 
-            content_words = _content_words(summary)
-            if not content_words or len(content_words) > _MAX_CONTENT_WORDS:
-                continue
-            name_tokens = set(lower_tokens(node.name))
-            param_tokens = {
-                tok for name in signature_param_names(node) for tok in lower_tokens(name)
-            }
-            allowed = name_tokens | param_tokens
-            if not all(word in allowed for word in content_words):
-                continue
 
-            parents = parent_chain(node)
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} docstring restates the signature "
-                        "without adding intent."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Describe what the function is *for*, not what its identifier already says."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"summary": summary},
-                ),
+def _useless_docstrings(tree: ast.AST) -> list[_UselessDocstring]:
+    candidates: list[_UselessDocstring] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        summary = _useless_summary(node)
+        if summary is not None:
+            candidates.append(
+                _UselessDocstring(
+                    node=node,
+                    symbol=qualified_symbol(node, parent_chain(node)),
+                    summary=summary,
+                )
             )
-        return findings
+    return candidates
+
+
+def _useless_summary(node: FunctionNode) -> str | None:
+    if _should_skip_useless_docstring_check(node):
+        return None
+    text = extract_docstring(node)
+    if text is None:
+        return None
+    parsed = parse_docstring(text)
+    if parsed is None or not parsed.summary:
+        return None
+    if parsed.description or parsed.params or parsed.returns or parsed.raises:
+        return None
+    if _is_signature_restatement(node, parsed.summary):
+        return parsed.summary
+    return None
+
+
+def _should_skip_useless_docstring_check(node: FunctionNode) -> bool:
+    return (
+        not is_public(node.name)
+        or is_dunder(node.name)
+        or is_overload_stub(node)
+        or is_property_setter_or_deleter(node)
+    )
+
+
+def _is_signature_restatement(node: FunctionNode, summary: str) -> bool:
+    content_words = _content_words(summary)
+    if not content_words or len(content_words) > _MAX_CONTENT_WORDS:
+        return False
+    allowed = set(lower_tokens(node.name)) | _parameter_tokens(node)
+    return all(word in allowed for word in content_words)
+
+
+def _parameter_tokens(node: FunctionNode) -> set[str]:
+    return {token for name in signature_param_names(node) for token in lower_tokens(name)}
+
+
+def _useless_docstring_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    candidate: _UselessDocstring,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"Function {candidate.symbol!r} docstring restates the signature "
+            "without adding intent."
+        ),
+        file_path=unit.file.display_path,
+        line=candidate.node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=candidate.node.end_lineno,
+        symbol=candidate.symbol,
+        remediation=("Describe what the function is *for*, not what its identifier already says."),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"summary": candidate.summary},
+    )
 
 
 def _content_words(summary: str) -> list[str]:

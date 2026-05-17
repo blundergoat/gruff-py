@@ -37,60 +37,74 @@ class ClassLengthRule(Rule):
         warning_threshold = settings.numeric_threshold("warning")
         error_threshold = settings.numeric_threshold("error")
 
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
+        return [
+            _class_length_finding(unit, definition, node, warning_threshold, error_threshold)
+            for node in _long_classes(unit.tree, warning_threshold)
+        ]
 
-            line_count = lines_for_size(node)
-            if line_count <= warning_threshold:
-                continue
 
-            if line_count > error_threshold:
-                severity = Severity.ERROR
-                threshold: int | float = error_threshold
-            else:
-                severity = Severity.WARNING
-                threshold = warning_threshold
+def _long_classes(tree: ast.AST, warning_threshold: int | float) -> list[ast.ClassDef]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and lines_for_size(node) > warning_threshold
+    ]
 
-            parents = parent_chain(node)
-            symbol = qualified_symbol(node, parents)
-            decorators = getattr(node, "decorator_list", None) or []
-            start_line = node.lineno
-            if decorators:
-                start_line = min(start_line, *(d.lineno for d in decorators))
 
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"Class {symbol!r} is {line_count} lines, "
-                        f"above the {severity.value} threshold of {_format_number(threshold)}."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=start_line,
-                    severity=severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Split the class along responsibility boundaries; "
-                        "extract collaborators or value objects."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={
-                        "lines": line_count,
-                        "measuredValue": line_count,
-                        "threshold": threshold,
-                        "thresholdDirection": "above",
-                        "thresholdType": severity.value,
-                    },
-                ),
-            )
+def _threshold_for(
+    measured: int | float,
+    warning_threshold: int | float,
+    error_threshold: int | float,
+) -> tuple[Severity, int | float]:
+    if measured > error_threshold:
+        return Severity.ERROR, error_threshold
+    return Severity.WARNING, warning_threshold
 
-        return findings
+
+def _class_length_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.ClassDef,
+    warning_threshold: int | float,
+    error_threshold: int | float,
+) -> Finding:
+    line_count = lines_for_size(node)
+    severity, threshold = _threshold_for(line_count, warning_threshold, error_threshold)
+    symbol = qualified_symbol(node, parent_chain(node))
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"Class {symbol!r} is {line_count} lines, "
+            f"above the {severity.value} threshold of {_format_number(threshold)}."
+        ),
+        file_path=unit.file.display_path,
+        line=_start_line(node),
+        severity=severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            "Split the class along responsibility boundaries; "
+            "extract collaborators or value objects."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={
+            "lines": line_count,
+            "measuredValue": line_count,
+            "threshold": threshold,
+            "thresholdDirection": "above",
+            "thresholdType": severity.value,
+        },
+    )
+
+
+def _start_line(node: ast.ClassDef) -> int:
+    decorators = getattr(node, "decorator_list", None) or []
+    if decorators:
+        return min(node.lineno, *(decorator.lineno for decorator in decorators))
+    return node.lineno
 
 
 def _format_number(value: int | float) -> str:

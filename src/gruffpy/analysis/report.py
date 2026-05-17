@@ -49,40 +49,53 @@ class AnalysisReport:
         report: dict[str, Any] = {
             "schemaVersion": ANALYSIS_SCHEMA_VERSION,
             "tool": {"name": TOOL_NAME, "version": self.tool_version},
-            "run": {
-                "format": self.format,
-                "failOn": self.fail_on,
-                "config": self.config_path,
-                "paths": list(self.requested_paths),
-                "filters": self.filters.to_dict() if self.filters is not None else None,
-            },
-            "summary": {
-                "filesDiscovered": self.files_discovered,
-                "filesParsed": self.files_parsed,
-                "ignoredPaths": len(self.ignored_paths),
-                "missingPaths": len(self.missing_paths),
-                "parseErrors": self.parse_error_count(),
-                "findings": self.finding_counts(),
-                "exitCode": self.exit_code,
-            },
+            "run": _run_payload(self),
+            "summary": _summary_payload(self),
             "ignoredPaths": list(self.ignored_paths),
             "missingPaths": list(self.missing_paths),
             "diagnostics": [d.to_dict() for d in self.diagnostics],
             "findings": [f.to_dict() for f in self.findings],
         }
-        if self.mutation is not None:
-            report["mutation"] = _to_report_value(self.mutation)
-        if self.score is not None:
-            report["score"] = self.score.to_dict()
-        if self.diff is not None:
-            report["diff"] = _to_report_value(self.diff)
-        if self.trend is not None:
-            report["trend"] = _to_report_value(self.trend)
-        if self.baseline is not None:
-            report["baseline"] = _to_report_value(self.baseline)
-        if self.review is not None:
-            report["review"] = _to_report_value(self.review)
+        report.update(_optional_payloads(self))
         return report
+
+
+def _run_payload(report: AnalysisReport) -> dict[str, Any]:
+    return {
+        "format": report.format,
+        "failOn": report.fail_on,
+        "config": report.config_path,
+        "paths": list(report.requested_paths),
+        "filters": report.filters.to_dict() if report.filters is not None else None,
+    }
+
+
+def _summary_payload(report: AnalysisReport) -> dict[str, Any]:
+    return {
+        "filesDiscovered": report.files_discovered,
+        "filesParsed": report.files_parsed,
+        "ignoredPaths": len(report.ignored_paths),
+        "missingPaths": len(report.missing_paths),
+        "parseErrors": report.parse_error_count(),
+        "findings": report.finding_counts(),
+        "exitCode": report.exit_code,
+    }
+
+
+def _optional_payloads(report: AnalysisReport) -> dict[str, Any]:
+    optional_sections = {
+        "mutation": report.mutation,
+        "score": report.score,
+        "diff": report.diff,
+        "trend": report.trend,
+        "baseline": report.baseline,
+        "review": report.review,
+    }
+    return {
+        key: _to_report_value(value)
+        for key, value in optional_sections.items()
+        if value is not None
+    }
 
 
 def _to_report_value(value: Any) -> Any:

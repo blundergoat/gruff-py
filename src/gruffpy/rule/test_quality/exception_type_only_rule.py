@@ -41,44 +41,57 @@ class ExceptionTypeOnlyRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
-            for node in walk_test_body(fn):
-                if not isinstance(node, ast.Call):
-                    continue
-                target = call_target_name(node)
-                if target is None or target.split(".")[-1] not in {"raises", "warns"}:
-                    continue
-                if not node.args:
-                    continue
-                first = node.args[0]
-                if not _is_wide_exception(first):
-                    continue
-                if call_keyword(node, "match") is not None:
-                    continue
-                parents = parent_chain(fn)
-                symbol = qualified_symbol(fn, parents)
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message=(f"Test {symbol!r} catches a wide exception without `match=`."),
-                        file_path=unit.file.display_path,
-                        line=node.lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=node.end_lineno,
-                        symbol=symbol,
-                        remediation=(
-                            "Narrow the exception type or add `match='expected substring'` "
-                            "to bind the assertion to the message."
-                        ),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={},
-                    ),
-                )
-        return findings
+        return [
+            _exception_type_only_finding(unit, definition, fn, node)
+            for fn, node in _type_only_exception_assertions(unit)
+        ]
+
+
+def _type_only_exception_assertions(
+    unit: AnalysisUnit,
+) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.Call]]:
+    findings: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.Call]] = []
+    for fn, _scope in test_functions(unit):
+        for node in walk_test_body(fn):
+            if isinstance(node, ast.Call) and _is_type_only_exception_assertion(node):
+                findings.append((fn, node))
+    return findings
+
+
+def _is_type_only_exception_assertion(node: ast.Call) -> bool:
+    target = call_target_name(node)
+    if target is None or target.split(".")[-1] not in {"raises", "warns"}:
+        return False
+    if not node.args or not _is_wide_exception(node.args[0]):
+        return False
+    return call_keyword(node, "match") is None
+
+
+def _exception_type_only_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+    node: ast.Call,
+) -> Finding:
+    symbol = qualified_symbol(fn, parent_chain(fn))
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Test {symbol!r} catches a wide exception without `match=`."),
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            "Narrow the exception type or add `match='expected substring'` "
+            "to bind the assertion to the message."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )
 
 
 def _is_wide_exception(node: ast.expr) -> bool:

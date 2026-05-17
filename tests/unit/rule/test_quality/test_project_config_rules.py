@@ -112,7 +112,7 @@ def test_opt_in_rules_default_off():
         assert rule_cls().definition().default_enabled is False
 
 
-def test_multiple_aaa_cycles_requires_opt_in(tmp_path: Path):
+def test_multiple_aaa_cycles_requires_opt_in():
     """Default-off rules don't fire through the registry unless explicitly enabled."""
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
     # Verify the rule is in defaults() but its settings.enabled is False.

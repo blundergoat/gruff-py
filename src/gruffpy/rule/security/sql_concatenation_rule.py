@@ -42,40 +42,52 @@ class SqlConcatenationRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.Call):
-                continue
-            target = call_target_name(node)
-            if target is None:
-                continue
-            leaf = target.split(".")[-1]
-            if leaf not in _SQL_EXECUTE_LEAVES:
-                continue
-            if not node.args:
-                continue
-            first = node.args[0]
-            if not is_dynamic_string(first):
-                continue
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"`{target}()` receives a dynamic SQL string — use parameterised arguments."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    remediation=(
-                        "Pass values as a separate parameter sequence: "
-                        "``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"target": target},
-                ),
-            )
-        return findings
+        return [
+            _sql_concatenation_finding(unit, definition, node, target)
+            for node, target in _dynamic_sql_calls(unit.tree)
+        ]
+
+
+def _dynamic_sql_calls(tree: ast.AST) -> list[tuple[ast.Call, str]]:
+    findings: list[tuple[ast.Call, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        target = _dynamic_sql_target(node)
+        if target is not None:
+            findings.append((node, target))
+    return findings
+
+
+def _dynamic_sql_target(node: ast.Call) -> str | None:
+    target = call_target_name(node)
+    if target is None or target.split(".")[-1] not in _SQL_EXECUTE_LEAVES:
+        return None
+    if not node.args or not is_dynamic_string(node.args[0]):
+        return None
+    return target
+
+
+def _sql_concatenation_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.Call,
+    target: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(f"`{target}()` receives a dynamic SQL string — use parameterised arguments."),
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        remediation=(
+            "Pass values as a separate parameter sequence: "
+            "``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"target": target},
+    )

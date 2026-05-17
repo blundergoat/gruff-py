@@ -7,6 +7,7 @@ return the same verdict for every probed path.
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -16,12 +17,18 @@ from gruffpy.source.gitignore import GitignoreMatcher
 _GIT = shutil.which("git")
 
 
+@dataclass(frozen=True, slots=True)
+class _PathProbe:
+    rel: str
+    is_dir: bool
+
+
 def _write(path: Path, text: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
-def _git_check_ignored(repo: Path, target: Path) -> bool:
+def _is_git_ignored(repo: Path, target: Path) -> bool:
     """Return True iff ``git check-ignore`` says *target* is ignored in *repo*."""
     assert _GIT is not None
     result = subprocess.run(
@@ -44,26 +51,26 @@ def _init_repo(root: Path) -> None:
     )
 
 
-_PROBES: tuple[tuple[str, bool], ...] = (
+_PATH_PROBES: tuple[_PathProbe, ...] = (
     # path relative to root, is_dir
-    ("app.py", False),
-    ("ignored.bin", False),
-    ("keep.bin", False),
-    ("build", True),
-    ("build/out.py", False),
-    ("pkg/build", True),
-    ("pkg/build/out.py", False),
-    ("pkg/.gitignore", False),
-    ("pkg/keep.bin", False),
-    ("pkg/noise.bin", False),
-    ("vendor", True),
-    ("vendor/keep.py", False),
-    ("anchored/build", True),
-    ("anchored/build/out.py", False),
-    ("docs/notes.md", False),
-    ("docs/temp/cache.txt", False),
-    ("a/temp/file.py", False),
-    ("b/deep/temp/file.py", False),
+    _PathProbe("app.py", False),
+    _PathProbe("ignored.bin", False),
+    _PathProbe("keep.bin", False),
+    _PathProbe("build", True),
+    _PathProbe("build/out.py", False),
+    _PathProbe("pkg/build", True),
+    _PathProbe("pkg/build/out.py", False),
+    _PathProbe("pkg/.gitignore", False),
+    _PathProbe("pkg/keep.bin", False),
+    _PathProbe("pkg/noise.bin", False),
+    _PathProbe("vendor", True),
+    _PathProbe("vendor/keep.py", False),
+    _PathProbe("anchored/build", True),
+    _PathProbe("anchored/build/out.py", False),
+    _PathProbe("docs/notes.md", False),
+    _PathProbe("docs/temp/cache.txt", False),
+    _PathProbe("a/temp/file.py", False),
+    _PathProbe("b/deep/temp/file.py", False),
 )
 
 
@@ -115,13 +122,14 @@ def test_matcher_matches_git_check_ignore_on_corpus(corpus: Path) -> None:
     matcher = GitignoreMatcher.from_root(corpus)
 
     disagreements: list[str] = []
-    for rel, is_dir in _PROBES:
-        target = corpus / rel
-        git_verdict = _git_check_ignored(corpus, target)
-        matcher_verdict = matcher.is_ignored(target, is_dir=is_dir)
+    for probe in _PATH_PROBES:
+        target = corpus / probe.rel
+        git_verdict = _is_git_ignored(corpus, target)
+        matcher_verdict = matcher.is_ignored(target, is_dir=probe.is_dir)
         if git_verdict != matcher_verdict:
             disagreements.append(
-                f"  {rel} (is_dir={is_dir}): git={git_verdict} matcher={matcher_verdict}"
+                f"  {probe.rel} (is_dir={probe.is_dir}): "
+                f"git={git_verdict} matcher={matcher_verdict}"
             )
 
     assert not disagreements, "GitignoreMatcher disagrees with git check-ignore:\n" + "\n".join(

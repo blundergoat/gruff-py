@@ -19,6 +19,7 @@ Confidence: MEDIUM. False positives are still possible on metaprogramming
 """
 
 import ast
+from dataclasses import dataclass
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -38,6 +39,15 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+
+FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+@dataclass(frozen=True, slots=True)
+class _PrivateFunctionCandidate:
+    node: FunctionNode
+    parents: list[ast.AST]
+    scope: ast.AST
 
 
 class UnusedPrivateFunctionRule(Rule):
@@ -60,59 +70,84 @@ class UnusedPrivateFunctionRule(Rule):
         all_names = module_all_names(unit.tree)
 
         findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        for raw_node in ast.walk(unit.tree):
+            candidate = _private_function_candidate(raw_node, unit.tree, all_names)
+            if candidate is None:
                 continue
-            if not _is_private(node.name):
+            if _is_name_referenced_outside_def(
+                candidate.node.name,
+                candidate.scope,
+                candidate.node,
+            ) or _is_name_referenced_by_getattr(
+                candidate.node.name, candidate.scope, candidate.node
+            ):
                 continue
-            if _is_dunder(node.name):
-                continue
-            if node.name in all_names:
-                continue
-            if is_abstract_method(node) or is_overload_stub(node):
-                continue
-            if has_framework_decorator(node):
-                continue
-            parents = parent_chain(node)
-            if is_protocol_method_stub(node, parents):
-                continue
-
-            parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
-            if parent_cls is not None and has_framework_base(parent_cls):
-                continue
-
-            scope = parent_cls if parent_cls is not None else unit.tree
-            if _name_referenced_outside_def(
-                node.name,
-                scope,
-                node,
-            ) or _name_referenced_by_getattr(node.name, scope, node):
-                continue
-
-            symbol = qualified_symbol(node, parents)
-            findings.append(
-                Finding(
-                    rule_id=definition.id,
-                    message=(
-                        f"Private function {symbol!r} is never called in its enclosing scope."
-                    ),
-                    file_path=unit.file.display_path,
-                    line=node.lineno,
-                    severity=definition.default_severity,
-                    pillar=definition.pillar,
-                    tier=definition.tier,
-                    confidence=definition.confidence,
-                    end_line=node.end_lineno,
-                    symbol=symbol,
-                    remediation=(
-                        "Delete the function or remove the leading underscore "
-                        "if external callers are expected."
-                    ),
-                    secondary_pillars=definition.secondary_pillars,
-                    metadata={"name": node.name},
-                ),
-            )
+            findings.append(_unused_private_function_finding(unit, definition, candidate))
         return findings
+
+
+def _private_function_candidate(
+    node: ast.AST,
+    tree: ast.AST,
+    all_names: set[str],
+) -> _PrivateFunctionCandidate | None:
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return None
+
+    parents = parent_chain(node)
+    parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
+    if _should_skip_private_function(node, parents, parent_cls, all_names):
+        return None
+
+    return _PrivateFunctionCandidate(
+        node=node,
+        parents=parents,
+        scope=parent_cls if parent_cls is not None else tree,
+    )
+
+
+def _should_skip_private_function(
+    node: FunctionNode,
+    parents: list[ast.AST],
+    parent_cls: ast.ClassDef | None,
+    all_names: set[str],
+) -> bool:
+    return (
+        not _is_private(node.name)
+        or _is_dunder(node.name)
+        or node.name in all_names
+        or is_abstract_method(node)
+        or is_overload_stub(node)
+        or has_framework_decorator(node)
+        or is_protocol_method_stub(node, parents)
+        or (parent_cls is not None and has_framework_base(parent_cls))
+    )
+
+
+def _unused_private_function_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    candidate: _PrivateFunctionCandidate,
+) -> Finding:
+    symbol = qualified_symbol(candidate.node, candidate.parents)
+    return Finding(
+        rule_id=definition.id,
+        message=(f"Private function {symbol!r} is never called in its enclosing scope."),
+        file_path=unit.file.display_path,
+        line=candidate.node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=candidate.node.end_lineno,
+        symbol=symbol,
+        remediation=(
+            "Delete the function or remove the leading underscore "
+            "if external callers are expected."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"name": candidate.node.name},
+    )
 
 
 def _is_private(name: str) -> bool:
@@ -123,7 +158,7 @@ def _is_dunder(name: str) -> bool:
     return name.startswith("__") and name.endswith("__") and len(name) > 4
 
 
-def _name_referenced_outside_def(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
+def _is_name_referenced_outside_def(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
     """Return True if *name* appears as a Name/Attribute within *scope*
     anywhere except inside *defining_node* itself (which contains the name
     on its own ``name`` field — not a reference)."""
@@ -139,7 +174,7 @@ def _name_referenced_outside_def(name: str, scope: ast.AST, defining_node: ast.A
     return False
 
 
-def _name_referenced_by_getattr(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
+def _is_name_referenced_by_getattr(name: str, scope: ast.AST, defining_node: ast.AST) -> bool:
     for node in ast.walk(scope):
         if node is defining_node or _is_descendant_of(node, defining_node):
             continue
@@ -149,12 +184,12 @@ def _name_referenced_by_getattr(name: str, scope: ast.AST, defining_node: ast.AS
             continue
         if len(node.args) < 2:
             continue
-        if _getattr_name_matches(name, node.args[1]):
+        if _does_getattr_name_match(name, node.args[1]):
             return True
     return False
 
 
-def _getattr_name_matches(name: str, value: ast.AST) -> bool:
+def _does_getattr_name_match(name: str, value: ast.AST) -> bool:
     if isinstance(value, ast.Constant) and isinstance(value.value, str):
         return value.value == name
     if isinstance(value, ast.JoinedStr):

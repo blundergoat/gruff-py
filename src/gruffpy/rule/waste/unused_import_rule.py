@@ -55,7 +55,7 @@ class UnusedImportRule(Rule):
         for name, alias_node in imports.items():
             if name in used_names or name in all_names:
                 continue
-            if _line_has_noqa(source_lines, alias_node.lineno):
+            if _has_noqa(source_lines, alias_node.lineno):
                 continue
             findings.append(
                 Finding(
@@ -146,7 +146,7 @@ def _string_annotation_value(node: ast.AST) -> str | None:
     return None
 
 
-def _line_has_noqa(source_lines: list[str], lineno: int) -> bool:
+def _has_noqa(source_lines: list[str], lineno: int) -> bool:
     if lineno < 1 or lineno > len(source_lines):
         return False
     return "# noqa" in source_lines[lineno - 1].lower()

@@ -77,7 +77,7 @@ class TautologicalTypeAssertionRule(Rule):
 
 
 def _is_tautology(expr: ast.expr) -> bool:
-    # isinstance(x, type(x))
+    # Match always-true runtime type identity assertions.
     if isinstance(expr, ast.Call):
         target = call_target_name(expr)
         if target == "isinstance" and len(expr.args) == 2:
@@ -86,30 +86,30 @@ def _is_tautology(expr: ast.expr) -> bool:
                 isinstance(ty, ast.Call)
                 and call_target_name(ty) == "type"
                 and len(ty.args) == 1
-                and _same_expr(obj, ty.args[0])
+                and _is_same_expr(obj, ty.args[0])
             ):
                 return True
-    # type(x) is type(x) / x.__class__ is x.__class__
+    # Match comparisons where both sides are the same type expression.
     return (
         isinstance(expr, ast.Compare)
         and len(expr.ops) == 1
         and isinstance(expr.ops[0], ast.Is | ast.Eq)
-        and _same_expr(expr.left, expr.comparators[0])
+        and _is_same_expr(expr.left, expr.comparators[0])
     )
 
 
-def _same_expr(a: ast.expr, b: ast.expr) -> bool:
+def _is_same_expr(a: ast.expr, b: ast.expr) -> bool:
     """Shallow structural equality — good enough for tautology detection."""
     if type(a) is not type(b):
         return False
     if isinstance(a, ast.Name) and isinstance(b, ast.Name):
         return a.id == b.id
     if isinstance(a, ast.Attribute) and isinstance(b, ast.Attribute):
-        return a.attr == b.attr and _same_expr(a.value, b.value)
+        return a.attr == b.attr and _is_same_expr(a.value, b.value)
     if isinstance(a, ast.Call) and isinstance(b, ast.Call):
         return (
             call_target_name(a) == call_target_name(b)
             and len(a.args) == len(b.args)
-            and all(_same_expr(x, y) for x, y in zip(a.args, b.args, strict=False))
+            and all(_is_same_expr(x, y) for x, y in zip(a.args, b.args, strict=False))
         )
     return False

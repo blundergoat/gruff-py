@@ -44,35 +44,48 @@ class HeaderInjectionRule(Rule):
         if not (frameworks_in_use(unit.tree) & _FRAMEWORK_GATE):
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        for node in ast.walk(unit.tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not isinstance(target, ast.Subscript):
-                    continue
-                value = target.value
-                if not (isinstance(value, ast.Attribute) and value.attr == "headers"):
-                    continue
-                if is_string_literal(target.slice):
-                    continue
-                findings.append(
-                    Finding(
-                        rule_id=definition.id,
-                        message="Response header key is dynamic — header injection risk.",
-                        file_path=unit.file.display_path,
-                        line=node.lineno,
-                        severity=definition.default_severity,
-                        pillar=definition.pillar,
-                        tier=definition.tier,
-                        confidence=definition.confidence,
-                        end_line=node.end_lineno,
-                        remediation=(
-                            "Use literal header names. If a runtime-chosen name is "
-                            "essential, validate against an explicit allowlist."
-                        ),
-                        secondary_pillars=definition.secondary_pillars,
-                        metadata={},
-                    ),
-                )
-        return findings
+        return [
+            _header_injection_finding(unit, definition, node)
+            for node in _dynamic_header_assignments(unit.tree)
+        ]
+
+
+def _dynamic_header_assignments(tree: ast.AST) -> list[ast.Assign]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign) and any(_is_dynamic_header_target(t) for t in node.targets)
+    ]
+
+
+def _is_dynamic_header_target(target: ast.expr) -> bool:
+    if not isinstance(target, ast.Subscript):
+        return False
+    value = target.value
+    if not (isinstance(value, ast.Attribute) and value.attr == "headers"):
+        return False
+    return not is_string_literal(target.slice)
+
+
+def _header_injection_finding(
+    unit: AnalysisUnit,
+    definition: RuleDefinition,
+    node: ast.Assign,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message="Response header key is dynamic — header injection risk.",
+        file_path=unit.file.display_path,
+        line=node.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=node.end_lineno,
+        remediation=(
+            "Use literal header names. If a runtime-chosen name is "
+            "essential, validate against an explicit allowlist."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={},
+    )

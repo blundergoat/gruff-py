@@ -31,10 +31,16 @@ _compute_counter = {"count": 0}
 
 
 def scopes_for_unit(unit: AnalysisUnit) -> ScopeMap:
-    """Return the scope classification for every function in *unit*'s tree.
+    """Return the scope classification for every function in a unit.
 
     Memoised: subsequent calls for the same tree return the cached map without
     re-walking. Non-Python units (``tree is None``) yield an empty map.
+
+    Args:
+        unit: Parsed analysis unit to classify.
+
+    Returns:
+        Mapping from function nodes to their test scope.
     """
     tree = unit.tree
     if tree is None:
@@ -49,17 +55,34 @@ def scopes_for_unit(unit: AnalysisUnit) -> ScopeMap:
     return computed
 
 
-def test_functions(
+def iter_test_functions(
     unit: AnalysisUnit,
 ) -> Iterator[tuple[ast.FunctionDef | ast.AsyncFunctionDef, TestScope]]:
-    """Yield (function, scope) pairs for every function in test scope."""
+    """Yield function/scope pairs for every function in test scope.
+
+    Args:
+        unit: Parsed analysis unit to inspect.
+
+    Returns:
+        Iterator of test function nodes and their classified scopes.
+    """
     for fn, scope in scopes_for_unit(unit).items():
         if scope.kind is not TestScopeKind.NON_TEST:
             yield fn, scope
 
 
+test_functions = iter_test_functions
+
+
 def is_assertion_call(call: ast.Call) -> bool:
-    """True for ``self.assertEqual(...)``, ``self.assertX(...)``, ``pytest.raises``, etc."""
+    """Return whether a call expression is an assertion helper.
+
+    Args:
+        call: Call expression to inspect.
+
+    Returns:
+        True for ``self.assertX(...)``, ``pytest.raises``, and related helpers.
+    """
     func = call.func
     if isinstance(func, ast.Attribute):
         if func.attr.startswith("assert"):
@@ -72,7 +95,14 @@ def is_assertion_call(call: ast.Call) -> bool:
 
 
 def is_skip_marker(decorator: ast.AST) -> bool:
-    """True if *decorator* is ``@pytest.mark.skip(...)`` / ``skipif`` / ``unittest.skip``."""
+    """Return whether a decorator is a recognised skip marker.
+
+    Args:
+        decorator: Decorator expression to inspect.
+
+    Returns:
+        True for ``@pytest.mark.skip(...)``, ``skipif``, or ``unittest.skip``.
+    """
     name = _dotted_name(decorator)
     if name is None:
         return False
@@ -86,6 +116,9 @@ def compute_count() -> int:
     Test-only instrumentation. The memoisation gate test diffs this counter
     before/after running all test-quality rules on the same unit and asserts
     the delta is 1, not N.
+
+    Returns:
+        Number of complete scope-map computations performed.
     """
     return _compute_counter["count"]
 
@@ -114,10 +147,16 @@ _MOCK_FACTORY_LEAVES: frozenset[str] = frozenset(
 
 
 def is_mock_factory_call(call: ast.Call) -> bool:
-    """True when *call* is a ``Mock()`` / ``MagicMock()`` / ``patch(...)`` / etc.
+    """Return whether a call constructs or opens a mock object.
 
     Recognises both ``Mock()`` and ``unittest.mock.Mock()`` shapes, plus
     ``mocker.patch(...)`` from pytest-mock.
+
+    Args:
+        call: Call expression to inspect.
+
+    Returns:
+        True when the call is a ``Mock()``, ``MagicMock()``, ``patch(...)``, or equivalent.
     """
     target = _dotted_name(call.func)
     if target is None:
@@ -131,34 +170,59 @@ def is_mock_factory_call(call: ast.Call) -> bool:
 
 
 def find_mock_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, ast.AST]:
-    """Return ``{name: assignment_node}`` for every variable bound to a mock factory.
+    """Return variable bindings created from mock factories.
 
     Catches ``mock = Mock()``, ``thing: Foo = MagicMock()``, and the with-statement
     ``with patch(...) as mock:`` shape.
+
+    Args:
+        fn: Test function to inspect.
+
+    Returns:
+        Mapping of variable name to the assignment or with-item node that created it.
     """
     bindings: dict[str, ast.AST] = {}
     for node in walk_test_body(fn):
-        if isinstance(node, ast.Assign):
-            if isinstance(node.value, ast.Call) and is_mock_factory_call(node.value):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        bindings[target.id] = node
-        elif isinstance(node, ast.AnnAssign):
-            if (
-                node.value is not None
-                and isinstance(node.value, ast.Call)
-                and is_mock_factory_call(node.value)
-                and isinstance(node.target, ast.Name)
-            ):
-                bindings[node.target.id] = node
-        elif isinstance(node, ast.With):
-            for item in node.items:
-                if (
-                    isinstance(item.context_expr, ast.Call)
-                    and is_mock_factory_call(item.context_expr)
-                    and isinstance(item.optional_vars, ast.Name)
-                ):
-                    bindings[item.optional_vars.id] = item
+        bindings.update(_mock_bindings_for_node(node))
+    return bindings
+
+
+def _mock_bindings_for_node(node: ast.AST) -> dict[str, ast.AST]:
+    if isinstance(node, ast.Assign):
+        return _assign_mock_bindings(node)
+    if isinstance(node, ast.AnnAssign):
+        return _ann_assign_mock_bindings(node)
+    if isinstance(node, ast.With):
+        return _with_mock_bindings(node)
+    return {}
+
+
+def _assign_mock_bindings(node: ast.Assign) -> dict[str, ast.AST]:
+    if not isinstance(node.value, ast.Call) or not is_mock_factory_call(node.value):
+        return {}
+    return {target.id: node for target in node.targets if isinstance(target, ast.Name)}
+
+
+def _ann_assign_mock_bindings(node: ast.AnnAssign) -> dict[str, ast.AST]:
+    if (
+        node.value is None
+        or not isinstance(node.value, ast.Call)
+        or not is_mock_factory_call(node.value)
+        or not isinstance(node.target, ast.Name)
+    ):
+        return {}
+    return {node.target.id: node}
+
+
+def _with_mock_bindings(node: ast.With) -> dict[str, ast.AST]:
+    bindings: dict[str, ast.AST] = {}
+    for item in node.items:
+        if (
+            isinstance(item.context_expr, ast.Call)
+            and is_mock_factory_call(item.context_expr)
+            and isinstance(item.optional_vars, ast.Name)
+        ):
+            bindings[item.optional_vars.id] = item
     return bindings
 
 
@@ -168,48 +232,58 @@ def find_mock_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, 
 def walk_test_body(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> Iterator[ast.AST]:
-    """Yield every node in *fn*'s body, recursing through control flow but
-    stopping at nested function / lambda boundaries.
+    """Yield every node in a test function body.
 
     A nested ``def helper(): ...`` inside a test is yielded (so rules can see
     it), but the nested function's body is not — its statements belong to the
     inner scope, not the test.
+
+    Args:
+        fn: Test function to walk.
+
+    Returns:
+        Iterator over body nodes, excluding nested function bodies.
     """
 
-    def visit(node: ast.AST) -> Iterator[ast.AST]:
+    def _visit(node: ast.AST) -> Iterator[ast.AST]:
         yield node
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
             return
         for child in ast.iter_child_nodes(node):
-            yield from visit(child)
+            yield from _visit(child)
 
     for stmt in fn.body:
-        yield from visit(stmt)
+        yield from _visit(stmt)
 
 
 def _compute_scopes(tree: ast.AST, file_is_conftest: bool) -> ScopeMap:
     """One-shot walk: classify every function in *tree* into a TestScope."""
-    result: ScopeMap = {}
-    _walk(tree, parent_class=None, file_is_conftest=file_is_conftest, result=result)
-    return result
+    scope_map: ScopeMap = {}
+    _walk(tree, parent_class=None, file_is_conftest=file_is_conftest, scope_map=scope_map)
+    return scope_map
 
 
 def _walk(
     node: ast.AST,
     parent_class: ast.ClassDef | None,
     file_is_conftest: bool,
-    result: ScopeMap,
+    scope_map: ScopeMap,
 ) -> None:
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         scope = _classify_function(node, parent_class, file_is_conftest)
-        result[node] = scope
+        scope_map[node] = scope
         return
     if isinstance(node, ast.ClassDef):
         for child in ast.iter_child_nodes(node):
-            _walk(child, parent_class=node, file_is_conftest=file_is_conftest, result=result)
+            _walk(child, parent_class=node, file_is_conftest=file_is_conftest, scope_map=scope_map)
         return
     for child in ast.iter_child_nodes(node):
-        _walk(child, parent_class=parent_class, file_is_conftest=file_is_conftest, result=result)
+        _walk(
+            child,
+            parent_class=parent_class,
+            file_is_conftest=file_is_conftest,
+            scope_map=scope_map,
+        )
 
 
 def _classify_function(
@@ -221,31 +295,42 @@ def _classify_function(
     if file_is_conftest:
         return TestScope(kind=TestScopeKind.CONFTEST, is_async=is_async, parent_class_name=None)
     if parent_class is None:
-        if fn.name.startswith("test_"):
-            return TestScope(kind=TestScopeKind.BARE_TEST_FUNC, is_async=is_async)
-        return TestScope(kind=TestScopeKind.NON_TEST, is_async=is_async)
+        return _bare_function_scope(fn, is_async)
     parent_name = parent_class.name
     if _is_unittest_testcase(parent_class):
-        if fn.name.startswith("test"):
-            return TestScope(
-                kind=TestScopeKind.UNITTEST_TEST_METHOD,
-                is_async=is_async,
-                parent_class_name=parent_name,
-            )
-        return TestScope(
-            kind=TestScopeKind.NON_TEST, is_async=is_async, parent_class_name=parent_name
+        return _class_method_scope(
+            is_test=fn.name.startswith("test"),
+            test_kind=TestScopeKind.UNITTEST_TEST_METHOD,
+            is_async=is_async,
+            parent_name=parent_name,
         )
     if parent_name.startswith("Test"):
-        if fn.name.startswith("test_"):
-            return TestScope(
-                kind=TestScopeKind.PYTEST_TEST_METHOD,
-                is_async=is_async,
-                parent_class_name=parent_name,
-            )
-        return TestScope(
-            kind=TestScopeKind.NON_TEST, is_async=is_async, parent_class_name=parent_name
+        return _class_method_scope(
+            is_test=fn.name.startswith("test_"),
+            test_kind=TestScopeKind.PYTEST_TEST_METHOD,
+            is_async=is_async,
+            parent_name=parent_name,
         )
     return TestScope(kind=TestScopeKind.NON_TEST, is_async=is_async, parent_class_name=parent_name)
+
+
+def _bare_function_scope(fn: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool) -> TestScope:
+    kind = TestScopeKind.BARE_TEST_FUNC if fn.name.startswith("test_") else TestScopeKind.NON_TEST
+    return TestScope(kind=kind, is_async=is_async)
+
+
+def _class_method_scope(
+    *,
+    is_test: bool,
+    test_kind: TestScopeKind,
+    is_async: bool,
+    parent_name: str,
+) -> TestScope:
+    return TestScope(
+        kind=test_kind if is_test else TestScopeKind.NON_TEST,
+        is_async=is_async,
+        parent_class_name=parent_name,
+    )
 
 
 def _is_unittest_testcase(cls: ast.ClassDef) -> bool:

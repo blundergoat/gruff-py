@@ -55,7 +55,7 @@ class BooleanPrefixRule(Rule):
                     continue
                 if _has_override_decorator(node):
                     continue
-                if not _returns_bool(node):
+                if not _has_bool_return(node):
                     continue
                 if _has_boolean_prefix(node.name):
                     continue
@@ -65,7 +65,7 @@ class BooleanPrefixRule(Rule):
             elif (
                 isinstance(node, ast.AnnAssign)
                 and isinstance(node.target, ast.Name)
-                and _annotation_is_bool(node.annotation)
+                and _is_bool_annotation(node.annotation)
                 and not _has_boolean_prefix(node.target.id)
                 and not _is_dunder(node.target.id)
             ):
@@ -124,14 +124,14 @@ def _has_boolean_prefix(name: str) -> bool:
     return first.lower() in _BOOLEAN_PREFIXES
 
 
-def _returns_bool(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def _has_bool_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     ret = fn.returns
     if ret is None:
         return False
-    return _annotation_is_bool(ret)
+    return _is_bool_annotation(ret)
 
 
-def _annotation_is_bool(annotation: ast.expr) -> bool:
+def _is_bool_annotation(annotation: ast.expr) -> bool:
     if isinstance(annotation, ast.Name) and annotation.id == "bool":
         return True
     if isinstance(annotation, ast.Constant) and annotation.value == "bool":

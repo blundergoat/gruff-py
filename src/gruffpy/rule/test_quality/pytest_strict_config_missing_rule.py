@@ -36,7 +36,7 @@ class PytestStrictConfigMissingRule(Rule):
         if not _has_tests(unit):
             return []
         config = read_pytest_config(context.project_root)
-        if not config.exists or config.has_strict_config():
+        if not config.is_present or config.has_strict_config():
             return []
         definition = self.definition()
         return [

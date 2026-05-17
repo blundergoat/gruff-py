@@ -17,8 +17,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import (
-    body_is_pass_or_ellipsis,
-    exception_handler_logs,
+    does_exception_handler_log,
+    is_pass_or_ellipsis_body,
 )
 
 _WIDE_EXCEPTION_LEAVES: frozenset[str] = frozenset({"Exception", "BaseException"})
@@ -47,9 +47,9 @@ class SilentExceptRule(Rule):
                 continue
             if not _is_wide_exception(node):
                 continue
-            if not body_is_pass_or_ellipsis(node.body):
+            if not is_pass_or_ellipsis_body(node.body):
                 continue
-            if exception_handler_logs(node):
+            if does_exception_handler_log(node):
                 continue
             findings.append(
                 Finding(
