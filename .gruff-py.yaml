@@ -39,6 +39,13 @@ allowlists:
   - pk
   - fk
   secretPreviews: []
+  # Exempt specific framework-injected symbols, decorators, or fixture paths
+  # from `dead-code.unused-private-function` and `dead-code.unused-private-attribute`.
+  # See `.goat-flow/decisions/ADR-015-dead-code-allowlist.md`.
+  deadCode:
+    symbols: []
+    decorators: []
+    paths: []
 selection:
   tiers:
   - v0.1

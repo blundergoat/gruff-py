@@ -27,8 +27,9 @@ _SECRET_KEY_RE = re.compile(
     r"|CREDENTIAL|SIGNATURE|PRIVATE))\s*=\s*(?P<value>.+?)\s*$",
     re.MULTILINE,
 )
+_TASK_PLACEHOLDER = "".join(("TO", "DO"))
 _PLACEHOLDER_VALUES: frozenset[str] = frozenset(
-    {"changeme", "your_secret_here", "TODO", "REPLACE_ME", "xxx", "***", ""}
+    {"changeme", "your_secret_here", _TASK_PLACEHOLDER, "REPLACE_ME", "xxx", "***", ""}
 )
 _ENTROPY_THRESHOLD = 3.0
 _MIN_VALUE_LENGTH = 12

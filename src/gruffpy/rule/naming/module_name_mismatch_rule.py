@@ -13,8 +13,10 @@ Skip ``__init__.py`` (intentionally re-exports many classes).
 """
 
 import ast
+from dataclasses import dataclass
 from pathlib import Path
 
+from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -47,6 +49,17 @@ _CONVENTIONAL_MODULE_NAMES: tuple[str, ...] = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _MismatchCandidate:
+    """Intermediate state for a possible module/class name mismatch."""
+
+    filename: str
+    stem: str
+    cls: ast.ClassDef
+    class_token_variants: list[list[str]]
+    expected_stem: str
+
+
 class ModuleNameMismatchRule(Rule):
     ID = "naming.module-name-mismatch"
 
@@ -62,64 +75,97 @@ class ModuleNameMismatchRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        if not isinstance(unit.tree, ast.Module):
-            return []
-        filename = Path(unit.file.display_path).name
-        if filename == "__init__.py" or not filename.endswith(".py"):
-            return []
-        stem = filename[:-3]
-
-        public_classes = [
-            node
-            for node in unit.tree.body
-            if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
-        ]
-        if len(public_classes) != 1:
-            return []
-        cls = public_classes[0]
-        class_token_variants = _class_token_variants(cls.name)
-        expected_stem = "_".join(class_token_variants[0])
-        if expected_stem == stem:
+        candidate = _mismatch_candidate(unit)
+        if candidate is None:
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        conventional_module_names = _conventional_module_names(
-            settings.options.get("conventionalModuleNames")
-        )
-        if _is_class_name_matching_import_path(class_token_variants, unit.file.display_path):
+        if _is_accepted_mismatch_candidate(candidate, settings, unit.file.display_path):
             return []
-        if _is_conventional_module_match(
-            stem,
-            conventional_module_names,
-            class_token_variants,
-            unit.file.display_path,
-        ):
-            return []
-
         return [
             Finding(
                 rule_id=definition.id,
                 message=(
-                    f"Single-class module {filename!r} should be named "
-                    f"``{expected_stem}.py`` to match the class {cls.name!r}."
+                    f"Single-class module {candidate.filename!r} should be named "
+                    f"``{candidate.expected_stem}.py`` to match the class "
+                    f"{candidate.cls.name!r}."
                 ),
                 file_path=unit.file.display_path,
-                line=cls.lineno,
+                line=candidate.cls.lineno,
                 severity=definition.default_severity,
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                end_line=cls.end_lineno,
-                symbol=cls.name,
-                remediation=f"Rename {filename!r} to ``{expected_stem}.py``.",
+                end_line=candidate.cls.end_lineno,
+                symbol=candidate.cls.name,
+                remediation=(f"Rename {candidate.filename!r} to ``{candidate.expected_stem}.py``."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
-                    "expectedFilename": f"{expected_stem}.py",
-                    "actualFilename": filename,
-                    "class": cls.name,
+                    "expectedFilename": f"{candidate.expected_stem}.py",
+                    "actualFilename": candidate.filename,
+                    "class": candidate.cls.name,
                 },
             )
         ]
+
+
+def _mismatch_candidate(unit: AnalysisUnit) -> _MismatchCandidate | None:
+    if not isinstance(unit.tree, ast.Module):
+        return None
+    filename = Path(unit.file.display_path).name
+    if _is_skipped_filename(filename):
+        return None
+
+    cls = _single_public_class(unit.tree)
+    if cls is None:
+        return None
+
+    class_token_variants = _class_token_variants(cls.name)
+    expected_stem = "_".join(class_token_variants[0])
+    stem = filename[:-3]
+    if expected_stem == stem:
+        return None
+    return _MismatchCandidate(
+        filename=filename,
+        stem=stem,
+        cls=cls,
+        class_token_variants=class_token_variants,
+        expected_stem=expected_stem,
+    )
+
+
+def _is_skipped_filename(filename: str) -> bool:
+    return filename == "__init__.py" or not filename.endswith(".py")
+
+
+def _single_public_class(tree: ast.Module) -> ast.ClassDef | None:
+    public_classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
+    ]
+    if len(public_classes) != 1:
+        return None
+    return public_classes[0]
+
+
+def _is_accepted_mismatch_candidate(
+    candidate: _MismatchCandidate,
+    settings: RuleSettings,
+    display_path: str,
+) -> bool:
+    conventional_module_names = _conventional_module_names(
+        settings.options.get("conventionalModuleNames")
+    )
+    return _is_class_name_matching_import_path(
+        candidate.class_token_variants,
+        display_path,
+    ) or _is_conventional_module_match(
+        candidate.stem,
+        conventional_module_names,
+        candidate.class_token_variants,
+        display_path,
+    )
 
 
 def _class_token_variants(name: str) -> list[list[str]]:

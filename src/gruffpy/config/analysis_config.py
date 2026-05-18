@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings
 
@@ -18,6 +19,7 @@ class AnalysisConfig:
     ignored_path_patterns: tuple[str, ...] = ()
     accepted_abbreviations: tuple[str, ...] = ()
     allowed_secret_previews: tuple[str, ...] = ()
+    dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
 
     def __post_init__(self) -> None:
         if self.minimum_python_version < (3, 11):
@@ -61,3 +63,6 @@ class AnalysisConfig:
 
     def with_allowed_secret_previews(self, previews: tuple[str, ...]) -> "AnalysisConfig":
         return replace(self, allowed_secret_previews=previews)
+
+    def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":
+        return replace(self, dead_code_allowlist=allowlist)

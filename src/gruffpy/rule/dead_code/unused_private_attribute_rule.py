@@ -45,10 +45,31 @@ class UnusedPrivateAttributeRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
+        allowlist = context.config.dead_code_allowlist
+        if allowlist.matches_path(unit.file.display_path):
+            return []
         findings: list[Finding] = []
         for cls in _candidate_classes(unit.tree):
-            findings.extend(_unused_attribute_findings(unit, definition, cls))
+            if allowlist.matches_decorator(_decorator_names(cls.decorator_list)):
+                continue
+            for finding in _unused_attribute_findings(unit, definition, cls):
+                if allowlist.matches_symbol(finding.symbol):
+                    continue
+                findings.append(finding)
         return findings
+
+
+def _decorator_names(decorators: list[ast.expr]) -> tuple[str, ...]:
+    names: list[str] = []
+    for decorator in decorators:
+        full = _decorator_repr(decorator)
+        if not full:
+            continue
+        names.append(full)
+        bare = full.rsplit(".", 1)[-1]
+        if bare and bare != full:
+            names.append(bare)
+    return tuple(names)
 
 
 def _candidate_classes(tree: ast.AST) -> list[ast.ClassDef]:

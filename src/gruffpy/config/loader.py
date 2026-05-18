@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
@@ -21,7 +22,8 @@ VALID_TOP_LEVEL_KEYS = frozenset(
     }
 )
 VALID_PATHS_KEYS = frozenset({"ignore"})
-VALID_ALLOWLISTS_KEYS = frozenset({"acceptedAbbreviations", "secretPreviews"})
+VALID_ALLOWLISTS_KEYS = frozenset({"acceptedAbbreviations", "secretPreviews", "deadCode"})
+VALID_DEAD_CODE_ALLOWLIST_KEYS = frozenset({"symbols", "decorators", "paths"})
 VALID_SELECTION_KEYS = frozenset(
     {
         "tiers",
@@ -163,7 +165,12 @@ class ConfigLoader:
         config = config.with_accepted_abbreviations(
             tuple(allowlists.get("acceptedAbbreviations", []))
         )
-        return config.with_allowed_secret_previews(tuple(allowlists.get("secretPreviews", [])))
+        config = config.with_allowed_secret_previews(tuple(allowlists.get("secretPreviews", [])))
+        if "deadCode" in allowlists:
+            config = config.with_dead_code_allowlist(
+                _parse_dead_code_allowlist(allowlists["deadCode"])
+            )
+        return config
 
     @staticmethod
     def _apply_selection(config: AnalysisConfig, selection: Any) -> AnalysisConfig:
@@ -292,6 +299,27 @@ def _merged_options(
         raise ConfigError(f'options in rule "{rule_id}" must be a table.')
     options.update(overrides)
     return options
+
+
+def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
+    if not isinstance(section, dict):
+        raise ConfigError("[tool.gruff-py.allowlists.deadCode] must be a table.")
+    unknown = set(section.keys()) - VALID_DEAD_CODE_ALLOWLIST_KEYS
+    if unknown:
+        raise ConfigError(
+            f"Unknown [tool.gruff-py.allowlists.deadCode] keys: {sorted(unknown)}"
+        )
+    for key in VALID_DEAD_CODE_ALLOWLIST_KEYS:
+        value = section.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            raise ConfigError(
+                f"[tool.gruff-py.allowlists.deadCode].{key} must be a list of strings."
+            )
+    return DeadCodeAllowlist(
+        symbols=tuple(section.get("symbols", [])),
+        decorators=tuple(section.get("decorators", [])),
+        paths=tuple(section.get("paths", [])),
+    )
 
 
 def _parse_python_version(value: Any) -> tuple[int, int]:

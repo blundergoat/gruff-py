@@ -1,6 +1,6 @@
 """Report value object serialized as ``gruff-py.analysis.v1``."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
@@ -9,6 +9,17 @@ from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.version import TOOL_NAME
+
+
+@dataclass(frozen=True, slots=True)
+class ReportExtensions:
+    """Optional report sections omitted from JSON when absent."""
+
+    mutation: Any | None = None
+    diff: Any | None = None
+    trend: Any | None = None
+    baseline: Any | None = None
+    review: Any | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,11 +37,7 @@ class AnalysisReport:
     exit_code: int
     config_path: str | None = None
     score: ScoreReport | None = None
-    mutation: Any | None = None
-    diff: Any | None = None
-    trend: Any | None = None
-    baseline: Any | None = None
-    review: Any | None = None
+    extensions: ReportExtensions = field(default_factory=ReportExtensions)
     filters: Any | None = None
 
     def finding_counts(self) -> dict[str, int]:
@@ -84,12 +91,12 @@ def _summary_payload(report: AnalysisReport) -> dict[str, Any]:
 
 def _optional_payloads(report: AnalysisReport) -> dict[str, Any]:
     optional_sections = {
-        "mutation": report.mutation,
+        "mutation": report.extensions.mutation,
         "score": report.score,
-        "diff": report.diff,
-        "trend": report.trend,
-        "baseline": report.baseline,
-        "review": report.review,
+        "diff": report.extensions.diff,
+        "trend": report.extensions.trend,
+        "baseline": report.extensions.baseline,
+        "review": report.extensions.review,
     }
     return {
         key: _to_report_value(value)

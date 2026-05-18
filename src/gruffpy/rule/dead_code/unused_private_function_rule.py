@@ -23,6 +23,7 @@ from collections import Counter
 from collections.abc import Container
 from dataclasses import dataclass
 
+from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -78,6 +79,7 @@ class UnusedPrivateFunctionRule(Rule):
             return []
         definition = self.definition()
         all_names = module_all_names(unit.tree)
+        allowlist = context.config.dead_code_allowlist
 
         findings: list[Finding] = []
         scope_references: dict[int, _ReferenceCounts] = {}
@@ -93,8 +95,47 @@ class UnusedPrivateFunctionRule(Rule):
             own_references = _collect_references(candidate.node)
             if _has_external_reference(candidate.node.name, references, own_references):
                 continue
+            if _is_allowlisted(unit, candidate, allowlist):
+                continue
             findings.append(_unused_private_function_finding(unit, definition, candidate))
         return findings
+
+
+def _is_allowlisted(
+    unit: AnalysisUnit,
+    candidate: "_PrivateFunctionCandidate",
+    allowlist: DeadCodeAllowlist,
+) -> bool:
+    if allowlist.matches_path(unit.file.display_path):
+        return True
+    symbol = qualified_symbol(candidate.node, candidate.parents)
+    if allowlist.matches_symbol(symbol):
+        return True
+    return allowlist.matches_decorator(_decorator_names(candidate.node.decorator_list))
+
+
+def _decorator_names(decorators: list[ast.expr]) -> tuple[str, ...]:
+    names: list[str] = []
+    for decorator in decorators:
+        full = _decorator_repr(decorator)
+        if not full:
+            continue
+        names.append(full)
+        bare = full.rsplit(".", 1)[-1]
+        if bare and bare != full:
+            names.append(bare)
+    return tuple(names)
+
+
+def _decorator_repr(decorator: ast.AST) -> str:
+    if isinstance(decorator, ast.Call):
+        return _decorator_repr(decorator.func)
+    if isinstance(decorator, ast.Name):
+        return decorator.id
+    if isinstance(decorator, ast.Attribute):
+        prefix = _decorator_repr(decorator.value)
+        return f"{prefix}.{decorator.attr}" if prefix else decorator.attr
+    return ""
 
 
 def _private_function_candidate(

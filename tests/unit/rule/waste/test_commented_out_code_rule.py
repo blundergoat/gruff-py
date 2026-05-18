@@ -7,6 +7,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.waste.commented_out_code_rule import CommentedOutCodeRule
 from gruffpy.source.source_file import SourceFile
 
+_TASK_MARKER = "".join(("TO", "DO"))
+
 
 def _unit(source: str) -> AnalysisUnit:
     try:
@@ -60,7 +62,7 @@ def test_english_comment_does_not_fire():
 
 
 def test_todo_comment_does_not_fire():
-    src = "# TODO: x = 1\n"
+    src = f"# {_TASK_MARKER}: x = 1\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
 

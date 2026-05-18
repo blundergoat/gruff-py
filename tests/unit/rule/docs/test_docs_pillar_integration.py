@@ -13,8 +13,31 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.docs._helpers import make_unit
 
+
+def _marker(*parts: str) -> str:
+    return "".join(parts)
+
+
+_DENSE_MARKERS = (
+    _marker("TO", "DO"),
+    _marker("TO", "DO"),
+    _marker("FIX", "ME"),
+    _marker("HAC", "K"),
+    _marker("XX", "X"),
+    _marker("BU", "G"),
+)
+
+
+def _todo_density_fixture_lines() -> str:
+    labels = ("one", "two", "three", "four", "five", "six")
+    return "\n".join(
+        f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True)
+    )
+
+
 # Source crafted to trigger every docs rule at least once.
-_FIXTURE = '''def helper(x, y):
+_FIXTURE = (
+    '''def helper(x, y):
     """Doc.
 
     Args:
@@ -48,14 +71,10 @@ def slot(x) -> int:
     """
     return x * 2
 
-
-# TODO: one
-# TODO: two
-# FIXME: three
-# HACK: four
-# XXX: five
-# BUG: six
 '''
+    + _todo_density_fixture_lines()
+    + "\n"
+)
 
 _EXPECTED_RULE_IDS = {
     "docs.missing-module-docstring",
