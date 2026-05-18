@@ -36,9 +36,16 @@ _TLS_REMEDIATION = (
 
 
 class DisabledSslVerificationRule(Rule):
+    """Find code paths that explicitly disable TLS certificate verification."""
+
     ID = "security.disabled-ssl-verification"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the disabled SSL verification rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Disabled SSL verification",
@@ -49,6 +56,15 @@ class DisabledSslVerificationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for disabled TLS verification calls.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for literal or same-scope alias TLS verification disablement.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()
@@ -58,6 +74,8 @@ class DisabledSslVerificationRule(Rule):
 
 
 class _DisabledSslVerificationVisitor(ast.NodeVisitor):
+    """AST visitor that tracks false aliases within each lexical scope."""
+
     def __init__(self, unit: AnalysisUnit, definition: RuleDefinition) -> None:
         self._unit = unit
         self._definition = definition
@@ -65,18 +83,43 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         self.findings: list[Finding] = []
 
     def visit_Module(self, node: ast.Module) -> None:
+        """Visit a module body with a fresh alias set.
+
+        Args:
+            node: Module node to inspect.
+        """
         self._visit_scope_body(node.body, false_aliases=set())
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Visit a function body with aliases isolated from outer scope.
+
+        Args:
+            node: Function definition to inspect.
+        """
         self._visit_scope_body(node.body, false_aliases=set())
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Visit an async function body with aliases isolated from outer scope.
+
+        Args:
+            node: Async function definition to inspect.
+        """
         self._visit_scope_body(node.body, false_aliases=set())
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Visit a class body with aliases isolated from outer scope.
+
+        Args:
+            node: Class definition to inspect.
+        """
         self._visit_scope_body(node.body, false_aliases=set())
 
     def visit_Call(self, node: ast.Call) -> None:
+        """Inspect a call expression for TLS verification disablement.
+
+        Args:
+            node: Call expression to inspect.
+        """
         target = call_target_name(node)
         if target is not None:
             reason, source_label = _ssl_verification_disabled_reason(
@@ -286,18 +329,40 @@ def _assigned_names(node: ast.AST) -> set[str]:
 
 
 class _AssignedNameCollector(ast.NodeVisitor):
+    """Collect names assigned anywhere inside a statement subtree."""
+
     def __init__(self) -> None:
         self.names: set[str] = set()
 
     def visit_Name(self, node: ast.Name) -> None:
+        """Record stored names.
+
+        Args:
+            node: Name node to inspect.
+        """
         if isinstance(node.ctx, ast.Store):
             self.names.add(node.id)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Record a nested function definition name without visiting its body.
+
+        Args:
+            node: Function definition to record.
+        """
         self.names.add(node.name)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Record a nested async function definition name without visiting its body.
+
+        Args:
+            node: Async function definition to record.
+        """
         self.names.add(node.name)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Record a nested class definition name without visiting its body.
+
+        Args:
+            node: Class definition to record.
+        """
         self.names.add(node.name)

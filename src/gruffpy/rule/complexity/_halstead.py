@@ -31,6 +31,8 @@ OperandCollector = Callable[[ast.AST, list[str], list[str]], None]
 
 @dataclass(frozen=True)
 class HalsteadMetrics:
+    """Aggregated Halstead counts for one function-like node."""
+
     distinct_operators: int  # η1
     distinct_operands: int  # η2
     total_operators: int  # N1
@@ -38,14 +40,29 @@ class HalsteadMetrics:
 
     @property
     def vocabulary(self) -> int:
+        """Return the number of distinct operators plus operands.
+
+        Returns:
+            Halstead vocabulary size.
+        """
         return self.distinct_operators + self.distinct_operands
 
     @property
     def length(self) -> int:
+        """Return the total operator plus operand occurrences.
+
+        Returns:
+            Halstead program length.
+        """
         return self.total_operators + self.total_operands
 
     @property
     def volume(self) -> float:
+        """Return the Halstead volume for the collected counts.
+
+        Returns:
+            Halstead volume, or zero when vocabulary is too small to score.
+        """
         if self.vocabulary <= 1:
             return 0.0
         return self.length * math.log2(self.vocabulary)
@@ -55,12 +72,18 @@ _HALSTEAD_CACHE_ATTR = "_gruffpy_halstead_metrics"
 
 
 def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
-    """Compute Halstead metrics for *fn*'s body.
+    """Compute Halstead metrics for a function-like node's body.
 
     Operands are only counted when they appear inside an operator-bearing
     expression (BinOp, UnaryOp, BoolOp, Compare, AugAssign). Bare Names and
     Constants in statements (``return x``, ``x = 1``) do NOT contribute —
     matching radon's expression-focused interpretation.
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Halstead metrics for the node body.
     """
     cached = getattr(fn, _HALSTEAD_CACHE_ATTR, None)
     if isinstance(cached, HalsteadMetrics):

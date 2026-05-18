@@ -11,11 +11,17 @@ LineCountableNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.
 
 
 def lines_for_size(node: LineCountableNode) -> int:
-    """Return the raw line span of *node*, inclusive of decorators and end line.
+    """Return the raw line span of a node, inclusive of decorators and end line.
 
     Lambdas have no decorators; their span runs from `lineno` to `end_lineno`.
     For def/class nodes, the span runs from the first decorator's `lineno`
     (or the node's own `lineno` if no decorators) to `end_lineno`.
+
+    Args:
+        node: Function, class, async function, or lambda node to measure.
+
+    Returns:
+        Inclusive raw line span for size scoring.
     """
     end = node.end_lineno
     if end is None:
@@ -33,11 +39,18 @@ def lines_for_size(node: LineCountableNode) -> int:
 
 
 def qualified_symbol(node: ast.AST, parents: list[ast.AST]) -> str:
-    """Return a qualified dotted name for *node* using its *parents* chain.
+    """Return a qualified dotted name using a node's parent chain.
 
     Used by size rules so findings carry a stable `symbol` field
     (e.g. ``ClassA.method_b`` or ``module_func``). The parents list is the
     parent AST chain from outermost (Module) to innermost (immediate parent).
+
+    Args:
+        node: AST node whose symbol should be rendered.
+        parents: Parent AST chain from outermost to immediate parent.
+
+    Returns:
+        Dotted symbol name, lambda marker, or ``<module>`` fallback.
     """
     parts: list[str] = []
     for ancestor in parents:
@@ -53,11 +66,20 @@ def qualified_symbol(node: ast.AST, parents: list[ast.AST]) -> str:
 
 
 def parent_chain(node: ast.AST) -> list[ast.AST]:
-    """Walk *node*.parent links upward and return the ancestor chain
+    """Walk parent links upward and return the ancestor chain.
+
+    Walks `parent` links from a node and returns ancestors
     from outermost (closest to module) to immediate parent (excluding *node*).
 
     Requires the parser to have attached `parent` attributes (the gruff-py
-    parser does this in `_attach_parents`)."""
+    parser does this in `_attach_parents`).
+
+    Args:
+        node: AST node whose ancestors should be returned.
+
+    Returns:
+        Ancestor chain from module-adjacent parent to immediate parent.
+    """
     chain: list[ast.AST] = []
     current = getattr(node, "parent", None)
     while current is not None:

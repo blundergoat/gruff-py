@@ -24,6 +24,8 @@ class ReportExtensions:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisReport:
+    """Native analysis report value object for ``gruff-py.analysis.v1``."""
+
     tool_version: str
     requested_paths: tuple[str, ...]
     format: str
@@ -41,18 +43,41 @@ class AnalysisReport:
     filters: Any | None = None
 
     def finding_counts(self) -> dict[str, int]:
+        """Return finding counts grouped by severity.
+
+        Returns:
+            Mapping containing advisory, warning, error, and total counts.
+        """
         counts = {"advisory": 0, "warning": 0, "error": 0, "total": len(self.findings)}
         for finding in self.findings:
             counts[finding.severity.value] += 1
         return counts
 
     def parse_error_count(self) -> int:
+        """Return the number of parser diagnostics in the report.
+
+        Returns:
+            Count of diagnostics whose type is ``parse-error``.
+        """
         return sum(1 for d in self.diagnostics if d.type == "parse-error")
 
     def has_findings_at_severity(self, severity: Severity) -> bool:
+        """Return whether the report contains a finding at a severity.
+
+        Args:
+            severity: Severity level to search for.
+
+        Returns:
+            True when at least one finding has the requested severity.
+        """
         return any(f.severity == severity for f in self.findings)
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the report to the native JSON-compatible payload.
+
+        Returns:
+            Dictionary shaped according to ``gruff-py.analysis.v1``.
+        """
         report: dict[str, Any] = {
             "schemaVersion": ANALYSIS_SCHEMA_VERSION,
             "tool": {"name": TOOL_NAME, "version": self.tool_version},

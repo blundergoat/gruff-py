@@ -16,7 +16,14 @@ _FUNCTION_CACHE_ATTR = "_gruffpy_function_nodes"
 
 
 def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
-    """Yield every function-like node in *tree*, in document order."""
+    """Yield every function-like node in an AST, in document order.
+
+    Args:
+        tree: AST root to inspect.
+
+    Returns:
+        Iterator over function, async function, and lambda nodes.
+    """
     cached = getattr(tree, _FUNCTION_CACHE_ATTR, None)
     if isinstance(cached, tuple):
         yield from cast(tuple[FunctionLike, ...], cached)
@@ -32,11 +39,19 @@ def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
 
 
 def body_nodes(fn: FunctionLike) -> Iterator[ast.AST]:
-    """Walk *fn*'s body, yielding every AST node, but stop at any nested
+    """Walk a function body without descending into nested scopes.
+
+    Walks every AST node in the body, but stops at any nested
     function/class definition (those are scored independently).
 
     Yields the function node itself first (so callers may inspect its
     arguments / decorators), then every descendant outside nested scopes.
+
+    Args:
+        fn: Function-like node whose body should be walked.
+
+    Returns:
+        Iterator over the function-like node and non-nested descendants.
     """
     if isinstance(fn, ast.Lambda):
         # Lambdas have no nested defs to skip; just walk the body expression.
@@ -58,10 +73,16 @@ def _walk_skip_nested(node: ast.AST) -> Iterator[ast.AST]:
 
 
 def is_wildcard_pattern(pattern: ast.pattern) -> bool:
-    """True for ``case _:`` and any pattern that is the bare-name catch-all.
+    """Return whether a match pattern is a bare wildcard.
 
     ``MatchAs(pattern=None, name=None)`` is the bare ``_`` (no binding).
     Named catch-alls like ``case x:`` bind a name and are NOT wildcards
     in the cyclomatic-counting sense — they are still decisions.
+
+    Args:
+        pattern: Pattern node from a ``match`` case.
+
+    Returns:
+        True for ``case _:`` and equivalent bare-name catch-all patterns.
     """
     return isinstance(pattern, ast.MatchAs) and pattern.pattern is None and pattern.name is None

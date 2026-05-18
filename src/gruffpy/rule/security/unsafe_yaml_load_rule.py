@@ -27,9 +27,16 @@ _SAFE_LOADERS: frozenset[str] = frozenset({"yaml.SafeLoader", "yaml.CSafeLoader"
 
 
 class UnsafeYamlLoadRule(Rule):
+    """Find PyYAML calls that can construct arbitrary Python objects."""
+
     ID = "security.unsafe-yaml-load"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the unsafe YAML load rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unsafe YAML load",
@@ -40,6 +47,15 @@ class UnsafeYamlLoadRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for unsafe PyYAML loading calls.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for unsafe ``yaml.load`` or ``yaml.unsafe_load`` usage.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()
@@ -57,10 +73,20 @@ class UnsafeYamlLoadRule(Rule):
 
 @dataclass(frozen=True, slots=True)
 class _YamlAliases:
+    """Import alias map for normalizing references to ``yaml`` members."""
+
     aliases: dict[str, str]
 
     @classmethod
     def from_tree(cls, tree: ast.AST) -> "_YamlAliases":
+        """Build YAML import aliases from a parsed module.
+
+        Args:
+            tree: Module AST to inspect for PyYAML imports.
+
+        Returns:
+            Alias map that resolves direct and aliased PyYAML references.
+        """
         aliases: dict[str, str] = {"yaml": "yaml"}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -70,6 +96,14 @@ class _YamlAliases:
         return cls(aliases)
 
     def normalize(self, target: str | None) -> str | None:
+        """Normalize a call target through the collected YAML aliases.
+
+        Args:
+            target: Dotted call target, or None when the call is dynamic.
+
+        Returns:
+            Target rewritten to a ``yaml.*`` form when an alias is known.
+        """
         if target is None:
             return None
         parts = target.split(".")
@@ -112,6 +146,14 @@ def _is_unsafe_yaml_call(
 
 
 def call_target_name_from_expr(node: ast.expr) -> str | None:
+    """Return a dotted target name from a name or attribute expression.
+
+    Args:
+        node: Expression to convert into a dotted name.
+
+    Returns:
+        Dotted target name, or None when the expression is not static.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):

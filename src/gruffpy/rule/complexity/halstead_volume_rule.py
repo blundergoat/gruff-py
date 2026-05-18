@@ -19,9 +19,16 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class HalsteadVolumeRule(Rule):
+    """Report functions whose Halstead volume exceeds configured thresholds."""
+
     ID = "complexity.halstead-volume"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the Halstead volume rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Halstead volume",
@@ -33,6 +40,15 @@ class HalsteadVolumeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for Halstead volume findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions above the configured Halstead threshold.
+        """
         if unit.tree is None:
             return []
 

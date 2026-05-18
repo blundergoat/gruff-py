@@ -29,9 +29,16 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class CognitiveComplexityRule(Rule):
+    """Report functions whose cognitive complexity exceeds configured thresholds."""
+
     ID = "complexity.cognitive"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the cognitive complexity rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Cognitive complexity",
@@ -43,6 +50,15 @@ class CognitiveComplexityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for cognitive complexity findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions above the configured complexity threshold.
+        """
         if unit.tree is None:
             return []
 
@@ -92,7 +108,14 @@ class CognitiveComplexityRule(Rule):
 
 
 def cognitive_for(fn: FunctionLike) -> int:
-    """Compute cognitive complexity for *fn* per ADR-003."""
+    """Compute cognitive complexity for a function-like node per ADR-003.
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Cognitive complexity score for the node body.
+    """
     fn_name = getattr(fn, "name", None) if not isinstance(fn, ast.Lambda) else None
     counter = _Counter(self_name=fn_name)
     if isinstance(fn, ast.Lambda):
@@ -104,11 +127,19 @@ def cognitive_for(fn: FunctionLike) -> int:
 
 
 class _Counter:
+    """Stateful visitor that accumulates a cognitive complexity score."""
+
     def __init__(self, self_name: str | None) -> None:
         self.score = 0
         self.self_name = self_name
 
     def visit(self, node: ast.AST, nesting: int) -> None:
+        """Dispatch a node to its cognitive-complexity visitor.
+
+        Args:
+            node: AST node to inspect.
+            nesting: Current control-flow nesting depth.
+        """
         handler = getattr(self, f"_visit_{type(node).__name__}", self._generic_visit)
         handler(node, nesting)
 

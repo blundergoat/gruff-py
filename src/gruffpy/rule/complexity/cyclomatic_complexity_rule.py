@@ -37,9 +37,16 @@ _CYCLOMATIC_CACHE_ATTR = "_gruffpy_cyclomatic_complexity"
 
 
 class CyclomaticComplexityRule(Rule):
+    """Report functions whose McCabe complexity exceeds configured thresholds."""
+
     ID = "complexity.cyclomatic"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the cyclomatic complexity rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Cyclomatic complexity",
@@ -51,6 +58,15 @@ class CyclomaticComplexityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for cyclomatic complexity findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions above the configured complexity threshold.
+        """
         if unit.tree is None:
             return []
 
@@ -100,10 +116,16 @@ class CyclomaticComplexityRule(Rule):
 
 
 def cyclomatic_for(fn: FunctionLike) -> int:
-    """Return the McCabe cyclomatic complexity of *fn*.
+    """Return the McCabe cyclomatic complexity of a function-like node.
 
     Radon-aligned: base 1, plus decision points enumerated in the module
     docstring. Nested function bodies are skipped.
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Cyclomatic complexity score for the node body.
     """
     cached = getattr(fn, _CYCLOMATIC_CACHE_ATTR, None)
     if isinstance(cached, int):

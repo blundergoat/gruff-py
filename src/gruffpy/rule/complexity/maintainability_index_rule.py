@@ -30,9 +30,16 @@ from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_sym
 
 
 class MaintainabilityIndexRule(Rule):
+    """Report functions whose maintainability index is below configured thresholds."""
+
     ID = "complexity.maintainability-index"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the maintainability index rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Maintainability index",
@@ -44,6 +51,15 @@ class MaintainabilityIndexRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for maintainability index findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions below the configured maintainability threshold.
+        """
         if unit.tree is None:
             return []
 
@@ -90,10 +106,16 @@ class MaintainabilityIndexRule(Rule):
 
 
 def maintainability_index_for(fn: FunctionLike) -> float:
-    """Compute MI for *fn* using the canonical formula.
+    """Compute maintainability index for a function-like node.
 
     Uses the M02 `lines_for_size()` helper for LOC so this rule does not
     re-derive line counts (ADR-002 cross-impl invariant).
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Maintainability index clamped to the range 0 through 100.
     """
     hv = halstead_for(fn).volume
     cc = cyclomatic_for(fn)

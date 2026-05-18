@@ -38,9 +38,16 @@ NPathHandler = Callable[[ast.AST], int]
 
 
 class NPathComplexityRule(Rule):
+    """Report functions whose NPATH complexity exceeds configured thresholds."""
+
     ID = "complexity.npath"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the NPATH complexity rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="NPATH complexity",
@@ -52,6 +59,15 @@ class NPathComplexityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for NPATH complexity findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions above the configured NPATH threshold.
+        """
         if unit.tree is None:
             return []
 
@@ -106,9 +122,18 @@ class NPathComplexityRule(Rule):
 
 
 def npath_for(fn: FunctionLike) -> int:
-    """Return NPATH for *fn*'s body. Caps internally at _NPATH_CAP * 10 to
+    """Return NPATH for a function-like node's body.
+
+    Caps internally at _NPATH_CAP * 10 to
     keep intermediate multiplications bounded (final value is capped by the
-    rule)."""
+    rule).
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Raw NPATH score, capped only for runaway intermediate growth.
+    """
     if isinstance(fn, ast.Lambda):
         return _npath_of([fn.body])
     return _npath_of(list(fn.body))

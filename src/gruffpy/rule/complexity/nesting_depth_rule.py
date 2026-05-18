@@ -34,9 +34,16 @@ _NESTING_KINDS = (
 
 
 class NestingDepthRule(Rule):
+    """Report functions whose control-flow nesting exceeds configured thresholds."""
+
     ID = "complexity.nesting-depth"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the nesting depth rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Nesting depth",
@@ -48,6 +55,15 @@ class NestingDepthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze function-like nodes for nesting depth findings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            Findings for functions above the configured nesting threshold.
+        """
         if unit.tree is None:
             return []
 
@@ -96,7 +112,14 @@ class NestingDepthRule(Rule):
 
 
 def nesting_depth_for(fn: FunctionLike) -> int:
-    """Return the maximum nesting depth inside *fn*'s body. 0 if no control flow."""
+    """Return the maximum control-flow nesting depth inside a function body.
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+
+    Returns:
+        Maximum nesting depth, or zero when there is no control flow.
+    """
     if isinstance(fn, ast.Lambda):
         return 0
     body_max = 0

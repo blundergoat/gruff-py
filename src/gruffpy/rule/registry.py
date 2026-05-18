@@ -14,6 +14,8 @@ RuleLike = Rule | ProjectRuleProtocol
 
 
 class RuleRegistry:
+    """Sorted in-memory registry for rule lookup and execution."""
+
     def __init__(self, rule_like_items: Iterable[RuleLike]) -> None:
         indexed: dict[str, RuleLike] = {}
         for rule in rule_like_items:
@@ -25,22 +27,59 @@ class RuleRegistry:
 
     @classmethod
     def defaults(cls) -> "RuleRegistry":
+        """Build a registry containing every built-in rule.
+
+        Returns:
+            Registry populated from the rule catalog.
+        """
         from gruffpy.rule.catalog import default_rules
 
         return cls(default_rules())
 
     def all(self) -> list[RuleLike]:
+        """Return every registered rule in deterministic id order.
+
+        Returns:
+            Registered rule instances sorted by rule id.
+        """
         return list(self._rules.values())
 
     def has(self, rule_id: str) -> bool:
+        """Return whether a rule id is registered.
+
+        Args:
+            rule_id: Rule identifier to check.
+
+        Returns:
+            True when the registry contains the rule id.
+        """
         return rule_id in self._rules
 
     def get(self, rule_id: str) -> RuleLike:
+        """Return a registered rule by id.
+
+        Args:
+            rule_id: Rule identifier to resolve.
+
+        Returns:
+            Registered rule instance for the id.
+
+        Raises:
+            KeyError: If the rule id is unknown.
+        """
         if rule_id not in self._rules:
             raise KeyError(f'Unknown rule id "{rule_id}".')
         return self._rules[rule_id]
 
     def enabled_rules(self, config: AnalysisConfig) -> list[RuleLike]:
+        """Return rules enabled by the current analysis configuration.
+
+        Args:
+            config: Analysis configuration with rule settings and selection.
+
+        Returns:
+            Registered rules allowed by both per-rule settings and profile filters.
+        """
         result: list[RuleLike] = []
         for rule in self._rules.values():
             definition = rule.definition()
@@ -50,6 +89,15 @@ class RuleRegistry:
         return result
 
     def analyse(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
+        """Run enabled source and project rules over analysis units.
+
+        Args:
+            units: Parsed and source-text analysis units to inspect.
+            context: Rule execution context containing configuration and paths.
+
+        Returns:
+            Deduplicated findings sorted into deterministic output order.
+        """
         enabled = self.enabled_rules(context.config)
         findings = self._analyse_units(units, context, enabled)
         project_units = self._project_units(units)
