@@ -78,4 +78,4 @@ def test_decorator_counted_in_class_span():
 def test_definition_uses_default_thresholds():
     d = ClassLengthRule().definition()
     assert d.id == "size.class-length"
-    assert d.default_thresholds == {"warning": 300, "error": 500}
+    assert d.default_thresholds == {"warning": 1000, "error": 1000}

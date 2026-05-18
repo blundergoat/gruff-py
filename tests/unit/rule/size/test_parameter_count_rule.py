@@ -105,4 +105,4 @@ def test_positional_only_args_count():
 def test_definition_uses_default_thresholds():
     d = ParameterCountRule().definition()
     assert d.id == "size.parameter-count"
-    assert d.default_thresholds == {"warning": 5, "error": 8}
+    assert d.default_thresholds == {"warning": 10, "error": 10}

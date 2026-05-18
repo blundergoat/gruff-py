@@ -69,4 +69,4 @@ def test_above_error_threshold_emits_error():
 def test_definition_uses_default_thresholds():
     d = PublicMethodCountRule().definition()
     assert d.id == "size.public-method-count"
-    assert d.default_thresholds == {"warning": 15, "error": 25}
+    assert d.default_thresholds == {"warning": 10, "error": 10}

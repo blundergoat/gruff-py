@@ -171,7 +171,7 @@ def test_cli_analyse_emits_schema_versioned_json(
     src = tmp_path / "src"
     src.mkdir()
     (src / "short.py").write_text("x = 1\n")
-    long_lines = "\n".join(f"x{i} = {i}" for i in range(900)) + "\n"
+    long_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
     (src / "long.py").write_text(long_lines)
 
     result = CliRunner().invoke(
@@ -193,7 +193,7 @@ def test_cli_analyse_emits_schema_versioned_json(
     assert len(file_length) == 1
     finding = file_length[0]
     assert len(finding["fingerprint"]) == 16
-    assert finding["metadata"]["lines"] >= 900
+    assert finding["metadata"]["lines"] >= 1001
     assert finding["severity"] == "error"
     assert finding["pillar"] == "size"
     assert finding["tier"] == "v0.1"
@@ -206,7 +206,7 @@ def test_cli_analyse_sarif_format_is_parseable(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "long.py").write_text("\n".join(f"x{i} = {i}" for i in range(900)) + "\n")
+    (src / "long.py").write_text("\n".join(f"x{i} = {i}" for i in range(1001)) + "\n")
 
     result = CliRunner().invoke(
         main,
@@ -294,7 +294,7 @@ def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.Mo
     src = tmp_path / "src"
     src.mkdir()
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
-    error_lines = "\n".join(f"x{i} = {i}" for i in range(900)) + "\n"
+    error_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
     (src / "warning.py").write_text(warning_lines)
     (src / "error.py").write_text(error_lines)
 
@@ -358,7 +358,7 @@ def test_cli_fail_on_error_exits_1_when_errors_present(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    long_lines = "\n".join(f"x{i} = {i}" for i in range(900)) + "\n"
+    long_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
     (src / "long.py").write_text(long_lines)
 
     result = CliRunner().invoke(
@@ -374,7 +374,7 @@ def test_cli_fail_on_none_exits_0_even_with_errors(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    long_lines = "\n".join(f"x{i} = {i}" for i in range(900)) + "\n"
+    long_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
     (src / "long.py").write_text(long_lines)
 
     result = CliRunner().invoke(

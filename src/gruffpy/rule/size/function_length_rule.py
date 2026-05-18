@@ -28,7 +28,7 @@ class FunctionLengthRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
-            default_thresholds={"warning": 30, "error": 60},
+            default_thresholds={"warning": 100, "error": 100},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

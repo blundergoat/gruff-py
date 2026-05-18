@@ -416,37 +416,37 @@ rules:
   # Too many attributes suggest an object with too many responsibilities.
   size.attribute-count:
     enabled: true
-    threshold: 25
+    threshold: 15
     severity: error
   # Classes with long average functions are hard to scan and change.
   size.average-function-length:
     enabled: true
-    threshold: 60
+    threshold: 100
     severity: error
   # Large classes usually mix responsibilities and slow review.
   size.class-length:
     enabled: true
-    threshold: 500
+    threshold: 1000
     severity: error
   # Very large files slow navigation and hide unrelated concerns.
   size.file-length:
     enabled: true
-    threshold: 800
+    threshold: 1000
     severity: error
   # Long functions are harder to understand, test, and refactor.
   size.function-length:
     enabled: true
-    threshold: 60
+    threshold: 100
     severity: error
   # Long parameter lists make call sites brittle.
   size.parameter-count:
     enabled: true
-    threshold: 8
+    threshold: 10
     severity: error
   # Too many public methods create a broad and hard-to-test surface.
   size.public-method-count:
     enabled: true
-    threshold: 25
+    threshold: 10
     severity: error
   # Branching inside tests makes intent and failure modes harder to read.
   test-quality.conditional-logic:

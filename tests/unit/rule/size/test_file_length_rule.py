@@ -71,5 +71,5 @@ def test_finding_carries_fingerprint_and_remediation():
 def test_definition_uses_default_thresholds():
     definition = FileLengthRule().definition()
     assert definition.id == "size.file-length"
-    assert definition.default_thresholds == {"warning": 400, "error": 800}
+    assert definition.default_thresholds == {"warning": 1000, "error": 1000}
     assert definition.default_severity == Severity.WARNING

@@ -234,8 +234,8 @@ def test_sarif_reporter_projects_registry_thresholds_and_options():
     }
 
     assert rules["size.file-length"]["properties"]["thresholds"] == {
-        "warning": 400,
-        "error": 800,
+        "warning": 1000,
+        "error": 1000,
     }
     assert rules["test-quality.test-longer-than-sut"]["properties"]["options"] == {
         "ratio": 2.0,

@@ -181,13 +181,22 @@ def _make_unit(source: str) -> AnalysisUnit:
 
 
 def _default_ctx() -> RuleContext:
+    # PMD-aligned production defaults are too generous for the small fixture to
+    # cross. Override the size rubrics that depend on small violations so the
+    # fixture still exercises every rule end-to-end.
+    size_test_thresholds = {
+        "size.parameter-count": {"warning": 5, "error": 8},
+        "size.function-length": {"warning": 30, "error": 60},
+        "size.average-function-length": {"warning": 30, "error": 60},
+    }
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():
         definition = rule.definition()
+        thresholds = size_test_thresholds.get(definition.id, dict(definition.default_thresholds))
         rules[definition.id] = RuleSettings(
             enabled=True,
-            thresholds=dict(definition.default_thresholds),
+            thresholds=thresholds,
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
@@ -210,16 +219,16 @@ def test_cumulative_fixture_emits_expected_rule_ids():
     registry = RuleRegistry.defaults()
     findings = registry.analyse([unit], ctx)
     rule_ids = {f.rule_id for f in findings}
-    # Expected hits at default thresholds:
+    # Expected hits at the test-calibrated thresholds (see _default_ctx):
     # - size.attribute-count fires on WideRecord (16 attrs > 15)
-    # - size.public-method-count fires on WidePublicSurface (16 public methods > 15)
+    # - size.public-method-count fires on WidePublicSurface (16 public methods > 10)
     # - size.parameter-count fires on big_static (10 params > 5)
     # - size.function-length fires on big_async, outer_function, outer_function.inner_function
     assert "size.attribute-count" in rule_ids
     assert "size.public-method-count" in rule_ids
     assert "size.parameter-count" in rule_ids
     assert "size.function-length" in rule_ids
-    # size.file-length should NOT fire (fixture is well under 400 lines)
+    # size.file-length should NOT fire (fixture is well under 1000 lines)
     assert "size.file-length" not in rule_ids
 
 
@@ -294,7 +303,7 @@ def test_findings_deterministic_across_two_runs():
 
 
 def test_config_override_changes_finding_count():
-    # Default function-length threshold = 30/60. Override to 5/10.
+    # Default function-length threshold = 100 (PMD-aligned). Override to 5/10 to widen coverage.
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():

@@ -80,4 +80,4 @@ def test_nested_class_with_too_few_methods_skipped():
 def test_definition_uses_default_thresholds():
     d = AverageFunctionLengthRule().definition()
     assert d.id == "size.average-function-length"
-    assert d.default_thresholds == {"warning": 30, "error": 60}
+    assert d.default_thresholds == {"warning": 100, "error": 100}

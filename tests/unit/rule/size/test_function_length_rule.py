@@ -111,7 +111,7 @@ def test_lambda_is_considered():
 def test_definition_uses_default_thresholds():
     definition = FunctionLengthRule().definition()
     assert definition.id == "size.function-length"
-    assert definition.default_thresholds == {"warning": 30, "error": 60}
+    assert definition.default_thresholds == {"warning": 100, "error": 100}
 
 
 def test_unit_with_no_tree_returns_empty():

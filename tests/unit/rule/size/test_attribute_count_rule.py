@@ -90,4 +90,4 @@ def test_tuple_self_assignment_collects_all_names():
 def test_definition_uses_default_thresholds():
     d = AttributeCountRule().definition()
     assert d.id == "size.attribute-count"
-    assert d.default_thresholds == {"warning": 15, "error": 25}
+    assert d.default_thresholds == {"warning": 15, "error": 15}

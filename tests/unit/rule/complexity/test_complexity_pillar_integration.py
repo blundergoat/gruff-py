@@ -111,11 +111,20 @@ def _make_unit(source: str) -> AnalysisUnit:
 
 
 def _default_ctx() -> RuleContext:
+    # PMD-aligned size defaults are too generous for the compact fixture.
+    # Override size.function-length and size.parameter-count so the fixture
+    # still produces overlapping size + complexity findings for the
+    # design.god-method composite.
+    size_test_thresholds = {
+        "size.function-length": {"warning": 15, "error": 30},
+        "size.parameter-count": {"warning": 5, "error": 8},
+    }
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():
         d = rule.definition()
-        rules[d.id] = RuleSettings(enabled=True, thresholds=dict(d.default_thresholds))
+        thresholds = size_test_thresholds.get(d.id, dict(d.default_thresholds))
+        rules[d.id] = RuleSettings(enabled=True, thresholds=thresholds)
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 

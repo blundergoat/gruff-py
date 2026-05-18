@@ -915,7 +915,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.attribute-count` protects the size pillar by flagging attribute count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported attribute count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `25`, `severity` = `error`
+- Config threshold: `threshold` = `15`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.attribute-count` leaves attribute count unaddressed.
@@ -932,7 +932,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.average-function-length` protects the size pillar by flagging average function length per class before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported average function length per class directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `60`, `severity` = `error`
+- Config threshold: `threshold` = `100`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.average-function-length` leaves average function length per class unaddressed.
@@ -949,7 +949,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.class-length` protects the size pillar by flagging class length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported class length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `500`, `severity` = `error`
+- Config threshold: `threshold` = `1000`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.class-length` leaves class length unaddressed.
@@ -966,7 +966,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.file-length` protects the size pillar by flagging file length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported file length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `800`, `severity` = `error`
+- Config threshold: `threshold` = `1000`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.file-length` leaves file length unaddressed.
@@ -983,7 +983,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.function-length` protects the size pillar by flagging function length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported function length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `60`, `severity` = `error`
+- Config threshold: `threshold` = `100`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.function-length` leaves function length unaddressed.
@@ -1000,7 +1000,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.parameter-count` protects the size pillar by flagging parameter count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported parameter count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `8`, `severity` = `error`
+- Config threshold: `threshold` = `10`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.parameter-count` leaves parameter count unaddressed.
@@ -1017,7 +1017,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.public-method-count` protects the size pillar by flagging public method count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported public method count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Config threshold: `threshold` = `25`, `severity` = `error`
+- Config threshold: `threshold` = `10`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.public-method-count` leaves public method count unaddressed.

@@ -72,7 +72,7 @@ def test_gruff_disable_file_is_file_local(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    long_body = "\n".join(f"x{i} = {i}" for i in range(410)) + "\n"
+    long_body = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
     (src / "suppressed.py").write_text("# gruff: disable-file=size.file-length\n" + long_body)
     (src / "visible.py").write_text(long_body)
 
