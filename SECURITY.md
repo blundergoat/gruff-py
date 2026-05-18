@@ -2,8 +2,8 @@
 
 ## Supported Versions
 
-The project is preparing its first public `0.1` release. Until a stable release
-line exists, security fixes target the current main development branch.
+`0.1.x` is the current supported release line. Security fixes target the latest
+`0.1.x` release and the `main` branch.
 
 ## Reporting A Vulnerability
 
@@ -33,12 +33,12 @@ In scope:
 Out of scope:
 
 - false positives or false negatives from heuristic rules
-- findings intentionally emitted from files the user asked gruff to scan
+- findings intentionally emitted from files the user asked gruff-py to scan
 - risks caused by manually binding the dashboard to a shared network interface
 
 ## Dashboard Note
 
-`gruff dashboard` has no authentication and is intended for local development.
-It binds to `127.0.0.1` by default. Do not expose it on a shared network unless
-you understand the risk.
+`gruff-py dashboard` has no authentication and is intended for local
+development. It binds to `127.0.0.1` by default. Do not expose it on a shared
+network unless you understand the risk.
 

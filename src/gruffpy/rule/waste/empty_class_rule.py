@@ -42,10 +42,7 @@ class EmptyClassRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _empty_class_finding(unit, definition, node)
-            for node in _empty_classes(unit.tree)
-        ]
+        return [_empty_class_finding(unit, definition, node) for node in _empty_classes(unit.tree)]
 
 
 def _empty_classes(tree: ast.AST) -> list[ast.ClassDef]:

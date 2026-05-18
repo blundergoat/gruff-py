@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 
+from gruffpy.version import VERSION
+
 
 def test_bin_gruff_py_launches_current_package() -> None:
     repo_root = Path(__file__).resolve().parents[2]
@@ -13,5 +15,5 @@ def test_bin_gruff_py_launches_current_package() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith("gruff-py 0.1.0-dev")
+    assert result.stdout.startswith(f"gruff-py {VERSION}")
     assert "Available commands:" in result.stdout

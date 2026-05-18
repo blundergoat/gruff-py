@@ -194,8 +194,7 @@ def _unused_private_function_finding(
         end_line=candidate.node.end_lineno,
         symbol=symbol,
         remediation=(
-            "Delete the function or remove the leading underscore "
-            "if external callers are expected."
+            "Delete the function or remove the leading underscore if external callers are expected."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"name": candidate.node.name},

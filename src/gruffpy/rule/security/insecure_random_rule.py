@@ -100,9 +100,7 @@ def _has_security_context_smell(call: ast.Call) -> bool:
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
-            return any(
-                isinstance(t, ast.Name) and has_security_smell(t.id) for t in parent.targets
-            )
+            return any(isinstance(t, ast.Name) and has_security_smell(t.id) for t in parent.targets)
         if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
             return has_security_smell(parent.name)
         parent = getattr(parent, "parent", None)

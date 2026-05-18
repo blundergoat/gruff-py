@@ -5,12 +5,15 @@ import pytest
 from click.testing import CliRunner
 
 from gruffpy.cli import main
+from gruffpy.version import VERSION
 
 
 def test_cli_help_lists_analyse_command():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert result.output.startswith("gruff-py 0.1.0-dev\n\nUsage:\n  command [options] [arguments]")
+    assert result.output.startswith(
+        f"gruff-py {VERSION}\n\nUsage:\n  command [options] [arguments]"
+    )
     assert "Available commands:" in result.output
     for command in (
         "analyse",
@@ -32,7 +35,7 @@ def test_cli_without_command_prints_php_style_menu():
     result = CliRunner().invoke(main, [])
 
     assert result.exit_code == 0
-    assert result.output.startswith("gruff-py 0.1.0-dev\n\nUsage:\n")
+    assert result.output.startswith(f"gruff-py {VERSION}\n\nUsage:\n")
     assert "Options:" in result.output
     assert "Available commands:" in result.output
 

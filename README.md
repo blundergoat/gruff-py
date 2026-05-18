@@ -10,18 +10,16 @@ It is heuristic static analysis. Use it beside tools such as `ruff`, `mypy`,
 
 ## Status
 
-`0.1.0.dev0` is the release-candidate line for the public `0.1` release.
+`0.1.0` is the first public release.
 
 - Python 3.11+
-- 98 rules across 10 active quality pillars
+- 100 rules across 10 active quality pillars
 - Text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF reports
 - Local dashboard served from `127.0.0.1` by default
 - `.gruff-py.yaml` and `[tool.gruff-py]` configuration
-- PHP-compatible finding fingerprints and schema strings
+- PHP-compatible finding fingerprints
 - Python import package `gruffpy` with a typed package marker via `py.typed`
-
-The project metadata currently declares a proprietary license. Replace
-`LICENSE.md` and `pyproject.toml` before publishing as open source.
+- MIT licensed (see [`LICENSE.md`](LICENSE.md))
 
 ## Install
 
@@ -235,3 +233,11 @@ make perf-baseline # overwrite the linux-x86_64 baseline with the current run
 - [Support](SUPPORT.md)
 - [Release checklist](docs/RELEASING.md)
 - [License](LICENSE.md)
+
+## Author
+
+Built by [Matthew Hansen](https://www.blundergoat.com/about).
+
+## License
+
+[MIT](LICENSE)

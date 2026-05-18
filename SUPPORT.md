@@ -7,9 +7,9 @@ gruff-py is pre-1.0 software.
 Start with:
 
 ```bash
-gruff --help
-gruff analyse --help
-gruff dashboard --help
+gruff-py --help
+gruff-py analyse --help
+gruff-py dashboard --help
 ```
 
 Useful docs:

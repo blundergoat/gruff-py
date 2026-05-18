@@ -306,9 +306,7 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
         raise ConfigError("[tool.gruff-py.allowlists.deadCode] must be a table.")
     unknown = set(section.keys()) - VALID_DEAD_CODE_ALLOWLIST_KEYS
     if unknown:
-        raise ConfigError(
-            f"Unknown [tool.gruff-py.allowlists.deadCode] keys: {sorted(unknown)}"
-        )
+        raise ConfigError(f"Unknown [tool.gruff-py.allowlists.deadCode] keys: {sorted(unknown)}")
     for key in VALID_DEAD_CODE_ALLOWLIST_KEYS:
         value = section.get(key, [])
         if not isinstance(value, list) or not all(isinstance(x, str) for x in value):

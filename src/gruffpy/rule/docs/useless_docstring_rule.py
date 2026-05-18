@@ -244,8 +244,7 @@ def _useless_docstring_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"{candidate.kind.capitalize()} {candidate.symbol!r} docstring "
-            f"{candidate.reason}."
+            f"{candidate.kind.capitalize()} {candidate.symbol!r} docstring {candidate.reason}."
         ),
         file_path=unit.file.display_path,
         line=_docstring_line(candidate.node),

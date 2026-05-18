@@ -19,9 +19,7 @@ from gruffpy.rule.security._security_node_helper import call_keyword, call_targe
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
-_SKIP_DECORATOR_LEAVES: frozenset[str] = frozenset(
-    {"skip", "skipif", "skipIf", "skipUnless"}
-)
+_SKIP_DECORATOR_LEAVES: frozenset[str] = frozenset({"skip", "skipif", "skipIf", "skipUnless"})
 
 
 class SkippedWithoutReasonRule(Rule):

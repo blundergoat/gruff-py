@@ -142,11 +142,7 @@ def _target_identifiers(node: ast.AST) -> list[tuple[str, int]]:
     if isinstance(node, ast.Name):
         return [(node.id, node.lineno)]
     if isinstance(node, ast.Tuple | ast.List):
-        return [
-            (elt.id, elt.lineno)
-            for elt in node.elts
-            if isinstance(elt, ast.Name)
-        ]
+        return [(elt.id, elt.lineno) for elt in node.elts if isinstance(elt, ast.Name)]
     return []
 
 
