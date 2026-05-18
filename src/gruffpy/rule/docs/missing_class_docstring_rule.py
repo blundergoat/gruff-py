@@ -24,9 +24,16 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class MissingClassDocstringRule(Rule):
+    """Detect public classes that lack explanatory class-level documentation."""
+
     ID = "docs.missing-class-docstring"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing class docstring rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing class docstring",
@@ -38,6 +45,15 @@ class MissingClassDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for undocumented class declarations.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with rule options.
+
+        Returns:
+            Findings for classes that should carry a docstring.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -20,9 +20,16 @@ from gruffpy.rule.rule import Rule
 
 
 class MissingModuleDocstringRule(Rule):
+    """Detect source modules that lack top-of-file documentation."""
+
     ID = "docs.missing-module-docstring"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing module docstring rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing module docstring",
@@ -33,6 +40,15 @@ class MissingModuleDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for a missing module docstring.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            A single missing-docstring finding when the module needs one.
+        """
         if not isinstance(unit.tree, ast.Module):
             return []
         if not unit.tree.body:

@@ -32,6 +32,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 @dataclass(frozen=True, slots=True)
 class _ParamDocCandidate:
+    """Function whose docstring is missing one or more parameter entries."""
+
     node: FunctionNode
     symbol: str
     missing: list[str]
@@ -40,9 +42,16 @@ class _ParamDocCandidate:
 
 
 class MissingParamDocRule(Rule):
+    """Detect documented functions with missing parameter documentation."""
+
     ID = "docs.missing-param-doc"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing parameter documentation rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing parameter documentation",
@@ -53,6 +62,15 @@ class MissingParamDocRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for undocumented function parameters.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for public documented functions with missing param entries.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

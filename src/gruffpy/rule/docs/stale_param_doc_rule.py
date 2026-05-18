@@ -26,6 +26,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 @dataclass(frozen=True, slots=True)
 class _StaleParam:
+    """Documented parameter entry that no longer exists in the signature."""
+
     node: FunctionNode
     symbol: str
     name: str
@@ -33,9 +35,16 @@ class _StaleParam:
 
 
 class StaleParamDocRule(Rule):
+    """Detect function docstrings that mention stale parameter names."""
+
     ID = "docs.stale-param-doc"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the stale parameter documentation rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Stale parameter documentation",
@@ -46,6 +55,15 @@ class StaleParamDocRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for stale docstring parameter entries.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for documented parameters absent from function signatures.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

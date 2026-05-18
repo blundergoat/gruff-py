@@ -35,9 +35,16 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
 class MissingFunctionDocstringRule(Rule):
+    """Detect public functions and methods that lack documentation."""
+
     ID = "docs.missing-function-docstring"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing function docstring rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing function docstring",
@@ -48,6 +55,15 @@ class MissingFunctionDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for undocumented public functions.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for public functions or methods missing docstrings.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

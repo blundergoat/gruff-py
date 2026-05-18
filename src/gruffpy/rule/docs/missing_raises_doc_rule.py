@@ -29,9 +29,16 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
 class MissingRaisesDocRule(Rule):
+    """Detect documented functions that raise without a Raises section."""
+
     ID = "docs.missing-raises-doc"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing raises documentation rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing raises documentation",
@@ -42,6 +49,15 @@ class MissingRaisesDocRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for undocumented raise behavior.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for documented public functions that raise without docs.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

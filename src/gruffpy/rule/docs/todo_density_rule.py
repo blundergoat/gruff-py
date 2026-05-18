@@ -25,9 +25,16 @@ _RULE_DEFINITION_FILE_SUFFIXES = (
 
 
 class TodoDensityRule(Rule):
+    """Detect files whose TODO-style marker density exceeds configured limits."""
+
     ID = "docs.todo-density"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the TODO density rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="TODO density",
@@ -39,6 +46,15 @@ class TodoDensityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze source text for excessive TODO-style markers.
+
+        Args:
+            unit: Source unit whose raw text should be scanned.
+            context: Rule execution context with threshold settings.
+
+        Returns:
+            A density finding when marker count exceeds the configured threshold.
+        """
         if not unit.source:
             return []
         if _is_rule_definition_file(unit.file.display_path):

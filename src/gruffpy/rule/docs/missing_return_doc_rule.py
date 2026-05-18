@@ -31,9 +31,16 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
 class MissingReturnDocRule(Rule):
+    """Detect documented functions whose non-None return value is undocumented."""
+
     ID = "docs.missing-return-doc"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing return documentation rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing return documentation",
@@ -44,6 +51,15 @@ class MissingReturnDocRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for undocumented return values.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplied by the analyzer.
+
+        Returns:
+            Findings for documented public functions missing Returns sections.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

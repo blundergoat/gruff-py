@@ -35,6 +35,8 @@ _EXTERNAL_PROTOCOL_BASES: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class _ClassInfo:
+    """Collected class declaration details used by the project-wide rule."""
+
     fqn: str
     simple_name: str
     unit: AnalysisUnit
@@ -44,6 +46,8 @@ class _ClassInfo:
 
 @dataclass(frozen=True, slots=True)
 class _TypeReference:
+    """Type annotation reference plus the class context that owns it."""
+
     name: str
     owner_class_fqn: str | None
 
@@ -73,7 +77,15 @@ class SingleImplementorProtocolRule:
         )
 
     def analyse_project(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
-        """Analyse the whole project for unnecessary abstractions."""
+        """Analyse the whole project for unnecessary abstractions.
+
+        Args:
+            units: Parsed project units to inspect together.
+            context: Rule execution context with configured options.
+
+        Returns:
+            Findings for one-implementor abstractions without external type usage.
+        """
         settings = context.settings_for(self.definition())
         external_bases = {
             base.lower() for base in settings.string_list_option("externalProtocolBases")
@@ -270,20 +282,32 @@ class _AnnotationVisitor(ast.NodeVisitor):
         self.class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Visit a class without traversing nested owner state incorrectly."""
+        """Visit a class without traversing nested owner state incorrectly.
+
+        Args:
+            node: Class definition node to inspect.
+        """
         self.class_stack.append(node.name)
         for stmt in node.body:
             self.visit(stmt)
         self.class_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Record function annotations and then inspect its body."""
+        """Record function annotations and then inspect its body.
+
+        Args:
+            node: Function definition node to inspect.
+        """
         self._record_function_annotations(node)
         for stmt in node.body:
             self.visit(stmt)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Record async function annotations and then inspect its body."""
+        """Record async function annotations and then inspect its body.
+
+        Args:
+            node: Async function definition node to inspect.
+        """
         self._record_function_annotations(node)
         for stmt in node.body:
             self.visit(stmt)

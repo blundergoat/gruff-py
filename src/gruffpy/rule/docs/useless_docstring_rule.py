@@ -95,6 +95,8 @@ DocstringNode = ast.Module | ast.ClassDef | FunctionNode
 
 @dataclass(frozen=True, slots=True)
 class _UselessDocstring:
+    """Docstring candidate that failed the usefulness heuristics."""
+
     node: DocstringNode
     kind: str
     symbol: str
@@ -103,9 +105,16 @@ class _UselessDocstring:
 
 
 class UselessDocstringRule(Rule):
+    """Detect docstrings that add little context beyond the symbol name."""
+
     ID = "docs.useless-docstring"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the useless docstring rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Useless docstring",
@@ -117,6 +126,15 @@ class UselessDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze a Python module for low-information docstrings.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context with rule options.
+
+        Returns:
+            Findings for module, class, or function docstrings that lack signal.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

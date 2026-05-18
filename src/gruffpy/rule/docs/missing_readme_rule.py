@@ -27,9 +27,16 @@ _README_CANDIDATES: tuple[str, ...] = (
 
 
 class MissingReadmeRule(Rule):
+    """Detect project roots that lack a conventional README file."""
+
     ID = "docs.missing-readme"
 
     def definition(self) -> RuleDefinition:
+        """Return the rule metadata used by the registry and reporters.
+
+        Returns:
+            Definition for the missing README rule.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Missing README",
@@ -40,6 +47,15 @@ class MissingReadmeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Analyze the project root for an absent README file.
+
+        Args:
+            unit: Current analysis unit; retained for the rule protocol.
+            context: Rule execution context containing the project root.
+
+        Returns:
+            A missing README finding when no candidate README exists.
+        """
         root = context.project_root
         if _has_readme(root):
             return []

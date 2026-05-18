@@ -56,12 +56,18 @@ _STYLE_MAP: dict[_dp.DocstringStyle, DocstringStyle] = {
 
 
 def parse_docstring(text: str) -> ParsedDocstring | None:
-    """Parse *text* with style auto-detection.
+    """Parse docstring text with style auto-detection.
 
     Returns a :class:`ParsedDocstring` with summary, description, and
     normalised param/return/raises tuples. ``None`` is returned only when
     *text* is empty, whitespace-only, or the parser raises — in which case
     field-mismatch rules should skip the docstring rather than emit findings.
+
+    Args:
+        text: Raw docstring text to parse.
+
+    Returns:
+        Parsed docstring fields, or None when parsing should be skipped.
     """
     if not text or not text.strip():
         return None
@@ -104,9 +110,15 @@ _DocstringHostNode = ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.C
 
 
 def extract_docstring(node: _DocstringHostNode) -> str | None:
-    """Return the raw docstring text for *node*, or ``None`` if absent.
+    """Return the raw docstring text for a supported AST node.
 
     Thin wrapper over :func:`ast.get_docstring` so docs rules import a single
     helper module rather than mixing stdlib calls with parser calls.
+
+    Args:
+        node: Module, class, function, or async function node to inspect.
+
+    Returns:
+        Raw docstring text, or None when the node has no docstring.
     """
     return ast.get_docstring(node, clean=False)
