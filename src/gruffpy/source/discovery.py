@@ -72,11 +72,18 @@ DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryResult:
+    """Files and input-path diagnostics produced by source discovery."""
+
     files: tuple[SourceFile, ...]
     missing_paths: tuple[str, ...]
     ignored_paths: tuple[str, ...]
 
     def has_input_errors(self) -> bool:
+        """Return whether any requested path was missing.
+
+        Returns:
+            True when source discovery found missing input paths.
+        """
         return bool(self.missing_paths)
 
 
@@ -105,6 +112,16 @@ class SourceDiscovery:
         include_ignored: bool = False,
         configured_ignore_patterns: Iterable[str] = (),
     ) -> SourceDiscoveryResult:
+        """Discover analyzable source files from requested paths.
+
+        Args:
+            paths: Requested file or directory paths relative to the project root.
+            include_ignored: Whether default and gitignored paths should be included.
+            configured_ignore_patterns: Additional project-config ignore patterns.
+
+        Returns:
+            Discovered source files plus missing and ignored path summaries.
+        """
         patterns = list(configured_ignore_patterns)
         requested = paths or ["."]
         files: dict[str, SourceFile] = {}

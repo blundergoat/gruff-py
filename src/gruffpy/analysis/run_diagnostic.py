@@ -6,6 +6,8 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class RunDiagnostic:
+    """Non-finding diagnostic emitted for run-level issues."""
+
     type: str
     message: str
     file_path: str | None = None
@@ -13,6 +15,11 @@ class RunDiagnostic:
     path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the diagnostic to the analysis report payload.
+
+        Returns:
+            JSON-compatible diagnostic mapping.
+        """
         return {
             "type": self.type,
             "message": self.message,

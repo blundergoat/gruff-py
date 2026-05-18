@@ -38,7 +38,14 @@ class ParsedSuppressions:
     diagnostics: tuple[SuppressionDiagnostic, ...] = ()
 
     def disabled_on_line(self, line: int) -> frozenset[str]:
-        """Return rule ids disabled for a physical source line."""
+        """Return rule ids disabled for a physical source line.
+
+        Args:
+            line: One-based physical source line.
+
+        Returns:
+            Rule ids disabled directly on the line or by ``disable-next``.
+        """
         same_line = self.line_disabled_rule_ids.get(line, frozenset())
         next_line = self.next_line_disabled_rule_ids.get(line, frozenset())
         return same_line | next_line
@@ -86,12 +93,16 @@ def parse_suppressions(
 
 @dataclass(frozen=True, slots=True)
 class _CommentToken:
+    """Source comment token with its physical line number."""
+
     text: str
     line: int
 
 
 @dataclass(frozen=True, slots=True)
 class _ParsedComment:
+    """Parsed suppression directive plus diagnostics for one comment."""
+
     directive: SuppressionDirective | None
     rule_ids: frozenset[str]
     diagnostics: tuple[SuppressionDiagnostic, ...] = ()

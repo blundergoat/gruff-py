@@ -27,7 +27,14 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
 
 
 def rule_security_metadata(rule_id: str) -> dict[str, Any]:
-    """Return optional security taxonomy for a built-in rule."""
+    """Return optional security taxonomy for a built-in rule.
+
+    Args:
+        rule_id: Rule identifier to look up.
+
+    Returns:
+        Copy of the rule's taxonomy metadata, or an empty mapping.
+    """
     return dict(_RULE_SECURITY_METADATA.get(rule_id, {}))
 
 
@@ -37,7 +44,16 @@ def finding_security_metadata(
     source_label: str = "",
     sink_label: str = "",
 ) -> dict[str, Any]:
-    """Return JSON-ready security metadata for an individual finding."""
+    """Return JSON-ready security metadata for an individual finding.
+
+    Args:
+        rule_id: Rule identifier to look up.
+        source_label: Optional source taxonomy label for the finding.
+        sink_label: Optional sink taxonomy label for the finding.
+
+    Returns:
+        Security taxonomy plus optional source and sink labels.
+    """
     metadata = rule_security_metadata(rule_id)
     if source_label:
         metadata["sourceLabel"] = source_label

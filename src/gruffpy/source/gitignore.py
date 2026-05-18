@@ -32,19 +32,39 @@ class GitignoreMatcher:
 
     @classmethod
     def from_root(cls, root: Path) -> "GitignoreMatcher":
+        """Create a matcher rooted at a project directory.
+
+        Args:
+            root: Project root whose nested ``.gitignore`` files should apply.
+
+        Returns:
+            Matcher with the root ``.gitignore`` loaded when present.
+        """
         resolved = root.resolve() if root.exists() else root
         matcher = cls(root=resolved)
         matcher._ensure_loaded(resolved)
         return matcher
 
     def has_rules(self) -> bool:
+        """Return whether any gitignore rules have been loaded.
+
+        Returns:
+            True when at least one applicable ``.gitignore`` file was found.
+        """
         return bool(self._specs_by_dir)
 
     def is_ignored(self, path: Path, *, is_dir: bool = False) -> bool:
-        """Return True iff *path* is excluded by the project's gitignore rules.
+        """Return whether a path is excluded by project gitignore rules.
 
         ``is_dir`` should be set when the path refers to a directory so
         trailing-slash patterns like ``build/`` match correctly.
+
+        Args:
+            path: File or directory path to check.
+            is_dir: Whether the path should be matched as a directory.
+
+        Returns:
+            True when the path is ignored by the applicable gitignore stack.
         """
         abs_path = path if path.is_absolute() else self.root / path
         try:

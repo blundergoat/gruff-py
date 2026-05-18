@@ -37,6 +37,12 @@ def tokenize(identifier: str) -> list[str]:
     Leading/trailing/internal underscores are dropped. Numeric runs are
     returned as separate tokens so callers can detect ``temp1`` / ``result2``
     placeholder patterns.
+
+    Args:
+        identifier: Python identifier-like name to split.
+
+    Returns:
+        Semantic tokens with original acronym casing preserved.
     """
     stripped = identifier.strip("_")
     if not stripped:
@@ -48,5 +54,11 @@ def lower_tokens(identifier: str) -> list[str]:
     """Return :func:`tokenize` output with every token lowercased.
 
     Convenient when only the semantic content matters, not the casing.
+
+    Args:
+        identifier: Python identifier-like name to split.
+
+    Returns:
+        Lowercased semantic tokens.
     """
     return [t.lower() for t in tokenize(identifier)]

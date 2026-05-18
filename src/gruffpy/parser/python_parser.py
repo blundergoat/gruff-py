@@ -7,7 +7,17 @@ from gruffpy.source.source_file import SourceFile
 
 
 class PythonFileParser:
+    """Read source files and parse Python files into analysis units."""
+
     def parse(self, source_file: SourceFile) -> AnalysisUnit:
+        """Parse a source file into an analysis unit.
+
+        Args:
+            source_file: Source file descriptor to read and parse.
+
+        Returns:
+            Analysis unit with source text, optional AST, and parse diagnostics.
+        """
         try:
             with open(source_file.absolute_path, encoding="utf-8", errors="replace") as f:
                 source = f.read()
