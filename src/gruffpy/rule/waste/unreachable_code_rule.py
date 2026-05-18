@@ -127,7 +127,7 @@ def _literal_condition_findings(
     findings: list[Finding] = []
     for node in ast.walk(unit.tree):
         if isinstance(node, ast.If):
-            truthiness = _literal_truthiness(node.test)
+            truthiness = _is_literal_truthy(node.test)
             if truthiness is False and node.body:
                 findings.append(
                     _literal_condition_finding(
@@ -141,7 +141,7 @@ def _literal_condition_findings(
                     )
                 )
         elif isinstance(node, ast.While):
-            if _literal_truthiness(node.test) is False and node.body:
+            if _is_literal_truthy(node.test) is False and node.body:
                 findings.append(
                     _literal_condition_finding(
                         unit, definition, node.body[0], node, "literal-false-condition"
@@ -150,7 +150,7 @@ def _literal_condition_findings(
     return findings
 
 
-def _literal_truthiness(test: ast.expr) -> bool | None:
+def _is_literal_truthy(test: ast.expr) -> bool | None:
     """Return the truth value of *test* if it's a syntactic constant; else None."""
     if not isinstance(test, ast.Constant):
         return None

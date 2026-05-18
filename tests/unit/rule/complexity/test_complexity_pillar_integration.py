@@ -1,4 +1,4 @@
-"""Cumulative integration test for the complexity pillar (M03)."""
+"""Cumulative integration tests covering complexity-pillar registry and metadata behavior."""
 
 import ast
 

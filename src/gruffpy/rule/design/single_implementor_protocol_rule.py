@@ -54,7 +54,11 @@ class SingleImplementorProtocolRule:
     ID = "design.single-implementor-protocol"
 
     def definition(self) -> RuleDefinition:
-        """Return rule metadata."""
+        """Return static metadata for the single-implementor abstraction rule.
+
+        Returns:
+            Rule metadata used by registry selection, configuration, and reports.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Single-implementor Protocol/ABC",
@@ -120,8 +124,7 @@ def _findings_for_abstractions(
 
 def _is_extended_abstraction(abstraction: _ClassInfo, extended_abstractions: set[str]) -> bool:
     return (
-        abstraction.fqn in extended_abstractions
-        or abstraction.simple_name in extended_abstractions
+        abstraction.fqn in extended_abstractions or abstraction.simple_name in extended_abstractions
     )
 
 
@@ -286,7 +289,11 @@ class _AnnotationVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        """Record an annotated assignment."""
+        """Record references from an annotated assignment.
+
+        Args:
+            node: Annotated assignment node to inspect.
+        """
         self._record_annotation(node.annotation)
         self.generic_visit(node)
 
@@ -389,8 +396,7 @@ def _sequence_annotation_names(elements: list[ast.expr]) -> set[str]:
 
 def _is_matching_name(name: str, abstraction: _ClassInfo) -> bool:
     return (
-        name in {abstraction.fqn, abstraction.simple_name}
-        or _leaf(name) == abstraction.simple_name
+        name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
     )
 
 

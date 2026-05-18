@@ -108,7 +108,7 @@ def _is_same_expr(a: ast.expr, b: ast.expr) -> bool:
         return a.attr == b.attr and _is_same_expr(a.value, b.value)
     if isinstance(a, ast.Call) and isinstance(b, ast.Call):
         return (
-            call_target_name(a) == call_target_name(b)
+            _is_same_expr(a.func, b.func)
             and len(a.args) == len(b.args)
             and all(_is_same_expr(x, y) for x, y in zip(a.args, b.args, strict=False))
         )

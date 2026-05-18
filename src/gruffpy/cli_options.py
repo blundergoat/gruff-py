@@ -1,4 +1,4 @@
-"""Click option and command decorators for the CLI."""
+"""Reusable Click option and command decorators shared by the CLI command tree."""
 
 from collections.abc import Callable, Iterable
 from pathlib import Path

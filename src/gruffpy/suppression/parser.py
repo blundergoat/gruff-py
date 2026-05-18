@@ -1,4 +1,4 @@
-"""Parser for explicit ``# gruff: ...`` rule suppressions."""
+"""Tokenizer-backed parser for explicit ``# gruff: ...`` rule suppression comments."""
 
 import io
 import re

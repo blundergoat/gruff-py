@@ -1,4 +1,4 @@
-"""Entry point for ``python -m gruffpy``."""
+"""Module execution entry point that delegates ``python -m gruffpy`` to the Click CLI."""
 
 from typing import cast
 
