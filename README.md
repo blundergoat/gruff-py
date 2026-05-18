@@ -16,7 +16,7 @@ It is heuristic static analysis. Use it beside tools such as `ruff`, `mypy`,
 - 98 rules across 10 active quality pillars
 - Text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF reports
 - Local dashboard served from `127.0.0.1` by default
-- `.gruff.yaml` and `[tool.gruff-py]` configuration
+- `.gruff-py.yaml` and `[tool.gruff-py]` configuration
 - PHP-compatible finding fingerprints and schema strings
 - Python import package `gruffpy` with a typed package marker via `py.typed`
 
@@ -107,7 +107,7 @@ Common `analyse` and `report` options:
 | `--format hotspot` | `gruff-py.hotspot.v1` file offender JSON |
 | `--format sarif` | SARIF 2.1.0 code-scanning output |
 | `--fail-on error` | Exit non-zero for findings at or above the threshold |
-| `--no-config` | Ignore `.gruff.yaml` and `[tool.gruff-py]` |
+| `--no-config` | Ignore `.gruff-py.yaml` and `[tool.gruff-py]` |
 | `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--min-severity warning` | Display only warning/error findings |
 | `--include-pillar documentation` | Display only selected pillar findings |
@@ -137,11 +137,11 @@ Exit codes:
 Config is optional. Precedence is:
 
 1. `--config <path>`
-2. `.gruff.yaml` in the project root
+2. `.gruff-py.yaml` in the project root
 3. `[tool.gruff-py]` in `pyproject.toml`
 4. Built-in defaults
 
-Example `.gruff.yaml`:
+Example `.gruff-py.yaml`:
 
 ```yaml
 paths:

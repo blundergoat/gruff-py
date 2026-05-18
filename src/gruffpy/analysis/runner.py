@@ -18,7 +18,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 from gruffpy.scoring.score_calculator import ScoreCalculator
-from gruffpy.source.discovery import SourceDiscovery
+from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
@@ -44,27 +44,24 @@ def run_analysis(
         registry=registry,
     )
 
-    discovery = SourceDiscovery(project_root)
-    discovery_result = discovery.discover(
-        list(paths),
+    discovery_result, units, files_parsed, parse_diagnostics = _discover_and_parse_sources(
+        project_root=project_root,
+        paths=paths,
         include_ignored=include_ignored,
-        configured_ignore_patterns=config.ignored_path_patterns,
+        config=config,
     )
     diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
-
-    units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
     diagnostics.extend(parse_diagnostics)
 
     context = RuleContext(project_root=str(project_root), config=config)
     suppressions_by_file = _parse_suppressions(units, registry)
     diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
-    findings = registry.analyse(units, context)
-    findings = apply_suppressions(findings, suppressions_by_file)
-    findings = CompositeFindingFactory().synthesise(findings)
-    findings = apply_suppressions(findings, suppressions_by_file)
-    findings = _filter_allowed_secret_previews(findings, config)
-    findings.sort(
-        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
+    findings = _collect_findings(
+        registry=registry,
+        units=units,
+        context=context,
+        config=config,
+        suppressions_by_file=suppressions_by_file,
     )
     score = ScoreCalculator().calculate(findings)
 
@@ -87,6 +84,42 @@ def run_analysis(
         score=score,
         filters=display_filter,
     )
+
+
+def _discover_and_parse_sources(
+    *,
+    project_root: Path,
+    paths: tuple[str, ...],
+    include_ignored: bool,
+    config: AnalysisConfig,
+) -> tuple[SourceDiscoveryResult, list[AnalysisUnit], int, list[RunDiagnostic]]:
+    discovery = SourceDiscovery(project_root)
+    discovery_result = discovery.discover(
+        list(paths),
+        include_ignored=include_ignored,
+        configured_ignore_patterns=config.ignored_path_patterns,
+    )
+    units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
+    return discovery_result, units, files_parsed, parse_diagnostics
+
+
+def _collect_findings(
+    *,
+    registry: RuleRegistry,
+    units: list[AnalysisUnit],
+    context: RuleContext,
+    config: AnalysisConfig,
+    suppressions_by_file: dict[str, ParsedSuppressions],
+) -> list[Finding]:
+    findings = registry.analyse(units, context)
+    findings = apply_suppressions(findings, suppressions_by_file)
+    findings = CompositeFindingFactory().synthesise(findings)
+    findings = apply_suppressions(findings, suppressions_by_file)
+    findings = _filter_allowed_secret_previews(findings, config)
+    findings.sort(
+        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
+    )
+    return findings
 
 
 def _load_analysis_config(

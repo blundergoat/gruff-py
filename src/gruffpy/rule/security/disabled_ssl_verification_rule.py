@@ -8,6 +8,7 @@ Catches:
 """
 
 import ast
+from dataclasses import dataclass
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -27,6 +28,10 @@ from gruffpy.rule.security._security_node_helper import (
 
 _REQUESTS_METHODS: frozenset[str] = frozenset(
     {"get", "post", "put", "delete", "patch", "head", "options", "request"}
+)
+_TLS_REMEDIATION = (
+    "Use a properly verified TLS context. If you need a custom trust "
+    "store, configure CA bundles instead of disabling verification."
 )
 
 
@@ -82,12 +87,14 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
             if reason is not None:
                 self.findings.append(
                     _finding(
-                        self._unit,
-                        self._definition,
-                        node,
-                        target,
-                        reason,
-                        source_label,
+                        _SslFindingParts(
+                            unit=self._unit,
+                            definition=self._definition,
+                            node=node,
+                            target=target,
+                            reason=reason,
+                            source_label=source_label,
+                        )
                     )
                 )
         self.generic_visit(node)
@@ -95,35 +102,73 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
     def _visit_scope_body(self, body: list[ast.stmt], false_aliases: set[str]) -> None:
         aliases = set(false_aliases)
         for stmt in body:
-            if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                aliases.discard(stmt.name)
-                self.visit(stmt)
-                continue
-            if isinstance(stmt, ast.Assign):
-                self._visit_with_aliases(stmt.value, aliases)
-                self._record_assignment(stmt.targets, stmt.value, aliases)
-                continue
-            if isinstance(stmt, ast.AnnAssign):
-                if stmt.value is not None:
-                    self._visit_with_aliases(stmt.value, aliases)
-                self._record_assignment([stmt.target], stmt.value, aliases)
-                continue
-            if isinstance(stmt, ast.AugAssign):
-                self._visit_with_aliases(stmt.value, aliases)
-                for name in _target_names(stmt.target):
-                    aliases.discard(name)
-                continue
-            if isinstance(stmt, ast.If):
-                self._visit_with_aliases(stmt.test, aliases)
-                self._visit_scope_body(stmt.body, set(aliases))
-                self._visit_scope_body(stmt.orelse, set(aliases))
-                aliases.difference_update(_assigned_names(stmt))
-                continue
-            if isinstance(stmt, ast.For | ast.AsyncFor | ast.While | ast.Try):
-                self._visit_branching_statement(stmt, aliases)
-                aliases.difference_update(_assigned_names(stmt))
-                continue
-            self._visit_with_aliases(stmt, aliases)
+            self._visit_scope_statement(stmt, aliases)
+
+    def _visit_scope_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        if self._did_visit_definition_or_assignment(stmt, aliases):
+            return
+        if self._did_visit_conditional_or_branching_statement(stmt, aliases):
+            return
+        self._visit_with_aliases(stmt, aliases)
+
+    def _did_visit_definition_or_assignment(self, stmt: ast.stmt, aliases: set[str]) -> bool:
+        if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            self._visit_nested_scope(stmt, aliases)
+            return True
+        if isinstance(stmt, ast.Assign):
+            self._visit_assignment(stmt, aliases)
+            return True
+        if isinstance(stmt, ast.AnnAssign):
+            self._visit_annotated_assignment(stmt, aliases)
+            return True
+        if isinstance(stmt, ast.AugAssign):
+            self._visit_augmented_assignment(stmt, aliases)
+            return True
+        return False
+
+    def _did_visit_conditional_or_branching_statement(
+        self,
+        stmt: ast.stmt,
+        aliases: set[str],
+    ) -> bool:
+        if isinstance(stmt, ast.If):
+            self._visit_if_statement(stmt, aliases)
+            return True
+        if isinstance(stmt, ast.For | ast.AsyncFor | ast.While | ast.Try):
+            self._visit_branching_scope_statement(stmt, aliases)
+            return True
+        return False
+
+    def _visit_nested_scope(
+        self,
+        stmt: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+        aliases: set[str],
+    ) -> None:
+        aliases.discard(stmt.name)
+        self.visit(stmt)
+
+    def _visit_assignment(self, stmt: ast.Assign, aliases: set[str]) -> None:
+        self._visit_with_aliases(stmt.value, aliases)
+        self._record_assignment(stmt.targets, stmt.value, aliases)
+
+    def _visit_annotated_assignment(self, stmt: ast.AnnAssign, aliases: set[str]) -> None:
+        if stmt.value is not None:
+            self._visit_with_aliases(stmt.value, aliases)
+        self._record_assignment([stmt.target], stmt.value, aliases)
+
+    def _visit_augmented_assignment(self, stmt: ast.AugAssign, aliases: set[str]) -> None:
+        self._visit_with_aliases(stmt.value, aliases)
+        aliases.difference_update(_target_names(stmt.target))
+
+    def _visit_if_statement(self, stmt: ast.If, aliases: set[str]) -> None:
+        self._visit_with_aliases(stmt.test, aliases)
+        self._visit_scope_body(stmt.body, set(aliases))
+        self._visit_scope_body(stmt.orelse, set(aliases))
+        aliases.difference_update(_assigned_names(stmt))
+
+    def _visit_branching_scope_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        self._visit_branching_statement(stmt, aliases)
+        aliases.difference_update(_assigned_names(stmt))
 
     def _visit_branching_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
         if isinstance(stmt, ast.For | ast.AsyncFor):
@@ -184,39 +229,46 @@ def _ssl_verification_disabled_reason(
     return None, ""
 
 
-def _finding(
-    unit: AnalysisUnit,
-    definition: RuleDefinition,
-    node: ast.Call,
-    target: str,
-    reason: str,
-    source_label: str,
-) -> Finding:
+@dataclass(frozen=True, slots=True)
+class _SslFindingParts:
+    """Values needed to render a disabled TLS verification finding."""
+
+    unit: AnalysisUnit
+    definition: RuleDefinition
+    node: ast.Call
+    target: str
+    reason: str
+    source_label: str
+
+
+def _finding(parts: _SslFindingParts) -> Finding:
+    definition = parts.definition
     return Finding(
         rule_id=definition.id,
-        message=f"{reason} disables TLS certificate verification.",
-        file_path=unit.file.display_path,
-        line=node.lineno,
+        message=f"{parts.reason} disables TLS certificate verification.",
+        file_path=parts.unit.file.display_path,
+        line=parts.node.lineno,
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
-        end_line=node.end_lineno,
-        remediation=(
-            "Use a properly verified TLS context. If you need a custom trust "
-            "store, configure CA bundles instead of disabling verification."
-        ),
+        end_line=parts.node.end_lineno,
+        remediation=_TLS_REMEDIATION,
         secondary_pillars=definition.secondary_pillars,
-        metadata={
-            "target": target,
-            "reason": reason,
-            **finding_security_metadata(
-                definition.id,
-                source_label=source_label,
-                sink_label="tls-verification",
-            ),
-        },
+        metadata=_finding_metadata(parts),
     )
+
+
+def _finding_metadata(parts: _SslFindingParts) -> dict[str, str]:
+    return {
+        "target": parts.target,
+        "reason": parts.reason,
+        **finding_security_metadata(
+            parts.definition.id,
+            source_label=parts.source_label,
+            sink_label="tls-verification",
+        ),
+    }
 
 
 def _target_names(target: ast.expr) -> set[str]:

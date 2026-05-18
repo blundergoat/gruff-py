@@ -1,4 +1,4 @@
-"""Loads ``.gruff.yaml`` and ``pyproject.toml`` config into an ``AnalysisConfig``."""
+"""Loads YAML and ``pyproject.toml`` config into an ``AnalysisConfig``."""
 
 import tomllib
 from pathlib import Path
@@ -8,7 +8,7 @@ from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings
-from gruffpy.config.yaml_loader import load_gruff_yaml
+from gruffpy.config.yaml_loader import load_gruff_py_yaml
 
 VALID_TOP_LEVEL_KEYS = frozenset(
     {
@@ -32,19 +32,19 @@ VALID_SELECTION_KEYS = frozenset(
 )
 VALID_RULE_KEYS = frozenset({"enabled", "thresholds", "options"})
 TOML_TOOL_KEY = "gruff-py"
-LEGACY_TOML_TOOL_KEY = "gruff"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
+DEFAULT_YAML_CONFIG_NAME = ".gruff-py.yaml"
 
 
 class ConfigLoader:
-    """Resolves the active ``AnalysisConfig`` from `.gruff.yaml` / `pyproject.toml` / defaults."""
+    """Resolves the active ``AnalysisConfig`` from YAML / `pyproject.toml` / defaults."""
 
     def __init__(self, project_root: str | Path, analysis_config: AnalysisConfig) -> None:
         self._project_root = Path(project_root)
         self._defaults = analysis_config
 
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
-        """Load config, honouring `.gruff.yaml` / `pyproject.toml` precedence.
+        """Load config, honouring YAML / `pyproject.toml` precedence.
 
         Returns ``(config, source_path)`` where ``source_path`` is the file the
         config was loaded from, or ``None`` if no config file was found and
@@ -53,16 +53,16 @@ class ConfigLoader:
         Precedence:
 
         1. Explicit *config_path* (format auto-detected by extension).
-        2. ``.gruff.yaml`` in the project root.
+        2. ``.gruff-py.yaml`` in the project root.
         3. ``pyproject.toml`` ``[tool.gruff-py]`` in the project root.
         4. Built-in defaults.
         """
         if config_path is not None:
             return self._load_explicit(config_path)
 
-        yaml_path = self._project_root / ".gruff.yaml"
+        yaml_path = self._project_root / DEFAULT_YAML_CONFIG_NAME
         if yaml_path.exists():
-            section = load_gruff_yaml(yaml_path)
+            section = load_gruff_py_yaml(yaml_path)
             if not section:
                 return self._defaults, yaml_path
             self._validate_top_level(section, source=str(yaml_path))
@@ -81,11 +81,15 @@ class ConfigLoader:
         if not path.exists():
             return self._defaults, None
         if path.suffix in {".yaml", ".yml"}:
-            section = load_gruff_yaml(path)
+            section = load_gruff_py_yaml(path)
             if not section:
                 return self._defaults, path
             self._validate_top_level(section, source=str(path))
             return self._apply_config_section(section), path
+        if path.suffix != ".toml":
+            raise ConfigError(
+                f"Unsupported config file extension for {path}; use .yaml, .yml, or .toml."
+            )
         toml_section = self._load_toml_section(path)
         if toml_section is None:
             return self._defaults, path
@@ -100,8 +104,6 @@ class ConfigLoader:
         tool_section = data.get("tool", {})
         section = tool_section.get(TOML_TOOL_KEY)
         if section is None:
-            if LEGACY_TOML_TOOL_KEY in tool_section:
-                raise ConfigError(f"Use {TOML_TABLE} in {path}; [tool.gruff] is not supported.")
             return None
         if not isinstance(section, dict):
             raise ConfigError(f"{TOML_TABLE} must be a table.")

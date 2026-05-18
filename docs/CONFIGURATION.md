@@ -9,7 +9,7 @@ terms.
 The first matching source wins:
 
 1. `gruff-py analyse --config <path>`
-2. `.gruff.yaml` in the project root
+2. `.gruff-py.yaml` in the project root
 3. `[tool.gruff-py]` in `pyproject.toml`
 4. Built-in defaults from `RuleRegistry.defaults()`
 

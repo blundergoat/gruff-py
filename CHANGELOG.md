@@ -27,7 +27,7 @@ schema and fingerprint contracts called out below.
   `--silent`, `--quiet`, `--version`, `--ansi` / `--no-ansi`,
   `--no-interaction`, and `--verbose`.
 - `gruff dashboard [paths...]` local browser dashboard.
-- Optional configuration from `--config`, `.gruff.yaml`, or `[tool.gruff]`.
+- Optional configuration from `--config`, `.gruff-py.yaml`, or `[tool.gruff-py]`.
 - Strict config validation with diagnostics for unknown keys.
 - Source discovery for Python files and selected text/config files.
 - Default ignores for generated, dependency, cache, and VCS directories.

@@ -40,7 +40,7 @@ class DashboardPageRenderer:
             f"{_field('Paths', 'paths', state['paths'])}"
             "</div>"
             '<div class="field-grid">'
-            f"{_field('Config path', 'config', state['config'], '.gruff.yaml')}"
+            f"{_field('Config path', 'config', state['config'], '.gruff-py.yaml')}"
             '<label>Fail on<select name="failOn">'
             f"{_option('none', state['failOn'])}"
             f"{_option('advisory', state['failOn'])}"

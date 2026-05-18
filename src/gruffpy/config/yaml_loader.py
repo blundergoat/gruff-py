@@ -1,4 +1,4 @@
-"""``.gruff.yaml`` loader (ADR-006).
+"""``.gruff-py.yaml`` loader (ADR-006).
 
 Parses a YAML file into the same ``dict`` shape ``ConfigLoader._apply`` accepts
 from ``pyproject.toml`` ``[tool.gruff-py]``. The YAML uses the same option keys
@@ -13,7 +13,7 @@ import yaml
 from gruffpy.config.exceptions import ConfigError
 
 
-def load_gruff_yaml(path: Path) -> dict[str, Any]:
+def load_gruff_py_yaml(path: Path) -> dict[str, Any]:
     """Return the parsed dict at *path*, or ``{}`` if the file is empty.
 
     Raises ``ConfigError`` on:

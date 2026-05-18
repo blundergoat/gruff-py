@@ -97,6 +97,14 @@ class _ParsedComment:
     diagnostics: tuple[SuppressionDiagnostic, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class _DirectiveParts:
+    """Validated suppression directive name plus its raw rule-id tokens."""
+
+    directive: SuppressionDirective
+    raw_rule_ids: tuple[str, ...]
+
+
 def _comment_tokens(source: str) -> list[_CommentToken]:
     tokens: list[_CommentToken] = []
     try:
@@ -118,52 +126,96 @@ def _parse_comment(
     if marker is None:
         return _ParsedComment(directive=None, rule_ids=frozenset())
 
-    body = marker.group("body")
+    parts, diagnostics = _parse_directive_parts(marker.group("body"), line)
+    if parts is None:
+        return _ParsedComment(directive=None, rule_ids=frozenset(), diagnostics=diagnostics)
+
+    accepted, diagnostics = _accepted_rule_ids(
+        parts.raw_rule_ids,
+        directive=parts.directive,
+        line=line,
+        known_rule_ids=known_rule_ids,
+    )
+    return _ParsedComment(
+        directive=parts.directive,
+        rule_ids=frozenset(accepted),
+        diagnostics=diagnostics,
+    )
+
+
+def _parse_directive_parts(
+    body: str,
+    line: int,
+) -> tuple[_DirectiveParts | None, tuple[SuppressionDiagnostic, ...]]:
     match = _DIRECTIVE_RE.match(body)
     if match is None:
-        return _invalid_comment(line, "Malformed gruff suppression comment.")
+        return None, _invalid_comment(line, "Malformed gruff suppression comment.").diagnostics
 
     directive = match.group("directive").lower()
     if directive not in _VALID_DIRECTIVES:
-        return _invalid_comment(line, f'Unknown gruff suppression directive "{directive}".')
+        return None, _invalid_comment(
+            line,
+            f'Unknown gruff suppression directive "{directive}".',
+        ).diagnostics
 
-    rule_ids_text = match.group("rule_ids")
-    raw_rule_ids = [item.strip() for item in rule_ids_text.split(",")]
+    raw_rule_ids = _split_rule_ids(match.group("rule_ids"))
+    if not raw_rule_ids:
+        return None, _invalid_comment(
+            line,
+            "Suppression must name at least one explicit rule id.",
+        ).diagnostics
+
+    return _DirectiveParts(_as_directive(directive), raw_rule_ids), ()
+
+
+def _split_rule_ids(rule_ids_text: str) -> tuple[str, ...]:
+    raw_rule_ids = tuple(item.strip() for item in rule_ids_text.split(","))
     if not raw_rule_ids or any(not item for item in raw_rule_ids):
-        return _invalid_comment(line, "Suppression must name at least one explicit rule id.")
+        return ()
+    return raw_rule_ids
 
+
+def _accepted_rule_ids(
+    raw_rule_ids: tuple[str, ...],
+    *,
+    directive: SuppressionDirective,
+    line: int,
+    known_rule_ids: frozenset[str] | None,
+) -> tuple[set[str], tuple[SuppressionDiagnostic, ...]]:
     accepted: set[str] = set()
     diagnostics: list[SuppressionDiagnostic] = []
     for rule_id in raw_rule_ids:
-        if not _RULE_ID_RE.match(rule_id):
-            diagnostics.append(
-                SuppressionDiagnostic(
-                    type="suppression-parse-error",
-                    message=f'Invalid gruff rule id "{rule_id}".',
-                    line=line,
-                    directive=directive,
-                    rule_id=rule_id,
-                )
-            )
-            continue
-        if known_rule_ids is not None and rule_id not in known_rule_ids:
-            diagnostics.append(
-                SuppressionDiagnostic(
-                    type="suppression-unknown-rule",
-                    message=f'Unknown gruff rule id "{rule_id}".',
-                    line=line,
-                    directive=directive,
-                    rule_id=rule_id,
-                )
-            )
+        diagnostic = _rule_id_diagnostic(rule_id, directive, line, known_rule_ids)
+        if diagnostic is not None:
+            diagnostics.append(diagnostic)
             continue
         accepted.add(rule_id)
+    return accepted, tuple(diagnostics)
 
-    return _ParsedComment(
-        directive=_as_directive(directive),
-        rule_ids=frozenset(accepted),
-        diagnostics=tuple(diagnostics),
-    )
+
+def _rule_id_diagnostic(
+    rule_id: str,
+    directive: SuppressionDirective,
+    line: int,
+    known_rule_ids: frozenset[str] | None,
+) -> SuppressionDiagnostic | None:
+    if not _RULE_ID_RE.match(rule_id):
+        return SuppressionDiagnostic(
+            type="suppression-parse-error",
+            message=f'Invalid gruff rule id "{rule_id}".',
+            line=line,
+            directive=directive,
+            rule_id=rule_id,
+        )
+    if known_rule_ids is not None and rule_id not in known_rule_ids:
+        return SuppressionDiagnostic(
+            type="suppression-unknown-rule",
+            message=f'Unknown gruff rule id "{rule_id}".',
+            line=line,
+            directive=directive,
+            rule_id=rule_id,
+        )
+    return None
 
 
 def _invalid_comment(line: int, message: str) -> _ParsedComment:

@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import Any
 
-from gruffpy.config.yaml_loader import load_gruff_yaml
+from gruffpy.config.yaml_loader import load_gruff_py_yaml
 from gruffpy.rule.registry import RuleRegistry
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_repo_gruff_yaml_references_all_builtin_rules_and_pillars() -> None:
-    data = load_gruff_yaml(_PROJECT_ROOT / ".gruff.yaml")
+def test_repo_gruff_py_yaml_references_all_builtin_rules_and_pillars() -> None:
+    data = load_gruff_py_yaml(_PROJECT_ROOT / ".gruff-py.yaml")
     definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
 
     assert data["selection"]["tiers"] == _unique(

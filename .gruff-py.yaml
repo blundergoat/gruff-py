@@ -1,8 +1,8 @@
-# gruff configuration - `.gruff.yaml` (ADR-006)
+# gruff-py configuration - `.gruff-py.yaml` (ADR-006)
 #
-# This file is dogfood: gruff-py uses it when running `gruff analyse src/`
+# This file is dogfood: gruff-py uses it when running `gruff-py analyse src/`
 # against itself. It mirrors the `[tool.gruff-py]` block in `pyproject.toml`.
-# `.gruff.yaml` takes precedence over `pyproject.toml` when both exist.
+# `.gruff-py.yaml` takes precedence over `pyproject.toml` when both exist.
 #
 # The selection.pillars list names every built-in rubric/pillar, and
 # selection.rules plus rules.* name every built-in rule. Rule entries repeat
@@ -11,6 +11,11 @@
 minimumPythonVersion: '3.11'
 paths:
   ignore:
+  - .agents/
+  - .claude/
+  - .codex/
+  - .github/
+  - .goat-flow/
   - tests/fixtures/**
 allowlists:
   acceptedAbbreviations: []
