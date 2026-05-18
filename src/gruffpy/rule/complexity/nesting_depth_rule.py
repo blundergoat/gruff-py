@@ -53,20 +53,13 @@ class NestingDepthRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
             depth = nesting_depth_for(fn)
-            if depth <= warning_threshold:
+            threshold_match = settings.high_value_threshold_match(depth)
+            if threshold_match is None:
                 continue
-            if depth > error_threshold:
-                severity = Severity.ERROR
-                threshold: int | float = error_threshold
-            else:
-                severity = Severity.WARNING
-                threshold = warning_threshold
 
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
@@ -75,11 +68,12 @@ class NestingDepthRule(Rule):
                     rule_id=definition.id,
                     message=(
                         f"Function {symbol!r} nests {depth} levels deep, "
-                        f"above the {severity.value} threshold of {_format_number(threshold)}."
+                        f"above the {threshold_match.severity.value} threshold of "
+                        f"{_format_number(threshold_match.threshold)}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=severity,
+                    severity=threshold_match.severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
@@ -92,9 +86,9 @@ class NestingDepthRule(Rule):
                     metadata={
                         "depth": depth,
                         "measuredValue": depth,
-                        "threshold": threshold,
+                        "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
-                        "thresholdType": severity.value,
+                        "thresholdType": threshold_match.severity.value,
                     },
                 ),
             )

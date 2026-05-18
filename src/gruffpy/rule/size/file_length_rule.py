@@ -28,30 +28,22 @@ class FileLengthRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
         line_count = unit.line_count()
-
-        if line_count <= warning_threshold:
+        threshold_match = settings.high_value_threshold_match(line_count)
+        if threshold_match is None:
             return []
-
-        if line_count > error_threshold:
-            severity = Severity.ERROR
-            threshold: int | float = error_threshold
-        else:
-            severity = Severity.WARNING
-            threshold = warning_threshold
 
         return [
             Finding(
                 rule_id=definition.id,
                 message=(
                     f"File has {line_count} lines, "
-                    f"above the {severity.value} threshold of {_format_number(threshold)}."
+                    f"above the {threshold_match.severity.value} threshold of "
+                    f"{_format_number(threshold_match.threshold)}."
                 ),
                 file_path=unit.file.display_path,
                 line=1,
-                severity=severity,
+                severity=threshold_match.severity,
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
@@ -61,9 +53,9 @@ class FileLengthRule(Rule):
                 metadata={
                     "lines": line_count,
                     "measuredValue": line_count,
-                    "threshold": threshold,
+                    "threshold": threshold_match.threshold,
                     "thresholdDirection": "above",
-                    "thresholdType": severity.value,
+                    "thresholdType": threshold_match.severity.value,
                 },
             ),
         ]

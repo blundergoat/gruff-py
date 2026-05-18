@@ -106,6 +106,18 @@ def test_collection_plural_last_token_skipped():
     assert findings == []
 
 
+def test_collection_plural_head_noun_skipped_for_role_suffix():
+    src = "def f(rules: list[RuleLike], methods: list[MethodNode]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_collection_members_role_name_skipped():
+    src = "def f(members: list[Finding]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
 def test_optional_collection_plural_name_skipped():
     src = "from typing import Optional\ndef f(findings: Optional[list[Finding]]): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
@@ -135,6 +147,29 @@ def test_collection_unrelated_name_still_fires():
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["expected"] == "finding"
+    assert findings[0].metadata["suggested"] == "findings"
+    assert "``findings``" in findings[0].message
+
+
+def test_collection_singular_name_suggests_plural():
+    src = "def f(member: list[Finding]): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["expected"] == "finding"
+    assert findings[0].metadata["suggested"] == "findings"
+    assert findings[0].remediation == "Rename ``member`` to ``findings``."
+
+
+def test_click_root_group_role_name_skipped():
+    src = "import click\ndef bind(root: click.Group): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_singular_annotation_suggestion_stays_singular():
+    src = "def f(finding: Finding): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
 
 
 def test_no_annotation_does_not_fire():

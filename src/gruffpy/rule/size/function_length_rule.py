@@ -2,6 +2,7 @@
 
 import ast
 
+from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -36,14 +37,11 @@ class FunctionLengthRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
+        threshold = _active_high_threshold(settings)
 
         return [
-            _function_length_finding(
-                unit, definition, node, warning_threshold, error_threshold
-            )
-            for node in _long_functions(unit.tree, warning_threshold)
+            _function_length_finding(unit, definition, node, settings)
+            for node in _long_functions(unit.tree, threshold)
         ]
 
 
@@ -56,35 +54,33 @@ def _long_functions(tree: ast.AST, warning_threshold: int | float) -> list[Funct
     ]
 
 
-def _threshold_for(
-    measured: int | float,
-    warning_threshold: int | float,
-    error_threshold: int | float,
-) -> tuple[Severity, int | float]:
-    if measured > error_threshold:
-        return Severity.ERROR, error_threshold
-    return Severity.WARNING, warning_threshold
+def _active_high_threshold(settings: RuleSettings) -> int | float:
+    if settings.severity_threshold is not None:
+        return settings.severity_threshold.threshold
+    return settings.numeric_threshold("warning")
 
 
 def _function_length_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
     node: FunctionNode,
-    warning_threshold: int | float,
-    error_threshold: int | float,
+    settings: RuleSettings,
 ) -> Finding:
     line_count = lines_for_size(node)
-    severity, threshold = _threshold_for(line_count, warning_threshold, error_threshold)
+    threshold_match = settings.high_value_threshold_match(line_count)
+    if threshold_match is None:
+        raise ValueError("function length finding requires a threshold match")
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
         message=(
             f"Function {symbol!r} is {line_count} lines, "
-            f"above the {severity.value} threshold of {_format_number(threshold)}."
+            f"above the {threshold_match.severity.value} threshold of "
+            f"{_format_number(threshold_match.threshold)}."
         ),
         file_path=unit.file.display_path,
         line=_start_line(node),
-        severity=severity,
+        severity=threshold_match.severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
@@ -95,9 +91,9 @@ def _function_length_finding(
         metadata={
             "lines": line_count,
             "measuredValue": line_count,
-            "threshold": threshold,
+            "threshold": threshold_match.threshold,
             "thresholdDirection": "above",
-            "thresholdType": severity.value,
+            "thresholdType": threshold_match.severity.value,
         },
     )
 

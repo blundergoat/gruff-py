@@ -86,4 +86,5 @@ secretPreviews = []
 # Per-rule overrides go in [tool.gruff-py.rules."<rule-id>"]:
 # [tool.gruff-py.rules."size.file-length"]
 # enabled = true
-# thresholds = { warning = 400, error = 800 }
+# threshold = 800
+# severity = "error"

@@ -23,7 +23,14 @@ def test_repo_gruff_py_yaml_references_all_builtin_rules_and_pillars() -> None:
     for definition in definitions:
         section = data["rules"][definition.id]
         assert section["enabled"] is definition.default_enabled
-        assert section.get("thresholds", {}) == _plain(definition.default_thresholds)
+        if set(definition.default_thresholds) == {"warning", "error"}:
+            assert "thresholds" not in section
+            assert section["threshold"] == definition.default_thresholds["error"]
+            assert section["severity"] == "error"
+        else:
+            assert section.get("thresholds", {}) == _plain(definition.default_thresholds)
+            assert "threshold" not in section
+            assert "severity" not in section
         assert section.get("options", {}) == _plain(definition.default_options)
 
 

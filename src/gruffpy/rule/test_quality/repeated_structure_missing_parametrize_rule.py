@@ -34,7 +34,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 3},
+            default_thresholds={"minGroupSize": 3},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -42,7 +42,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        min_group = int(settings.numeric_threshold("warning"))
+        min_group = int(settings.numeric_threshold("minGroupSize"))
         findings: list[Finding] = []
         groups: dict[str, list[ast.FunctionDef | ast.AsyncFunctionDef]] = collections.defaultdict(
             list

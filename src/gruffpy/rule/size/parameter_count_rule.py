@@ -34,8 +34,6 @@ class ParameterCountRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
 
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
@@ -45,26 +43,21 @@ class ParameterCountRule(Rule):
             parents = parent_chain(node)
             symbol = qualified_symbol(node, parents)
             count = _count_parameters(node, parents)
-            if count <= warning_threshold:
+            threshold_match = settings.high_value_threshold_match(count)
+            if threshold_match is None:
                 continue
-
-            if count > error_threshold:
-                severity = Severity.ERROR
-                threshold: int | float = error_threshold
-            else:
-                severity = Severity.WARNING
-                threshold = warning_threshold
 
             findings.append(
                 Finding(
                     rule_id=definition.id,
                     message=(
                         f"Function {symbol!r} has {count} parameters, "
-                        f"above the {severity.value} threshold of {_format_number(threshold)}."
+                        f"above the {threshold_match.severity.value} threshold of "
+                        f"{_format_number(threshold_match.threshold)}."
                     ),
                     file_path=unit.file.display_path,
                     line=node.lineno,
-                    severity=severity,
+                    severity=threshold_match.severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
@@ -78,9 +71,9 @@ class ParameterCountRule(Rule):
                     metadata={
                         "parameters": count,
                         "measuredValue": count,
-                        "threshold": threshold,
+                        "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
-                        "thresholdType": severity.value,
+                        "thresholdType": threshold_match.severity.value,
                     },
                 ),
             )

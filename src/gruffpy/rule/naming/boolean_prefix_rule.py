@@ -1,6 +1,6 @@
 """Bool-returning functions / bool-typed attributes should start with a
-boolean-intent prefix: ``is_``, ``has_``, ``can_``, ``should_``, ``was_``,
-``did_``, ``will_``, ``must_``, ``needs_``.
+boolean-intent prefix or predicate spelling: ``is_``, ``has_``, ``can_``,
+``uses_``, ``supports_``, ``enabled``, ``include_*``, and similar forms.
 
 Detection:
 
@@ -23,10 +23,75 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule._python_dynamism import _decorator_name
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
+from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 
 _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
-    {"is", "has", "can", "should", "was", "did", "will", "must", "needs", "are", "do", "does"}
+    {
+        "accepts",
+        "allows",
+        "are",
+        "can",
+        "check",
+        "checks",
+        "contains",
+        "did",
+        "do",
+        "does",
+        "expects",
+        "has",
+        "is",
+        "matches",
+        "must",
+        "needs",
+        "produces",
+        "requires",
+        "returns",
+        "should",
+        "supports",
+        "uses",
+        "validates",
+        "was",
+        "will",
+    }
+)
+_BOOLEAN_ADJECTIVES: frozenset[str] = frozenset(
+    {
+        "active",
+        "applicable",
+        "available",
+        "default",
+        "disabled",
+        "empty",
+        "enabled",
+        "excluded",
+        "frozen",
+        "included",
+        "interactive",
+        "invalid",
+        "optional",
+        "present",
+        "ready",
+        "required",
+        "valid",
+        "verbose",
+        "visible",
+    }
+)
+_BOOLEAN_PREFIX_PATTERNS: tuple[str, ...] = (
+    "exclude_",
+    "include_",
+    "no_",
+    "with_",
+    "without_",
+)
+_BOOLEAN_SUFFIX_PATTERNS: tuple[str, ...] = (
+    "_bool",
+    "_disabled",
+    "_enabled",
+    "_flag",
+    "_optional",
+    "_required",
 )
 
 
@@ -45,6 +110,8 @@ class BooleanPrefixRule(Rule):
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         if unit.tree is None:
+            return []
+        if _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
         findings: list[Finding] = []
@@ -136,10 +203,18 @@ def _has_boolean_prefix(name: str) -> bool:
     stripped = name.lstrip("_")
     if not stripped:
         return False
-    if "_" not in stripped:
-        return stripped.lower() in _BOOLEAN_PREFIXES
-    first = stripped.split("_", 1)[0]
-    return first.lower() in _BOOLEAN_PREFIXES
+    lowered = stripped.lower()
+    tokens = lower_tokens(stripped)
+    if not tokens:
+        return False
+    return (
+        lowered in _BOOLEAN_PREFIXES
+        or lowered in _BOOLEAN_ADJECTIVES
+        or tokens[0] in _BOOLEAN_PREFIXES
+        or tokens[-1] in _BOOLEAN_ADJECTIVES
+        or lowered.startswith(_BOOLEAN_PREFIX_PATTERNS)
+        or lowered.endswith(_BOOLEAN_SUFFIX_PATTERNS)
+    )
 
 
 def _has_bool_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -163,3 +238,11 @@ def _is_bool_name(node: ast.AST) -> bool:
 
 def _strip_lead(name: str) -> str:
     return name.lstrip("_") or name
+
+
+def _is_test_file(display_path: str) -> bool:
+    normalized = display_path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    if normalized.startswith("tests/") or "/tests/" in normalized:
+        return True
+    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

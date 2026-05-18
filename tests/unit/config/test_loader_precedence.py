@@ -73,6 +73,106 @@ def test_explicit_toml_path_supported(tmp_path: Path):
     assert config.rules["size.file-length"].thresholds["warning"] == 222
 
 
+def test_threshold_and_severity_override_warning_error_rule(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  size.file-length:\n    threshold: 900\n    severity: error\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    config, _ = loader.load()
+    settings = config.rule_settings("size.file-length")
+
+    assert settings.severity_threshold is not None
+    assert settings.severity_threshold.threshold == 900
+    assert settings.severity_threshold.severity.value == "error"
+    assert settings.high_value_threshold_match(900) is None
+    match = settings.high_value_threshold_match(901)
+    assert match is not None
+    assert match.threshold == 900
+    assert match.severity.value == "error"
+
+
+def test_threshold_and_warning_severity_supported(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  size.file-length:\n    threshold: 500\n    severity: warning\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    config, _ = loader.load()
+    settings = config.rule_settings("size.file-length")
+    match = settings.high_value_threshold_match(501)
+
+    assert match is not None
+    assert match.severity.value == "warning"
+
+
+def test_threshold_and_severity_override_low_value_rule(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  complexity.maintainability-index:\n    threshold: 60\n    severity: error\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    config, _ = loader.load()
+    settings = config.rule_settings("complexity.maintainability-index")
+
+    assert settings.low_value_threshold_match(60) is None
+    match = settings.low_value_threshold_match(59)
+    assert match is not None
+    assert match.threshold == 60
+    assert match.severity.value == "error"
+
+
+def test_threshold_requires_severity(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text("rules:\n  size.file-length:\n    threshold: 900\n")
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match='severity" must be "warning" or "error"'):
+        loader.load()
+
+
+def test_severity_requires_threshold(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text("rules:\n  size.file-length:\n    severity: error\n")
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match='severity" requires "threshold"'):
+        loader.load()
+
+
+def test_threshold_rejects_named_threshold_rule(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  test-quality.eager-test:\n    threshold: 5\n    severity: error\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match="only supported for rules with warning/error"):
+        loader.load()
+
+
+def test_threshold_and_thresholds_cannot_be_combined(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n"
+        "  size.file-length:\n"
+        "    threshold: 900\n"
+        "    severity: error\n"
+        "    thresholds:\n"
+        "      warning: 500\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match='cannot combine "threshold" and "thresholds"'):
+        loader.load()
+
+
+def test_unknown_named_threshold_rejected(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  test-quality.eager-test:\n    thresholds:\n      warning: 5\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match='Unknown threshold "rules.test-quality.eager-test'):
+        loader.load()
+
+
 def test_explicit_config_path_rejects_unknown_extension(tmp_path: Path):
     explicit = tmp_path / "custom.cfg"
     explicit.write_text("rules = {}\n")

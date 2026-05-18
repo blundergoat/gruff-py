@@ -27,6 +27,7 @@ from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
+from gruffpy.rule.naming._allowlists import DEFAULT_NAMING_ABBREVIATIONS
 from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 
@@ -39,9 +40,11 @@ _TRIM_SUFFIXES: tuple[str, ...] = (
     "Adapter",
     "Provider",
 )
-_DEFAULT_IGNORED: tuple[str, ...] = ("id", "ctx", "url", "ip", "io", "ui", "fn")
+_HEAD_NOUN_SUFFIX_TOKENS: frozenset[str] = frozenset({"item", "like", "node"})
 _IGNORED_TYPE_NAMES: frozenset[str] = frozenset({"Any"})
 _PATH_ROLE_TOKENS: frozenset[str] = frozenset({"path", "root", "file", "dir", "directory"})
+_COLLECTION_ROLE_NAMES: frozenset[str] = frozenset({"members"})
+_GROUP_ROLE_TOKENS: frozenset[str] = frozenset({"root"})
 _COLLECTION_TYPES: frozenset[str] = frozenset(
     {
         "list",
@@ -64,6 +67,7 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 class _ParameterMismatch:
     name: str
     expected: str
+    suggested: str
     line: int
 
 
@@ -78,7 +82,7 @@ class ParameterTypeNameRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_options={"ignoredParameterNames": list(_DEFAULT_IGNORED)},
+            default_options={"ignoredParameterNames": list(DEFAULT_NAMING_ABBREVIATIONS)},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -97,7 +101,7 @@ class ParameterTypeNameRule(Rule):
 
 def _ignored_parameter_names(configured: object) -> frozenset[str]:
     if not isinstance(configured, list) or not all(isinstance(name, str) for name in configured):
-        return frozenset(_DEFAULT_IGNORED)
+        return frozenset(DEFAULT_NAMING_ABBREVIATIONS)
     return frozenset(configured)
 
 
@@ -109,7 +113,14 @@ def _parameter_mismatches(tree: ast.AST, ignored: frozenset[str]) -> list[_Param
         for arg in _function_parameters(node):
             expected = _expected_parameter_name(arg, ignored)
             if expected is not None:
-                mismatches.append(_ParameterMismatch(arg.arg, expected, arg.lineno))
+                mismatches.append(
+                    _ParameterMismatch(
+                        arg.arg,
+                        expected,
+                        _suggested_parameter_name(arg.annotation, expected),
+                        arg.lineno,
+                    )
+                )
     return mismatches
 
 
@@ -137,8 +148,10 @@ def _is_acceptable_parameter_name(arg: ast.arg, expected: str) -> bool:
     if (
         annotation is not None
         and _is_collection_annotation(annotation)
-        and _has_plural_match(arg.arg, expected)
+        and (_has_plural_match(arg.arg, expected) or arg.arg in _COLLECTION_ROLE_NAMES)
     ):
+        return True
+    if expected == "group" and bool(set(lower_tokens(arg.arg)) & _GROUP_ROLE_TOKENS):
         return True
     if _has_shared_token(arg.arg, expected):
         return True
@@ -154,7 +167,7 @@ def _parameter_mismatch_finding(
         rule_id=definition.id,
         message=(
             f"Parameter {mismatch.name!r} annotated as a complex type; "
-            f"prefer the canonical name ``{mismatch.expected}``."
+            f"prefer the canonical name ``{mismatch.suggested}``."
         ),
         file_path=unit.file.display_path,
         line=mismatch.line,
@@ -164,11 +177,12 @@ def _parameter_mismatch_finding(
         confidence=definition.confidence,
         end_line=mismatch.line,
         symbol=mismatch.name,
-        remediation=f"Rename ``{mismatch.name}`` to ``{mismatch.expected}``.",
+        remediation=f"Rename ``{mismatch.name}`` to ``{mismatch.suggested}``.",
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "parameter": mismatch.name,
             "expected": mismatch.expected,
+            "suggested": mismatch.suggested,
         },
     )
 
@@ -269,11 +283,33 @@ def _root_name(annotation: ast.Attribute) -> str | None:
 
 
 def _has_plural_match(param_name: str, expected: str) -> bool:
-    if param_name == _pluralize(expected):
+    if param_name in _plural_name_candidates(expected):
         return True
     param_tokens = set(lower_tokens(param_name))
-    expected_tokens = expected.split("_")
-    return _pluralize(expected_tokens[-1]) in param_tokens
+    return bool(param_tokens & _plural_name_candidates(expected))
+
+
+def _plural_name_candidates(expected: str) -> frozenset[str]:
+    candidates = {_pluralize(expected)}
+    tokens = expected.split("_")
+    if len(tokens) > 1:
+        candidates.add(_pluralize(tokens[0]))
+        candidates.add(_pluralize(tokens[-1]))
+    return frozenset(candidates)
+
+
+def _suggested_parameter_name(annotation: ast.expr | None, expected: str) -> str:
+    if annotation is None or not _is_collection_annotation(annotation):
+        return expected
+    return _collection_parameter_name(expected)
+
+
+def _collection_parameter_name(expected: str) -> str:
+    tokens = expected.split("_")
+    if len(tokens) > 1 and tokens[-1] in _HEAD_NOUN_SUFFIX_TOKENS:
+        return _pluralize(tokens[0])
+    tokens[-1] = _pluralize(tokens[-1])
+    return "_".join(tokens)
 
 
 def _pluralize(name: str) -> str:

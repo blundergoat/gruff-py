@@ -7,9 +7,9 @@ Consumes Halstead volume (`_halstead.halstead_for`), cyclomatic complexity
 helper (`gruff.rule.size._lines.lines_for_size`) — ADR-002 requires the
 LOC term to share the helper, not be re-derived locally.
 
-Lower MI = worse; the rule emits when MI < threshold (default warning=80,
-error=70). Pillar: ``maintainability`` so this metric surfaces separately
-from per-function complexity.
+Lower MI = worse; the rule emits when MI is below the configured threshold.
+Pillar: ``maintainability`` so this metric surfaces separately from
+per-function complexity.
 """
 
 import math
@@ -49,21 +49,13 @@ class MaintainabilityIndexRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
             mi = maintainability_index_for(fn)
-            # Lower is worse: emit when MI < threshold.
-            if mi >= warning_threshold:
+            threshold_match = settings.low_value_threshold_match(mi)
+            if threshold_match is None:
                 continue
-            if mi < error_threshold:
-                severity = Severity.ERROR
-                threshold: int | float = error_threshold
-            else:
-                severity = Severity.WARNING
-                threshold = warning_threshold
 
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
@@ -72,11 +64,12 @@ class MaintainabilityIndexRule(Rule):
                     rule_id=definition.id,
                     message=(
                         f"Function {symbol!r} has maintainability index {mi:.1f}, "
-                        f"below the {severity.value} threshold of {_format_number(threshold)}."
+                        f"below the {threshold_match.severity.value} threshold of "
+                        f"{_format_number(threshold_match.threshold)}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=severity,
+                    severity=threshold_match.severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
@@ -87,9 +80,9 @@ class MaintainabilityIndexRule(Rule):
                     metadata={
                         "maintainabilityIndex": round(mi, 2),
                         "measuredValue": round(mi, 2),
-                        "threshold": threshold,
+                        "threshold": threshold_match.threshold,
                         "thresholdDirection": "below",
-                        "thresholdType": severity.value,
+                        "thresholdType": threshold_match.severity.value,
                     },
                 ),
             )

@@ -77,6 +77,9 @@ perf-out/
 # ----- Claude Code (per-user overrides; shared .claude/settings.json stays tracked) -----
 .claude/settings.local.json
 
+# ----- Codex (per-user overrides; shared .codex/config.toml stays tracked) -----
+.codex/config.local.toml
+
 /node_modules
 
 # ----- Not ignored on purpose (keep tracked) -----

@@ -42,7 +42,7 @@ class ParametrizeAnnotationRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 2},
+            default_thresholds={"maxCasesWithoutIds": 2},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -50,7 +50,7 @@ class ParametrizeAnnotationRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        min_cases = settings.numeric_threshold("warning")
+        min_cases = settings.numeric_threshold("maxCasesWithoutIds")
         return [
             _parametrize_without_ids_finding(unit, definition, candidate)
             for candidate in _parametrize_without_ids(unit, min_cases)
@@ -108,8 +108,7 @@ def _parametrize_without_ids_finding(
         end_line=candidate.decorator.end_lineno,
         symbol=symbol,
         remediation=(
-            "Add `ids=['case-a', 'case-b', ...]` so failed cases are "
-            "identifiable in the report."
+            "Add `ids=['case-a', 'case-b', ...]` so failed cases are identifiable in the report."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"caseCount": candidate.case_count},

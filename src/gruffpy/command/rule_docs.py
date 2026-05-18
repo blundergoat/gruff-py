@@ -182,8 +182,14 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
-    if definition.default_thresholds:
-        lines.append(f"- Thresholds: {_inline_mapping(definition.default_thresholds)}")
+    if _has_severity_thresholds(definition):
+        lines.append(
+            "- Config threshold: "
+            f"`threshold` = `{definition.default_thresholds['error']!r}`, "
+            "`severity` = `error`"
+        )
+    elif definition.default_thresholds:
+        lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
     if definition.default_options:
         lines.append(f"- Options: {_inline_mapping(definition.default_options)}")
     if docs.threshold_metadata_keys:
@@ -206,6 +212,10 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
 def _inline_mapping(mapping: dict[str, Any]) -> str:
     pairs = ", ".join(f"`{key}` = `{value!r}`" for key, value in sorted(mapping.items()))
     return pairs or "none"
+
+
+def _has_severity_thresholds(definition: RuleDefinition) -> bool:
+    return set(definition.default_thresholds) == {"warning", "error"}
 
 
 def _inline_list(values: tuple[str, ...]) -> str:
@@ -269,14 +279,22 @@ def _choosing_rules_lines() -> list[str]:
         "    enabled: true",
         "```",
         "",
-        "Adjust thresholds:",
+        "Set one threshold for a metric rule:",
         "",
         "```yaml",
         "rules:",
         "  size.file-length:",
+        "    threshold: 900",
+        "    severity: error",
+        "```",
+        "",
+        "Adjust a named threshold knob:",
+        "",
+        "```yaml",
+        "rules:",
+        "  test-quality.eager-test:",
         "    thresholds:",
-        "      warning: 500",
-        "      error: 900",
+        "      maxAssertions: 5",
         "```",
         "",
     ]

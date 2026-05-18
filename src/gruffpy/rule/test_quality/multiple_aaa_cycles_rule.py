@@ -35,7 +35,7 @@ class MultipleAaaCyclesRule(Rule):
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
             default_enabled=False,
-            default_thresholds={"warning": 2},
+            default_thresholds={"maxCycles": 2},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -43,7 +43,7 @@ class MultipleAaaCyclesRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        threshold = settings.numeric_threshold("warning")
+        threshold = settings.numeric_threshold("maxCycles")
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             cycles = _count_aaa_cycles(fn)

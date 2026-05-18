@@ -38,9 +38,12 @@ selection:
 
 rules:
   size.file-length:
+    threshold: 900
+    severity: error
+
+  test-quality.eager-test:
     thresholds:
-      warning: 500
-      error: 900
+      maxAssertions: 5
 
   test-quality.testdox-readability:
     enabled: true
@@ -63,7 +66,11 @@ secretPreviews = ["example-token-prefix"]
 excludeRules = ["docs.missing-module-docstring"]
 
 [tool.gruff-py.rules."size.file-length"]
-thresholds = { warning = 500, error = 900 }
+threshold = 900
+severity = "error"
+
+[tool.gruff-py.rules."test-quality.eager-test"]
+thresholds = { maxAssertions = 5 }
 
 [tool.gruff-py.rules."test-quality.testdox-readability"]
 enabled = true
@@ -109,8 +116,14 @@ Per-rule settings:
 | Key | Type | Meaning |
 |---|---|---|
 | `enabled` | bool | Enable or disable the rule |
-| `thresholds` | table | Numeric threshold overrides |
+| `threshold` | number | Single numeric threshold for rules with warning/error metric defaults |
+| `severity` | string | Finding severity for `threshold`: `warning` or `error` |
+| `thresholds` | table | Named numeric threshold knobs, such as `maxAssertions` or `entropy` |
 | `options` | table | Rule-specific options |
+
+Use `threshold` plus `severity` for metric rules that have warning/error
+defaults. Keep `thresholds` for named tuning values. Do not combine
+`threshold` and `thresholds` in the same rule entry.
 
 Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
 

@@ -42,11 +42,64 @@ def test_matching_filename_does_not_fire():
     assert findings == []
 
 
+def test_package_path_tokens_can_complete_class_name():
+    src = "class ConfigLoader:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/config/loader.py"), _ctx())
+    assert findings == []
+
+
+def test_multi_segment_package_path_tokens_can_complete_class_name():
+    src = "class SingleImplementorProtocolRule:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(
+        _unit(src, "src/gruffpy/rule/design/single_implementor_protocol_rule.py"), _ctx()
+    )
+    assert findings == []
+
+
+def test_role_suffix_can_be_completed_by_package_path():
+    src = "class ProjectRuleProtocol:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(
+        _unit(src, "src/gruffpy/rule/project_rule.py"), _ctx()
+    )
+    assert findings == []
+
+
+def test_matcher_suffix_can_be_completed_by_package_path():
+    src = "class GitignoreMatcher:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(
+        _unit(src, "src/gruffpy/source/gitignore.py"), _ctx()
+    )
+    assert findings == []
+
+
+def test_conventional_module_name_can_group_domain_exceptions():
+    src = "class ConfigError:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(
+        _unit(src, "src/gruffpy/config/exceptions.py"), _ctx()
+    )
+    assert findings == []
+
+
 def test_http_server_acronym():
     src = "class HTTPServer:\n    pass\n"
     findings = ModuleNameMismatchRule().analyse(_unit(src, "server.py"), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["expectedFilename"] == "http_server.py"
+
+
+def test_joined_initialism_filename_matches():
+    src = "class NPathComplexityRule:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(
+        _unit(src, "src/gruffpy/rule/complexity/npath_complexity_rule.py"), _ctx()
+    )
+    assert findings == []
+
+
+def test_joined_initialism_suggestion_uses_canonical_filename():
+    src = "class NPathComplexityRule:\n    pass\n"
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "complexity_rule.py"), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["expectedFilename"] == "npath_complexity_rule.py"
 
 
 def test_multiple_public_classes_does_not_fire():

@@ -62,8 +62,58 @@ def test_perf_script_quick_mode_smoke(tmp_path: Path) -> None:
     assert {"cold-start", "analyse-src-text"}.issubset(workload_names)
 
     for workload in payload["workloads"]:
+        assert isinstance(workload["command"], list)
+        assert isinstance(workload["exitCode"], int)
         assert workload["median"] > 0
         assert workload["min"] <= workload["median"] <= workload["max"]
+
+    cold_start = next(w for w in payload["workloads"] if w["name"] == "cold-start")
+    assert cold_start["exitCode"] == 0
+
+
+def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "workloads": [
+                    {"name": "cold-start", "median": 0.001},
+                    {"name": "analyse-src-text", "median": 0.001},
+                ],
+            }
+        )
+    )
+
+    proc = subprocess.run(
+        [
+            "bash",
+            str(SCRIPT_PATH),
+            "--quick",
+            "--repeat",
+            "3",
+            "--baseline",
+            str(baseline),
+            "--output-dir",
+            str(tmp_path / "perf-out"),
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PERF_REGRESSION_ABS_S": "0.001",
+            "PERF_REGRESSION_PCT": "1",
+        },
+        timeout=300,
+        check=False,
+    )
+
+    assert proc.returncode == 1, (
+        f"expected regression exit 1\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    )
+    assert "regressions detected" in proc.stdout
 
 
 def test_perf_script_help_lists_documented_flags() -> None:
@@ -75,5 +125,13 @@ def test_perf_script_help_lists_documented_flags() -> None:
         timeout=10,
         check=True,
     )
-    for flag in ("--quick", "--json", "--repeat", "--baseline", "--update-baseline"):
+    for flag in (
+        "--quick",
+        "--json",
+        "--repeat",
+        "--baseline",
+        "--update-baseline",
+        "--output-dir",
+        "--scale",
+    ):
         assert flag in proc.stdout, f"--help output missing {flag}"

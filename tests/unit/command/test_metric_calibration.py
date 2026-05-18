@@ -43,9 +43,13 @@ def test_metric_calibration_report_summarises_function_metrics(tmp_path: Path) -
     metrics = {metric["name"]: metric for metric in payload["metrics"]}  # type: ignore[index]
     assert metrics["cyclomatic"]["min"] == 1
     assert metrics["cyclomatic"]["p50"] == 2
+    assert metrics["cyclomatic"]["p99"] == 2.98
     assert metrics["cyclomatic"]["max"] == 3
     assert metrics["npath"]["count"] == 2
-    assert metrics["halsteadVolume"]["warningThreshold"] == 180
+    assert metrics["halsteadVolume"]["threshold"] == 180
+    assert metrics["halsteadVolume"]["thresholdSeverity"] == "warning"
+    assert "warningThreshold" not in metrics["halsteadVolume"]
+    assert "errorThreshold" not in metrics["halsteadVolume"]
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
     top = payload["top"]  # type: ignore[index]
@@ -69,6 +73,7 @@ def test_metric_calibration_text_is_human_readable(tmp_path: Path) -> None:
 
     assert "metric calibration" in rendered
     assert "Metric distributions:" in rendered
+    assert "p99" in rendered
     assert "Top cyclomatic:" in rendered
     assert "src/sample.py:1 only cyclomatic=1" in rendered
 

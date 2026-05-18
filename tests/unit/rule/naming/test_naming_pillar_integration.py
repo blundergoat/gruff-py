@@ -1,6 +1,6 @@
-"""Cumulative integration for the naming pillar (M05).
+"""Cumulative integration for the naming pillar (M05 + M25).
 
-Asserts all 9 rules wire into ``RuleRegistry.defaults()`` and exercise
+Asserts all naming rules wire into ``RuleRegistry.defaults()`` and exercise
 expected positives + negatives on a single fixture.
 """
 
@@ -46,10 +46,16 @@ def process(x):  # naming.generic-function
     return x
 
 
-def valid(value) -> bool:  # naming.boolean-prefix
+def status(value) -> bool:  # naming.boolean-prefix
     """Bool return without boolean-intent prefix."""
 
     return value > 0
+
+
+def load_cfg():  # naming.abbreviation
+    """Abbreviated function name."""
+
+    return None
 
 
 def main() -> None:
@@ -88,10 +94,11 @@ def _default_ctx() -> RuleContext:
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
-def test_registry_includes_all_nine_naming_rules():
+def test_registry_includes_all_naming_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
+        "naming.abbreviation",
         "naming.boolean-prefix",
         "naming.confusing-name",
         "naming.generic-function",
@@ -112,6 +119,7 @@ def test_naming_rules_fire_on_fixture():
     assert "naming.hungarian-notation" in rule_ids
     assert "naming.generic-function" in rule_ids
     assert "naming.boolean-prefix" in rule_ids
+    assert "naming.abbreviation" in rule_ids
     assert "naming.identifier-quality" in rule_ids
     assert "naming.short-variable" in rule_ids
 

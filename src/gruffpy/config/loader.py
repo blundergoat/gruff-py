@@ -7,8 +7,9 @@ from typing import Any
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_selection import RuleSelection
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
+from gruffpy.finding.severity import Severity
 
 VALID_TOP_LEVEL_KEYS = frozenset(
     {
@@ -30,7 +31,7 @@ VALID_SELECTION_KEYS = frozenset(
         "excludeRules",
     }
 )
-VALID_RULE_KEYS = frozenset({"enabled", "thresholds", "options"})
+VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
 TOML_TOOL_KEY = "gruff-py"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
 DEFAULT_YAML_CONFIG_NAME = ".gruff-py.yaml"
@@ -192,12 +193,18 @@ class ConfigLoader:
         for rule_id, rule_section in rules.items():
             _validate_rule_section(config, rule_id, rule_section)
             rule_settings = config.rules[rule_id]
+            severity_threshold = _severity_threshold(rule_id, rule_settings, rule_section)
             config = config.with_rule_settings(
                 rule_id,
                 RuleSettings(
                     enabled=_is_rule_enabled(rule_settings, rule_section),
-                    thresholds=_merged_thresholds(rule_id, rule_settings, rule_section),
+                    thresholds=(
+                        dict(rule_settings.thresholds)
+                        if severity_threshold is not None
+                        else _merged_thresholds(rule_id, rule_settings, rule_section)
+                    ),
                     options=_merged_options(rule_id, rule_settings, rule_section),
+                    severity_threshold=severity_threshold,
                 ),
             )
         return config
@@ -226,6 +233,8 @@ def _merged_thresholds(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> dict[str, int | float]:
+    if "severity" in rule_section:
+        raise ConfigError(f'Config key "rules.{rule_id}.severity" requires "threshold".')
     thresholds = dict(rule_settings.thresholds)
     if "thresholds" not in rule_section:
         return thresholds
@@ -233,10 +242,41 @@ def _merged_thresholds(
     if not isinstance(overrides, dict):
         raise ConfigError(f'thresholds in rule "{rule_id}" must be a table.')
     for key, value in overrides.items():
+        if key not in rule_settings.thresholds:
+            raise ConfigError(f'Unknown threshold "rules.{rule_id}.thresholds.{key}".')
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise ConfigError(f'threshold "{key}" in rule "{rule_id}" must be a number.')
         thresholds[key] = value
     return thresholds
+
+
+def _severity_threshold(
+    rule_id: str,
+    rule_settings: RuleSettings,
+    rule_section: dict[str, Any],
+) -> SeverityThreshold | None:
+    if "threshold" not in rule_section:
+        return None
+    if "thresholds" in rule_section:
+        raise ConfigError(
+            f'Config key "rules.{rule_id}" cannot combine "threshold" and "thresholds".'
+        )
+    if set(rule_settings.thresholds) != {"warning", "error"}:
+        raise ConfigError(
+            f'Config key "rules.{rule_id}.threshold" is only supported for rules '
+            "with warning/error thresholds."
+        )
+
+    threshold = rule_section["threshold"]
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+        raise ConfigError(f'Config key "rules.{rule_id}.threshold" must be numeric.')
+
+    severity = rule_section.get("severity")
+    allowed_severities = {Severity.WARNING.value, Severity.ERROR.value}
+    if not isinstance(severity, str) or severity not in allowed_severities:
+        raise ConfigError(f'Config key "rules.{rule_id}.severity" must be "warning" or "error".')
+
+    return SeverityThreshold(threshold=threshold, severity=Severity(severity))
 
 
 def _merged_options(

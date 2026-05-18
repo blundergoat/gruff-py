@@ -57,30 +57,23 @@ class NPathComplexityRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
             np_raw = npath_for(fn)
             np_capped = min(np_raw, _NPATH_CAP)
-            if np_capped <= warning_threshold:
+            threshold_match = settings.high_value_threshold_match(np_capped)
+            if threshold_match is None:
                 continue
-            if np_capped > error_threshold:
-                severity = Severity.ERROR
-                threshold: int | float = error_threshold
-            else:
-                severity = Severity.WARNING
-                threshold = warning_threshold
 
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
             metadata: dict[str, object] = {
                 "npath": np_capped,
                 "measuredValue": np_capped,
-                "threshold": threshold,
+                "threshold": threshold_match.threshold,
                 "thresholdDirection": "above",
-                "thresholdType": severity.value,
+                "thresholdType": threshold_match.severity.value,
             }
             if np_raw >= _NPATH_CAP:
                 metadata["npathCapped"] = True
@@ -90,11 +83,12 @@ class NPathComplexityRule(Rule):
                     message=(
                         f"Function {symbol!r} has NPATH complexity {np_capped}"
                         f"{' (capped)' if np_raw >= _NPATH_CAP else ''}, "
-                        f"above the {severity.value} threshold of {_format_number(threshold)}."
+                        f"above the {threshold_match.severity.value} threshold of "
+                        f"{_format_number(threshold_match.threshold)}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=severity,
+                    severity=threshold_match.severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,

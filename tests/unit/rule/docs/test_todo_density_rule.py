@@ -23,6 +23,27 @@ def test_high_density_emits():
     assert findings[0].metadata["densityPer1000"] > 10
 
 
+def test_rule_defining_docs_file_is_exempt():
+    src = "# TODO: a\n# FIXME: b\n# HACK: c\n# XXX: d\n# BUG: e\n" + ("x = 1\n" * 10)
+    unit = make_unit(src, display_path="src/gruffpy/rule/docs/todo_density_rule.py")
+
+    assert TodoDensityRule().analyse(unit, default_ctx()) == []
+
+
+def test_rule_defining_commented_out_code_file_is_exempt():
+    src = "# TODO: a\n# FIXME: b\n# HACK: c\n# XXX: d\n# BUG: e\n" + ("x = 1\n" * 10)
+    unit = make_unit(src, display_path="src/gruffpy/rule/waste/commented_out_code_rule.py")
+
+    assert TodoDensityRule().analyse(unit, default_ctx()) == []
+
+
+def test_same_filename_outside_rule_package_still_emits():
+    src = "# TODO: a\n# FIXME: b\n# HACK: c\n# XXX: d\n# BUG: e\n" + ("x = 1\n" * 10)
+    unit = make_unit(src, display_path="tools/todo_density_rule.py")
+
+    assert TodoDensityRule().analyse(unit, default_ctx())
+
+
 def test_default_threshold():
     rule = TodoDensityRule()
-    assert rule.definition().default_thresholds["warning"] == 10
+    assert rule.definition().default_thresholds == {"warning": 10, "error": 10}

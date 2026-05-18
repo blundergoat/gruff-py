@@ -34,7 +34,7 @@ class SetupBloatRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 30},
+            default_thresholds={"maxSetupLines": 30},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -42,7 +42,7 @@ class SetupBloatRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        threshold = settings.numeric_threshold("warning")
+        threshold = settings.numeric_threshold("maxSetupLines")
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):

@@ -26,6 +26,7 @@ from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
+from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.confusing_name_rule import ConfusingNameRule
 from gruffpy.rule.naming.generic_function_rule import GenericFunctionRule
@@ -139,11 +140,21 @@ _THRESHOLD_DIRECTIONS = {
 _FORMULA_PROVENANCE = {
     "complexity.cyclomatic": "Radon-aligned decision-point counting.",
     "complexity.halstead-volume": (
-        "Radon-inspired Halstead volume with documented Python AST deltas."
+        "Radon-inspired Halstead volume with documented Python AST deltas. "
+        "The dogfood rubric uses one configured threshold, `>400` at error "
+        "severity; the legacy built-in fallback came from Java/PHP-tuned gruff "
+        "defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed "
+        "p50=4.75, p90=38.04, p99=96.0, max=283.39."
     ),
     "complexity.maintainability-index": (
         "gruff per-function maintainability heuristic based on Halstead volume, "
-        "cyclomatic complexity, and raw function lines."
+        "cyclomatic complexity, and raw function lines. The dogfood rubric uses "
+        "one configured threshold, `<70` at error severity; the legacy built-in "
+        "fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 "
+        "metric-calibration on `src/` and `tests/` observed min=78.78, p50=100, "
+        "p90=100, p99=100. Radon 6.0.1 ranks maintainability index 20-100 as "
+        "A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: "
+        "https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command."
     ),
     "complexity.npath": "gruff-specific AST path-counting heuristic.",
 }
@@ -258,7 +269,10 @@ def _confidence_rationale(confidence: Confidence) -> str:
 
 def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
     keys: list[str] = []
-    keys.extend(f"thresholds.{name}" for name in definition.default_thresholds)
+    if _has_severity_thresholds(definition.default_thresholds):
+        keys.extend(("threshold", "severity"))
+    else:
+        keys.extend(f"thresholds.{name}" for name in definition.default_thresholds)
     keys.extend(f"options.{name}" for name in definition.default_options)
     return tuple(keys)
 
@@ -272,9 +286,17 @@ def _threshold_direction(definition: RuleDefinition) -> str:
 def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
     if not definition.default_thresholds:
         return ()
-    if definition.pillar in {Pillar.SIZE, Pillar.COMPLEXITY, Pillar.MAINTAINABILITY}:
+    if _has_severity_thresholds(definition.default_thresholds) or definition.pillar in {
+        Pillar.SIZE,
+        Pillar.COMPLEXITY,
+        Pillar.MAINTAINABILITY,
+    }:
         return _STANDARD_THRESHOLD_METADATA_KEYS
     return ()
+
+
+def _has_severity_thresholds(thresholds: dict[str, int | float]) -> bool:
+    return set(thresholds) == {"warning", "error"}
 
 
 BUILTIN_RULES: tuple[BuiltInRule, ...] = (
@@ -297,6 +319,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(StaleParamDocRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
+    _entry(AbbreviationRule),
     _entry(BooleanPrefixRule),
     _entry(ConfusingNameRule),
     _entry(GenericFunctionRule),

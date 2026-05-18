@@ -34,7 +34,7 @@ class EagerTestRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 5},
+            default_thresholds={"maxAssertions": 5},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -42,7 +42,7 @@ class EagerTestRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        threshold = settings.numeric_threshold("warning")
+        threshold = settings.numeric_threshold("maxAssertions")
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             count = sum(

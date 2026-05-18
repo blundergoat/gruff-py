@@ -18,7 +18,26 @@ paths:
   - .goat-flow/
   - tests/fixtures/**
 allowlists:
-  acceptedAbbreviations: []
+  acceptedAbbreviations:
+  - id
+  - ctx
+  - url
+  - ip
+  - io
+  - ui
+  - fn
+  - uri
+  - db
+  - ok
+  - api
+  - css
+  - html
+  - json
+  - yaml
+  - xml
+  - sql
+  - pk
+  - fk
   secretPreviews: []
 selection:
   tiers:
@@ -54,6 +73,7 @@ selection:
   - docs.stale-param-doc
   - docs.todo-density
   - docs.useless-docstring
+  - naming.abbreviation
   - naming.boolean-prefix
   - naming.confusing-name
   - naming.generic-function
@@ -140,39 +160,33 @@ rules:
   # Hard-to-follow branch nesting increases review and change risk.
   complexity.cognitive:
     enabled: true
-    thresholds:
-      warning: 15
-      error: 30
+    threshold: 30
+    severity: error
   # Too many branch paths make behavior harder to test safely.
   complexity.cyclomatic:
     enabled: true
-    thresholds:
-      warning: 10
-      error: 20
+    threshold: 20
+    severity: error
   # Dense operators and operands signal logic that is hard to understand.
   complexity.halstead-volume:
     enabled: true
-    thresholds:
-      warning: 180
-      error: 400
+    threshold: 400
+    severity: error
   # Low maintainability index marks code likely to be costly to change.
   complexity.maintainability-index:
     enabled: true
-    thresholds:
-      warning: 80
-      error: 70
+    threshold: 70
+    severity: error
   # Deep nesting hides control flow and edge cases.
   complexity.nesting-depth:
     enabled: true
-    thresholds:
-      warning: 4
-      error: 6
+    threshold: 6
+    severity: error
   # Too many execution paths make complete testing unreliable.
   complexity.npath:
     enabled: true
-    thresholds:
-      warning: 200
-      error: 500
+    threshold: 500
+    severity: error
   # Unused private attributes add state nobody reads.
   dead-code.unused-private-attribute:
     enabled: true
@@ -225,8 +239,8 @@ rules:
   # Dense TODO/FIXME markers expose deferred work becoming hidden debt.
   docs.todo-density:
     enabled: true
-    thresholds:
-      warning: 10
+    threshold: 10
+    severity: error
   # Empty or restated docstrings make useful documentation harder to find.
   docs.useless-docstring:
     enabled: true
@@ -238,6 +252,9 @@ rules:
   # Boolean names should read like predicates at call sites.
   naming.boolean-prefix:
     enabled: true
+  # Abbreviations like cfg or req hide intent unless the project explicitly allows them.
+  naming.abbreviation:
+    enabled: false
   # Catch-all names like Manager or Data hide responsibility.
   naming.confusing-name:
     enabled: true
@@ -280,6 +297,13 @@ rules:
   # Modules should have names that match their primary public symbol.
   naming.module-name-mismatch:
     enabled: true
+    options:
+      conventionalModuleNames:
+      - constants
+      - exceptions
+      - helpers
+      - protocols
+      - types
   # Class-typed parameters should include the role of the object.
   naming.parameter-type-name:
     enabled: true
@@ -292,6 +316,18 @@ rules:
       - io
       - ui
       - fn
+      - uri
+      - db
+      - ok
+      - api
+      - css
+      - html
+      - json
+      - yaml
+      - xml
+      - sql
+      - pk
+      - fk
   # Very short variable names are easy to misread outside tiny scopes.
   naming.short-variable:
     enabled: true
@@ -380,45 +416,38 @@ rules:
   # Too many attributes suggest an object with too many responsibilities.
   size.attribute-count:
     enabled: true
-    thresholds:
-      warning: 15
-      error: 25
+    threshold: 25
+    severity: error
   # Classes with long average functions are hard to scan and change.
   size.average-function-length:
     enabled: true
-    thresholds:
-      warning: 30
-      error: 60
+    threshold: 60
+    severity: error
   # Large classes usually mix responsibilities and slow review.
   size.class-length:
     enabled: true
-    thresholds:
-      warning: 300
-      error: 500
+    threshold: 500
+    severity: error
   # Very large files slow navigation and hide unrelated concerns.
   size.file-length:
     enabled: true
-    thresholds:
-      warning: 400
-      error: 800
+    threshold: 800
+    severity: error
   # Long functions are harder to understand, test, and refactor.
   size.function-length:
     enabled: true
-    thresholds:
-      warning: 30
-      error: 60
+    threshold: 60
+    severity: error
   # Long parameter lists make call sites brittle.
   size.parameter-count:
     enabled: true
-    thresholds:
-      warning: 5
-      error: 8
+    threshold: 8
+    severity: error
   # Too many public methods create a broad and hard-to-test surface.
   size.public-method-count:
     enabled: true
-    thresholds:
-      warning: 15
-      error: 25
+    threshold: 25
+    severity: error
   # Branching inside tests makes intent and failure modes harder to read.
   test-quality.conditional-logic:
     enabled: true
@@ -426,7 +455,7 @@ rules:
   test-quality.eager-test:
     enabled: true
     thresholds:
-      warning: 5
+      maxAssertions: 5
   # Empty parametrization can make tests pass without cases.
   test-quality.empty-parametrize:
     enabled: true
@@ -437,7 +466,7 @@ rules:
   test-quality.excessive-mocking:
     enabled: true
     thresholds:
-      warning: 4
+      maxMocks: 4
   # Tests inheriting production classes couple test setup to app design.
   test-quality.extends-production-class:
     enabled: true
@@ -491,7 +520,7 @@ rules:
   test-quality.multiple-aaa-cycles:
     enabled: false
     thresholds:
-      warning: 2
+      maxCycles: 2
   # Tests depending on hidden files or services are hard to reproduce.
   test-quality.mystery-guest:
     enabled: true
@@ -505,7 +534,7 @@ rules:
   test-quality.parametrize-annotation:
     enabled: true
     thresholds:
-      warning: 2
+      maxCasesWithoutIds: 2
   # Reflecting into private members ties tests to implementation details.
   test-quality.private-reflection:
     enabled: true
@@ -522,12 +551,12 @@ rules:
   test-quality.repeated-structure-missing-parametrize:
     enabled: true
     thresholds:
-      warning: 3
+      minGroupSize: 3
   # Large setup blocks hide the behavior under test.
   test-quality.setup-bloat:
     enabled: true
     thresholds:
-      warning: 30
+      maxSetupLines: 30
   # Skipped tests should explain why they are disabled.
   test-quality.skipped-without-reason:
     enabled: true
@@ -543,9 +572,8 @@ rules:
   # Long test functions are hard to scan and maintain.
   test-quality.test-function-too-long:
     enabled: true
-    thresholds:
-      warning: 50
-      error: 100
+    threshold: 100
+    severity: error
   # Tests much longer than the SUT may signal excessive setup or assertion noise.
   test-quality.test-longer-than-sut:
     enabled: true

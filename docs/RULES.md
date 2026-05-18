@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 99 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 100 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -13,7 +13,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `complexity` | 5 | Cyclomatic, cognitive, Halstead, nesting, and NPATH |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
-| `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
+| `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 10 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 13 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
@@ -56,6 +56,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 
 ### Naming
 
+- `naming.abbreviation` (default off)
 - `naming.boolean-prefix`
 - `naming.confusing-name`
 - `naming.generic-function`
@@ -163,7 +164,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.cognitive` protects the complexity pillar by flagging cognitive complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cognitive complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `30`, `warning` = `15`
+- Config threshold: `threshold` = `30`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `complexity.cognitive` leaves cognitive complexity unaddressed.
@@ -180,7 +181,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cyclomatic complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `20`, `warning` = `10`
+- Config threshold: `threshold` = `20`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Formula provenance: Radon-aligned decision-point counting.
@@ -198,10 +199,10 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.halstead-volume` protects the complexity pillar by flagging halstead volume before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported halstead volume directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `error` = `400`, `warning` = `180`
+- Config threshold: `threshold` = `400`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
-- Formula provenance: Radon-inspired Halstead volume with documented Python AST deltas.
+- Formula provenance: Radon-inspired Halstead volume with documented Python AST deltas. The dogfood rubric uses one configured threshold, `>400` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed p50=4.75, p90=38.04, p99=96.0, max=283.39.
 - Bad example: Code that triggers `complexity.halstead-volume` leaves halstead volume unaddressed.
 - Good example: Code that satisfies `complexity.halstead-volume` makes halstead volume explicit or simpler.
 
@@ -216,10 +217,10 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.maintainability-index` protects the maintainability pillar by flagging maintainability index before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported maintainability index directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `error` = `70`, `warning` = `80`
+- Config threshold: `threshold` = `70`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `below`
-- Formula provenance: gruff per-function maintainability heuristic based on Halstead volume, cyclomatic complexity, and raw function lines.
+- Formula provenance: gruff per-function maintainability heuristic based on Halstead volume, cyclomatic complexity, and raw function lines. The dogfood rubric uses one configured threshold, `<70` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed min=78.78, p50=100, p90=100, p99=100. Radon 6.0.1 ranks maintainability index 20-100 as A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command.
 - Bad example: Code that triggers `complexity.maintainability-index` leaves maintainability index unaddressed.
 - Good example: Code that satisfies `complexity.maintainability-index` makes maintainability index explicit or simpler.
 
@@ -234,7 +235,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.nesting-depth` protects the complexity pillar by flagging nesting depth before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported nesting depth directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `6`, `warning` = `4`
+- Config threshold: `threshold` = `6`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `complexity.nesting-depth` leaves nesting depth unaddressed.
@@ -251,7 +252,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.npath` protects the complexity pillar by flagging npath complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported npath complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `error` = `500`, `warning` = `200`
+- Config threshold: `threshold` = `500`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Formula provenance: gruff-specific AST path-counting heuristic.
@@ -425,7 +426,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `docs.todo-density` protects the documentation pillar by flagging todo density before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported todo density directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `10`
+- Config threshold: `threshold` = `10`, `severity` = `error`
+- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
+- Threshold direction: `above`
 - Bad example: Code that triggers `docs.todo-density` leaves todo density unaddressed.
 - Good example: Code that satisfies `docs.todo-density` makes todo density explicit or simpler.
 
@@ -443,6 +446,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Options: `min_summary_words` = `{'module': 6, 'class': 4, 'function': 4}`
 - Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
 - Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
+
+### `naming.abbreviation`
+
+- Name: Abbreviation
+- Pillar: `naming`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: no
+- Rationale: `naming.abbreviation` protects the naming pillar by flagging abbreviation before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported abbreviation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Bad example: Code that triggers `naming.abbreviation` leaves abbreviation unaddressed.
+- Good example: Code that satisfies `naming.abbreviation` makes abbreviation explicit or simpler.
 
 ### `naming.boolean-prefix`
 
@@ -527,6 +544,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `naming.module-name-mismatch` protects the naming pillar by flagging module name mismatch before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported module name mismatch directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `conventionalModuleNames` = `['constants', 'exceptions', 'helpers', 'protocols', 'types']`
 - Bad example: Code that triggers `naming.module-name-mismatch` leaves module name mismatch unaddressed.
 - Good example: Code that satisfies `naming.module-name-mismatch` makes module name mismatch explicit or simpler.
 
@@ -541,7 +559,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `naming.parameter-type-name` protects the naming pillar by flagging parameter type name before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported parameter type name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `ignoredParameterNames` = `['id', 'ctx', 'url', 'ip', 'io', 'ui', 'fn']`
+- Options: `ignoredParameterNames` = `['id', 'ctx', 'url', 'ip', 'io', 'ui', 'fn', 'uri', 'db', 'ok', 'api', 'css', 'html', 'json', 'yaml', 'xml', 'sql', 'pk', 'fk']`
 - Bad example: Code that triggers `naming.parameter-type-name` leaves parameter type name unaddressed.
 - Good example: Code that satisfies `naming.parameter-type-name` makes parameter type name explicit or simpler.
 
@@ -897,7 +915,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.attribute-count` protects the size pillar by flagging attribute count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported attribute count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `25`, `warning` = `15`
+- Config threshold: `threshold` = `25`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.attribute-count` leaves attribute count unaddressed.
@@ -914,7 +932,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.average-function-length` protects the size pillar by flagging average function length per class before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported average function length per class directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `60`, `warning` = `30`
+- Config threshold: `threshold` = `60`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.average-function-length` leaves average function length per class unaddressed.
@@ -931,7 +949,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.class-length` protects the size pillar by flagging class length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported class length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `500`, `warning` = `300`
+- Config threshold: `threshold` = `500`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.class-length` leaves class length unaddressed.
@@ -948,7 +966,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.file-length` protects the size pillar by flagging file length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported file length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `800`, `warning` = `400`
+- Config threshold: `threshold` = `800`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.file-length` leaves file length unaddressed.
@@ -965,7 +983,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.function-length` protects the size pillar by flagging function length before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported function length directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `60`, `warning` = `30`
+- Config threshold: `threshold` = `60`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.function-length` leaves function length unaddressed.
@@ -982,7 +1000,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.parameter-count` protects the size pillar by flagging parameter count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported parameter count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `8`, `warning` = `5`
+- Config threshold: `threshold` = `8`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.parameter-count` leaves parameter count unaddressed.
@@ -999,7 +1017,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `size.public-method-count` protects the size pillar by flagging public method count before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported public method count directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `25`, `warning` = `15`
+- Config threshold: `threshold` = `25`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Bad example: Code that triggers `size.public-method-count` leaves public method count unaddressed.
@@ -1030,7 +1048,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.eager-test` protects the test-quality pillar by flagging eager test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported eager test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `5`
+- Named thresholds: `maxAssertions` = `5`
 - Bad example: Code that triggers `test-quality.eager-test` leaves eager test unaddressed.
 - Good example: Code that satisfies `test-quality.eager-test` makes eager test explicit or simpler.
 
@@ -1073,7 +1091,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.excessive-mocking` protects the test-quality pillar by flagging excessive mocking before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported excessive mocking directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `4`
+- Named thresholds: `maxMocks` = `4`
 - Bad example: Code that triggers `test-quality.excessive-mocking` leaves excessive mocking unaddressed.
 - Good example: Code that satisfies `test-quality.excessive-mocking` makes excessive mocking explicit or simpler.
 
@@ -1202,7 +1220,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.multiple-aaa-cycles` protects the test-quality pillar by flagging multiple aaa cycles before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported multiple aaa cycles directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Thresholds: `warning` = `2`
+- Named thresholds: `maxCycles` = `2`
 - Bad example: Code that triggers `test-quality.multiple-aaa-cycles` leaves multiple aaa cycles unaddressed.
 - Good example: Code that satisfies `test-quality.multiple-aaa-cycles` makes multiple aaa cycles explicit or simpler.
 
@@ -1259,7 +1277,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.parametrize-annotation` protects the test-quality pillar by flagging parametrize without `ids` before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported parametrize without `ids` directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `2`
+- Named thresholds: `maxCasesWithoutIds` = `2`
 - Bad example: Code that triggers `test-quality.parametrize-annotation` leaves parametrize without `ids` unaddressed.
 - Good example: Code that satisfies `test-quality.parametrize-annotation` makes parametrize without `ids` explicit or simpler.
 
@@ -1330,7 +1348,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.repeated-structure-missing-parametrize` protects the test-quality pillar by flagging repeated structure without parametrize before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported repeated structure without parametrize directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `3`
+- Named thresholds: `minGroupSize` = `3`
 - Bad example: Code that triggers `test-quality.repeated-structure-missing-parametrize` leaves repeated structure without parametrize unaddressed.
 - Good example: Code that satisfies `test-quality.repeated-structure-missing-parametrize` makes repeated structure without parametrize explicit or simpler.
 
@@ -1345,7 +1363,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.setup-bloat` protects the test-quality pillar by flagging setup bloat before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported setup bloat directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Thresholds: `warning` = `30`
+- Named thresholds: `maxSetupLines` = `30`
 - Bad example: Code that triggers `test-quality.setup-bloat` leaves setup bloat unaddressed.
 - Good example: Code that satisfies `test-quality.setup-bloat` makes setup bloat explicit or simpler.
 
@@ -1416,7 +1434,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test function too long directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Thresholds: `error` = `100`, `warning` = `50`
+- Config threshold: `threshold` = `100`, `severity` = `error`
+- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
+- Threshold direction: `above`
 - Bad example: Code that triggers `test-quality.test-function-too-long` leaves test function too long unaddressed.
 - Good example: Code that satisfies `test-quality.test-function-too-long` makes test function too long explicit or simpler.
 
@@ -1654,12 +1674,20 @@ rules:
     enabled: true
 ```
 
-Adjust thresholds:
+Set one threshold for a metric rule:
 
 ```yaml
 rules:
   size.file-length:
+    threshold: 900
+    severity: error
+```
+
+Adjust a named threshold knob:
+
+```yaml
+rules:
+  test-quality.eager-test:
     thresholds:
-      warning: 500
-      error: 900
+      maxAssertions: 5
 ```

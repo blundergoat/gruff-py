@@ -125,7 +125,7 @@ def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
     rule = MultipleAaaCyclesRule()
     config = AnalysisConfig(
         rules={
-            rule.definition().id: RuleSettings(enabled=True, thresholds={"warning": 1}),
+            rule.definition().id: RuleSettings(enabled=True, thresholds={"maxCycles": 1}),
         }
     )
     ctx = RuleContext(project_root=str(tmp_path), config=config)

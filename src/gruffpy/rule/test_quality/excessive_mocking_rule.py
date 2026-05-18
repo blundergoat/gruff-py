@@ -1,7 +1,6 @@
 """``test-quality.excessive-mocking`` — test creates too many mocks.
 
 Default threshold: more than 4 mock factory calls in a single test body.
-Configurable via the rule's ``max_mocks`` option.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -31,7 +30,7 @@ class ExcessiveMockingRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 4},
+            default_thresholds={"maxMocks": 4},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -39,7 +38,7 @@ class ExcessiveMockingRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        threshold = settings.numeric_threshold("warning")
+        threshold = settings.numeric_threshold("maxMocks")
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             mock_count = len(find_mock_bindings(fn))

@@ -36,15 +36,12 @@ class TestFunctionTooLongRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning = settings.numeric_threshold("warning")
-        error = settings.numeric_threshold("error")
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             lines = lines_for_size(fn)
-            if lines <= warning:
+            threshold_match = settings.high_value_threshold_match(lines)
+            if threshold_match is None:
                 continue
-            severity = Severity.ERROR if lines > error else Severity.WARNING
-            threshold = error if severity is Severity.ERROR else warning
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
             findings.append(
@@ -52,11 +49,12 @@ class TestFunctionTooLongRule(Rule):
                     rule_id=definition.id,
                     message=(
                         f"Test {symbol!r} is {lines} lines, above the "
-                        f"{severity.value} threshold of {threshold}."
+                        f"{threshold_match.severity.value} threshold of "
+                        f"{threshold_match.threshold}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=severity,
+                    severity=threshold_match.severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
@@ -68,8 +66,10 @@ class TestFunctionTooLongRule(Rule):
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "lines": lines,
-                        "threshold": threshold,
-                        "thresholdType": severity.value,
+                        "measuredValue": lines,
+                        "threshold": threshold_match.threshold,
+                        "thresholdDirection": "above",
+                        "thresholdType": threshold_match.severity.value,
                     },
                 ),
             )

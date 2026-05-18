@@ -9,6 +9,8 @@ from typing import Literal
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
+from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import ParseDiagnostic
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.complexity._halstead import halstead_for
@@ -70,8 +72,8 @@ class MetricDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class MetricThreshold:
-    warning: float
-    error: float
+    threshold: float
+    severity: Severity
     direction: ThresholdDirection
 
 
@@ -138,12 +140,12 @@ class MetricSummary:
     minimum: float | None
     p50: float | None
     p90: float | None
+    p99: float | None
     maximum: float | None
-    warning_threshold: float
-    error_threshold: float
+    threshold: float
+    threshold_severity: Severity
     threshold_direction: ThresholdDirection
-    warning_crossings: int
-    error_crossings: int
+    threshold_crossings: int
 
     def to_payload(self) -> dict[str, object]:
         """Serialise this metric summary.
@@ -157,12 +159,12 @@ class MetricSummary:
             "min": _rounded_optional(self.minimum),
             "p50": _rounded_optional(self.p50),
             "p90": _rounded_optional(self.p90),
+            "p99": _rounded_optional(self.p99),
             "max": _rounded_optional(self.maximum),
             "thresholdDirection": self.threshold_direction,
-            "warningThreshold": _rounded(self.warning_threshold),
-            "errorThreshold": _rounded(self.error_threshold),
-            "warningCrossings": self.warning_crossings,
-            "errorCrossings": self.error_crossings,
+            "threshold": _rounded(self.threshold),
+            "thresholdSeverity": self.threshold_severity.value,
+            "thresholdCrossings": self.threshold_crossings,
         }
 
 
@@ -450,8 +452,8 @@ def _append_distribution(lines: list[str], summaries: Sequence[MetricSummary]) -
             "",
             "Metric distributions:",
             (
-                f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'max':>8} "
-                f"{'warning':>12} {'error':>12}"
+                f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'p99':>8} "
+                f"{'max':>8} {'threshold':>18}"
             ),
         ]
     )
@@ -459,20 +461,17 @@ def _append_distribution(lines: list[str], summaries: Sequence[MetricSummary]) -
 
 
 def _summary_line(summary: MetricSummary) -> str:
-    warning = _crossing_label(
+    threshold = _crossing_label(
         summary.threshold_direction,
-        summary.warning_threshold,
-        summary.warning_crossings,
-    )
-    error = _crossing_label(
-        summary.threshold_direction,
-        summary.error_threshold,
-        summary.error_crossings,
+        summary.threshold,
+        summary.threshold_crossings,
+        summary.threshold_severity,
     )
     return (
         f"  {summary.metric:<24} {_format_optional(summary.minimum):>8} "
         f"{_format_optional(summary.p50):>8} {_format_optional(summary.p90):>8} "
-        f"{_format_optional(summary.maximum):>8} {warning:>12} {error:>12}"
+        f"{_format_optional(summary.p99):>8} {_format_optional(summary.maximum):>8} "
+        f"{threshold:>18}"
     )
 
 
@@ -512,22 +511,26 @@ def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
 
 def _metric_thresholds(config: AnalysisConfig) -> dict[MetricName, MetricThreshold]:
     return {
-        "cyclomatic": _threshold(config, CyclomaticComplexityRule.ID, "above"),
-        "npath": _threshold(config, NPathComplexityRule.ID, "above"),
-        "halsteadVolume": _threshold(config, HalsteadVolumeRule.ID, "above"),
-        "maintainabilityIndex": _threshold(config, MaintainabilityIndexRule.ID, "below"),
+        "cyclomatic": _threshold(config, CyclomaticComplexityRule.ID, Severity.WARNING, "above"),
+        "npath": _threshold(config, NPathComplexityRule.ID, Severity.WARNING, "above"),
+        "halsteadVolume": _threshold(config, HalsteadVolumeRule.ID, Severity.WARNING, "above"),
+        "maintainabilityIndex": _threshold(
+            config, MaintainabilityIndexRule.ID, Severity.WARNING, "below"
+        ),
     }
 
 
 def _threshold(
     config: AnalysisConfig,
     rule_id: str,
+    default_severity: Severity,
     direction: ThresholdDirection,
 ) -> MetricThreshold:
     settings = config.rule_settings(rule_id)
+    active = _active_threshold(settings, default_severity)
     return MetricThreshold(
-        warning=float(settings.numeric_threshold("warning")),
-        error=float(settings.numeric_threshold("error")),
+        threshold=float(active.threshold),
+        severity=active.severity,
         direction=direction,
     )
 
@@ -545,12 +548,12 @@ def _summary_for(
             minimum=None,
             p50=None,
             p90=None,
+            p99=None,
             maximum=None,
-            warning_threshold=threshold.warning,
-            error_threshold=threshold.error,
+            threshold=threshold.threshold,
+            threshold_severity=threshold.severity,
             threshold_direction=threshold.direction,
-            warning_crossings=0,
-            error_crossings=0,
+            threshold_crossings=0,
         )
 
     sorted_values = sorted(values)
@@ -560,12 +563,12 @@ def _summary_for(
         minimum=sorted_values[0],
         p50=_percentile(sorted_values, 50),
         p90=_percentile(sorted_values, 90),
+        p99=_percentile(sorted_values, 99),
         maximum=sorted_values[-1],
-        warning_threshold=threshold.warning,
-        error_threshold=threshold.error,
+        threshold=threshold.threshold,
+        threshold_severity=threshold.severity,
         threshold_direction=threshold.direction,
-        warning_crossings=_crossings(values, threshold.warning, threshold.direction),
-        error_crossings=_crossings(values, threshold.error, threshold.direction),
+        threshold_crossings=_crossings(values, threshold.threshold, threshold.direction),
     )
 
 
@@ -604,9 +607,23 @@ def _crossings(
     return sum(1 for value in values if value < threshold)
 
 
-def _crossing_label(direction: ThresholdDirection, threshold: float, count: int) -> str:
+def _active_threshold(settings: RuleSettings, default_severity: Severity) -> SeverityThreshold:
+    if settings.severity_threshold is not None:
+        return settings.severity_threshold
+    return SeverityThreshold(
+        threshold=settings.numeric_threshold("warning"),
+        severity=default_severity,
+    )
+
+
+def _crossing_label(
+    direction: ThresholdDirection,
+    threshold: float,
+    count: int,
+    severity: Severity,
+) -> str:
     operator = ">" if direction == "above" else "<"
-    return f"{operator}{_format_number(threshold)}:{count}"
+    return f"{operator}{_format_number(threshold)} {severity.value}:{count}"
 
 
 def _format_optional(value: float | None) -> str:

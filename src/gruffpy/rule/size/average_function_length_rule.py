@@ -2,6 +2,7 @@
 
 import ast
 
+from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -37,14 +38,11 @@ class AverageFunctionLengthRule(Rule):
 
         definition = self.definition()
         settings = context.settings_for(definition)
-        warning_threshold = settings.numeric_threshold("warning")
-        error_threshold = settings.numeric_threshold("error")
+        threshold = _active_high_threshold(settings)
 
         return [
-            _average_function_length_finding(
-                unit, definition, node, methods, warning_threshold, error_threshold
-            )
-            for node, methods in _classes_with_long_average(unit.tree, warning_threshold)
+            _average_function_length_finding(unit, definition, node, methods, settings)
+            for node, methods in _classes_with_long_average(unit.tree, threshold)
         ]
 
 
@@ -64,9 +62,7 @@ def _classes_with_long_average(
 
 def _methods_for(node: ast.ClassDef) -> list[MethodNode]:
     return [
-        child
-        for child in node.body
-        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
+        child for child in node.body if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
     ]
 
 
@@ -74,26 +70,17 @@ def _average_lines(methods: list[MethodNode]) -> float:
     return sum(lines_for_size(method) for method in methods) / len(methods)
 
 
-def _threshold_for(
-    measured: int | float,
-    warning_threshold: int | float,
-    error_threshold: int | float,
-) -> tuple[Severity, int | float]:
-    if measured > error_threshold:
-        return Severity.ERROR, error_threshold
-    return Severity.WARNING, warning_threshold
-
-
 def _average_function_length_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
     node: ast.ClassDef,
     methods: list[MethodNode],
-    warning_threshold: int | float,
-    error_threshold: int | float,
+    settings: RuleSettings,
 ) -> Finding:
     avg = _average_lines(methods)
-    severity, threshold = _threshold_for(avg, warning_threshold, error_threshold)
+    threshold_match = settings.high_value_threshold_match(avg)
+    if threshold_match is None:
+        raise ValueError("average function length finding requires a threshold match")
     symbol = qualified_symbol(node, parent_chain(node))
     rounded_avg = round(avg, 2)
     return Finding(
@@ -101,11 +88,12 @@ def _average_function_length_finding(
         message=(
             f"Class {symbol!r} averages {avg:.1f} lines per method "
             f"(over {len(methods)} methods), "
-            f"above the {severity.value} threshold of {_format_number(threshold)}."
+            f"above the {threshold_match.severity.value} threshold of "
+            f"{_format_number(threshold_match.threshold)}."
         ),
         file_path=unit.file.display_path,
         line=node.lineno,
-        severity=severity,
+        severity=threshold_match.severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
@@ -120,11 +108,17 @@ def _average_function_length_finding(
             "averageLines": rounded_avg,
             "measuredValue": rounded_avg,
             "methodCount": len(methods),
-            "threshold": threshold,
+            "threshold": threshold_match.threshold,
             "thresholdDirection": "above",
-            "thresholdType": severity.value,
+            "thresholdType": threshold_match.severity.value,
         },
     )
+
+
+def _active_high_threshold(settings: RuleSettings) -> int | float:
+    if settings.severity_threshold is not None:
+        return settings.severity_threshold.threshold
+    return settings.numeric_threshold("warning")
 
 
 def _format_number(value: int | float) -> str:

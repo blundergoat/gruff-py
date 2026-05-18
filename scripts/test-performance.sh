@@ -43,7 +43,7 @@ REGRESSION_ABS_S="${PERF_REGRESSION_ABS_S:-0.5}"
 
 # --- arg parsing -------------------------------------------------------------
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -107,6 +107,11 @@ json_escape() {
   uv run python -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
 }
 
+# JSON argv helper using python -c (read-only).
+json_argv() {
+  uv run python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"
+}
+
 # Compute median/p95/min/max/mean over a whitespace-separated list of floats.
 # Outputs five floats on one line.
 stats5() {
@@ -124,32 +129,42 @@ PY
 }
 
 # Run one workload N times. Echo space-separated wall times; capture peak RSS
-# (kilobytes) of the LAST run via $TIME_BIN if available, else empty.
+# (kilobytes) and exit code of the LAST run via $TIME_BIN if available, else
+# empty RSS plus last exit code.
 # $1 = label, rest = command tokens.
 run_workload() {
   local label="$1"; shift
   local times=()
   local rss_kb=""
+  local exit_code=0
   local last_log="$OUTPUT_DIR/last_${label}.time"
 
   for ((i = 1; i <= REPEAT; i++)); do
     local t_start t_end
+    local cmd_status=0
     if [[ -n "$TIME_BIN" && $i -eq REPEAT ]]; then
       t_start="$(date +%s.%N)"
-      "$TIME_BIN" -v -o "$last_log" "$@" >/dev/null 2>&1 || true
+      set +e
+      "$TIME_BIN" -v -o "$last_log" "$@" >/dev/null 2>&1
+      cmd_status=$?
+      set -e
       t_end="$(date +%s.%N)"
       rss_kb="$(awk -F': ' '/Maximum resident set size/ {print $2}' "$last_log" 2>/dev/null || true)"
     else
       t_start="$(date +%s.%N)"
-      "$@" >/dev/null 2>&1 || true
+      set +e
+      "$@" >/dev/null 2>&1
+      cmd_status=$?
+      set -e
       t_end="$(date +%s.%N)"
     fi
+    exit_code="$cmd_status"
     local dt
     dt="$(awk -v a="$t_start" -v b="$t_end" 'BEGIN{printf "%.4f", b - a}')"
     times+=("$dt")
   done
 
-  echo "${times[*]}|$rss_kb"
+  echo "${times[*]}|$rss_kb|$exit_code"
 }
 
 # Build synthetic project of $1 files under $2.
@@ -256,8 +271,8 @@ echo "  host: $PLATFORM, python $PYTHON_VERSION, gruff-py $GRUFF_VERSION"
 echo "  repeat: $REPEAT, rss-via: $([[ -n "$TIME_BIN" ]] && echo "$TIME_BIN -v" || echo "unavailable")"
 echo "  output-dir: $OUTPUT_DIR"
 echo
-printf "  %-22s %10s %10s %10s %12s\n" "workload" "median" "p95" "min" "peak-rss"
-printf "  %-22s %10s %10s %10s %12s\n" "--------" "------" "---" "---" "--------"
+printf "  %-22s %10s %10s %10s %12s %8s\n" "workload" "median" "p95" "min" "peak-rss" "status"
+printf "  %-22s %10s %10s %10s %12s %8s\n" "--------" "------" "---" "---" "--------" "------"
 
 # Warm-up: one untimed analyse-src run if applicable.
 uv run gruff-py --version >/dev/null 2>&1 || true
@@ -269,8 +284,10 @@ for entry in "${WORKLOADS[@]}"; do
   cmd_tokens=($cmd)
 
   raw="$(run_workload "$label" "${cmd_tokens[@]}")"
-  times_str="${raw%|*}"
-  rss_kb="${raw##*|}"
+  exit_code="${raw##*|}"
+  without_exit="${raw%|*}"
+  times_str="${without_exit%|*}"
+  rss_kb="${without_exit##*|}"
   # shellcheck disable=SC2086
   read -r median p95 mn mx mean <<<"$(stats5 $times_str)"
 
@@ -279,10 +296,15 @@ for entry in "${WORKLOADS[@]}"; do
   else
     rss_disp="-"
   fi
-  printf "  %-22s %9ss %9ss %9ss %12s\n" "$label" "$median" "$p95" "$mn" "$rss_disp"
+  if [[ "$exit_code" == "0" ]]; then
+    status_disp="ok"
+  else
+    status_disp="exit $exit_code"
+  fi
+  printf "  %-22s %9ss %9ss %9ss %12s %8s\n" "$label" "$median" "$p95" "$mn" "$rss_disp" "$status_disp"
 
   # Stash a JSON-ready line.
-  RESULT_LINES+=("{\"name\":$(json_escape "$label"),\"command\":$(json_escape "$cmd"),\"median\":$median,\"p95\":$p95,\"min\":$mn,\"max\":$mx,\"mean\":$mean,\"peakRssKb\":${rss_kb:-null}}")
+  RESULT_LINES+=("{\"name\":$(json_escape "$label"),\"command\":$(json_argv "${cmd_tokens[@]}"),\"median\":$median,\"p95\":$p95,\"min\":$mn,\"max\":$mx,\"mean\":$mean,\"peakRssKb\":${rss_kb:-null},\"exitCode\":$exit_code}")
 done
 
 # --- per-rule attribution (full mode only) -----------------------------------
