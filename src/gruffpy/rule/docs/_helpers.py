@@ -10,15 +10,28 @@ import ast
 
 
 def is_dunder(name: str) -> bool:
-    """True for ``__init__`` / ``__repr__`` / etc. — framework hook names."""
+    """Return whether a name is a Python double-underscore hook.
+
+    Args:
+        name: Identifier to inspect.
+
+    Returns:
+        True for names such as ``__init__`` and ``__repr__``.
+    """
     return name.startswith("__") and name.endswith("__") and len(name) >= 4
 
 
 def is_public(name: str) -> bool:
-    """True when *name* does not start with an underscore.
+    """Return whether a name should be treated as public documentation surface.
 
     Dunder names (``__x__``) are framework hooks, not public API; this returns
     False for them so the caller can decide whether to treat them specially.
+
+    Args:
+        name: Identifier to inspect.
+
+    Returns:
+        True when the name is public and not a dunder hook.
     """
     if is_dunder(name):
         return False
@@ -26,7 +39,15 @@ def is_public(name: str) -> bool:
 
 
 def is_test_file(display_path: str) -> bool:
-    """True when *display_path* points at a conventional Python test file."""
+    """Return whether a display path points at a conventional Python test file.
+
+    Args:
+        display_path: Project-relative source path shown in findings.
+
+    Returns:
+        True when the path is under a tests directory or is a top-level
+        ``test_*.py`` file.
+    """
     normalized = display_path.replace("\\", "/").lower()
     name = normalized.rsplit("/", 1)[-1]
     if normalized.startswith("tests/") or "/tests/" in normalized:
@@ -35,15 +56,28 @@ def is_test_file(display_path: str) -> bool:
 
 
 def is_property_getter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True if *fn* carries an ``@property`` decorator."""
+    """Return whether a function carries an ``@property`` decorator.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when any decorator resolves to ``property``.
+    """
     return any(_decorator_name(d).split(".")[-1] == "property" for d in fn.decorator_list)
 
 
 def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True if *fn* is decorated as ``@<name>.setter`` or ``@<name>.deleter``.
+    """Return whether a function is a property setter or deleter.
 
     Setters and deleters inherit documentation from the getter; the docs pillar
     treats them as exempt from missing-docstring checks.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when any decorator resolves to ``setter`` or ``deleter``.
     """
     for d in fn.decorator_list:
         name = _decorator_name(d)
@@ -54,11 +88,17 @@ def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) ->
 
 
 def signature_param_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-    """Return the user-facing parameter names for *fn*.
+    """Return the user-facing parameter names for a function.
 
     Excludes ``self`` / ``cls`` when present as the first positional arg.
     Includes positional-only, regular positional, keyword-only, ``*args``,
     and ``**kwargs`` names so docstring matching covers all signature slots.
+
+    Args:
+        fn: Function node whose signature should be inspected.
+
+    Returns:
+        Parameter names that should appear in function documentation.
     """
     args = fn.args
     names: list[str] = []
@@ -75,11 +115,17 @@ def signature_param_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[st
 
 
 def has_none_only_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True when *fn*'s return annotation is exactly ``None``.
+    """Return whether a function's return annotation is exactly ``None``.
 
     Used by ``docs.missing-return-doc`` to skip void-typed functions.
     Functions without any return annotation are NOT considered void here —
     the rule already requires an explicit non-None annotation before firing.
+
+    Args:
+        fn: Function node whose return annotation should be inspected.
+
+    Returns:
+        True when the return annotation is explicitly ``None``.
     """
     annotation = fn.returns
     if annotation is None:
@@ -90,15 +136,28 @@ def has_none_only_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def has_return_annotation(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True when *fn* declares any return annotation at all."""
+    """Return whether a function declares any return annotation.
+
+    Args:
+        fn: Function node whose signature should be inspected.
+
+    Returns:
+        True when the function has a return annotation.
+    """
     return fn.returns is not None
 
 
 def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True when *fn*'s body contains at least one ``raise`` statement.
+    """Return whether a function body contains a direct ``raise`` statement.
 
     Walks control-flow blocks but stops at nested function/lambda boundaries so
     a wrapped helper's ``raise`` does not trigger the outer rule.
+
+    Args:
+        fn: Function node whose body should be inspected.
+
+    Returns:
+        True when a non-nested raise statement appears in the function body.
     """
     stack: list[ast.AST] = list(fn.body)
     while stack:

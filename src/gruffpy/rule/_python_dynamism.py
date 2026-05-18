@@ -70,10 +70,16 @@ _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
 
 
 def has_framework_decorator(node: ast.AST) -> bool:
-    """True when *node* carries a decorator hint that implies external use.
+    """Return whether a node carries a decorator hint that implies external use.
 
     Matches both ``@fixture`` and ``@pytest.fixture`` shapes by checking the
     rightmost attribute / name. ``@app.route(...)`` matches ``route``.
+
+    Args:
+        node: AST node that may expose a ``decorator_list`` attribute.
+
+    Returns:
+        True when any decorator matches a known framework hook.
     """
     decorators = getattr(node, "decorator_list", None) or []
     for d in decorators:
@@ -126,7 +132,11 @@ _FRAMEWORK_BASE_HINTS: frozenset[str] = frozenset(
 
 
 def has_framework_base(cls: ast.ClassDef) -> bool:
-    """True if *cls* extends a Protocol / ABC / TypedDict / Enum-like base."""
+    """Return whether a class extends a Protocol, ABC, TypedDict, or Enum-like base.
+
+    Returns:
+        True when any base class matches a known framework-style base.
+    """
     for base in cls.bases:
         name = _decorator_name(base)
         if name in _FRAMEWORK_BASE_HINTS:
@@ -137,7 +147,11 @@ def has_framework_base(cls: ast.ClassDef) -> bool:
 
 
 def has_dataclass_decorator(cls: ast.ClassDef) -> bool:
-    """True if *cls* has @dataclass / @attrs.define / @attr.s family."""
+    """Return whether a class has a dataclass or attrs-style decorator.
+
+    Returns:
+        True when the class decorator list marks generated instance behavior.
+    """
     decorators = cls.decorator_list
     for d in decorators:
         name = _decorator_name(d)
@@ -155,6 +169,12 @@ def module_all_names(tree: ast.AST) -> frozenset[str]:
 
     Only static lists/tuples of string constants are recognised. Dynamic
     constructions are treated as "no __all__" — conservative on purpose.
+
+    Args:
+        tree: Module AST to inspect.
+
+    Returns:
+        Frozen set of statically exported names, or an empty set.
     """
     if not isinstance(tree, ast.Module):
         return frozenset()
@@ -187,10 +207,16 @@ def _string_seq(value: ast.AST) -> frozenset[str]:
 
 
 def is_abstract_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True if *fn* is decorated as abstract.
+    """Return whether a function is decorated as abstract.
 
     Recognises @abstractmethod / @abstractclassmethod / @abstractstaticmethod
     / @abstractproperty by their rightmost segment.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when a decorator marks the function as abstract.
     """
     for d in fn.decorator_list:
         name = _decorator_name(d).split(".")[-1]
@@ -205,15 +231,30 @@ def is_abstract_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def is_overload_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """True if *fn* is decorated with @typing.overload."""
+    """Return whether a function is decorated with ``@typing.overload``.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when the function has an overload decorator.
+    """
     return any(_decorator_name(d).split(".")[-1] == "overload" for d in fn.decorator_list)
 
 
 def is_protocol_method_stub(
     fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]
 ) -> bool:
-    """True if *fn* is a method inside a Protocol class with an empty body
-    (the canonical ``def m(self): ...`` shape)."""
+    """Return whether a function is an empty Protocol method stub.
+
+    Args:
+        fn: Function node to inspect.
+        parents: Parent chain for locating the owning class.
+
+    Returns:
+        True for canonical ``def m(self): ...`` methods inside Protocol-like
+        classes.
+    """
     if not parents:
         return False
     parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)

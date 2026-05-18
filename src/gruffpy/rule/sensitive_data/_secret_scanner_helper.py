@@ -34,6 +34,13 @@ def compile_pattern(pattern: str, *, ignore_case: bool = False) -> re.Pattern[st
 
     All sensitive-data rules use raw compiled patterns; this helper exists so
     case-sensitivity is an explicit decision per rule rather than copy-pasted.
+
+    Args:
+        pattern: Regular expression source to compile.
+        ignore_case: Whether matching should ignore character case.
+
+    Returns:
+        Compiled regular expression configured for multiline scanning.
     """
     flags = re.MULTILINE
     if ignore_case:
@@ -45,6 +52,13 @@ def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]
     """Yield :class:`SecretMatch` for every non-overlapping pattern match in *source*.
 
     The match's ``line`` is the 1-based line number of the first character.
+
+    Args:
+        pattern: Compiled sensitive-data pattern to scan with.
+        source: Source text to inspect.
+
+    Returns:
+        Iterator of secret matches with offsets and line numbers.
     """
     line_offsets = _line_offsets(source)
     for match in pattern.finditer(source):
@@ -61,6 +75,12 @@ def shannon_entropy(text: str) -> float:
 
     Used by the high-entropy-string and hardcoded-env-value rules.
     Empty strings return 0.0.
+
+    Args:
+        text: Candidate secret text to measure.
+
+    Returns:
+        Shannon entropy in bits per character.
     """
     if not text:
         return 0.0
@@ -77,6 +97,12 @@ def redact_preview(secret: str) -> str:
     Shape: ``first4...last4 (redacted, N chars)``. Shorter secrets get a
     single asterisk per character so the structure is still recognisable
     without leaking content.
+
+    Args:
+        secret: Raw secret-like value that must not be exposed directly.
+
+    Returns:
+        Redacted preview preserving only length and limited edge context.
     """
     length = len(secret)
     if length < MIN_REDACTABLE_LEN:
