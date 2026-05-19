@@ -31,6 +31,16 @@ class ShortVariableRule(Rule):
     ID = "naming.short-variable"
 
     def definition(self) -> RuleDefinition:
+        """Describe the short-variable rule with a configurable accepted-name list.
+
+        Low confidence because single-character names are idiomatic in
+        mathematical, loop-counter, and exception-handler contexts. The
+        ``acceptedShortNames`` option lets teams expand the default
+        (``i``/``j``/``k``/``n``/``m``/``x``/``y``/``z``/``e``/``_``/``f``).
+
+        Returns:
+            Definition for the short-variable rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Short variable name",
@@ -42,6 +52,21 @@ class ShortVariableRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag local single-character assignments not in the accepted-short-name set.
+
+        Function parameters are intentionally not scanned (see module
+        docstring — math-flavoured signatures use single-char params), and
+        test files are skipped because fixture code routinely uses tiny
+        placeholders.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``acceptedShortNames`` option.
+
+        Returns:
+            One finding per ``(name, line)`` short-name assignment.
+        """
         if unit.tree is None:
             return []
         if _is_test_file(unit.file.display_path):

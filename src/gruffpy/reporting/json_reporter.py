@@ -15,6 +15,19 @@ class JsonReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as the ``gruff-py.analysis.v1`` JSON document.
+
+        Output is byte-compatible with gruff-php — 4-space indent,
+        ASCII-escaped non-ASCII, unescaped forward slashes. Finite floats
+        with integer values are coerced to ``int`` so PHP's looser JSON
+        rules don't break consumers.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Pretty-printed JSON document with a trailing newline.
+        """
         return json.dumps(_php_json_value(report.to_dict()), indent=4) + "\n"
 
 

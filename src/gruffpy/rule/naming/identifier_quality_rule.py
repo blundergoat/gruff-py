@@ -36,6 +36,11 @@ class IdentifierQualityRule(Rule):
     ID = "naming.identifier-quality"
 
     def definition(self) -> RuleDefinition:
+        """Describe the identifier-quality rule as a high-confidence warning.
+
+        Returns:
+            Definition for the identifier-quality rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Identifier quality",
@@ -46,6 +51,21 @@ class IdentifierQualityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag identifiers that match placeholder patterns left over from drafts.
+
+        Three families of pattern: exact ``todo`` matches; first-token
+        ``temp``/``foo``/``bar``/``baz``/``qux``/``thing``/``stuff``; and
+        numbered placeholders (``result1``, ``data42``, ``value2``). Each
+        unique ``(name, line)`` fires once.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per placeholder identifier (variable, parameter,
+            function, or class).
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

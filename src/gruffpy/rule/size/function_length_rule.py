@@ -21,6 +21,12 @@ class FunctionLengthRule(Rule):
     ID = "size.function-length"
 
     def definition(self) -> RuleDefinition:
+        """Describe the function-length rule with a configurable line threshold (default 100).
+
+        Returns:
+            Definition under the size pillar; covers ``def``, ``async def``,
+            and ``lambda`` nodes.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Function length",
@@ -32,6 +38,20 @@ class FunctionLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per function whose body exceeds the configured line count.
+
+        Length is measured via ``lines_for_size`` (logical-line count, shared
+        across size rules) and includes decorators when computing the
+        finding's start line.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per ``FunctionDef``/``AsyncFunctionDef``/``Lambda``
+            that crosses the threshold.
+        """
         if unit.tree is None:
             return []
 

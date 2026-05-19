@@ -22,6 +22,17 @@ class TestdoxReadabilityRule(Rule):
     ID = "test-quality.testdox-readability"
 
     def definition(self) -> RuleDefinition:
+        """Describe the testdox-readability rule as an opt-in low-confidence stylistic preference.
+
+        Low confidence and default-off because word-count is a crude proxy
+        for readability: ``test_login_succeeds_with_valid_credentials``
+        reads well at 5 tokens, but ``test_x_y_z`` is only stylistically bad
+        — not wrong.
+
+        Returns:
+            Definition with ``default_enabled=False`` and the ``min_words``
+            option (default 4).
+        """
         return RuleDefinition(
             id=self.ID,
             name="Testdox readability",
@@ -34,6 +45,20 @@ class TestdoxReadabilityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests whose name (sans ``test_``) has fewer than ``min_words`` underscore tokens.
+
+        Counts non-empty tokens from splitting on underscores; the
+        sentence-like ``test_<subject>_<action>_<expected>`` shape
+        comfortably clears the default threshold of 4.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``min_words``
+                option.
+
+        Returns:
+            One finding per test whose stripped name has too few tokens.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

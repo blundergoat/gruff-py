@@ -58,6 +58,17 @@ class DatabaseUrlPasswordRule(SourceTextRule):
     ID = "sensitive-data.database-url-password"
 
     def definition(self) -> RuleDefinition:
+        """Describe the database-URL-password rule as a high-confidence ERROR.
+
+        ERROR severity because a credentialled connection string in source
+        usually unlocks the whole database surface; the supported scheme
+        list (Postgres, MySQL, Mongo, Redis, ClickHouse, AMQP, ...) is wide
+        but exact.
+
+        Returns:
+            Definition for the database-URL-password rule under the
+            sensitive-data pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Database URL with password",
@@ -68,6 +79,19 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Scan raw source for ``<scheme>://user:password@host`` URLs with a real password.
+
+        Common placeholders (``password``, ``changeme``, ``xxx``, ``***``,
+        ``<password>``, etc.) are recognised and skipped so example
+        connection strings in docs and tests don't fire.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per database URL whose password is not a placeholder.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):

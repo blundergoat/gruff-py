@@ -30,6 +30,17 @@ class ErrorSuppressionRule(Rule):
     ID = "security.error-suppression"
 
     def definition(self) -> RuleDefinition:
+        """Describe the wide-error-suppression rule as a medium-confidence advisory.
+
+        Advisory rather than warning because there are legitimate cases
+        (top-level event loops, plugin sandboxes) where catching
+        ``Exception`` is intentional — narrower than ``BaseException`` and
+        well-thought-out.
+
+        Returns:
+            Definition for the wide-error-suppression rule under the
+            security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Wide error suppression",
@@ -40,6 +51,23 @@ class ErrorSuppressionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag wide-exception suppression *shapes* (regardless of handler body).
+
+        Two shapes trigger findings: ``contextlib.suppress(Exception)`` /
+        ``suppress(BaseException)``; and ``except (Exception, ...)`` /
+        ``except (BaseException, ...)`` tuple handlers. The plain
+        ``except Exception:`` shape with a pass-only body is handled by
+        ``security.silent-except`` — this rule complements that one by
+        catching the type-shape signal regardless of body.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per wide-suppression shape (``with suppress(...)``
+            or wide-tuple ``except``).
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -19,6 +19,12 @@ class ClassLengthRule(Rule):
     ID = "size.class-length"
 
     def definition(self) -> RuleDefinition:
+        """Describe the class-length rule with a configurable line threshold (default 1000).
+
+        Returns:
+            Definition under the size pillar; class span includes nested
+            methods and class-level statements.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Class length",
@@ -30,6 +36,16 @@ class ClassLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per class whose body exceeds the configured line count.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per ``ClassDef`` over threshold, anchored at the
+            class definition line (decorators included).
+        """
         if unit.tree is None:
             return []
 

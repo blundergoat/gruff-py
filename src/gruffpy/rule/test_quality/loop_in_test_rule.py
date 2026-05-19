@@ -26,6 +26,15 @@ class LoopInTestRule(Rule):
     ID = "test-quality.loop-in-test"
 
     def definition(self) -> RuleDefinition:
+        """Describe the loop-in-test rule as a medium-confidence advisory.
+
+        Medium confidence: most loops in tests do hide per-iteration assertions
+        that should be parametrised, but some legitimate cases exist (setting
+        up fixture data) — hence advisory rather than warning.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Loop in test",
@@ -36,6 +45,20 @@ class LoopInTestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions whose body contains a ``for``, ``async for``, or ``while`` loop.
+
+        Stops at the first loop per test (one finding per function is enough);
+        catches ``if``/``match`` branching via the separate
+        ``conditional-logic`` rule.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test function containing a loop, anchored at the
+            loop node.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

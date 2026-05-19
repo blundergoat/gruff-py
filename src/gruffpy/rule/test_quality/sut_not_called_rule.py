@@ -70,6 +70,16 @@ class SutNotCalledRule(Rule):
     ID = "test-quality.sut-not-called"
 
     def definition(self) -> RuleDefinition:
+        """Describe the sut-not-called rule as a medium-confidence advisory.
+
+        Medium confidence because identifying "SUT" without project context
+        is impossible; the rule reports tests whose every call is a
+        framework, builtin, or mock — a strong negative signal but not a
+        proof.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="System under test never called",
@@ -80,6 +90,22 @@ class SutNotCalledRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests with zero calls whose target is outside the framework/mock/builtin allowlist.
+
+        A call counts as "SUT-like" when its target root isn't ``pytest``,
+        ``unittest``, or ``mock``; its leaf isn't in the framework leaves
+        (``raises``, ``fixture``, ``parametrize``, etc.), mock leaves
+        (``Mock``, ``patch``, ``assert_called*``, etc.), or builtin leaves
+        (``len``, ``isinstance``, ``getattr``); and it isn't an ``assert*``-
+        prefixed method.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test whose body never reaches non-framework code.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

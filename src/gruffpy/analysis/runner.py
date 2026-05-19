@@ -36,6 +36,27 @@ def run_analysis(
     project_root: Path,
     display_filter: FindingDisplayFilter,
 ) -> AnalysisReport:
+    """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
+
+    Pipeline order: load config, discover and parse sources, parse inline
+    suppressions, run every enabled rule, synthesise composite findings,
+    apply suppressions again (in case composites are suppressed), filter
+    sensitive-data allowed previews, compute scores, derive the exit code,
+    and apply the display filter.
+
+    Args:
+        paths: CLI-supplied paths; empty tuple is reported as ``(".",)``.
+        config_path: Explicit YAML/TOML config path, or ``None`` to use auto-discovery.
+        no_config: When true, skip auto-loading the default config file.
+        output: Requested output format (recorded on the report).
+        fail_threshold: Severity that determines the non-zero exit code.
+        include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
+        project_root: Resolved project root used for path display and discovery.
+        display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
+
+    Returns:
+        Fully-populated report ready to be handed to a reporter.
+    """
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics = _load_analysis_config(
         project_root=project_root,
@@ -214,6 +235,20 @@ def compute_exit_code(
     diagnostics: list[RunDiagnostic],
     fail_threshold: FailThreshold,
 ) -> int:
+    """Derive the CLI exit code from the analysis outcome.
+
+    Exit code 2 (diagnostics) wins over 1 (findings) — a parse error
+    surfaces even when the project is otherwise clean.
+
+    Args:
+        findings: All findings from the run (post-suppression).
+        diagnostics: Run-level diagnostics (config errors, parse failures, missing paths).
+        fail_threshold: Severity threshold from ``--fail-on``.
+
+    Returns:
+        ``2`` when diagnostics exist, ``1`` when any finding meets the
+        threshold, otherwise ``0``.
+    """
     if diagnostics:
         return 2
     for finding in findings:

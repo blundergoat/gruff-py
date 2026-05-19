@@ -130,6 +130,17 @@ class MagicNumberAssertionRule(Rule):
     ID = "test-quality.magic-number-assertion"
 
     def definition(self) -> RuleDefinition:
+        """Describe the magic-number-assertion rule with a configurable allowlist.
+
+        Medium confidence because the default allowlist covers common
+        legitimate cases (HTTP statuses, small loop indices), but project-
+        specific domain constants will trigger false positives until added to
+        ``allowed_numbers``.
+
+        Returns:
+            Definition with the ``allowed_numbers`` option seeded from the
+            default allowlist.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Magic-number assertion",
@@ -141,6 +152,21 @@ class MagicNumberAssertionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``assert`` statements that compare against unexplained integer literals.
+
+        Suppresses constants that look like analyser metrics (``len(x) == 5``,
+        attribute-based thresholds, ``threshold=10`` keyword values) since
+        those are typically derived from configuration, not magic.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``allowed_numbers``
+                option override.
+
+        Returns:
+            One finding per assert whose ``test`` expression contains an
+            integer literal outside the allowlist.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

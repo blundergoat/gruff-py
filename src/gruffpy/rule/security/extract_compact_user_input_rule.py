@@ -33,6 +33,12 @@ class ExtractCompactUserInputRule(Rule):
     ID = "security.extract-compact-user-input"
 
     def definition(self) -> RuleDefinition:
+        """Describe the splat-unpacked-user-input rule as a medium-confidence warning.
+
+        Returns:
+            Definition for the extract-compact-user-input rule under the
+            security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Splat-unpacked user input",
@@ -43,6 +49,21 @@ class ExtractCompactUserInputRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``f(**request.<attr>)`` patterns across major web frameworks.
+
+        Splatting user-controlled dicts into kwargs is Python's analogue of
+        PHP's ``extract()`` — the attacker chooses the parameter names that
+        get bound. Covers Flask/Django/FastAPI access patterns (``.json``,
+        ``.form``, ``.args``, ``.GET``/``.POST``/``.data``,
+        ``.query_params``, ``.values``).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per call site that splats a request attribute.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

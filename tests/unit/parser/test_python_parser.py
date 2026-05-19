@@ -17,6 +17,15 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(
     source_path.write_text("value = 1\n", encoding="utf-8")
 
     def raise_value_error(*_args: Any, **_kwargs: Any) -> ast.AST:
+        """Stub for ``ast.parse`` that surfaces the canonical CPython post-3.12 shape error.
+
+        Real CPython raises ``ValueError`` (not ``SyntaxError``) for this
+        family of malformed AST node — the parser's diagnostic path must
+        catch both.
+
+        Returns:
+            Never returns — always raises.
+        """
         raise ValueError("field 'value' is required for Constant")
 
     monkeypatch.setattr(ast, "parse", raise_value_error)

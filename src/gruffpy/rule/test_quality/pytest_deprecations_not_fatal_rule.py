@@ -24,6 +24,16 @@ class PytestDeprecationsNotFatalRule(Rule):
     ID = "test-quality.pytest-deprecations-not-fatal"
 
     def definition(self) -> RuleDefinition:
+        """Describe the pytest-deprecations-not-fatal rule as a medium-confidence advisory.
+
+        Medium confidence because some projects intentionally let
+        deprecations stay warnings (third-party noise they can't fix); the
+        rule recommends the strict default but defers to per-project
+        suppression.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Pytest deprecations not fatal",
@@ -34,6 +44,21 @@ class PytestDeprecationsNotFatalRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit a pyproject-anchored finding when pytest does not escalate ``DeprecationWarning``.
+
+        Only fires when the unit contains at least one test function and a
+        pytest config block is present; checks ``filterwarnings`` for an
+        ``error::DeprecationWarning`` entry.
+
+        Args:
+            unit: Parsed source file used to detect test presence.
+            context: Rule execution context supplying the ``project_root``
+                used to locate pyproject.toml.
+
+        Returns:
+            One pyproject.toml-anchored finding when deprecation warnings
+            are not escalated, otherwise empty.
+        """
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []
         config = read_pytest_config(context.project_root)

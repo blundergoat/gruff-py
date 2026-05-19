@@ -37,6 +37,16 @@ class ExtendsProductionClassRule(Rule):
     ID = "test-quality.extends-production-class"
 
     def definition(self) -> RuleDefinition:
+        """Describe the extends-production-class rule as a high-confidence warning.
+
+        High confidence because the rule allowlists the conventional testing
+        bases (``TestCase``, ``Protocol``, ``ABC``, ``Generic``, ``object``);
+        anything outside that list is almost certainly production code being
+        subclassed by tests.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Test class extends production class",
@@ -47,6 +57,20 @@ class ExtendsProductionClassRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``class Test*`` definitions whose first base is non-testing production code.
+
+        Only runs inside test files (path contains ``tests/`` or filename
+        matches ``test_*.py``); the allowlist of bases includes ``object``,
+        ``TestCase``, ``IsolatedAsyncioTestCase``, ``Protocol``, ``ABC``, and
+        ``Generic``.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per offending ``Test*`` class.
+        """
         if unit.tree is None:
             return []
         if not _is_test_file(unit.file.display_path):

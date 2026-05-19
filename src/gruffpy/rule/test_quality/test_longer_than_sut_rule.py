@@ -27,6 +27,16 @@ class TestLongerThanSutRule(Rule):
     ID = "test-quality.test-longer-than-sut"
 
     def definition(self) -> RuleDefinition:
+        """Describe the test-longer-than-sut rule with a configurable ``ratio`` option.
+
+        Medium confidence because the SUT lookup is best-effort: only tests
+        named ``test_<sut>`` get matched against an in-unit function named
+        ``<sut>`` — cross-module SUTs and method tests don't pair up.
+
+        Returns:
+            Definition with the ``ratio`` option (test-to-SUT line ratio
+            threshold).
+        """
         return RuleDefinition(
             id=self.ID,
             name="Test longer than SUT",
@@ -38,6 +48,22 @@ class TestLongerThanSutRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests whose line count exceeds ``ratio`` times the matching SUT function's lines.
+
+        Skips tests where the SUT can't be located, where the SUT is
+        trivial (≤5 lines, since a 50-line test for a 5-line SUT is
+        plausible), or where the test name doesn't follow the
+        ``test_<name>`` shape.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``ratio`` option
+                (test-to-SUT line ratio threshold).
+
+        Returns:
+            One finding per test that exceeds the configured ratio against
+            its inferred SUT.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

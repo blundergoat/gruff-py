@@ -24,6 +24,18 @@ class CliState:
 
 
 def state(ctx: click.Context | None = None) -> CliState:
+    """Return the :class:`CliState` attached to the nearest Click parent context.
+
+    Walks ``ctx.parent`` chain so subcommand callbacks see the state set by
+    the root group's option callbacks. Falls back to a fresh default state
+    when no context carries one (e.g. unit tests).
+
+    Args:
+        ctx: Explicit Click context; defaults to the current active one.
+
+    Returns:
+        Shared CLI state — never ``None``.
+    """
     current = ctx or click.get_current_context(silent=True)
     while current is not None:
         if isinstance(current.obj, CliState):

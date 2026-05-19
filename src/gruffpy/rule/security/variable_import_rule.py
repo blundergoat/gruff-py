@@ -30,6 +30,15 @@ class VariableImportRule(Rule):
     ID = "security.variable-import"
 
     def definition(self) -> RuleDefinition:
+        """Describe the variable-import rule as a medium-confidence warning.
+
+        Medium confidence because plugin loaders and command dispatchers
+        legitimately import dynamically; the rule fires on the shape and
+        leaves the allowlist enforcement to the application.
+
+        Returns:
+            Definition for the variable-import rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Variable import",
@@ -40,6 +49,20 @@ class VariableImportRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``importlib.import_module(name)`` and ``__import__(name)`` with non-literal name.
+
+        ``exec("import " + ...)`` lands under
+        ``security.dangerous-function-call`` and is intentionally not
+        duplicated here. Literal arguments are skipped (equivalent to a
+        normal import).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per dynamic-module-name import call.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -6,6 +6,18 @@ from gruffpy.finding.finding import Finding
 
 class GithubAnnotationsReporter:
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as ``::error``/``::warning``/``::notice`` workflow-command lines.
+
+        Each finding becomes one annotation that GitHub Actions surfaces
+        inline on PR diffs. Severity maps: ``error`` → ``error``,
+        ``warning`` → ``warning``, ``advisory`` → ``notice``.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Annotation lines (empty string when there are no findings).
+        """
         lines = [_annotation(finding) for finding in report.findings]
         return "" if not lines else "\n".join(lines) + "\n"
 

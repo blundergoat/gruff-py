@@ -22,9 +22,25 @@ class FindingDisplayFilter:
     exclude_rules: tuple[str, ...] = ()
 
     def filter_findings(self, findings: list[Finding] | tuple[Finding, ...]) -> list[Finding]:
+        """Return only the findings that satisfy every active selector.
+
+        Args:
+            findings: Findings produced by the analyser, in stable sort order.
+
+        Returns:
+            Subset preserving the original order.
+        """
         return [finding for finding in findings if self.is_allowed(finding)]
 
     def is_active(self) -> bool:
+        """Return whether any selector would actually filter findings.
+
+        Used by reporters to skip the per-finding loop when nothing's
+        configured.
+
+        Returns:
+            True if at least one min-severity / pillar / rule selector is set.
+        """
         return (
             self.min_severity is not None
             or bool(self.include_pillars)
@@ -34,6 +50,14 @@ class FindingDisplayFilter:
         )
 
     def to_dict(self) -> dict[str, object]:
+        """Serialise the filter shape for inclusion in JSON / SARIF report metadata.
+
+        Enum members are flattened to their ``.value`` strings so the
+        output is JSON-native.
+
+        Returns:
+            Plain dict containing the filter configuration plus an ``active`` flag.
+        """
         return {
             "active": self.is_active(),
             "minSeverity": self.min_severity.value if self.min_severity is not None else None,
@@ -44,6 +68,17 @@ class FindingDisplayFilter:
         }
 
     def is_allowed(self, finding: Finding) -> bool:
+        """Return whether *finding* passes every active selector.
+
+        Selector order: min-severity gate, then pillar include/exclude,
+        then rule include/exclude. Exclude always wins over include.
+
+        Args:
+            finding: One finding to test.
+
+        Returns:
+            True when the finding should appear in reports.
+        """
         if (
             self.min_severity is not None
             and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]

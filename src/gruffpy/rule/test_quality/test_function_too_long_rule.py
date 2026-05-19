@@ -21,6 +21,15 @@ class TestFunctionTooLongRule(Rule):
     ID = "test-quality.test-function-too-long"
 
     def definition(self) -> RuleDefinition:
+        """Describe the test-function-too-long rule with two-tier line thresholds (50/100).
+
+        High confidence because line count is a deterministic structural
+        metric; long tests reliably hide multiple behaviours and resist
+        future maintenance.
+
+        Returns:
+            Definition with ``warning``/``error`` threshold keys.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Test function too long",
@@ -32,6 +41,20 @@ class TestFunctionTooLongRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions whose ``lines_for_size`` count exceeds the warning/error thresholds.
+
+        Uses the size-pillar's shared ``lines_for_size`` helper per ADR-002
+        so the line metric stays consistent with other size rules; the
+        finding's severity reflects which threshold was crossed.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``warning``/
+                ``error`` line-count thresholds.
+
+        Returns:
+            One finding per test whose size exceeds either threshold.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -29,6 +29,15 @@ class MockWithoutExpectationRule(Rule):
     ID = "test-quality.mock-without-expectation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the mock-without-expectation rule as a medium-confidence advisory.
+
+        Medium confidence because a mock used purely as a stub (return-value
+        producer) is legitimate — the rule can't distinguish "stub" from
+        "spy that should have been verified" without intent.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Mock without expectation",
@@ -39,6 +48,20 @@ class MockWithoutExpectationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests with mock bindings that never have an ``.assert_*`` method called on them.
+
+        Walks the test body collecting attribute calls whose name starts with
+        ``assert_`` (``assert_called``, ``assert_called_with``, etc.); any
+        mock binding not in that set is reported.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test, listing the unverified mock names in the
+            message and metadata.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

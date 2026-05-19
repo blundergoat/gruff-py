@@ -23,6 +23,15 @@ class EmptyParametrizeRule(Rule):
     ID = "test-quality.empty-parametrize"
 
     def definition(self) -> RuleDefinition:
+        """Describe the empty-parametrize rule as a high-confidence warning.
+
+        High confidence because an empty cases list to ``@pytest.mark.parametrize``
+        is unambiguously a bug — pytest silently skips the test rather than
+        flagging it.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Empty parametrize",
@@ -33,6 +42,19 @@ class EmptyParametrizeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``@pytest.mark.parametrize`` decorators whose cases list is an empty literal.
+
+        Matches any decorator name ending in ``parametrize`` (covers
+        ``pytest.mark.parametrize`` and aliases) where the second argument is
+        an empty list or tuple literal.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per parametrize decorator with an empty cases sequence.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

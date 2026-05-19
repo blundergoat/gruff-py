@@ -28,6 +28,15 @@ class NoAssertionsRule(Rule):
     ID = "test-quality.no-assertions"
 
     def definition(self) -> RuleDefinition:
+        """Describe the no-assertions rule as a high-confidence warning.
+
+        High confidence because a test with zero ``assert`` statements,
+        framework assertions, AND ``pytest.raises``/``warns`` blocks is
+        almost certainly verifying nothing.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Test without assertions",
@@ -38,6 +47,19 @@ class NoAssertionsRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions with no ``assert``, ``self.assertX``, or ``pytest.raises``/``warns``.
+
+        A test counts as having an assertion if any of these appear in its
+        body: a bare ``assert`` statement, a framework assertion call, or a
+        ``with`` item whose context manager is an assertion call.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test function with zero detected assertions.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

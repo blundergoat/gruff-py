@@ -35,6 +35,15 @@ class ParametrizeAnnotationRule(Rule):
     ID = "test-quality.parametrize-annotation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the parametrize-annotation rule with a ``maxCasesWithoutIds`` threshold.
+
+        Medium confidence because the threshold is a stylistic judgement:
+        two cases without ``ids=`` are usually fine, but past that point
+        pytest's auto-generated case names become unreadable in reports.
+
+        Returns:
+            Definition with the ``maxCasesWithoutIds`` threshold key.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Parametrize without `ids`",
@@ -46,6 +55,20 @@ class ParametrizeAnnotationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``@parametrize`` with more than ``maxCasesWithoutIds`` cases but no ``ids=``.
+
+        Counts cases from list/tuple literals only; dynamically-built case
+        lists aren't measurable and are skipped.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``maxCasesWithoutIds`` numeric threshold.
+
+        Returns:
+            One finding per offending parametrize decorator, anchored at
+            the decorator's line.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

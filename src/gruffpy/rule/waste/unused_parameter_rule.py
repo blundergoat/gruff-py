@@ -43,6 +43,15 @@ class UnusedParameterRule(Rule):
     ID = "waste.unused-parameter"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unused-parameter rule as a medium-confidence advisory.
+
+        Medium confidence: parameters can be referenced indirectly via
+        ``locals()`` / ``inspect`` or required by an unrecognised framework
+        protocol, both of which look unused to static analysis.
+
+        Returns:
+            Definition for the unused-parameter rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unused parameter",
@@ -53,6 +62,20 @@ class UnusedParameterRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag function arguments that never appear as a ``Name`` in the body.
+
+        Skips ``self``/``cls``, ``_``-prefixed params, abstract/overload/Protocol
+        stubs, framework decorators, and subclasses whose base constrains the
+        signature shape (``Rule``, ``SourceTextRule``, ``BaseHTTPRequestHandler``).
+        Closure-captured names count as referenced.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per unused parameter, anchored at the parameter's line.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

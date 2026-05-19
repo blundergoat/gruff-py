@@ -29,6 +29,11 @@ class EmptyFunctionRule(Rule):
     ID = "waste.empty-function"
 
     def definition(self) -> RuleDefinition:
+        """Describe the empty-function rule as a high-confidence dead-code warning.
+
+        Returns:
+            Definition for the empty-function rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Empty function",
@@ -39,6 +44,18 @@ class EmptyFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag functions and methods whose body is just ``pass`` or ``...``.
+
+        Skips abstract methods, ``@typing.overload`` stubs, Protocol stubs,
+        and framework-hook decorators — these legitimately have empty bodies.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per non-exempt empty function definition.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

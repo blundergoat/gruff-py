@@ -62,6 +62,14 @@ class CommentedOutCodeRule(Rule):
     ID = "waste.commented-out-code"
 
     def definition(self) -> RuleDefinition:
+        """Describe the commented-out-code rule as a low-confidence advisory.
+
+        Low confidence reflects the parser-based heuristic — prose comments
+        that happen to look like Python (``# x is the same as y``) can trip it.
+
+        Returns:
+            Definition for the commented-out-code rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Commented-out code",
@@ -72,6 +80,19 @@ class CommentedOutCodeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Scan each source line for comments that parse as Python statements.
+
+        Lines matching ``TODO``/``FIXME``/``type:``/``pragma:``/``noqa``/etc.
+        are skipped before the parser runs, so the regex pre-filter only
+        forwards statement-shaped candidates.
+
+        Args:
+            unit: Parsed source file (only ``unit.source`` is used here).
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per line whose comment body re-parses as Python code.
+        """
         if not unit.source:
             return []
         definition = self.definition()

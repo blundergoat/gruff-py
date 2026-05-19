@@ -21,9 +21,27 @@ class PytestConfig:
     is_present: bool = False
 
     def has_strict_config(self) -> bool:
+        """Return whether pytest is configured to fail on unknown configs or markers.
+
+        True when either ``--strict-config`` or ``--strict-markers``
+        appears in ``addopts``; both pins are treated as equivalent strict
+        signals.
+
+        Returns:
+            True when pytest will refuse silent config typos.
+        """
         return "--strict-config" in self.addopts or "--strict-markers" in self.addopts
 
     def has_deprecations_as_errors(self) -> bool:
+        """Return whether pytest will escalate ``DeprecationWarning`` to an error.
+
+        Accepts three filter shapes: ``error...DeprecationWarning``,
+        ``error::...DeprecationWarning``, and a bare ``error`` (which
+        escalates *every* warning class, deprecations included).
+
+        Returns:
+            True when ``filterwarnings`` would turn a ``DeprecationWarning`` fatal.
+        """
         return (
             any(
                 line.startswith("error") and "DeprecationWarning" in line
@@ -37,6 +55,11 @@ class PytestConfig:
         )
 
     def has_coverage_source(self) -> bool:
+        """Return whether ``[tool.coverage.run] source`` lists at least one package.
+
+        Returns:
+            True when coverage has a configured source allowlist.
+        """
         return bool(self.coverage_source)
 
 

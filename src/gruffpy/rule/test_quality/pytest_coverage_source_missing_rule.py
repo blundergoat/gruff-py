@@ -24,6 +24,16 @@ class PytestCoverageSourceMissingRule(Rule):
     ID = "test-quality.pytest-coverage-source-missing"
 
     def definition(self) -> RuleDefinition:
+        """Describe the coverage-source-missing rule as a medium-confidence advisory.
+
+        Medium confidence because some projects intentionally rely on
+        ``--cov=<pkg>`` CLI flags or other tools; the rule encourages
+        declarative configuration but can't prove the user isn't covered by
+        another mechanism.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Coverage source missing",
@@ -34,6 +44,21 @@ class PytestCoverageSourceMissingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit a pyproject-anchored finding when ``[tool.coverage.run].source`` is empty or absent.
+
+        Only fires when the unit contains at least one test function (no
+        point flagging config on non-test files) and when a pytest config
+        block is present.
+
+        Args:
+            unit: Parsed source file used to detect test presence.
+            context: Rule execution context supplying the ``project_root``
+                used to locate pyproject.toml.
+
+        Returns:
+            One pyproject.toml-anchored finding per analyse run when the
+            coverage source is missing, otherwise empty.
+        """
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []
         config = read_pytest_config(context.project_root)

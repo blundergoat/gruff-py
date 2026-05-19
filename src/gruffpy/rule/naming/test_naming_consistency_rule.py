@@ -38,6 +38,12 @@ class TestNamingConsistencyRule(Rule):
     ID = "naming.test-naming-consistency"
 
     def definition(self) -> RuleDefinition:
+        """Describe the test-naming-consistency rule as a medium-confidence advisory.
+
+        Returns:
+            Definition for the test-naming-consistency rule under the
+            naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Test naming consistency",
@@ -48,6 +54,20 @@ class TestNamingConsistencyRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag a test file that mixes ``test_snake_case`` and ``testCamelCase`` function names.
+
+        Both top-level test functions and ``Test<X>`` class methods are
+        scanned; the file is silent unless *both* styles appear (so an
+        all-snake or all-camel file passes).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            Empty list, or a single file-anchored finding summarising the
+            mix with sample names.
+        """
         if not isinstance(unit.tree, ast.Module):
             return []
         if not _is_test_file(unit.file.display_path):

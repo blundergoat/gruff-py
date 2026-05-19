@@ -27,6 +27,16 @@ class MultipleAaaCyclesRule(Rule):
     ID = "test-quality.multiple-aaa-cycles"
 
     def definition(self) -> RuleDefinition:
+        """Describe the multiple-AAA-cycles rule as an opt-in low-confidence stylistic advisory.
+
+        Low confidence and default-off because identifying "cycles" by
+        assert-block boundaries is fuzzy — interleaved arrange/assert
+        statements can look like multiple cycles when they aren't.
+
+        Returns:
+            Definition with ``default_enabled=False`` and a ``maxCycles``
+            threshold defaulting to 2.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Multiple AAA cycles",
@@ -39,6 +49,21 @@ class MultipleAaaCyclesRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests whose top-level body contains more than ``maxCycles`` assertion blocks.
+
+        A cycle ends each time a non-assertion statement follows an
+        assertion block; the rule fires when the cycle count exceeds the
+        configured threshold (default: more than 2).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``maxCycles``
+                numeric threshold.
+
+        Returns:
+            One finding per test whose top-level cycle count exceeds the
+            threshold.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

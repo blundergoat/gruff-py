@@ -40,6 +40,16 @@ class ApiKeyPatternRule(SourceTextRule):
     ID = "sensitive-data.api-key-pattern"
 
     def definition(self) -> RuleDefinition:
+        """Describe the API-key-pattern rule as a high-confidence warning.
+
+        High confidence because each vendor pattern is specific enough that
+        false positives are rare; severity is warning (not error) because
+        revoking a leaked key is straightforward.
+
+        Returns:
+            Definition for the API-key-pattern rule under the sensitive-data
+            pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="API key pattern",
@@ -50,6 +60,19 @@ class ApiKeyPatternRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Scan the raw source text for vendor-specific API key shapes.
+
+        Operates on ``unit.source`` directly (this is a ``SourceTextRule``)
+        so it sees content inside strings, comments, and docstrings. Each
+        match is tagged with the identified vendor for metadata.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per detected vendor key, with a redacted preview.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):

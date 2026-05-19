@@ -30,6 +30,15 @@ class TrivialSnapshotRule(Rule):
     ID = "test-quality.trivial-snapshot"
 
     def definition(self) -> RuleDefinition:
+        """Describe the trivial-snapshot rule as a medium-confidence advisory.
+
+        Medium confidence because a large literal in an assert is sometimes
+        appropriate (e.g. a canonical encoding fixture); the rule reports
+        the brittleness risk without enforcing.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Trivial snapshot assertion",
@@ -40,6 +49,20 @@ class TrivialSnapshotRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag asserts containing a list/tuple/set/dict literal with at least 10 elements.
+
+        Stops at the first oversized literal per assert (one finding per
+        statement); list/tuple/set use ``len(elts)``, dict uses
+        ``len(keys)``.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per assert whose test expression embeds a 10+
+            element literal collection.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

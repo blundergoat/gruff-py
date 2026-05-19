@@ -15,6 +15,19 @@ from gruffpy.version import TOOL_NAME
 
 class SarifReporter:
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers.
+
+        Builds the ``runs[0].tool.driver.rules`` section from the full
+        registry so SARIF consumers see metadata for every rule that
+        *could* fire, not just the ones with findings. Findings without a
+        matching registry entry get a fallback rule descriptor.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Pretty-printed SARIF JSON, trailing newline included.
+        """
         rules: dict[str, dict[str, Any]] = {
             rule.definition().id: _rule_metadata(rule.definition())
             for rule in RuleRegistry.defaults().all()

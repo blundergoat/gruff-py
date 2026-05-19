@@ -45,6 +45,15 @@ class WeakCryptoRule(Rule):
     ID = "security.weak-crypto"
 
     def definition(self) -> RuleDefinition:
+        """Describe the weak-crypto rule as a high-confidence warning.
+
+        High confidence because the call shape (``hashlib.md5/sha1``) is
+        exact and the security-context check trims away the cache-key and
+        content-digest uses where MD5/SHA1 are acceptable.
+
+        Returns:
+            Definition for the weak-crypto rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Weak cryptographic hash",
@@ -55,6 +64,23 @@ class WeakCryptoRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag MD5/SHA1 in security contexts, and SHA256/SHA512 used for password hashing.
+
+        Two patterns trigger findings:
+        - ``hashlib.md5/sha1(...)`` when the argument or enclosing scope
+          carries a security-smelling name (``token``, ``signature``, etc.);
+        - ``hashlib.sha256/sha512(...)`` when the surrounding context smells
+          like password hashing — fast cryptographic hashes are too quick
+          for password storage and should be replaced with a KDF
+          (``scrypt``/``argon2``/``bcrypt``).
+
+        Args:
+            unit: Parsed source file to inspect (with parent links).
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per weak-algorithm-in-security-context call.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

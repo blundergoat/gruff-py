@@ -19,11 +19,33 @@ _command_root: click.Group | None = None
 
 
 def bind_root_group(root: click.Group) -> None:
+    """Register *root* as the parent Click group that ``@<command>_command`` decorators attach to.
+
+    Must be called once during CLI bootstrap before any ``@analyse_command``
+    / ``@dashboard_command`` / etc. decorator runs — otherwise ``_command``
+    raises ``RuntimeError``.
+
+    Args:
+        root: Click root group that owns every gruff subcommand.
+    """
     global _command_root
     _command_root = root
 
 
 def apply_decorators(function: _F, decorators: Iterable[ClickDecorator]) -> _F:
+    """Apply *decorators* to *function* in order, returning the wrapped callable.
+
+    Iterates the iterable left-to-right: ``decorators = (a, b, c)`` produces
+    ``c(b(a(function)))``. Used to compose the per-command decorator tuples
+    declared at the bottom of this module.
+
+    Args:
+        function: The Click command function to decorate.
+        decorators: Sequence of Click option/argument/command decorators.
+
+    Returns:
+        The fully-decorated function, cast back to its original signature type.
+    """
     wrapped: Callable[..., Any] = function
     for decorator in decorators:
         wrapped = decorator(wrapped)
@@ -98,6 +120,14 @@ def _argument(*param_decls: str, **attrs: Any) -> ClickDecorator:
 
 def _command(*args: Any, **attrs: Any) -> ClickDecorator:
     def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
+        """Register *function* as a subcommand of the bound root group.
+
+        Args:
+            function: The command implementation to register.
+
+        Returns:
+            The Click-wrapped command callable.
+        """
         if _command_root is None:
             raise RuntimeError("CLI root group has not been bound.")
         return cast(Callable[..., Any], _command_root.command(*args, **attrs)(function))
@@ -110,38 +140,126 @@ def _pass_context(function: _F) -> _F:
 
 
 def analyse_command(function: _F) -> _F:
+    """Wire *function* up as the ``analyse`` subcommand with its full option set.
+
+    Adds the global flags (``--silent``, ``--quiet``, ``--ansi``, etc.) plus
+    analyse-specific options for rule/pillar filtering, fail-on, output
+    format, config, and the PHP-port compatibility flags.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff analyse``.
+    """
     return apply_decorators(function, _ANALYSE_COMMAND_DECORATORS)
 
 
 def dashboard_command(function: _F) -> _F:
+    """Wire *function* up as the ``dashboard`` subcommand serving the live HTTP UI.
+
+    Adds ``--host``/``--port``/``--scan-timeout`` and baseline/diff aliases
+    on top of the global flags.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff dashboard``.
+    """
     return apply_decorators(function, _DASHBOARD_COMMAND_DECORATORS)
 
 
 def list_rules_command(function: _F) -> _F:
+    """Wire *function* up as the ``list-rules`` subcommand (table or JSON output).
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff list-rules``.
+    """
     return apply_decorators(function, _LIST_RULES_COMMAND_DECORATORS)
 
 
 def report_command(function: _F) -> _F:
+    """Wire *function* up as the ``report`` subcommand for writing HTML/JSON to disk.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff report``.
+    """
     return apply_decorators(function, _REPORT_COMMAND_DECORATORS)
 
 
 def summary_command(function: _F) -> _F:
+    """Wire *function* up as the ``summary`` subcommand for top-N rule/file digests.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff summary``.
+    """
     return apply_decorators(function, _SUMMARY_COMMAND_DECORATORS)
 
 
 def metric_calibration_command(function: _F) -> _F:
+    """Wire *function* up as the hidden ``metric-calibration`` subcommand.
+
+    Hidden from ``--help`` listings; used during rule tuning to inspect the
+    distribution of metric values across the codebase.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff metric-calibration``.
+    """
     return apply_decorators(function, _METRIC_CALIBRATION_COMMAND_DECORATORS)
 
 
 def list_command(function: _F) -> _F:
+    """Wire *function* up as the ``list`` subcommand (introspect available commands).
+
+    Supports ``--format`` for txt/xml/json/md output and ``--raw`` for a bare
+    command listing.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff list``.
+    """
     return apply_decorators(function, _LIST_COMMAND_DECORATORS)
 
 
 def help_command_decorator(function: _F) -> _F:
+    """Wire *function* up as the ``help`` subcommand (per-command help text).
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff help``.
+    """
     return apply_decorators(function, _HELP_COMMAND_DECORATORS)
 
 
 def completion_command(function: _F) -> _F:
+    """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
+
+    ``--debug`` tails the completion debug log for troubleshooting wonky
+    shell integrations.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff completion``.
+    """
     return apply_decorators(function, _COMPLETION_COMMAND_DECORATORS)
 
 

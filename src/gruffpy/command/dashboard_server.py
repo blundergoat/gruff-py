@@ -29,6 +29,14 @@ class DashboardState:
     report_interactive: bool = False
 
     def to_query(self) -> dict[str, str]:
+        """Serialise the state to the dashboard URL query-string shape.
+
+        Boolean fields become ``"1"``/``"0"`` strings so the same encoding
+        survives both the form post-back and the URL bar.
+
+        Returns:
+            Camel-cased query parameters ready to be URL-encoded.
+        """
         return {
             "project": self.project,
             "paths": self.paths,
@@ -40,6 +48,18 @@ class DashboardState:
         }
 
     def merge_query(self, query: dict[str, str]) -> "DashboardState":
+        """Return a new ``DashboardState`` with *query* values layered over the current ones.
+
+        Each query parameter overrides the corresponding state field; missing
+        keys fall back to ``self``. The ``failOn`` value is sanitised against
+        :class:`FailThreshold` to avoid blindly accepting URL input.
+
+        Args:
+            query: Query parameters parsed from the request (single value each).
+
+        Returns:
+            Merged state used for the scan.
+        """
         return DashboardState(
             project=query.get("project", self.project),
             paths=query.get("paths", self.paths),
@@ -67,6 +87,25 @@ def create_dashboard_server(
     initial_state: DashboardState,
     renderer: DashboardPageRenderer | None = None,
 ) -> ThreadingHTTPServer:
+    """Build (but do not start) the threaded HTTP server backing the dashboard.
+
+    Returns a ``ThreadingHTTPServer`` so the caller can manage the lifecycle
+    (``serve_forever`` in the foreground, ``server_close`` on shutdown).
+    The handler routes ``/`` to the shell, ``/scan`` to a single analyse
+    run, ``/health`` to a probe, and ``/favicon.ico`` to ``204``.
+
+    Args:
+        host: Bind address for the listener.
+        port: TCP port for the listener.
+        launch_root: Directory the CLI was invoked from; used to resolve
+            relative ``project`` paths from the form.
+        initial_state: Seed state derived from the CLI flags.
+        renderer: Page renderer override (tests inject a stub); defaults
+            to a fresh :class:`DashboardPageRenderer`.
+
+    Returns:
+        Configured but not yet serving HTTP server.
+    """
     page_renderer = renderer or DashboardPageRenderer()
     launch_root = launch_root.resolve()
 
@@ -74,6 +113,7 @@ def create_dashboard_server(
         server_version = "gruff-dashboard/0.1"
 
         def do_GET(self) -> None:  # noqa: N802
+            """Route GET to shell, scan, health, or 404 (``BaseHTTPRequestHandler`` hook)."""
             parsed = urlparse(self.path)
             query = _flatten_query(parse_qs(parsed.query, keep_blank_values=True))
             if parsed.path == "/health":
@@ -93,6 +133,12 @@ def create_dashboard_server(
             self._send(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"not found\n")
 
         def log_message(self, format: str, *args: Any) -> None:
+            """Silence ``BaseHTTPRequestHandler``'s default stderr access log.
+
+            Args:
+                format: Printf-style format from the base handler.
+                args: Format arguments — discarded.
+            """
             return
 
         def _send_html(self, body: str) -> None:

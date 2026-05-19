@@ -45,6 +45,23 @@ class ScoreCalculator:
         findings: list[Finding],
         diff_active: bool = False,
     ) -> ScoreReport:
+        """Compute the full ``ScoreReport`` from *findings*.
+
+        Each pillar starts at 100 and subtracts a weighted finding penalty
+        (severity × confidence × pillar multiplier). The composite grade is
+        the arithmetic mean of applicable pillar scores; top offenders are
+        the 10 files with the worst grade (ties broken by finding count
+        then path).
+
+        Args:
+            findings: Findings produced by the rule pass.
+            diff_active: When true, the report's ``scope`` is ``"diff"``
+                instead of ``"full-project"`` (callers set this when a
+                diff filter is active so reporters can hint at the scope).
+
+        Returns:
+            Score report ready for serialisation and rendering.
+        """
         pillars = self._pillar_scores(findings)
         applicable_scores = [p.grade.score for p in pillars if p.applicable and p.grade is not None]
         average = sum(applicable_scores) / len(applicable_scores) if applicable_scores else 100.0

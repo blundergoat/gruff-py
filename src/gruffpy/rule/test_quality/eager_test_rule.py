@@ -27,6 +27,16 @@ class EagerTestRule(Rule):
     ID = "test-quality.eager-test"
 
     def definition(self) -> RuleDefinition:
+        """Describe the eager-test rule with a configurable assertion threshold (default 5).
+
+        Medium confidence because the threshold is a heuristic — a few extra
+        asserts on the same outcome are fine; this rule catches tests that
+        verify several unrelated behaviours at once.
+
+        Returns:
+            Definition under the test-quality pillar with the
+            ``maxAssertions`` threshold key.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Eager test",
@@ -38,6 +48,20 @@ class EagerTestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions whose assertion count exceeds the ``maxAssertions`` threshold.
+
+        Counts both bare ``assert`` statements and framework assertion calls
+        (``self.assertEqual``, ``pytest.raises``, etc.) anywhere inside the
+        test body.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``maxAssertions``
+                numeric threshold.
+
+        Returns:
+            One finding per test whose assertion count exceeds the threshold.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

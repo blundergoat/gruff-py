@@ -15,6 +15,12 @@ class FileLengthRule(Rule):
     ID = "size.file-length"
 
     def definition(self) -> RuleDefinition:
+        """Describe the file-length rule with a configurable line threshold (default 1000).
+
+        Returns:
+            Definition under the size pillar; thresholds are configurable via
+            the ``warning``/``error`` keys.
+        """
         return RuleDefinition(
             id=self.ID,
             name="File length",
@@ -26,6 +32,19 @@ class FileLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per file whose physical line count exceeds the configured threshold.
+
+        Counts raw lines (no comment/blank-line stripping) so the metric
+        matches what a human sees in their editor.
+
+        Args:
+            unit: Parsed source file whose line count is checked.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            Empty list when under threshold; otherwise a single
+            file-anchored finding spanning the whole file.
+        """
         definition = self.definition()
         settings = context.settings_for(definition)
         line_count = unit.line_count()

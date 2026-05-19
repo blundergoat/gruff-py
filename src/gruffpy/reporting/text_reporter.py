@@ -8,6 +8,18 @@ from gruffpy.version import TOOL_NAME
 
 class TextReporter:
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as the terminal-friendly default ``gruff-py analyse`` output.
+
+        Layout: tool/version header, file counts, ignored/missing path
+        listings, run diagnostics, the score block, every finding, and a
+        summary footer with severity counts and the exit code.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Trailing-newline-terminated text suitable for stdout.
+        """
         counts = report.finding_counts()
         lines: list[str] = [
             f"{TOOL_NAME} {report.tool_version}",

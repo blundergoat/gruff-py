@@ -27,6 +27,15 @@ class RepeatedStructureMissingParametrizeRule(Rule):
     ID = "test-quality.repeated-structure-missing-parametrize"
 
     def definition(self) -> RuleDefinition:
+        """Describe the repeated-structure rule with a ``minGroupSize`` threshold (default 3).
+
+        Medium confidence because the structural hash ignores constant
+        values to find shape duplicates — but legitimately distinct tests
+        can occasionally hash the same when they share boilerplate scaffolding.
+
+        Returns:
+            Definition with the ``minGroupSize`` threshold key.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Repeated structure without parametrize",
@@ -38,6 +47,22 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests sharing a body-shape hash with at least ``minGroupSize - 1`` siblings.
+
+        Hashes each test body's structural skeleton (node types, names,
+        attributes — but not constant values) and groups by hash; skips
+        tests that already have a call-style decorator (they're presumed
+        intentionally individualised).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``minGroupSize``
+                numeric threshold.
+
+        Returns:
+            One finding per test belonging to a shape-equivalent group whose
+            size meets the threshold.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -42,6 +42,16 @@ class ShellInjectionRule(Rule):
     ID = "security.shell-injection"
 
     def definition(self) -> RuleDefinition:
+        """Describe the shell-injection rule as a high-confidence ERROR.
+
+        ERROR severity because the pattern is rarely accidental: someone had
+        to write ``shell=True`` with a non-literal command. High confidence
+        because the call shape is precise (target name + ``shell=True``
+        kwarg + dynamic first arg).
+
+        Returns:
+            Definition for the shell-injection rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Shell injection",
@@ -52,6 +62,20 @@ class ShellInjectionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag subprocess ``shell=True`` with dynamic input, and ``os.system``/``os.popen`` calls.
+
+        Static command strings to ``subprocess(..., shell=True)`` and
+        ``os.system("...")`` are skipped (no injection surface). The
+        subprocess targets covered include ``run``/``call``/``check_call``/
+        ``check_output``/``Popen``/``getoutput``/``getstatusoutput``.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per shell-injection call site.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

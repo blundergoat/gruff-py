@@ -18,6 +18,15 @@ class ScoreReport:
     explanation: str
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise the full score report to its ``gruff-py.analysis.v1`` payload shape.
+
+        Composite grade, scope, explanation string, all pillar scores, the
+        top-offender table, and the cyclomatic-complexity distribution
+        buckets each appear under their schema-specified camelCase keys.
+
+        Returns:
+            JSON-ready dict matching the cross-implementation schema.
+        """
         return {
             "composite": self.composite.to_dict(),
             "scope": self.scope,

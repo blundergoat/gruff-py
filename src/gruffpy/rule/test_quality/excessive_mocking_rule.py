@@ -23,6 +23,16 @@ class ExcessiveMockingRule(Rule):
     ID = "test-quality.excessive-mocking"
 
     def definition(self) -> RuleDefinition:
+        """Describe the excessive-mocking rule with a configurable mock-count threshold (default 4).
+
+        Medium confidence because the line between "appropriately mocked
+        collaborators" and "test is mocking everything" is judgement; high
+        mock counts strongly correlate with brittle, tightly-coupled tests.
+
+        Returns:
+            Definition under the test-quality pillar with the ``maxMocks``
+            threshold key.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Excessive mocking",
@@ -34,6 +44,20 @@ class ExcessiveMockingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions whose mock-binding count exceeds the ``maxMocks`` threshold.
+
+        Counts distinct names bound to mock factory results (``Mock``,
+        ``MagicMock``, ``patch``, ``create_autospec``, etc.) via
+        ``find_mock_bindings``.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``maxMocks``
+                numeric threshold.
+
+        Returns:
+            One finding per test whose mock count exceeds the threshold.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -32,6 +32,15 @@ class OneLineFunctionRule(Rule):
     ID = "waste.one-line-function"
 
     def definition(self) -> RuleDefinition:
+        """Describe the one-line-function rule as a medium-confidence advisory.
+
+        Medium confidence: the heuristic only matches strict signature
+        passthroughs, but decorators or framework hooks can still mean the
+        wrapper is load-bearing in non-syntactic ways.
+
+        Returns:
+            Definition for the one-line-function rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="One-line function wrapper",
@@ -42,6 +51,19 @@ class OneLineFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag functions whose body is just ``return f(...)`` forwarding the same args.
+
+        The wrapper's parameter list must match the inner call one-for-one
+        (positional, keyword, and ``*args``); otherwise the wrapper is doing
+        real argument shaping work and is left alone.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per pure-passthrough wrapper function.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

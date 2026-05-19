@@ -28,6 +28,11 @@ class SilentExceptRule(Rule):
     ID = "security.silent-except"
 
     def definition(self) -> RuleDefinition:
+        """Describe the silent-except rule as a high-confidence advisory.
+
+        Returns:
+            Definition for the silent-except rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Silent except",
@@ -38,6 +43,19 @@ class SilentExceptRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``except:`` / ``except Exception:`` whose body is just ``pass`` / ``...``.
+
+        A logging call in the handler (``logger.error``,
+        ``logging.exception``, ``print``, etc.) defuses the rule — the
+        exception is observable even when swallowed.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per pass-only wide ``except`` handler that doesn't log.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

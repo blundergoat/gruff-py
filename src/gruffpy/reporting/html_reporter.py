@@ -30,6 +30,20 @@ class HtmlReporter:
         self.interactive = interactive
 
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as the standalone single-file HTML inspection report.
+
+        Sections: masthead, optional diagnostics block, verdict (grade
+        stamp + severity counts), per-pillar grade cards, top-offender
+        table, cyclomatic-complexity histogram, finding list, and footer.
+        When ``interactive=True``, the finding section also gets a filter
+        toolbar backed by inline ES modules.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Complete single-file HTML document (no external assets).
+        """
         score = report.score
         grade = score.composite.letter if score is not None else "n/a"
         numeric_score = f"{score.composite.score:.2f} / 100" if score is not None else "n/a"

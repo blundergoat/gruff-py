@@ -28,6 +28,16 @@ class MockingDomainObjectRule(Rule):
     ID = "test-quality.mocking-domain-object"
 
     def definition(self) -> RuleDefinition:
+        """Describe the mocking-domain-object rule as an opt-in medium-confidence advisory.
+
+        Default-disabled because the rule cannot identify "domain"
+        namespaces without project-specific configuration — users must
+        opt in by listing dotted prefixes in ``domain_namespaces``.
+
+        Returns:
+            Definition with ``default_enabled=False`` and the
+            ``domain_namespaces`` option seeded to an empty list.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Mocking domain object",
@@ -40,6 +50,21 @@ class MockingDomainObjectRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag mock factory calls whose ``spec=`` / first arg names a configured domain type.
+
+        Resolves dotted names from the factory's positional or ``spec``/
+        ``spec_set`` keyword argument and matches against the
+        ``domain_namespaces`` prefix list; emits nothing when the option is
+        empty.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``domain_namespaces`` list option.
+
+        Returns:
+            One finding per mock factory targeting a configured domain type.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -34,6 +34,16 @@ class SqlConcatenationRule(Rule):
     ID = "security.sql-concatenation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the SQL-concatenation rule as a medium-confidence warning.
+
+        Medium confidence because ``execute`` is a generic method name and
+        non-SQL receivers (Click commands, generic command runners) do
+        occasionally surface; the dynamic-first-arg gate keeps the noise
+        bounded.
+
+        Returns:
+            Definition for the SQL-concatenation rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="SQL concatenation",
@@ -44,6 +54,21 @@ class SqlConcatenationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``execute``-style calls whose first arg is dynamic, plus over-quoted placeholders.
+
+        Two shapes trigger findings: a dynamic SQL string (f-string,
+        ``.format()``, ``%``, ``+``); and a quoted placeholder (``'?'`` /
+        ``"%s"``) in a parameterised call — the quotes break parameter
+        binding by some drivers.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per unsafe ``execute`` / ``executemany`` /
+            ``executescript`` / ``text`` call.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

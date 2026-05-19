@@ -32,6 +32,11 @@ class RedundantVariableRule(Rule):
     ID = "waste.redundant-variable"
 
     def definition(self) -> RuleDefinition:
+        """Describe the redundant-variable rule as a high-confidence advisory.
+
+        Returns:
+            Definition for the redundant-variable rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Redundant variable",
@@ -42,6 +47,19 @@ class RedundantVariableRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag the ``x = expr; return x`` shape when ``x`` is unused elsewhere.
+
+        Detection is restricted to the last two statements of a function and
+        ignores cases where the temporary is referenced earlier in the body
+        (a real local), so debugger-aid bindings stay clean.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per function ending in a redundant assign-and-return.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

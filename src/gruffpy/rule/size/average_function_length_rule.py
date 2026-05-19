@@ -22,6 +22,13 @@ class AverageFunctionLengthRule(Rule):
     ID = "size.average-function-length"
 
     def definition(self) -> RuleDefinition:
+        """Describe the average-function-length rule with a configurable threshold (default 100).
+
+        Returns:
+            Definition under the size pillar; the metric is reported per class
+            and only fires once at least 3 methods are present (avoiding noise
+            on tiny classes).
+        """
         return RuleDefinition(
             id=self.ID,
             name="Average function length per class",
@@ -33,6 +40,20 @@ class AverageFunctionLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per class whose mean method length crosses the threshold.
+
+        Catches "god classes" that hide behind small methods *and* one giant
+        one — the average reveals the bulk that per-method limits miss.
+        Requires the class to have at least 3 methods.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per ``ClassDef`` whose mean method length is over
+            threshold.
+        """
         if unit.tree is None:
             return []
 

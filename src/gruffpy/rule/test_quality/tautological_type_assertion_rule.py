@@ -30,6 +30,15 @@ class TautologicalTypeAssertionRule(Rule):
     ID = "test-quality.tautological-type-assertion"
 
     def definition(self) -> RuleDefinition:
+        """Describe the tautological-type-assertion rule as a medium-confidence advisory.
+
+        Medium confidence because the rule's structural-equality check is
+        intentionally shallow — it catches ``isinstance(x, type(x))`` and
+        ``type(x) is type(x)`` but not semantically equivalent rewrites.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Tautological type assertion",
@@ -40,6 +49,20 @@ class TautologicalTypeAssertionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``assert`` statements that assert always-true type identities.
+
+        Detects two shapes: ``isinstance(obj, type(obj))`` where both
+        operands are structurally identical, and ``Compare`` nodes with
+        ``Is``/``Eq`` whose left and right are the same expression.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per ``assert`` whose ``test`` matches a tautological
+            type identity.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

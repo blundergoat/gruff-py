@@ -65,6 +65,16 @@ class UnusedPrivateFunctionRule(Rule):
     ID = "dead-code.unused-private-function"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unused-private-function rule as a medium-confidence warning.
+
+        Medium confidence: ``getattr``, plugin registries, and other
+        metaprogramming patterns can call a private function in ways static
+        analysis can't see.
+
+        Returns:
+            Definition for the unused-private-function rule under the
+            dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unused private function",
@@ -75,6 +85,22 @@ class UnusedPrivateFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``_``-prefixed functions/methods with no reference in their enclosing scope.
+
+        Scope is the module for module-level functions and the class body
+        for methods. References include ``Name`` reads, attribute access by
+        bare name, and ``getattr(obj, "name")`` / f-string-prefix lookups
+        for partial matches. The rule honours the project-level
+        ``dead_code_allowlist`` so generated code or framework hooks can opt
+        out by path, symbol, or decorator.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the allowlist.
+
+        Returns:
+            One finding per unreferenced private function or method.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

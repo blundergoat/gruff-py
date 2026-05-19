@@ -29,6 +29,16 @@ class AwsAccessKeyRule(SourceTextRule):
     ID = "sensitive-data.aws-access-key"
 
     def definition(self) -> RuleDefinition:
+        """Describe the AWS-access-key rule as a high-confidence ERROR.
+
+        ERROR severity reflects the blast radius of a leaked AWS root or
+        session credential; ``AKIA``/``ASIA`` patterns are precise enough
+        for high confidence.
+
+        Returns:
+            Definition for the AWS-access-key rule under the sensitive-data
+            pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="AWS access key",
@@ -39,6 +49,19 @@ class AwsAccessKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Scan raw source for ``AKIA``-/``ASIA``-prefixed access key IDs, excluding ``*EXAMPLE``.
+
+        AWS's documentation explicitly uses ``AKIAIOSFODNN7EXAMPLE`` and
+        similar placeholders, so any match ending in ``EXAMPLE`` is treated
+        as canonical doc text rather than a leak.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per non-placeholder AWS access key literal.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):

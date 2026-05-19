@@ -99,6 +99,15 @@ class BooleanPrefixRule(Rule):
     ID = "naming.boolean-prefix"
 
     def definition(self) -> RuleDefinition:
+        """Describe the boolean-prefix rule as a medium-confidence advisory.
+
+        Medium confidence: a bool-returning function may use a synonym we
+        don't recognise (``valid_``, ``empty_``, ``open_``) and there's no
+        runtime check we can do.
+
+        Returns:
+            Definition for the boolean-prefix rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Boolean prefix",
@@ -109,6 +118,23 @@ class BooleanPrefixRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag bool-typed functions/attributes without a predicate-shaped name.
+
+        Triggers when the return annotation contains ``bool`` (including
+        ``"bool"`` strings and ``Optional[bool]``) or when an annotated
+        assignment uses ``bool``, and the name doesn't match an
+        ``is_``/``has_``/``can_``/predicate-shape prefix. Test files and
+        ``@override`` methods are skipped to avoid forcing renames on
+        inherited contracts.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per bool-typed function or attribute lacking a
+            boolean-intent name.
+        """
         if unit.tree is None:
             return []
         if _is_test_file(unit.file.display_path):

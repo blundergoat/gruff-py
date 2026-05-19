@@ -18,6 +18,12 @@ class PublicMethodCountRule(Rule):
     ID = "size.public-method-count"
 
     def definition(self) -> RuleDefinition:
+        """Describe the public-method-count rule with a configurable threshold (default 10).
+
+        Returns:
+            Definition under the size pillar; methods starting with ``_``
+            (including dunder methods) are excluded from the count.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Public method count",
@@ -29,6 +35,20 @@ class PublicMethodCountRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per class whose public-method count exceeds the threshold.
+
+        Only direct methods of the class body are counted — nested classes
+        are reported separately. The metric is a proxy for the size of the
+        class's external API.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per ``ClassDef`` whose public-method count is over
+            threshold.
+        """
         if unit.tree is None:
             return []
 

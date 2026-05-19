@@ -58,6 +58,15 @@ class HungarianNotationRule(Rule):
     ID = "naming.hungarian-notation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the Hungarian-notation rule as a high-confidence warning.
+
+        High confidence because the prefix set is intentionally narrow —
+        false positives on real domain names (``int_id``) erode trust faster
+        than missed detections.
+
+        Returns:
+            Definition for the Hungarian-notation rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Hungarian notation",
@@ -68,6 +77,21 @@ class HungarianNotationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag function/parameter/variable names whose first snake-case token is a type prefix.
+
+        Class names are intentionally not scanned (``StrSerializer`` is a
+        domain name, not a Hungarian prefix). The check requires an
+        underscore in the name so single-token identifiers like ``str`` or
+        ``int`` are not flagged.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per unique ``(name, line)`` identifier with a
+            Hungarian prefix.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

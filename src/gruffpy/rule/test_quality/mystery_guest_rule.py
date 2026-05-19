@@ -34,6 +34,15 @@ class MysteryGuestRule(Rule):
     ID = "test-quality.mystery-guest"
 
     def definition(self) -> RuleDefinition:
+        """Describe the mystery-guest rule as a medium-confidence advisory.
+
+        Medium confidence: the curated I/O vocabulary (network + filesystem
+        leaves) catches the common cases, but legitimate fixture-style
+        ``open(...)`` on a ``tmp_path`` will also fire.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Mystery guest in test",
@@ -44,6 +53,21 @@ class MysteryGuestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests calling external I/O leaves (``open``, ``requests.*``, ``socket.*``, etc.).
+
+        Stops at the first matching call per test; the heuristic combines a
+        prefix set (``requests``, ``urllib``, ``urllib3``, ``socket``,
+        ``httpx``, ``aiohttp``, ``ftplib``, ``smtplib``) with leaf names
+        (``open``, ``popen``).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test that reaches into external state, with the
+            offending target captured in metadata.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

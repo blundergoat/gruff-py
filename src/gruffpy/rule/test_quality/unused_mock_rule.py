@@ -28,6 +28,15 @@ class UnusedMockRule(Rule):
     ID = "test-quality.unused-mock"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unused-mock rule as a high-confidence warning.
+
+        High confidence because the rule looks for any Load-context
+        reference to the mock's name in the test body — a mock with zero
+        such references is dead test scaffolding.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unused mock",
@@ -38,6 +47,20 @@ class UnusedMockRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests whose mock binding name is never read elsewhere in the function body.
+
+        Considers a mock "used" only when its name appears as a
+        Load-context ``Name`` node (attribute access, function argument,
+        etc.); plain reassignment doesn't count.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test, listing the unused mock names in the
+            message and metadata.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

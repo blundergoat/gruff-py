@@ -26,6 +26,15 @@ class GlobalStateMutationRule(Rule):
     ID = "test-quality.global-state-mutation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the global-state-mutation rule as a medium-confidence warning.
+
+        Medium confidence because v0.1 detects only the explicit ``global``
+        declaration shape — direct module-level rebinding without ``global``
+        is not yet caught.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Global state mutation in test",
@@ -36,6 +45,20 @@ class GlobalStateMutationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag test functions that declare ``global`` to rebind a module-level name.
+
+        Stops at the first ``global`` statement per test (one finding per
+        function is enough); module-level state leaks across tests and breaks
+        order-independence.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test that uses ``global``, with the affected
+            names captured in metadata.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

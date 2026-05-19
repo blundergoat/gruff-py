@@ -28,6 +28,16 @@ class DangerousFunctionCallRule(Rule):
     ID = "security.dangerous-function-call"
 
     def definition(self) -> RuleDefinition:
+        """Describe the dangerous-function-call rule as a high-confidence ERROR.
+
+        ERROR severity because arbitrary code execution surfaces are
+        unambiguous bugs; high confidence because the targets are exact
+        stdlib names with very few legitimate uses.
+
+        Returns:
+            Definition for the dangerous-function-call rule under the
+            security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Dangerous function call",
@@ -38,6 +48,19 @@ class DangerousFunctionCallRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag every ``eval``/``exec``/``compile`` call, plus dynamic ``__import__``.
+
+        Literal ``__import__("os")`` is treated as a normal import and
+        skipped; ``__import__(name_var)`` is flagged. The other targets fire
+        unconditionally because they always represent code-execution surface.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per matching call site.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

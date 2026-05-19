@@ -18,6 +18,13 @@ class AttributeCountRule(Rule):
     ID = "size.attribute-count"
 
     def definition(self) -> RuleDefinition:
+        """Describe the attribute-count rule with a configurable attribute threshold (default 15).
+
+        Returns:
+            Definition under the size pillar; the threshold applies to the
+            union of class-body attributes and ``self.x`` assignments
+            discovered in ``__init__``.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Attribute count",
@@ -29,6 +36,20 @@ class AttributeCountRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per class whose attribute count exceeds the threshold.
+
+        Attribute names are deduplicated, so a class-level annotation that
+        is re-assigned in ``__init__`` counts once. Tuple-target unpacking
+        in ``__init__`` (``self.a, self.b = ...``) is supported.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per ``ClassDef`` whose deduped attribute count is
+            over threshold.
+        """
         if unit.tree is None:
             return []
 

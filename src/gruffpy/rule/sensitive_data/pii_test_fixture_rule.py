@@ -43,6 +43,17 @@ class PiiTestFixtureRule(SourceTextRule):
     ID = "sensitive-data.pii-test-fixture"
 
     def definition(self) -> RuleDefinition:
+        """Describe the PII-in-test-fixture rule as a medium-confidence warning.
+
+        Medium confidence because realistic-looking emails/phones don't
+        always belong to a real person; the placeholder allowlists
+        (``example.com``, ``555`` numbers) cover the canonical fixture
+        shapes.
+
+        Returns:
+            Definition for the PII-test-fixture rule under the
+            sensitive-data pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="PII in test fixture",
@@ -53,6 +64,20 @@ class PiiTestFixtureRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag realistic emails and phone numbers in files under test paths.
+
+        Path gate: the file path must contain ``test`` or ``fixture``.
+        Placeholder domains (``example.com``, ``test.com``, ``localhost``,
+        etc.) and US ``555`` area / exchange codes are recognised and
+        skipped.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per realistic email or phone in a test/fixture file.
+        """
         if not _is_test_path(unit.file.display_path):
             return []
         definition = self.definition()

@@ -21,6 +21,11 @@ class UnreachableCodeRule(Rule):
     ID = "waste.unreachable-code"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unreachable-code rule as a high-confidence dead-code warning.
+
+        Returns:
+            Definition for the unreachable-code rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unreachable code",
@@ -31,6 +36,20 @@ class UnreachableCodeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag statements after a terminator, plus literal-condition dead branches.
+
+        Walks every statement block (function bodies, if/else, loop bodies,
+        try handlers, match cases) and reports the first statement after a
+        ``return``/``raise``/``continue``/``break``. Also catches the dead
+        side of ``if True:`` / ``if False:`` / ``while False:``.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per unreachable statement (at most one per terminator block).
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

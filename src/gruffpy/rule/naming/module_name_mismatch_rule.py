@@ -64,6 +64,15 @@ class ModuleNameMismatchRule(Rule):
     ID = "naming.module-name-mismatch"
 
     def definition(self) -> RuleDefinition:
+        """Describe the module-name-mismatch rule with a configurable module list.
+
+        The ``conventionalModuleNames`` option lists filenames that may host
+        a different-named class without firing (``constants.py``,
+        ``exceptions.py``, ``helpers.py``, ``protocols.py``, ``types.py``).
+
+        Returns:
+            Definition for the module-name-mismatch rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Module name mismatch",
@@ -75,6 +84,21 @@ class ModuleNameMismatchRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag single-public-class modules whose filename doesn't match the class.
+
+        Skipped when: the file is ``__init__.py``; the import path already
+        carries the class's tokens (so ``users/service.py`` containing
+        ``class UserService`` is fine); or the file is a conventional
+        bucket (``constants.py`` etc.) sharing any token with the class.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``conventionalModuleNames`` option.
+
+        Returns:
+            Empty list, or a single finding pointing at the mismatched class.
+        """
         candidate = _mismatch_candidate(unit)
         if candidate is None:
             return []

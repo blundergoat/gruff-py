@@ -29,6 +29,11 @@ class EmptyClassRule(Rule):
     ID = "waste.empty-class"
 
     def definition(self) -> RuleDefinition:
+        """Describe the empty-class rule as a high-confidence dead-code advisory.
+
+        Returns:
+            Definition for the empty-class rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Empty class",
@@ -39,6 +44,19 @@ class EmptyClassRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag classes whose entire body is ``pass`` or ``...``.
+
+        Suppressed for dataclasses, framework decorators/bases, and marker
+        bases (Protocol/ABC/Enum/Exception subclasses), where empty bodies
+        are intentional.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per non-exempt class with an empty body.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

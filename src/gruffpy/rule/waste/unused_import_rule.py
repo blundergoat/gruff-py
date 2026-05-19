@@ -30,6 +30,11 @@ class UnusedImportRule(Rule):
     ID = "waste.unused-import"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unused-import rule as a high-confidence dead-code warning.
+
+        Returns:
+            Definition tagging this rule under the dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unused import",
@@ -40,6 +45,18 @@ class UnusedImportRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag imports whose locally-bound name is never referenced.
+
+        Skips ``__init__.py`` modules wholesale, honours ``__all__`` re-exports,
+        and respects ``# noqa`` on the import line.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per unused import alias, located at the alias's line.
+        """
         if unit.tree is None:
             return []
         if Path(unit.file.display_path).name == "__init__.py":

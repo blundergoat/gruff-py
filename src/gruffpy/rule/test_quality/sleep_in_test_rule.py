@@ -28,6 +28,15 @@ class SleepInTestRule(Rule):
     ID = "test-quality.sleep-in-test"
 
     def definition(self) -> RuleDefinition:
+        """Describe the sleep-in-test rule as a high-confidence warning.
+
+        High confidence because ``time.sleep``-style waits in tests are a
+        classic flakiness source; the dotted-suffix match also covers
+        ``asyncio.sleep``, ``trio.sleep``, and ``anyio.sleep``.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Sleep in test",
@@ -38,6 +47,19 @@ class SleepInTestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag every call in a test whose dotted target ends in ``.sleep`` (``time.sleep`` etc.).
+
+        Reports each occurrence (not just the first) since each sleep is its
+        own flakiness vector; the offending dotted target is captured in
+        the finding metadata.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per sleep-style call inside a test body.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

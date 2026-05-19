@@ -31,6 +31,16 @@ class MockOnlyTestRule(Rule):
     ID = "test-quality.mock-only-test"
 
     def definition(self) -> RuleDefinition:
+        """Describe the mock-only-test rule as a medium-confidence warning.
+
+        Medium confidence because the heuristic ignores framework/builtin
+        calls and mock-bound calls — but a clever test that constructs real
+        objects via factory functions named like mocks could still false-
+        positive.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Mock-only test",
@@ -41,6 +51,20 @@ class MockOnlyTestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests that create mocks but never invoke any non-mock, non-framework code.
+
+        Only considers tests with at least one mock binding; a test reaches
+        real code if any call's root name is not a mock binding, not in
+        ``{pytest, unittest, mock}``, and not an assertion/mock-factory call.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test whose only call targets are mocks or
+            framework helpers.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

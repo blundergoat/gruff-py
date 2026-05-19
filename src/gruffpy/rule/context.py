@@ -13,4 +13,15 @@ class RuleContext:
     config: AnalysisConfig
 
     def settings_for(self, definition: RuleDefinition) -> RuleSettings:
+        """Return the per-rule settings for *definition*'s id.
+
+        Convenience indirection so rules can call ``context.settings_for(self.definition())``
+        without reaching into the config dict themselves.
+
+        Args:
+            definition: The rule's definition record.
+
+        Returns:
+            Resolved ``RuleSettings`` (thresholds, options, enabled flag).
+        """
         return self.config.rule_settings(definition.id)

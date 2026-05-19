@@ -29,6 +29,17 @@ class PhiPatternRule(SourceTextRule):
     ID = "sensitive-data.phi-pattern"
 
     def definition(self) -> RuleDefinition:
+        """Describe the PHI-pattern rule as a medium-confidence ERROR.
+
+        ERROR severity because PHI in source is a HIPAA exposure risk;
+        medium confidence because the patterns (``NNN-NN-NNNN`` SSN,
+        ``MRN: <digits>``) are narrow but not exhaustive — the rule
+        surfaces shapes for review rather than promising compliance.
+
+        Returns:
+            Definition for the PHI-pattern rule under the sensitive-data
+            pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="PHI pattern",
@@ -39,6 +50,18 @@ class PhiPatternRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag US SSN literals and ``MRN: <digits>`` patterns in source.
+
+        Canonical SSA documentation placeholders (``000-00-0000``,
+        ``123-45-6789``, ``999-99-9999``) are recognised and skipped.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per non-placeholder SSN or MRN match.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in _SSN_RE.finditer(unit.source):

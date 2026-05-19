@@ -9,6 +9,18 @@ from gruffpy.finding.finding import Finding
 
 class MarkdownReporter:
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as Markdown with collapsible severity sections (GitHub-compatible).
+
+        Findings are grouped by severity (error / warning / advisory) and
+        then by file, wrapped in ``<details open>`` so reviewers can fold
+        sections in PR comments.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Markdown document with a trailing newline.
+        """
         score = report.score
         counts = report.finding_counts()
         lines = [

@@ -26,6 +26,15 @@ class ConditionalLogicRule(Rule):
     ID = "test-quality.conditional-logic"
 
     def definition(self) -> RuleDefinition:
+        """Describe the conditional-logic-in-test rule as a medium-confidence advisory.
+
+        Medium confidence because a stray ``if`` in a test body usually
+        indicates branching behaviour better expressed as parametrised cases,
+        but legitimate uses exist (skip-on-platform guards inside the body).
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Conditional logic in test",
@@ -36,6 +45,19 @@ class ConditionalLogicRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag pytest test functions whose body contains ``if``/``elif``/``match`` branches.
+
+        Stops at the first branching node per test (one finding per function is
+        enough); ``for`` and ``while`` are handled by ``loop-in-test`` instead.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test function containing branching control flow,
+            anchored at the offending node.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

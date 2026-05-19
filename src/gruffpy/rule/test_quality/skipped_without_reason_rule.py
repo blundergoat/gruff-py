@@ -26,6 +26,15 @@ class SkippedWithoutReasonRule(Rule):
     ID = "test-quality.skipped-without-reason"
 
     def definition(self) -> RuleDefinition:
+        """Describe the skipped-without-reason rule as a high-confidence warning.
+
+        High confidence because a missing ``reason=`` on ``skip``/``skipif``
+        is unambiguous: pytest and unittest both accept the kwarg and a
+        skipped test without context becomes permanently invisible.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Skipped without reason",
@@ -36,6 +45,19 @@ class SkippedWithoutReasonRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``@skip``/``@skipif``/``@skipIf``/``@skipUnless`` without a non-empty reason.
+
+        Treats bare ``@pytest.mark.skip`` (without parens) and call-form
+        decorators with no ``reason=`` keyword or string first positional
+        as missing; whitespace-only reasons also fire.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test decorated with a reasonless skip.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

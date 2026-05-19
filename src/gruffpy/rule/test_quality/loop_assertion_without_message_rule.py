@@ -27,6 +27,15 @@ class LoopAssertionWithoutMessageRule(Rule):
     ID = "test-quality.loop-assertion-without-message"
 
     def definition(self) -> RuleDefinition:
+        """Describe the loop-assertion-without-message rule as a medium-confidence advisory.
+
+        Medium confidence: a missing message on a loop assertion is a real
+        debuggability problem, but a fix is often "split into parametrize"
+        rather than "add a message" — so the advice is contextual.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Loop assertion without message",
@@ -37,6 +46,19 @@ class LoopAssertionWithoutMessageRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``assert`` statements nested inside ``for``/``while`` loops with no message.
+
+        Walks each loop in a test body and stops at the first message-less
+        assert (one finding per loop); the missing iteration context makes
+        failures hard to attribute.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per loop whose inner assert omits a message.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

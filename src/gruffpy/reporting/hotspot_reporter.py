@@ -8,6 +8,18 @@ from gruffpy.analysis.schema import HOTSPOT_SCHEMA_VERSION
 
 class HotspotReporter:
     def render(self, report: AnalysisReport) -> str:
+        """Render *report* as a ``gruff-py.hotspot.v1`` JSON map of top-offender files.
+
+        The payload's ``limitations`` field documents the current ranking
+        approach (finding density + available metrics; no git churn yet) so
+        consumers can interpret hotspot scores honestly.
+
+        Args:
+            report: Fully-populated analysis report.
+
+        Returns:
+            Pretty-printed JSON document with a trailing newline.
+        """
         score = report.score
         payload = {
             "schemaVersion": HOTSPOT_SCHEMA_VERSION,

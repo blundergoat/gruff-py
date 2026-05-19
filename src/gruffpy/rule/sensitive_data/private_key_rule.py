@@ -27,6 +27,16 @@ class PrivateKeyRule(SourceTextRule):
     ID = "sensitive-data.private-key"
 
     def definition(self) -> RuleDefinition:
+        """Describe the private-key rule as a high-confidence ERROR.
+
+        ERROR severity because the PEM header itself is the canonical
+        signal of a committed private key; the body's validity isn't
+        load-bearing.
+
+        Returns:
+            Definition for the private-key rule under the sensitive-data
+            pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Private key",
@@ -37,6 +47,19 @@ class PrivateKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag any ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM header in source.
+
+        Covers RSA, EC, DSA, ED25519, and OpenSSH variants — the rule
+        doesn't validate the rest of the PEM body because committed
+        headers alone leak the intent and require rotation.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per PEM header occurrence.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):

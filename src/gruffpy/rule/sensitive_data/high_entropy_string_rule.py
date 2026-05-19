@@ -33,6 +33,16 @@ class HighEntropyStringRule(SourceTextRule):
     ID = "sensitive-data.high-entropy-string"
 
     def definition(self) -> RuleDefinition:
+        """Describe the high-entropy-string rule as a low-confidence warning.
+
+        Low confidence because base64-like strings have many legitimate uses
+        (hashes, IDs, encoded payloads); reviewers should expect to triage
+        these and add benign previews to ``allowlists.secretPreviews``.
+
+        Returns:
+            Definition for the high-entropy-string rule under the
+            sensitive-data pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="High-entropy string",
@@ -43,6 +53,20 @@ class HighEntropyStringRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag 20+ char base64-alphabet runs whose Shannon entropy exceeds 4.5 bits/char.
+
+        Benign-shape suppressions filter out filesystem paths (multiple
+        ``/``), PascalCase identifiers, short hex (< 40 chars — probably
+        a checksum), and snake_case names without digits.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per high-entropy substring that passes the
+            benign-shape filter.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in _CANDIDATE_RE.finditer(unit.source):

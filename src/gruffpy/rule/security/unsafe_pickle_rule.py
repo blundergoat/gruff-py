@@ -36,6 +36,15 @@ class UnsafePickleRule(Rule):
     ID = "security.unsafe-pickle"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unsafe-pickle rule as a high-confidence ERROR.
+
+        ERROR severity because pickle deserialisation of untrusted input is
+        a textbook RCE vector — there's no defensive ``loads`` mode that
+        makes it safe.
+
+        Returns:
+            Definition for the unsafe-pickle rule under the security pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unsafe pickle deserialisation",
@@ -46,6 +55,20 @@ class UnsafePickleRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal bytes argument.
+
+        ``pickle.loads(b'...')`` against a literal is treated as test
+        infrastructure. The chained form
+        ``pickle.Unpickler(file).load()`` is also detected (and the
+        ``cPickle``/``dill`` equivalents).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per pickle deserialisation call without a literal source.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

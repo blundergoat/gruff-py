@@ -7,6 +7,19 @@ from gruffpy.version import TOOL_NAME, VERSION
 
 
 def root_menu(ctx: click.Context) -> str:
+    """Render the Symfony-style help screen shown when ``gruff-py`` runs without a subcommand.
+
+    Joins three sections — header (tool/version + usage line), global
+    options, and the available-commands list — into one terminal-friendly
+    string. ANSI styling honours ``--ansi``/``--no-ansi`` via
+    :func:`should_use_color`.
+
+    Args:
+        ctx: Current Click context (carries CLI state and ANSI setting).
+
+    Returns:
+        Multi-line help screen, terminated with a blank line.
+    """
     return "\n".join(
         [
             *_root_menu_header(ctx),
@@ -94,6 +107,19 @@ def _style(text: str, color: str, ctx: click.Context) -> str:
 
 
 def should_use_color(ctx: click.Context) -> bool | None:
+    """Resolve whether ANSI color should be applied for the current context.
+
+    Precedence: an ``ansi`` parameter on *ctx*, then the ``should_use_ansi``
+    flag from the shared :class:`CliState`, then Click's own ``ctx.color``
+    (which respects ``NO_COLOR`` and TTY detection). ``None`` means "let
+    Click decide".
+
+    Args:
+        ctx: Current Click context.
+
+    Returns:
+        ``True``/``False`` to force color on/off; ``None`` to defer to Click.
+    """
     params = getattr(ctx, "params", {})
     if "ansi" in params:
         value = params["ansi"]

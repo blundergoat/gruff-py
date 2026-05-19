@@ -27,6 +27,14 @@ class JwtTokenRule(SourceTextRule):
     ID = "sensitive-data.jwt-token"
 
     def definition(self) -> RuleDefinition:
+        """Describe the JWT-token rule as a high-confidence warning.
+
+        The ``eyJ`` prefix corresponds to the base64 of the standard JWT
+        header ``{"`` — false positives are rare even on large corpora.
+
+        Returns:
+            Definition for the JWT-token rule under the sensitive-data pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="JWT token",
@@ -37,6 +45,15 @@ class JwtTokenRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``eyJ<header>.<payload>.<signature>``-shaped literals in source.
+
+        Args:
+            unit: Source file whose raw text is scanned.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per JWT-shaped triplet, with a redacted preview.
+        """
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):

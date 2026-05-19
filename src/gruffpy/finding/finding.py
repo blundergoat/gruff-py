@@ -28,6 +28,15 @@ class Finding:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def fingerprint(self) -> str:
+        """Compute the stable 16-char identifier used for baselines and dedup.
+
+        Byte-compatible with gruff-php so baselines cross-apply between
+        implementations. See :mod:`gruffpy.finding.fingerprint` for the
+        algorithm.
+
+        Returns:
+            str: Lowercase hex string, 16 characters of a SHA-256 prefix.
+        """
         return fingerprint_for(
             rule_id=self.rule_id,
             file_path=self.file_path,
@@ -38,6 +47,15 @@ class Finding:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise the finding to its ``gruff-py.analysis.v1`` JSON shape.
+
+        Keys are camelCased to match the shared schema; the ``fingerprint``
+        is computed on the fly to avoid serialising stale values when
+        callers mutate metadata.
+
+        Returns:
+            JSON-ready dict with every public field plus computed fingerprint.
+        """
         return {
             "ruleId": self.rule_id,
             "message": self.message,

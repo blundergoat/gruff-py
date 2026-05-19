@@ -48,6 +48,15 @@ class AbbreviationRule(Rule):
     ID = "naming.abbreviation"
 
     def definition(self) -> RuleDefinition:
+        """Describe the abbreviation rule, opt-in (``default_enabled=False``).
+
+        Off by default because the blocklist is opinionated (``ctx``, ``msg``,
+        ``args`` are idiomatic in many codebases); teams enable it when they
+        want to enforce full domain spellings.
+
+        Returns:
+            Definition for the abbreviation rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Abbreviation",
@@ -59,6 +68,22 @@ class AbbreviationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag identifiers whose tokenised form contains a blocked abbreviation.
+
+        Project-accepted abbreviations from
+        ``allowlists.acceptedAbbreviations`` are subtracted before matching.
+        Test files are skipped wholesale (fixtures routinely use ``tmp``,
+        ``ctx``, ``msg``). Each blocked name fires at most once per file.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying accepted-abbreviation
+                allowlists.
+
+        Returns:
+            One finding per unique identifier whose first blocked-abbreviation
+            token is not accepted.
+        """
         if unit.tree is None:
             return []
         if _is_test_file(unit.file.display_path):

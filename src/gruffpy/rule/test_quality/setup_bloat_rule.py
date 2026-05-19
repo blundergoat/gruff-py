@@ -27,6 +27,15 @@ class SetupBloatRule(Rule):
     ID = "test-quality.setup-bloat"
 
     def definition(self) -> RuleDefinition:
+        """Describe the setup-bloat rule with a ``maxSetupLines`` threshold (default 30).
+
+        Medium confidence because a longer setup is sometimes warranted
+        (complex domain object construction); the rule reports the size
+        signal and lets reviewers judge.
+
+        Returns:
+            Definition with the ``maxSetupLines`` threshold key.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Setup bloat",
@@ -38,6 +47,20 @@ class SetupBloatRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``setUp``/``setup_method``/``@pytest.fixture`` bodies over ``maxSetupLines`` lines.
+
+        Matches ``setUp``, ``setUpClass``, ``setup_method``, ``setup_class``,
+        ``setup_function``, ``setup`` by name, plus any function decorated
+        with a ``@*.fixture`` call.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``maxSetupLines``
+                numeric threshold.
+
+        Returns:
+            One finding per oversized setup/fixture function.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

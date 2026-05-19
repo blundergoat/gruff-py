@@ -28,6 +28,15 @@ class ExceptionTypeOnlyRule(Rule):
     ID = "test-quality.exception-type-only"
 
     def definition(self) -> RuleDefinition:
+        """Describe the exception-type-only rule as a medium-confidence advisory.
+
+        Medium confidence because catching ``Exception`` without ``match=`` is
+        sometimes intentional (you genuinely don't care about the message),
+        but more often hides which error actually fired.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Exception type-only assertion",
@@ -38,6 +47,19 @@ class ExceptionTypeOnlyRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``pytest.raises``/``pytest.warns`` catching ``Exception`` without ``match=``.
+
+        Only fires when the caught type is wide (``Exception`` or
+        ``BaseException``, by name or attribute) AND no ``match`` keyword is
+        provided — narrow types like ``ValueError`` are presumed intentional.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per type-only wide-exception assertion.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

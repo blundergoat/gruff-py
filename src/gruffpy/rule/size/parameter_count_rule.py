@@ -18,6 +18,12 @@ class ParameterCountRule(Rule):
     ID = "size.parameter-count"
 
     def definition(self) -> RuleDefinition:
+        """Describe the parameter-count rule with a configurable arity threshold (default 10).
+
+        Returns:
+            Definition under the size pillar; parameter count includes
+            ``*args``/``**kwargs`` but excludes ``self``/``cls``.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Parameter count",
@@ -29,6 +35,20 @@ class ParameterCountRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit one finding per function whose total parameter arity exceeds the threshold.
+
+        Counts positional-only + positional + keyword-only + ``*args`` +
+        ``**kwargs``. Method receivers (``self``/``cls``) are excluded so a
+        9-parameter free function and a 9-parameter method compare on equal
+        footing.
+
+        Args:
+            unit: Parsed source file to walk.
+            context: Rule execution context that supplies the threshold.
+
+        Returns:
+            One finding per function whose adjusted arity is over threshold.
+        """
         if unit.tree is None:
             return []
 

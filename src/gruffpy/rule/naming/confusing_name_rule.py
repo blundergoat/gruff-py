@@ -39,6 +39,12 @@ class ConfusingNameRule(Rule):
     ID = "naming.confusing-name"
 
     def definition(self) -> RuleDefinition:
+        """Describe the confusing-class-name rule with a configurable name list.
+
+        Returns:
+            Definition under the naming pillar; the blocklist is exposed via
+            the ``confusingNames`` option so projects can extend or trim it.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Confusing class name",
@@ -50,6 +56,20 @@ class ConfusingNameRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag standalone class names that exactly match a configured vague name.
+
+        Exact match only — ``UserService`` is fine because ``Service`` is a
+        suffix; ``Service`` alone is not. The blocklist comes from rule
+        options with a fallback to a curated default set.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the ``confusingNames``
+                option.
+
+        Returns:
+            One finding per ``ClassDef`` whose bare name is in the blocklist.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

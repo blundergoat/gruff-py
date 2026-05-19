@@ -18,6 +18,15 @@ class PillarScore:
     penalty: float
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialise the pillar score to its ``gruff-py.analysis.v1`` payload shape.
+
+        ``grade`` becomes ``None`` (not the literal ``"n/a"``) when the
+        pillar is not applicable; reporters render the human-friendly form.
+        ``penalty`` is rounded to two decimals to match gruff-php.
+
+        Returns:
+            JSON-ready dict with pillar name, applicability, grade, and severity counts.
+        """
         return {
             "pillar": self.pillar,
             "applicable": self.applicable,

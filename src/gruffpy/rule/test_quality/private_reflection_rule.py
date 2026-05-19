@@ -27,6 +27,15 @@ class PrivateReflectionRule(Rule):
     ID = "test-quality.private-reflection"
 
     def definition(self) -> RuleDefinition:
+        """Describe the private-reflection rule as a medium-confidence warning.
+
+        Medium confidence because some legitimate test patterns access
+        ``_private`` (e.g. testing a thoroughly internal helper); the rule
+        catches the broad case and lets users suppress the rare exceptions.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Private reflection in test",
@@ -37,6 +46,20 @@ class PrivateReflectionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag tests that access ``_private`` attributes on objects other than ``self``/``cls``.
+
+        Skips dunder names (``__init__``, ``__class__``) since those are
+        framework hooks rather than private state; allows ``self._x`` and
+        ``cls._x`` to permit ordinary in-class test helpers.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per test reaching into a private attribute (capped
+            at one per function).
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

@@ -23,6 +23,15 @@ class PytestStrictConfigMissingRule(Rule):
     ID = "test-quality.pytest-strict-config-missing"
 
     def definition(self) -> RuleDefinition:
+        """Describe the pytest-strict-config-missing rule as a medium-confidence advisory.
+
+        Medium confidence because while ``--strict-config``/
+        ``--strict-markers`` is a strong default, some projects deliberately
+        accept unknown markers (plugin compatibility shims).
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Pytest strict-config missing",
@@ -33,6 +42,21 @@ class PytestStrictConfigMissingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Emit a pyproject-anchored finding when pytest lacks ``--strict-config`` or markers.
+
+        Gated on at least one test-shaped function being in the analysed
+        unit and on a pytest config block being present; without strict
+        flags, unknown options and markers silently pass.
+
+        Args:
+            unit: Parsed source file used to detect test presence.
+            context: Rule execution context supplying the ``project_root``
+                used to locate pyproject.toml.
+
+        Returns:
+            One pyproject.toml-anchored finding when strict flags are
+            absent, otherwise empty.
+        """
         if not _has_tests(unit):
             return []
         config = read_pytest_config(context.project_root)

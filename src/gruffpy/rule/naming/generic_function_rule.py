@@ -39,6 +39,12 @@ class GenericFunctionRule(Rule):
     ID = "naming.generic-function"
 
     def definition(self) -> RuleDefinition:
+        """Describe the generic-function rule with a configurable verb blocklist.
+
+        Returns:
+            Definition under the naming pillar; the blocklist is exposed via
+            the ``genericFunctions`` option.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Generic function name",
@@ -50,6 +56,21 @@ class GenericFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag single-token function names equal to a configured generic verb.
+
+        Single-token check is deliberate: ``process_payment`` passes
+        (two tokens) but ``process`` alone fails. The blocklist defaults to
+        common contentless verbs (``process``, ``handle``, ``do``, ``run``,
+        ``execute``, ``perform``, ``apply``, ``manage``, ``operate``).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``genericFunctions`` option.
+
+        Returns:
+            One finding per function whose name is exactly one generic token.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

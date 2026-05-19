@@ -37,4 +37,13 @@ class RuleDefinition:
                 raise ValueError(f'Rule "{self.id}" has an invalid option name.')
 
     def get_description(self) -> str:
+        """Return the human-readable description, falling back to the rule name.
+
+        SARIF and other consumers want a sentence — the ``description``
+        field is optional, so reporters call this rather than testing for
+        emptiness themselves.
+
+        Returns:
+            Non-empty description or the rule's display name.
+        """
         return self.description or self.name

@@ -15,6 +15,17 @@ class DashboardPageRenderer:
     """Builds the self-contained HTML shell served by the local dashboard."""
 
     def dashboard_html(self, state: dict[str, str]) -> str:
+        """Return the dashboard shell page seeded with *state* in the form fields.
+
+        Inlines CSS and JS so the shell is fully self-contained — no external
+        asset fetches, mirroring gruff-php's no-assets dashboard.
+
+        Args:
+            state: Query-shaped state dict (from :meth:`DashboardState.to_query`).
+
+        Returns:
+            Single complete HTML document.
+        """
         scan_url = "/scan?" + urlencode(state)
         return (
             '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
@@ -69,6 +80,23 @@ class DashboardPageRenderer:
         exit_code: int,
         duration_ms: int,
     ) -> str:
+        """Splice a JSON-payload ``<script>`` + post-message bridge into the scan iframe.
+
+        The injected script reads the JSON tag and forwards it to
+        ``window.parent`` so the dashboard shell can show exit-code and
+        timing metadata without rescanning. Falls back to prepending the
+        metadata when no ``<body>`` tag is present.
+
+        Args:
+            html_text: The freshly rendered HTML report.
+            project_root: Resolved project root (for display in the shell).
+            command: Command-line argv that produced this scan.
+            exit_code: ``run_analysis`` exit code (0 = clean, 1 = findings, 2 = errors).
+            duration_ms: Wall-clock duration of the scan.
+
+        Returns:
+            The original HTML with the metadata script injected at body open.
+        """
         payload = _json_script_payload(
             {
                 "type": "gruff-scan-complete",
@@ -97,6 +125,17 @@ class DashboardPageRenderer:
         exit_code: int,
         duration_ms: int,
     ) -> str:
+        """Return a minimal HTML error page surfaced inside the dashboard iframe on scan failure.
+
+        Args:
+            message: One-line user-facing summary.
+            detail: Longer free-form context (typically the exception ``str``).
+            exit_code: Numeric exit code to display next to the message.
+            duration_ms: Wall-clock duration before the error surfaced.
+
+        Returns:
+            Self-contained HTML document with the error styled to match the shell.
+        """
         return (
             '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
@@ -113,6 +152,14 @@ class DashboardPageRenderer:
         )
 
     def loading_frame(self) -> str:
+        """Return the ``Ready to scan.`` placeholder injected via the iframe ``srcdoc``.
+
+        Shown until the first ``/scan`` response loads — keeps the dashboard
+        visually consistent on initial paint.
+
+        Returns:
+            Self-contained HTML document acting as a loading placeholder.
+        """
         return (
             '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
             "<style>body{margin:0;background:#0d0c0a;color:#f3e9d2;font:14px "
@@ -122,6 +169,17 @@ class DashboardPageRenderer:
 
 
 def display_command(command: list[str]) -> str:
+    """Render an argv list as a copy-pasteable shell command string.
+
+    Each part is run through :func:`shlex.quote` so whitespace and quotes
+    survive a round-trip back into a real shell.
+
+    Args:
+        command: argv list as produced by ``_display_command_for``.
+
+    Returns:
+        Single line shell-quoted command string.
+    """
     return " ".join(shlex.quote(part) for part in command)
 
 

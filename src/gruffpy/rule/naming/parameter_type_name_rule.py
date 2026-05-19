@@ -75,6 +75,15 @@ class ParameterTypeNameRule(Rule):
     ID = "naming.parameter-type-name"
 
     def definition(self) -> RuleDefinition:
+        """Describe the parameter-type-name rule with a configurable ignore list.
+
+        ``ignoredParameterNames`` defaults to the project's accepted-naming
+        abbreviations set (``id``, ``ctx``, etc.) so common short forms
+        don't fire when their type would suggest a longer canonical name.
+
+        Returns:
+            Definition for the parameter-type-name rule under the naming pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Parameter type name",
@@ -86,6 +95,22 @@ class ParameterTypeNameRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag parameters whose name diverges from their annotation's canonical form.
+
+        Strips role suffixes (``Service``, ``Repository``, ``Protocol``,
+        ``ABC``, ``Type``, ``Adapter``, ``Provider``) before comparing.
+        Accepts plurals for collection-typed parameters (``list[User]`` ->
+        ``users`` is fine) and shared-token names. Test files are skipped.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the
+                ``ignoredParameterNames`` option.
+
+        Returns:
+            One finding per parameter whose name doesn't match the type's
+            canonical name (or accepted short forms / plurals / shared tokens).
+        """
         if unit.tree is None:
             return []
         if _is_test_file(unit.file.display_path):

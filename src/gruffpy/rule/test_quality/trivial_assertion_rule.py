@@ -26,6 +26,15 @@ class TrivialAssertionRule(Rule):
     ID = "test-quality.trivial-assertion"
 
     def definition(self) -> RuleDefinition:
+        """Describe the trivial-assertion rule as a high-confidence warning.
+
+        High confidence because ``assert True``, ``assert 1``, and
+        ``assert 1 == 1`` shapes are syntactically constant — there's no
+        legitimate runtime case where they need to be in test code.
+
+        Returns:
+            Definition tagging this rule under the test-quality pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Trivial assertion",
@@ -36,6 +45,19 @@ class TrivialAssertionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``assert`` statements whose test expression evaluates the same on every run.
+
+        Catches three shapes: ``assert <constant>`` (bool/int/float
+        literal), ``assert not <constant>`` (recursive unary-not), and
+        ``assert <const> == <const>`` (compare between literals only).
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused — no thresholds).
+
+        Returns:
+            One finding per trivial assert.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()

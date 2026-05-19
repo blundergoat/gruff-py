@@ -27,6 +27,19 @@ class AnalysisConfig:
 
     @classmethod
     def from_registry(cls, registry: "RuleRegistry") -> "AnalysisConfig":
+        """Build a baseline config from each rule's declared defaults.
+
+        Initialises the ``rules`` mapping with one ``RuleSettings`` per
+        registered rule, seeded from its ``RuleDefinition`` defaults
+        (enabled flag, thresholds, options). Loader code then layers
+        user overrides on top via :meth:`with_rule_settings`.
+
+        Args:
+            registry: Registry of all built-in and plugin rules.
+
+        Returns:
+            Config with every known rule populated at its default values.
+        """
         rules: dict[str, RuleSettings] = {}
         for rule in registry.all():
             definition = rule.definition()
@@ -38,11 +51,32 @@ class AnalysisConfig:
         return cls(rules=rules)
 
     def rule_settings(self, rule_id: str) -> RuleSettings:
+        """Return the merged settings for *rule_id*.
+
+        Raises ``KeyError`` for unknown ids — this is a programming error
+        on the caller's part, not a user-input issue (unknown rules in
+        user config are flagged separately by the loader).
+
+        Args:
+            rule_id: Canonical rule id (e.g. ``"size.function-length"``).
+
+        Returns:
+            Resolved settings (enabled flag, thresholds, options).
+        """
         if rule_id not in self.rules:
             raise KeyError(f'Unknown rule id "{rule_id}".')
         return self.rules[rule_id]
 
     def with_rule_settings(self, rule_id: str, settings: RuleSettings) -> "AnalysisConfig":
+        """Return a new config with *rule_id*'s settings replaced.
+
+        Args:
+            rule_id: Existing rule id; must already be present.
+            settings: Replacement settings record.
+
+        Returns:
+            New ``AnalysisConfig`` with the single rule entry updated.
+        """
         if rule_id not in self.rules:
             raise KeyError(f'Unknown rule id "{rule_id}".')
         new_rules = dict(self.rules)
@@ -50,19 +84,77 @@ class AnalysisConfig:
         return replace(self, rules=new_rules)
 
     def with_minimum_python_version(self, version: tuple[int, int]) -> "AnalysisConfig":
+        """Return a new config whose minimum-supported-Python pin is *version*.
+
+        Used by modernisation rules to decide which language features are
+        safe to require.
+
+        Args:
+            version: ``(major, minor)`` tuple, e.g. ``(3, 11)``.
+
+        Returns:
+            New ``AnalysisConfig`` with the pin updated.
+        """
         return replace(self, minimum_python_version=version)
 
     def with_rule_selection(self, selection: RuleSelection) -> "AnalysisConfig":
+        """Return a new config with the rule include/exclude selection swapped.
+
+        Args:
+            selection: ``RuleSelection`` capturing the CLI filter flags.
+
+        Returns:
+            New ``AnalysisConfig`` carrying the updated selection.
+        """
         return replace(self, rule_selection=selection)
 
     def with_ignored_path_patterns(self, patterns: tuple[str, ...]) -> "AnalysisConfig":
+        """Return a new config whose ignore-path globs are *patterns*.
+
+        Args:
+            patterns: Project-relative glob patterns to exclude from discovery.
+
+        Returns:
+            New ``AnalysisConfig`` with the patterns updated.
+        """
         return replace(self, ignored_path_patterns=patterns)
 
     def with_accepted_abbreviations(self, abbrevs: tuple[str, ...]) -> "AnalysisConfig":
+        """Return a new config whose naming-rule allowlist is *abbrevs*.
+
+        Consumed by ``naming.abbreviation`` and ``naming.parameter-type-name``
+        to exempt project-standard short forms (``ctx``, ``msg``, ``args``).
+
+        Args:
+            abbrevs: Allowed-abbreviation tokens, lowercase.
+
+        Returns:
+            New ``AnalysisConfig`` with the allowlist updated.
+        """
         return replace(self, accepted_abbreviations=abbrevs)
 
     def with_allowed_secret_previews(self, previews: tuple[str, ...]) -> "AnalysisConfig":
+        """Return a new config whose sensitive-data allowlist is *previews*.
+
+        Each preview is the redacted token surfaced in a finding; matching
+        previews are silently filtered before reporting.
+
+        Args:
+            previews: Redacted-preview strings copied from prior findings.
+
+        Returns:
+            New ``AnalysisConfig`` with the allowlist updated.
+        """
         return replace(self, allowed_secret_previews=previews)
 
     def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":
+        """Return a new config whose dead-code allowlist is *allowlist*.
+
+        Args:
+            allowlist: Path/symbol/decorator allowlist used by the
+                ``dead-code.*`` rules.
+
+        Returns:
+            New ``AnalysisConfig`` with the allowlist updated.
+        """
         return replace(self, dead_code_allowlist=allowlist)

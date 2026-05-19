@@ -32,6 +32,16 @@ class UnusedPrivateAttributeRule(Rule):
     ID = "dead-code.unused-private-attribute"
 
     def definition(self) -> RuleDefinition:
+        """Describe the unused-private-attribute rule as a medium-confidence warning.
+
+        Medium confidence: ``__x``-style name-mangled attributes accessed via
+        the runtime-mangled name (``self._Cls__x``) are out of scope and can
+        false-positive.
+
+        Returns:
+            Definition for the unused-private-attribute rule under the
+            dead-code pillar.
+        """
         return RuleDefinition(
             id=self.ID,
             name="Unused private attribute",
@@ -42,6 +52,20 @@ class UnusedPrivateAttributeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag ``self._x``-style assignments inside a class that the class never reads.
+
+        Skips dataclasses (fields are intentionally write-only at the type
+        level), framework-base subclasses, and ``_x`` attributes paired with
+        an ``@property x`` getter (the underscore is the backing field).
+        Honours the dead-code allowlist by path, symbol, and decorator.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context supplying the allowlist.
+
+        Returns:
+            One finding per private attribute assigned-but-never-read.
+        """
         if unit.tree is None:
             return []
         definition = self.definition()
