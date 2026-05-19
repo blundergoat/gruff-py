@@ -88,7 +88,7 @@ class ComplexBranchRationaleRule(Rule):
                 continue
             cyclomatic = cyclomatic_for(fn)
             cognitive = cognitive_for(fn)
-            if not _crosses_thresholds(fn, cyclomatic, cognitive, thresholds):
+            if not _has_threshold_crossing(fn, cyclomatic, cognitive, thresholds):
                 continue
             if _has_substantive_docstring(fn):
                 continue
@@ -125,7 +125,7 @@ def _positive_int(value: Any, *, fallback: int) -> int:
     return fallback
 
 
-def _crosses_thresholds(
+def _has_threshold_crossing(
     fn: _FunctionNode,
     cyclomatic: int,
     cognitive: int,

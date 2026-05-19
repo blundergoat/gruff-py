@@ -166,34 +166,74 @@ def _documented_fields(
     fields: tuple[str, ...],
     allow_bullets: bool,
 ) -> tuple[str, ...]:
+    """Return fields documented by Sphinx entries, Attributes sections, or bullets.
+
+    The three syntaxes are collected independently so the section-tracking
+    state for Google-style ``Attributes:`` blocks does not obscure the simpler
+    Sphinx and bullet matchers.
+    """
     if not docstring:
         return ()
     field_set = set(fields)
-    documented: set[str] = set()
+    documented = set(_sphinx_documented_fields(docstring, field_set))
+    documented.update(_attribute_section_fields(docstring, field_set))
+    if allow_bullets:
+        documented.update(_bullet_documented_fields(docstring, field_set))
+    return tuple(field for field in fields if field in documented)
+
+
+def _sphinx_documented_fields(docstring: str, field_set: set[str]) -> tuple[str, ...]:
+    documented: list[str] = []
+    for raw_line in docstring.splitlines():
+        field = _matched_field(_SPHINX_FIELD_PATTERN.search(raw_line.strip()), field_set)
+        if field is not None:
+            documented.append(field)
+    return tuple(documented)
+
+
+def _attribute_section_fields(docstring: str, field_set: set[str]) -> tuple[str, ...]:
+    documented: list[str] = []
     in_attribute_section = False
     for raw_line in docstring.splitlines():
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        sphinx_match = _SPHINX_FIELD_PATTERN.search(stripped)
-        if sphinx_match and sphinx_match.group(1) in field_set:
-            documented.add(sphinx_match.group(1))
-        if stripped.rstrip(":").lower() in {"attributes", "attrs"}:
+        stripped = raw_line.rstrip().strip()
+        if _is_attribute_section_header(stripped):
             in_attribute_section = True
             continue
-        if in_attribute_section:
-            if not stripped:
-                continue
-            if not raw_line.startswith((" ", "\t")) and not set(stripped) <= {"-"}:
-                in_attribute_section = False
-                continue
-            match = _FIELD_PATTERN.match(stripped)
-            if match and match.group(1) in field_set:
-                documented.add(match.group(1))
-        if allow_bullets:
-            bullet_match = _BULLET_FIELD_PATTERN.match(stripped)
-            if bullet_match and bullet_match.group(1) in field_set:
-                documented.add(bullet_match.group(1))
-    return tuple(field for field in fields if field in documented)
+        if not in_attribute_section or not stripped:
+            continue
+        if _is_attribute_section_exit(raw_line, stripped):
+            in_attribute_section = False
+            continue
+        field = _matched_field(_FIELD_PATTERN.match(stripped), field_set)
+        if field is not None:
+            documented.append(field)
+    return tuple(documented)
+
+
+def _bullet_documented_fields(docstring: str, field_set: set[str]) -> tuple[str, ...]:
+    documented: list[str] = []
+    for raw_line in docstring.splitlines():
+        field = _matched_field(_BULLET_FIELD_PATTERN.match(raw_line.strip()), field_set)
+        if field is not None:
+            documented.append(field)
+    return tuple(documented)
+
+
+def _is_attribute_section_header(stripped: str) -> bool:
+    return stripped.rstrip(":").lower() in {"attributes", "attrs"}
+
+
+def _is_attribute_section_exit(raw_line: str, stripped: str) -> bool:
+    return not raw_line.startswith((" ", "\t")) and not set(stripped) <= {"-"}
+
+
+def _matched_field(match: re.Match[str] | None, field_set: set[str]) -> str | None:
+    if match is None:
+        return None
+    field = match.group(1)
+    if field not in field_set:
+        return None
+    return field
 
 
 def _dataclass_attributes_finding(
