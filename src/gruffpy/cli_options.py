@@ -127,6 +127,9 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
 
         Returns:
             The Click-wrapped command callable.
+
+        Raises:
+            RuntimeError: If ``bind_cli_root`` has not been called first.
         """
         if _command_root is None:
             raise RuntimeError("CLI root group has not been bound.")

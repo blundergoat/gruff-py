@@ -25,6 +25,9 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(
 
         Returns:
             Never returns — always raises.
+
+        Raises:
+            ValueError: Always, mimicking CPython's malformed-Constant error.
         """
         raise ValueError("field 'value' is required for Constant")
 

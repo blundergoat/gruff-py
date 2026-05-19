@@ -69,6 +69,9 @@ class AnalysisConfig:
 
         Returns:
             Resolved settings (enabled flag, thresholds, options).
+
+        Raises:
+            KeyError: When ``rule_id`` is not present in this config.
         """
         if rule_id not in self.rules:
             raise KeyError(f'Unknown rule id "{rule_id}".')
@@ -83,6 +86,9 @@ class AnalysisConfig:
 
         Returns:
             New ``AnalysisConfig`` with the single rule entry updated.
+
+        Raises:
+            KeyError: When ``rule_id`` is not present in this config.
         """
         if rule_id not in self.rules:
             raise KeyError(f'Unknown rule id "{rule_id}".')

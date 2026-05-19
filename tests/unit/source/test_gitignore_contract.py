@@ -78,7 +78,14 @@ _PATH_PROBES: tuple[_PathProbe, ...] = (
 
 @pytest.fixture
 def corpus(tmp_path: Path) -> Path:
-    """Create a representative gitignore corpus in *tmp_path* and return its root."""
+    """Create a representative gitignore corpus in *tmp_path* and return its root.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory.
+
+    Returns:
+        The same ``tmp_path`` after the gitignore probe tree has been written.
+    """
     _write_probe_paths(tmp_path)
     _write_gitignore_files(tmp_path)
     return tmp_path

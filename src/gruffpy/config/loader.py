@@ -49,16 +49,20 @@ class ConfigLoader:
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
         """Load config, honouring YAML / `pyproject.toml` precedence.
 
-        Returns ``(config, source_path)`` where ``source_path`` is the file the
-        config was loaded from, or ``None`` if no config file was found and
-        defaults are used.
-
         Precedence:
 
         1. Explicit *config_path* (format auto-detected by extension).
         2. ``.gruff-py.yaml`` in the project root.
         3. ``pyproject.toml`` ``[tool.gruff-py]`` in the project root.
         4. Built-in defaults.
+
+        Args:
+            config_path: Optional explicit config path; when set, skips the
+                project-root discovery and loads that file directly.
+
+        Returns:
+            Tuple ``(config, source_path)`` where ``source_path`` is the file
+            the config was loaded from, or ``None`` if defaults were used.
         """
         if config_path is not None:
             return self._load_explicit(config_path)

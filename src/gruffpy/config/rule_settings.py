@@ -48,6 +48,9 @@ class RuleSettings:
 
         Returns:
             Numeric threshold value.
+
+        Raises:
+            LookupError: When the key is missing or its value is not numeric.
         """
         value = self.thresholds.get(name)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -137,6 +140,9 @@ class RuleSettings:
 
         Returns:
             Configured option value as-is.
+
+        Raises:
+            LookupError: When the option key is not present.
         """
         if name not in self.options:
             raise LookupError(f'Missing option "{name}".')
@@ -154,6 +160,9 @@ class RuleSettings:
 
         Returns:
             Fresh list copy containing only strings.
+
+        Raises:
+            TypeError: When the option is set but is not a ``list[str]``.
         """
         value = self.options.get(name, [])
         if not isinstance(value, list):

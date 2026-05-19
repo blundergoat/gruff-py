@@ -51,6 +51,13 @@ class CompositeFindingFactory:
         Input order is preserved; composites are appended at the end. Callers
         that need sorted/deduplicated output should pipe the result back
         through their existing post-processing.
+
+        Args:
+            findings: Per-unit findings to inspect for composite contributors.
+
+        Returns:
+            New list: the originals plus any composite findings (e.g.
+            ``design.god-method``) synthesised from contributor groups.
         """
         result = list(findings)
         result.extend(self._god_methods(findings))

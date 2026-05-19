@@ -67,7 +67,14 @@ _cache: dict[str, PytestConfig] = {}
 
 
 def read_pytest_config(project_root: str) -> PytestConfig:
-    """Return the cached :class:`PytestConfig` for *project_root*."""
+    """Return the cached :class:`PytestConfig` for *project_root*.
+
+    Args:
+        project_root: Path to the project root containing ``pyproject.toml``.
+
+    Returns:
+        Parsed pytest configuration; subsequent calls reuse the cached value.
+    """
     if project_root in _cache:
         return _cache[project_root]
     config = _read(project_root)

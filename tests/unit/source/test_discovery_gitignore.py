@@ -99,7 +99,11 @@ def test_explicit_gitignored_path_is_skipped_unless_include_ignored(tmp_path: Pa
 
 
 def test_gitignored_directory_descent_is_skipped(tmp_path: Path) -> None:
-    """Gitignored directories must not be walked into (performance + correctness)."""
+    """Gitignored directories must not be walked into (performance + correctness).
+
+    Args:
+        tmp_path: Pytest-provided per-test directory holding the synthetic project tree.
+    """
     _write(tmp_path / ".gitignore", "vendor/\n")
     _write(tmp_path / "vendor" / "a.py")
     _write(tmp_path / "vendor" / "deep" / "b.py")
@@ -113,7 +117,11 @@ def test_gitignored_directory_descent_is_skipped(tmp_path: Path) -> None:
 
 
 def test_gitignored_paths_only_directories_appear_in_ignored_summary(tmp_path: Path) -> None:
-    """Match the existing convention: files are silently skipped; directories are summarised."""
+    """Match the existing convention: files are silently skipped; directories are summarised.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory holding the synthetic project tree.
+    """
     _write(tmp_path / ".gitignore", "skip_me.py\nvendor/\n")
     _write(tmp_path / "skip_me.py")
     _write(tmp_path / "vendor" / "lib.py")

@@ -110,17 +110,35 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
 
 
 def check_rules_markdown(path: Path) -> bool:
-    """Return whether *path* matches generated rule docs."""
+    """Return whether *path* matches generated rule docs.
+
+    Args:
+        path: Markdown file to compare against the freshly rendered output.
+
+    Returns:
+        True when the file is byte-identical to ``render_rules_markdown()``.
+    """
     return path.read_text() == render_rules_markdown()
 
 
 def write_rules_markdown(path: Path) -> None:
-    """Write generated rule docs to *path*."""
+    """Write generated rule docs to *path*.
+
+    Args:
+        path: Destination markdown file; overwritten unconditionally.
+    """
     path.write_text(render_rules_markdown())
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for docs generation/checking."""
+    """CLI entry point for docs generation/checking.
+
+    Args:
+        argv: Optional argv slice (defaults to ``sys.argv[1:]`` when ``None``).
+
+    Returns:
+        ``0`` on success or when docs are current; ``1`` if ``--check`` fails.
+    """
     parser = argparse.ArgumentParser(description="Generate or check docs/RULES.md.")
     parser.add_argument("path", nargs="?", default="docs/RULES.md")
     mode = parser.add_mutually_exclusive_group()

@@ -422,6 +422,9 @@ def documentation_for_rule(rule_id: str) -> RuleDocs:
     Args:
         rule_id: Built-in rule id.
 
+    Returns:
+        Catalog ``RuleDocs`` (rationale, examples, threshold semantics).
+
     Raises:
         KeyError: If *rule_id* is not a built-in catalog entry.
     """
@@ -432,5 +435,9 @@ def documentation_for_rule(rule_id: str) -> RuleDocs:
 
 
 def catalog_definitions() -> list[RuleDefinition]:
-    """Return built-in rule definitions in catalog order."""
+    """Return built-in rule definitions in catalog order.
+
+    Returns:
+        List of ``RuleDefinition`` records, one per ``BUILTIN_RULES`` entry.
+    """
     return [entry.definition for entry in BUILTIN_RULES]

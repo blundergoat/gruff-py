@@ -52,7 +52,11 @@ def test_strict_config_present_skips(tmp_path: Path):
 
 
 def test_strict_config_rule_skipped_on_non_test_unit(tmp_path: Path):
-    """Project-config rules must not fire on non-test units — gating regression."""
+    """Project-config rules must not fire on non-test units — gating regression.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory holding the synthetic ``pyproject.toml``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '-ra'\n",
@@ -121,7 +125,11 @@ def test_multiple_aaa_cycles_requires_opt_in():
 
 
 def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
-    """When opted in, the rule does fire on multi-cycle tests."""
+    """When opted in, the rule does fire on multi-cycle tests.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory used as the project root.
+    """
     rule = MultipleAaaCyclesRule()
     config = AnalysisConfig(
         rules={
@@ -144,7 +152,11 @@ def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
 
 
 def test_testdox_readability_skipped_when_default(tmp_path: Path):
-    """testdox-readability is default-off; even short test names don't fire by default."""
+    """testdox-readability is default-off; even short test names don't fire by default.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory used as the project root.
+    """
     rule = TestdoxReadabilityRule()
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)

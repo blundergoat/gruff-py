@@ -21,7 +21,16 @@ def _file_paths_in_report(output: str) -> set[str]:
 
 @pytest.fixture
 def project_with_gitignored_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Tmp project: kept file is clean, ignored file has a known docstring finding."""
+    """Tmp project: kept file is clean, ignored file has a known docstring finding.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory.
+        monkeypatch: Pytest monkeypatch fixture (used to ``chdir`` into the project).
+
+    Returns:
+        Project root path with ``.gitignore``, ``src/kept.py``, and an ignored
+        ``vendor/third_party.py`` already written.
+    """
     monkeypatch.chdir(tmp_path)
     _write(tmp_path / ".gitignore", "vendor/\n")
     _write(tmp_path / "src" / "kept.py", '"""Kept module."""\n\nx = 1\n')
