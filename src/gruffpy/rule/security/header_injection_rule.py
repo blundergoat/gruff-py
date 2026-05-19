@@ -2,8 +2,7 @@
 
 Heuristic: subscript-assignment to an attribute named ``headers`` where the
 subscript key is not a string literal. Scoped to files that import a known
-web framework (Flask / FastAPI / Django / Starlette) to keep false-positive
-risk low.
+web framework (Flask / FastAPI / Django) to keep false-positive risk low.
 """
 
 import ast

@@ -3,8 +3,9 @@
 Recognises Stripe (``sk_live_*``/``rk_live_*``), GitHub (``ghp_*``/``gho_*``/
 ``ghu_*``/``ghs_*``/``ghr_*``), Slack (``xoxb-*``/``xoxp-*``/``xoxa-*``/
 ``xoxs-*``), OpenAI (``sk-...``), Square (``EAAA*``), and Twilio (``SK*``).
-Vocabulary is configurable via the rule's ``vendor_patterns`` option, where
-the default is the curated map below.
+The vendor map is module-private and not currently configurable; the
+patterns are tuned for low false positives on real API tokens rather
+than for project-specific extension.
 """
 
 from gruffpy.finding.confidence import Confidence
