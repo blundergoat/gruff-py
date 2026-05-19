@@ -75,20 +75,26 @@ def test_inject_dashboard_metadata_embeds_html_safe_script_block():
     assert "\\u003Cproject\\u003E\\u0026" in html
 
 
+_SAMPLE_EXIT_CODE = 2
+_SAMPLE_DURATION_MS = 345
+_SAMPLE_PROJECT_ROOT = '/tmp/<project>&"quoted"'
+_SAMPLE_COMMAND_ARGV = ("gruff-py", "analyse", "--format", "html", "path with spaces")
+
+
 def test_inject_dashboard_metadata_payload_records_scan_provenance():
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
-        project_root='/tmp/<project>&"quoted"',
-        command=["gruff-py", "analyse", "--format", "html", "path with spaces"],
-        exit_code=2,
-        duration_ms=345,
+        project_root=_SAMPLE_PROJECT_ROOT,
+        command=list(_SAMPLE_COMMAND_ARGV),
+        exit_code=_SAMPLE_EXIT_CODE,
+        duration_ms=_SAMPLE_DURATION_MS,
     )
     payload = _metadata_payload(html)
     assert payload == {
         "type": "gruff-scan-complete",
-        "exitCode": 2,
-        "durationMs": 345,
-        "projectRoot": '/tmp/<project>&"quoted"',
+        "exitCode": _SAMPLE_EXIT_CODE,
+        "durationMs": _SAMPLE_DURATION_MS,
+        "projectRoot": _SAMPLE_PROJECT_ROOT,
         "command": "gruff-py analyse --format html 'path with spaces'",
     }
 

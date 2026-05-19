@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
@@ -33,12 +31,6 @@ def _two_function_report(tmp_path: Path):
     )
 
 
-@pytest.fixture
-def two_function_payload(tmp_path: Path) -> dict[str, object]:
-    """Return ``metric_calibration_payload`` for a 2-function sample project."""
-    return metric_calibration_payload(_two_function_report(tmp_path), top=1)
-
-
 def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) -> None:
     report = _two_function_report(tmp_path)
     assert (
@@ -49,10 +41,9 @@ def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) ->
     ) == (1, 1, 2, False)
 
 
-def test_metric_calibration_payload_cyclomatic_distribution(
-    two_function_payload: dict[str, object],
-) -> None:
-    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> None:
+    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
     cyclomatic = metrics["cyclomatic"]
     assert (cyclomatic["min"], cyclomatic["p50"], cyclomatic["p99"], cyclomatic["max"]) == (
         1,
@@ -62,17 +53,15 @@ def test_metric_calibration_payload_cyclomatic_distribution(
     )
 
 
-def test_metric_calibration_payload_npath_count(
-    two_function_payload: dict[str, object],
-) -> None:
-    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+def test_metric_calibration_payload_npath_count(tmp_path: Path) -> None:
+    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
     assert metrics["npath"]["count"] == 2
 
 
-def test_metric_calibration_payload_collapses_single_threshold_rules(
-    two_function_payload: dict[str, object],
-) -> None:
-    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: Path) -> None:
+    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
     hv = metrics["halsteadVolume"]
     assert hv["threshold"] == 180
     assert hv["thresholdSeverity"] == "warning"
@@ -80,17 +69,15 @@ def test_metric_calibration_payload_collapses_single_threshold_rules(
     assert "errorThreshold" not in hv
 
 
-def test_metric_calibration_payload_maintainability_uses_below_direction(
-    two_function_payload: dict[str, object],
-) -> None:
-    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+def test_metric_calibration_payload_maintainability_uses_below_direction(tmp_path: Path) -> None:
+    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
 
-def test_metric_calibration_payload_top_cyclomatic_names_branchy(
-    two_function_payload: dict[str, object],
-) -> None:
-    top = two_function_payload["top"]  # type: ignore[index]
+def test_metric_calibration_payload_top_cyclomatic_names_branchy(tmp_path: Path) -> None:
+    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
+    top = payload["top"]  # type: ignore[index]
     assert top["cyclomatic"][0]["symbol"] == "branchy"  # type: ignore[index]
 
 

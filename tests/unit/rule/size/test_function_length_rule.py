@@ -38,15 +38,27 @@ def test_under_warning_threshold_emits_no_finding():
     assert findings == []
 
 
+_WARNING_BOUNDARY = 5
+_BODY_STATEMENT_COUNT = 10
+# A def-line + N body statements = N+1 lines in the AST span.
+_EXPECTED_REPORTED_LINES = _BODY_STATEMENT_COUNT + 1
+
+
 def test_above_warning_below_error_emits_warning():
-    body = "\n".join(["    x = 1"] * 10)
+    body = "\n".join(["    x = 1"] * _BODY_STATEMENT_COUNT)
     source = f"def f():\n{body}\n"
-    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = FunctionLengthRule().analyse(
+        _make_unit(source), _ctx(warning=_WARNING_BOUNDARY, error=20)
+    )
     assert len(findings) == 1
     f = findings[0]
     assert (f.severity, f.symbol) == (Severity.WARNING, "f")
     relevant_metadata = {k: f.metadata[k] for k in ("lines", "threshold", "thresholdType")}
-    assert relevant_metadata == {"lines": 11, "threshold": 5, "thresholdType": "warning"}
+    assert relevant_metadata == {
+        "lines": _EXPECTED_REPORTED_LINES,
+        "threshold": _WARNING_BOUNDARY,
+        "thresholdType": "warning",
+    }
 
 
 def test_above_error_emits_error():
