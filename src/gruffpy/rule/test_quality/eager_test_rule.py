@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class EagerTestRule(Rule):
+    """Flag tests that contain more top-level `assert` statements than the configured threshold."""
+
     ID = "test-quality.eager-test"
 
     def definition(self) -> RuleDefinition:

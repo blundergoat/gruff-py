@@ -18,6 +18,8 @@ _BlockHandler = Callable[[ast.AST], Iterator[list[ast.stmt]]]
 
 
 class UnreachableCodeRule(Rule):
+    """Detect statements following a `return`, `raise`, `continue`, or `break` in the same block."""
+
     ID = "waste.unreachable-code"
 
     def definition(self) -> RuleDefinition:

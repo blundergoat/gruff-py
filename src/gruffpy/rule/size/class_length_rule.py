@@ -16,6 +16,8 @@ from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_sym
 
 
 class ClassLengthRule(Rule):
+    """Flag classes whose body line count exceeds the threshold (default 1000)."""
+
     ID = "size.class-length"
 
     def definition(self) -> RuleDefinition:

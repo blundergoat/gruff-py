@@ -26,6 +26,8 @@ _SSN_PLACEHOLDERS: frozenset[str] = frozenset({"000-00-0000", "123-45-6789", "99
 
 
 class PhiPatternRule(SourceTextRule):
+    """Detect US-shaped protected health info: SSN literals and ``MRN: <digits>`` patterns."""
+
     ID = "sensitive-data.phi-pattern"
 
     def definition(self) -> RuleDefinition:

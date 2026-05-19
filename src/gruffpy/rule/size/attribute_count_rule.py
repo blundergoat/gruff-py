@@ -15,6 +15,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class AttributeCountRule(Rule):
+    """Flag classes whose deduped attribute count (class body + ``self.x`` in init) exceeds 15."""
+
     ID = "size.attribute-count"
 
     def definition(self) -> RuleDefinition:

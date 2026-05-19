@@ -96,7 +96,7 @@ _BOOLEAN_SUFFIX_PATTERNS: tuple[str, ...] = (
 
 
 class BooleanPrefixRule(Rule):
-    """Flag bool-returning functions and bool-typed attributes lacking an `is_`/`has_`-style prefix."""
+    """Flag bool-returning functions and bool-typed attributes lacking an `is_`/`has_` prefix."""
 
     ID = "naming.boolean-prefix"
 

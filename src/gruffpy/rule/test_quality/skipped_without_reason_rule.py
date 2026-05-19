@@ -23,6 +23,8 @@ _SKIP_DECORATOR_LEAVES: frozenset[str] = frozenset({"skip", "skipif", "skipIf", 
 
 
 class SkippedWithoutReasonRule(Rule):
+    """Detect `@pytest.mark.skip`/`skipif` decorators missing a non-empty `reason` argument."""
+
     ID = "test-quality.skipped-without-reason"
 
     def definition(self) -> RuleDefinition:

@@ -19,6 +19,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class TestdoxReadabilityRule(Rule):
+    """Flag test names with fewer than `min_words` snake_case tokens after the `test_` prefix."""
+
     ID = "test-quality.testdox-readability"
 
     def definition(self) -> RuleDefinition:

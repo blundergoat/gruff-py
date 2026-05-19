@@ -23,6 +23,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class GlobalStateMutationRule(Rule):
+    """Detect tests that rebind a module-level name or use `global` to mutate shared state."""
+
     ID = "test-quality.global-state-mutation"
 
     def definition(self) -> RuleDefinition:

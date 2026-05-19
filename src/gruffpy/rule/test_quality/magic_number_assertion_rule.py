@@ -127,6 +127,8 @@ _ANALYSER_METRIC_HELPERS: frozenset[str] = frozenset(
 
 
 class MagicNumberAssertionRule(Rule):
+    """Detect assertions whose expected value is a numeric literal outside the allowlist."""
+
     ID = "test-quality.magic-number-assertion"
 
     def definition(self) -> RuleDefinition:

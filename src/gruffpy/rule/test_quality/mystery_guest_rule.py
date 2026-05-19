@@ -31,6 +31,8 @@ _MYSTERY_LEAVES: frozenset[str] = frozenset({"open", "popen"})
 
 
 class MysteryGuestRule(Rule):
+    """Detect tests that call network, filesystem, or other I/O without a fixture wrapping them."""
+
     ID = "test-quality.mystery-guest"
 
     def definition(self) -> RuleDefinition:

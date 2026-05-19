@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class PrivateReflectionRule(Rule):
+    """Detect tests accessing `_x`/`__x` attributes (or mangled `_Cls__name`) on the SUT."""
+
     ID = "test-quality.private-reflection"
 
     def definition(self) -> RuleDefinition:

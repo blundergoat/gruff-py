@@ -26,6 +26,8 @@ _DOCUMENTATION_SUFFIX = "EXAMPLE"
 
 
 class AwsAccessKeyRule(SourceTextRule):
+    """Detect AWS access-key-ID literals matching the `AKIA`/`ASIA` 20-character pattern."""
+
     ID = "sensitive-data.aws-access-key"
 
     def definition(self) -> RuleDefinition:

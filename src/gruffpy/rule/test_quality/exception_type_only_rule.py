@@ -25,6 +25,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class ExceptionTypeOnlyRule(Rule):
+    """Detect `pytest.raises(Exception)` or `pytest.warns` blocks that omit a `match=` argument."""
+
     ID = "test-quality.exception-type-only"
 
     def definition(self) -> RuleDefinition:

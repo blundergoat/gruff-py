@@ -26,6 +26,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class EmptyFunctionRule(Rule):
+    """Detect functions whose body is only `pass` or `...` outside of abstract or overload stubs."""
+
     ID = "waste.empty-function"
 
     def definition(self) -> RuleDefinition:

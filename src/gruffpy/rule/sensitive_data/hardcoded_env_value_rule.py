@@ -36,6 +36,8 @@ _MIN_VALUE_LENGTH = 12
 
 
 class HardcodedEnvValueRule(SourceTextRule):
+    """Detect secret-named keys in `.env` files paired with high-entropy non-placeholder values."""
+
     ID = "sensitive-data.hardcoded-env-value"
 
     def definition(self) -> RuleDefinition:

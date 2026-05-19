@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class RepeatedStructureMissingParametrizeRule(Rule):
+    """Detect groups of three or more test functions whose AST shape collapses to the same hash."""
+
     ID = "test-quality.repeated-structure-missing-parametrize"
 
     def definition(self) -> RuleDefinition:

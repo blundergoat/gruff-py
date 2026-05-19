@@ -20,7 +20,7 @@ from gruffpy.version import TOOL_NAME
 
 @dataclass(frozen=True, slots=True)
 class DashboardState:
-    """Immutable snapshot of the dashboard's form fields, round-tripped through the URL query string."""
+    """Immutable snapshot of the dashboard form fields, round-tripped via the URL query string."""
 
     project: str
     paths: str

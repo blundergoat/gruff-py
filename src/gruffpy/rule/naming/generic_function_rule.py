@@ -36,7 +36,7 @@ _DEFAULT_GENERIC: tuple[str, ...] = (
 
 
 class GenericFunctionRule(Rule):
-    """Flag functions named with vague verbs like `process`, `handle`, or `run` without an object."""
+    """Flag functions named with vague verbs like `process` or `handle` without an object."""
 
     ID = "naming.generic-function"
 

@@ -15,6 +15,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class PublicMethodCountRule(Rule):
+    """Flag classes whose direct public method count exceeds the threshold (default 10)."""
+
     ID = "size.public-method-count"
 
     def definition(self) -> RuleDefinition:

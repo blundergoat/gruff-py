@@ -29,6 +29,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class OneLineFunctionRule(Rule):
+    """Detect single-statement wrappers that forward all arguments to another call unchanged."""
+
     ID = "waste.one-line-function"
 
     def definition(self) -> RuleDefinition:

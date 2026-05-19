@@ -40,6 +40,8 @@ class _UnusedParameter(NamedTuple):
 
 
 class UnusedParameterRule(Rule):
+    """Detect non-`self`/`cls` function parameters that are never referenced in the body."""
+
     ID = "waste.unused-parameter"
 
     def definition(self) -> RuleDefinition:

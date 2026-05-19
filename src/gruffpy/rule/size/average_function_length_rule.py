@@ -19,6 +19,8 @@ MethodNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
 class AverageFunctionLengthRule(Rule):
+    """Flag classes (with at least 3 methods) whose mean method length exceeds the threshold."""
+
     ID = "size.average-function-length"
 
     def definition(self) -> RuleDefinition:

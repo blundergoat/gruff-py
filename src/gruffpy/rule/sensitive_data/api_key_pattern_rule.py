@@ -38,6 +38,8 @@ _PATTERN = compile_pattern("|".join(f"(?P<{name}>{pat})" for name, pat in _VENDO
 
 
 class ApiKeyPatternRule(SourceTextRule):
+    """Detect vendor API key literals from Stripe, GitHub, Slack, OpenAI, Square, or Twilio."""
+
     ID = "sensitive-data.api-key-pattern"
 
     def definition(self) -> RuleDefinition:

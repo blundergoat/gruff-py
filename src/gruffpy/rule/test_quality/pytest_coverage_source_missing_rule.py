@@ -21,6 +21,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class PytestCoverageSourceMissingRule(Rule):
+    """Detect pyproject configurations whose `[tool.coverage.run].source` is empty or absent."""
+
     ID = "test-quality.pytest-coverage-source-missing"
 
     def definition(self) -> RuleDefinition:

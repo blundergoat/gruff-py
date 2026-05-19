@@ -24,6 +24,8 @@ _SETUP_NAMES: frozenset[str] = frozenset(
 
 
 class SetupBloatRule(Rule):
+    """Flag `setUp`, `setup_method`, or fixture functions whose line count exceeds the threshold."""
+
     ID = "test-quality.setup-bloat"
 
     def definition(self) -> RuleDefinition:

@@ -28,6 +28,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class MockOnlyTestRule(Rule):
+    """Detect tests whose every call is a mock factory, mock interaction, or framework assertion."""
+
     ID = "test-quality.mock-only-test"
 
     def definition(self) -> RuleDefinition:

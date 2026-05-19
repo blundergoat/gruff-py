@@ -34,6 +34,8 @@ class _ParametrizeWithoutIds:
 
 
 class ParametrizeAnnotationRule(Rule):
+    """Flag `parametrize` decorators with many cases but no `ids=` labels for failure reporting."""
+
     ID = "test-quality.parametrize-annotation"
 
     def definition(self) -> RuleDefinition:

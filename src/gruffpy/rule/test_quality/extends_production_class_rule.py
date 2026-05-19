@@ -34,6 +34,8 @@ _TESTING_BASES: frozenset[str] = frozenset(
 
 
 class ExtendsProductionClassRule(Rule):
+    """Detect `Test<X>` classes whose base is a non-test production type imported from app code."""
+
     ID = "test-quality.extends-production-class"
 
     def definition(self) -> RuleDefinition:

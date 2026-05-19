@@ -57,7 +57,7 @@ class _PrivateFunctionCandidate:
 
 @dataclass(frozen=True, slots=True)
 class _ReferenceCounts:
-    """Name/attribute/``getattr`` occurrence counts within one scope, used to detect external use."""
+    """Name, attribute, and ``getattr`` occurrence counts in one scope, used to detect use."""
 
     names: Counter[str]
     attributes: Counter[str]

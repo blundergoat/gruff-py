@@ -24,6 +24,8 @@ _PATTERN = compile_pattern(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
 
 
 class PrivateKeyRule(SourceTextRule):
+    """Detect ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM headers across RSA, EC, ED25519, etc."""
+
     ID = "sensitive-data.private-key"
 
     def definition(self) -> RuleDefinition:

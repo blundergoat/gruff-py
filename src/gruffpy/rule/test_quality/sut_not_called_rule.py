@@ -67,6 +67,8 @@ _BUILTIN_LEAVES: frozenset[str] = frozenset(
 
 
 class SutNotCalledRule(Rule):
+    """Detect tests whose every call is a framework helper, builtin, or mock interaction."""
+
     ID = "test-quality.sut-not-called"
 
     def definition(self) -> RuleDefinition:

@@ -26,6 +26,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class EmptyClassRule(Rule):
+    """Detect classes with `pass`/`...` bodies outside Protocol/ABC/Enum/dataclass roles."""
+
     ID = "waste.empty-class"
 
     def definition(self) -> RuleDefinition:

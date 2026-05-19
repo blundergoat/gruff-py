@@ -26,6 +26,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class MockWithoutExpectationRule(Rule):
+    """Detect mocks created in a test that never receive an `.assert_*` interaction check."""
+
     ID = "test-quality.mock-without-expectation"
 
     def definition(self) -> RuleDefinition:

@@ -23,6 +23,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class ConditionalLogicRule(Rule):
+    """Detect `if`, `elif`, or `match` statements inside a test function body."""
+
     ID = "test-quality.conditional-logic"
 
     def definition(self) -> RuleDefinition:

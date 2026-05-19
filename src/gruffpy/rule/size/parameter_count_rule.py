@@ -15,6 +15,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class ParameterCountRule(Rule):
+    """Flag functions whose total arity (excluding ``self``/``cls``) exceeds the threshold."""
+
     ID = "size.parameter-count"
 
     def definition(self) -> RuleDefinition:

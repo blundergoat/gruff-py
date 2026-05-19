@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class LoopAssertionWithoutMessageRule(Rule):
+    """Flag `assert` statements inside `for`/`while` loops that lack a failure message."""
+
     ID = "test-quality.loop-assertion-without-message"
 
     def definition(self) -> RuleDefinition:

@@ -23,6 +23,8 @@ from gruffpy.rule.rule import Rule
 
 
 class NamingConsistencyRule(Rule):
+    """Detect test files that mix `test_foo`, `testFoo`, `TestFoo`, and `FooTest` naming styles."""
+
     ID = "test-quality.naming-consistency"
 
     def definition(self) -> RuleDefinition:

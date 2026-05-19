@@ -40,6 +40,8 @@ _PLACEHOLDER_PHONE_SEGMENTS: frozenset[str] = frozenset({"555"})
 
 
 class PiiTestFixtureRule(SourceTextRule):
+    """Detect realistic emails or phone numbers in test/fixture files (ignoring placeholders)."""
+
     ID = "sensitive-data.pii-test-fixture"
 
     def definition(self) -> RuleDefinition:

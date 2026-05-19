@@ -23,6 +23,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class TrivialAssertionRule(Rule):
+    """Detect always-true assertions like `assert True`, `assert 1`, or `self.assertTrue(True)`."""
+
     ID = "test-quality.trivial-assertion"
 
     def definition(self) -> RuleDefinition:

@@ -55,6 +55,8 @@ _PLACEHOLDER_PASSWORDS: frozenset[str] = frozenset(
 
 
 class DatabaseUrlPasswordRule(SourceTextRule):
+    """Detect database connection URLs that embed a non-placeholder password in the userinfo."""
+
     ID = "sensitive-data.database-url-password"
 
     def definition(self) -> RuleDefinition:

@@ -14,7 +14,7 @@ _RULE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
 @dataclass(frozen=True, slots=True)
 class RuleDefinition:
-    """Static rule metadata: id, pillar/tier, default severity and confidence, threshold/option defaults.
+    """Static rule metadata: id, pillar, tier, severity, confidence, threshold and option defaults.
 
     Every ``Rule`` subclass returns one of these from ``definition()``.
     The values are immutable and used by the registry, reporters, and

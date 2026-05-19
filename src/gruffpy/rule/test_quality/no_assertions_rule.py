@@ -25,6 +25,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class NoAssertionsRule(Rule):
+    """Detect test functions containing zero `assert`, `assertX`, or `pytest.raises` calls."""
+
     ID = "test-quality.no-assertions"
 
     def definition(self) -> RuleDefinition:

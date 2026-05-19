@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class TestLongerThanSutRule(Rule):
+    """Flag tests whose line count exceeds the matched SUT's by the configured ratio."""
+
     ID = "test-quality.test-longer-than-sut"
 
     def definition(self) -> RuleDefinition:

@@ -30,6 +30,8 @@ _MIN_LENGTH = 20
 
 
 class HighEntropyStringRule(SourceTextRule):
+    """Detect long base64-alphabet substrings whose Shannon entropy exceeds the secret threshold."""
+
     ID = "sensitive-data.high-entropy-string"
 
     def definition(self) -> RuleDefinition:

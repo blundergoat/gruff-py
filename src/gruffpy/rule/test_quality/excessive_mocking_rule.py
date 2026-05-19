@@ -20,6 +20,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class ExcessiveMockingRule(Rule):
+    """Flag tests whose count of mock-factory calls exceeds the configured threshold."""
+
     ID = "test-quality.excessive-mocking"
 
     def definition(self) -> RuleDefinition:

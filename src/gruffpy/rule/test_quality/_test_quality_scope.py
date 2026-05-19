@@ -20,7 +20,7 @@ class TestScopeKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TestScope:
-    """Resolved test-function context: which test-collection convention owns it, async flag, parent class."""
+    """Resolved test-function context: test-collection convention, async flag, parent class name."""
 
     kind: TestScopeKind
     is_async: bool

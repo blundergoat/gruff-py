@@ -18,6 +18,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class TestFunctionTooLongRule(Rule):
+    """Flag test functions whose `lines_for_size` count exceeds the configured threshold."""
+
     ID = "test-quality.test-function-too-long"
 
     def definition(self) -> RuleDefinition:

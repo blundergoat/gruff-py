@@ -27,6 +27,8 @@ from gruffpy.rule.rule import Rule
 
 
 class UnusedImportRule(Rule):
+    """Detect imported names never referenced in their declaring module."""
+
     ID = "waste.unused-import"
 
     def definition(self) -> RuleDefinition:

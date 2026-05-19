@@ -29,6 +29,8 @@ class _RedundantReturn(NamedTuple):
 
 
 class RedundantVariableRule(Rule):
+    """Detect trailing `x = expr; return x` shapes where the binding is unused elsewhere."""
+
     ID = "waste.redundant-variable"
 
     def definition(self) -> RuleDefinition:

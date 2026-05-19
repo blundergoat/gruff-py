@@ -27,6 +27,8 @@ _MIN_SIZE = 10
 
 
 class TrivialSnapshotRule(Rule):
+    """Flag assertions that compare against a hardcoded literal collection of 10+ elements."""
+
     ID = "test-quality.trivial-snapshot"
 
     def definition(self) -> RuleDefinition:

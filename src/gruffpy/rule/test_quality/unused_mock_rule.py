@@ -25,6 +25,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class UnusedMockRule(Rule):
+    """Detect mock variables created in a test body that are never referenced afterwards."""
+
     ID = "test-quality.unused-mock"
 
     def definition(self) -> RuleDefinition:

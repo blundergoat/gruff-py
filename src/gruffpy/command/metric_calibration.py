@@ -48,7 +48,7 @@ METRIC_ORDER: tuple[MetricName, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class MetricDiagnostic:
-    """Non-finding run-time message surfaced by ``metric-calibration`` (parse error, missing path, etc.)."""
+    """Non-finding run-time message from ``metric-calibration`` (parse error, missing path)."""
 
     type: str
     message: str
@@ -83,7 +83,7 @@ class MetricThreshold:
 
 @dataclass(frozen=True, slots=True)
 class FunctionMetricRow:
-    """One parsed function's metric snapshot: location plus cyclomatic / npath / Halstead / MI values."""
+    """One parsed function's metric snapshot: location plus cyclomatic, npath, Halstead, and MI."""
 
     file_path: str
     line: int
@@ -141,7 +141,7 @@ class FunctionMetricRow:
 
 @dataclass(frozen=True, slots=True)
 class MetricSummary:
-    """Distribution summary for one metric: count, min/p50/p90/p99/max plus threshold-crossing total."""
+    """Distribution summary for one metric: count, min/p50/p90/p99/max, threshold-crossing total."""
 
     metric: MetricName
     count: int
@@ -178,7 +178,7 @@ class MetricSummary:
 
 @dataclass(frozen=True, slots=True)
 class MetricCalibrationReport:
-    """Full output of the ``metric-calibration`` command: rows, summaries, diagnostics, run metadata."""
+    """Full output of ``metric-calibration``: rows, summaries, diagnostics, and run metadata."""
 
     requested_paths: tuple[str, ...]
     files_discovered: int

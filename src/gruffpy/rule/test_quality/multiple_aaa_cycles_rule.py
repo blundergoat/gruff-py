@@ -24,6 +24,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class MultipleAaaCyclesRule(Rule):
+    """Detect tests whose assertions interleave with non-assertion work in multiple AAA cycles."""
+
     ID = "test-quality.multiple-aaa-cycles"
 
     def definition(self) -> RuleDefinition:

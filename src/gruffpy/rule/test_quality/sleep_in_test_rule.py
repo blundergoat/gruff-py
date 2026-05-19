@@ -25,6 +25,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class SleepInTestRule(Rule):
+    """Detect calls to `time.sleep`, `asyncio.sleep`, or other `.sleep`-suffixed waits in tests."""
+
     ID = "test-quality.sleep-in-test"
 
     def definition(self) -> RuleDefinition:

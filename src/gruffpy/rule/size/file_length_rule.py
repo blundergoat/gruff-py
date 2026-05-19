@@ -12,6 +12,8 @@ from gruffpy.rule.rule import Rule
 
 
 class FileLengthRule(Rule):
+    """Flag source files whose raw line count exceeds the configured threshold (default 1000)."""
+
     ID = "size.file-length"
 
     def definition(self) -> RuleDefinition:

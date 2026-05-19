@@ -27,6 +27,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class TautologicalTypeAssertionRule(Rule):
+    """Detect always-true assertions like `isinstance(x, type(x))` or `type(x) is type(x)`."""
+
     ID = "test-quality.tautological-type-assertion"
 
     def definition(self) -> RuleDefinition:

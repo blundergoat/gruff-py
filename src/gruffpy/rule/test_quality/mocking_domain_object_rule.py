@@ -25,6 +25,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class MockingDomainObjectRule(Rule):
+    """Flag mock factories whose target type lives under a configured `domain_namespaces` prefix."""
+
     ID = "test-quality.mocking-domain-object"
 
     def definition(self) -> RuleDefinition:

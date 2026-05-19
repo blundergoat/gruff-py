@@ -10,7 +10,7 @@ from gruffpy.scoring.pillar_score import PillarScore
 
 @dataclass(frozen=True, slots=True)
 class ScoreReport:
-    """Composite scoring output — overall grade, per-pillar breakdown, top offenders, distribution."""
+    """Composite scoring output: overall grade, per-pillar breakdown, and top-offender table."""
 
     composite: Grade
     pillars: tuple[PillarScore, ...]

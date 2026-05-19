@@ -21,6 +21,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class PytestDeprecationsNotFatalRule(Rule):
+    """Detect projects whose pytest config does not escalate `DeprecationWarning` to error."""
+
     ID = "test-quality.pytest-deprecations-not-fatal"
 
     def definition(self) -> RuleDefinition:

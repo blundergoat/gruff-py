@@ -20,6 +20,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class EmptyParametrizeRule(Rule):
+    """Detect `@pytest.mark.parametrize` decorators whose cases list is empty."""
+
     ID = "test-quality.empty-parametrize"
 
     def definition(self) -> RuleDefinition:

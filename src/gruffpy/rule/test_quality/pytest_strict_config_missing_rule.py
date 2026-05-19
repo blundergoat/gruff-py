@@ -20,6 +20,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
 class PytestStrictConfigMissingRule(Rule):
+    """Detect pyproject configurations that omit `--strict-config` and `--strict-markers` flags."""
+
     ID = "test-quality.pytest-strict-config-missing"
 
     def definition(self) -> RuleDefinition:

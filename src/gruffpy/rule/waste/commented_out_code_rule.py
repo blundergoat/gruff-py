@@ -59,6 +59,8 @@ _SKIP_PATTERNS = (
 
 
 class CommentedOutCodeRule(Rule):
+    """Detect comment lines that pass `ast.parse` after the code-like pre-filter accepts them."""
+
     ID = "waste.commented-out-code"
 
     def definition(self) -> RuleDefinition:

@@ -24,6 +24,8 @@ _PATTERN = compile_pattern(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0
 
 
 class JwtTokenRule(SourceTextRule):
+    """Detect ``eyJ<header>.<payload>.<signature>``-shaped JWT literals committed to source."""
+
     ID = "sensitive-data.jwt-token"
 
     def definition(self) -> RuleDefinition:

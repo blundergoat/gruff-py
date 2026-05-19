@@ -23,6 +23,8 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class LoopInTestRule(Rule):
+    """Detect `for` or `while` loops inside test function bodies (prefer `parametrize`)."""
+
     ID = "test-quality.loop-in-test"
 
     def definition(self) -> RuleDefinition:

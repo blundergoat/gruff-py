@@ -18,6 +18,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
 
 class FunctionLengthRule(Rule):
+    """Flag ``def``, ``async def``, or ``lambda`` whose line count exceeds the threshold."""
+
     ID = "size.function-length"
 
     def definition(self) -> RuleDefinition:
