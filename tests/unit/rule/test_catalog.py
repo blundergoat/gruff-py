@@ -4,6 +4,8 @@ import pkgutil
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import gruffpy.rule
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.finding.pillar import Pillar
@@ -13,6 +15,7 @@ from gruffpy.rule.catalog import (
     catalog_definitions,
     documentation_for_rule,
 )
+from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.rule import Rule
@@ -39,6 +42,8 @@ _FORMULA_RULES = {
     "complexity.npath",
 }
 
+_ALL_DEFINITIONS = catalog_definitions()
+
 
 def test_catalog_entries_are_importable_and_unique() -> None:
     definitions = catalog_definitions()
@@ -57,10 +62,10 @@ def test_registry_defaults_consumes_catalog_entries() -> None:
     assert AnalysisConfig.from_registry(RuleRegistry.defaults()).rules.keys() == registry_ids
 
 
-def test_rule_ids_match_pillar_prefix_convention() -> None:
-    for definition in catalog_definitions():
-        prefixes = _PREFIXES_BY_PILLAR[definition.pillar]
-        assert definition.id.startswith(prefixes), definition.id
+@pytest.mark.parametrize("definition", _ALL_DEFINITIONS, ids=lambda d: d.id)
+def test_rule_id_matches_pillar_prefix_convention(definition: RuleDefinition) -> None:
+    prefixes = _PREFIXES_BY_PILLAR[definition.pillar]
+    assert definition.id.startswith(prefixes)
 
 
 def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
@@ -70,38 +75,59 @@ def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
     assert concrete_classes == catalog_classes
 
 
-def test_every_builtin_rule_has_required_docs_metadata() -> None:
-    for definition in catalog_definitions():
-        docs = documentation_for_rule(definition.id)
-        assert isinstance(docs, RuleDocs)
-        assert docs.rationale
-        assert docs.fix_guidance
-        assert docs.bad_example
-        assert docs.good_example
-        assert docs.confidence_rationale
-        assert docs.to_payload()["rationale"] == docs.rationale
+def test_documentation_for_rule_returns_rule_docs_with_payload_round_trip() -> None:
+    sample_id = _ALL_DEFINITIONS[0].id
+    docs = documentation_for_rule(sample_id)
+    assert isinstance(docs, RuleDocs)
+    assert docs.to_payload()["rationale"] == docs.rationale
 
 
-def test_metric_rules_publish_formula_provenance() -> None:
-    for definition in catalog_definitions():
-        docs = documentation_for_rule(definition.id)
-        if definition.id in _FORMULA_RULES:
-            assert docs.formula_provenance
-        else:
-            assert docs.formula_provenance == ""
+@pytest.mark.parametrize("definition", _ALL_DEFINITIONS, ids=lambda d: d.id)
+def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> None:
+    docs = documentation_for_rule(definition.id)
+    assert docs.rationale
+    assert docs.fix_guidance
+    assert docs.bad_example
+    assert docs.good_example
+    assert docs.confidence_rationale
 
 
-def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract() -> None:
-    for definition in catalog_definitions():
-        docs = documentation_for_rule(definition.id)
-        if definition.pillar in {Pillar.SIZE, Pillar.COMPLEXITY, Pillar.MAINTAINABILITY}:
-            assert docs.threshold_metadata_keys == (
-                "measuredValue",
-                "threshold",
-                "thresholdDirection",
-                "thresholdType",
-            )
-            assert docs.threshold_direction in {"above", "below"}
+_METRIC_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.id in _FORMULA_RULES]
+_NON_METRIC_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.id not in _FORMULA_RULES]
+
+
+@pytest.mark.parametrize("definition", _METRIC_DEFINITIONS, ids=lambda d: d.id)
+def test_metric_rule_publishes_formula_provenance(definition: RuleDefinition) -> None:
+    docs = documentation_for_rule(definition.id)
+    assert docs.formula_provenance
+
+
+@pytest.mark.parametrize("definition", _NON_METRIC_DEFINITIONS, ids=lambda d: d.id)
+def test_non_metric_rule_has_no_formula_provenance(definition: RuleDefinition) -> None:
+    docs = documentation_for_rule(definition.id)
+    assert docs.formula_provenance == ""
+
+
+_SIZE_OR_COMPLEXITY_PILLARS = {Pillar.SIZE, Pillar.COMPLEXITY, Pillar.MAINTAINABILITY}
+_SIZE_AND_COMPLEXITY_DEFINITIONS = [
+    d for d in _ALL_DEFINITIONS if d.pillar in _SIZE_OR_COMPLEXITY_PILLARS
+]
+
+
+@pytest.mark.parametrize(
+    "definition", _SIZE_AND_COMPLEXITY_DEFINITIONS, ids=lambda d: d.id
+)
+def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
+    definition: RuleDefinition,
+) -> None:
+    docs = documentation_for_rule(definition.id)
+    assert docs.threshold_metadata_keys == (
+        "measuredValue",
+        "threshold",
+        "thresholdDirection",
+        "thresholdType",
+    )
+    assert docs.threshold_direction in {"above", "below"}
 
 
 def test_selected_security_rules_publish_taxonomy_metadata() -> None:

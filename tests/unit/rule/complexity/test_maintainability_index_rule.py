@@ -44,11 +44,30 @@ def _ctx(warning: int = 80, error: int = 70) -> RuleContext:
     return RuleContext(project_root="/", config=config)
 
 
+def _branched_body(branch_count: int, with_elif: bool = False) -> str:
+    """Return a function body that contains ``branch_count`` if/else branches."""
+    lines: list[str] = []
+    for i in range(branch_count):
+        lines.append(f"    if a{i} > b{i}:")
+        lines.append(f"        x = a{i} + b{i}")
+        if with_elif:
+            lines.append(f"        x = a{i} + b{i} * c{i} - d{i}")
+            lines.append(f"    elif a{i} < b{i}:")
+            lines.append(f"        x = a{i} - b{i} / c{i} + d{i}")
+        else:
+            lines.append("    else:")
+            lines.append(f"        x = a{i} - b{i}")
+    return "def f():\n" + "\n".join(lines) + "\n    return x\n"
+
+
 def test_trivial_function_has_max_mi():
     # Simple short function: low HV, CC=1, low LOC -> MI close to 100 (clamped).
     src = "def f(x):\n    return x + 1\n"
     mi = maintainability_index_for(_first_fn(src))
     assert mi == 100.0  # clamped at upper bound
+
+
+_MI_CLAMP_MAX = 100.0
 
 
 def test_mi_formula_matches_canonical_values():
@@ -65,47 +84,31 @@ def test_mi_formula_matches_canonical_values():
     """
     src = "def f(x):\n    return x + 1\n"
     raw = 171 - 5.2 * math.log(4.7548875) - 0.23 * 1 - 16.2 * math.log(2)
-    assert raw > 100  # would clamp
-    assert maintainability_index_for(_first_fn(src)) == 100.0
+    assert raw > _MI_CLAMP_MAX  # would clamp
+    assert maintainability_index_for(_first_fn(src)) == _MI_CLAMP_MAX
 
 
 def test_complex_function_lowers_mi():
     # Bigger function should have lower (worse) MI.
-    body_lines = []
-    for i in range(40):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i}")
-        body_lines.append("    else:")
-        body_lines.append(f"        x = a{i} - b{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    src = _branched_body(40)
     mi = maintainability_index_for(_first_fn(src))
     assert mi < 80.0  # below default warning
 
 
 def test_warning_finding_emitted_for_low_mi():
-    # Construct a function below the default warning threshold.
-    body_lines = []
-    for i in range(20):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    # Use 40-branch fixture so MI is guaranteed below default warning=80.
+    src = _branched_body(40)
     findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    if findings:  # Depending on derived MI, may or may not fire
-        f = findings[0]
-        assert f.pillar == Pillar.MAINTAINABILITY  # separate pillar
-        assert "maintainabilityIndex" in f.metadata
-        assert f.severity in (Severity.WARNING, Severity.ERROR)
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.pillar == Pillar.MAINTAINABILITY  # separate pillar
+    assert "maintainabilityIndex" in finding.metadata
+    assert finding.severity in (Severity.WARNING, Severity.ERROR)
 
 
 def test_error_finding_emitted_for_very_low_mi():
-    # Aggressively low MI: many branches and operators
-    body_lines = []
-    for i in range(80):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i} * c{i} - d{i}")
-        body_lines.append(f"    elif a{i} < b{i}:")
-        body_lines.append(f"        x = a{i} - b{i} / c{i} + d{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    # Aggressively low MI: many branches and operators.
+    src = _branched_body(80, with_elif=True)
     findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR

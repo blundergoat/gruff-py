@@ -189,15 +189,46 @@ def _default_ctx() -> RuleContext:
         "size.function-length": {"warning": 30, "error": 60},
         "size.average-function-length": {"warning": 30, "error": 60},
     }
+    return _ctx_with_threshold_overrides(size_test_thresholds)
+
+
+def _ctx_with_threshold_overrides(
+    overrides: dict[str, dict[str, int]],
+) -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        definition = rule.definition()
-        thresholds = size_test_thresholds.get(definition.id, dict(definition.default_thresholds))
-        rules[definition.id] = RuleSettings(
+    rules = {
+        rule.definition().id: RuleSettings(
             enabled=True,
-            thresholds=thresholds,
+            thresholds=overrides.get(
+                rule.definition().id, dict(rule.definition().default_thresholds)
+            ),
         )
+        for rule in registry.all()
+    }
+    return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+
+
+def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContext:
+    registry = RuleRegistry.defaults()
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=rule.definition().id in rule_ids,
+            thresholds=thresholds if rule.definition().id in rule_ids else {},
+        )
+        for rule in registry.all()
+    }
+    return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+
+
+def _ctx_with_disabled(disabled_id: str) -> RuleContext:
+    registry = RuleRegistry.defaults()
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=(rule.definition().id != disabled_id),
+            thresholds=dict(rule.definition().default_thresholds),
+        )
+        for rule in registry.all()
+    }
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
@@ -234,29 +265,17 @@ def test_cumulative_fixture_emits_expected_rule_ids():
 
 def test_cumulative_fixture_findings_carry_symbol_and_metadata_lines():
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
-    ctx = _default_ctx()
-    findings = RuleRegistry.defaults().analyse([unit], ctx)
+    findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     fl = [f for f in findings if f.rule_id == "size.function-length"]
     assert fl, "expected function-length findings"
-    for f in fl:
-        assert f.symbol  # qualified name
-        assert "lines" in f.metadata
-        assert isinstance(f.metadata["lines"], int)
+    assert all(f.symbol for f in fl), f"missing symbol on: {fl}"
+    assert all("lines" in f.metadata for f in fl), f"missing 'lines' in metadata: {fl}"
+    assert all(isinstance(f.metadata["lines"], int) for f in fl), (
+        f"non-int 'lines' in metadata: {fl}"
+    )
 
 
-def test_size_threshold_findings_carry_standard_threshold_metadata():
-    registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        definition = rule.definition()
-        thresholds = {"warning": 0, "error": 9999} if definition.id in SIZE_RULE_IDS else {}
-        rules[definition.id] = RuleSettings(
-            enabled=definition.id in SIZE_RULE_IDS,
-            thresholds=thresholds,
-        )
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(
-        """
+_THRESHOLD_METADATA_FIXTURE_SRC = """
 class Example:
     field = 1
 
@@ -270,17 +289,18 @@ class Example:
     def third(self):
         return 3
 """
-    )
 
-    findings = registry.analyse([unit], ctx)
-    size_findings = [finding for finding in findings if finding.rule_id in SIZE_RULE_IDS]
 
-    assert SIZE_RULE_IDS.issubset({finding.rule_id for finding in size_findings})
-    for finding in size_findings:
-        assert isinstance(finding.metadata["measuredValue"], int | float)
-        assert finding.metadata["threshold"] == 0
-        assert finding.metadata["thresholdDirection"] == "above"
-        assert finding.metadata["thresholdType"] == "warning"
+def test_size_threshold_findings_carry_standard_threshold_metadata():
+    ctx = _ctx_with_only(SIZE_RULE_IDS, thresholds={"warning": 0, "error": 9999})
+    findings = RuleRegistry.defaults().analyse([_make_unit(_THRESHOLD_METADATA_FIXTURE_SRC)], ctx)
+    size_findings = [f for f in findings if f.rule_id in SIZE_RULE_IDS]
+
+    assert SIZE_RULE_IDS.issubset({f.rule_id for f in size_findings})
+    assert all(isinstance(f.metadata["measuredValue"], int | float) for f in size_findings)
+    assert all(f.metadata["threshold"] == 0 for f in size_findings)
+    assert all(f.metadata["thresholdDirection"] == "above" for f in size_findings)
+    assert all(f.metadata["thresholdType"] == "warning" for f in size_findings)
 
 
 def test_nested_inner_function_emits_independent_finding():
@@ -305,18 +325,11 @@ def test_findings_deterministic_across_two_runs():
 def test_config_override_changes_finding_count():
     # Default function-length threshold = 100 (PMD-aligned). Override to 5/10 to widen coverage.
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        d = rule.definition()
-        if d.id == "size.function-length":
-            rules[d.id] = RuleSettings(enabled=True, thresholds={"warning": 5, "error": 10})
-        else:
-            rules[d.id] = RuleSettings(enabled=True, thresholds=dict(d.default_thresholds))
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(SIZE_PILLAR_FIXTURE)
-
+    ctx = _ctx_with_threshold_overrides(
+        {"size.function-length": {"warning": 5, "error": 10}},
+    )
     default_findings = registry.analyse([_make_unit(SIZE_PILLAR_FIXTURE)], _default_ctx())
-    overridden_findings = registry.analyse([unit], ctx)
+    overridden_findings = registry.analyse([_make_unit(SIZE_PILLAR_FIXTURE)], ctx)
 
     default_fn_count = sum(1 for f in default_findings if f.rule_id == "size.function-length")
     override_fn_count = sum(1 for f in overridden_findings if f.rule_id == "size.function-length")
@@ -325,17 +338,8 @@ def test_config_override_changes_finding_count():
 
 
 def test_disabling_a_rule_removes_its_findings():
-    registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        d = rule.definition()
-        rules[d.id] = RuleSettings(
-            enabled=(d.id != "size.attribute-count"),
-            thresholds=dict(d.default_thresholds),
-        )
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(SIZE_PILLAR_FIXTURE)
-    findings = registry.analyse([unit], ctx)
+    ctx = _ctx_with_disabled("size.attribute-count")
+    findings = RuleRegistry.defaults().analyse([_make_unit(SIZE_PILLAR_FIXTURE)], ctx)
     assert all(f.rule_id != "size.attribute-count" for f in findings)
 
 

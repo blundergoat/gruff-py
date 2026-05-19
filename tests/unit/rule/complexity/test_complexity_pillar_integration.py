@@ -119,12 +119,55 @@ def _default_ctx() -> RuleContext:
         "size.function-length": {"warning": 15, "error": 30},
         "size.parameter-count": {"warning": 5, "error": 8},
     }
+    return _ctx_with_threshold_overrides(size_test_thresholds)
+
+
+def _ctx_with_threshold_overrides(
+    overrides: dict[str, dict[str, int]],
+) -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        d = rule.definition()
-        thresholds = size_test_thresholds.get(d.id, dict(d.default_thresholds))
-        rules[d.id] = RuleSettings(enabled=True, thresholds=thresholds)
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=True,
+            thresholds=overrides.get(
+                rule.definition().id, dict(rule.definition().default_thresholds)
+            ),
+        )
+        for rule in registry.all()
+    }
+    return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+
+
+def _ctx_for_complexity_metadata() -> RuleContext:
+    """Context enabling only complexity rules, with reversed MI thresholds."""
+
+    def thresholds_for(rule_id: str) -> dict[str, int]:
+        """Return the per-rule threshold pair used to force findings for every complexity rule.
+
+        Maintainability-index inverts direction (lower is worse) so warning=101 guarantees the
+        clamped MI=100 trips the rule; other complexity rules use warning=0 to fire on any value.
+
+        Args:
+            rule_id: Canonical rule id to compute thresholds for.
+
+        Returns:
+            Threshold mapping suitable for ``RuleSettings.thresholds``; empty dict
+            for rule ids outside ``COMPLEXITY_RULE_IDS`` (they stay disabled).
+        """
+        if rule_id == "complexity.maintainability-index":
+            return {"warning": 101, "error": 0}
+        if rule_id in COMPLEXITY_RULE_IDS:
+            return {"warning": 0, "error": 9999}
+        return {}
+
+    registry = RuleRegistry.defaults()
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=rule.definition().id in COMPLEXITY_RULE_IDS,
+            thresholds=thresholds_for(rule.definition().id),
+        )
+        for rule in registry.all()
+    }
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
@@ -145,47 +188,55 @@ def test_complexity_rules_emit_findings_on_fixture():
     assert "complexity.nesting-depth" in rule_ids
 
 
-def test_complexity_threshold_findings_carry_standard_threshold_metadata():
-    registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        definition = rule.definition()
-        if definition.id == "complexity.maintainability-index":
-            thresholds = {"warning": 101, "error": 0}
-        elif definition.id in COMPLEXITY_RULE_IDS:
-            thresholds = {"warning": 0, "error": 9999}
-        else:
-            thresholds = {}
-        rules[definition.id] = RuleSettings(
-            enabled=definition.id in COMPLEXITY_RULE_IDS,
-            thresholds=thresholds,
-        )
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(
-        """
+_METADATA_FIXTURE_SRC = """
 def sample(a, b):
     if a + 1 > b - 1:
         if a and b:
             return a * b
     return a + b
 """
+
+
+def _complexity_findings_with_metadata_ctx() -> list:
+    findings = RuleRegistry.defaults().analyse(
+        [_make_unit(_METADATA_FIXTURE_SRC)], _ctx_for_complexity_metadata()
     )
+    return [f for f in findings if f.rule_id in COMPLEXITY_RULE_IDS]
 
-    findings = registry.analyse([unit], ctx)
+
+def test_complexity_metadata_covers_all_complexity_rules():
+    complexity_findings = _complexity_findings_with_metadata_ctx()
+    assert COMPLEXITY_RULE_IDS.issubset({f.rule_id for f in complexity_findings})
+
+
+def test_complexity_findings_carry_numeric_measured_value():
+    complexity_findings = _complexity_findings_with_metadata_ctx()
+    assert all(isinstance(f.metadata["measuredValue"], int | float) for f in complexity_findings)
+
+
+def test_complexity_findings_carry_warning_threshold_type():
+    complexity_findings = _complexity_findings_with_metadata_ctx()
+    assert all(f.metadata["thresholdType"] == "warning" for f in complexity_findings)
+
+
+def test_above_threshold_complexity_findings_carry_above_direction():
     complexity_findings = [
-        finding for finding in findings if finding.rule_id in COMPLEXITY_RULE_IDS
+        f
+        for f in _complexity_findings_with_metadata_ctx()
+        if f.rule_id != "complexity.maintainability-index"
     ]
+    assert all(f.metadata["threshold"] == 0 for f in complexity_findings)
+    assert all(f.metadata["thresholdDirection"] == "above" for f in complexity_findings)
 
-    assert COMPLEXITY_RULE_IDS.issubset({finding.rule_id for finding in complexity_findings})
-    for finding in complexity_findings:
-        assert isinstance(finding.metadata["measuredValue"], int | float)
-        if finding.rule_id == "complexity.maintainability-index":
-            assert finding.metadata["threshold"] == 101
-            assert finding.metadata["thresholdDirection"] == "below"
-        else:
-            assert finding.metadata["threshold"] == 0
-            assert finding.metadata["thresholdDirection"] == "above"
-        assert finding.metadata["thresholdType"] == "warning"
+
+def test_maintainability_index_finding_carries_below_direction():
+    mi_findings = [
+        f
+        for f in _complexity_findings_with_metadata_ctx()
+        if f.rule_id == "complexity.maintainability-index"
+    ]
+    assert all(f.metadata["threshold"] == 101 for f in mi_findings)
+    assert all(f.metadata["thresholdDirection"] == "below" for f in mi_findings)
 
 
 def test_design_god_method_synthesises_on_overlap():
@@ -199,17 +250,21 @@ def test_design_god_method_synthesises_on_overlap():
     assert "god_method" in symbols
 
 
+_COMPLEXITY_RULES_FOR_SHALLOW = (
+    "complexity.cognitive",
+    "complexity.cyclomatic",
+    "complexity.nesting-depth",
+    "complexity.npath",
+)
+
+
 def test_shallow_function_no_complexity_findings():
     unit = _make_unit(COMPLEXITY_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
-    for f in findings:
-        if f.symbol == "shallow":
-            assert f.rule_id not in (
-                "complexity.cognitive",
-                "complexity.cyclomatic",
-                "complexity.nesting-depth",
-                "complexity.npath",
-            ), f"shallow should not trip {f.rule_id}"
+    shallow_complexity_findings = [
+        f for f in findings if f.symbol == "shallow" and f.rule_id in _COMPLEXITY_RULES_FOR_SHALLOW
+    ]
+    assert shallow_complexity_findings == []
 
 
 def test_findings_deterministic_across_two_runs():
@@ -230,5 +285,5 @@ def test_maintainability_index_uses_maintainability_pillar():
     src = f"def f():\n{body}\n    return x\n"
     findings = RuleRegistry.defaults().analyse([_make_unit(src)], _default_ctx())
     mi_findings = [f for f in findings if f.rule_id == "complexity.maintainability-index"]
-    if mi_findings:
-        assert mi_findings[0].pillar.value == "maintainability"
+    assert mi_findings, "expected at least one maintainability-index finding"
+    assert all(f.pillar.value == "maintainability" for f in mi_findings)

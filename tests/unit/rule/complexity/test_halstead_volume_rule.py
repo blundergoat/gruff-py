@@ -122,38 +122,44 @@ def test_definition_uses_default_thresholds():
     assert d.default_thresholds == {"warning": 180, "error": 400}
 
 
-def test_radon_delta_within_threshold():
-    """Cross-check Halstead volume against radon 6.0.1 ground-truth.
+_RADON_VOLUMES = {
+    "simple": 4.75,
+    "with_branches": 20.68,
+    "with_loop": 13.93,
+    "with_boolops": 15.51,
+    "with_comprehension": 13.93,
+    "a1": 4.75,
+    "a2": 9.51,
+}
 
-    M03 ship gate: ±10% average delta on the ground-truth fixture.
-    Run ``uvx radon hal tests/fixtures/complexity/cc_fixture.py -f`` to
-    refresh radon's numbers; update `radon_ground_truth.md` if they change.
 
-    See `radon_ground_truth.md` for known per-function deltas — the chained
-    boolean-operator pattern produces a documented 25% delta; the average
-    stays under 10%.
+def _halstead_deltas_against_radon() -> list[float]:
+    """Compute per-function ``|gruff - radon| / radon`` deltas for the cc_fixture.
+
+    Returns:
+        Relative deltas (one per function in ``_RADON_VOLUMES`` that exists in
+        the fixture's parsed AST).
     """
     from pathlib import Path
 
-    radon_volumes = {
-        "simple": 4.75,
-        "with_branches": 20.68,
-        "with_loop": 13.93,
-        "with_boolops": 15.51,
-        "with_comprehension": 13.93,
-        "a1": 4.75,
-        "a2": 9.51,
-    }
     fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
     tree = ast.parse(fixture.read_text())
-    deltas: list[float] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in radon_volumes:
-            gruff_v = halstead_for(node).volume
-            radon_v = radon_volumes[node.name]
-            deltas.append(abs(gruff_v - radon_v) / radon_v)
+    return [
+        abs(halstead_for(node).volume - _RADON_VOLUMES[node.name]) / _RADON_VOLUMES[node.name]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name in _RADON_VOLUMES
+    ]
+
+
+def test_radon_delta_within_threshold():
+    """Cross-check Halstead volume against radon 6.0.1 ground-truth.
+
+    M03 ship gate: ±15% average delta on the ground-truth fixture (relaxed
+    from ±10% due to a documented chained-BoolOp pattern in
+    ``radon_ground_truth.md``; aggregate well under the ±50% kill threshold).
+    Run ``uvx radon hal tests/fixtures/complexity/cc_fixture.py -f`` to
+    refresh radon's numbers; update ``radon_ground_truth.md`` if they change.
+    """
+    deltas = _halstead_deltas_against_radon()
     average = sum(deltas) / len(deltas)
-    # M03 ship gate: ±15% average delta (relaxed from ±10% due to documented
-    # chained-BoolOp pattern in radon_ground_truth.md; aggregate well under
-    # the ±50% kill threshold). Average across these fixtures: ~10.3%.
     assert average <= 0.15, f"average Halstead delta {average:.1%} exceeds 15%"
