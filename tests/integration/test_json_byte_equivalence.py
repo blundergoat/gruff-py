@@ -14,11 +14,13 @@ from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.scoring.score_calculator import ScoreCalculator
 
 
+@pytest.mark.skipif(
+    shutil.which("php") is None,
+    reason="php binary not available for JSON byte-equivalence check",
+)
 def test_json_reporter_matches_php_json_encoding_flags():
     php = shutil.which("php")
-    if php is None:
-        pytest.skip("php binary not available for JSON byte-equivalence check")
-
+    assert php is not None  # narrowed by skipif above
     report = _fixture_report()
     python_json = JsonReporter().render(report)
     php_json = _php_pretty_json(php, python_json)

@@ -38,13 +38,24 @@ def test_under_warning_threshold_emits_no_finding():
     assert findings == []
 
 
+_WARNING_BOUNDARY = 100
+_FILE_LINES_OVER_WARNING = 150
+
+
 def test_above_warning_below_error_emits_warning():
-    findings = FileLengthRule().analyse(_make_unit(150), _ctx(warning=100, error=200))
+    findings = FileLengthRule().analyse(
+        _make_unit(_FILE_LINES_OVER_WARNING),
+        _ctx(warning=_WARNING_BOUNDARY, error=200),
+    )
     assert len(findings) == 1
     finding = findings[0]
     assert (finding.severity, finding.rule_id) == (Severity.WARNING, "size.file-length")
     relevant_metadata = {k: finding.metadata[k] for k in ("lines", "threshold", "thresholdType")}
-    assert relevant_metadata == {"lines": 150, "threshold": 100, "thresholdType": "warning"}
+    assert relevant_metadata == {
+        "lines": _FILE_LINES_OVER_WARNING,
+        "threshold": _WARNING_BOUNDARY,
+        "thresholdType": "warning",
+    }
 
 
 def test_above_error_emits_error():

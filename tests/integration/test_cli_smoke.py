@@ -7,6 +7,26 @@ from click.testing import CliRunner
 from gruffpy.cli import main
 from gruffpy.version import VERSION
 
+_EXPECTED_ROOT_COMMANDS = (
+    "analyse",
+    "completion",
+    "dashboard",
+    "help",
+    "list",
+    "list-rules",
+    "report",
+    "summary",
+)
+_HIDDEN_ROOT_COMMANDS = ("metric-calibration",)
+_EXPECTED_GLOBAL_OPTIONS = (
+    "--silent",
+    "--quiet",
+    "--version",
+    "--ansi",
+    "--no-interaction",
+    "--verbose",
+)
+
 
 def test_cli_help_lists_analyse_command():
     result = CliRunner().invoke(main, ["--help"])
@@ -15,20 +35,12 @@ def test_cli_help_lists_analyse_command():
         f"gruff-py {VERSION}\n\nUsage:\n  command [options] [arguments]"
     )
     assert "Available commands:" in result.output
-    for command in (
-        "analyse",
-        "completion",
-        "dashboard",
-        "help",
-        "list",
-        "list-rules",
-        "report",
-        "summary",
-    ):
-        assert command in result.output
-    assert "metric-calibration" not in result.output
-    for option in ("--silent", "--quiet", "--version", "--ansi", "--no-interaction", "--verbose"):
-        assert option in result.output
+    classification = {
+        "missing_commands": [c for c in _EXPECTED_ROOT_COMMANDS if c not in result.output],
+        "leaked_commands": [c for c in _HIDDEN_ROOT_COMMANDS if c in result.output],
+        "missing_options": [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output],
+    }
+    assert classification == {"missing_commands": [], "leaked_commands": [], "missing_options": []}
 
 
 def test_cli_without_command_prints_php_style_menu():
@@ -48,23 +60,21 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
     assert "\x1b[32manalyse\x1b" in result.output
 
 
+_EXPECTED_ANALYSE_LOCAL_OPTIONS = ("--diff", "--diff-vs", "--baseline", "--generate-baseline")
+
+
 def test_cli_command_help_lists_symfony_style_global_options():
     result = CliRunner().invoke(main, ["analyse", "--help"])
     assert result.exit_code == 0
-    for option in ("--silent", "--quiet", "--version", "--ansi", "--no-interaction", "--verbose"):
-        assert option in result.output
-    for option in ("--diff", "--diff-vs", "--baseline", "--generate-baseline"):
-        assert option in result.output
+    missing_global = [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output]
+    missing_local = [o for o in _EXPECTED_ANALYSE_LOCAL_OPTIONS if o not in result.output]
+    assert missing_global == [], f"missing global options in analyse --help: {missing_global}"
+    assert missing_local == [], f"missing local options in analyse --help: {missing_local}"
     assert "sarif" in result.output
 
 
-def test_cli_list_rules_json_lists_rule_metadata():
-    result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
-    assert result.exit_code == 0, result.output
-
-    payload = json.loads(result.output)
-    rule = payload["rules"][0]
-    assert {
+_REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
+    {
         "id",
         "name",
         "pillar",
@@ -76,8 +86,19 @@ def test_cli_list_rules_json_lists_rule_metadata():
         "options",
         "description",
         "documentation",
-    } <= set(rule)
-    assert {"rationale", "fixGuidance", "confidenceRationale"} <= set(rule["documentation"])
+    }
+)
+_REQUIRED_RULE_DOCUMENTATION_KEYS = frozenset({"rationale", "fixGuidance", "confidenceRationale"})
+
+
+def test_cli_list_rules_json_lists_rule_metadata():
+    result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.output)
+    rule = payload["rules"][0]
+    assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
+    assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,14 +188,16 @@ def test_cli_quiet_suppresses_success_output(
     assert result.output == ""
 
 
-def test_cli_analyse_emits_schema_versioned_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+_LONG_FIXTURE_LINE_COUNT = 1001
+_FINGERPRINT_HEX_LENGTH = 16
+
+
+def _analyse_short_and_long_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "short.py").write_text("x = 1\n")
-    long_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
+    long_lines = "\n".join(f"x{i} = {i}" for i in range(_LONG_FIXTURE_LINE_COUNT)) + "\n"
     (src / "long.py").write_text(long_lines)
 
     result = CliRunner().invoke(
@@ -182,25 +205,40 @@ def test_cli_analyse_emits_schema_versioned_json(
         ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "src"],
     )
     assert result.exit_code == 0, result.output
+    return json.loads(result.output)
 
-    payload = json.loads(result.output)
+
+def test_cli_analyse_emits_schema_version_and_tool_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     assert payload["schemaVersion"] == "gruff-py.analysis.v1"
     assert payload["tool"]["name"] == "gruff-py"
+
+
+def test_cli_analyse_summary_counts_at_least_two_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     assert payload["summary"]["filesDiscovered"] >= 2
     assert payload["summary"]["filesParsed"] >= 2
 
-    rule_ids = [f["ruleId"] for f in payload["findings"]]
-    assert "size.file-length" in rule_ids
 
+def test_cli_analyse_emits_file_length_finding_with_full_classification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     file_length = [f for f in payload["findings"] if f["ruleId"] == "size.file-length"]
     assert len(file_length) == 1
     finding = file_length[0]
-    assert len(finding["fingerprint"]) == 16
-    assert finding["metadata"]["lines"] >= 1001
-    assert finding["severity"] == "error"
-    assert finding["pillar"] == "size"
-    assert finding["tier"] == "v0.1"
-    assert finding["confidence"] == "high"
+    assert len(finding["fingerprint"]) == _FINGERPRINT_HEX_LENGTH
+    assert finding["metadata"]["lines"] >= _LONG_FIXTURE_LINE_COUNT
+    assert (finding["severity"], finding["pillar"], finding["tier"], finding["confidence"]) == (
+        "error",
+        "size",
+        "v0.1",
+        "high",
+    )
 
 
 def test_cli_analyse_sarif_format_is_parseable(
@@ -223,9 +261,8 @@ def test_cli_analyse_sarif_format_is_parseable(
     assert payload["runs"][0]["results"][0]["partialFingerprints"]["gruffFingerprint"]
 
 
-def test_cli_analyse_sarif_fixture_contract() -> None:
+def _sarif_fixture_payload() -> dict:
     fixture = Path("tests/fixtures/complexity")
-
     result = CliRunner().invoke(
         main,
         [
@@ -239,23 +276,42 @@ def test_cli_analyse_sarif_fixture_contract() -> None:
         ],
     )
     assert result.exit_code == 0, result.output
+    return json.loads(result.output)
 
-    payload = json.loads(result.output)
+
+def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
+    payload = _sarif_fixture_payload()
     run = payload["runs"][0]
-    driver = run["tool"]["driver"]
-    rule_ids = [rule["id"] for rule in driver["rules"]]
-
     assert payload["version"] == "2.1.0"
-    assert driver["name"] == "gruff-py"
+    assert run["tool"]["driver"]["name"] == "gruff-py"
+    assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
+
+
+def test_cli_analyse_sarif_fixture_driver_rules_are_sorted_and_nonempty() -> None:
+    run = _sarif_fixture_payload()["runs"][0]
+    rule_ids = [rule["id"] for rule in run["tool"]["driver"]["rules"]]
     assert rule_ids == sorted(rule_ids)
     assert len(run["results"]) > 0
-    for sarif_result in run["results"]:
-        assert sarif_result["partialFingerprints"]["gruffFingerprint"]
-        assert driver["rules"][sarif_result["ruleIndex"]]["id"] == sarif_result["ruleId"]
-        uri = sarif_result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
-        assert not uri.startswith("./")
-        assert "\\" not in uri
-    assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
+
+
+def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:
+    run = _sarif_fixture_payload()["runs"][0]
+    driver_rules = run["tool"]["driver"]["rules"]
+    missing_fp = [r for r in run["results"] if not r["partialFingerprints"]["gruffFingerprint"]]
+    mismatched_rule_index = [
+        r for r in run["results"] if driver_rules[r["ruleIndex"]]["id"] != r["ruleId"]
+    ]
+    assert missing_fp == [], f"results missing gruffFingerprint: {missing_fp}"
+    assert mismatched_rule_index == [], f"ruleIndex/ruleId mismatches: {mismatched_rule_index}"
+
+
+def test_cli_analyse_sarif_fixture_artifact_uris_are_normalised() -> None:
+    run = _sarif_fixture_payload()["runs"][0]
+    uris = [
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in run["results"]
+    ]
+    bad = [uri for uri in uris if uri.startswith("./") or "\\" in uri]
+    assert bad == [], f"un-normalised artifact URIs: {bad}"
 
 
 def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

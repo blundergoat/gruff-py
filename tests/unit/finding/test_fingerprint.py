@@ -45,20 +45,30 @@ def test_fingerprint_is_deterministic():
     assert fingerprint_for("r", "f", 1, 1, 1, "s") == fingerprint_for("r", "f", 1, 1, 1, "s")
 
 
-def test_fingerprint_distinguishes_lines():
-    assert fingerprint_for("r", "f", 1) != fingerprint_for("r", "f", 2)
-
-
-def test_fingerprint_distinguishes_files():
-    assert fingerprint_for("r", "a", 1) != fingerprint_for("r", "b", 1)
-
-
-def test_fingerprint_distinguishes_rule_ids():
-    assert fingerprint_for("a", "f", 1) != fingerprint_for("b", "f", 1)
-
-
-def test_fingerprint_distinguishes_symbols():
-    assert fingerprint_for("r", "f", 1, symbol="a") != fingerprint_for("r", "f", 1, symbol="b")
+@pytest.mark.parametrize(
+    ("kwargs_a", "kwargs_b"),
+    [
+        (
+            {"rule_id": "r", "file_path": "f", "line": 1},
+            {"rule_id": "r", "file_path": "f", "line": 2},
+        ),
+        (
+            {"rule_id": "r", "file_path": "a", "line": 1},
+            {"rule_id": "r", "file_path": "b", "line": 1},
+        ),
+        (
+            {"rule_id": "a", "file_path": "f", "line": 1},
+            {"rule_id": "b", "file_path": "f", "line": 1},
+        ),
+        (
+            {"rule_id": "r", "file_path": "f", "line": 1, "symbol": "a"},
+            {"rule_id": "r", "file_path": "f", "line": 1, "symbol": "b"},
+        ),
+    ],
+    ids=["line", "file_path", "rule_id", "symbol"],
+)
+def test_fingerprint_distinguishes_by_identifying_field(kwargs_a: dict, kwargs_b: dict) -> None:
+    assert fingerprint_for(**kwargs_a) != fingerprint_for(**kwargs_b)
 
 
 def test_fingerprint_does_not_depend_on_unhashed_fields():

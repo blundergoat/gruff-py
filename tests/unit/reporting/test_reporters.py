@@ -188,7 +188,7 @@ def _assert_sarif_shared_contract(payload: dict[str, Any]) -> None:
     assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff-py.analysis.v1"
 
 
-def test_sarif_reporter_uses_registry_shaped_fallback_for_unknown_rule_ids():
+def _unknown_rule_payload() -> dict[str, Any]:
     report = _report(
         (
             _finding(
@@ -200,19 +200,27 @@ def test_sarif_reporter_uses_registry_shaped_fallback_for_unknown_rule_ids():
             ),
         )
     )
+    return json.loads(SarifReporter().render(report))
 
-    payload = json.loads(SarifReporter().render(report))
-    run = payload["runs"][0]
+
+def test_unknown_rule_fallback_has_same_shape_as_registry_backed_rule() -> None:
+    run = _unknown_rule_payload()["runs"][0]
     rules = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}
-    fallback = rules["external.custom-rule"]
-    registry_backed = rules["security.dangerous-function-call"]
-    result = run["results"][0]
+    assert set(rules["external.custom-rule"]) == set(rules["security.dangerous-function-call"])
 
-    assert set(fallback) == set(registry_backed)
+
+def test_unknown_rule_fallback_uses_rule_id_for_name_and_descriptions() -> None:
+    run = _unknown_rule_payload()["runs"][0]
+    fallback = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}["external.custom-rule"]
     assert fallback["name"] == "external.custom-rule"
     assert fallback["shortDescription"]["text"] == "external.custom-rule"
     assert fallback["fullDescription"]["text"] == "External rule message."
     assert fallback["help"]["text"] == "External rule message."
+
+
+def test_unknown_rule_fallback_projects_finding_attributes_into_properties() -> None:
+    run = _unknown_rule_payload()["runs"][0]
+    fallback = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}["external.custom-rule"]
     assert fallback["properties"] == {
         "pillar": "design",
         "tier": "v0.1",
@@ -222,6 +230,11 @@ def test_sarif_reporter_uses_registry_shaped_fallback_for_unknown_rule_ids():
         "secondaryPillars": ["maintainability"],
     }
     assert "severity" not in fallback["properties"]
+
+
+def test_unknown_rule_fallback_result_rule_index_points_to_matching_driver_rule() -> None:
+    run = _unknown_rule_payload()["runs"][0]
+    result = run["results"][0]
     assert run["tool"]["driver"]["rules"][result["ruleIndex"]]["id"] == result["ruleId"]
 
 
@@ -251,28 +264,45 @@ def test_sarif_reporter_omits_region_when_finding_has_no_line():
     assert "region" not in physical_location
 
 
-def test_sarif_reporter_projects_optional_native_finding_metadata():
+_NATIVE_METADATA_FINDING_LINE = 12
+_NATIVE_METADATA_FINDING_COLUMN = 8
+_NATIVE_METADATA_FINDING_END_LINE = 15
+
+
+def _native_metadata_finding_payload() -> dict[str, Any]:
     finding = _finding(
-        line=12,
-        end_line=15,
-        column=8,
+        line=_NATIVE_METADATA_FINDING_LINE,
+        end_line=_NATIVE_METADATA_FINDING_END_LINE,
+        column=_NATIVE_METADATA_FINDING_COLUMN,
         symbol="load_user",
         remediation="Use a safe dispatcher.",
         secondary_pillars=(Pillar.MAINTAINABILITY,),
         metadata={"target": "eval", "count": 2},
     )
+    return json.loads(SarifReporter().render(_report((finding,))))
 
-    payload = json.loads(SarifReporter().render(_report((finding,))))
-    result = payload["runs"][0]["results"][0]
+
+def test_sarif_reporter_projects_finding_region_from_native_attributes() -> None:
+    result = _native_metadata_finding_payload()["runs"][0]["results"][0]
     region = result["locations"][0]["physicalLocation"]["region"]
-    properties = result["properties"]
+    assert region == {
+        "startLine": _NATIVE_METADATA_FINDING_LINE,
+        "startColumn": _NATIVE_METADATA_FINDING_COLUMN,
+        "endLine": _NATIVE_METADATA_FINDING_END_LINE,
+    }
 
-    assert region == {"startLine": 12, "startColumn": 8, "endLine": 15}
+
+def test_sarif_reporter_projects_finding_classification_into_properties() -> None:
+    properties = _native_metadata_finding_payload()["runs"][0]["results"][0]["properties"]
     assert properties["severity"] == "error"
     assert properties["pillar"] == "security"
     assert properties["tier"] == "v0.1"
     assert properties["confidence"] == "high"
     assert properties["secondaryPillars"] == ["maintainability"]
+
+
+def test_sarif_reporter_projects_finding_remediation_and_metadata() -> None:
+    properties = _native_metadata_finding_payload()["runs"][0]["results"][0]["properties"]
     assert properties["symbol"] == "load_user"
     assert properties["remediation"] == "Use a safe dispatcher."
     assert properties["metadata"] == {"target": "eval", "count": 2}
@@ -316,8 +346,8 @@ def test_sarif_reporter_does_not_emit_stale_contract_keys():
         "gruffPy" + "SchemaVersion",
     )
 
-    for key in stale_keys:
-        assert key not in rendered
+    leaked = [key for key in stale_keys if key in rendered]
+    assert leaked == [], f"stale SARIF keys leaked into output: {leaked}"
 
 
 def test_sarif_reporter_normalizes_paths_and_maps_native_severities():
@@ -345,10 +375,15 @@ def test_sarif_reporter_rule_indexes_point_to_sorted_driver_rules():
     payload = json.loads(SarifReporter().render(_report()))
     run = payload["runs"][0]
     rule_ids = [rule["id"] for rule in run["tool"]["driver"]["rules"]]
+    driver_rules = run["tool"]["driver"]["rules"]
 
     assert rule_ids == sorted(rule_ids)
-    for result in run["results"]:
-        assert run["tool"]["driver"]["rules"][result["ruleIndex"]]["id"] == result["ruleId"]
+    mismatched = [
+        (result["ruleIndex"], result["ruleId"], driver_rules[result["ruleIndex"]]["id"])
+        for result in run["results"]
+        if driver_rules[result["ruleIndex"]]["id"] != result["ruleId"]
+    ]
+    assert mismatched == [], f"rule index ↔ id mismatches: {mismatched}"
 
 
 def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
