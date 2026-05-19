@@ -35,6 +35,11 @@ class ExtractCompactUserInputRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the splat-unpacked-user-input rule as a medium-confidence warning.
 
+        Medium confidence because the rule matches by attribute name alone
+        (``request.json``, ``.form``, etc.) without verifying that ``request``
+        is actually a web-framework request object; a local variable named
+        ``request`` will also trip the rule.
+
         Returns:
             Definition for the extract-compact-user-input rule under the
             security pillar.

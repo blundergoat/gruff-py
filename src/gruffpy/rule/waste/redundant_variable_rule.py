@@ -34,6 +34,11 @@ class RedundantVariableRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the redundant-variable rule as a high-confidence advisory.
 
+        Advisory because the pattern (``x = expr; return x``) is stylistic
+        and sometimes preserved as a debugger-aid binding. High confidence
+        because the AST shape is precise and the unused-elsewhere check
+        eliminates the only common false-positive.
+
         Returns:
             Definition for the redundant-variable rule under the dead-code pillar.
         """

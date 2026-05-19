@@ -55,12 +55,12 @@ class UnsafePickleRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal bytes argument.
+        """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal first argument.
 
-        ``pickle.loads(b'...')`` against a literal is treated as test
-        infrastructure. The chained form
+        A literal bytes or str first argument is skipped — it can't be
+        attacker-controlled. The chained form
         ``pickle.Unpickler(file).load()`` is also detected (and the
-        ``cPickle``/``dill`` equivalents).
+        ``cPickle``/``dill`` equivalents) regardless of receiver shape.
 
         Args:
             unit: Parsed source file to inspect.

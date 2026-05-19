@@ -87,9 +87,10 @@ class ModuleNameMismatchRule(Rule):
         """Flag single-public-class modules whose filename doesn't match the class.
 
         Skipped when: the file is ``__init__.py``; the import path already
-        carries the class's tokens (so ``users/service.py`` containing
-        ``class UserService`` is fine); or the file is a conventional
-        bucket (``constants.py`` etc.) sharing any token with the class.
+        carries the class's tokens (``config/loader.py`` containing
+        ``class ConfigLoader`` is fine — ``config`` plus ``loader`` cover
+        the class); or the file is a conventional bucket (``constants.py``,
+        ``exceptions.py``, etc.) sharing any token with the class.
 
         Args:
             unit: Parsed source file to inspect.

@@ -46,9 +46,10 @@ class PytestCoverageSourceMissingRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit a pyproject-anchored finding when ``[tool.coverage.run].source`` is empty or absent.
 
-        Only fires when the unit contains at least one test function (no
-        point flagging config on non-test files) and when a pytest config
-        block is present.
+        Per-unit: each test-bearing unit contributes one finding (downstream
+        dedup collapses the duplicates that share a fingerprint). Skipped
+        when the unit has no test functions or when no pytest config block
+        exists in ``pyproject.toml``.
 
         Args:
             unit: Parsed source file used to detect test presence.
@@ -56,8 +57,8 @@ class PytestCoverageSourceMissingRule(Rule):
                 used to locate pyproject.toml.
 
         Returns:
-            One pyproject.toml-anchored finding per analyse run when the
-            coverage source is missing, otherwise empty.
+            One pyproject.toml-anchored finding when coverage source is
+            absent (and the unit has tests), otherwise empty.
         """
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []

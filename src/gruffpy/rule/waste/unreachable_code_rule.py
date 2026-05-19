@@ -23,6 +23,11 @@ class UnreachableCodeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unreachable-code rule as a high-confidence dead-code warning.
 
+        High confidence because the rule only matches structural terminators
+        (``return``, ``raise``, ``break``, ``continue``) and syntactically
+        literal conditions; runtime-dependent branches stay clean because
+        only ``ast.Constant`` tests qualify.
+
         Returns:
             Definition for the unreachable-code rule under the dead-code pillar.
         """

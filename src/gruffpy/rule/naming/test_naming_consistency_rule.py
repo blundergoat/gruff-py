@@ -40,6 +40,11 @@ class TestNamingConsistencyRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the test-naming-consistency rule as a medium-confidence advisory.
 
+        Advisory because mixed casing is a style problem, not a defect.
+        Medium confidence because a partial migration (e.g. from unittest
+        camelCase to pytest snake_case) can legitimately produce mixed
+        styles for a transitional period.
+
         Returns:
             Definition for the test-naming-consistency rule under the
             naming pillar.

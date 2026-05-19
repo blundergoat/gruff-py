@@ -31,6 +31,12 @@ class EmptyClassRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the empty-class rule as a high-confidence dead-code advisory.
 
+        Advisory rather than warning because empty subclasses are sometimes
+        a deliberate marker (custom exception types, namespacing). High
+        confidence because ``pass``/``...``-only bodies are structurally
+        unambiguous once the marker bases (Protocol, ABC, Enum, Exception)
+        and dataclasses are exempted.
+
         Returns:
             Definition for the empty-class rule under the dead-code pillar.
         """

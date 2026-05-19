@@ -38,6 +38,11 @@ class IdentifierQualityRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the identifier-quality rule as a high-confidence warning.
 
+        High confidence because the matched tokens (``temp``, ``foo``,
+        ``bar``, numbered ``result1``, etc.) are placeholder-only — there
+        are essentially no legitimate domain uses, so false positives are
+        rare.
+
         Returns:
             Definition for the identifier-quality rule under the naming pillar.
         """

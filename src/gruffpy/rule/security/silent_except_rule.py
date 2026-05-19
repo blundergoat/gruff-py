@@ -30,6 +30,11 @@ class SilentExceptRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the silent-except rule as a high-confidence advisory.
 
+        Advisory rather than warning because silent swallowing can be
+        intentional (fire-and-forget cleanup, optional best-effort steps).
+        High confidence because the matched shape is narrow: wide ``except``
+        target, pass-only body, and no logging call in the handler.
+
         Returns:
             Definition for the silent-except rule under the security pillar.
         """

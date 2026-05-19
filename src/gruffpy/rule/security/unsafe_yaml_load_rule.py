@@ -32,10 +32,16 @@ class UnsafeYamlLoadRule(Rule):
     ID = "security.unsafe-yaml-load"
 
     def definition(self) -> RuleDefinition:
-        """Return the rule metadata used by the registry and reporters.
+        """Describe the unsafe-yaml-load rule as a high-confidence ERROR.
+
+        ERROR severity because ``yaml.load`` without an explicit safe Loader
+        constructs arbitrary Python objects from input — a well-known RCE
+        vector. High confidence because the rule matches both the explicit
+        ``yaml.unsafe_load`` call and the bare ``yaml.load(...)`` form,
+        respecting import aliases.
 
         Returns:
-            Definition for the unsafe YAML load rule.
+            Definition for the unsafe-yaml-load rule under the security pillar.
         """
         return RuleDefinition(
             id=self.ID,
@@ -47,14 +53,20 @@ class UnsafeYamlLoadRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze a Python module for unsafe PyYAML loading calls.
+        """Flag ``yaml.unsafe_load`` and ``yaml.load`` without a safe Loader.
+
+        Resolves ``import yaml as y`` / ``from yaml import load`` aliases so
+        the rule fires regardless of how PyYAML was imported. ``yaml.load``
+        is safe only when ``Loader=`` is explicitly ``SafeLoader`` /
+        ``CSafeLoader``; ``Loader=Loader/UnsafeLoader/CLoader/CUnsafeLoader``
+        or a missing ``Loader=`` is flagged.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Rule execution context (unused — no thresholds).
 
         Returns:
-            Findings for unsafe ``yaml.load`` or ``yaml.unsafe_load`` usage.
+            One finding per unsafe ``yaml.load`` / ``yaml.unsafe_load`` call.
         """
         if unit.tree is None:
             return []

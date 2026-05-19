@@ -41,10 +41,17 @@ class DisabledSslVerificationRule(Rule):
     ID = "security.disabled-ssl-verification"
 
     def definition(self) -> RuleDefinition:
-        """Return the rule metadata used by the registry and reporters.
+        """Describe the disabled-SSL-verification rule as a high-confidence ERROR.
+
+        ERROR severity because disabling TLS verification on outbound
+        requests defeats certificate-pinning and exposes the caller to
+        active MITM attacks; high confidence because the matched shapes
+        (``verify=False``, ``_create_unverified_context``,
+        ``disable_warnings``) are deliberate, not incidental.
 
         Returns:
-            Definition for the disabled SSL verification rule.
+            Definition for the disabled-SSL-verification rule under the
+            security pillar.
         """
         return RuleDefinition(
             id=self.ID,
@@ -56,14 +63,21 @@ class DisabledSslVerificationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze a Python module for disabled TLS verification calls.
+        """Flag explicit TLS-verification disablement across requests / ssl / urllib3.
+
+        Three call shapes trigger findings: ``requests.<method>(verify=...)``
+        with literal ``False`` or a same-scope ``False`` alias;
+        ``ssl._create_unverified_context()``; and
+        ``urllib3.disable_warnings()``. Alias tracking is reset at function,
+        async-function, and class boundaries to avoid leaking state across
+        unrelated scopes.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Rule execution context (unused — no thresholds).
 
         Returns:
-            Findings for literal or same-scope alias TLS verification disablement.
+            One finding per TLS-verification-disabling call site.
         """
         if unit.tree is None:
             return []

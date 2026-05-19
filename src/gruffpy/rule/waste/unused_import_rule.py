@@ -32,6 +32,12 @@ class UnusedImportRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unused-import rule as a high-confidence dead-code warning.
 
+        High confidence because the rule honours ``__all__`` re-exports,
+        skips ``__init__.py`` modules, and parses string annotations
+        (forward references) — the remaining false-positive surface is
+        side-effect-only imports (``import logging.config``) which the v0.1
+        scope intentionally doesn't cover.
+
         Returns:
             Definition tagging this rule under the dead-code pillar.
         """

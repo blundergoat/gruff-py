@@ -44,9 +44,11 @@ class PytestStrictConfigMissingRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit a pyproject-anchored finding when pytest lacks ``--strict-config`` or markers.
 
-        Gated on at least one test-shaped function being in the analysed
-        unit and on a pytest config block being present; without strict
-        flags, unknown options and markers silently pass.
+        Per-unit: each test-bearing unit contributes one finding (downstream
+        dedup collapses duplicates that share a fingerprint). Gated on at
+        least one test-shaped function being in the unit and on a pytest
+        config block being present; without strict flags, unknown options
+        and markers silently pass.
 
         Args:
             unit: Parsed source file used to detect test presence.
@@ -55,7 +57,7 @@ class PytestStrictConfigMissingRule(Rule):
 
         Returns:
             One pyproject.toml-anchored finding when strict flags are
-            absent, otherwise empty.
+            absent (and the unit has tests), otherwise empty.
         """
         if not _has_tests(unit):
             return []

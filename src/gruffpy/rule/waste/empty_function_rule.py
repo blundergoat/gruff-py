@@ -31,6 +31,11 @@ class EmptyFunctionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the empty-function rule as a high-confidence dead-code warning.
 
+        High confidence because ``pass``/``...``-only bodies are structurally
+        unambiguous; the rule defers to ``is_abstract_method``,
+        ``is_overload_stub``, Protocol-stub detection, and framework
+        decorators to suppress the legitimate cases.
+
         Returns:
             Definition for the empty-function rule under the dead-code pillar.
         """
