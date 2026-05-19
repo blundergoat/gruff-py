@@ -3,7 +3,7 @@
 # The inline CSS/JS intentionally mirrors gruff-php's dependency-free reporter
 # style, so long asset strings are kept in this file instead of split across
 # separate static assets.
-# ruff: noqa: E501
+# ruff: noqa: E501 - inline CSS/JS stays self-contained for reports
 
 import html
 from pathlib import Path

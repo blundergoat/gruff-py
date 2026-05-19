@@ -43,7 +43,7 @@ def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) ->
 
 def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
     cyclomatic = metrics["cyclomatic"]
     assert (cyclomatic["min"], cyclomatic["p50"], cyclomatic["p99"], cyclomatic["max"]) == (
         1,
@@ -55,13 +55,13 @@ def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> N
 
 def test_metric_calibration_payload_npath_count(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
     assert metrics["npath"]["count"] == 2
 
 
 def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
     hv = metrics["halsteadVolume"]
     assert hv["threshold"] == 180
     assert hv["thresholdSeverity"] == "warning"
@@ -71,14 +71,14 @@ def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: P
 
 def test_metric_calibration_payload_maintainability_uses_below_direction(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
 
 def test_metric_calibration_payload_top_cyclomatic_names_branchy(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    top = payload["top"]  # type: ignore[index]
-    assert top["cyclomatic"][0]["symbol"] == "branchy"  # type: ignore[index]
+    top = payload["top"]  # type: ignore[index]  # metric JSON
+    assert top["cyclomatic"][0]["symbol"] == "branchy"  # type: ignore[index]  # metric JSON
 
 
 def test_metric_calibration_text_is_human_readable(tmp_path: Path) -> None:

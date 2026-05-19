@@ -118,7 +118,7 @@ def create_dashboard_server(
 
         server_version = "gruff-dashboard/0.1"
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:  # noqa: N802 - stdlib handler hook name
             """Route GET to shell, scan, health, or 404 (``BaseHTTPRequestHandler`` hook)."""
             parsed = urlparse(self.path)
             query = _flatten_query(parse_qs(parsed.query, keep_blank_values=True))

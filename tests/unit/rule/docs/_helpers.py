@@ -30,7 +30,7 @@ def make_unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 

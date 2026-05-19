@@ -118,7 +118,7 @@ def _build_finding(
         rule_id=definition.id,
         message=f"Wide-exception suppression: `{label}`.",
         file_path=unit.file.display_path,
-        line=node.lineno,  # type: ignore[attr-defined]
+        line=node.lineno,  # type: ignore[attr-defined]  # AST location exists here
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,

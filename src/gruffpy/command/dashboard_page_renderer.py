@@ -1,7 +1,7 @@
 """Self-contained local dashboard shell renderer."""
 
 # The CSS/JS is intentionally inline to match gruff-php's no-assets dashboard.
-# ruff: noqa: E501
+# ruff: noqa: E501 - inline CSS/JS stays self-contained for the dashboard
 
 import html
 import json

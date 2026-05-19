@@ -58,4 +58,4 @@ class PythonFileParser:
 def _attach_parents(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
-            child.parent = node  # type: ignore[attr-defined]
+            child.parent = node  # type: ignore[attr-defined]  # AST parent links

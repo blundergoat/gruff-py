@@ -246,7 +246,7 @@ def _invalid_comment(line: int, message: str) -> _ParsedComment:
 def _as_directive(value: str) -> SuppressionDirective:
     if value not in _VALID_DIRECTIVES:
         raise ValueError(f"Unsupported suppression directive: {value}")
-    return value  # type: ignore[return-value]
+    return value  # type: ignore[return-value]  # directive literal validated
 
 
 def _add_line_rule_ids(target: dict[int, set[str]], line: int, rule_ids: frozenset[str]) -> None:
