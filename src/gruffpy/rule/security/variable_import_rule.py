@@ -27,6 +27,8 @@ _VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset(
 
 
 class VariableImportRule(Rule):
+    """Detect `importlib.import_module` or `__import__` calls receiving non-literal module names."""
+
     ID = "security.variable-import"
 
     def definition(self) -> RuleDefinition:

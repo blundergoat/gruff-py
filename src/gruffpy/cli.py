@@ -72,6 +72,8 @@ class GruffGroup(click.Group):
 
 @dataclass(frozen=True, slots=True)
 class _AnalysisCliRequest:
+    """Bundle of validated ``analyse`` CLI flags before they're handed to ``run_analysis``."""
+
     paths: tuple[str, ...]
     config_path: Path | None
     should_skip_config: bool
@@ -89,6 +91,8 @@ class _AnalysisCliRequest:
 
 @dataclass(frozen=True, slots=True)
 class _DashboardCliRequest:
+    """Bundle of validated ``dashboard`` CLI flags before the server is started."""
+
     paths: tuple[str, ...]
     project_root: Path | None
     host: str

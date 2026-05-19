@@ -48,6 +48,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 @dataclass(frozen=True, slots=True)
 class _PrivateFunctionCandidate:
+    """A private function/method paired with its parents and enclosing-scope node."""
+
     node: FunctionNode
     parents: list[ast.AST]
     scope: ast.AST
@@ -55,6 +57,8 @@ class _PrivateFunctionCandidate:
 
 @dataclass(frozen=True, slots=True)
 class _ReferenceCounts:
+    """Name/attribute/``getattr`` occurrence counts within one scope, used to detect external use."""
+
     names: Counter[str]
     attributes: Counter[str]
     getattr_names: Counter[str]
@@ -62,6 +66,8 @@ class _ReferenceCounts:
 
 
 class UnusedPrivateFunctionRule(Rule):
+    """Detect underscore-prefixed functions or methods never called in their enclosing scope."""
+
     ID = "dead-code.unused-private-function"
 
     def definition(self) -> RuleDefinition:

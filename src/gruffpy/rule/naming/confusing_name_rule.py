@@ -36,6 +36,8 @@ _DEFAULT_CONFUSING: tuple[str, ...] = (
 
 
 class ConfusingNameRule(Rule):
+    """Flag classes whose standalone names match vague nouns like `Handler`, `Manager`, or `Util`."""
+
     ID = "naming.confusing-name"
 
     def definition(self) -> RuleDefinition:

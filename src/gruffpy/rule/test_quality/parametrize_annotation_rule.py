@@ -26,6 +26,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 @dataclass(frozen=True, slots=True)
 class _ParametrizeWithoutIds:
+    """A ``@pytest.mark.parametrize`` call carrying many cases but no ``ids=`` annotation."""
+
     fn: FunctionNode
     decorator: ast.Call
     case_count: int

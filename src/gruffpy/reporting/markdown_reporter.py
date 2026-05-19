@@ -8,6 +8,8 @@ from gruffpy.finding.finding import Finding
 
 
 class MarkdownReporter:
+    """Render an analysis report as Markdown with collapsible per-severity sections for PR review."""
+
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as Markdown with collapsible severity sections (GitHub-compatible).
 

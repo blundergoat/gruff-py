@@ -25,6 +25,8 @@ _WIDE_EXCEPTION_LEAVES: frozenset[str] = frozenset({"Exception", "BaseException"
 
 
 class SilentExceptRule(Rule):
+    """Detect wide `except` handlers whose body only passes and never logs the exception."""
+
     ID = "security.silent-except"
 
     def definition(self) -> RuleDefinition:

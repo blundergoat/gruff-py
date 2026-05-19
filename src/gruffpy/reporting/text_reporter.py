@@ -7,6 +7,8 @@ from gruffpy.version import TOOL_NAME
 
 
 class TextReporter:
+    """Render an analysis report as the plain-text terminal output for ``gruff-py analyse``."""
+
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as the terminal-friendly default ``gruff-py analyse`` output.
 

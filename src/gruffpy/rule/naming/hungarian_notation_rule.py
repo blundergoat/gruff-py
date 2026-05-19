@@ -55,6 +55,8 @@ _HUNGARIAN_PREFIXES: frozenset[str] = frozenset(
 
 
 class HungarianNotationRule(Rule):
+    """Detect identifiers whose first token is a type-prefix like `i_count`, `str_name`, or `arr_items`."""
+
     ID = "naming.hungarian-notation"
 
     def definition(self) -> RuleDefinition:

@@ -19,6 +19,8 @@ _GIT = shutil.which("git")
 
 @dataclass(frozen=True, slots=True)
 class _PathProbe:
+    """Test-fixture row pairing a project-relative path with whether it should be a directory."""
+
     rel: str
     is_dir: bool
 

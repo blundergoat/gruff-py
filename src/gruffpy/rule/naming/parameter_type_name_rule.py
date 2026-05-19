@@ -65,6 +65,8 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 @dataclass(frozen=True, slots=True)
 class _ParameterMismatch:
+    """One parameter whose name diverges from its annotation's canonical form."""
+
     name: str
     expected: str
     suggested: str
@@ -72,6 +74,8 @@ class _ParameterMismatch:
 
 
 class ParameterTypeNameRule(Rule):
+    """Detect parameters whose name does not match the snake_case root of their type annotation."""
+
     ID = "naming.parameter-type-name"
 
     def definition(self) -> RuleDefinition:

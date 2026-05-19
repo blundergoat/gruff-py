@@ -29,6 +29,8 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class UnusedPrivateAttributeRule(Rule):
+    """Detect `self._x` attributes assigned in a class but never read within it."""
+
     ID = "dead-code.unused-private-attribute"
 
     def definition(self) -> RuleDefinition:

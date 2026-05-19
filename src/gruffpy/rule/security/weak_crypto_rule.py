@@ -42,6 +42,8 @@ _PASSWORD_HASH_TOKENS: frozenset[str] = frozenset(
 
 
 class WeakCryptoRule(Rule):
+    """Detect `hashlib.md5` and `hashlib.sha1` calls in contexts smelling of password or token use."""
+
     ID = "security.weak-crypto"
 
     def definition(self) -> RuleDefinition:

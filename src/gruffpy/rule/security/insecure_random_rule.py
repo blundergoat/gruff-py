@@ -38,6 +38,8 @@ _RANDOM_METHODS: frozenset[str] = frozenset(
 
 
 class InsecureRandomRule(Rule):
+    """Detect `random.*` calls used to produce security-sensitive values like tokens or passwords."""
+
     ID = "security.insecure-random"
 
     def definition(self) -> RuleDefinition:

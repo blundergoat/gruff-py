@@ -30,6 +30,8 @@ _REQUEST_ATTRS: frozenset[str] = frozenset(
 
 
 class ExtractCompactUserInputRule(Rule):
+    """Detect splat-unpacking of `request.json`/`form`/`args` into a callee's kwargs."""
+
     ID = "security.extract-compact-user-input"
 
     def definition(self) -> RuleDefinition:

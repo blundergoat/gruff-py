@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class DeadCodeAllowlist:
+    """Path/symbol/decorator allowlist consumed by the ``dead-code.unused-private-*`` rules."""
+
     symbols: tuple[str, ...] = ()
     decorators: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()

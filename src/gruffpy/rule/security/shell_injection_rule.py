@@ -39,6 +39,8 @@ _OS_SHELL_TARGETS: frozenset[str] = frozenset({"os.system", "os.popen"})
 
 
 class ShellInjectionRule(Rule):
+    """Detect `subprocess.*(shell=True)` or `os.system`/`popen` calls receiving dynamic commands."""
+
     ID = "security.shell-injection"
 
     def definition(self) -> RuleDefinition:

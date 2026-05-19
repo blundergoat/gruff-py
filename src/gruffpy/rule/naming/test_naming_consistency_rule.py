@@ -35,6 +35,8 @@ _CAMEL_TEST = re.compile(r"^test[A-Z][A-Za-z0-9]*$")
 
 
 class TestNamingConsistencyRule(Rule):
+    """Detect test files mixing `test_snake_case` and `testCamelCase` function-naming conventions."""
+
     ID = "naming.test-naming-consistency"
 
     def definition(self) -> RuleDefinition:

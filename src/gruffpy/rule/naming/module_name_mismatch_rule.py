@@ -61,6 +61,8 @@ class _MismatchCandidate:
 
 
 class ModuleNameMismatchRule(Rule):
+    """Detect single-class modules whose filename does not snake_case-match the class name."""
+
     ID = "naming.module-name-mismatch"
 
     def definition(self) -> RuleDefinition:

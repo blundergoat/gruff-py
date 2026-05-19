@@ -33,6 +33,8 @@ _NUMBERED_BASES: frozenset[str] = frozenset({"result", "data", "value", "item", 
 
 
 class IdentifierQualityRule(Rule):
+    """Detect placeholder identifiers like `temp`, `foo`, `bar`, or numbered names like `result1`."""
+
     ID = "naming.identifier-quality"
 
     def definition(self) -> RuleDefinition:

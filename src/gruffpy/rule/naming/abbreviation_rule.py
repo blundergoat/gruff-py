@@ -45,6 +45,8 @@ _ABBREVIATION_BLOCKLIST: frozenset[str] = frozenset(
 
 
 class AbbreviationRule(Rule):
+    """Flag identifiers containing curated unclear abbreviations like `ctx`, `cfg`, or `tmp`."""
+
     ID = "naming.abbreviation"
 
     def definition(self) -> RuleDefinition:

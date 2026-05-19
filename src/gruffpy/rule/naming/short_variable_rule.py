@@ -28,6 +28,8 @@ _DEFAULT_ACCEPTED: tuple[str, ...] = ("i", "j", "k", "n", "m", "x", "y", "z", "e
 
 
 class ShortVariableRule(Rule):
+    """Detect single-character local variable assignments outside idiomatic loop and math names."""
+
     ID = "naming.short-variable"
 
     def definition(self) -> RuleDefinition:

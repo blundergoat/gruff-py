@@ -13,6 +13,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisConfig:
+    """Resolved analyser configuration for one run: rules, ignore globs, allowlists, Python pin.
+
+    Immutable. ``from_registry`` seeds per-rule defaults; the
+    ``with_*`` methods produce updated copies as the config loader
+    layers user overrides on top.
+    """
+
     rules: dict[str, RuleSettings] = field(default_factory=dict)
     minimum_python_version: tuple[int, int] = (3, 11)
     rule_selection: RuleSelection = field(default_factory=RuleSelection)

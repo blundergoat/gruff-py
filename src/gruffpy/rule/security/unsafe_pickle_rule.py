@@ -33,6 +33,8 @@ _UNSAFE_LOAD_TARGETS: frozenset[str] = frozenset(
 
 
 class UnsafePickleRule(Rule):
+    """Detect `pickle.load`/`loads` (and `cPickle`/`dill` equivalents) on non-literal input."""
+
     ID = "security.unsafe-pickle"
 
     def definition(self) -> RuleDefinition:

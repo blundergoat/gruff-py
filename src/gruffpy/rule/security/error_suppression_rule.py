@@ -27,6 +27,8 @@ _WIDE: frozenset[str] = frozenset({"Exception", "BaseException"})
 
 
 class ErrorSuppressionRule(Rule):
+    """Detect wide exception suppression via `contextlib.suppress(Exception)` or `except (Exception,)`."""
+
     ID = "security.error-suppression"
 
     def definition(self) -> RuleDefinition:

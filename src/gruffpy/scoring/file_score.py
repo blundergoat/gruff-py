@@ -8,6 +8,8 @@ from gruffpy.scoring.grade import Grade
 
 @dataclass(frozen=True, slots=True)
 class FileScore:
+    """Per-file score row used to populate the top-offenders table in a report."""
+
     file_path: str
     grade: Grade
     findings: int

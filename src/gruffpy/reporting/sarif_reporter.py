@@ -14,6 +14,8 @@ from gruffpy.version import TOOL_NAME
 
 
 class SarifReporter:
+    """Render an analysis report as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers."""
+
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers.
 

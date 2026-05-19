@@ -7,6 +7,8 @@ from gruffpy.analysis.schema import HOTSPOT_SCHEMA_VERSION
 
 
 class HotspotReporter:
+    """Render an analysis report as a ``gruff-py.hotspot.v1`` JSON map of top-offender files."""
+
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as a ``gruff-py.hotspot.v1`` JSON map of top-offender files.
 

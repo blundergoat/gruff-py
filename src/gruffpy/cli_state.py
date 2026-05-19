@@ -7,6 +7,8 @@ import click
 
 @dataclass(slots=True)
 class CliState:
+    """Mutable per-run CLI flags (silent/quiet/ansi/no-interaction/verbosity) shared via Click context."""
+
     is_silent: bool = False
     is_quiet: bool = False
     should_use_ansi: bool | None = None

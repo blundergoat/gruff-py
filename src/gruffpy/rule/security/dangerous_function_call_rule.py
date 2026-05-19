@@ -25,6 +25,8 @@ _UNCONDITIONAL_DANGEROUS: frozenset[str] = frozenset({"eval", "exec", "compile"}
 
 
 class DangerousFunctionCallRule(Rule):
+    """Detect calls to `eval`, `exec`, `compile`, and `__import__` with non-literal arguments."""
+
     ID = "security.dangerous-function-call"
 
     def definition(self) -> RuleDefinition:

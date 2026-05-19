@@ -12,6 +12,13 @@ from gruffpy.finding.severity import Severity
 
 @dataclass(frozen=True, slots=True)
 class Finding:
+    """One rule violation: rule id, location, severity, and optional remediation metadata.
+
+    Immutable. Every rule's ``analyse()`` returns a list of these. The
+    fingerprint computed from rule id + location + symbol is the stable
+    cross-implementation identity used by baselines and dedup.
+    """
+
     rule_id: str
     message: str
     file_path: str

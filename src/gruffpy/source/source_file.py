@@ -8,6 +8,8 @@ SourceFileType = Literal["python", "text"]
 
 @dataclass(frozen=True, slots=True)
 class SourceFile:
+    """Discovered source file: absolute path, display path, and Python/text classification."""
+
     absolute_path: str
     display_path: str
     type: SourceFileType = "python"

@@ -19,6 +19,8 @@ from gruffpy.version import TOOL_NAME
 
 
 class HtmlReporter:
+    """Render an analysis report as a single-file HTML document with optional interactive filters."""
+
     def __init__(
         self,
         project_root: str = "",

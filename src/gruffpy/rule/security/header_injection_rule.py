@@ -25,6 +25,8 @@ _FRAMEWORK_GATE: frozenset[str] = frozenset({"flask", "fastapi", "django"})
 
 
 class HeaderInjectionRule(Rule):
+    """Detect `response.headers[<dynamic>] = ...` assignments in web-framework modules."""
+
     ID = "security.header-injection"
 
     def definition(self) -> RuleDefinition:

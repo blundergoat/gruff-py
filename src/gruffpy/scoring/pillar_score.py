@@ -8,6 +8,8 @@ from gruffpy.scoring.grade import Grade
 
 @dataclass(frozen=True, slots=True)
 class PillarScore:
+    """Per-pillar grade + severity counts contributing to the composite score."""
+
     pillar: str
     applicable: bool
     grade: Grade | None

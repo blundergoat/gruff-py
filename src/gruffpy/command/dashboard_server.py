@@ -20,6 +20,8 @@ from gruffpy.version import TOOL_NAME
 
 @dataclass(frozen=True, slots=True)
 class DashboardState:
+    """Immutable snapshot of the dashboard's form fields, round-tripped through the URL query string."""
+
     project: str
     paths: str
     fail_on: str = "none"
@@ -76,6 +78,8 @@ class DashboardState:
 
 
 class _DashboardHttpServer(ThreadingHTTPServer):
+    """``ThreadingHTTPServer`` subclass that sets ``SO_REUSEADDR`` for fast restart in dev."""
+
     allow_reuse_address = True
 
 
@@ -110,6 +114,8 @@ def create_dashboard_server(
     launch_root = launch_root.resolve()
 
     class DashboardRequestHandler(BaseHTTPRequestHandler):
+        """Per-request handler dispatching the four dashboard routes: shell, scan, health, 404."""
+
         server_version = "gruff-dashboard/0.1"
 
         def do_GET(self) -> None:  # noqa: N802

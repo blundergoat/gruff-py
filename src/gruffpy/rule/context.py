@@ -9,6 +9,13 @@ from gruffpy.rule.definition import RuleDefinition
 
 @dataclass(frozen=True, slots=True)
 class RuleContext:
+    """Read-only context handed to every rule's ``analyse()`` call.
+
+    Carries the project root (for resolving ``pyproject.toml`` / paths)
+    and the resolved ``AnalysisConfig`` so rules can look up their own
+    settings via ``settings_for()``.
+    """
+
     project_root: str
     config: AnalysisConfig
 

@@ -14,6 +14,14 @@ _RULE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
 @dataclass(frozen=True, slots=True)
 class RuleDefinition:
+    """Static rule metadata: id, pillar/tier, default severity and confidence, threshold/option defaults.
+
+    Every ``Rule`` subclass returns one of these from ``definition()``.
+    The values are immutable and used by the registry, reporters, and
+    SARIF/JSON serialisers; the rule id is validated against
+    ``^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`` on construction.
+    """
+
     id: str
     name: str
     pillar: Pillar

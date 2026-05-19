@@ -31,6 +31,8 @@ _QUOTED_PLACEHOLDER_RE = re.compile(
 
 
 class SqlConcatenationRule(Rule):
+    """Detect dynamic strings (f-string, format, concat) passed to `execute`-style cursor calls."""
+
     ID = "security.sql-concatenation"
 
     def definition(self) -> RuleDefinition:

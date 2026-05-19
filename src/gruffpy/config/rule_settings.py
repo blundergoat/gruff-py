@@ -8,18 +8,30 @@ from gruffpy.finding.severity import Severity
 
 @dataclass(frozen=True, slots=True)
 class SeverityThreshold:
+    """Single-threshold override pairing one value with one severity.
+
+    Set on a ``RuleSettings`` when the user picks the single-threshold
+    shape (``threshold: X, severity: Y``) instead of the two-tier
+    ``warning``/``error`` pair. When present it short-circuits the
+    threshold matchers.
+    """
+
     threshold: int | float
     severity: Severity
 
 
 @dataclass(frozen=True, slots=True)
 class ThresholdMatch:
+    """Result of a threshold check — the value that fired and the matched severity."""
+
     threshold: int | float
     severity: Severity
 
 
 @dataclass(frozen=True, slots=True)
 class RuleSettings:
+    """Resolved per-rule configuration: enabled flag, thresholds, options, optional override."""
+
     enabled: bool = True
     thresholds: dict[str, int | float] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)

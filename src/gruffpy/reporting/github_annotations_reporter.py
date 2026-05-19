@@ -5,6 +5,8 @@ from gruffpy.finding.finding import Finding
 
 
 class GithubAnnotationsReporter:
+    """Render findings as ``::error``/``::warning``/``::notice`` lines for GitHub Actions PR annotations."""
+
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as ``::error``/``::warning``/``::notice`` workflow-command lines.
 
