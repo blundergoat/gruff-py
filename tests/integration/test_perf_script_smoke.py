@@ -24,10 +24,18 @@ pytestmark = [
 ]
 
 
-def test_perf_script_quick_mode_smoke(tmp_path: Path) -> None:
-    json_out = tmp_path / "perf-results.json"
-    output_dir = tmp_path / "perf-out"
+@pytest.fixture(scope="module")
+def quick_run_payload(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
+    """Run the perf script once at --quick mode and return its parsed JSON payload.
 
+    Args:
+        tmp_path_factory: Pytest-provided factory for module-scoped temp dirs.
+
+    Returns:
+        The parsed ``--json`` payload from a single ``--quick`` invocation.
+    """
+    tmp_path = tmp_path_factory.mktemp("perf_quick")
+    json_out = tmp_path / "perf-results.json"
     proc = subprocess.run(
         [
             "bash",
@@ -38,7 +46,7 @@ def test_perf_script_quick_mode_smoke(tmp_path: Path) -> None:
             "--json",
             str(json_out),
             "--output-dir",
-            str(output_dir),
+            str(tmp_path / "perf-out"),
         ],
         cwd=str(REPO_ROOT),
         capture_output=True,
@@ -47,27 +55,64 @@ def test_perf_script_quick_mode_smoke(tmp_path: Path) -> None:
         timeout=300,
         check=False,
     )
-
     assert proc.returncode == 0, (
         f"perf script exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     )
     assert json_out.exists(), "expected JSON output file was not written"
+    return json.loads(json_out.read_text())
 
-    payload = json.loads(json_out.read_text())
-    assert payload["schemaVersion"] == 1
-    for key in ("host", "repeat", "workloads", "perRuleCost", "importTime", "regressions"):
-        assert key in payload, f"missing top-level key: {key}"
 
-    workload_names = {w["name"] for w in payload["workloads"]}
+_EXPECTED_TOP_LEVEL_KEYS = {
+    "schemaVersion",
+    "host",
+    "repeat",
+    "workloads",
+    "perRuleCost",
+    "importTime",
+    "regressions",
+}
+
+
+def test_perf_script_payload_advertises_schema_version_1(
+    quick_run_payload: dict[str, object],
+) -> None:
+    assert quick_run_payload["schemaVersion"] == 1
+
+
+def test_perf_script_payload_publishes_documented_top_level_keys(
+    quick_run_payload: dict[str, object],
+) -> None:
+    assert _EXPECTED_TOP_LEVEL_KEYS.issubset(quick_run_payload), (
+        f"missing top-level keys: {_EXPECTED_TOP_LEVEL_KEYS - quick_run_payload.keys()}"
+    )
+
+
+def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
+    quick_run_payload: dict[str, object],
+) -> None:
+    workloads = quick_run_payload["workloads"]
+    workload_names = {w["name"] for w in workloads}
     assert {"cold-start", "analyse-src-text"}.issubset(workload_names)
 
-    for workload in payload["workloads"]:
-        assert isinstance(workload["command"], list)
-        assert isinstance(workload["exitCode"], int)
-        assert workload["median"] > 0
-        assert workload["min"] <= workload["median"] <= workload["max"]
 
-    cold_start = next(w for w in payload["workloads"] if w["name"] == "cold-start")
+def test_perf_script_workloads_have_well_formed_timing_record(
+    quick_run_payload: dict[str, object],
+) -> None:
+    workloads = quick_run_payload["workloads"]
+    assert all(
+        isinstance(w["command"], list)
+        and isinstance(w["exitCode"], int)
+        and w["median"] > 0
+        and w["min"] <= w["median"] <= w["max"]
+        for w in workloads
+    ), workloads
+
+
+def test_perf_script_cold_start_workload_exits_zero(
+    quick_run_payload: dict[str, object],
+) -> None:
+    workloads = quick_run_payload["workloads"]
+    cold_start = next(w for w in workloads if w["name"] == "cold-start")
     assert cold_start["exitCode"] == 0
 
 
@@ -116,6 +161,17 @@ def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
     assert "regressions detected" in proc.stdout
 
 
+_DOCUMENTED_FLAGS = (
+    "--quick",
+    "--json",
+    "--repeat",
+    "--baseline",
+    "--update-baseline",
+    "--output-dir",
+    "--scale",
+)
+
+
 def test_perf_script_help_lists_documented_flags() -> None:
     proc = subprocess.run(
         ["bash", str(SCRIPT_PATH), "--help"],
@@ -125,13 +181,5 @@ def test_perf_script_help_lists_documented_flags() -> None:
         timeout=10,
         check=True,
     )
-    for flag in (
-        "--quick",
-        "--json",
-        "--repeat",
-        "--baseline",
-        "--update-baseline",
-        "--output-dir",
-        "--scale",
-    ):
-        assert flag in proc.stdout, f"--help output missing {flag}"
+    missing = [flag for flag in _DOCUMENTED_FLAGS if flag not in proc.stdout]
+    assert not missing, f"--help output missing flags: {missing}"

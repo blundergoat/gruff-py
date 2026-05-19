@@ -1,6 +1,8 @@
 import ast
 from typing import Any
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.finding import Finding
@@ -49,18 +51,6 @@ def sample(value, other):
 """
 
 
-def test_size_and_complexity_threshold_findings_share_standard_metadata_contract() -> None:
-    findings = RuleRegistry.defaults().analyse([_unit(_SOURCE)], _threshold_ctx())
-    by_rule = {
-        finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS
-    }
-
-    assert by_rule.keys() >= _THRESHOLD_RULE_IDS
-    for finding in by_rule.values():
-        _assert_standard_threshold_metadata(finding)
-        _assert_message_mentions_measured_value_and_threshold(finding)
-
-
 def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
@@ -77,36 +67,24 @@ def _unit(source: str) -> AnalysisUnit:
     )
 
 
+def _thresholds_for(rule_id: str) -> dict[str, int]:
+    if rule_id == "complexity.maintainability-index":
+        return {"warning": 101, "error": 0}
+    if rule_id in _THRESHOLD_RULE_IDS:
+        return {"warning": 0, "error": 9999}
+    return {}
+
+
 def _threshold_ctx() -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        definition = rule.definition()
-        if definition.id == "complexity.maintainability-index":
-            thresholds = {"warning": 101, "error": 0}
-        elif definition.id in _THRESHOLD_RULE_IDS:
-            thresholds = {"warning": 0, "error": 9999}
-        else:
-            thresholds = {}
-        rules[definition.id] = RuleSettings(
-            enabled=definition.id in _THRESHOLD_RULE_IDS,
-            thresholds=thresholds,
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=rule.definition().id in _THRESHOLD_RULE_IDS,
+            thresholds=_thresholds_for(rule.definition().id),
         )
+        for rule in registry.all()
+    }
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-
-
-def _assert_standard_threshold_metadata(finding: Finding) -> None:
-    metadata = finding.metadata
-    assert isinstance(metadata["measuredValue"], int | float)
-    assert isinstance(metadata["threshold"], int | float)
-    assert metadata["thresholdDirection"] in {"above", "below"}
-    assert metadata["thresholdType"] in {"warning", "error"}
-
-
-def _assert_message_mentions_measured_value_and_threshold(finding: Finding) -> None:
-    metadata = finding.metadata
-    assert _number_is_rendered(metadata["threshold"], finding.message)
-    assert _number_is_rendered(metadata["measuredValue"], finding.message)
 
 
 def _number_is_rendered(value: Any, message: str) -> bool:
@@ -119,3 +97,44 @@ def _number_is_rendered(value: Any, message: str) -> bool:
         f"{value:.2f}",
     }
     return any(candidate in message for candidate in candidates)
+
+
+def _findings_by_rule_id() -> dict[str, Finding]:
+    findings = RuleRegistry.defaults().analyse([_unit(_SOURCE)], _threshold_ctx())
+    return {
+        finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS
+    }
+
+
+_FINDINGS_BY_RULE = _findings_by_rule_id()
+
+
+def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:
+    assert _FINDINGS_BY_RULE.keys() >= _THRESHOLD_RULE_IDS
+
+
+@pytest.mark.parametrize(
+    "rule_id",
+    sorted(_THRESHOLD_RULE_IDS),
+    ids=lambda r: r,
+)
+def test_size_and_complexity_finding_has_standard_threshold_metadata(rule_id: str) -> None:
+    metadata = _FINDINGS_BY_RULE[rule_id].metadata
+    assert isinstance(metadata["measuredValue"], int | float)
+    assert isinstance(metadata["threshold"], int | float)
+    assert metadata["thresholdDirection"] in {"above", "below"}
+    assert metadata["thresholdType"] in {"warning", "error"}
+
+
+@pytest.mark.parametrize(
+    "rule_id",
+    sorted(_THRESHOLD_RULE_IDS),
+    ids=lambda r: r,
+)
+def test_size_and_complexity_finding_message_mentions_measured_and_threshold(
+    rule_id: str,
+) -> None:
+    finding = _FINDINGS_BY_RULE[rule_id]
+    metadata = finding.metadata
+    assert _number_is_rendered(metadata["threshold"], finding.message)
+    assert _number_is_rendered(metadata["measuredValue"], finding.message)

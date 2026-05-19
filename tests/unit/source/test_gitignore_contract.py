@@ -122,21 +122,14 @@ def _write_probe_paths(root: Path) -> None:
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is not available on PATH")
-def test_matcher_matches_git_check_ignore_on_corpus(corpus: Path) -> None:
+@pytest.mark.parametrize("probe", _PATH_PROBES, ids=lambda p: f"{p.rel}::is_dir={p.is_dir}")
+def test_matcher_matches_git_check_ignore_on_probe(probe: _PathProbe, corpus: Path) -> None:
     _init_repo(corpus)
     matcher = GitignoreMatcher.from_root(corpus)
 
-    disagreements: list[str] = []
-    for probe in _PATH_PROBES:
-        target = corpus / probe.rel
-        git_verdict = _is_git_ignored(corpus, target)
-        matcher_verdict = matcher.is_ignored(target, is_dir=probe.is_dir)
-        if git_verdict != matcher_verdict:
-            disagreements.append(
-                f"  {probe.rel} (is_dir={probe.is_dir}): "
-                f"git={git_verdict} matcher={matcher_verdict}"
-            )
-
-    assert not disagreements, "GitignoreMatcher disagrees with git check-ignore:\n" + "\n".join(
-        disagreements
+    target = corpus / probe.rel
+    git_verdict = _is_git_ignored(corpus, target)
+    matcher_verdict = matcher.is_ignored(target, is_dir=probe.is_dir)
+    assert matcher_verdict == git_verdict, (
+        f"{probe.rel} (is_dir={probe.is_dir}): git={git_verdict} matcher={matcher_verdict}"
     )

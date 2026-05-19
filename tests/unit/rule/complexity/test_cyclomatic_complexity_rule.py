@@ -62,10 +62,7 @@ def _function_by_name(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
     fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
     tree = ast.parse(fixture.read_text())
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-            and node.name == name
-        ):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
             return node
     raise AssertionError(f"function {name!r} not found in cc_fixture.py")
 

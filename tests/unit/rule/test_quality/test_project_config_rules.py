@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.rule.context import RuleContext
@@ -110,10 +112,18 @@ def test_coverage_source_present_skips(tmp_path: Path):
     assert PytestCoverageSourceMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx) == []
 
 
-def test_opt_in_rules_default_off():
-    """The opt-in test-quality rules must default to enabled=False."""
-    for rule_cls in (MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule):
-        assert rule_cls().definition().default_enabled is False
+@pytest.mark.parametrize(
+    "rule_cls",
+    [MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule],
+    ids=lambda c: c.__name__,
+)
+def test_opt_in_rule_default_off(rule_cls: type) -> None:
+    """The opt-in test-quality rules must default to enabled=False.
+
+    Args:
+        rule_cls: Rule class expected to ship with ``default_enabled=False``.
+    """
+    assert rule_cls().definition().default_enabled is False
 
 
 def test_multiple_aaa_cycles_requires_opt_in():

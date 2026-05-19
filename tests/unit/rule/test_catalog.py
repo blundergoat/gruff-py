@@ -114,9 +114,7 @@ _SIZE_AND_COMPLEXITY_DEFINITIONS = [
 ]
 
 
-@pytest.mark.parametrize(
-    "definition", _SIZE_AND_COMPLEXITY_DEFINITIONS, ids=lambda d: d.id
-)
+@pytest.mark.parametrize("definition", _SIZE_AND_COMPLEXITY_DEFINITIONS, ids=lambda d: d.id)
 def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
     definition: RuleDefinition,
 ) -> None:
