@@ -16,6 +16,9 @@ from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAt
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
+from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
+from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
+from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.docs.missing_class_docstring_rule import MissingClassDocstringRule
 from gruffpy.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
 from gruffpy.rule.docs.missing_module_docstring_rule import MissingModuleDocstringRule
@@ -24,6 +27,7 @@ from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
 from gruffpy.rule.docs.missing_readme_rule import MissingReadmeRule
 from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
+from gruffpy.rule.docs.todo_actionability_rule import TodoActionabilityRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
@@ -229,6 +233,9 @@ def _entry(factory: RuleFactory) -> BuiltInRule:
 def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
     subject = definition.name.lower()
     config_keys = _config_keys_for(definition)
+    custom_docs = _custom_docs_for(definition, config_keys=config_keys)
+    if custom_docs is not None:
+        return custom_docs
     return RuleDocs(
         rationale=_rationale_for(definition),
         fix_guidance=_fix_guidance_for(definition),
@@ -241,6 +248,93 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
         threshold_metadata_keys=_threshold_metadata_keys(definition),
         security_metadata=rule_security_metadata(definition.id),
     )
+
+
+def _custom_docs_for(
+    definition: RuleDefinition,
+    *,
+    config_keys: tuple[str, ...],
+) -> RuleDocs | None:
+    match definition.id:
+        case IgnoreDirectiveReasonRule.ID:
+            return RuleDocs(
+                rationale=(
+                    "Suppression comments age badly unless they explain the local "
+                    "compatibility, framework, or test boundary that made the "
+                    "suppression acceptable."
+                ),
+                fix_guidance=(
+                    "Keep the suppression precise and add a short reason after "
+                    "`-`, `--`, or a second `#` comment marker."
+                ),
+                bad_example="`import plugin  # noqa`",
+                good_example="`import plugin  # noqa: F401 - re-exported public API`",
+                confidence_rationale=(
+                    "High confidence: the rule only matches explicit suppression "
+                    "comment directives parsed from Python comment tokens."
+                ),
+                config_keys=config_keys,
+            )
+        case TodoActionabilityRule.ID:
+            return RuleDocs(
+                rationale=(
+                    "TODO-style markers should leave enough ownership, issue, date, "
+                    "or concrete action context for a later maintainer to resolve them."
+                ),
+                fix_guidance=(
+                    "Attach an issue, owner, date, or specific imperative action, "
+                    "or move the work into the tracker and remove the marker."
+                ),
+                bad_example="`# TODO: fix later`",
+                good_example="`# TODO(#123): remove fallback after parser migration`",
+                confidence_rationale=(
+                    "Medium confidence: the rule uses bounded source-comment "
+                    "heuristics with configurable markers and detail thresholds."
+                ),
+                config_keys=config_keys,
+            )
+        case DataclassAttributesRule.ID:
+            return RuleDocs(
+                rationale=(
+                    "Public dataclasses often become reporter, config, or API "
+                    "payload contracts; field names alone rarely explain units, "
+                    "nullability, or stability guarantees."
+                ),
+                fix_guidance=(
+                    "Add an `Attributes:` section, Sphinx `:ivar:` entries, or a "
+                    "field bullet list that explains the payload fields."
+                ),
+                bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
+                good_example=("`Attributes:` section documenting `findings` and `exit_code`."),
+                confidence_rationale=(
+                    "Medium confidence: the rule is limited to public dataclasses "
+                    "above a configurable field-count threshold."
+                ),
+                config_keys=config_keys,
+            )
+        case ComplexBranchRationaleRule.ID:
+            return RuleDocs(
+                rationale=(
+                    "Highly branched functions are expensive to review; when they "
+                    "cannot be simplified, maintainers need the protocol, bug, or "
+                    "compatibility reason for the branch structure."
+                ),
+                fix_guidance=(
+                    "Extract the branching logic, or add a substantive docstring or "
+                    "nearby rationale comment explaining why the complexity remains."
+                ),
+                bad_example="A public parser function with many `if` branches and no docstring.",
+                good_example=(
+                    "A complex compatibility router with a docstring naming the "
+                    "legacy protocol contract."
+                ),
+                confidence_rationale=(
+                    "Medium confidence: the rule reuses existing complexity helpers "
+                    "and accepts substantive docstrings or nearby rationale comments."
+                ),
+                config_keys=config_keys,
+            )
+    return None
 
 
 def _rationale_for(definition: RuleDefinition) -> str:
@@ -309,6 +403,9 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(UnusedPrivateAttributeRule),
     _entry(UnusedPrivateFunctionRule),
     _entry(SingleImplementorProtocolRule),
+    _entry(ComplexBranchRationaleRule),
+    _entry(DataclassAttributesRule),
+    _entry(IgnoreDirectiveReasonRule),
     _entry(MissingClassDocstringRule),
     _entry(MissingFunctionDocstringRule),
     _entry(MissingModuleDocstringRule),
@@ -317,6 +414,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(MissingReadmeRule),
     _entry(MissingReturnDocRule),
     _entry(StaleParamDocRule),
+    _entry(TodoActionabilityRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
     _entry(AbbreviationRule),

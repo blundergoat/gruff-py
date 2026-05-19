@@ -37,7 +37,45 @@ def _todo_density_fixture_lines() -> str:
 
 # Source crafted to trigger every docs rule at least once.
 _FIXTURE = (
-    '''def helper(x, y):
+    '''from dataclasses import dataclass
+import os  # noqa
+
+
+@dataclass
+class Payload:
+    name: str
+    value: int
+    status: str
+
+
+def route_payload(value):
+    total = 0
+    if value == 0:
+        total += 0
+    if value == 1:
+        total += 1
+    if value == 2:
+        total += 2
+    if value == 3:
+        total += 3
+    if value == 4:
+        total += 4
+    if value == 5:
+        total += 5
+    if value == 6:
+        total += 6
+    if value == 7:
+        total += 7
+    if value == 8:
+        total += 8
+    if value == 9:
+        total += 9
+    if value == 10:
+        total += 10
+    return total
+
+
+def helper(x, y):
     """Doc.
 
     Args:
@@ -77,6 +115,9 @@ def slot(x) -> int:
 )
 
 _EXPECTED_RULE_IDS = {
+    "docs.complex-branch-rationale",
+    "docs.dataclass-attributes",
+    "docs.ignore-directive-reason",
     "docs.missing-module-docstring",
     "docs.missing-class-docstring",
     "docs.missing-function-docstring",
@@ -84,6 +125,7 @@ _EXPECTED_RULE_IDS = {
     "docs.missing-return-doc",
     "docs.missing-raises-doc",
     "docs.stale-param-doc",
+    "docs.todo-actionability",
     "docs.useless-docstring",
     "docs.todo-density",
     "docs.missing-readme",
@@ -102,7 +144,7 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     assert not missing, f"Missing rule fires: {sorted(missing)}"
 
 
-def test_docs_registry_has_ten_rules():
+def test_docs_registry_has_fourteen_rules():
     registry = RuleRegistry.defaults()
     docs_ids = {
         rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")

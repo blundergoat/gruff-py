@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-20
 ---
 
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
@@ -33,3 +33,17 @@ When a rule scans raw source text and tests need runtime strings containing
 trigger tokens, use a construction that the formatter will not fold back into
 the raw token, such as `"".join(("TO", "DO"))`, and re-run the analyzer after
 formatting rather than trusting the unit test alone.
+
+## Lesson: Test directive parsers against reason delimiters before dogfood
+
+**Created:** 2026-05-20
+**Incident:** During M24, the first `docs.ignore-directive-reason` tests showed
+that `src/gruffpy/rule/docs/ignore_directive_reason_rule.py` initially let the
+`noqa` directive regex consume `- re-exported public API` as part of the
+directive, while `type: ignore[attr-defined]` stopped before the bracketed
+code. Focused tests caught the bug before the rule was registered for dogfood.
+
+When implementing source-comment directive parsers, test each supported
+directive with no reason, `-` / `--` reasons, second-`#` reasons, and bracketed
+payloads before broad dogfood. The regex should stop at the reason delimiter,
+not include the rationale in the directive payload.

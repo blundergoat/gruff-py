@@ -70,6 +70,9 @@ selection:
   - dead-code.unused-private-attribute
   - dead-code.unused-private-function
   - design.single-implementor-protocol
+  - docs.complex-branch-rationale
+  - docs.dataclass-attributes
+  - docs.ignore-directive-reason
   - docs.missing-class-docstring
   - docs.missing-function-docstring
   - docs.missing-module-docstring
@@ -78,6 +81,7 @@ selection:
   - docs.missing-readme
   - docs.missing-return-doc
   - docs.stale-param-doc
+  - docs.todo-actionability
   - docs.todo-density
   - docs.useless-docstring
   - naming.abbreviation
@@ -217,6 +221,24 @@ rules:
       - ContextManager
       - AsyncContextManager
       additionalExcludedPaths: []
+  # Highly branched code needs either simpler structure or maintainer rationale.
+  docs.complex-branch-rationale:
+    enabled: true
+    options:
+      cyclomatic_warning: 10
+      cognitive_warning: 15
+      private_cyclomatic_warning: 15
+      private_cognitive_warning: 20
+  # Public dataclass payload fields should be documented as part of the contract.
+  docs.dataclass-attributes:
+    enabled: true
+    options:
+      min_fields: 3
+      require_all_fields: false
+      allow_bullets: true
+  # Suppression directives need a reason future maintainers can evaluate.
+  docs.ignore-directive-reason:
+    enabled: true
   # Classes need docstrings to explain purpose and invariants.
   docs.missing-class-docstring:
     enabled: true
@@ -243,6 +265,18 @@ rules:
   # Stale parameter docs mislead callers more than missing docs.
   docs.stale-param-doc:
     enabled: true
+  # TODO-style comments need an issue, owner, date, or concrete next action.
+  docs.todo-actionability:
+    enabled: true
+    options:
+      markers:
+      - TODO
+      - FIXME
+      - HACK
+      - XXX
+      - BUG
+      require_issue_or_owner: false
+      minimum_detail_words: 5
   # Dense TODO/FIXME markers expose deferred work becoming hidden debt.
   docs.todo-density:
     enabled: true

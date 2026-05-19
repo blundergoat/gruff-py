@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 100 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 104 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -14,7 +14,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
-| `documentation` | 10 | Docstring presence and quality, stale docs, TODO density, README presence |
+| `documentation` | 14 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 13 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
@@ -69,6 +69,9 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 
 ### Documentation
 
+- `docs.complex-branch-rationale`
+- `docs.dataclass-attributes`
+- `docs.ignore-directive-reason`
 - `docs.missing-class-docstring`
 - `docs.missing-function-docstring`
 - `docs.missing-module-docstring`
@@ -77,6 +80,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `docs.missing-readme`
 - `docs.missing-return-doc`
 - `docs.stale-param-doc`
+- `docs.todo-actionability`
 - `docs.todo-density`
 - `docs.useless-docstring`
 
@@ -302,6 +306,50 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `design.single-implementor-protocol` leaves single-implementor protocol/abc unaddressed.
 - Good example: Code that satisfies `design.single-implementor-protocol` makes single-implementor protocol/abc explicit or simpler.
 
+### `docs.complex-branch-rationale`
+
+- Name: Complex branch rationale
+- Pillar: `documentation`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: Highly branched functions are expensive to review; when they cannot be simplified, maintainers need the protocol, bug, or compatibility reason for the branch structure.
+- Fix guidance: Extract the branching logic, or add a substantive docstring or nearby rationale comment explaining why the complexity remains.
+- Confidence rationale: Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments.
+- Options: `cognitive_warning` = `15`, `cyclomatic_warning` = `10`, `private_cognitive_warning` = `20`, `private_cyclomatic_warning` = `15`
+- Bad example: A public parser function with many `if` branches and no docstring.
+- Good example: A complex compatibility router with a docstring naming the legacy protocol contract.
+
+### `docs.dataclass-attributes`
+
+- Name: Dataclass attributes
+- Pillar: `documentation`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: Public dataclasses often become reporter, config, or API payload contracts; field names alone rarely explain units, nullability, or stability guarantees.
+- Fix guidance: Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields.
+- Confidence rationale: Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold.
+- Options: `allow_bullets` = `True`, `min_fields` = `3`, `require_all_fields` = `False`
+- Bad example: `@dataclass class Report: findings: tuple[str, ...]; exit_code: int`
+- Good example: `Attributes:` section documenting `findings` and `exit_code`.
+
+### `docs.ignore-directive-reason`
+
+- Name: Ignore directive reason
+- Pillar: `documentation`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: Suppression comments age badly unless they explain the local compatibility, framework, or test boundary that made the suppression acceptable.
+- Fix guidance: Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker.
+- Confidence rationale: High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens.
+- Bad example: `import plugin  # noqa`
+- Good example: `import plugin  # noqa: F401 - re-exported public API`
+
 ### `docs.missing-class-docstring`
 
 - Name: Missing class docstring
@@ -414,6 +462,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `docs.stale-param-doc` leaves stale parameter documentation unaddressed.
 - Good example: Code that satisfies `docs.stale-param-doc` makes stale parameter documentation explicit or simpler.
+
+### `docs.todo-actionability`
+
+- Name: TODO actionability
+- Pillar: `documentation`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: TODO-style markers should leave enough ownership, issue, date, or concrete action context for a later maintainer to resolve them.
+- Fix guidance: Attach an issue, owner, date, or specific imperative action, or move the work into the tracker and remove the marker.
+- Confidence rationale: Medium confidence: the rule uses bounded source-comment heuristics with configurable markers and detail thresholds.
+- Options: `markers` = `['TODO', 'FIXME', 'HACK', 'XXX', 'BUG']`, `minimum_detail_words` = `5`, `require_issue_or_owner` = `False`
+- Bad example: `# TODO: fix later`
+- Good example: `# TODO(#123): remove fallback after parser migration`
 
 ### `docs.todo-density`
 
