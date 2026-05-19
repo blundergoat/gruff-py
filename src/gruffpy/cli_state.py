@@ -7,7 +7,15 @@ import click
 
 @dataclass(slots=True)
 class CliState:
-    """Mutable per-run CLI flags shared via Click context (silent/quiet/ansi/no-interaction)."""
+    """Mutable per-run CLI flags shared via Click context.
+
+    Attributes:
+        is_silent: Whether command output should be fully suppressed.
+        is_quiet: Whether non-essential command output should be suppressed.
+        should_use_ansi: Optional override for ANSI colour output.
+        is_interaction_disabled: Whether prompts and interactive flows are disabled.
+        verbosity: Verbosity level requested by CLI flags.
+    """
 
     is_silent: bool = False
     is_quiet: bool = False

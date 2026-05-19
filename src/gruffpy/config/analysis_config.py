@@ -18,6 +18,15 @@ class AnalysisConfig:
     Immutable. ``from_registry`` seeds per-rule defaults; the
     ``with_*`` methods produce updated copies as the config loader
     layers user overrides on top.
+
+    Attributes:
+        rules: Per-rule settings keyed by rule id.
+        minimum_python_version: Minimum Python version assumed by modernisation rules.
+        rule_selection: Include and exclude selectors applied before analysis.
+        ignored_path_patterns: Configured path globs excluded during discovery.
+        accepted_abbreviations: Project-approved abbreviations for naming rules.
+        allowed_secret_previews: Redacted secret previews allowed by config.
+        dead_code_allowlist: Symbols, decorators, and paths allowed for dead-code rules.
     """
 
     rules: dict[str, RuleSettings] = field(default_factory=dict)

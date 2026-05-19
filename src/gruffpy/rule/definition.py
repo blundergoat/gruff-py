@@ -20,6 +20,19 @@ class RuleDefinition:
     The values are immutable and used by the registry, reporters, and
     SARIF/JSON serialisers; the rule id is validated against
     ``^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`` on construction.
+
+    Attributes:
+        id: Canonical public rule id.
+        name: Human-readable rule name.
+        pillar: Primary quality pillar.
+        tier: Rule maturity tier.
+        default_severity: Severity used when the rule emits a finding.
+        confidence: Confidence rating for findings emitted by the rule.
+        default_thresholds: Named numeric threshold defaults.
+        secondary_pillars: Additional pillars affected by the rule.
+        default_enabled: Whether the rule runs by default.
+        default_options: Free-form option defaults.
+        description: Optional sentence used by generated metadata.
     """
 
     id: str

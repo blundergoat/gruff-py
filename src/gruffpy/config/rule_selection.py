@@ -9,7 +9,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class RuleSelection:
-    """Tier/pillar/rule include + exclude selectors applied by the registry before analysis."""
+    """Tier/pillar/rule include and exclude selectors.
+
+    Attributes:
+        tiers: Included rule tiers.
+        pillars: Included pillars.
+        rules: Included rule ids.
+        exclude_pillars: Pillars excluded after includes are evaluated.
+        exclude_rules: Rule ids excluded after includes are evaluated.
+    """
 
     tiers: tuple[str, ...] = ()
     pillars: tuple[str, ...] = ()

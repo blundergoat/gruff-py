@@ -8,7 +8,21 @@ from gruffpy.scoring.grade import Grade
 
 @dataclass(frozen=True, slots=True)
 class FileScore:
-    """Per-file score row used to populate the top-offenders table in a report."""
+    """Per-file score row used to populate the top-offenders table in a report.
+
+    Attributes:
+        file_path: Display path for the scored file.
+        grade: Letter grade assigned to the file.
+        findings: Total findings for the file.
+        advisories: Advisory findings for the file.
+        warnings: Warning findings for the file.
+        errors: Error findings for the file.
+        penalty: Score penalty before output rounding.
+        max_cyclomatic: Maximum cyclomatic complexity observed in the file.
+        max_cognitive: Maximum cognitive complexity observed in the file.
+        max_lines: Maximum function length observed in the file.
+        mutation_score: Optional mutation score for the file.
+    """
 
     file_path: str
     grade: Grade

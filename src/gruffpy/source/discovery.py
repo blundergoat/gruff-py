@@ -72,7 +72,13 @@ DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryResult:
-    """Files and input-path diagnostics produced by source discovery."""
+    """Files and input-path diagnostics produced by source discovery.
+
+    Attributes:
+        files: Discovered source files that should be analysed.
+        missing_paths: Requested input paths that were not found.
+        ignored_paths: Requested input paths skipped by ignore handling.
+    """
 
     files: tuple[SourceFile, ...]
     missing_paths: tuple[str, ...]

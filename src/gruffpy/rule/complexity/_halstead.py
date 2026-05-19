@@ -31,7 +31,14 @@ OperandCollector = Callable[[ast.AST, list[str], list[str]], None]
 
 @dataclass(frozen=True)
 class HalsteadMetrics:
-    """Aggregated Halstead counts for one function-like node."""
+    """Aggregated Halstead counts for one function-like node.
+
+    Attributes:
+        distinct_operators: Number of unique operators.
+        distinct_operands: Number of unique operands.
+        total_operators: Total operator occurrences.
+        total_operands: Total operand occurrences.
+    """
 
     distinct_operators: int  # η1
     distinct_operands: int  # η2

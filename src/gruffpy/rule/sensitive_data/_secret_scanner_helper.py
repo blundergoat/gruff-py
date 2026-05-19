@@ -21,7 +21,14 @@ MIN_REDACTABLE_LEN = 8
 
 @dataclass(frozen=True, slots=True)
 class SecretMatch:
-    """One match of a sensitive-data pattern inside a source file."""
+    """One match of a sensitive-data pattern inside a source file.
+
+    Attributes:
+        raw: Matched secret text before redaction.
+        start_offset: Zero-based start offset in the source text.
+        end_offset: Zero-based end offset in the source text.
+        line: One-based source line containing the match start.
+    """
 
     raw: str
     start_offset: int

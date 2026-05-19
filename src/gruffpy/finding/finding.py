@@ -17,6 +17,22 @@ class Finding:
     Immutable. Every rule's ``analyse()`` returns a list of these. The
     fingerprint computed from rule id + location + symbol is the stable
     cross-implementation identity used by baselines and dedup.
+
+    Attributes:
+        rule_id: Canonical rule id that emitted the finding.
+        message: Human-readable finding message.
+        file_path: Display path for the finding location.
+        line: Optional one-based start line.
+        severity: Finding severity.
+        pillar: Primary quality pillar.
+        tier: Rule maturity tier.
+        confidence: Rule confidence rating.
+        end_line: Optional one-based end line.
+        column: Optional one-based column.
+        symbol: Optional qualified symbol.
+        remediation: Optional remediation guidance.
+        secondary_pillars: Additional pillars affected by the finding.
+        metadata: Rule-specific JSON-compatible metadata.
     """
 
     rule_id: str

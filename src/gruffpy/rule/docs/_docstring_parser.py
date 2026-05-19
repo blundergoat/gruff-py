@@ -28,6 +28,11 @@ class DocstringField:
     *name* is ``None`` and *type_hint* / *description* carry the documented
     return shape. For ``@raises`` / ``Raises:`` entries, *name* is the
     exception class name and *type_hint* is ``None``.
+
+    Attributes:
+        name: Parameter or exception name, or None for return entries.
+        type_hint: Documented type string, if present.
+        description: Documented field description, if present.
     """
 
     name: str | None
@@ -37,7 +42,16 @@ class DocstringField:
 
 @dataclass(frozen=True, slots=True)
 class ParsedDocstring:
-    """Normalised view over a docstring across all supported styles."""
+    """Normalised view over a docstring across all supported styles.
+
+    Attributes:
+        summary: Short description, if present.
+        description: Long description, if present.
+        params: Documented parameter fields.
+        returns: Documented return field, if present.
+        raises: Documented exception fields.
+        style: Parser-detected docstring style.
+    """
 
     summary: str | None
     description: str | None

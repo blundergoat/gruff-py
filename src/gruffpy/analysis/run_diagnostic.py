@@ -6,7 +6,15 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class RunDiagnostic:
-    """Non-finding diagnostic emitted for run-level issues."""
+    """Non-finding diagnostic emitted for run-level issues.
+
+    Attributes:
+        type: Diagnostic category such as ``parse-error``.
+        message: Human-readable diagnostic text.
+        file_path: Optional file path associated with the diagnostic.
+        line: Optional one-based source line.
+        path: Optional input path associated with the diagnostic.
+    """
 
     type: str
     message: str

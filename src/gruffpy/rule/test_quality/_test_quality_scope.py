@@ -20,7 +20,13 @@ class TestScopeKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TestScope:
-    """Resolved test-function context: test-collection convention, async flag, parent class name."""
+    """Resolved test-function context.
+
+    Attributes:
+        kind: Matched pytest or unittest collection convention.
+        is_async: Whether the test function is async.
+        parent_class_name: Enclosing test class name, if class-scoped.
+    """
 
     kind: TestScopeKind
     is_async: bool

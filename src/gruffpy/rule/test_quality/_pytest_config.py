@@ -13,7 +13,14 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class PytestConfig:
-    """Snapshot of pytest-relevant config in a project."""
+    """Snapshot of pytest-relevant config in a project.
+
+    Attributes:
+        addopts: Parsed ``tool.pytest.ini_options.addopts`` tokens.
+        filterwarnings: Pytest warning-filter entries.
+        coverage_source: Coverage source package entries.
+        is_present: Whether pytest configuration was found.
+    """
 
     addopts: tuple[str, ...] = ()
     filterwarnings: tuple[str, ...] = ()

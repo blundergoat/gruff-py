@@ -8,7 +8,18 @@ from gruffpy.scoring.grade import Grade
 
 @dataclass(frozen=True, slots=True)
 class PillarScore:
-    """Per-pillar grade + severity counts contributing to the composite score."""
+    """Per-pillar grade and severity counts contributing to the composite score.
+
+    Attributes:
+        pillar: Pillar name being scored.
+        applicable: Whether the pillar applies to the analysed scope.
+        grade: Letter grade for the pillar, or None when not applicable.
+        findings: Total findings for the pillar.
+        advisories: Advisory findings for the pillar.
+        warnings: Warning findings for the pillar.
+        errors: Error findings for the pillar.
+        penalty: Score penalty before output rounding.
+    """
 
     pillar: str
     applicable: bool

@@ -7,7 +7,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class SourceComment:
-    """One Python source comment token."""
+    """One Python source comment token.
+
+    Attributes:
+        line: One-based source line for the comment.
+        raw: Raw comment text including the leading ``#``.
+        body: Comment text with the leading marker stripped.
+    """
 
     line: int
     raw: str

@@ -48,7 +48,14 @@ METRIC_ORDER: tuple[MetricName, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class MetricDiagnostic:
-    """Non-finding run-time message from ``metric-calibration`` (parse error, missing path)."""
+    """Non-finding run-time message from ``metric-calibration``.
+
+    Attributes:
+        type: Diagnostic category such as parse error or missing path.
+        message: Human-readable diagnostic text.
+        path: Optional path associated with the diagnostic.
+        line: Optional one-based source line.
+    """
 
     type: str
     message: str
@@ -74,7 +81,13 @@ class MetricDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class MetricThreshold:
-    """Threshold + severity + direction (high/low) used to count crossings for one metric."""
+    """Threshold + severity + direction used to count crossings for one metric.
+
+    Attributes:
+        threshold: Numeric threshold value.
+        severity: Severity assigned when the threshold is crossed.
+        direction: Whether high or low values cross the threshold.
+    """
 
     threshold: float
     severity: Severity
@@ -83,7 +96,19 @@ class MetricThreshold:
 
 @dataclass(frozen=True, slots=True)
 class FunctionMetricRow:
-    """One parsed function's metric snapshot: location plus cyclomatic, npath, Halstead, and MI."""
+    """One parsed function's location and complexity metric snapshot.
+
+    Attributes:
+        file_path: Display path containing the function.
+        line: One-based start line.
+        end_line: Optional one-based end line.
+        symbol: Qualified function symbol.
+        cyclomatic: Cyclomatic complexity value.
+        npath: NPath complexity value.
+        is_npath_capped: Whether NPath hit the configured cap.
+        halstead_volume: Halstead volume value.
+        maintainability_index: Maintainability index value.
+    """
 
     file_path: str
     line: int
@@ -141,7 +166,21 @@ class FunctionMetricRow:
 
 @dataclass(frozen=True, slots=True)
 class MetricSummary:
-    """Distribution summary for one metric: count, min/p50/p90/p99/max, threshold-crossing total."""
+    """Distribution summary for one metric.
+
+    Attributes:
+        metric: Metric name this summary describes.
+        count: Number of values in the distribution.
+        minimum: Minimum observed value.
+        p50: Median observed value.
+        p90: 90th percentile observed value.
+        p99: 99th percentile observed value.
+        maximum: Maximum observed value.
+        threshold: Threshold used for crossing counts.
+        threshold_severity: Severity assigned to threshold crossings.
+        threshold_direction: Whether values above or below the threshold cross.
+        threshold_crossings: Number of rows crossing the threshold.
+    """
 
     metric: MetricName
     count: int
@@ -178,7 +217,20 @@ class MetricSummary:
 
 @dataclass(frozen=True, slots=True)
 class MetricCalibrationReport:
-    """Full output of ``metric-calibration``: rows, summaries, diagnostics, and run metadata."""
+    """Full output of ``metric-calibration``.
+
+    Attributes:
+        requested_paths: User-requested input paths.
+        files_discovered: Count of discovered source files.
+        files_parsed: Count of files parsed for metric rows.
+        ignored_paths: Paths skipped by discovery.
+        missing_paths: Requested paths that were not found.
+        diagnostics: Non-finding diagnostics collected during the run.
+        rows: Per-function metric rows.
+        summaries: Per-metric distribution summaries.
+        config_path: Loaded configuration path, if any.
+        tool_version: gruff-py version that produced the report.
+    """
 
     requested_paths: tuple[str, ...]
     files_discovered: int

@@ -13,7 +13,15 @@ from gruffpy.version import TOOL_NAME
 
 @dataclass(frozen=True, slots=True)
 class ReportExtensions:
-    """Optional report sections omitted from JSON when absent."""
+    """Optional report sections omitted from JSON when absent.
+
+    Attributes:
+        mutation: Optional mutation-testing payload.
+        diff: Optional diff-comparison payload.
+        trend: Optional trend payload.
+        baseline: Optional baseline-comparison payload.
+        review: Optional review-assistance payload.
+    """
 
     mutation: Any | None = None
     diff: Any | None = None
@@ -24,7 +32,25 @@ class ReportExtensions:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisReport:
-    """Native analysis report value object for ``gruff-py.analysis.v1``."""
+    """Native analysis report value object for ``gruff-py.analysis.v1``.
+
+    Attributes:
+        tool_version: gruff-py version that produced the report.
+        requested_paths: User-requested input paths.
+        format: Requested output format.
+        fail_on: Configured fail threshold.
+        files_discovered: Count of discovered source files.
+        files_parsed: Count of successfully parsed files.
+        ignored_paths: Paths skipped by discovery.
+        missing_paths: Requested paths that were not found.
+        diagnostics: Non-finding run diagnostics.
+        findings: Rule findings emitted for the run.
+        exit_code: Process exit code implied by findings and diagnostics.
+        config_path: Loaded configuration path, if any.
+        score: Optional score payload.
+        extensions: Optional report extension sections.
+        filters: Optional finding-display filter metadata.
+    """
 
     tool_version: str
     requested_paths: tuple[str, ...]

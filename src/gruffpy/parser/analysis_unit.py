@@ -16,7 +16,14 @@ class ParseDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisUnit:
-    """Source file plus parsed AST and diagnostics supplied to rules."""
+    """Source file plus parsed AST and diagnostics supplied to rules.
+
+    Attributes:
+        file: Source file handle being analysed.
+        source: Full source text for source-text rules.
+        tree: Parsed Python AST, or None for text files and parse failures.
+        diagnostics: Parse diagnostics collected for the source.
+    """
 
     file: SourceFile
     source: str

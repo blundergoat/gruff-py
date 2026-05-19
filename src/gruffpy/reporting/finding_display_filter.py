@@ -15,7 +15,15 @@ _SEVERITY_RANK: dict[Severity, int] = {
 
 @dataclass(frozen=True, slots=True)
 class FindingDisplayFilter:
-    """Reporter-side filter applying ``--min-severity`` plus pillar/rule include + exclude lists."""
+    """Reporter-side filter for min-severity, pillar, and rule selectors.
+
+    Attributes:
+        min_severity: Minimum severity to include, if configured.
+        include_pillars: Pillars that must be present when set.
+        exclude_pillars: Pillars removed after includes are evaluated.
+        include_rules: Rule ids that must be present when set.
+        exclude_rules: Rule ids removed after includes are evaluated.
+    """
 
     min_severity: Severity | None = None
     include_pillars: tuple[Pillar, ...] = ()

@@ -30,7 +30,14 @@ class ThresholdMatch:
 
 @dataclass(frozen=True, slots=True)
 class RuleSettings:
-    """Resolved per-rule configuration: enabled flag, thresholds, options, optional override."""
+    """Resolved per-rule configuration.
+
+    Attributes:
+        enabled: Whether the rule should run.
+        thresholds: Named numeric thresholds for the rule.
+        options: Free-form rule options.
+        severity_threshold: Optional single threshold and severity override.
+    """
 
     enabled: bool = True
     thresholds: dict[str, int | float] = field(default_factory=dict)

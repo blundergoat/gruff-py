@@ -166,7 +166,20 @@ _FORMULA_PROVENANCE = {
 
 @dataclass(frozen=True, slots=True)
 class RuleDocs:
-    """Durable documentation metadata for a built-in rule."""
+    """Durable documentation metadata for a built-in rule.
+
+    Attributes:
+        rationale: Why the rule exists.
+        fix_guidance: Human-readable remediation guidance.
+        bad_example: Example code that should trigger the rule.
+        good_example: Example code that should satisfy the rule.
+        confidence_rationale: Why the rule has its configured confidence.
+        config_keys: Public config keys accepted by the rule.
+        formula_provenance: Source or calibration note for metric formulas.
+        threshold_direction: Whether larger or smaller values are worse.
+        threshold_metadata_keys: Metadata keys used by threshold findings.
+        security_metadata: SARIF security metadata for security rules.
+    """
 
     rationale: str
     fix_guidance: str
@@ -206,7 +219,13 @@ class RuleDocs:
 
 @dataclass(frozen=True, slots=True)
 class BuiltInRule:
-    """Catalog entry tying a built-in rule factory to docs metadata."""
+    """Catalog entry tying a built-in rule factory to docs metadata.
+
+    Attributes:
+        factory: Callable that creates a fresh rule instance.
+        definition: Static rule metadata returned by the factory.
+        docs: Documentation metadata for reports and generated docs.
+    """
 
     factory: RuleFactory
     definition: RuleDefinition

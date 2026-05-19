@@ -20,7 +20,17 @@ from gruffpy.version import TOOL_NAME
 
 @dataclass(frozen=True, slots=True)
 class DashboardState:
-    """Immutable snapshot of the dashboard form fields, round-tripped via the URL query string."""
+    """Immutable snapshot of dashboard form fields round-tripped through query strings.
+
+    Attributes:
+        project: Project root entered in the dashboard form.
+        paths: Source paths entered in the dashboard form.
+        fail_on: Failure threshold selected for dashboard scans.
+        config: Optional configuration file path.
+        no_config: Whether config loading is disabled.
+        include_ignored: Whether ignored files are included in scans.
+        report_interactive: Whether generated HTML reports keep interactive controls.
+    """
 
     project: str
     paths: str

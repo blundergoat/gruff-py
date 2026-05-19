@@ -19,7 +19,15 @@ _VALID_DIRECTIVES: frozenset[str] = frozenset({"disable", "disable-next", "disab
 
 @dataclass(frozen=True, slots=True)
 class SuppressionDiagnostic:
-    """A non-finding problem found while parsing suppression comments."""
+    """A non-finding problem found while parsing suppression comments.
+
+    Attributes:
+        type: Diagnostic category.
+        message: Human-readable diagnostic text.
+        line: One-based source line for the directive.
+        directive: Parsed directive name, if available.
+        rule_id: Parsed rule id, if available.
+    """
 
     type: str
     message: str
@@ -30,7 +38,14 @@ class SuppressionDiagnostic:
 
 @dataclass(frozen=True, slots=True)
 class ParsedSuppressions:
-    """Suppression rules parsed for one source file."""
+    """Suppression rules parsed for one source file.
+
+    Attributes:
+        file_disabled_rule_ids: Rule ids disabled for the whole file.
+        line_disabled_rule_ids: Rule ids disabled on specific source lines.
+        next_line_disabled_rule_ids: Rule ids disabled by previous-line directives.
+        diagnostics: Non-finding suppression parser diagnostics.
+    """
 
     file_disabled_rule_ids: frozenset[str] = frozenset()
     line_disabled_rule_ids: dict[int, frozenset[str]] = field(default_factory=dict)

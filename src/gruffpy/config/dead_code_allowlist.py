@@ -10,7 +10,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class DeadCodeAllowlist:
-    """Path/symbol/decorator allowlist consumed by the ``dead-code.unused-private-*`` rules."""
+    """Path/symbol/decorator allowlist consumed by dead-code rules.
+
+    Attributes:
+        symbols: Exact qualified symbols allowed to appear unused.
+        decorators: Decorators that mark otherwise-unused symbols as allowed.
+        paths: Display-path globs whose dead-code findings are allowed.
+    """
 
     symbols: tuple[str, ...] = ()
     decorators: tuple[str, ...] = ()
