@@ -106,11 +106,9 @@ def _findings_by_rule_id() -> dict[str, Finding]:
     }
 
 
-_FINDINGS_BY_RULE = _findings_by_rule_id()
-
-
 def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:
-    assert _FINDINGS_BY_RULE.keys() >= _THRESHOLD_RULE_IDS
+    findings = _findings_by_rule_id()
+    assert findings.keys() >= _THRESHOLD_RULE_IDS
 
 
 @pytest.mark.parametrize(
@@ -119,7 +117,7 @@ def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:
     ids=lambda r: r,
 )
 def test_size_and_complexity_finding_has_standard_threshold_metadata(rule_id: str) -> None:
-    metadata = _FINDINGS_BY_RULE[rule_id].metadata
+    metadata = _findings_by_rule_id()[rule_id].metadata
     assert isinstance(metadata["measuredValue"], int | float)
     assert isinstance(metadata["threshold"], int | float)
     assert metadata["thresholdDirection"] in {"above", "below"}
@@ -134,7 +132,7 @@ def test_size_and_complexity_finding_has_standard_threshold_metadata(rule_id: st
 def test_size_and_complexity_finding_message_mentions_measured_and_threshold(
     rule_id: str,
 ) -> None:
-    finding = _FINDINGS_BY_RULE[rule_id]
+    finding = _findings_by_rule_id()[rule_id]
     metadata = finding.metadata
     assert _number_is_rendered(metadata["threshold"], finding.message)
     assert _number_is_rendered(metadata["measuredValue"], finding.message)

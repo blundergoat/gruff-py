@@ -57,7 +57,7 @@ from gruffpy.version import TOOL_NAME, VERSION
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 
-class GruffGroup(click.Group):
+class CliGroup(click.Group):
     """Root command group with the custom Symfony-style help screen."""
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -152,7 +152,7 @@ _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         ClickDecorator,
         click.group(
             name=TOOL_NAME,
-            cls=GruffGroup,
+            cls=CliGroup,
             context_settings={"help_option_names": ["-h", "--help"]},
             invoke_without_command=True,
         ),

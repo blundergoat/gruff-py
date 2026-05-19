@@ -305,12 +305,21 @@ rules:
   naming.module-name-mismatch:
     enabled: true
     options:
+      # Module stems whose name reflects role (entry point, server, parser,
+      # multi-function helper) rather than the single class they happen to
+      # host. The rule should not fire on these even though they contain
+      # exactly one public class with a different name.
       conventionalModuleNames:
       - constants
       - exceptions
       - helpers
       - protocols
       - types
+      - cli
+      - dashboard_server
+      - python_parser
+      - _halstead
+      - _secret_scanner_helper
   # Class-typed parameters should include the role of the object.
   naming.parameter-type-name:
     enabled: true
