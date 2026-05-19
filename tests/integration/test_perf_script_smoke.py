@@ -24,6 +24,28 @@ pytestmark = [
 ]
 
 
+def _run_perf_script_quick(json_out: Path, output_dir: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [
+            "bash",
+            str(SCRIPT_PATH),
+            "--quick",
+            "--repeat",
+            "3",
+            "--json",
+            str(json_out),
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        timeout=300,
+        check=False,
+    )
+
+
 @pytest.fixture(scope="module")
 def quick_run_payload(tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
     """Run the perf script once at --quick mode and return its parsed JSON payload.
@@ -36,25 +58,7 @@ def quick_run_payload(tmp_path_factory: pytest.TempPathFactory) -> dict[str, obj
     """
     tmp_path = tmp_path_factory.mktemp("perf_quick")
     json_out = tmp_path / "perf-results.json"
-    proc = subprocess.run(
-        [
-            "bash",
-            str(SCRIPT_PATH),
-            "--quick",
-            "--repeat",
-            "3",
-            "--json",
-            str(json_out),
-            "--output-dir",
-            str(tmp_path / "perf-out"),
-        ],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-        timeout=300,
-        check=False,
-    )
+    proc = _run_perf_script_quick(json_out, tmp_path / "perf-out")
     assert proc.returncode == 0, (
         f"perf script exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     )

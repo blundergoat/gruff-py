@@ -112,16 +112,23 @@ def test_registry_includes_all_naming_rules():
     assert expected.issubset(ids)
 
 
+_EXPECTED_NAMING_RULE_IDS_FIRED = {
+    "naming.confusing-name",
+    "naming.hungarian-notation",
+    "naming.generic-function",
+    "naming.boolean-prefix",
+    "naming.abbreviation",
+    "naming.identifier-quality",
+    "naming.short-variable",
+}
+
+
 def test_naming_rules_fire_on_fixture():
     findings = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    assert "naming.confusing-name" in rule_ids
-    assert "naming.hungarian-notation" in rule_ids
-    assert "naming.generic-function" in rule_ids
-    assert "naming.boolean-prefix" in rule_ids
-    assert "naming.abbreviation" in rule_ids
-    assert "naming.identifier-quality" in rule_ids
-    assert "naming.short-variable" in rule_ids
+    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), (
+        f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
+    )
 
 
 def test_module_name_mismatch_fires_when_filename_wrong():

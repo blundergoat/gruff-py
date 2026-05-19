@@ -42,11 +42,9 @@ def test_above_warning_below_error_emits_warning():
     findings = FileLengthRule().analyse(_make_unit(150), _ctx(warning=100, error=200))
     assert len(findings) == 1
     finding = findings[0]
-    assert finding.severity == Severity.WARNING
-    assert finding.rule_id == "size.file-length"
-    assert finding.metadata["lines"] == 150
-    assert finding.metadata["threshold"] == 100
-    assert finding.metadata["thresholdType"] == "warning"
+    assert (finding.severity, finding.rule_id) == (Severity.WARNING, "size.file-length")
+    relevant_metadata = {k: finding.metadata[k] for k in ("lines", "threshold", "thresholdType")}
+    assert relevant_metadata == {"lines": 150, "threshold": 100, "thresholdType": "warning"}
 
 
 def test_above_error_emits_error():

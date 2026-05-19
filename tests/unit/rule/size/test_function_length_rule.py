@@ -44,11 +44,9 @@ def test_above_warning_below_error_emits_warning():
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
-    assert f.symbol == "f"
-    assert f.metadata["lines"] == 11
-    assert f.metadata["threshold"] == 5
-    assert f.metadata["thresholdType"] == "warning"
+    assert (f.severity, f.symbol) == (Severity.WARNING, "f")
+    relevant_metadata = {k: f.metadata[k] for k in ("lines", "threshold", "thresholdType")}
+    assert relevant_metadata == {"lines": 11, "threshold": 5, "thresholdType": "warning"}
 
 
 def test_above_error_emits_error():

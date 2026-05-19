@@ -1,58 +1,96 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
     render_metric_calibration_text,
 )
 
+_TWO_FUNCTION_SAMPLE = (
+    "def simple(value):\n"
+    "    return value\n"
+    "\n"
+    "def branchy(value):\n"
+    "    if value > 0 and value < 10:\n"
+    "        return value + 1\n"
+    "    return value - 1\n"
+)
 
-def test_metric_calibration_report_summarises_function_metrics(tmp_path: Path) -> None:
+
+def _two_function_report(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text(
-        "\n".join(
-            [
-                "def simple(value):",
-                "    return value",
-                "",
-                "def branchy(value):",
-                "    if value > 0 and value < 10:",
-                "        return value + 1",
-                "    return value - 1",
-            ]
-        )
-        + "\n"
-    )
-
-    report = build_metric_calibration_report(
+    (src / "sample.py").write_text(_TWO_FUNCTION_SAMPLE)
+    return build_metric_calibration_report(
         paths=("src",),
         config_path=None,
         no_config=True,
         include_ignored=False,
         project_root=tmp_path,
     )
-    payload = metric_calibration_payload(report, top=1)
 
-    assert report.files_discovered == 1
-    assert report.files_parsed == 1
-    assert report.function_count == 2
-    assert report.has_input_errors() is False
 
-    metrics = {metric["name"]: metric for metric in payload["metrics"]}  # type: ignore[index]
-    assert metrics["cyclomatic"]["min"] == 1
-    assert metrics["cyclomatic"]["p50"] == 2
-    assert metrics["cyclomatic"]["p99"] == 2.98
-    assert metrics["cyclomatic"]["max"] == 3
+@pytest.fixture
+def two_function_payload(tmp_path: Path) -> dict[str, object]:
+    """Return ``metric_calibration_payload`` for a 2-function sample project."""
+    return metric_calibration_payload(_two_function_report(tmp_path), top=1)
+
+
+def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) -> None:
+    report = _two_function_report(tmp_path)
+    assert (
+        report.files_discovered,
+        report.files_parsed,
+        report.function_count,
+        report.has_input_errors(),
+    ) == (1, 1, 2, False)
+
+
+def test_metric_calibration_payload_cyclomatic_distribution(
+    two_function_payload: dict[str, object],
+) -> None:
+    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+    cyclomatic = metrics["cyclomatic"]
+    assert (cyclomatic["min"], cyclomatic["p50"], cyclomatic["p99"], cyclomatic["max"]) == (
+        1,
+        2,
+        2.98,
+        3,
+    )
+
+
+def test_metric_calibration_payload_npath_count(
+    two_function_payload: dict[str, object],
+) -> None:
+    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
     assert metrics["npath"]["count"] == 2
-    assert metrics["halsteadVolume"]["threshold"] == 180
-    assert metrics["halsteadVolume"]["thresholdSeverity"] == "warning"
-    assert "warningThreshold" not in metrics["halsteadVolume"]
-    assert "errorThreshold" not in metrics["halsteadVolume"]
+
+
+def test_metric_calibration_payload_collapses_single_threshold_rules(
+    two_function_payload: dict[str, object],
+) -> None:
+    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
+    hv = metrics["halsteadVolume"]
+    assert hv["threshold"] == 180
+    assert hv["thresholdSeverity"] == "warning"
+    assert "warningThreshold" not in hv
+    assert "errorThreshold" not in hv
+
+
+def test_metric_calibration_payload_maintainability_uses_below_direction(
+    two_function_payload: dict[str, object],
+) -> None:
+    metrics = {m["name"]: m for m in two_function_payload["metrics"]}  # type: ignore[index]
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
-    top = payload["top"]  # type: ignore[index]
+
+def test_metric_calibration_payload_top_cyclomatic_names_branchy(
+    two_function_payload: dict[str, object],
+) -> None:
+    top = two_function_payload["top"]  # type: ignore[index]
     assert top["cyclomatic"][0]["symbol"] == "branchy"  # type: ignore[index]
 
 

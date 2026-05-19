@@ -18,72 +18,98 @@ def test_plain_summary_only():
     assert parsed.raises == ()
 
 
+_GOOGLE_TEXT = (
+    "Summary line.\n\n"
+    "Args:\n"
+    "    x (int): The x value.\n"
+    "    y: The y value.\n\n"
+    "Returns:\n"
+    "    str: A description.\n\n"
+    "Raises:\n"
+    "    ValueError: When x is negative.\n"
+)
+
+
 def test_google_style_detected():
-    text = (
-        "Summary line.\n\n"
-        "Args:\n"
-        "    x (int): The x value.\n"
-        "    y: The y value.\n\n"
-        "Returns:\n"
-        "    str: A description.\n\n"
-        "Raises:\n"
-        "    ValueError: When x is negative.\n"
-    )
-    parsed = parse_docstring(text)
+    parsed = parse_docstring(_GOOGLE_TEXT)
     assert parsed is not None
-    assert parsed.style is DocstringStyle.GOOGLE
-    assert parsed.summary == "Summary line."
+    assert (parsed.style, parsed.summary) == (DocstringStyle.GOOGLE, "Summary line.")
+
+
+def test_google_style_extracts_params():
+    parsed = parse_docstring(_GOOGLE_TEXT)
+    assert parsed is not None
     assert [(p.name, p.type_hint, p.description) for p in parsed.params] == [
         ("x", "int", "The x value."),
         ("y", None, "The y value."),
     ]
+
+
+def test_google_style_extracts_returns():
+    parsed = parse_docstring(_GOOGLE_TEXT)
+    assert parsed is not None
     assert parsed.returns is not None
-    assert parsed.returns.type_hint == "str"
-    assert parsed.returns.description == "A description."
+    assert (parsed.returns.type_hint, parsed.returns.description) == ("str", "A description.")
+
+
+def test_google_style_extracts_raises():
+    parsed = parse_docstring(_GOOGLE_TEXT)
+    assert parsed is not None
     assert [(r.name, r.description) for r in parsed.raises] == [
         ("ValueError", "When x is negative."),
     ]
 
 
+_NUMPY_TEXT = (
+    "Summary.\n\n"
+    "Parameters\n"
+    "----------\n"
+    "x : int\n"
+    "    The x value.\n"
+    "y\n"
+    "    The y value.\n\n"
+    "Returns\n"
+    "-------\n"
+    "str\n"
+    "    A description.\n"
+)
+
+
 def test_numpy_style_detected():
-    text = (
-        "Summary.\n\n"
-        "Parameters\n"
-        "----------\n"
-        "x : int\n"
-        "    The x value.\n"
-        "y\n"
-        "    The y value.\n\n"
-        "Returns\n"
-        "-------\n"
-        "str\n"
-        "    A description.\n"
-    )
-    parsed = parse_docstring(text)
+    parsed = parse_docstring(_NUMPY_TEXT)
     assert parsed is not None
-    assert parsed.style is DocstringStyle.NUMPY
-    assert parsed.summary == "Summary."
-    names = [p.name for p in parsed.params]
-    assert names == ["x", "y"]
+    assert (parsed.style, parsed.summary) == (DocstringStyle.NUMPY, "Summary.")
+
+
+def test_numpy_style_extracts_params_and_returns():
+    parsed = parse_docstring(_NUMPY_TEXT)
+    assert parsed is not None
+    assert [p.name for p in parsed.params] == ["x", "y"]
     assert parsed.returns is not None
     assert parsed.returns.description == "A description."
 
 
+_SPHINX_TEXT = (
+    "Summary.\n\n"
+    ":param x: The x value.\n"
+    ":type x: int\n"
+    ":param y: The y value.\n"
+    ":returns: A description.\n"
+    ":rtype: str\n"
+    ":raises ValueError: When x is negative.\n"
+)
+
+
 def test_sphinx_rest_style_detected():
-    text = (
-        "Summary.\n\n"
-        ":param x: The x value.\n"
-        ":type x: int\n"
-        ":param y: The y value.\n"
-        ":returns: A description.\n"
-        ":rtype: str\n"
-        ":raises ValueError: When x is negative.\n"
-    )
-    parsed = parse_docstring(text)
+    parsed = parse_docstring(_SPHINX_TEXT)
     assert parsed is not None
     assert parsed.style is DocstringStyle.SPHINX
-    names = {p.name for p in parsed.params}
-    assert names == {"x", "y"}
+
+
+def test_sphinx_rest_style_extracts_params_returns_and_raises():
+    parsed = parse_docstring(_SPHINX_TEXT)
+    assert parsed is not None
+    assert {p.name for p in parsed.params} == {"x", "y"}
     assert parsed.returns is not None
     assert parsed.returns.description == "A description."
     assert any(r.name == "ValueError" for r in parsed.raises)

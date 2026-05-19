@@ -73,22 +73,36 @@ def test_explicit_toml_path_supported(tmp_path: Path):
     assert config.rules["size.file-length"].thresholds["warning"] == 222
 
 
-def test_threshold_and_severity_override_warning_error_rule(tmp_path: Path):
+_HIGH_THRESHOLD_BOUNDARY = 900
+_LOW_THRESHOLD_BOUNDARY = 60
+
+
+def _settings_with_high_threshold_override(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "rules:\n  size.file-length:\n    threshold: 900\n    severity: error\n"
+        f"rules:\n  size.file-length:\n    threshold: {_HIGH_THRESHOLD_BOUNDARY}\n"
+        "    severity: error\n"
     )
-    loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = ConfigLoader(tmp_path, _defaults()).load()
+    return config.rule_settings("size.file-length")
 
-    config, _ = loader.load()
-    settings = config.rule_settings("size.file-length")
 
+def test_severity_threshold_override_stores_value(tmp_path: Path):
+    settings = _settings_with_high_threshold_override(tmp_path)
     assert settings.severity_threshold is not None
-    assert settings.severity_threshold.threshold == 900
+    assert settings.severity_threshold.threshold == _HIGH_THRESHOLD_BOUNDARY
     assert settings.severity_threshold.severity.value == "error"
-    assert settings.high_value_threshold_match(900) is None
-    match = settings.high_value_threshold_match(901)
+
+
+def test_severity_threshold_override_does_not_match_at_boundary(tmp_path: Path):
+    settings = _settings_with_high_threshold_override(tmp_path)
+    assert settings.high_value_threshold_match(_HIGH_THRESHOLD_BOUNDARY) is None
+
+
+def test_severity_threshold_override_matches_just_above_boundary(tmp_path: Path):
+    settings = _settings_with_high_threshold_override(tmp_path)
+    match = settings.high_value_threshold_match(_HIGH_THRESHOLD_BOUNDARY + 1)
     assert match is not None
-    assert match.threshold == 900
+    assert match.threshold == _HIGH_THRESHOLD_BOUNDARY
     assert match.severity.value == "error"
 
 
@@ -106,19 +120,25 @@ def test_threshold_and_warning_severity_supported(tmp_path: Path):
     assert match.severity.value == "warning"
 
 
-def test_threshold_and_severity_override_low_value_rule(tmp_path: Path):
+def _settings_with_low_threshold_override(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "rules:\n  complexity.maintainability-index:\n    threshold: 60\n    severity: error\n"
+        f"rules:\n  complexity.maintainability-index:\n    threshold: {_LOW_THRESHOLD_BOUNDARY}\n"
+        "    severity: error\n"
     )
-    loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = ConfigLoader(tmp_path, _defaults()).load()
+    return config.rule_settings("complexity.maintainability-index")
 
-    config, _ = loader.load()
-    settings = config.rule_settings("complexity.maintainability-index")
 
-    assert settings.low_value_threshold_match(60) is None
-    match = settings.low_value_threshold_match(59)
+def test_low_value_threshold_override_does_not_match_at_boundary(tmp_path: Path):
+    settings = _settings_with_low_threshold_override(tmp_path)
+    assert settings.low_value_threshold_match(_LOW_THRESHOLD_BOUNDARY) is None
+
+
+def test_low_value_threshold_override_matches_just_below_boundary(tmp_path: Path):
+    settings = _settings_with_low_threshold_override(tmp_path)
+    match = settings.low_value_threshold_match(_LOW_THRESHOLD_BOUNDARY - 1)
     assert match is not None
-    assert match.threshold == 60
+    assert match.threshold == _LOW_THRESHOLD_BOUNDARY
     assert match.severity.value == "error"
 
 

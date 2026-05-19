@@ -7,6 +7,23 @@ from urllib.request import urlopen
 
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
 
+_EXPECTED_SHELL_SUBSTRINGS = (
+    "gruff-py dashboard",
+    "controls-toggle",
+    "controls-panel",
+    "report-frame",
+    "Project root",
+)
+_EXPECTED_SCAN_SUBSTRINGS = (
+    ".paper",
+    "gruff-dashboard-meta",
+    "gruff-py analyse --format html --fail-on none -- src",
+)
+_EXPECTED_INTERACTIVE_SCAN_SUBSTRINGS = (
+    'class="finding-filters"',
+    "--report-interactive",
+)
+
 
 def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
     src = tmp_path / "src"
@@ -20,16 +37,13 @@ def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
         interactive_scan = _fetch(base_url + "/scan?reportInteractive=1")
 
     assert health == "ok\n"
-    assert "gruff-py dashboard" in shell
-    assert "controls-toggle" in shell
-    assert "controls-panel" in shell
-    assert "report-frame" in shell
-    assert "Project root" in shell
-    assert ".paper" in scan
-    assert "gruff-dashboard-meta" in scan
-    assert "gruff-py analyse --format html --fail-on none -- src" in scan
-    assert 'class="finding-filters"' in interactive_scan
-    assert "--report-interactive" in interactive_scan
+    assert _missing(shell, _EXPECTED_SHELL_SUBSTRINGS) == []
+    assert _missing(scan, _EXPECTED_SCAN_SUBSTRINGS) == []
+    assert _missing(interactive_scan, _EXPECTED_INTERACTIVE_SCAN_SUBSTRINGS) == []
+
+
+def _missing(body: str, expected: tuple[str, ...]) -> list[str]:
+    return [s for s in expected if s not in body]
 
 
 def test_dashboard_scan_returns_error_html_for_invalid_project(tmp_path: Path):
