@@ -1,5 +1,5 @@
-# CLAUDE.md - v1.6.4 (2026-05-13)
-gruff-py - Python CLI quality analyser built with Click, uv, ruff, mypy, and pytest. Primary invariant: `gruff.analysis.v1`, `gruff.baseline.v1`, and finding fingerprints stay compatible with gruff-php.
+# CLAUDE.md - v1.7.0 (2026-05-21)
+gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff-py.analysis.v1`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
 Workspace boundary: this checkout is the selected target project; GOAT Flow package files under `node_modules/@blundergoat/goat-flow/` are installer references, not project instruction content to copy verbatim.
 
@@ -9,12 +9,13 @@ Workspace boundary: this checkout is the selected target project; GOAT Flow pack
 3. `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`.
 4. `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`.
 5. Skill files loaded on demand from `.claude/skills/`.
+6. Peer instructions such as `AGENTS.md` for cross-agent context only.
 
 ## Autonomy Tiers
-**Always:** read relevant `src/gruff/`, `tests/`, `pyproject.toml`, and `.goat-flow/` files before changes; declare scope before writes; run focused checks and the required verification for changed surfaces.
+**Always:** read relevant `src/gruffpy/`, `tests/`, `docs/`, `pyproject.toml`, and `.goat-flow/` files before changes; declare scope before writes; run focused checks and the required verification for changed surfaces.
 **Ask First:** before touching risky boundaries, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
-Ask First boundaries: cross-implementation contracts in `src/gruff/finding/fingerprint.py`, `src/gruff/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit-code behaviour in `src/gruff/cli.py`, `src/gruff/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, and `package-lock.json`; CI/hooks in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.claude/settings.json`, and `.claude/hooks/`; public rule IDs, schema keys, or output formats across `src/gruff/rule/`, `src/gruff/finding/`, and `src/gruff/scoring/`.
-**Never:** edit secrets or `.env*` files; commit, push, publish, or delete user work unless asked; use `make lint` as a verification command unless source auto-fix is intended; invent compatibility claims without tests or code evidence.
+Ask First boundaries: cross-implementation contracts in `src/gruffpy/finding/fingerprint.py`, `src/gruffpy/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit-code behaviour in `src/gruffpy/cli.py`, `src/gruffpy/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, `package-lock.json`, and `docs/RELEASING.md`; CI/hooks/agent config in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.claude/settings.json`, `.claude/hooks/`, and peer agent files; public rule IDs, schema keys, or output formats across `src/gruffpy/rule/`, `src/gruffpy/finding/`, and `src/gruffpy/scoring/`.
+**Never:** edit secrets or `.env*` files; commit, push, publish, or delete user work, or modify `AGENTS.md` unless explicitly asked; use `make lint` as a verification command unless source auto-fix is intended; invent compatibility claims without tests or code evidence.
 
 ## Hard Rules
 - If a file exists, modify it in place; never create `_modified`, `_new`, `_backup`, or `_v2` variants.
@@ -30,7 +31,7 @@ Ask First boundaries: cross-implementation contracts in `src/gruff/finding/finge
 - Learning loop, grep before every change: `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`.
 - Architecture and orientation: `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`.
 - Skill reference (meta): `.goat-flow/skill-reference/`; read before changing skill contracts.
-- Tool playbooks: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`; read before declaring a tool unavailable.
+- Tool playbooks: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`, `.goat-flow/skill-playbooks/skill-quality-testing.md`; read before declaring a tool unavailable.
 
 ## Essential Commands
 ```bash
@@ -39,7 +40,7 @@ uv run ruff format --check src tests
 uv run mypy src
 uv run pytest
 uv build
-uv run gruff analyse src/
+uv run gruff-py analyse src/
 ```
 Use `make check` only when auto-fixing via `make lint` is acceptable; CI uses non-mutating `ruff check`, `ruff format --check`, `mypy`, and `pytest`.
 
@@ -56,7 +57,15 @@ Declare intent, complexity tier, mode, files allowed to change, non-goals, and b
 Declare `State: [MODE] | Goal: [one line] | Exit: [condition]`. Mode must be Plan, Implement, Explain, Debug, or Review.
 
 ### VERIFY
-Run required checks for changed files. Check cross-references after renames. Tick milestone checkboxes immediately. Do not claim checks passed without the literal pass/fail line from this session. Stop the line when tests break, builds fail, or behaviour regresses. If VERIFY caught a failure or corrected course, update the learning loop before DoD.
+Run required checks for changed files. Run `shellcheck` on changed shell scripts. Check cross-references after renames. Tick milestone checkboxes immediately. Do not claim checks passed without the literal pass/fail line from this session. Stop the line when tests break, builds fail, or behaviour regresses. If VERIFY caught a failure or corrected course, update the learning loop before DoD.
+
+**Hallucination red-flags:**
+1. **Checks passed.** Do not claim tests pass or any check passed (shellcheck, typecheck, preflight, audit) without showing the literal pass/fail line copied verbatim from this session's run. Paraphrase, cached output, or prior-session results do not count.
+2. **Completion.** Do not claim completion without listing the specific files changed in this turn. If no files were changed, say so explicitly.
+3. **Fix verification.** Do not claim a fix works without running the reproduction steps that originally demonstrated the bug. "Looks correct" is not verification.
+4. **Hedged claims.** Do not use "should work", "probably fine", "looks good" as verification. These are guesses, not evidence.
+
+Rationalisations to reject: see `.goat-flow/skill-reference/skill-preamble.md` for the full excuse-vs-reality table.
 
 ## Definition of Done
 - Relevant lint, typecheck, tests, or audits passed with literal output captured from this session.
@@ -69,18 +78,23 @@ Run required checks for changed files. Check cross-references after renames. Tic
 ## Artifact Routing
 Requests to add durable project knowledge route to `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/`, or `.goat-flow/patterns/` after reading that directory's `README.md`. Runtime code, hooks, and agent config changes stay separate from documentation artifacts.
 
+## Quality Bar
+Every line in this file must fit one of: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge belongs in cold-path files under `.goat-flow/`. Strict constraints state whether they are prose-only or mechanically enforced by hooks/CI.
+
 ## Router Table
 | Resource | Path |
 |----------|------|
 | Project instructions | `CLAUDE.md` |
+| Peer instructions | `AGENTS.md` |
 | Learning loop | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/` |
 | Skill reference (meta) | `.goat-flow/skill-reference/` - read before changing skill contracts |
 | Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-playbooks/` - read BEFORE declaring a tool unavailable |
 | Architecture | `.goat-flow/architecture.md` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Claude skills/config/hooks | `.claude/skills/`, `.claude/settings.json`, `.claude/hooks/` |
-| Runtime source | `src/gruff/` |
+| Runtime source | `src/gruffpy/` |
 | Tests | `tests/` |
+| Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json`, `package-lock.json` |
 | CI and commit guidance | `.github/workflows/ci.yml`, `.github/git-commit-instructions.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/`, `.goat-flow/scratchpad/` |
