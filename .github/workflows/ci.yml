@@ -25,16 +25,16 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install project
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --all-extras --dev --python ${{ matrix.python-version }}
 
       - name: Lint
-        run: ruff check src tests
+        run: uv run ruff check src tests
 
       - name: Format check
-        run: ruff format --check src tests
+        run: uv run ruff format --check src tests
 
       - name: Typecheck
-        run: mypy src
+        run: uv run mypy src
 
       - name: Test
-        run: pytest
+        run: uv run pytest

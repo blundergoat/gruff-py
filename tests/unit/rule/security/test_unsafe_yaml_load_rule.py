@@ -46,6 +46,28 @@ def test_yaml_load_with_safe_loader_skipped():
     assert UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx()) == []
 
 
+def test_yaml_load_with_positional_safe_loader_skipped():
+    src = "import yaml\nyaml.load(data, yaml.SafeLoader)\n"
+    assert UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_yaml_load_with_positional_unsafe_loader_emits():
+    src = "import yaml\nyaml.load(data, yaml.Loader)\n"
+    findings = UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_yaml_load_with_indirect_unsafe_loader_emits():
+    src = "import yaml\nloader = yaml.Loader\nyaml.load(data, Loader=loader)\n"
+    findings = UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_yaml_load_with_indirect_safe_loader_skipped():
+    src = "import yaml\nloader = yaml.SafeLoader\nyaml.load(data, Loader=loader)\n"
+    assert UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx()) == []
+
+
 def test_unknown_load_skipped():
     src = "load(data)\n"
     assert UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx()) == []

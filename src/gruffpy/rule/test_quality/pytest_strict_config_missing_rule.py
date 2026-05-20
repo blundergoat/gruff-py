@@ -4,8 +4,6 @@ Fires at most once per analyse run, gated on at least one test-shaped unit
 being in scope (no point flagging configuration on a non-test analyse).
 """
 
-from pathlib import Path
-
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -73,7 +71,7 @@ class PytestStrictConfigMissingRule(Rule):
                 message=(
                     "Pytest config missing strict flags (`--strict-config` or `--strict-markers`)."
                 ),
-                file_path=str(Path(context.project_root) / "pyproject.toml"),
+                file_path="pyproject.toml",
                 line=None,
                 severity=definition.default_severity,
                 pillar=definition.pillar,

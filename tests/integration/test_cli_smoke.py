@@ -380,6 +380,35 @@ def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.Mo
     assert {finding["severity"] for finding in payload["findings"]} == {"error"}
 
 
+def test_cli_analyse_accepts_comma_separated_pillar_filters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "long.py").write_text("\n".join(f"x{i} = {i}" for i in range(1001)) + "\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--include-pillar",
+            "size,documentation",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["run"]["filters"]["includePillars"] == ["size", "documentation"]
+
+
 def test_cli_applies_configured_secret_preview_allowlist(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

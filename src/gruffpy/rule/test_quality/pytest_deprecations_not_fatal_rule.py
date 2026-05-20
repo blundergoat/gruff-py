@@ -5,8 +5,6 @@ silently and breaks on the eventual removal. The rule wants
 ``filterwarnings = ["error::DeprecationWarning"]`` or equivalent.
 """
 
-from pathlib import Path
-
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -71,7 +69,7 @@ class PytestDeprecationsNotFatalRule(Rule):
             Finding(
                 rule_id=definition.id,
                 message=("Pytest config doesn't escalate DeprecationWarning to error."),
-                file_path=str(Path(context.project_root) / "pyproject.toml"),
+                file_path="pyproject.toml",
                 line=None,
                 severity=definition.default_severity,
                 pillar=definition.pillar,

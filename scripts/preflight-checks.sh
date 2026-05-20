@@ -40,7 +40,20 @@ TOTAL=0
 PASSED=0
 FAILED=0
 FAILURES=()
-START_TIME="$(date +%s%N)"
+
+now_ns() {
+  local timestamp
+
+  timestamp="$(date +%s%N)"
+  if [[ "$timestamp" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$timestamp"
+    return
+  fi
+
+  uv run python -c 'import time; print(time.monotonic_ns())'
+}
+
+START_TIME="$(now_ns)"
 
 usage() {
   cat <<'USAGE'
@@ -81,7 +94,7 @@ elapsed_since() {
   local remainder
   local frac
 
-  finished_at="$(date +%s%N)"
+  finished_at="$(now_ns)"
   elapsed_ms=$(((finished_at - started_at) / 1000000))
 
   if ((elapsed_ms < 1000)); then
@@ -157,7 +170,7 @@ run_step() {
   local elapsed
 
   step "$label"
-  started_at="$(date +%s%N)"
+  started_at="$(now_ns)"
   output=$("$@" 2>&1)
   status=$?
   elapsed="$(elapsed_since "$started_at")"
@@ -185,7 +198,7 @@ run_step_in() {
   local elapsed
 
   step "$label"
-  started_at="$(date +%s%N)"
+  started_at="$(now_ns)"
   output=$(cd "$dir" && "$@" 2>&1)
   status=$?
   elapsed="$(elapsed_since "$started_at")"

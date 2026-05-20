@@ -43,6 +43,7 @@ def test_strict_config_missing_emits_when_pytest_block_lacks_flags(tmp_path: Pat
     )
     findings = PytestStrictConfigMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
 
 
 def test_strict_config_present_skips(tmp_path: Path):
@@ -85,6 +86,7 @@ def test_deprecations_not_fatal_emits_when_filterwarnings_silent(tmp_path: Path)
     )
     findings = PytestDeprecationsNotFatalRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
 
 
 def test_deprecations_not_fatal_skipped_with_filterwarnings(tmp_path: Path):
@@ -102,6 +104,19 @@ def test_coverage_source_missing_emits(tmp_path: Path):
     )
     findings = PytestCoverageSourceMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
+
+
+def test_project_config_rules_skip_when_pyproject_has_no_pytest_config(tmp_path: Path):
+    ctx = _ctx_with_pyproject(
+        tmp_path,
+        '[tool.coverage.run]\nsource = ["my_package"]\n',
+    )
+    unit = make_unit(_TEST_FIXTURE)
+
+    assert PytestStrictConfigMissingRule().analyse(unit, ctx) == []
+    assert PytestDeprecationsNotFatalRule().analyse(unit, ctx) == []
+    assert PytestCoverageSourceMissingRule().analyse(unit, ctx) == []
 
 
 def test_coverage_source_present_skips(tmp_path: Path):

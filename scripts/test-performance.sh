@@ -68,6 +68,16 @@ if (( REPEAT < 3 )); then
   exit 2
 fi
 
+if [[ -n "$BASELINE_PATH" && -n "$UPDATE_BASELINE_PATH" ]]; then
+  echo "error: --baseline cannot be combined with --update-baseline" >&2
+  exit 2
+fi
+
+if [[ -n "$BASELINE_PATH" && ! -f "$BASELINE_PATH" ]]; then
+  echo "error: --baseline path does not exist: $BASELINE_PATH" >&2
+  exit 2
+fi
+
 # --- environment probe -------------------------------------------------------
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
@@ -112,6 +122,23 @@ json_argv() {
   uv run python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"
 }
 
+date_has_fractional_seconds() {
+  [[ "$(date +%s.%N)" =~ ^[0-9]+\.[0-9]+$ ]]
+}
+
+DATE_HAS_FRACTIONAL_SECONDS=0
+if date_has_fractional_seconds; then
+  DATE_HAS_FRACTIONAL_SECONDS=1
+fi
+
+now_seconds() {
+  if [[ "$DATE_HAS_FRACTIONAL_SECONDS" == "1" ]]; then
+    date +%s.%N
+  else
+    uv run python -c 'import time; print(f"{time.perf_counter():.9f}")'
+  fi
+}
+
 # Compute median/p95/min/max/mean over a whitespace-separated list of floats.
 # Outputs five floats on one line.
 stats5() {
@@ -129,8 +156,8 @@ PY
 }
 
 # Run one workload N times. Echo space-separated wall times; capture peak RSS
-# (kilobytes) and exit code of the LAST run via $TIME_BIN if available, else
-# empty RSS plus last exit code.
+# (kilobytes) from the final timed run when available, and preserve the first
+# non-zero exit code from any repetition.
 # $1 = label, rest = command tokens.
 run_workload() {
   local label="$1"; shift
@@ -143,25 +170,28 @@ run_workload() {
     local t_start t_end
     local cmd_status=0
     if [[ -n "$TIME_BIN" && $i -eq REPEAT ]]; then
-      t_start="$(date +%s.%N)"
+      t_start="$(now_seconds)"
       set +e
       "$TIME_BIN" -v -o "$last_log" "$@" >/dev/null 2>&1
       cmd_status=$?
       set -e
-      t_end="$(date +%s.%N)"
+      t_end="$(now_seconds)"
       rss_kb="$(awk -F': ' '/Maximum resident set size/ {print $2}' "$last_log" 2>/dev/null || true)"
     else
-      t_start="$(date +%s.%N)"
+      t_start="$(now_seconds)"
       set +e
       "$@" >/dev/null 2>&1
       cmd_status=$?
       set -e
-      t_end="$(date +%s.%N)"
+      t_end="$(now_seconds)"
     fi
-    exit_code="$cmd_status"
     local dt
     dt="$(awk -v a="$t_start" -v b="$t_end" 'BEGIN{printf "%.4f", b - a}')"
     times+=("$dt")
+    if [[ "$cmd_status" != "0" ]]; then
+      exit_code="$cmd_status"
+      break
+    fi
   done
 
   echo "${times[*]}|$rss_kb|$exit_code"
@@ -222,24 +252,24 @@ PY
 # Each entry: "label|cmd tokens space-separated"
 WORKLOADS_QUICK=(
   "cold-start|uv run gruff-py --version"
-  "analyse-src-text|uv run gruff-py analyse src/"
+  "analyse-src-text|uv run gruff-py analyse --fail-on none src/"
 )
 
 WORKLOADS_FULL=(
   "cold-start|uv run gruff-py --version"
   "help|uv run gruff-py --help"
   "list-rules|uv run gruff-py list-rules --format json"
-  "analyse-src-text|uv run gruff-py analyse src/"
-  "analyse-src-json|uv run gruff-py analyse src/ --format json"
-  "analyse-tests|uv run gruff-py analyse tests/"
-  "analyse-both|uv run gruff-py analyse src/ tests/"
+  "analyse-src-text|uv run gruff-py analyse --fail-on none src/"
+  "analyse-src-json|uv run gruff-py analyse --fail-on none src/ --format json"
+  "analyse-tests|uv run gruff-py analyse --fail-on none tests/"
+  "analyse-both|uv run gruff-py analyse --fail-on none src/ tests/"
   "metric-calibration|uv run gruff-py metric-calibration src/"
   "summary|uv run gruff-py summary src/"
-  "report-html|uv run gruff-py report src/ --format html"
+  "report-html|uv run gruff-py report --fail-on none src/ --format html"
 )
 
 # --- run ---------------------------------------------------------------------
-START_TS="$(date -Iseconds)"
+START_TS="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 if [[ "$QUICK" == "1" ]]; then
   WORKLOADS=("${WORKLOADS_QUICK[@]}")
@@ -255,11 +285,11 @@ if [[ "$QUICK" != "1" ]]; then
   generate_synthetic 1000 "$SYNTHETIC_ROOT/proj1000"
   # Synthetic fixtures live under $TMPDIR, which is in gruff-py's default
   # ignored-directories list; use --include-ignored so the files are seen.
-  WORKLOADS+=("synthetic-100|uv run gruff-py analyse --include-ignored $SYNTHETIC_ROOT/proj100")
-  WORKLOADS+=("synthetic-1000|uv run gruff-py analyse --include-ignored $SYNTHETIC_ROOT/proj1000")
+  WORKLOADS+=("synthetic-100|uv run gruff-py analyse --fail-on none --include-ignored $SYNTHETIC_ROOT/proj100")
+  WORKLOADS+=("synthetic-1000|uv run gruff-py analyse --fail-on none --include-ignored $SYNTHETIC_ROOT/proj1000")
   if [[ "$SCALE" == "large" ]]; then
     generate_synthetic 10000 "$SYNTHETIC_ROOT/proj10000"
-    WORKLOADS+=("synthetic-10000|uv run gruff-py analyse --include-ignored $SYNTHETIC_ROOT/proj10000")
+    WORKLOADS+=("synthetic-10000|uv run gruff-py analyse --fail-on none --include-ignored $SYNTHETIC_ROOT/proj10000")
   fi
 fi
 
@@ -303,6 +333,11 @@ for entry in "${WORKLOADS[@]}"; do
   fi
   printf "  %-22s %9ss %9ss %9ss %12s %8s\n" "$label" "$median" "$p95" "$mn" "$rss_disp" "$status_disp"
 
+  if [[ "$exit_code" != "0" ]]; then
+    echo "error: workload '$label' failed with exit $exit_code" >&2
+    exit 2
+  fi
+
   # Stash a JSON-ready line.
   RESULT_LINES+=("{\"name\":$(json_escape "$label"),\"command\":$(json_argv "${cmd_tokens[@]}"),\"median\":$median,\"p95\":$p95,\"min\":$mn,\"max\":$mx,\"mean\":$mean,\"peakRssKb\":${rss_kb:-null},\"exitCode\":$exit_code}")
 done
@@ -314,7 +349,7 @@ if [[ "$QUICK" != "1" ]]; then
   echo
   echo "Capturing cProfile attribution for analyse-src ..."
   PROFILE_OUT="$OUTPUT_DIR/analyse-src.prof"
-  uv run python -m cProfile -o "$PROFILE_OUT" -m gruffpy analyse src/ >/dev/null 2>&1 || true
+  uv run python -m cProfile -o "$PROFILE_OUT" -m gruffpy analyse --fail-on none src/ >/dev/null 2>&1 || true
   if [[ -f "$PROFILE_OUT" ]]; then
     PROFILE_LINES_JSON="$(uv run python - "$PROFILE_OUT" <<'PY'
 import json, pstats, sys
@@ -394,19 +429,20 @@ fi
 # --- regression check --------------------------------------------------------
 REGRESSIONS_JSON="[]"
 REGRESSED=0
-if [[ -n "$BASELINE_PATH" && -f "$BASELINE_PATH" ]]; then
+RESULTS_JOINED="$(IFS=,; echo "${RESULT_LINES[*]}")"
+if [[ -n "$BASELINE_PATH" ]]; then
   echo
   echo "Comparing to baseline: $BASELINE_PATH"
-  REGRESSION_OUTPUT="$(uv run python - "$BASELINE_PATH" "$REGRESSION_PCT" "$REGRESSION_ABS_S" <<PY
+  REGRESSION_OUTPUT="$(uv run python - "$BASELINE_PATH" "$REGRESSION_PCT" "$REGRESSION_ABS_S" "$RESULTS_JOINED" <<'PY'
 import json, sys
 baseline_path = sys.argv[1]
 pct = float(sys.argv[2]) / 100.0
 abs_s = float(sys.argv[3])
+current_json = sys.argv[4]
 with open(baseline_path) as fh:
     base = json.load(fh)
 base_by_name = {w["name"]: w for w in base.get("workloads", [])}
-current = []
-$(printf '%s\n' "${RESULT_LINES[@]}" | sed 's/^/current.append(/; s/$/)/')
+current = json.loads(f"[{current_json}]") if current_json else []
 regressions = []
 for w in current:
     b = base_by_name.get(w["name"])
@@ -414,8 +450,9 @@ for w in current:
         continue
     bm, cm = float(b["median"]), float(w["median"])
     delta = cm - bm
-    if delta > abs_s and delta / max(bm, 0.001) > pct:
-        regressions.append({"name": w["name"], "baselineMedian": bm, "currentMedian": cm, "deltaSeconds": round(delta, 3), "deltaPct": round(100 * delta / bm, 1)})
+    denominator = max(bm, 0.001)
+    if delta > abs_s and delta / denominator > pct:
+        regressions.append({"name": w["name"], "baselineMedian": bm, "currentMedian": cm, "deltaSeconds": round(delta, 3), "deltaPct": round(100 * delta / denominator, 1)})
 print(json.dumps(regressions))
 PY
 )"
@@ -427,13 +464,9 @@ PY
   else
     echo "  no regressions."
   fi
-elif [[ -n "$BASELINE_PATH" ]]; then
-  echo
-  echo "warning: --baseline path does not exist: $BASELINE_PATH" >&2
 fi
 
 # --- JSON output -------------------------------------------------------------
-RESULTS_JOINED="$(IFS=,; echo "${RESULT_LINES[*]}")"
 JSON_DOC="$(cat <<EOF
 {
   "schemaVersion": 1,

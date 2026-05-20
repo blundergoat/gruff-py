@@ -105,6 +105,10 @@ class _YamlAliases:
                 _record_yaml_import_aliases(node, aliases)
             elif isinstance(node, ast.ImportFrom) and node.module == "yaml":
                 _record_yaml_from_import_aliases(node, aliases)
+            elif isinstance(node, ast.Assign):
+                _record_yaml_loader_assignments(node.targets, node.value, aliases)
+            elif isinstance(node, ast.AnnAssign):
+                _record_yaml_loader_assignments([node.target], node.value, aliases)
         return cls(aliases)
 
     def normalize(self, target: str | None) -> str | None:
@@ -139,6 +143,21 @@ def _record_yaml_from_import_aliases(node: ast.ImportFrom, aliases: dict[str, st
         aliases[alias.asname or alias.name] = f"yaml.{alias.name}"
 
 
+def _record_yaml_loader_assignments(
+    targets: list[ast.expr],
+    value: ast.expr | None,
+    aliases: dict[str, str],
+) -> None:
+    if value is None:
+        return
+    loader_target = _normalize_with_aliases(call_target_name_from_expr(value), aliases)
+    if loader_target not in _SAFE_LOADERS and loader_target not in _UNSAFE_LOADERS:
+        return
+    for target in targets:
+        if isinstance(target, ast.Name):
+            aliases[target.id] = loader_target
+
+
 def _is_unsafe_yaml_call(
     call: ast.Call,
     target: str | None,
@@ -148,13 +167,32 @@ def _is_unsafe_yaml_call(
         return True
     if target != "yaml.load":
         return False
-    loader = call_keyword(call, "Loader")
+    loader = _loader_argument(call)
     if loader is None:
         return True
     loader_target = aliases.normalize(call_target_name_from_expr(loader))
     if loader_target in _SAFE_LOADERS:
         return False
     return loader_target in _UNSAFE_LOADERS
+
+
+def _normalize_with_aliases(target: str | None, aliases: dict[str, str]) -> str | None:
+    if target is None:
+        return None
+    parts = target.split(".")
+    replacement = aliases.get(parts[0])
+    if replacement is None:
+        return target
+    return ".".join((replacement, *parts[1:]))
+
+
+def _loader_argument(call: ast.Call) -> ast.expr | None:
+    keyword_loader = call_keyword(call, "Loader")
+    if keyword_loader is not None:
+        return keyword_loader
+    if len(call.args) >= 2:
+        return call.args[1]
+    return None
 
 
 def call_target_name_from_expr(node: ast.expr) -> str | None:

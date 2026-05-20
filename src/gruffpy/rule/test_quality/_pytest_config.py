@@ -9,6 +9,7 @@ so concurrent rules share the parse.
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,20 +104,41 @@ def _read(project_root: str) -> PytestConfig:
     except (OSError, tomllib.TOMLDecodeError):
         return PytestConfig()
 
-    tool = data.get("tool", {})
-    pytest_section = tool.get("pytest", {}).get("ini_options", {})
-    coverage_section = tool.get("coverage", {}).get("run", {})
+    tool = _as_table(data.get("tool"))
+    if tool is None:
+        return PytestConfig()
+    pytest_section = _nested_table(tool, "pytest", "ini_options")
+    coverage_section = _nested_table(tool, "coverage", "run")
 
-    addopts = _split_str(pytest_section.get("addopts"))
-    filterwarnings = _string_list(pytest_section.get("filterwarnings"))
-    coverage_source = _string_list(coverage_section.get("source"))
+    addopts = _split_str(_table_value(pytest_section, "addopts"))
+    filterwarnings = _string_list(_table_value(pytest_section, "filterwarnings"))
+    coverage_source = _string_list(_table_value(coverage_section, "source"))
 
     return PytestConfig(
         addopts=tuple(addopts),
         filterwarnings=tuple(filterwarnings),
         coverage_source=tuple(coverage_source),
-        is_present=True,
+        is_present=pytest_section is not None,
     )
+
+
+def _as_table(value: object) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _nested_table(table: dict[str, Any], outer_key: str, inner_key: str) -> dict[str, Any] | None:
+    outer = _as_table(table.get(outer_key))
+    if outer is None:
+        return None
+    return _as_table(outer.get(inner_key))
+
+
+def _table_value(table: dict[str, Any] | None, key: str) -> object:
+    if table is None:
+        return None
+    return table.get(key)
 
 
 def _split_str(value: object) -> list[str]:

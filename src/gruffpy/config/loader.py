@@ -10,6 +10,8 @@ from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 
 VALID_TOP_LEVEL_KEYS = frozenset(
@@ -35,8 +37,11 @@ VALID_SELECTION_KEYS = frozenset(
 )
 VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
 TOML_TOOL_KEY = "gruff-py"
+LEGACY_TOML_TOOL_KEY = "gruff"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
+LEGACY_TOML_TABLE = f"[tool.{LEGACY_TOML_TOOL_KEY}]"
 DEFAULT_YAML_CONFIG_NAME = ".gruff-py.yaml"
+LEGACY_YAML_CONFIG_NAME = ".gruff.yaml"
 
 
 class ConfigLoader:
@@ -52,8 +57,8 @@ class ConfigLoader:
         Precedence:
 
         1. Explicit *config_path* (format auto-detected by extension).
-        2. ``.gruff-py.yaml`` in the project root.
-        3. ``pyproject.toml`` ``[tool.gruff-py]`` in the project root.
+        2. ``.gruff-py.yaml`` or legacy ``.gruff.yaml`` in the project root.
+        3. ``pyproject.toml`` ``[tool.gruff-py]`` or legacy ``[tool.gruff]``.
         4. Built-in defaults.
 
         Args:
@@ -67,8 +72,12 @@ class ConfigLoader:
         if config_path is not None:
             return self._load_explicit(config_path)
 
-        yaml_path = self._project_root / DEFAULT_YAML_CONFIG_NAME
-        if yaml_path.exists():
+        for yaml_path in (
+            self._project_root / DEFAULT_YAML_CONFIG_NAME,
+            self._project_root / LEGACY_YAML_CONFIG_NAME,
+        ):
+            if not yaml_path.exists():
+                continue
             section = load_gruff_py_yaml(yaml_path)
             if not section:
                 return self._defaults, yaml_path
@@ -86,7 +95,7 @@ class ConfigLoader:
 
     def _load_explicit(self, path: Path) -> tuple[AnalysisConfig, Path | None]:
         if not path.exists():
-            return self._defaults, None
+            raise ConfigError(f"Config file does not exist: {path}")
         if path.suffix in {".yaml", ".yml"}:
             section = load_gruff_py_yaml(path)
             if not section:
@@ -109,12 +118,18 @@ class ConfigLoader:
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"Failed to read config file {path}: {exc}") from exc
         tool_section = data.get("tool", {})
+        if not isinstance(tool_section, dict):
+            raise ConfigError("[tool] must be a table.")
         section = tool_section.get(TOML_TOOL_KEY)
+        table = TOML_TABLE
+        if section is None:
+            section = tool_section.get(LEGACY_TOML_TOOL_KEY)
+            table = LEGACY_TOML_TABLE
         if section is None:
             return None
         if not isinstance(section, dict):
-            raise ConfigError(f"{TOML_TABLE} must be a table.")
-        self._validate_top_level(section, source=f"{TOML_TABLE} in {path}")
+            raise ConfigError(f"{table} must be a table.")
+        self._validate_top_level(section, source=f"{table} in {path}")
         return section
 
     @staticmethod
@@ -187,6 +202,7 @@ class ConfigLoader:
             value = selection.get(key, [])
             if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
                 raise ConfigError(f"[tool.gruff-py.selection].{key} must be a list of strings.")
+        _validate_selection_values(config, selection)
         return config.with_rule_selection(
             RuleSelection(
                 tiers=tuple(selection.get("tiers", [])),
@@ -236,7 +252,36 @@ def _validate_rule_section(
 
 
 def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) -> bool:
-    return bool(rule_section.get("enabled", rule_settings.enabled))
+    if "enabled" not in rule_section:
+        return rule_settings.enabled
+    enabled = rule_section["enabled"]
+    if not isinstance(enabled, bool):
+        raise ConfigError('Config key "rules.*.enabled" must be a boolean.')
+    return enabled
+
+
+def _validate_selection_values(config: AnalysisConfig, selection: dict[str, Any]) -> None:
+    valid_tiers = {tier.value for tier in RuleTier}
+    valid_pillars = {pillar.value for pillar in Pillar}
+    valid_rules = set(config.rules)
+
+    _reject_unknown_selection_values("tiers", selection.get("tiers", []), valid_tiers)
+    _reject_unknown_selection_values("pillars", selection.get("pillars", []), valid_pillars)
+    _reject_unknown_selection_values(
+        "excludePillars", selection.get("excludePillars", []), valid_pillars
+    )
+    _reject_unknown_selection_values("rules", selection.get("rules", []), valid_rules)
+    _reject_unknown_selection_values("excludeRules", selection.get("excludeRules", []), valid_rules)
+
+
+def _reject_unknown_selection_values(
+    key: str,
+    values: list[str],
+    valid_values: set[str],
+) -> None:
+    unknown = sorted(set(values) - valid_values)
+    if unknown:
+        raise ConfigError(f"Unknown [tool.gruff-py.selection].{key} values: {unknown}")
 
 
 def _merged_thresholds(

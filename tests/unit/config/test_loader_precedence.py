@@ -38,6 +38,29 @@ def test_gruff_py_yaml_wins_over_pyproject_toml(tmp_path: Path):
     assert config.rules["size.file-length"].thresholds["warning"] == 250
 
 
+def test_gruff_py_yaml_wins_over_legacy_gruff_yaml(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "rules:\n  size.file-length:\n    thresholds:\n      warning: 250\n"
+    )
+    (tmp_path / ".gruff.yaml").write_text(
+        "rules:\n  size.file-length:\n    thresholds:\n      warning: 400\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+    config, source = loader.load()
+    assert source == tmp_path / ".gruff-py.yaml"
+    assert config.rules["size.file-length"].thresholds["warning"] == 250
+
+
+def test_legacy_gruff_yaml_is_discovered(tmp_path: Path):
+    (tmp_path / ".gruff.yaml").write_text(
+        "rules:\n  size.file-length:\n    thresholds:\n      warning: 321\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+    config, source = loader.load()
+    assert source == tmp_path / ".gruff.yaml"
+    assert config.rules["size.file-length"].thresholds["warning"] == 321
+
+
 def test_pyproject_used_when_only_pyproject_exists(tmp_path: Path):
     (tmp_path / "pyproject.toml").write_text(
         '[tool.gruff-py.rules."size.file-length"]\n'
@@ -48,6 +71,31 @@ def test_pyproject_used_when_only_pyproject_exists(tmp_path: Path):
     config, source = loader.load()
     assert source == tmp_path / "pyproject.toml"
     assert config.rules["size.file-length"].thresholds["warning"] == 333
+
+
+def test_legacy_pyproject_table_is_supported(tmp_path: Path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.gruff.rules."size.file-length"]\n'
+        "enabled = true\n"
+        "thresholds = { warning = 444, error = 999 }\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+    config, source = loader.load()
+    assert source == tmp_path / "pyproject.toml"
+    assert config.rules["size.file-length"].thresholds["warning"] == 444
+
+
+def test_modern_pyproject_table_wins_over_legacy_table(tmp_path: Path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.gruff-py.rules."size.file-length"]\n'
+        "thresholds = { warning = 222, error = 999 }\n"
+        '[tool.gruff.rules."size.file-length"]\n'
+        "thresholds = { warning = 444, error = 999 }\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+    config, source = loader.load()
+    assert source == tmp_path / "pyproject.toml"
+    assert config.rules["size.file-length"].thresholds["warning"] == 222
 
 
 def test_explicit_yaml_path_overrides_discovery(tmp_path: Path):
@@ -202,6 +250,22 @@ def test_explicit_config_path_rejects_unknown_extension(tmp_path: Path):
         loader.load(explicit)
 
 
+def test_explicit_config_path_rejects_missing_file(tmp_path: Path):
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match="Config file does not exist"):
+        loader.load(tmp_path / "missing.yaml")
+
+
+def test_toml_tool_section_must_be_table(tmp_path: Path):
+    explicit = tmp_path / "pyproject.toml"
+    explicit.write_text('tool = "not-a-table"\n')
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match=r"\[tool\] must be a table"):
+        loader.load(explicit)
+
+
 def test_yaml_paths_ignore_applied(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text("paths:\n  ignore:\n    - build/\n    - .venv/\n")
     loader = ConfigLoader(tmp_path, _defaults())
@@ -222,6 +286,37 @@ def test_yaml_selection_applied(tmp_path: Path):
     config, _ = loader.load()
     assert config.rule_selection.pillars == ("size", "complexity")
     assert config.rule_selection.exclude_rules == ("size.file-length",)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("tiers", "v9.9", "selection].tiers"),
+        ("pillars", "made-up", "selection].pillars"),
+        ("excludePillars", "made-up", "selection].excludePillars"),
+        ("rules", "size.nope", "selection].rules"),
+        ("excludeRules", "size.nope", "selection].excludeRules"),
+    ],
+)
+def test_yaml_selection_rejects_unknown_values(
+    tmp_path: Path,
+    key: str,
+    value: str,
+    message: str,
+):
+    (tmp_path / ".gruff-py.yaml").write_text(f"selection:\n  {key}:\n    - {value}\n")
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match=message):
+        loader.load()
+
+
+def test_rule_enabled_must_be_boolean(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text('rules:\n  size.file-length:\n    enabled: "false"\n')
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match="enabled"):
+        loader.load()
 
 
 def test_yaml_unknown_top_level_key_raises(tmp_path: Path):

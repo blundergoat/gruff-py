@@ -5,8 +5,6 @@ misses modules that aren't imported during the suite. The rule wants
 ``source = ["my_package"]`` declared.
 """
 
-from pathlib import Path
-
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -72,7 +70,7 @@ class PytestCoverageSourceMissingRule(Rule):
             Finding(
                 rule_id=definition.id,
                 message="Coverage `source` is empty or absent — coverage may be incomplete.",
-                file_path=str(Path(context.project_root) / "pyproject.toml"),
+                file_path="pyproject.toml",
                 line=None,
                 severity=definition.default_severity,
                 pillar=definition.pillar,

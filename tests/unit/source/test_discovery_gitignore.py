@@ -87,6 +87,18 @@ def test_nested_gitignore_negation_re_includes_file(tmp_path: Path) -> None:
     assert "pkg/ignored.gen.py" not in paths
 
 
+def test_gitignore_contents_glob_reincluded_child_is_discovered(tmp_path: Path) -> None:
+    _write(tmp_path / ".gitignore", "/foo/**\n!foo/bar.py\n")
+    _write(tmp_path / "foo" / "bar.py")
+    _write(tmp_path / "foo" / "baz.py")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    paths = _display_paths(result.files)
+    assert "foo/bar.py" in paths
+    assert "foo/baz.py" not in paths
+
+
 def test_explicit_gitignored_path_is_skipped_unless_include_ignored(tmp_path: Path) -> None:
     _write(tmp_path / ".gitignore", "secret.py\n")
     _write(tmp_path / "secret.py")

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from gruffpy.source.gitignore import GitignoreMatcher
 
 
@@ -74,6 +76,33 @@ def test_negation_pattern_re_includes(tmp_path: Path) -> None:
 
     assert matcher.is_ignored(tmp_path / "ignored.bin") is True
     assert matcher.is_ignored(tmp_path / "keep.bin") is False
+
+
+def test_contents_glob_allows_later_file_reinclude(tmp_path: Path) -> None:
+    _write(tmp_path / ".gitignore", "/foo/**\n!foo/bar.py\n")
+    _write(tmp_path / "foo" / "bar.py")
+    _write(tmp_path / "foo" / "baz.py")
+
+    matcher = GitignoreMatcher.from_root(tmp_path)
+
+    assert matcher.is_ignored(tmp_path / "foo", is_dir=True) is False
+    assert matcher.is_ignored(tmp_path / "foo" / "bar.py") is False
+    assert matcher.is_ignored(tmp_path / "foo" / "baz.py") is True
+
+
+def test_symlink_matches_link_path_not_resolved_target(tmp_path: Path) -> None:
+    _write(tmp_path / ".gitignore", "target.py\n")
+    _write(tmp_path / "target.py")
+    link = tmp_path / "link.py"
+    try:
+        link.symlink_to(tmp_path / "target.py")
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {exc}")
+
+    matcher = GitignoreMatcher.from_root(tmp_path)
+
+    assert matcher.is_ignored(link) is False
+    assert matcher.is_ignored(tmp_path / "target.py") is True
 
 
 def test_nested_gitignore_overrides_root(tmp_path: Path) -> None:

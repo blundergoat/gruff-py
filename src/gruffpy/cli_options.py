@@ -9,7 +9,6 @@ import click
 from gruffpy.cli_state import state as _state
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
-from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.severity import Severity
 from gruffpy.version import TOOL_NAME, VERSION
 
@@ -397,13 +396,11 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--exclude-pillar",
         multiple=True,
-        type=click.Choice([p.value for p in Pillar]),
         help="Hide these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        type=click.Choice([p.value for p in Pillar]),
         help="Display only these comma-separated pillars or repeated values.",
     ),
     _option(
@@ -588,13 +585,11 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--exclude-pillar",
         multiple=True,
-        type=click.Choice([p.value for p in Pillar]),
         help="Hide these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        type=click.Choice([p.value for p in Pillar]),
         help="Display only these comma-separated pillars or repeated values.",
     ),
     _option(

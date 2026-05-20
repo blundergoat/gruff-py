@@ -68,9 +68,8 @@ class GitignoreMatcher:
         """
         abs_path = path if path.is_absolute() else self.root / path
         try:
-            resolved = abs_path.resolve()
-            rel = resolved.relative_to(self.root)
-        except (ValueError, OSError):
+            rel = abs_path.relative_to(self.root)
+        except ValueError:
             return False
 
         applicable_dirs = [self.root]
@@ -91,7 +90,7 @@ class GitignoreMatcher:
 
         is_ignored: bool | None = None
         for gitignore_dir in applicable_dirs:
-            is_ignored = self._is_ignored_by_spec(gitignore_dir, resolved, is_dir, is_ignored)
+            is_ignored = self._is_ignored_by_spec(gitignore_dir, abs_path, is_dir, is_ignored)
         return is_ignored is True
 
     def _is_ignored_by_spec(
@@ -104,19 +103,44 @@ class GitignoreMatcher:
         spec = self._specs_by_dir.get(gitignore_dir)
         if spec is None:
             return prior
-        try:
-            rel = abs_path.relative_to(gitignore_dir)
-        except ValueError:
+        rel_str = _relative_gitignore_path(abs_path, gitignore_dir)
+        if rel_str is None:
             return prior
-        rel_str = str(rel).replace("\\", "/")
-        if not rel_str or rel_str == ".":
+        is_ignored = self._is_spec_ignored(spec, rel_str, is_dir)
+        if is_ignored is None:
             return prior
-        if is_dir and not rel_str.endswith("/"):
-            rel_str += "/"
-        result = spec.check_file(rel_str)
+        return is_ignored
+
+    @staticmethod
+    def _is_spec_ignored(
+        spec: GitIgnoreSpec,
+        rel_str: str,
+        is_dir: bool,
+    ) -> bool | None:
+        result = spec.check_file(_match_path(rel_str, is_dir))
         if result.include is None:
-            return prior
+            return None
+        if (
+            is_dir
+            and result.include is True
+            and GitignoreMatcher._is_directory_match_contents_only(spec, rel_str, result.index)
+        ):
+            return None
         return bool(result.include)
+
+    @staticmethod
+    def _is_directory_match_contents_only(
+        spec: GitIgnoreSpec,
+        rel_str: str,
+        pattern_index: int | None,
+    ) -> bool:
+        if pattern_index is None:
+            return False
+        without_slash = spec.check_file(rel_str)
+        if without_slash.include is not None:
+            return False
+        pattern = spec.patterns[pattern_index].pattern
+        return isinstance(pattern, str) and pattern.lstrip("!").endswith("/**")
 
     def _ensure_loaded(self, directory: Path) -> None:
         if directory in self._loaded_dirs:
@@ -125,3 +149,20 @@ class GitignoreMatcher:
         spec = _load_spec(directory)
         if spec is not None:
             self._specs_by_dir[directory] = spec
+
+
+def _relative_gitignore_path(abs_path: Path, gitignore_dir: Path) -> str | None:
+    try:
+        rel = abs_path.relative_to(gitignore_dir)
+    except ValueError:
+        return None
+    rel_str = str(rel).replace("\\", "/")
+    if not rel_str or rel_str == ".":
+        return None
+    return rel_str
+
+
+def _match_path(rel_str: str, is_dir: bool) -> str:
+    if is_dir and not rel_str.endswith("/"):
+        return f"{rel_str}/"
+    return rel_str

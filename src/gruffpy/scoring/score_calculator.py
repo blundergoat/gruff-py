@@ -15,7 +15,7 @@ STATIC_PILLARS: tuple[str, ...] = (
     "dead-code",
     "naming",
     "documentation",
-    "modernisation",
+    "design",
     "security",
     "sensitive-data",
     "test-quality",
@@ -184,7 +184,7 @@ class ScoreCalculator:
 
     @staticmethod
     def _max_line_metric(findings: list[Finding]) -> int | None:
-        target_rules = {"size.file-length", "size.method-length", "size.class-length"}
+        target_rules = {"size.file-length", "size.function-length", "size.class-length"}
         result: int | None = None
         for finding in findings:
             if finding.rule_id not in target_rules:
