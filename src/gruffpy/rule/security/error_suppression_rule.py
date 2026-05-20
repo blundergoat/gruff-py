@@ -24,6 +24,7 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import call_target_name
 
 _WIDE: frozenset[str] = frozenset({"Exception", "BaseException"})
+_SOURCE_NEEDLES: tuple[str, ...] = ("Exception", "BaseException")
 
 
 class ErrorSuppressionRule(Rule):
@@ -70,7 +71,7 @@ class ErrorSuppressionRule(Rule):
             One finding per wide-suppression shape (``with suppress(...)``
             or wide-tuple ``except``).
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

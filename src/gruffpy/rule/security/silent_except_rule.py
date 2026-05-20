@@ -63,7 +63,7 @@ class SilentExceptRule(Rule):
         Returns:
             One finding per pass-only wide ``except`` handler that doesn't log.
         """
-        if unit.tree is None:
+        if unit.tree is None or "except" not in unit.source:
             return []
         definition = self.definition()
         findings: list[Finding] = []

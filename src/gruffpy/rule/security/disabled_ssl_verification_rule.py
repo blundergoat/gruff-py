@@ -29,6 +29,7 @@ from gruffpy.rule.security._security_node_helper import (
 _REQUESTS_METHODS: frozenset[str] = frozenset(
     {"get", "post", "put", "delete", "patch", "head", "options", "request"}
 )
+_SOURCE_NEEDLES: tuple[str, ...] = ("verify", "_create_unverified_context", "disable_warnings")
 _TLS_REMEDIATION = (
     "Use a properly verified TLS context. If you need a custom trust "
     "store, configure CA bundles instead of disabling verification."
@@ -79,7 +80,7 @@ class DisabledSslVerificationRule(Rule):
         Returns:
             One finding per TLS-verification-disabling call site.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         visitor = _DisabledSslVerificationVisitor(unit, definition)

@@ -68,7 +68,7 @@ class UnsafeYamlLoadRule(Rule):
         Returns:
             One finding per unsafe ``yaml.load`` / ``yaml.unsafe_load`` call.
         """
-        if unit.tree is None:
+        if unit.tree is None or "yaml" not in unit.source:
             return []
         definition = self.definition()
         aliases = _YamlAliases.from_tree(unit.tree)

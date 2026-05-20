@@ -24,6 +24,7 @@ from gruffpy.rule.security._security_node_helper import (
 _VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset(
     {"importlib.import_module", "__import__", "import_module"}
 )
+_SOURCE_NEEDLES: tuple[str, ...] = ("import_module", "__import__")
 
 
 class VariableImportRule(Rule):
@@ -65,7 +66,7 @@ class VariableImportRule(Rule):
         Returns:
             One finding per dynamic-module-name import call.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

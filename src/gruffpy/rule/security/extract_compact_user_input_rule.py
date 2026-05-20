@@ -71,7 +71,7 @@ class ExtractCompactUserInputRule(Rule):
         Returns:
             One finding per call site that splats a request attribute.
         """
-        if unit.tree is None:
+        if unit.tree is None or "request" not in unit.source or "**" not in unit.source:
             return []
         definition = self.definition()
         findings: list[Finding] = []

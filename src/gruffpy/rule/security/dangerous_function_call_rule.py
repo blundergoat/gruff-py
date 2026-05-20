@@ -22,6 +22,7 @@ from gruffpy.rule.security._security_node_helper import (
 )
 
 _UNCONDITIONAL_DANGEROUS: frozenset[str] = frozenset({"eval", "exec", "compile"})
+_SOURCE_NEEDLES: tuple[str, ...] = ("eval", "exec", "compile", "__import__")
 
 
 class DangerousFunctionCallRule(Rule):
@@ -63,7 +64,7 @@ class DangerousFunctionCallRule(Rule):
         Returns:
             One finding per matching call site.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         return [

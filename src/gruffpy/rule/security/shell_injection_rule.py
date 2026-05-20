@@ -36,6 +36,7 @@ _SUBPROCESS_TARGETS: frozenset[str] = frozenset(
     }
 )
 _OS_SHELL_TARGETS: frozenset[str] = frozenset({"os.system", "os.popen"})
+_SOURCE_NEEDLES: tuple[str, ...] = ("subprocess", "system", "popen")
 
 
 class ShellInjectionRule(Rule):
@@ -78,7 +79,7 @@ class ShellInjectionRule(Rule):
         Returns:
             One finding per shell-injection call site.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

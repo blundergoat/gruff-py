@@ -25,6 +25,7 @@ from gruffpy.rule.security._security_node_helper import (
 
 _WEAK_ALGORITHMS: frozenset[str] = frozenset({"md5", "sha1"})
 _FAST_PASSWORD_HASH_ALGORITHMS: frozenset[str] = frozenset({"sha256", "sha512"})
+_SOURCE_NEEDLES: tuple[str, ...] = ("hashlib", "md5", "sha1", "sha256", "sha512")
 _PASSWORD_HASH_TOKENS: frozenset[str] = frozenset(
     {
         "password",
@@ -83,7 +84,7 @@ class WeakCryptoRule(Rule):
         Returns:
             One finding per weak-algorithm-in-security-context call.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

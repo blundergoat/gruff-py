@@ -30,6 +30,7 @@ _UNSAFE_LOAD_TARGETS: frozenset[str] = frozenset(
         "dill.load",
     }
 )
+_SOURCE_NEEDLES: tuple[str, ...] = ("pickle", "cPickle", "dill", "Unpickler")
 
 
 class UnsafePickleRule(Rule):
@@ -71,7 +72,7 @@ class UnsafePickleRule(Rule):
         Returns:
             One finding per pickle deserialisation call without a literal source.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

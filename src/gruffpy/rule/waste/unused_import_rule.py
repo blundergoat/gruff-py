@@ -69,10 +69,12 @@ class UnusedImportRule(Rule):
             return []
         if Path(unit.file.display_path).name == "__init__.py":
             return []
+        imports = _collect_imports(unit.tree)
+        if not imports:
+            return []
+
         definition = self.definition()
         all_names = module_all_names(unit.tree)
-
-        imports = _collect_imports(unit.tree)
         used_names = _collect_used_names(unit.tree, set(imports))
 
         source_lines = unit.source.splitlines() if unit.source else []
@@ -126,18 +128,22 @@ def _collect_used_names(tree: ast.AST, candidates: set[str]) -> set[str]:
     """Return the subset of *candidates* that appear as Name/Attribute roots
     anywhere in *tree* outside of import statements themselves."""
     used: set[str] = set()
-    _collect_direct_used_names(tree, candidates, used)
+    string_annotations: list[str] = []
+    for node in ast.walk(tree):
+        name = _candidate_use_name(node)
+        if name is not None and name in candidates:
+            used.add(name)
+            if used == candidates:
+                return used
+        string_annotations.extend(_string_annotation_values(node))
+
     if used == candidates:
         return used
-    _collect_string_annotation_used_names(tree, candidates, used)
+    _collect_string_annotation_used_names(string_annotations, candidates, used)
     return used
 
 
-def _collect_direct_used_names(
-    tree: ast.AST,
-    candidates: set[str],
-    used: set[str],
-) -> None:
+def _collect_direct_used_names(tree: ast.AST, candidates: set[str], used: set[str]) -> None:
     for node in ast.walk(tree):
         name = _candidate_use_name(node)
         if name is not None and name in candidates:
@@ -166,14 +172,11 @@ def _attribute_root_name(node: ast.Attribute) -> str | None:
 
 
 def _collect_string_annotation_used_names(
-    tree: ast.AST,
+    annotation_values: list[str],
     candidates: set[str],
     used: set[str],
 ) -> None:
-    for annotation in _iter_annotation_nodes(tree):
-        value = _string_annotation_value(annotation)
-        if value is None:
-            continue
+    for value in annotation_values:
         try:
             parsed = ast.parse(value, mode="eval")
         except SyntaxError:
@@ -183,16 +186,17 @@ def _collect_string_annotation_used_names(
             return
 
 
-def _iter_annotation_nodes(tree: ast.AST) -> list[ast.AST]:
-    annotations: list[ast.AST] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.arg) and node.annotation is not None:
-            annotations.append(node.annotation)
-        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.returns is not None:
-            annotations.append(node.returns)
-        elif isinstance(node, ast.AnnAssign):
-            annotations.append(node.annotation)
-    return annotations
+def _string_annotation_values(node: ast.AST) -> tuple[str, ...]:
+    if isinstance(node, ast.arg) and node.annotation is not None:
+        value = _string_annotation_value(node.annotation)
+        return (value,) if value is not None else ()
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.returns is not None:
+        value = _string_annotation_value(node.returns)
+        return (value,) if value is not None else ()
+    if isinstance(node, ast.AnnAssign):
+        value = _string_annotation_value(node.annotation)
+        return (value,) if value is not None else ()
+    return ()
 
 
 def _string_annotation_value(node: ast.AST) -> str | None:

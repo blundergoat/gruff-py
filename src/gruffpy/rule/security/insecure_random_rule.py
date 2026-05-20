@@ -76,7 +76,7 @@ class InsecureRandomRule(Rule):
         Returns:
             One finding per ``random.X`` call in a security-smelling scope.
         """
-        if unit.tree is None:
+        if unit.tree is None or "random" not in unit.source:
             return []
         definition = self.definition()
         findings: list[Finding] = []

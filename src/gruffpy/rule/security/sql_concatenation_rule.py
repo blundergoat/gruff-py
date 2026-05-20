@@ -25,6 +25,7 @@ from gruffpy.rule.security._security_node_helper import (
 )
 
 _SQL_EXECUTE_LEAVES: frozenset[str] = frozenset({"execute", "executemany", "executescript", "text"})
+_SOURCE_NEEDLES: tuple[str, ...] = ("execute", "executemany", "executescript", "text")
 _QUOTED_PLACEHOLDER_RE = re.compile(
     r"""(?P<quote>['"])\s*(?:%s|%\([A-Za-z_][A-Za-z0-9_]*\)s|\?|:\w+|\$\d+)\s*(?P=quote)"""
 )
@@ -71,7 +72,7 @@ class SqlConcatenationRule(Rule):
             One finding per unsafe ``execute`` / ``executemany`` /
             ``executescript`` / ``text`` call.
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         return [

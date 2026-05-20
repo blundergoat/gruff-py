@@ -62,7 +62,7 @@ class HeaderInjectionRule(Rule):
         Returns:
             One finding per dynamic-key header assignment in gated files.
         """
-        if unit.tree is None:
+        if unit.tree is None or "headers" not in unit.source:
             return []
         if not (frameworks_in_use(unit.tree) & _FRAMEWORK_GATE):
             return []
