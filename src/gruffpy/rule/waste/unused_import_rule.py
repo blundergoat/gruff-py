@@ -143,15 +143,6 @@ def _collect_used_names(tree: ast.AST, candidates: set[str]) -> set[str]:
     return used
 
 
-def _collect_direct_used_names(tree: ast.AST, candidates: set[str], used: set[str]) -> None:
-    for node in ast.walk(tree):
-        name = _candidate_use_name(node)
-        if name is not None and name in candidates:
-            used.add(name)
-            if used == candidates:
-                return
-
-
 def _candidate_use_name(node: ast.AST) -> str | None:
     if isinstance(node, ast.Import | ast.ImportFrom):
         return None

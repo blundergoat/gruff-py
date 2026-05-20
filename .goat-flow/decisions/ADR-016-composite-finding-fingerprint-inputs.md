@@ -1,4 +1,4 @@
-# ADR-003a: Composite finding fingerprint inputs
+# ADR-016: Composite finding fingerprint inputs
 
 **Status:** Accepted
 **Date:** 2026-05-13

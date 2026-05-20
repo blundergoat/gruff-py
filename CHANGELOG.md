@@ -45,7 +45,7 @@ First public release.
 
 ### Rule Catalogue
 
-- 100 rules are registered in `RuleRegistry.defaults()`.
+- 103 rules are registered in `RuleRegistry.defaults()`.
 - Active pillars in `0.1`: `size`, `complexity`, `maintainability`,
   `dead-code`, `naming`, `documentation`, `security`, `sensitive-data`,
   `test-quality`, and `design`.
@@ -55,7 +55,7 @@ First public release.
   - `maintainability`: 1
   - `dead-code`: 10
   - `naming`: 10
-  - `documentation`: 10
+  - `documentation`: 13
   - `security`: 13
   - `sensitive-data`: 9
   - `test-quality`: 34

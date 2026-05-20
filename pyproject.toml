@@ -18,6 +18,12 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/blundergoat/gruff-py"
+Repository = "https://github.com/blundergoat/gruff-py"
+Issues = "https://github.com/blundergoat/gruff-py/issues"
+Changelog = "https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
@@ -29,6 +35,20 @@ dev = [
 
 [project.scripts]
 gruff-py = "gruffpy.cli:main"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.agents",
+    "/.claude",
+    "/.codex",
+    "/.goat-flow",
+    "/AGENTS.md",
+    "/CLAUDE.md",
+    "/node_modules",
+    "/package-lock.json",
+    "/package.json",
+    "/perf-out",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gruffpy"]

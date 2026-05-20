@@ -1,11 +1,11 @@
-"""Composite finding synthesis (ADR-003a).
+"""Composite finding synthesis (ADR-016).
 
 Runs in ``cli.py`` after ``RuleRegistry.analyse()`` returns. Groups per-unit
 findings by ``(file_path, symbol)``; when at least one Complexity finding and
 one Size finding co-occur on the same symbol, emits a synthesised
 ``design.god-method`` finding.
 
-Fingerprint inputs are locked by ADR-003a: ``rule_id``, ``file``, ``symbol``,
+Fingerprint inputs are locked by ADR-016: ``rule_id``, ``file``, ``symbol``,
 ``line`` (min over contributors), ``end_line`` (max over contributors),
 ``column=None``. ``metadata.componentRules`` is a sorted tuple of contributor
 rule IDs; ``secondary_pillars`` is the sorted distinct pillar set excluding

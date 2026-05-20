@@ -13,7 +13,7 @@ It is heuristic static analysis. Use it beside tools such as `ruff`, `mypy`,
 `0.1.0` is the first public release.
 
 - Python 3.11+
-- 100 rules across 10 active quality pillars
+- 103 rules across 10 active quality pillars
 - Text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF reports
 - Local dashboard served from `127.0.0.1` by default
 - `.gruff-py.yaml` and `[tool.gruff-py]` configuration
