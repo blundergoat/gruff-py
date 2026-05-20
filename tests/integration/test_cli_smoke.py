@@ -29,6 +29,7 @@ _EXPECTED_GLOBAL_OPTIONS = (
 
 
 def test_cli_help_lists_analyse_command():
+    """Guard the root help contract across visible commands and global options."""
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
     assert result.output.startswith(

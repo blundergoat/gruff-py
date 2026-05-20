@@ -1,12 +1,8 @@
-import importlib
-import inspect
-import pkgutil
+import ast
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-import gruffpy.rule
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.finding.pillar import Pillar
 from gruffpy.rule.catalog import (
@@ -16,11 +12,10 @@ from gruffpy.rule.catalog import (
     documentation_for_rule,
 )
 from gruffpy.rule.definition import RuleDefinition
-from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
-from gruffpy.rule.rule import Rule
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_RULE_ROOT = _PROJECT_ROOT / "src" / "gruffpy" / "rule"
 
 _PREFIXES_BY_PILLAR = {
     Pillar.SIZE: ("size.",),
@@ -69,8 +64,11 @@ def test_rule_id_matches_pillar_prefix_convention(definition: RuleDefinition) ->
 
 
 def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
-    catalog_classes = {type(entry.create()) for entry in BUILTIN_RULES}
-    concrete_classes = set(_concrete_rule_classes())
+    catalog_classes = {
+        f"{type(entry.create()).__module__}.{type(entry.create()).__name__}"
+        for entry in BUILTIN_RULES
+    }
+    concrete_classes = set(_concrete_rule_class_paths())
 
     assert concrete_classes == catalog_classes
 
@@ -137,27 +135,21 @@ def test_selected_security_rules_publish_taxonomy_metadata() -> None:
     assert yaml_docs.security_metadata["cwe"] == ["CWE-502"]
 
 
-def _concrete_rule_classes() -> list[type[Any]]:
-    classes: list[type[Any]] = []
-    for module_info in pkgutil.walk_packages(gruffpy.rule.__path__, gruffpy.rule.__name__ + "."):
-        if not module_info.name.endswith("_rule"):
+def _concrete_rule_class_paths() -> list[str]:
+    classes: list[str] = []
+    for path in sorted(_RULE_ROOT.rglob("*_rule.py")):
+        if path.name == "project_rule.py":
             continue
-        module = importlib.import_module(module_info.name)
-        for _name, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__ != module.__name__:
-                continue
-            if inspect.isabstract(cls):
-                continue
-            if _is_rule_class(cls):
-                classes.append(cls)
-    return sorted(classes, key=lambda cls: f"{cls.__module__}.{cls.__name__}")
+        module_name = "gruffpy.rule." + ".".join(path.relative_to(_RULE_ROOT).with_suffix("").parts)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and _looks_like_rule_class(node):
+                classes.append(f"{module_name}.{node.name}")
+    return sorted(classes)
 
 
-def _is_rule_class(cls: type[Any]) -> bool:
-    if issubclass(cls, Rule):
-        return cls is not Rule
-    try:
-        instance = cls()
-    except TypeError:
-        return False
-    return isinstance(instance, ProjectRuleProtocol)
+def _looks_like_rule_class(cls: ast.ClassDef) -> bool:
+    methods = {
+        node.name for node in cls.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+    return "definition" in methods and bool({"analyse", "analyse_project"} & methods)

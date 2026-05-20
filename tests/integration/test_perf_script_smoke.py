@@ -80,7 +80,7 @@ _EXPECTED_TOP_LEVEL_KEYS = {
 def test_perf_script_payload_advertises_schema_version_1(
     quick_run_payload: dict[str, object],
 ) -> None:
-    assert quick_run_payload["schemaVersion"] == 1
+    assert quick_run_payload.get("schemaVersion") == 1
 
 
 def test_perf_script_payload_publishes_documented_top_level_keys(

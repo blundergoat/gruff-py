@@ -292,6 +292,7 @@ class Example:
 
 
 def test_size_threshold_findings_carry_standard_threshold_metadata():
+    """Keep size rule threshold metadata aligned with reporter contracts."""
     ctx = _ctx_with_only(SIZE_RULE_IDS, thresholds={"warning": 0, "error": 9999})
     findings = RuleRegistry.defaults().analyse([_make_unit(_THRESHOLD_METADATA_FIXTURE_SRC)], ctx)
     size_findings = [f for f in findings if f.rule_id in SIZE_RULE_IDS]

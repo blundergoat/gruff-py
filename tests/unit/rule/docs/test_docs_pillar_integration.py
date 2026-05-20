@@ -125,7 +125,6 @@ _EXPECTED_RULE_IDS = {
     "docs.missing-return-doc",
     "docs.missing-raises-doc",
     "docs.stale-param-doc",
-    "docs.todo-actionability",
     "docs.useless-docstring",
     "docs.todo-density",
     "docs.missing-readme",
@@ -144,7 +143,7 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     assert not missing, f"Missing rule fires: {sorted(missing)}"
 
 
-def test_docs_registry_has_fourteen_rules():
+def test_docs_registry_has_thirteen_rules():
     registry = RuleRegistry.defaults()
     docs_ids = {
         rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")

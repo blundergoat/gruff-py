@@ -27,7 +27,6 @@ from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
 from gruffpy.rule.docs.missing_readme_rule import MissingReadmeRule
 from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
-from gruffpy.rule.docs.todo_actionability_rule import TodoActionabilityRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
@@ -294,24 +293,6 @@ def _custom_docs_for(
                 ),
                 config_keys=config_keys,
             )
-        case TodoActionabilityRule.ID:
-            return RuleDocs(
-                rationale=(
-                    "TODO-style markers should leave enough ownership, issue, date, "
-                    "or concrete action context for a later maintainer to resolve them."
-                ),
-                fix_guidance=(
-                    "Attach an issue, owner, date, or specific imperative action, "
-                    "or move the work into the tracker and remove the marker."
-                ),
-                bad_example="`# TODO: fix later`",
-                good_example="`# TODO(#123): remove fallback after parser migration`",
-                confidence_rationale=(
-                    "Medium confidence: the rule uses bounded source-comment "
-                    "heuristics with configurable markers and detail thresholds."
-                ),
-                config_keys=config_keys,
-            )
         case DataclassAttributesRule.ID:
             return RuleDocs(
                 rationale=(
@@ -433,7 +414,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(MissingReadmeRule),
     _entry(MissingReturnDocRule),
     _entry(StaleParamDocRule),
-    _entry(TodoActionabilityRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
     _entry(AbbreviationRule),

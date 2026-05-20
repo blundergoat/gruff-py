@@ -47,3 +47,30 @@ When implementing source-comment directive parsers, test each supported
 directive with no reason, `-` / `--` reasons, second-`#` reasons, and bracketed
 payloads before broad dogfood. The regex should stop at the reason delimiter,
 not include the rationale in the directive payload.
+
+## Lesson: Rule removals must update dogfood config before full pytest
+
+**Created:** 2026-05-20
+**Incident:** Removing `docs.todo-actionability` from
+`src/gruffpy/rule/catalog.py`, generated `docs/RULES.md`, and docs-pillar tests
+left `.gruff-py.yaml` with the stale rule in both `selection.rules` and
+`rules:`. Focused rule/docs tests passed, but full `uv run pytest` failed
+`tests/unit/config/test_gruff_py_yaml_registry_coverage.py` because the dogfood
+config must mirror `RuleRegistry.defaults()`.
+
+When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
+alongside the catalog, generated docs, fixtures, and focused rule tests before
+running broad verification.
+
+## Lesson: Static rule catalog scans must exclude support protocols
+
+**Created:** 2026-05-20
+**Incident:** While replacing a dynamic `importlib.import_module()` scan in
+`tests/unit/rule/test_catalog.py`, the first static `*_rule.py` source scan
+included `src/gruffpy/rule/project_rule.py` and reported
+`ProjectRuleProtocol` as an omitted concrete rule. Focused verification caught
+the false positive before broader checks.
+
+When converting dynamic rule discovery to source scanning, explicitly exclude
+support contract modules such as `project_rule.py` and keep the predicate tied
+to concrete rule implementation files, not just filename suffixes.

@@ -81,7 +81,6 @@ selection:
   - docs.missing-readme
   - docs.missing-return-doc
   - docs.stale-param-doc
-  - docs.todo-actionability
   - docs.todo-density
   - docs.useless-docstring
   - naming.abbreviation
@@ -265,18 +264,6 @@ rules:
   # Stale parameter docs mislead callers more than missing docs.
   docs.stale-param-doc:
     enabled: true
-  # TODO-style comments need an issue, owner, date, or concrete next action.
-  docs.todo-actionability:
-    enabled: true
-    options:
-      markers:
-      - TODO
-      - FIXME
-      - HACK
-      - XXX
-      - BUG
-      require_issue_or_owner: false
-      minimum_detail_words: 5
   # Dense TODO/FIXME markers expose deferred work becoming hidden debt.
   docs.todo-density:
     enabled: true
@@ -354,6 +341,7 @@ rules:
       - python_parser
       - _halstead
       - _secret_scanner_helper
+      - _comment_scanner
   # Class-typed parameters should include the role of the object.
   naming.parameter-type-name:
     enabled: true

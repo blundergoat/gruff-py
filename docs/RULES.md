@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 104 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 103 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -14,7 +14,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
-| `documentation` | 14 | Docstring presence and quality, stale docs, TODO density, README presence |
+| `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 13 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
@@ -80,7 +80,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `docs.missing-readme`
 - `docs.missing-return-doc`
 - `docs.stale-param-doc`
-- `docs.todo-actionability`
 - `docs.todo-density`
 - `docs.useless-docstring`
 
@@ -462,21 +461,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `docs.stale-param-doc` leaves stale parameter documentation unaddressed.
 - Good example: Code that satisfies `docs.stale-param-doc` makes stale parameter documentation explicit or simpler.
-
-### `docs.todo-actionability`
-
-- Name: TODO actionability
-- Pillar: `documentation`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: TODO-style markers should leave enough ownership, issue, date, or concrete action context for a later maintainer to resolve them.
-- Fix guidance: Attach an issue, owner, date, or specific imperative action, or move the work into the tracker and remove the marker.
-- Confidence rationale: Medium confidence: the rule uses bounded source-comment heuristics with configurable markers and detail thresholds.
-- Options: `markers` = `['TODO', 'FIXME', 'HACK', 'XXX', 'BUG']`, `minimum_detail_words` = `5`, `require_issue_or_owner` = `False`
-- Bad example: `# TODO: fix later`
-- Good example: `# TODO(#123): remove fallback after parser migration`
 
 ### `docs.todo-density`
 
