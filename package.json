@@ -20,7 +20,7 @@
     "url": "https://github.com/blundergoat/gruff-py/issues"
   },
   "homepage": "https://github.com/blundergoat/gruff-py#readme",
-  "dependencies": {
+  "devDependencies": {
     "@blundergoat/goat-flow": "^1.6.4"
   }
 }
