@@ -297,6 +297,7 @@ def test_yaml_selection_applied(tmp_path: Path):
         ("rules", "size.nope", "selection].rules"),
         ("excludeRules", "size.nope", "selection].excludeRules"),
     ],
+    ids=["tiers", "pillars", "exclude-pillars", "rules", "exclude-rules"],
 )
 def test_yaml_selection_rejects_unknown_values(
     tmp_path: Path,

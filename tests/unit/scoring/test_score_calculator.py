@@ -32,11 +32,12 @@ def test_score_report_static_pillars_include_design_not_modernisation():
 
 
 def test_file_score_max_lines_uses_function_length_findings():
+    expected_max_lines = 75
     findings = [
-        _finding("size.function-length", pillar=Pillar.SIZE, lines=75),
+        _finding("size.function-length", pillar=Pillar.SIZE, lines=expected_max_lines),
         _finding("size.parameter-count", pillar=Pillar.SIZE, lines=999),
     ]
 
     report = ScoreCalculator().calculate(findings)
 
-    assert report.top_offenders[0].max_lines == 75
+    assert report.top_offenders[0].max_lines == expected_max_lines

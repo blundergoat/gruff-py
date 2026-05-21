@@ -38,3 +38,6 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+      - name: Gruff self-check
+        run: uv run gruff-py analyse src tests --fail-on advisory
