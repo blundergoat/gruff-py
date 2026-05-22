@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 114 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 116 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -15,7 +15,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 24 | Heuristic AST-level dangerous patterns |
+| `security` | 26 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -101,9 +101,11 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `security.insecure-tls-protocol`
 - `security.jinja2-autoescape-off`
 - `security.paramiko-no-host-key-check`
+- `security.path-traversal`
 - `security.shell-injection`
 - `security.silent-except`
 - `security.sql-concatenation`
+- `security.ssrf`
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load`
 - `security.variable-import`
@@ -885,6 +887,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `security.paramiko-no-host-key-check` leaves paramiko accepts unknown host keys unaddressed.
 - Good example: Code that satisfies `security.paramiko-no-host-key-check` makes paramiko accepts unknown host keys explicit or simpler.
 
+### `security.path-traversal`
+
+- Name: Path traversal
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.path-traversal` protects the security pillar by flagging path traversal before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported path traversal directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-22']`, `owasp` = `['A01:2021-Broken Access Control']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.path-traversal` leaves path traversal unaddressed.
+- Good example: Code that satisfies `security.path-traversal` makes path traversal explicit or simpler.
+
 ### `security.shell-injection`
 
 - Name: Shell injection
@@ -927,6 +944,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.sql-concatenation` leaves sql concatenation unaddressed.
 - Good example: Code that satisfies `security.sql-concatenation` makes sql concatenation explicit or simpler.
+
+### `security.ssrf`
+
+- Name: Server-side request forgery (SSRF)
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.ssrf` protects the security pillar by flagging server-side request forgery (ssrf) before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported server-side request forgery (ssrf) directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-918']`, `owasp` = `['A10:2021-Server-Side Request Forgery']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.ssrf` leaves server-side request forgery (ssrf) unaddressed.
+- Good example: Code that satisfies `security.ssrf` makes server-side request forgery (ssrf) explicit or simpler.
 
 ### `security.unsafe-pickle`
 

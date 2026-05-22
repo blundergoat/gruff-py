@@ -78,6 +78,16 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A02:2021-Cryptographic Failures"],
         "securitySeverity": "high",
     },
+    "security.ssrf": {
+        "cwe": ["CWE-918"],
+        "owasp": ["A10:2021-Server-Side Request Forgery"],
+        "securitySeverity": "high",
+    },
+    "security.path-traversal": {
+        "cwe": ["CWE-22"],
+        "owasp": ["A01:2021-Broken Access Control"],
+        "securitySeverity": "high",
+    },
 }
 
 

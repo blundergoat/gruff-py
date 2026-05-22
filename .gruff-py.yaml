@@ -110,9 +110,11 @@ selection:
   - security.insecure-tls-protocol
   - security.jinja2-autoescape-off
   - security.paramiko-no-host-key-check
+  - security.path-traversal
   - security.shell-injection
   - security.silent-except
   - security.sql-concatenation
+  - security.ssrf
   - security.unsafe-pickle
   - security.unsafe-yaml-load
   - security.variable-import
@@ -445,6 +447,9 @@ rules:
   # paramiko AutoAddPolicy / WarningPolicy accept unknown SSH host keys.
   security.paramiko-no-host-key-check:
     enabled: true
+  # User-controlled paths reaching open / Path / shutil are a traversal risk.
+  security.path-traversal:
+    enabled: true
   # Shell-routed commands can turn strings into command injection.
   security.shell-injection:
     enabled: true
@@ -453,6 +458,9 @@ rules:
     enabled: true
   # Runtime-composed SQL can introduce injection paths.
   security.sql-concatenation:
+    enabled: true
+  # User-controlled URLs reaching outbound HTTP clients enable SSRF.
+  security.ssrf:
     enabled: true
   # Pickle deserialization can execute attacker-controlled code.
   security.unsafe-pickle:

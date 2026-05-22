@@ -56,6 +56,7 @@ def echo():
     sock = socket.socket()
     sock.bind(("0.0.0.0", 9000))
     tmp = tempfile.mktemp()
+    payload = open(request.args["file"]).read()
     with suppress(Exception):
         risky()
     try:
@@ -85,9 +86,11 @@ _EXPECTED_RULE_IDS = {
     "security.insecure-tls-protocol",
     "security.jinja2-autoescape-off",
     "security.paramiko-no-host-key-check",
+    "security.path-traversal",
     "security.shell-injection",
     "security.silent-except",
     "security.sql-concatenation",
+    "security.ssrf",
     "security.unsafe-pickle",
     "security.unsafe-yaml-load",
     "security.weak-crypto",
@@ -140,7 +143,7 @@ def test_security_registry_has_expected_rule_count():
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 24
+    assert len(ids) == 26
     assert _EXPECTED_RULE_IDS.issubset(ids)
     # `security.variable-import` is intentionally absent from the dangerous
     # fixture above because the fixture's `eval` covers the import surface.

@@ -66,9 +66,11 @@ from gruffpy.rule.security.jinja2_autoescape_off_rule import Jinja2AutoescapeOff
 from gruffpy.rule.security.paramiko_no_host_key_check_rule import (
     ParamikoNoHostKeyCheckRule,
 )
+from gruffpy.rule.security.path_traversal_rule import PathTraversalRule
 from gruffpy.rule.security.shell_injection_rule import ShellInjectionRule
 from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
+from gruffpy.rule.security.ssrf_rule import SsrfRule
 from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
 from gruffpy.rule.security.unsafe_yaml_load_rule import UnsafeYamlLoadRule
 from gruffpy.rule.security.variable_import_rule import VariableImportRule
@@ -461,9 +463,11 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(InsecureTlsProtocolRule),
     _entry(Jinja2AutoescapeOffRule),
     _entry(ParamikoNoHostKeyCheckRule),
+    _entry(PathTraversalRule),
     _entry(ShellInjectionRule),
     _entry(SilentExceptRule),
     _entry(SqlConcatenationRule),
+    _entry(SsrfRule),
     _entry(UnsafePickleRule),
     _entry(UnsafeYamlLoadRule),
     _entry(VariableImportRule),
