@@ -46,8 +46,11 @@ from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunction
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
+from gruffpy.rule.security.flask_debug_enabled_rule import FlaskDebugEnabledRule
 from gruffpy.rule.security.header_injection_rule import HeaderInjectionRule
 from gruffpy.rule.security.insecure_random_rule import InsecureRandomRule
+from gruffpy.rule.security.insecure_tls_protocol_rule import InsecureTlsProtocolRule
+from gruffpy.rule.security.jinja2_autoescape_off_rule import Jinja2AutoescapeOffRule
 from gruffpy.rule.security.shell_injection_rule import ShellInjectionRule
 from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
@@ -55,6 +58,7 @@ from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
 from gruffpy.rule.security.unsafe_yaml_load_rule import UnsafeYamlLoadRule
 from gruffpy.rule.security.variable_import_rule import VariableImportRule
 from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
+from gruffpy.rule.security.xxe_rule import XxeRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
@@ -430,8 +434,11 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(DisabledSslVerificationRule),
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
+    _entry(FlaskDebugEnabledRule),
     _entry(HeaderInjectionRule),
     _entry(InsecureRandomRule),
+    _entry(InsecureTlsProtocolRule),
+    _entry(Jinja2AutoescapeOffRule),
     _entry(ShellInjectionRule),
     _entry(SilentExceptRule),
     _entry(SqlConcatenationRule),
@@ -439,6 +446,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(UnsafeYamlLoadRule),
     _entry(VariableImportRule),
     _entry(WeakCryptoRule),
+    _entry(XxeRule),
     _entry(ApiKeyPatternRule),
     _entry(AwsAccessKeyRule),
     _entry(DatabaseUrlPasswordRule),

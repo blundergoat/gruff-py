@@ -23,6 +23,26 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A02:2021-Cryptographic Failures"],
         "securitySeverity": "medium",
     },
+    "security.insecure-tls-protocol": {
+        "cwe": ["CWE-326", "CWE-327"],
+        "owasp": ["A02:2021-Cryptographic Failures"],
+        "securitySeverity": "high",
+    },
+    "security.flask-debug-enabled": {
+        "cwe": ["CWE-489", "CWE-215"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "high",
+    },
+    "security.xxe": {
+        "cwe": ["CWE-611", "CWE-776"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "high",
+    },
+    "security.jinja2-autoescape-off": {
+        "cwe": ["CWE-79"],
+        "owasp": ["A03:2021-Injection"],
+        "securitySeverity": "high",
+    },
 }
 
 

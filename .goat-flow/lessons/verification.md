@@ -1,7 +1,26 @@
 ---
 category: verification
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-22
 ---
+
+## Lesson: Read the rule body before calling a rule dead or leftover
+
+**Created:** 2026-05-22
+**Incident:** While scoping security-scan improvements, the agent claimed
+`src/gruffpy/rule/security/extract_compact_user_input_rule.py` and
+`src/gruffpy/rule/security/variable_import_rule.py` "look like PHP-port
+leftovers" based solely on the PHP-flavoured rule IDs
+(`security.extract-compact-user-input`, `security.variable-import`). Reading
+the files showed both target real Python risks — `f(**request.json)` kwargs
+splat across Flask/Django/FastAPI, and `importlib.import_module(non_literal)`
+/ `__import__(non_literal)`. Tests pass (`8 passed`) and both rules pull
+weight. The agent had to retract the hypothesis to the user.
+
+When a rule ID's lineage suggests it might not apply to this language, the
+ID is not evidence — read the `analyse` method and tests before stating
+"looks like a leftover" or "probably dead". This is a CLAUDE.md
+hallucination red-flag #4 ("looks like", "probably") applied to dead-code
+hypotheses, not just verification claims.
 
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
 

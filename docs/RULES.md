@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 103 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 107 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -15,7 +15,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 13 | Heuristic AST-level dangerous patterns |
+| `security` | 17 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -89,8 +89,11 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `security.disabled-ssl-verification`
 - `security.error-suppression`
 - `security.extract-compact-user-input`
+- `security.flask-debug-enabled`
 - `security.header-injection`
 - `security.insecure-random`
+- `security.insecure-tls-protocol`
+- `security.jinja2-autoescape-off`
 - `security.shell-injection`
 - `security.silent-except`
 - `security.sql-concatenation`
@@ -98,6 +101,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `security.unsafe-yaml-load`
 - `security.variable-import`
 - `security.weak-crypto`
+- `security.xxe`
 
 ### Sensitive Data
 
@@ -696,6 +700,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `security.extract-compact-user-input` leaves splat-unpacked user input unaddressed.
 - Good example: Code that satisfies `security.extract-compact-user-input` makes splat-unpacked user input explicit or simpler.
 
+### `security.flask-debug-enabled`
+
+- Name: Flask debug enabled
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.flask-debug-enabled` protects the security pillar by flagging flask debug enabled before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported flask debug enabled directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-489', 'CWE-215']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
+- Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
+
 ### `security.header-injection`
 
 - Name: Header injection
@@ -723,6 +742,36 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Bad example: Code that triggers `security.insecure-random` leaves insecure random source unaddressed.
 - Good example: Code that satisfies `security.insecure-random` makes insecure random source explicit or simpler.
+
+### `security.insecure-tls-protocol`
+
+- Name: Insecure TLS protocol
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.insecure-tls-protocol` protects the security pillar by flagging insecure tls protocol before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported insecure tls protocol directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-326', 'CWE-327']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.insecure-tls-protocol` leaves insecure tls protocol unaddressed.
+- Good example: Code that satisfies `security.insecure-tls-protocol` makes insecure tls protocol explicit or simpler.
+
+### `security.jinja2-autoescape-off`
+
+- Name: Jinja2 autoescape disabled
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.jinja2-autoescape-off` protects the security pillar by flagging jinja2 autoescape disabled before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported jinja2 autoescape disabled directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-79']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.jinja2-autoescape-off` leaves jinja2 autoescape disabled unaddressed.
+- Good example: Code that satisfies `security.jinja2-autoescape-off` makes jinja2 autoescape disabled explicit or simpler.
 
 ### `security.shell-injection`
 
@@ -824,6 +873,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
 - Bad example: Code that triggers `security.weak-crypto` leaves weak cryptographic hash unaddressed.
 - Good example: Code that satisfies `security.weak-crypto` makes weak cryptographic hash explicit or simpler.
+
+### `security.xxe`
+
+- Name: XML external entity (XXE)
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.xxe` protects the security pillar by flagging xml external entity (xxe) before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported xml external entity (xxe) directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-611', 'CWE-776']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.xxe` leaves xml external entity (xxe) unaddressed.
+- Good example: Code that satisfies `security.xxe` makes xml external entity (xxe) explicit or simpler.
 
 ### `sensitive-data.api-key-pattern`
 

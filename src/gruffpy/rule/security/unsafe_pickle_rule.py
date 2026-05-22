@@ -1,10 +1,14 @@
-"""``security.unsafe-pickle`` — pickle deserialisation of non-literal input.
+"""``security.unsafe-pickle`` — pickle-family deserialisation of non-literal input.
 
 ``pickle.loads(b'...')`` against a literal byte string is safe (well, as safe as
 shipping a literal bytes object can be). ``pickle.loads(user_input)`` is the
 canonical RCE vector. The rule fires when the first argument is not a literal.
-Also covers ``cPickle`` (legacy), ``pickle.Unpickler(file).load()``, and
-``dill.loads``.
+
+Also covers the same shape across the pickle-compatible deserialiser family:
+``cPickle`` (legacy), ``pickle.Unpickler(file).load()``, ``dill.loads``/``load``,
+``marshal.loads``/``load`` (bytecode deserialisation — accepts attacker-built
+code objects), ``shelve.open`` (a thin pickle wrapper over DBM), and
+``jsonpickle.decode`` (reconstructs arbitrary classes from JSON).
 """
 
 import ast
@@ -28,9 +32,21 @@ _UNSAFE_LOAD_TARGETS: frozenset[str] = frozenset(
         "cPickle.load",
         "dill.loads",
         "dill.load",
+        "marshal.loads",
+        "marshal.load",
+        "shelve.open",
+        "jsonpickle.decode",
     }
 )
-_SOURCE_NEEDLES: tuple[str, ...] = ("pickle", "cPickle", "dill", "Unpickler")
+_SOURCE_NEEDLES: tuple[str, ...] = (
+    "pickle",
+    "cPickle",
+    "dill",
+    "marshal",
+    "shelve",
+    "jsonpickle",
+    "Unpickler",
+)
 
 
 class UnsafePickleRule(Rule):
@@ -130,7 +146,10 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=f"`{target}(...)` deserialises a non-literal input — pickle is a known RCE vector.",
+        message=(
+            f"`{target}(...)` deserialises a non-literal input — pickle-family "
+            "deserialisation is a known RCE vector."
+        ),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -12,6 +12,7 @@ minimumPythonVersion: '3.11'
 paths:
   ignore:
   - .agents/
+  - .antigravitycli/
   - .claude/
   - .codex/
   - .github/
@@ -97,8 +98,11 @@ selection:
   - security.disabled-ssl-verification
   - security.error-suppression
   - security.extract-compact-user-input
+  - security.flask-debug-enabled
   - security.header-injection
   - security.insecure-random
+  - security.insecure-tls-protocol
+  - security.jinja2-autoescape-off
   - security.shell-injection
   - security.silent-except
   - security.sql-concatenation
@@ -106,6 +110,7 @@ selection:
   - security.unsafe-yaml-load
   - security.variable-import
   - security.weak-crypto
+  - security.xxe
   - sensitive-data.api-key-pattern
   - sensitive-data.aws-access-key
   - sensitive-data.database-url-password
@@ -397,11 +402,20 @@ rules:
   # Splat-unpacking compact user input can bypass explicit validation.
   security.extract-compact-user-input:
     enabled: true
+  # Flask debug mode exposes the Werkzeug debugger and is an RCE in production.
+  security.flask-debug-enabled:
+    enabled: true
   # Unsanitized header values can enable response splitting.
   security.header-injection:
     enabled: true
   # Non-cryptographic randomness is unsafe for secrets or tokens.
   security.insecure-random:
+    enabled: true
+  # Deprecated SSL/TLS protocol constants accept known-broken ciphers.
+  security.insecure-tls-protocol:
+    enabled: true
+  # Jinja2 environments without autoescape leave templates exposed to XSS.
+  security.jinja2-autoescape-off:
     enabled: true
   # Shell-routed commands can turn strings into command injection.
   security.shell-injection:
@@ -423,6 +437,9 @@ rules:
     enabled: true
   # Weak hashes are unsuitable for security-sensitive data.
   security.weak-crypto:
+    enabled: true
+  # Stdlib/lxml XML parsers without defusedxml are vulnerable to XXE.
+  security.xxe:
     enabled: true
   # Vendor API key patterns may expose live credentials.
   sensitive-data.api-key-pattern:

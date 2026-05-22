@@ -4,11 +4,14 @@ from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 _DANGEROUS_FIXTURE = """import hashlib
+import jinja2
 import os
 import pickle
 import random
 import requests
+import ssl
 import subprocess
+import xml.etree.ElementTree as ET
 import yaml
 
 from contextlib import suppress
@@ -34,6 +37,9 @@ def echo():
     password_hash = hashlib.md5(request.args["password"].encode()).hexdigest()
     token = random.randint(0, 99999999)
     requests.get(request.args["url"], verify=False)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+    tree = ET.parse(request.args["doc"])
+    env = jinja2.Environment(loader=loader)
     with suppress(Exception):
         risky()
     try:
@@ -41,6 +47,9 @@ def echo():
     except Exception:
         pass
     return response
+
+
+app.run(debug=True)
 """
 
 _EXPECTED_RULE_IDS = {
@@ -48,14 +57,18 @@ _EXPECTED_RULE_IDS = {
     "security.disabled-ssl-verification",
     "security.error-suppression",
     "security.extract-compact-user-input",
+    "security.flask-debug-enabled",
     "security.header-injection",
     "security.insecure-random",
+    "security.insecure-tls-protocol",
+    "security.jinja2-autoescape-off",
     "security.shell-injection",
     "security.silent-except",
     "security.sql-concatenation",
     "security.unsafe-pickle",
     "security.unsafe-yaml-load",
     "security.weak-crypto",
+    "security.xxe",
 }
 
 
@@ -98,14 +111,14 @@ def test_safe_equivalents_emit_no_security_findings():
     )
 
 
-def test_security_registry_has_thirteen_rules():
+def test_security_registry_has_expected_rule_count():
     ids = {
         rule.definition().id
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 13
+    assert len(ids) == 17
     assert _EXPECTED_RULE_IDS.issubset(ids)
-    # The 13th is `security.variable-import`, which the dangerous fixture above
-    # doesn't trigger because the fixture's eval covers the import surface.
+    # `security.variable-import` is intentionally absent from the dangerous
+    # fixture above because the fixture's `eval` covers the import surface.
     assert "security.variable-import" in ids
