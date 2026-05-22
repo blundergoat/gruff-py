@@ -94,6 +94,7 @@ selection:
   - naming.parameter-type-name
   - naming.short-variable
   - naming.test-naming-consistency
+  - security.cors-wildcard-with-credentials
   - security.dangerous-function-call
   - security.disabled-ssl-verification
   - security.django-mark-safe
@@ -101,10 +102,14 @@ selection:
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
+  - security.hardcoded-bind-all-interfaces
+  - security.hardcoded-framework-secret-key
   - security.header-injection
   - security.insecure-random
+  - security.insecure-temp-file
   - security.insecure-tls-protocol
   - security.jinja2-autoescape-off
+  - security.paramiko-no-host-key-check
   - security.shell-injection
   - security.silent-except
   - security.sql-concatenation
@@ -392,6 +397,9 @@ rules:
   # Test names should follow the project's test naming convention.
   naming.test-naming-consistency:
     enabled: true
+  # CORS wildcard origin combined with credentials is a misconfigured policy.
+  security.cors-wildcard-with-credentials:
+    enabled: true
   # Calls that execute code or perform risky operations need scrutiny.
   security.dangerous-function-call:
     enabled: true
@@ -413,17 +421,29 @@ rules:
   # Flask debug mode exposes the Werkzeug debugger and is an RCE in production.
   security.flask-debug-enabled:
     enabled: true
+  # Binding to 0.0.0.0 or :: exposes the service on every network interface.
+  security.hardcoded-bind-all-interfaces:
+    enabled: true
+  # Module-scope SECRET_KEY literals in Flask/Django files leak signing keys.
+  security.hardcoded-framework-secret-key:
+    enabled: true
   # Unsanitized header values can enable response splitting.
   security.header-injection:
     enabled: true
   # Non-cryptographic randomness is unsafe for secrets or tokens.
   security.insecure-random:
     enabled: true
+  # mktemp and hardcoded /tmp paths are exposed to TOCTOU and symlink attacks.
+  security.insecure-temp-file:
+    enabled: true
   # Deprecated SSL/TLS protocol constants accept known-broken ciphers.
   security.insecure-tls-protocol:
     enabled: true
   # Jinja2 environments without autoescape leave templates exposed to XSS.
   security.jinja2-autoescape-off:
+    enabled: true
+  # paramiko AutoAddPolicy / WarningPolicy accept unknown SSH host keys.
+  security.paramiko-no-host-key-check:
     enabled: true
   # Shell-routed commands can turn strings into command injection.
   security.shell-injection:

@@ -53,6 +53,31 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A03:2021-Injection"],
         "securitySeverity": "high",
     },
+    "security.paramiko-no-host-key-check": {
+        "cwe": ["CWE-295", "CWE-322"],
+        "owasp": ["A07:2021-Identification and Authentication Failures"],
+        "securitySeverity": "high",
+    },
+    "security.hardcoded-bind-all-interfaces": {
+        "cwe": ["CWE-668"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "medium",
+    },
+    "security.insecure-temp-file": {
+        "cwe": ["CWE-377", "CWE-379"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "medium",
+    },
+    "security.cors-wildcard-with-credentials": {
+        "cwe": ["CWE-942", "CWE-346"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "high",
+    },
+    "security.hardcoded-framework-secret-key": {
+        "cwe": ["CWE-798", "CWE-321"],
+        "owasp": ["A02:2021-Cryptographic Failures"],
+        "securitySeverity": "high",
+    },
 }
 
 

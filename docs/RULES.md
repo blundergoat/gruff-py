@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 109 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 114 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -15,7 +15,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 19 | Heuristic AST-level dangerous patterns |
+| `security` | 24 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -85,6 +85,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 
 ### Security
 
+- `security.cors-wildcard-with-credentials`
 - `security.dangerous-function-call`
 - `security.disabled-ssl-verification`
 - `security.django-mark-safe`
@@ -92,10 +93,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
+- `security.hardcoded-bind-all-interfaces`
+- `security.hardcoded-framework-secret-key`
 - `security.header-injection`
 - `security.insecure-random`
+- `security.insecure-temp-file`
 - `security.insecure-tls-protocol`
 - `security.jinja2-autoescape-off`
+- `security.paramiko-no-host-key-check`
 - `security.shell-injection`
 - `security.silent-except`
 - `security.sql-concatenation`
@@ -645,6 +650,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `naming.test-naming-consistency` leaves test naming consistency unaddressed.
 - Good example: Code that satisfies `naming.test-naming-consistency` makes test naming consistency explicit or simpler.
 
+### `security.cors-wildcard-with-credentials`
+
+- Name: CORS wildcard origin with credentials
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.cors-wildcard-with-credentials` protects the security pillar by flagging cors wildcard origin with credentials before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported cors wildcard origin with credentials directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-942', 'CWE-346']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.cors-wildcard-with-credentials` leaves cors wildcard origin with credentials unaddressed.
+- Good example: Code that satisfies `security.cors-wildcard-with-credentials` makes cors wildcard origin with credentials explicit or simpler.
+
 ### `security.dangerous-function-call`
 
 - Name: Dangerous function call
@@ -747,6 +767,36 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
 - Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
 
+### `security.hardcoded-bind-all-interfaces`
+
+- Name: Hardcoded bind to all interfaces
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `security.hardcoded-bind-all-interfaces` protects the security pillar by flagging hardcoded bind to all interfaces before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported hardcoded bind to all interfaces directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-668']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.hardcoded-bind-all-interfaces` leaves hardcoded bind to all interfaces unaddressed.
+- Good example: Code that satisfies `security.hardcoded-bind-all-interfaces` makes hardcoded bind to all interfaces explicit or simpler.
+
+### `security.hardcoded-framework-secret-key`
+
+- Name: Hardcoded framework SECRET_KEY
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.hardcoded-framework-secret-key` protects the security pillar by flagging hardcoded framework secret_key before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported hardcoded framework secret_key directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-798', 'CWE-321']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.hardcoded-framework-secret-key` leaves hardcoded framework secret_key unaddressed.
+- Good example: Code that satisfies `security.hardcoded-framework-secret-key` makes hardcoded framework secret_key explicit or simpler.
+
 ### `security.header-injection`
 
 - Name: Header injection
@@ -774,6 +824,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Bad example: Code that triggers `security.insecure-random` leaves insecure random source unaddressed.
 - Good example: Code that satisfies `security.insecure-random` makes insecure random source explicit or simpler.
+
+### `security.insecure-temp-file`
+
+- Name: Insecure temporary file
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `security.insecure-temp-file` protects the security pillar by flagging insecure temporary file before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported insecure temporary file directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-377', 'CWE-379']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.insecure-temp-file` leaves insecure temporary file unaddressed.
+- Good example: Code that satisfies `security.insecure-temp-file` makes insecure temporary file explicit or simpler.
 
 ### `security.insecure-tls-protocol`
 
@@ -804,6 +869,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-79']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.jinja2-autoescape-off` leaves jinja2 autoescape disabled unaddressed.
 - Good example: Code that satisfies `security.jinja2-autoescape-off` makes jinja2 autoescape disabled explicit or simpler.
+
+### `security.paramiko-no-host-key-check`
+
+- Name: Paramiko accepts unknown host keys
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.paramiko-no-host-key-check` protects the security pillar by flagging paramiko accepts unknown host keys before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported paramiko accepts unknown host keys directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-295', 'CWE-322']`, `owasp` = `['A07:2021-Identification and Authentication Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.paramiko-no-host-key-check` leaves paramiko accepts unknown host keys unaddressed.
+- Good example: Code that satisfies `security.paramiko-no-host-key-check` makes paramiko accepts unknown host keys explicit or simpler.
 
 ### `security.shell-injection`
 

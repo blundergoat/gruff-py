@@ -6,11 +6,14 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 _DANGEROUS_FIXTURE = """import hashlib
 import jinja2
 import os
+import paramiko
 import pickle
 import random
 import requests
+import socket
 import ssl
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 import yaml
 
@@ -18,9 +21,12 @@ from contextlib import suppress
 from django.db.models.expressions import RawSQL
 from django.utils.safestring import mark_safe
 from flask import Flask, request
+from flask_cors import CORS
 
 
+SECRET_KEY = "do-not-ship-this"
 app = Flask(__name__)
+CORS(app, supports_credentials=True, origins="*")
 
 
 @app.route("/echo")
@@ -45,6 +51,11 @@ def echo():
     rendered = mark_safe(request.args["html"])
     raw = Model.objects.raw(f"SELECT * FROM t WHERE x={request.args['x']}")
     expr = RawSQL(f"SUM(x) WHERE id = {request.args['id']}", [])
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    sock = socket.socket()
+    sock.bind(("0.0.0.0", 9000))
+    tmp = tempfile.mktemp()
     with suppress(Exception):
         risky()
     try:
@@ -54,10 +65,11 @@ def echo():
     return response
 
 
-app.run(debug=True)
+app.run(host="0.0.0.0", debug=True)
 """
 
 _EXPECTED_RULE_IDS = {
+    "security.cors-wildcard-with-credentials",
     "security.dangerous-function-call",
     "security.disabled-ssl-verification",
     "security.django-mark-safe",
@@ -65,10 +77,14 @@ _EXPECTED_RULE_IDS = {
     "security.error-suppression",
     "security.extract-compact-user-input",
     "security.flask-debug-enabled",
+    "security.hardcoded-bind-all-interfaces",
+    "security.hardcoded-framework-secret-key",
     "security.header-injection",
     "security.insecure-random",
+    "security.insecure-temp-file",
     "security.insecure-tls-protocol",
     "security.jinja2-autoescape-off",
+    "security.paramiko-no-host-key-check",
     "security.shell-injection",
     "security.silent-except",
     "security.sql-concatenation",
@@ -124,7 +140,7 @@ def test_security_registry_has_expected_rule_count():
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 19
+    assert len(ids) == 24
     assert _EXPECTED_RULE_IDS.issubset(ids)
     # `security.variable-import` is intentionally absent from the dangerous
     # fixture above because the fixture's `eval` covers the import surface.
