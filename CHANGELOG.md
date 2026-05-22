@@ -8,9 +8,54 @@ schema and fingerprint contracts called out below.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-05-19
+## [0.1.0] - 2026-05-23
 
 First public release.
+
+### Fixed
+
+False-positive precision sweep from the 2026-05-23 healthkit/strands_agents
+dogfood scan (53 Python files, 425 baseline findings). Total reduction:
+**425 → 335** (-21%) across nine rules; no rule's contract, severity, or
+fingerprint inputs changed.
+
+- `waste.unused-import` no longer flags `from __future__ import …`
+  directives (PEP 236 / 563 markers have no runtime name to reference).
+- `waste.empty-class` no longer flags empty subclasses of `Exception` /
+  `BaseException` or any base whose name ends in `Error` / `Exception` /
+  `Warning` — empty discriminable-exception types are idiomatic Python.
+- `naming.parameter-type-name` accepts `websocket`, `req`, `request`,
+  `ws`, `msg` as canonical parameter names regardless of annotation —
+  the rule no longer recommends `web_socket` for FastAPI / Starlette /
+  `websockets` handler params.
+- `docs.stale-param-doc` strips leading `*` / `**` from docstring
+  parameter entries before matching the signature, so documented
+  `*args` / `**kwargs` no longer report as stale.
+- `naming.boolean-prefix` exempts UPPER_SNAKE module-level constants
+  (`ENABLE_PROMPT_CACHE: bool = True`), pydantic `BaseModel`,
+  `RootModel`, `TypedDict`, and `@dataclass` fields — schema field
+  names are part of the JSON / API contract.
+- `naming.boolean-prefix` allowlist broadened to recognise `looks_`
+  prefix and `_affirms` / `_declines` / `_matches` suffixes as
+  verb-shaped English predicates.
+- `size.public-method-count` and `size.attribute-count` exempt
+  `unittest.TestCase` subclasses, pytest `Test*` name-prefix classes,
+  framework-base classes (`TypedDict`, `BaseModel`, `NamedTuple`,
+  `Protocol`, `ABC`, Enum-like), and `@dataclass` shells — test
+  classes and schema classes are not "unfocused" by virtue of having
+  many slots.
+- `docs.missing-function-docstring` exempts nested functions whose
+  name is referenced at most once inside the enclosing function —
+  one-shot regex callbacks, SSE `event_generator` patterns, and
+  inner mock-method stubs.
+- `test-quality.sut-not-called` treats reads of any module-level bound
+  name (imports plus module-level `NAME = …` / `NAME: T = …`
+  assignments) and attribute access to `model_fields`,
+  `__annotations__`, `__fields__`, or `model_config` as SUT touches.
+  Schema-contract and prompt-regression tests no longer false-fire.
+  Test-framework module imports (`pytest`, `unittest`, `mock`,
+  `unittest.mock`) are excluded from the SUT-name set so the rule
+  still catches tests that only invoke framework helpers.
 
 ### Added
 
@@ -42,6 +87,11 @@ First public release.
 - GitHub Actions annotation output.
 - SARIF 2.1.0 output.
 - Local dashboard shell matching the gruff-php dashboard pattern.
+- Shared `is_test_class()` helper in `gruffpy.rule._python_dynamism`
+  covering both `unittest.TestCase` subclasses and pytest `Test*`
+  name-prefix collection.
+- `BaseModel` and `RootModel` recognised as framework bases by
+  `has_framework_base()`.
 
 ### Rule Catalogue
 
