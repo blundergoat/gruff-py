@@ -107,6 +107,9 @@ class CognitiveComplexityRule(Rule):
         return findings
 
 
+_COGNITIVE_CACHE_ATTR = "_gruffpy_cognitive_complexity"
+
+
 def cognitive_for(fn: FunctionLike) -> int:
     """Compute cognitive complexity for a function-like node per ADR-003.
 
@@ -116,6 +119,10 @@ def cognitive_for(fn: FunctionLike) -> int:
     Returns:
         Cognitive complexity score for the node body.
     """
+    cached = getattr(fn, _COGNITIVE_CACHE_ATTR, None)
+    if isinstance(cached, int):
+        return cached
+
     fn_name = getattr(fn, "name", None) if not isinstance(fn, ast.Lambda) else None
     counter = _Counter(self_name=fn_name)
     if isinstance(fn, ast.Lambda):
@@ -123,6 +130,7 @@ def cognitive_for(fn: FunctionLike) -> int:
     else:
         for stmt in fn.body:
             counter.visit(stmt, nesting=0)
+    setattr(fn, _COGNITIVE_CACHE_ATTR, counter.score)
     return counter.score
 
 

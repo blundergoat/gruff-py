@@ -139,6 +139,24 @@ def test_cli_summary_json_is_compact_digest(
     assert "summary" in payload
     assert "topRules" in payload
     assert "topFiles" in payload
+    assert payload["summary"]["paths"] == ["src"]
+    assert isinstance(payload["summary"]["elapsedSeconds"], int | float)
+    assert payload["summary"]["elapsedSeconds"] >= 0
+
+
+def test_cli_summary_text_includes_path_and_elapsed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Path: src" in result.output
+    assert "Elapsed:" in result.output
 
 
 def test_cli_metric_calibration_json_is_developer_dump(

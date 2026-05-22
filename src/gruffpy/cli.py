@@ -4,6 +4,7 @@ import json
 import os
 import shlex
 import sys
+import time
 from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -313,14 +314,16 @@ def summary(**kwargs: Any) -> None:
     summary_format = cast(str, kwargs["summary_format"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
+    start = time.perf_counter()
     analysis_report = _run_analysis_for_cli(
         _summary_analysis_request(kwargs, summary_format=summary_format)
     )
+    elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
-        _write_stdout(json.dumps(_summary_payload(analysis_report, top), indent=4))
+        _write_stdout(json.dumps(_summary_payload(analysis_report, top, elapsed_seconds), indent=4))
         _write_stdout("\n")
     else:
-        _write_stdout(_summary_text(analysis_report, top))
+        _write_stdout(_summary_text(analysis_report, top, elapsed_seconds))
     sys.exit(analysis_report.exit_code)
 
 
@@ -525,12 +528,13 @@ def _render_report(
             return TextReporter().render(report)
 
 
-def _summary_payload(report: AnalysisReport, top: int) -> dict[str, Any]:
+def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -> dict[str, Any]:
     pillar_counts = Counter(finding.pillar.value for finding in report.findings)
     rule_counts = Counter(finding.rule_id for finding in report.findings)
     file_counts = Counter(finding.file_path for finding in report.findings)
     return {
         "summary": {
+            "paths": list(report.requested_paths),
             "filesDiscovered": report.files_discovered,
             "filesParsed": report.files_parsed,
             "ignored": len(report.ignored_paths),
@@ -538,6 +542,7 @@ def _summary_payload(report: AnalysisReport, top: int) -> dict[str, Any]:
             "parseErrors": report.parse_error_count(),
             "findings": len(report.findings),
             "exitCode": report.exit_code,
+            "elapsedSeconds": round(elapsed_seconds, 3),
         },
         "pillars": dict(sorted(pillar_counts.items())),
         "topRules": _counter_rows(rule_counts, top),
@@ -545,17 +550,20 @@ def _summary_payload(report: AnalysisReport, top: int) -> dict[str, Any]:
     }
 
 
-def _summary_text(report: AnalysisReport, top: int) -> str:
-    payload = _summary_payload(report, top)
+def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> str:
+    payload = _summary_payload(report, top, elapsed_seconds)
     summary = payload["summary"]
+    paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
     lines = [
         f"gruff {report.tool_version} summary",
+        f"Path: {paths_display}",
         (
             f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
             f"{summary['ignored']} ignored, {summary['missing']} missing, "
             f"{summary['parseErrors']} parse errors"
         ),
         f"Findings: {summary['findings']}",
+        f"Elapsed: {summary['elapsedSeconds']:.3f}s",
         "",
         "Per pillar:",
     ]

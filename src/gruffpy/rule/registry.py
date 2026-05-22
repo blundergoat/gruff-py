@@ -99,14 +99,34 @@ class RuleRegistry:
             Deduplicated findings sorted into deterministic output order.
         """
         enabled = self.enabled_rules(context.config)
-        findings = self._analyse_units(units, context, enabled)
+        python_rules, text_rules, project_rules = self._partition_rules(enabled)
+        findings = self._analyse_units(units, context, python_rules, text_rules)
         project_units = self._project_units(units)
-        findings.extend(self._analyse_project_rules(project_units, context, enabled))
+        findings.extend(self._analyse_project_rules(project_units, context, project_rules))
         findings = self._deduplicate(findings)
         findings.sort(
             key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
         )
         return findings
+
+    @staticmethod
+    def _partition_rules(
+        rules: list[RuleLike],
+    ) -> tuple[list[Rule], list[SourceTextRule], list[ProjectRuleProtocol]]:
+        # Project-rule check must come first: a rule satisfying ProjectRuleProtocol
+        # is dispatched only through analyse_project, mirroring the prior inline
+        # `if isinstance(rule, ProjectRuleProtocol): continue` guard.
+        python_rules: list[Rule] = []
+        text_rules: list[SourceTextRule] = []
+        project_rules: list[ProjectRuleProtocol] = []
+        for rule in rules:
+            if isinstance(rule, ProjectRuleProtocol):
+                project_rules.append(rule)
+            elif isinstance(rule, SourceTextRule):
+                text_rules.append(rule)
+            else:
+                python_rules.append(rule)
+        return python_rules, text_rules, project_rules
 
     @staticmethod
     def _project_units(units: list[AnalysisUnit]) -> list[AnalysisUnit]:
@@ -120,28 +140,28 @@ class RuleRegistry:
     def _analyse_units(
         units: list[AnalysisUnit],
         context: RuleContext,
-        rules: list[RuleLike],
+        python_rules: list[Rule],
+        text_rules: list[SourceTextRule],
     ) -> list[Finding]:
         findings: list[Finding] = []
         for unit in units:
-            findings.extend(RuleRegistry._analyse_unit(unit, context, rules))
+            findings.extend(RuleRegistry._analyse_unit(unit, context, python_rules, text_rules))
         return findings
 
     @staticmethod
     def _analyse_unit(
         unit: AnalysisUnit,
         context: RuleContext,
-        rules: list[RuleLike],
+        python_rules: list[Rule],
+        text_rules: list[SourceTextRule],
     ) -> list[Finding]:
         if unit.has_parse_errors():
             return []
         findings: list[Finding] = []
-        is_python = unit.file.is_python()
-        for rule in rules:
-            if isinstance(rule, ProjectRuleProtocol):
-                continue
-            if not is_python and not isinstance(rule, SourceTextRule):
-                continue
+        if unit.file.is_python():
+            for rule in python_rules:
+                findings.extend(rule.analyse(unit, context))
+        for rule in text_rules:
             findings.extend(rule.analyse(unit, context))
         return findings
 
@@ -149,12 +169,11 @@ class RuleRegistry:
     def _analyse_project_rules(
         units: list[AnalysisUnit],
         context: RuleContext,
-        rules: list[RuleLike],
+        rules: list[ProjectRuleProtocol],
     ) -> list[Finding]:
         findings: list[Finding] = []
         for rule in rules:
-            if isinstance(rule, ProjectRuleProtocol):
-                findings.extend(rule.analyse_project(units, context))
+            findings.extend(rule.analyse_project(units, context))
         return findings
 
     @staticmethod
