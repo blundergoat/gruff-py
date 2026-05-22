@@ -100,7 +100,38 @@ def _should_report_missing_function_docstring(
         or is_overload_stub(node)
         or is_property_setter_or_deleter(node)
         or is_protocol_method_stub(node, parents)
+        or _is_single_callsite_closure(node, parents)
     )
+
+
+def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> bool:
+    # Nested function whose name is referenced at most once inside the
+    # enclosing function is treated as a closure / one-shot callback (regex
+    # sub callbacks, SSE `event_generator`, mock-class method stubs). Forcing
+    # a docstring on these is noise — the call-site context already documents
+    # intent. Source: 2026-05-23 healthkit dogfood (17 of 44 hits).
+    enclosing = next(
+        (p for p in reversed(parents) if isinstance(p, ast.FunctionDef | ast.AsyncFunctionDef)),
+        None,
+    )
+    if enclosing is None:
+        return False
+    return _name_reference_count_excluding(enclosing, node.name, node) <= 1
+
+
+def _name_reference_count_excluding(root: ast.AST, name: str, exclude: ast.AST) -> int:
+    count = 0
+    stack: list[ast.AST] = list(ast.iter_child_nodes(root))
+    while stack:
+        current = stack.pop()
+        if current is exclude:
+            # Don't descend into the closure's own body — recursive references
+            # inside the closure shouldn't count toward "external callsites".
+            continue
+        if isinstance(current, ast.Name) and current.id == name:
+            count += 1
+        stack.extend(ast.iter_child_nodes(current))
+    return count
 
 
 def _missing_function_docstring_finding(

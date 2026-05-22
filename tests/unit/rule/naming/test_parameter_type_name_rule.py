@@ -79,6 +79,37 @@ def test_configurable_ignored():
     assert findings == []
 
 
+def test_websocket_parameter_is_accepted():
+    # FastAPI/Starlette convention: `websocket` is the canonical lowercase name;
+    # rewriting it to `web_socket` would go against the entire Python websocket
+    # ecosystem. Source: 2026-05-23 healthkit dogfood.
+    src = "async def ws_handler(websocket: WebSocket): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_req_parameter_is_accepted():
+    # FastAPI handler convention.
+    src = "def endpoint(req: BookingChatRequest): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_request_parameter_is_accepted():
+    src = "def endpoint(request: BookingChatRequest): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_real_parameter_named_payload_still_fires():
+    # Sanity: the allowlist is the literal set {websocket, req, request, ws,
+    # msg}; other shortish names like `payload` MUST still go through the
+    # canonical-name check. This keeps the FP fix narrow.
+    src = "def endpoint(payload: BookingChatRequest): pass\n"
+    findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
 def test_self_skipped():
     src = "class C:\n    def m(self, x: UserService): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())

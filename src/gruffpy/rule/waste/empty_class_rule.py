@@ -115,8 +115,18 @@ def _empty_class_finding(
     )
 
 
+_EXCEPTION_BASE_SUFFIXES = ("Error", "Exception", "Warning")
+_EXACT_MARKER_BASES = frozenset({"BaseException", "Exception", "Rule", "SourceTextRule"})
+
+
 def _is_marker_base_subclass(node: ast.ClassDef) -> bool:
-    return bool(_base_names(node) & {"BaseException", "Exception", "Rule", "SourceTextRule"})
+    base_names = _base_names(node)
+    if base_names & _EXACT_MARKER_BASES:
+        return True
+    # Python convention: any class ending in Error/Exception/Warning is an exception
+    # type; an empty `class FooTimeout(BarError): pass` is the idiomatic way to
+    # introduce a discriminable exception with no extra payload.
+    return any(name.endswith(_EXCEPTION_BASE_SUFFIXES) for name in base_names)
 
 
 def _base_names(node: ast.ClassDef) -> set[str]:

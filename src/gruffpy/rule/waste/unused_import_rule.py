@@ -4,7 +4,10 @@ Skip:
 
 - names listed in ``__all__`` (intentional re-exports);
 - ``__init__.py`` modules (any name imported there is plausibly re-exported);
-- imports tagged with ``# noqa`` on the import line.
+- imports tagged with ``# noqa`` on the import line;
+- ``from __future__ import …`` directives — these are compile-time
+  PEP 236 / 563 markers whose name never appears in the runtime
+  namespace, so the "is it referenced?" question doesn't apply.
 
 Side-effect imports (``import sentry_sdk.init`` or ``import logging.config``)
 are not yet detected — they typically come in as ``Import`` with multiple
@@ -116,6 +119,9 @@ def _collect_imports(tree: ast.AST) -> dict[str, ast.alias]:
                 local = alias.asname or alias.name.split(".")[0]
                 imports[local] = alias
         elif isinstance(node, ast.ImportFrom):
+            if node.module == "__future__":
+                # PEP 236/563 directives — compile-time only, no runtime name to reference.
+                continue
             for alias in node.names:
                 if alias.name == "*":
                     continue

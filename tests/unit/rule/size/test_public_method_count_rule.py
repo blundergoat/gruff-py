@@ -66,6 +66,25 @@ def test_above_error_threshold_emits_error():
     assert findings[0].metadata["publicMethods"] == 30
 
 
+def test_unittest_testcase_subclass_is_exempt():
+    # TestCase subclasses have one method per test case by design.
+    methods = "\n".join([f"    def test_a{i}(self):\n        pass" for i in range(20)])
+    source = f"import unittest\nclass MyTest(unittest.TestCase):\n{methods}\n"
+    assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_pytest_test_prefix_class_is_exempt():
+    methods = "\n".join([f"    def test_a{i}(self):\n        pass" for i in range(20)])
+    source = f"class TestFoo:\n{methods}\n"
+    assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_pydantic_basemodel_subclass_is_exempt():
+    body = "\n".join(f"    def m{i}(self):\n        return {i}" for i in range(20))
+    source = f"from pydantic import BaseModel\nclass S(BaseModel):\n{body}\n"
+    assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
 def test_definition_uses_default_thresholds():
     d = PublicMethodCountRule().definition()
     assert d.id == "size.public-method-count"

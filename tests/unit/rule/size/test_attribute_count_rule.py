@@ -87,6 +87,35 @@ def test_tuple_self_assignment_collects_all_names():
     assert findings[0].metadata["attributes"] == 3
 
 
+def test_typeddict_is_exempt():
+    # TypedDict's job IS to enumerate fields; counting them as "too many
+    # attributes" misses the intent. Source: 2026-05-23 healthkit
+    # dogfood (VoiceSession TypedDict with 16 fields).
+    body = "\n".join(f"    a{i}: int" for i in range(20))
+    source = f"from typing import TypedDict\nclass S(TypedDict, total=False):\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_dataclass_is_exempt():
+    body = "\n".join(f"    a{i}: int = {i}" for i in range(20))
+    source = f"from dataclasses import dataclass\n@dataclass\nclass C:\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_pydantic_basemodel_is_exempt():
+    body = "\n".join(f"    a{i}: int = {i}" for i in range(20))
+    source = f"from pydantic import BaseModel\nclass S(BaseModel):\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_unittest_testcase_is_exempt():
+    init_body = "\n".join(f"        self.a{i} = {i}" for i in range(20))
+    source = (
+        f"import unittest\nclass MyTest(unittest.TestCase):\n    def __init__(self):\n{init_body}\n"
+    )
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
 def test_definition_uses_default_thresholds():
     d = AttributeCountRule().definition()
     assert d.id == "size.attribute-count"

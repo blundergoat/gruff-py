@@ -62,6 +62,33 @@ def test_exception_marker_class_does_not_fire():
     assert findings == []
 
 
+def test_subclass_of_custom_error_does_not_fire():
+    # Exception ancestry by Python naming convention: a base whose name ends in
+    # Error/Exception/Warning is treated as exception-flavoured even when its own
+    # definition isn't in this file (e.g. RuntimeError, or a project-defined
+    # `class VoiceTurnError(Exception)`).
+    src = (
+        "class VoiceTurnError(Exception):\n"
+        "    pass\n"
+        "class VoiceTurnTimeoutError(VoiceTurnError):\n"
+        "    pass\n"
+    )
+    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
+    assert findings == []
+
+
+def test_subclass_of_runtime_error_does_not_fire():
+    src = "class ScenarioRunError(RuntimeError):\n    pass\n"
+    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
+    assert findings == []
+
+
+def test_subclass_of_user_warning_does_not_fire():
+    src = "class BazWarning(UserWarning):\n    pass\n"
+    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
+    assert findings == []
+
+
 def test_internal_marker_base_class_does_not_fire():
     src = "from abc import ABC\nclass Rule(ABC): ...\nclass SourceTextRule(Rule):\n    pass\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))

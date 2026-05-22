@@ -13,6 +13,7 @@ inherited from the parent class signature.
 """
 
 import ast
+import re
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -20,11 +21,16 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
-from gruffpy.rule._python_dynamism import _decorator_name
+from gruffpy.rule._python_dynamism import (
+    _decorator_name,
+    has_dataclass_decorator,
+    has_framework_base,
+)
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size._lines import parent_chain
 
 _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
     {
@@ -41,6 +47,7 @@ _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
         "expects",
         "has",
         "is",
+        "looks",
         "matches",
         "must",
         "needs",
@@ -55,6 +62,9 @@ _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
         "will",
     }
 )
+# Suffix predicates added from 2026-05-23 healthkit dogfood; verb-shaped English
+# predicates where the action verb sits at the end of the identifier.
+_BOOLEAN_VERB_SUFFIXES: frozenset[str] = frozenset({"affirms", "declines", "matches"})
 _BOOLEAN_ADJECTIVES: frozenset[str] = frozenset(
     {
         "active",
@@ -187,6 +197,10 @@ class BooleanPrefixRule(Rule):
             return None
         if not _is_bool_annotation(node.annotation):
             return None
+        if _is_upper_snake_constant(node, name):
+            return None
+        if _is_schema_field(node):
+            return None
         return self._finding(unit, definition, name, node.target.lineno, kind="attribute")
 
     def _finding(
@@ -240,6 +254,7 @@ def _has_boolean_prefix(name: str) -> bool:
         or lowered in _BOOLEAN_ADJECTIVES
         or tokens[0] in _BOOLEAN_PREFIXES
         or tokens[-1] in _BOOLEAN_ADJECTIVES
+        or tokens[-1] in _BOOLEAN_VERB_SUFFIXES
         or lowered.startswith(_BOOLEAN_PREFIX_PATTERNS)
         or lowered.endswith(_BOOLEAN_SUFFIX_PATTERNS)
     )
@@ -266,6 +281,30 @@ def _is_bool_name(node: ast.AST) -> bool:
 
 def _strip_lead(name: str) -> str:
     return name.lstrip("_") or name
+
+
+_UPPER_SNAKE_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*$")
+
+
+def _is_upper_snake_constant(node: ast.AnnAssign, name: str) -> bool:
+    # Module-level (or class-level) UPPER_SNAKE annotated bool — conventional
+    # constant declaration. Renaming `ENABLE_PROMPT_CACHE: bool = True` to
+    # `is_prompt_cache_enabled` would violate the all-caps constant convention.
+    if not _UPPER_SNAKE_PATTERN.fullmatch(name):
+        return False
+    return any(isinstance(p, ast.Module | ast.ClassDef) for p in parent_chain(node))
+
+
+def _is_schema_field(node: ast.AnnAssign) -> bool:
+    # Schema-field exemption: when the AnnAssign sits directly inside a class
+    # whose role is to declare a schema (pydantic BaseModel / TypedDict /
+    # NamedTuple / Enum-like / @dataclass), the field name is part of the
+    # public API contract — renaming `actioned` to `is_actioned` on a pydantic
+    # model would break every JSON consumer.
+    for parent in reversed(parent_chain(node)):
+        if isinstance(parent, ast.ClassDef):
+            return has_framework_base(parent) or has_dataclass_decorator(parent)
+    return False
 
 
 def _is_test_file(display_path: str) -> bool:

@@ -34,9 +34,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
-@dataclass
 class WideRecord:
-    """Dataclass with too many attributes."""
+    """Plain class with too many attributes.
+
+    Was a ``@dataclass`` until M37 added a schema/dataclass exemption to
+    ``size.attribute-count``. The rule's intent (flag classes with too
+    many fields) holds for plain classes whose attributes are not part
+    of a schema/contract; the fixture exercises that case.
+    """
 
     a: int = 0
     b: int = 0

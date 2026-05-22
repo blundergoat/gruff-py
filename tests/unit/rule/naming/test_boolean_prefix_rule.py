@@ -149,6 +149,80 @@ def test_dunder_skipped():
     assert findings == []
 
 
+def test_upper_snake_module_constant_does_not_fire():
+    # Module-level all-caps constants follow Python convention; renaming
+    # `ENABLE_PROMPT_CACHE: bool = True` to `is_prompt_cache_enabled` would
+    # break the convention. Source: 2026-05-23 healthkit dogfood.
+    src = "ENABLE_PROMPT_CACHE: bool = True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_pydantic_basemodel_field_does_not_fire():
+    # Pydantic field name is part of the JSON API contract; rename would break
+    # every consumer.
+    src = (
+        "from pydantic import BaseModel\n"
+        "class SuggestedAction(BaseModel):\n"
+        "    actioned: bool = False\n"
+    )
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_typeddict_field_does_not_fire():
+    src = (
+        "from typing import TypedDict\n"
+        "class Session(TypedDict, total=False):\n"
+        "    skip_verification: bool\n"
+    )
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_dataclass_field_does_not_fire():
+    src = "from dataclasses import dataclass\n@dataclass\nclass Cfg:\n    actioned: bool = False\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_plain_class_bool_field_still_fires():
+    # Sanity: the schema exemption is keyed on framework bases / dataclass
+    # decorator. A plain class with a bool attribute is NOT exempt.
+    src = "class Service:\n    actioned: bool = False\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
+def test_looks_like_prefix_does_not_fire():
+    # Verb-shaped English predicate; 2026-05-23 healthkit dogfood added this.
+    src = "def _looks_like_phone(s: str) -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_affirms_suffix_does_not_fire():
+    src = "def _slot_prompt_affirms(s: str) -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_declines_suffix_does_not_fire():
+    src = "def _slot_prompt_declines(s: str) -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_classify_verb_still_fires():
+    # Sanity: not every verb is a predicate. `classify` returns a label, not
+    # a bool — a function called `_classify_caller_phone` that returns bool
+    # legitimately deserves the rename suggestion. Proves the verb allowlist
+    # didn't over-broaden into "every verb".
+    src = "def _classify_caller_phone(p: str) -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
 def test_definition():
     d = BooleanPrefixRule().definition()
     assert d.id == "naming.boolean-prefix"

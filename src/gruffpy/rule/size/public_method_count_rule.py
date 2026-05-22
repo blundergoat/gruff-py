@@ -8,6 +8,11 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule._python_dynamism import (
+    has_dataclass_decorator,
+    has_framework_base,
+    is_test_class,
+)
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
@@ -61,6 +66,8 @@ class PublicMethodCountRule(Rule):
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.ClassDef):
                 continue
+            if _is_exempt_from_method_count(node):
+                continue
 
             count = _count_public_methods(node)
             threshold_match = settings.high_value_threshold_match(count)
@@ -98,6 +105,14 @@ class PublicMethodCountRule(Rule):
             )
 
         return findings
+
+
+def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
+    # Test classes have one method per test case by design; counting them
+    # against an API-surface threshold yields no useful signal. Schema bases
+    # (TypedDict, BaseModel, NamedTuple, Enum-like) also do not represent
+    # behavioural surface area. Source: 2026-05-23 healthkit dogfood.
+    return is_test_class(cls) or has_framework_base(cls) or has_dataclass_decorator(cls)
 
 
 def _count_public_methods(cls: ast.ClassDef) -> int:

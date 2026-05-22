@@ -97,8 +97,15 @@ def _stale_params_for_function(node: FunctionNode) -> list[_StaleParam]:
     return [
         _StaleParam(node=node, symbol=symbol, name=param.name, style=parsed.style)
         for param in parsed.params
-        if param.name is not None and param.name not in signature_names
+        if param.name is not None and _normalise_param_name(param.name) not in signature_names
     ]
+
+
+def _normalise_param_name(name: str) -> str:
+    # Docstring parsers preserve `*args` / `**kwargs` literally; signature_param_names
+    # returns the bare identifier. Strip the leading `*` / `**` so a docstring
+    # entry for `*keys` matches a signature varargs slot named `keys`.
+    return name.lstrip("*")
 
 
 def _stale_param_finding(

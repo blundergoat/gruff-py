@@ -31,6 +31,13 @@ from gruffpy.rule.naming._allowlists import DEFAULT_NAMING_ABBREVIATIONS
 from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 
+# Framework-idiomatic parameter names that match many annotation shapes by
+# convention rather than by snake-case derivation. `websocket` is the canonical
+# lowercase spelling across Starlette / FastAPI / the `websockets` library
+# (suggesting `web_socket` is wrong); `req` / `request` are the standard
+# FastAPI handler parameter names; `ws` / `msg` are the equally idiomatic
+# short forms. Source: 2026-05-23 healthkit dogfood.
+_ACCEPTED_PARAMETER_NAMES: frozenset[str] = frozenset({"websocket", "req", "request", "ws", "msg"})
 _TRIM_SUFFIXES: tuple[str, ...] = (
     "Service",
     "Repository",
@@ -160,7 +167,12 @@ def _function_parameters(node: FunctionNode) -> list[ast.arg]:
 def _expected_parameter_name(arg: ast.arg, ignored: frozenset[str]) -> str | None:
     if arg.annotation is None:
         return None
-    if arg.arg.startswith("_") or arg.arg in ignored or arg.arg in {"self", "cls"}:
+    if (
+        arg.arg.startswith("_")
+        or arg.arg in ignored
+        or arg.arg in {"self", "cls"}
+        or arg.arg in _ACCEPTED_PARAMETER_NAMES
+    ):
         return None
     expected = _expected_name(arg.annotation)
     if expected is None or _is_acceptable_parameter_name(arg, expected):

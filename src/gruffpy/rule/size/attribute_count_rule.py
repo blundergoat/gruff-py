@@ -8,6 +8,11 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule._python_dynamism import (
+    has_dataclass_decorator,
+    has_framework_base,
+    is_test_class,
+)
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
@@ -62,6 +67,8 @@ class AttributeCountRule(Rule):
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.ClassDef):
                 continue
+            if _is_exempt_from_attribute_count(node):
+                continue
 
             attrs = _collect_attributes(node)
             count = len(attrs)
@@ -100,6 +107,15 @@ class AttributeCountRule(Rule):
             )
 
         return findings
+
+
+def _is_exempt_from_attribute_count(cls: ast.ClassDef) -> bool:
+    # Schemas (TypedDict, BaseModel, NamedTuple, Enum-like) and dataclasses
+    # enumerate their fields by design; counting them against an
+    # "unfocused class" threshold misses the intent. Test classes likewise
+    # carry per-case fixture attributes that aren't behavioural state.
+    # Source: 2026-05-23 healthkit dogfood (e.g. ``VoiceSession(TypedDict)``).
+    return is_test_class(cls) or has_framework_base(cls) or has_dataclass_decorator(cls)
 
 
 def _collect_attributes(cls: ast.ClassDef) -> set[str]:

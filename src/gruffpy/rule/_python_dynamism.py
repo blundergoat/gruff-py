@@ -127,6 +127,10 @@ _FRAMEWORK_BASE_HINTS: frozenset[str] = frozenset(
         "IntEnum",
         "StrEnum",
         "Flag",
+        # pydantic — same role as TypedDict for naming/size purposes: the class
+        # IS a schema declaration, so its field shape is part of its API contract.
+        "BaseModel",
+        "RootModel",
     }
 )
 
@@ -144,6 +148,32 @@ def has_framework_base(cls: ast.ClassDef) -> bool:
         if "." in name and name.split(".")[-1] in _FRAMEWORK_BASE_HINTS:
             return True
     return False
+
+
+def is_test_class(cls: ast.ClassDef) -> bool:
+    """Return whether a class is a unittest TestCase or a pytest-style Test* class.
+
+    Recognised shapes:
+
+    - ``class FooTest(unittest.TestCase):`` / ``class FooTest(TestCase):`` /
+      ``class FooTest(IsolatedAsyncioTestCase):`` — anything ending in
+      ``TestCase`` (covers most subclassed test bases).
+    - ``class TestFoo:`` — pytest's name-based collection convention; a
+      fallback when the import chain is opaque or the test base is
+      provided by a fixture/conftest.
+
+    Used by size rules (size.public-method-count, size.attribute-count) and
+    other rules that should not flag legitimate test scaffolding. Mirrors the
+    logic in ``_test_quality_node_helper._is_unittest_testcase`` but adds the
+    pytest name fallback.
+    """
+    for base in cls.bases:
+        name = _decorator_name(base)
+        if name in {"TestCase", "unittest.TestCase", "IsolatedAsyncioTestCase"}:
+            return True
+        if name.endswith(".TestCase") or name.endswith("TestCase"):
+            return True
+    return cls.name.startswith("Test")
 
 
 def has_dataclass_decorator(cls: ast.ClassDef) -> bool:

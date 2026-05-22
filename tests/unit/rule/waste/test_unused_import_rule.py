@@ -136,6 +136,19 @@ def f() -> "list[RuleDefinition]":
     assert findings == []
 
 
+def test_future_annotations_import_is_skipped():
+    src = "from __future__ import annotations\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_future_import_does_not_mask_unrelated_unused_import():
+    src = "from __future__ import annotations\nimport os\n"
+    findings = UnusedImportRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["name"] == "os"
+
+
 def test_definition():
     d = UnusedImportRule().definition()
     assert d.id == "waste.unused-import"
