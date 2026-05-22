@@ -44,6 +44,8 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
 from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
+from gruffpy.rule.security.django_mark_safe_rule import DjangoMarkSafeRule
+from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
 from gruffpy.rule.security.flask_debug_enabled_rule import FlaskDebugEnabledRule
@@ -432,6 +434,8 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(TestNamingConsistencyRule),
     _entry(DangerousFunctionCallRule),
     _entry(DisabledSslVerificationRule),
+    _entry(DjangoMarkSafeRule),
+    _entry(DjangoRawSqlRule),
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
     _entry(FlaskDebugEnabledRule),

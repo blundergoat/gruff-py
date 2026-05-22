@@ -96,6 +96,8 @@ selection:
   - naming.test-naming-consistency
   - security.dangerous-function-call
   - security.disabled-ssl-verification
+  - security.django-mark-safe
+  - security.django-raw-sql
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
@@ -395,6 +397,12 @@ rules:
     enabled: true
   # Disabling SSL verification removes transport trust checks.
   security.disabled-ssl-verification:
+    enabled: true
+  # mark_safe on dynamic content disables Django's XSS protection.
+  security.django-mark-safe:
+    enabled: true
+  # Django ORM raw SQL escape hatches with dynamic strings reopen SQLi.
+  security.django-raw-sql:
     enabled: true
   # Broad exception suppression can hide failures and security checks.
   security.error-suppression:

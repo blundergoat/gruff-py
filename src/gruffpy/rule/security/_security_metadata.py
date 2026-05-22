@@ -43,6 +43,16 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A03:2021-Injection"],
         "securitySeverity": "high",
     },
+    "security.django-mark-safe": {
+        "cwe": ["CWE-79"],
+        "owasp": ["A03:2021-Injection"],
+        "securitySeverity": "medium",
+    },
+    "security.django-raw-sql": {
+        "cwe": ["CWE-89"],
+        "owasp": ["A03:2021-Injection"],
+        "securitySeverity": "high",
+    },
 }
 
 

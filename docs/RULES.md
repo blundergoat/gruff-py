@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 107 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 109 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
@@ -15,7 +15,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 17 | Heuristic AST-level dangerous patterns |
+| `security` | 19 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -87,6 +87,8 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 
 - `security.dangerous-function-call`
 - `security.disabled-ssl-verification`
+- `security.django-mark-safe`
+- `security.django-raw-sql`
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
@@ -671,6 +673,36 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-295']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.disabled-ssl-verification` leaves disabled ssl verification unaddressed.
 - Good example: Code that satisfies `security.disabled-ssl-verification` makes disabled ssl verification explicit or simpler.
+
+### `security.django-mark-safe`
+
+- Name: Django mark_safe on dynamic content
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `security.django-mark-safe` protects the security pillar by flagging django mark_safe on dynamic content before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported django mark_safe on dynamic content directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-79']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.django-mark-safe` leaves django mark_safe on dynamic content unaddressed.
+- Good example: Code that satisfies `security.django-mark-safe` makes django mark_safe on dynamic content explicit or simpler.
+
+### `security.django-raw-sql`
+
+- Name: Django raw SQL with dynamic string
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.django-raw-sql` protects the security pillar by flagging django raw sql with dynamic string before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported django raw sql with dynamic string directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.django-raw-sql` leaves django raw sql with dynamic string unaddressed.
+- Good example: Code that satisfies `security.django-raw-sql` makes django raw sql with dynamic string explicit or simpler.
 
 ### `security.error-suppression`
 

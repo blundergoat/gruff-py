@@ -15,6 +15,8 @@ import xml.etree.ElementTree as ET
 import yaml
 
 from contextlib import suppress
+from django.db.models.expressions import RawSQL
+from django.utils.safestring import mark_safe
 from flask import Flask, request
 
 
@@ -40,6 +42,9 @@ def echo():
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
     tree = ET.parse(request.args["doc"])
     env = jinja2.Environment(loader=loader)
+    rendered = mark_safe(request.args["html"])
+    raw = Model.objects.raw(f"SELECT * FROM t WHERE x={request.args['x']}")
+    expr = RawSQL(f"SUM(x) WHERE id = {request.args['id']}", [])
     with suppress(Exception):
         risky()
     try:
@@ -55,6 +60,8 @@ app.run(debug=True)
 _EXPECTED_RULE_IDS = {
     "security.dangerous-function-call",
     "security.disabled-ssl-verification",
+    "security.django-mark-safe",
+    "security.django-raw-sql",
     "security.error-suppression",
     "security.extract-compact-user-input",
     "security.flask-debug-enabled",
@@ -117,7 +124,7 @@ def test_security_registry_has_expected_rule_count():
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 17
+    assert len(ids) == 19
     assert _EXPECTED_RULE_IDS.issubset(ids)
     # `security.variable-import` is intentionally absent from the dangerous
     # fixture above because the fixture's `eval` covers the import surface.
