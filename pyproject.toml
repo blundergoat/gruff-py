@@ -11,6 +11,32 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 license-files = ["LICENSE.md"]
 authors = [{ name = "Matthew Hansen" }]
+keywords = [
+    "linter",
+    "static-analysis",
+    "code-quality",
+    "code-review",
+    "quality-gate",
+    "sarif",
+    "dead-code",
+    "security-scanner",
+    "test-quality",
+    "dashboard",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "click>=8.1",
     "docstring-parser>=0.15,<1",

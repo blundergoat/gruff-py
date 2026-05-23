@@ -207,7 +207,7 @@ def _has_collected_opaque_operand(node: ast.AST, operands: list[str]) -> bool:
     if isinstance(node, ast.Call | ast.Subscript | ast.Attribute):
         try:
             operands.append(ast.unparse(node))
-        except Exception:  # pragma: no cover - defensive
+        except Exception:  # pragma: no cover - ast.unparse rarely raises on valid source nodes
             operands.append(type(node).__name__)
         return True
     return False
