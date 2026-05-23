@@ -72,7 +72,8 @@ uv build
 uv publish
 ```
 
-Use TestPyPI first when validating release-mechanics changes.
+Use `scripts/publish-pypi.sh` when you want the local preflight, build, and
+artifact checks to run before publishing.
 
 ## Tag And Announce
 
