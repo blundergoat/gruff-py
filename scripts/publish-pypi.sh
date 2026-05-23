@@ -211,8 +211,15 @@ main() {
   fi
 
   if [[ -z "${UV_PUBLISH_TOKEN:-}" ]]; then
-    err "UV_PUBLISH_TOKEN is not set."
-    err "Get a token at https://pypi.org/manage/account/token/"
+    cat >&2 <<'TOKEN_HELP'
+  read -rsp "PyPI token: " UV_PUBLISH_TOKEN; echo
+  export UV_PUBLISH_TOKEN
+  scripts/publish-pypi.sh
+
+  Get the token from:
+
+  https://pypi.org/manage/account/token/
+TOKEN_HELP
     return 1
   fi
 
