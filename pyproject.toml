@@ -80,6 +80,7 @@ combine-as-imports = true
 [tool.ruff.lint.per-file-ignores]
 # AST visitor dispatch follows `ast.NodeVisitor`'s `visit_<NodeType>` convention.
 "src/gruffpy/rule/complexity/cognitive_complexity_rule.py" = ["N802"]
+"src/gruffpy/rule/security/unsafe_yaml_load_rule.py" = ["N802"]
 
 [tool.ruff.format]
 quote-style = "double"

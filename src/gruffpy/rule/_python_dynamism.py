@@ -166,6 +166,9 @@ def is_test_class(cls: ast.ClassDef) -> bool:
     other rules that should not flag legitimate test scaffolding. Mirrors the
     logic in ``_test_quality_node_helper._is_unittest_testcase`` but adds the
     pytest name fallback.
+
+    Returns:
+        True when the class is a recognised unittest or pytest test class.
     """
     for base in cls.bases:
         name = _decorator_name(base)

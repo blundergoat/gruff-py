@@ -136,12 +136,11 @@ def test_cli_summary_json_is_compact_digest(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert "summary" in payload
-    assert "topRules" in payload
-    assert "topFiles" in payload
-    assert payload["summary"]["paths"] == ["src"]
-    assert isinstance(payload["summary"]["elapsedSeconds"], int | float)
-    assert payload["summary"]["elapsedSeconds"] >= 0
+    assert {"summary", "topRules", "topFiles"} <= payload.keys()
+    summary = payload["summary"]
+    elapsed = summary["elapsedSeconds"]
+    assert summary["paths"] == ["src"]
+    assert isinstance(elapsed, int | float) and elapsed >= 0
 
 
 def test_cli_summary_text_includes_path_and_elapsed(

@@ -14,11 +14,7 @@ def test_open_tainted_path_emits():
 
 
 def test_open_literal_path_skipped():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    open('/etc/config.json').read()\n"
-    )
+    src = "from flask import request\ndef view():\n    open('/etc/config.json').read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -115,10 +111,7 @@ def test_fstring_path_emits():
 
 def test_non_web_file_skipped():
     """Without a web-framework import, the rule does not run (no taint sources possible)."""
-    src = (
-        "def view(user_input):\n"
-        "    open(user_input).read()\n"
-    )
+    src = "def view(user_input):\n    open(user_input).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -135,11 +128,7 @@ def test_fastapi_query_parameter_emits():
 
 
 def test_carries_security_metadata():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    open(request.args['file']).read()\n"
-    )
+    src = "from flask import request\ndef view():\n    open(request.args['file']).read()\n"
     finding = PathTraversalRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "filesystem"
     assert finding.metadata["sourceLabel"] == "user-controlled-path"

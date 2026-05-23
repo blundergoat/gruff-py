@@ -120,9 +120,7 @@ def _is_wildcard_origins(value: ast.expr | None) -> bool:
     if isinstance(value, ast.Constant) and value.value == "*":
         return True
     if isinstance(value, ast.List | ast.Tuple):
-        return any(
-            isinstance(item, ast.Constant) and item.value == "*" for item in value.elts
-        )
+        return any(isinstance(item, ast.Constant) and item.value == "*" for item in value.elts)
     return False
 
 

@@ -163,31 +163,65 @@ class _AliasCollector(ast.NodeVisitor):
         self.loader_assignments: list[tuple[int, str, str]] = []
         self._scope_depth = 0
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+    def _enter_scope(self, node: ast.AST) -> None:
+        """Track entering a nested scope so loader assignments stay module-local.
+
+        Args:
+            node: Function or class node introducing a new lexical scope.
+        """
         self._scope_depth += 1
         self.generic_visit(node)
         self._scope_depth -= 1
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Dispatch ``def`` blocks through the scope-tracking helper.
+
+        Args:
+            node: ``FunctionDef`` introducing a new lexical scope.
+        """
+        self._enter_scope(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self._scope_depth += 1
-        self.generic_visit(node)
-        self._scope_depth -= 1
+        """Dispatch ``async def`` blocks through the scope-tracking helper.
+
+        Args:
+            node: ``AsyncFunctionDef`` introducing a new lexical scope.
+        """
+        self._enter_scope(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._scope_depth += 1
-        self.generic_visit(node)
-        self._scope_depth -= 1
+        """Dispatch ``class`` blocks through the scope-tracking helper.
+
+        Args:
+            node: ``ClassDef`` introducing a new lexical scope.
+        """
+        self._enter_scope(node)
 
     def visit_Import(self, node: ast.Import) -> None:
+        """Record ``import yaml`` and ``import yaml as y`` aliases.
+
+        Args:
+            node: ``import …`` statement to inspect for PyYAML modules.
+        """
         _record_yaml_import_aliases(node, self.imports)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Record ``from yaml import …`` aliases.
+
+        Args:
+            node: ``from … import …`` statement to inspect.
+        """
         if node.module == "yaml":
             _record_yaml_from_import_aliases(node, self.imports)
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:
+        """Record module-level loader assignments such as ``loader = yaml.SafeLoader``.
+
+        Args:
+            node: Assignment node whose targets bind a loader name.
+        """
         if self._scope_depth == 0:
             _record_yaml_loader_assignments(
                 node.targets, node.value, self.imports, self.loader_assignments, node.lineno
@@ -195,6 +229,11 @@ class _AliasCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """Record annotated module-level loader assignments.
+
+        Args:
+            node: Annotated assignment node whose target binds a loader name.
+        """
         if self._scope_depth == 0:
             _record_yaml_loader_assignments(
                 [node.target], node.value, self.imports, self.loader_assignments, node.lineno

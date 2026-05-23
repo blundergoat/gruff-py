@@ -64,8 +64,7 @@ def test_rawsql_with_fstring_emits():
 
 def test_rawsql_with_string_literal_skipped():
     src = (
-        "from django.db.models.expressions import RawSQL\n"
-        "RawSQL('SUM(x) WHERE id = %s', [value])\n"
+        "from django.db.models.expressions import RawSQL\nRawSQL('SUM(x) WHERE id = %s', [value])\n"
     )
     assert DjangoRawSqlRule().analyse(make_unit(src), default_ctx()) == []
 

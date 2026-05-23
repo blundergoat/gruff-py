@@ -44,9 +44,7 @@ from gruffpy.rule.security._security_node_helper import call_target_name, framew
 from gruffpy.rule.security._security_taint_helper import TaintAnalyser
 
 _FRAMEWORK_GATE: frozenset[str] = frozenset({"flask", "django", "fastapi"})
-_SHUTIL_SOURCE_LEAVES: frozenset[str] = frozenset(
-    {"copyfile", "copy", "copy2", "move", "rename"}
-)
+_SHUTIL_SOURCE_LEAVES: frozenset[str] = frozenset({"copyfile", "copy", "copy2", "move", "rename"})
 _OS_REMOVE_LEAVES: frozenset[str] = frozenset({"remove", "unlink"})
 _PATH_READ_WRITE_LEAVES: frozenset[str] = frozenset(
     {"read_text", "read_bytes", "write_text", "write_bytes", "open"}
@@ -172,10 +170,7 @@ def _build_finding(
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` reads/writes a user-controlled path — path "
-            "traversal risk."
-        ),
+        message=(f"`{target}(...)` reads/writes a user-controlled path — path traversal risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

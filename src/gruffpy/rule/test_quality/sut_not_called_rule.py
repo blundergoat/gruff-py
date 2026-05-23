@@ -237,6 +237,18 @@ def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:
 
 
 def _collect_from_module_statement(node: ast.AST, names: set[str]) -> None:
+    """Add module-level name bindings from *node* to *names*.
+
+    Dispatches across the four statement shapes that bind module-level names
+    a test file may treat as SUT touches: ``import``, ``from … import``,
+    bare assignment, and annotated assignment. Test-framework module roots
+    (pytest, unittest, mock) are excluded so the SUT-not-called rule still
+    catches tests that only invoke framework helpers.
+
+    Args:
+        node: AST node to inspect; non-binding statements are ignored.
+        names: Mutated to include every module-level name *node* introduces.
+    """
     if isinstance(node, ast.Import):
         for alias in node.names:
             root = alias.name.split(".")[0]

@@ -27,6 +27,14 @@ jobs:
       - name: Install project
         run: uv sync --all-extras --dev --python ${{ matrix.python-version }}
 
+      - name: Bash syntax
+        run: bash -n scripts/*.sh
+
+      - name: Shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: ./scripts
+
       - name: Lint
         run: uv run ruff check src tests
 
@@ -36,8 +44,14 @@ jobs:
       - name: Typecheck
         run: uv run mypy src
 
+      - name: Rule docs
+        run: uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+
       - name: Test
         run: uv run pytest
 
       - name: Gruff self-check
         run: uv run gruff-py analyse src tests --fail-on advisory
+
+      - name: Package build
+        run: uv build

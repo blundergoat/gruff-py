@@ -117,8 +117,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{label}(...)` receives a dynamic SQL string — use parameterised "
-            "arguments instead."
+            f"`{label}(...)` receives a dynamic SQL string — use parameterised arguments instead."
         ),
         file_path=unit.file.display_path,
         line=call.lineno,

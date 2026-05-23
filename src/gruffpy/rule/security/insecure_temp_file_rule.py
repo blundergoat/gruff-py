@@ -130,8 +130,7 @@ def _build_mktemp_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            "`tempfile.mktemp()` returns a path without creating the file — "
-            "TOCTOU race risk."
+            "`tempfile.mktemp()` returns a path without creating the file — TOCTOU race risk."
         ),
         file_path=unit.file.display_path,
         line=call.lineno,

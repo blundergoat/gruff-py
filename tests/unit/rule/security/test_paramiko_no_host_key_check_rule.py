@@ -55,10 +55,7 @@ def test_bare_import_autoaddpolicy_emits():
 
 
 def test_bare_import_autoaddpolicy_with_alias_emits():
-    src = (
-        "from paramiko import AutoAddPolicy as YOLO\n"
-        "client.set_missing_host_key_policy(YOLO())\n"
-    )
+    src = "from paramiko import AutoAddPolicy as YOLO\nclient.set_missing_host_key_policy(YOLO())\n"
     findings = ParamikoNoHostKeyCheckRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["policy"] == "AutoAddPolicy"

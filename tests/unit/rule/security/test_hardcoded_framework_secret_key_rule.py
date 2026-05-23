@@ -18,11 +18,7 @@ def test_flask_app_module_scope_secret_key_emits():
 
 
 def test_secret_key_from_env_skipped():
-    src = (
-        "import os\n"
-        "from django.conf import settings\n"
-        "SECRET_KEY = os.environ['SECRET_KEY']\n"
-    )
+    src = "import os\nfrom django.conf import settings\nSECRET_KEY = os.environ['SECRET_KEY']\n"
     assert HardcodedFrameworkSecretKeyRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -34,8 +30,7 @@ def test_secret_key_from_getenv_skipped():
 def test_function_scope_secret_key_skipped():
     """SECRET_KEY inside a function is a local variable, not the framework setting."""
     src = (
-        "from flask import Flask\n"
-        "def setup():\n    SECRET_KEY = 'literal'\n    return SECRET_KEY\n"
+        "from flask import Flask\ndef setup():\n    SECRET_KEY = 'literal'\n    return SECRET_KEY\n"
     )
     assert HardcodedFrameworkSecretKeyRule().analyse(make_unit(src), default_ctx()) == []
 

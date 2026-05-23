@@ -3,10 +3,7 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_mark_safe_with_variable_emits():
-    src = (
-        "from django.utils.safestring import mark_safe\n"
-        "def render(x):\n    return mark_safe(x)\n"
-    )
+    src = "from django.utils.safestring import mark_safe\ndef render(x):\n    return mark_safe(x)\n"
     findings = DjangoMarkSafeRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["leaf"] == "mark_safe"
@@ -46,8 +43,7 @@ def test_mark_safe_with_conditional_escape_skipped():
 
 def test_safestring_with_variable_emits():
     src = (
-        "from django.utils.safestring import SafeString\n"
-        "def render(x):\n    return SafeString(x)\n"
+        "from django.utils.safestring import SafeString\ndef render(x):\n    return SafeString(x)\n"
     )
     findings = DjangoMarkSafeRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -100,10 +96,7 @@ def test_rest_framework_file_also_triggers_django_gate():
 
 
 def test_carries_security_metadata():
-    src = (
-        "from django.utils.safestring import mark_safe\n"
-        "def render(x):\n    return mark_safe(x)\n"
-    )
+    src = "from django.utils.safestring import mark_safe\ndef render(x):\n    return mark_safe(x)\n"
     finding = DjangoMarkSafeRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "django-safe-marker"
     assert finding.metadata["sourceLabel"] == "user-html-input"

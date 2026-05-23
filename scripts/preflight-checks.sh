@@ -65,7 +65,7 @@ Runs the local gruff-py preflight suite:
   - ruff lint and format checks
   - mypy type checking
   - generated rule docs check
-  - gruff-py summary check
+  - gruff-py self-check (analyse src tests --fail-on advisory)
   - pytest
   - uv build
   - sibling gruff-go gofmt/go vet/go test/dogfood checks
@@ -266,19 +266,17 @@ rule_docs_check() {
   uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
 }
 
-gruff_py_summary_check() {
+gruff_py_self_check() {
   local output
   local status
   local findings
-  local files
 
-  output="$(uv run gruff-py summary --format text --top 5 src/ 2>&1)"
+  output="$(uv run gruff-py analyse src tests --fail-on advisory --format text 2>&1)"
   status=$?
+  findings="$(printf '%s\n' "$output" | awk '/^  Findings:/ {sub(/^  Findings: /, ""); print; exit}')"
 
   if ((status == 0)); then
-    files="$(printf '%s\n' "$output" | awk -F': ' '/^Files:/ {print $2; exit}')"
-    findings="$(printf '%s\n' "$output" | awk -F': ' '/^Findings:/ {print $2; exit}')"
-    printf '%s findings; %s' "${findings:-unknown}" "${files:-file summary unavailable}"
+    printf 'findings: %s' "${findings:-0}"
   else
     printf '%s\n' "$output"
   fi
@@ -505,7 +503,7 @@ main() {
   run_step "Rule docs" rule_docs_check
   rule_docs_status=$?
 
-  run_step "Gruff summary" gruff_py_summary_check
+  run_step "Gruff self-check" gruff_py_self_check
   gruff_py_status=$?
 
   run_step "Tests" pytest_check

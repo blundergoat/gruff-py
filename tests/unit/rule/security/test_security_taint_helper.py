@@ -24,11 +24,7 @@ def _analyse(src: str, sanitisers: frozenset[str] = frozenset()) -> tuple[ast.AS
 
 
 def test_request_attr_is_a_source():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    sink(request.json)\n"
-    )
+    src = "from flask import request\ndef view():\n    sink(request.json)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -36,12 +32,7 @@ def test_request_attr_is_a_source():
 
 
 def test_assignment_propagates_taint():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.json\n"
-        "    sink(x)\n"
-    )
+    src = "from flask import request\ndef view():\n    x = request.json\n    sink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -49,12 +40,7 @@ def test_assignment_propagates_taint():
 
 
 def test_subscript_of_tainted_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    body = request.json\n"
-        "    sink(body['url'])\n"
-    )
+    src = "from flask import request\ndef view():\n    body = request.json\n    sink(body['url'])\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -62,12 +48,7 @@ def test_subscript_of_tainted_is_tainted():
 
 
 def test_attribute_of_tainted_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    user = request.json\n"
-        "    sink(user.name)\n"
-    )
+    src = "from flask import request\ndef view():\n    user = request.json\n    sink(user.name)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -227,11 +208,7 @@ def test_fastapi_query_default_marks_parameter_as_source():
 
 
 def test_module_scope_request_attr_propagates():
-    src = (
-        "from flask import request\n"
-        "x = request.json\n"
-        "sink(x)\n"
-    )
+    src = "from flask import request\nx = request.json\nsink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -240,11 +217,7 @@ def test_module_scope_request_attr_propagates():
 
 def test_self_request_attr_recognised_as_source():
     """A `self.request.json`-style access (Django CBV idiom) is a source."""
-    src = (
-        "class View:\n"
-        "    def get(self):\n"
-        "        sink(self.request.json)\n"
-    )
+    src = "class View:\n    def get(self):\n        sink(self.request.json)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")

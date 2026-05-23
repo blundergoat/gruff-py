@@ -170,5 +170,3 @@ def _build_finding(
             ),
         },
     )
-
-
