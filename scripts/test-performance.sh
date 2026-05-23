@@ -103,7 +103,7 @@ RSS_AVAILABLE=$([[ -n "$TIME_BIN" ]] && echo true || echo false)
 
 # Synthetic fixture root (cleaned via trap).
 SYNTHETIC_ROOT=""
-# shellcheck disable=SC2317  # invoked via trap
+# shellcheck disable=SC2317,SC2329  # invoked via trap
 cleanup() {
   if [[ -n "$SYNTHETIC_ROOT" && -d "$SYNTHETIC_ROOT" ]]; then
     rm -rf "$SYNTHETIC_ROOT"
