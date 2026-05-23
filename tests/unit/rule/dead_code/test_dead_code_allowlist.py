@@ -37,9 +37,6 @@ def _ctx(*, allowlist: DeadCodeAllowlist | None = None) -> RuleContext:
     return RuleContext(project_root="/", config=config)
 
 
-# --- unused_private_function ---
-
-
 def test_function_allowlisted_by_symbol():
     src = "def _helper():\n    pass\n"
     allowlist = DeadCodeAllowlist(symbols=("_helper",))
@@ -102,9 +99,6 @@ def test_function_path_glob_does_not_match_other_paths():
     assert len(findings) == 1
 
 
-# --- unused_private_attribute ---
-
-
 def test_attribute_allowlisted_by_qualified_symbol():
     src = (
         "class Service:\n"
@@ -148,9 +142,6 @@ def test_attribute_allowlisted_by_path():
         _ctx(allowlist=allowlist),
     )
     assert findings == []
-
-
-# --- precedence and empty defaults ---
 
 
 def test_empty_allowlist_does_not_affect_findings():

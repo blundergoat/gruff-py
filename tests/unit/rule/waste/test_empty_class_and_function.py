@@ -28,9 +28,6 @@ def _ctx_for(rule_id: str) -> RuleContext:
     )
 
 
-# --- empty-class -------------------------------------------------------------
-
-
 def test_empty_class_pass_fires():
     src = "class C:\n    pass\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
@@ -105,9 +102,6 @@ def test_class_with_body_does_not_fire():
     src = "class C:\n    x = 1\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
     assert findings == []
-
-
-# --- empty-function ----------------------------------------------------------
 
 
 def test_empty_function_pass_fires():

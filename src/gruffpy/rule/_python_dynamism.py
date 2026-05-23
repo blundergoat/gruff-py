@@ -15,8 +15,6 @@ when the node should be treated as "active" by the calling rule.
 
 import ast
 
-# --- Decorator-recognition helpers -------------------------------------------
-
 # Decorators whose presence on a function/method means that name IS referenced
 # by an external framework — never flag the function as unused.
 _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
@@ -113,8 +111,6 @@ def _decorator_name(decorator: ast.AST) -> str:
     return ""
 
 
-# --- Base-class recognition --------------------------------------------------
-
 # Class bases that imply the class is a framework hook target.
 _FRAMEWORK_BASE_HINTS: frozenset[str] = frozenset(
     {
@@ -194,9 +190,6 @@ def has_dataclass_decorator(cls: ast.ClassDef) -> bool:
     return False
 
 
-# --- __all__ extraction ------------------------------------------------------
-
-
 def module_all_names(tree: ast.AST) -> frozenset[str]:
     """Return the string names declared by a module-level ``__all__``.
 
@@ -234,9 +227,6 @@ def _string_seq(value: ast.AST) -> frozenset[str]:
         if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
             names.add(elt.value)
     return frozenset(names)
-
-
-# --- Method-shape recognition ------------------------------------------------
 
 
 def is_abstract_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

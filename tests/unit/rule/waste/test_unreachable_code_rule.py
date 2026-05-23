@@ -98,9 +98,6 @@ def test_definition():
     assert d.id == "waste.unreachable-code"
 
 
-# --- Literal-condition reachability ---
-
-
 def test_if_false_body_is_unreachable():
     src = "def f():\n    if False:\n        x = 1\n"
     findings = UnreachableCodeRule().analyse(_make_unit(src), _ctx())

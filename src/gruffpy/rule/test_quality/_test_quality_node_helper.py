@@ -128,8 +128,6 @@ def reset_compute_count() -> None:
     _compute_counter["count"] = 0
 
 
-# --- Mock-object recognition -------------------------------------------------
-
 # Dotted suffixes that identify a call as a mock factory.
 _MOCK_FACTORY_LEAVES: frozenset[str] = frozenset(
     {
@@ -224,9 +222,6 @@ def _with_mock_bindings(node: ast.With) -> dict[str, ast.AST]:
         ):
             bindings[item.optional_vars.id] = item
     return bindings
-
-
-# --- Body walker -------------------------------------------------------------
 
 
 def walk_test_body(

@@ -25,9 +25,6 @@ def _first_class(source: str) -> ast.ClassDef:
     raise AssertionError("no class")
 
 
-# --- has_framework_decorator -------------------------------------------------
-
-
 def test_no_decorator_returns_false():
     assert has_framework_decorator(_first_fn("def f(): pass\n")) is False
 
@@ -75,9 +72,6 @@ def test_unrelated_decorator_returns_false():
     assert has_framework_decorator(fn) is False
 
 
-# --- has_framework_base ------------------------------------------------------
-
-
 def test_protocol_base():
     src = "from typing import Protocol\nclass P(Protocol):\n    def m(self): ...\n"
     assert has_framework_base(_first_class(src)) is True
@@ -98,9 +92,6 @@ def test_unrelated_base():
     assert has_framework_base(_first_class(src)) is False
 
 
-# --- has_dataclass_decorator -------------------------------------------------
-
-
 def test_dataclass_decorator():
     src = "from dataclasses import dataclass\n@dataclass\nclass C:\n    x: int = 0\n"
     assert has_dataclass_decorator(_first_class(src)) is True
@@ -109,9 +100,6 @@ def test_dataclass_decorator():
 def test_attrs_define_decorator():
     src = "import attrs\n@attrs.define\nclass C:\n    x = 0\n"
     assert has_dataclass_decorator(_first_class(src)) is True
-
-
-# --- module_all_names --------------------------------------------------------
 
 
 def test_module_all_extracts_string_list():
@@ -137,9 +125,6 @@ def test_module_all_missing_returns_empty():
 def test_module_all_dynamic_returns_empty():
     src = "__all__ = list_of_names()\n"
     assert module_all_names(ast.parse(src)) == frozenset()
-
-
-# --- is_protocol_method_stub -------------------------------------------------
 
 
 def test_protocol_method_stub_recognised():

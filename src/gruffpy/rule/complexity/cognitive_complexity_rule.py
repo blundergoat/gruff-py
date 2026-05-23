@@ -155,14 +155,10 @@ class _Counter:
         for child in ast.iter_child_nodes(node):
             self.visit(child, nesting)
 
-    # --- B1/B2 contributors ---------------------------------------------------
-
     def _visit_If(self, node: ast.If, nesting: int) -> None:
         self.score += 1 + nesting  # B1 + B2
-        # Body increments nesting
         for stmt in node.body:
             self.visit(stmt, nesting + 1)
-        # `else`/`elif` arm
         if node.orelse:
             if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
                 # `elif`: B1 only, no additional nesting penalty
@@ -171,17 +167,13 @@ class _Counter:
                 # Treat the elif like an If but skip its own B1 (already added)
                 for stmt in elif_node.body:
                     self.visit(stmt, nesting + 1)
-                # Walk through the elif's own orelse with the same nesting
                 if elif_node.orelse:
                     self._visit_orelse(elif_node.orelse, nesting)
-                # Walk the elif test for BoolOps / recursion etc.
                 self.visit(elif_node.test, nesting)
             else:
-                # bare `else`
                 self.score += 1
                 for stmt in node.orelse:
                     self.visit(stmt, nesting + 1)
-        # Walk the test for BoolOps / recursion
         self.visit(node.test, nesting)
 
     def _visit_orelse(self, orelse: list[ast.stmt], nesting: int) -> None:
@@ -253,8 +245,6 @@ class _Counter:
                 self.visit(case.guard, nesting + 1)
         self.visit(node.subject, nesting)
 
-    # --- Nested scopes reset nesting -----------------------------------------
-
     def _visit_Lambda(self, node: ast.Lambda, nesting: int) -> None:
         # Nested lambda inside another function — the lambda body is a new
         # scope; nesting resets to 0 for its body, but the *outer* function's
@@ -296,14 +286,10 @@ class _Counter:
         for base in node.bases:
             self.visit(base, nesting)
 
-    # --- B3: boolean operators -----------------------------------------------
-
     def _visit_BoolOp(self, node: ast.BoolOp, nesting: int) -> None:
         self.score += 1
         for value in node.values:
             self.visit(value, nesting)
-
-    # --- Recursion -----------------------------------------------------------
 
     def _visit_Call(self, node: ast.Call, nesting: int) -> None:
         if (
@@ -312,7 +298,6 @@ class _Counter:
             and node.func.id == self.self_name
         ):
             self.score += 1
-        # Walk arguments
         for arg in node.args:
             self.visit(arg, nesting)
         for keyword in node.keywords:
