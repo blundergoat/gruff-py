@@ -1,4 +1,4 @@
-from gruff.rule.security.error_suppression_rule import ErrorSuppressionRule
+from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

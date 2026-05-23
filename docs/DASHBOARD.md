@@ -1,9 +1,9 @@
 # Dashboard
 
-`gruff dashboard` serves a local browser UI for repeated scans.
+`gruff-py dashboard` serves a local browser UI for repeated scans.
 
 ```bash
-gruff dashboard src/ --report-interactive
+gruff-py dashboard src/ --report-interactive
 ```
 
 Default URL:
@@ -14,7 +14,7 @@ http://127.0.0.1:8765/
 
 ## Controls
 
-The dashboard supports controls for shipped `gruff analyse` features:
+The dashboard supports controls for shipped `gruff-py analyse` features:
 
 - project root
 - paths
@@ -31,7 +31,7 @@ review, editor links, async cancellation, or websocket updates.
 ## Options
 
 ```bash
-gruff dashboard [PATHS]...
+gruff-py dashboard [PATHS]...
 ```
 
 | Option | Meaning |
@@ -43,7 +43,7 @@ gruff dashboard [PATHS]...
 | `--config <path>` | Initial config path |
 | `--no-config` | Skip config loading |
 | `--fail-on <severity>` | Initial fail threshold |
-| `--include-ignored` | Scan normally ignored directories |
+| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--report-interactive` | Enable HTML finding filters |
 
 ## HTTP Routes
@@ -62,4 +62,3 @@ binds to `127.0.0.1` by default.
 
 Only bind to a non-loopback host when you understand the risk of exposing local
 project paths and static-analysis output on your network.
-

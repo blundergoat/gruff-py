@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.sleep_in_test_rule import SleepInTestRule
+from gruffpy.rule.test_quality.sleep_in_test_rule import SleepInTestRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

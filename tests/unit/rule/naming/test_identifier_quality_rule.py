@@ -1,18 +1,18 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.naming.identifier_quality_rule import IdentifierQualityRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
         file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
         source=source,
@@ -61,7 +61,7 @@ def test_descriptive_name_does_not_fire():
 
 
 def test_temperature_does_not_fire():
-    # 'temperature' tokenizes to ['temperature'] — first token 'temperature'
+    # 'temperature' tokenizes to ['temperature'] - first token 'temperature'
     # is NOT 'temp'. Make sure we match exact tokens, not prefixes.
     src = "temperature = 20\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
@@ -97,6 +97,12 @@ def test_result_without_number_does_not_fire():
     src = "result = compute()\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     # 'result' alone is fine; only 'result1' / 'result2' fire.
+    assert findings == []
+
+
+def test_todo_domain_name_does_not_fire():
+    src = "class TodoDensityRule: pass\n"
+    findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 

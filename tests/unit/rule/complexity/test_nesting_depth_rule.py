@@ -1,12 +1,12 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity.nesting_depth_rule import NestingDepthRule, nesting_depth_for
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule, nesting_depth_for
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
@@ -21,7 +21,7 @@ def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 

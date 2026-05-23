@@ -3,11 +3,11 @@
 from collections import Counter
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._pytest_config import reset_cache
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._pytest_config import reset_cache
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _EXPECTED_COUNTS = {
@@ -93,8 +93,14 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
 
 def _full_pillar_source() -> str:
     setup_body = "".join("    value += 1\n" for _ in range(31))
-    long_test_body = "".join("    step = 1\n" for _ in range(51))
-    return f"""import pytest
+    long_test_body = "".join("    step = 1\n" for _ in range(101))
+    return _FULL_PILLAR_SOURCE.format(
+        setup_body=setup_body,
+        long_test_body=long_test_body,
+    )
+
+
+_FULL_PILLAR_SOURCE = """import pytest
 import time
 from unittest.mock import Mock
 

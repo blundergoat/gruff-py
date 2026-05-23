@@ -1,4 +1,4 @@
-from gruff.rule.security.variable_import_rule import VariableImportRule
+from gruffpy.rule.security.variable_import_rule import VariableImportRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

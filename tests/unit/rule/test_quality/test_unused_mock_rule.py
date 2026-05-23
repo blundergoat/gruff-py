@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.unused_mock_rule import UnusedMockRule
+from gruffpy.rule.test_quality.unused_mock_rule import UnusedMockRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
@@ -25,7 +25,7 @@ def test_used_mock_skipped():
 
 
 def test_bespoke_fake_not_treated_as_mock():
-    """Mock-recognition is bounded to documented mock factories — bespoke fakes are fine."""
+    """Mock-recognition is bounded to documented mock factories - bespoke fakes are fine."""
     src = (
         "class FakeService:\n    pass\n"
         "def test_foo():\n"

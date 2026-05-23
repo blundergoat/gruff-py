@@ -1,4 +1,4 @@
-# ADR-004: Naming pillar boundary — gruff vs ruff N-rules
+# ADR-004: Naming pillar boundary - gruff vs ruff N-rules
 
 **Status:** Accepted
 **Date:** 2026-05-13
@@ -31,7 +31,7 @@ ruff's `N` rules are a fast, well-maintained reimplementation of PEP 8 naming st
 
 The intent-layer rules gruff owns require AST + semantic context that single-pass style checkers don't have:
 
-- Identifier-quality needs a tokenizer that splits `temp1` / `result2` / `data42` numeric suffixes — `IdentifierTokenizer`.
+- Identifier-quality needs a tokenizer that splits `temp1` / `result2` / `data42` numeric suffixes - `IdentifierTokenizer`.
 - Parameter-type-name needs to read the type annotation and compare against the parameter name.
 - Boolean-prefix needs to read return-type annotations.
 - Module-name-mismatch needs filesystem + AST coordination.
@@ -47,7 +47,7 @@ The intent-layer rules gruff owns require AST + semantic context that single-pas
 
 ## Consequences
 
-- Adding any new naming rule requires checking it doesn't overlap with `ruff N`. The CI test enforces this — when ruff adds a new `N` rule that overlaps with gruff, gruff must back off or refactor.
+- Adding any new naming rule requires checking it doesn't overlap with `ruff N`. The CI test enforces this - when ruff adds a new `N` rule that overlaps with gruff, gruff must back off or refactor.
 - Users who run gruff without ruff will miss PEP 8 style violations. The CLI / docs make this clear ("complementary to ruff N").
 - `naming.module-name-mismatch` and `naming.test-naming-consistency` are project-scope rules: they need filesystem context, not just AST.
 

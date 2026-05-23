@@ -1,17 +1,17 @@
 import ast
 import math
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.pillar import Pillar
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity.maintainability_index_rule import (
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity.maintainability_index_rule import (
     MaintainabilityIndexRule,
     maintainability_index_for,
 )
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
@@ -26,12 +26,12 @@ def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 55, error: int = 35) -> RuleContext:
+def _ctx(warning: int = 80, error: int = 70) -> RuleContext:
     rule = MaintainabilityIndexRule()
     config = AnalysisConfig(
         rules={
@@ -44,11 +44,30 @@ def _ctx(warning: int = 55, error: int = 35) -> RuleContext:
     return RuleContext(project_root="/", config=config)
 
 
+def _branched_body(branch_count: int, with_elif: bool = False) -> str:
+    """Return a function body that contains ``branch_count`` if/else branches."""
+    lines: list[str] = []
+    for i in range(branch_count):
+        lines.append(f"    if a{i} > b{i}:")
+        lines.append(f"        x = a{i} + b{i}")
+        if with_elif:
+            lines.append(f"        x = a{i} + b{i} * c{i} - d{i}")
+            lines.append(f"    elif a{i} < b{i}:")
+            lines.append(f"        x = a{i} - b{i} / c{i} + d{i}")
+        else:
+            lines.append("    else:")
+            lines.append(f"        x = a{i} - b{i}")
+    return "def f():\n" + "\n".join(lines) + "\n    return x\n"
+
+
 def test_trivial_function_has_max_mi():
     # Simple short function: low HV, CC=1, low LOC -> MI close to 100 (clamped).
     src = "def f(x):\n    return x + 1\n"
     mi = maintainability_index_for(_first_fn(src))
     assert mi == 100.0  # clamped at upper bound
+
+
+_MI_CLAMP_MAX = 100.0
 
 
 def test_mi_formula_matches_canonical_values():
@@ -65,47 +84,31 @@ def test_mi_formula_matches_canonical_values():
     """
     src = "def f(x):\n    return x + 1\n"
     raw = 171 - 5.2 * math.log(4.7548875) - 0.23 * 1 - 16.2 * math.log(2)
-    assert raw > 100  # would clamp
-    assert maintainability_index_for(_first_fn(src)) == 100.0
+    assert raw > _MI_CLAMP_MAX  # would clamp
+    assert maintainability_index_for(_first_fn(src)) == _MI_CLAMP_MAX
 
 
 def test_complex_function_lowers_mi():
     # Bigger function should have lower (worse) MI.
-    body_lines = []
-    for i in range(40):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i}")
-        body_lines.append("    else:")
-        body_lines.append(f"        x = a{i} - b{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    src = _branched_body(40)
     mi = maintainability_index_for(_first_fn(src))
-    assert mi < 55.0  # below default warning
+    assert mi < 80.0  # below default warning
 
 
 def test_warning_finding_emitted_for_low_mi():
-    # Construct a function with MI between 35 and 55.
-    body_lines = []
-    for i in range(20):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    # Use 40-branch fixture so MI is guaranteed below default warning=80.
+    src = _branched_body(40)
     findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    if findings:  # Depending on derived MI, may or may not fire
-        f = findings[0]
-        assert f.pillar == Pillar.MAINTAINABILITY  # separate pillar
-        assert "maintainabilityIndex" in f.metadata
-        assert f.severity in (Severity.WARNING, Severity.ERROR)
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.pillar == Pillar.MAINTAINABILITY  # separate pillar
+    assert "maintainabilityIndex" in finding.metadata
+    assert finding.severity in (Severity.WARNING, Severity.ERROR)
 
 
 def test_error_finding_emitted_for_very_low_mi():
-    # Aggressively low MI: many branches and operators
-    body_lines = []
-    for i in range(80):
-        body_lines.append(f"    if a{i} > b{i}:")
-        body_lines.append(f"        x = a{i} + b{i} * c{i} - d{i}")
-        body_lines.append(f"    elif a{i} < b{i}:")
-        body_lines.append(f"        x = a{i} - b{i} / c{i} + d{i}")
-    src = "def f():\n" + "\n".join(body_lines) + "\n    return x\n"
+    # Aggressively low MI: many branches and operators.
+    src = _branched_body(80, with_elif=True)
     findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
@@ -126,4 +129,4 @@ def test_definition_uses_default_thresholds():
     d = MaintainabilityIndexRule().definition()
     assert d.id == "complexity.maintainability-index"
     assert d.pillar == Pillar.MAINTAINABILITY  # NOT complexity!
-    assert d.default_thresholds == {"warning": 55, "error": 35}
+    assert d.default_thresholds == {"warning": 80, "error": 70}

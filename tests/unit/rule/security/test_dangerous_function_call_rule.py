@@ -1,4 +1,4 @@
-from gruff.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
+from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

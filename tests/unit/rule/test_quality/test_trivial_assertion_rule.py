@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
+from gruffpy.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

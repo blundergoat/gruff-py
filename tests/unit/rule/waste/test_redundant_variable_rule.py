@@ -1,18 +1,18 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.waste.redundant_variable_rule import RedundantVariableRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.waste.redundant_variable_rule import RedundantVariableRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
         file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
         source=source,
@@ -43,7 +43,7 @@ def test_assign_then_return_with_complex_rhs_fires():
 
 
 def test_variable_used_elsewhere_does_not_fire():
-    # x is used in the print statement BEFORE the return — not redundant.
+    # x is used in the print statement BEFORE the return - not redundant.
     src = "def f():\n    x = 1\n    print(x)\n    x = 2\n    return x\n"
     findings = RedundantVariableRule().analyse(_unit(src), _ctx())
     assert findings == []

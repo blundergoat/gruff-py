@@ -1,18 +1,18 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.naming.hungarian_notation_rule import HungarianNotationRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
         file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
         source=source,
@@ -53,10 +53,28 @@ def test_arr_items_fires():
     assert len(findings) == 1
 
 
+def test_lst_items_fires():
+    src = "lst_items = []\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
 def test_dict_users_fires():
     src = "dict_users = {}\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
+
+
+def test_list_verb_name_does_not_fire():
+    src = "def list_commands():\n    return []\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_set_verb_name_does_not_fire():
+    src = "def set_status(value):\n    return value\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
 
 
 def test_parameter_name_fires():
@@ -99,7 +117,7 @@ def test_private_with_hungarian_prefix_fires():
 
 
 def test_unrelated_underscore_does_not_fire():
-    # ``id_field`` is not Hungarian — id is the leading segment but not a type
+    # ``id_field`` is not Hungarian - id is the leading segment but not a type
     # prefix.
     src = "id_field = 0\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())

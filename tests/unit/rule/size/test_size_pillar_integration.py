@@ -1,32 +1,47 @@
 """Cumulative integration test for the size pillar.
 
-Exercises every M02 size rule end-to-end via `RuleRegistry.defaults()`. Edge
+Exercises every size rule end-to-end via `RuleRegistry.defaults()`. Edge
 cases (decorators, multi-line signatures, nested classes/functions, async,
 dataclasses, abstract methods, @override) are covered in a single fixture.
 """
 
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile
 
-# Edge fixture: small but exercises the patterns called out in M02
-# Assumptions (decorators counted, multi-line sigs counted, nested
-# def/class emit independent findings, async included, dataclass fields
-# count toward attribute-count, abstract/override decorators don't change
-# size-rule behaviour).
+SIZE_RULE_IDS = {
+    "size.file-length",
+    "size.class-length",
+    "size.function-length",
+    "size.average-function-length",
+    "size.parameter-count",
+    "size.attribute-count",
+    "size.public-method-count",
+}
+
+# Edge fixture: small but exercises every size-rule edge case the pillar
+# documents (decorators counted, multi-line sigs counted, nested def/class
+# emit independent findings, async included, dataclass fields count toward
+# attribute-count, abstract/override decorators don't change size-rule
+# behaviour).
 SIZE_PILLAR_FIXTURE = '''
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
-@dataclass
 class WideRecord:
-    """Dataclass with too many attributes."""
+    """Plain class with too many attributes.
+
+    Kept as a plain class (not a ``@dataclass``) because
+    ``size.attribute-count`` exempts schema/dataclass shells - the rule's
+    intent is to flag classes with too many fields whose attributes are
+    NOT part of a schema/contract, and this fixture exercises that case.
+    """
 
     a: int = 0
     b: int = 0
@@ -165,36 +180,67 @@ def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/integration.py", display_path="integration.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def _default_ctx() -> RuleContext:
+    # PMD-aligned production defaults are too generous for the small fixture to
+    # cross. Override the size rubrics that depend on small violations so the
+    # fixture still exercises every rule end-to-end.
+    size_test_thresholds = {
+        "size.parameter-count": {"warning": 5, "error": 8},
+        "size.function-length": {"warning": 30, "error": 60},
+        "size.average-function-length": {"warning": 30, "error": 60},
+    }
+    return _ctx_with_threshold_overrides(size_test_thresholds)
+
+
+def _ctx_with_threshold_overrides(
+    overrides: dict[str, dict[str, int]],
+) -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        definition = rule.definition()
-        rules[definition.id] = RuleSettings(
+    rules = {
+        rule.definition().id: RuleSettings(
             enabled=True,
-            thresholds=dict(definition.default_thresholds),
+            thresholds=overrides.get(
+                rule.definition().id, dict(rule.definition().default_thresholds)
+            ),
         )
+        for rule in registry.all()
+    }
+    return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+
+
+def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContext:
+    registry = RuleRegistry.defaults()
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=rule.definition().id in rule_ids,
+            thresholds=thresholds if rule.definition().id in rule_ids else {},
+        )
+        for rule in registry.all()
+    }
+    return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
+
+
+def _ctx_with_disabled(disabled_id: str) -> RuleContext:
+    registry = RuleRegistry.defaults()
+    rules = {
+        rule.definition().id: RuleSettings(
+            enabled=(rule.definition().id != disabled_id),
+            thresholds=dict(rule.definition().default_thresholds),
+        )
+        for rule in registry.all()
+    }
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
 def test_registry_defaults_contains_all_seven_size_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
-    expected_size = {
-        "size.file-length",
-        "size.class-length",
-        "size.function-length",
-        "size.average-function-length",
-        "size.parameter-count",
-        "size.attribute-count",
-        "size.public-method-count",
-    }
-    assert expected_size.issubset(ids)
+    assert SIZE_RULE_IDS.issubset(ids)
 
 
 def test_registry_defaults_sorted_alphabetically_by_id():
@@ -209,29 +255,58 @@ def test_cumulative_fixture_emits_expected_rule_ids():
     registry = RuleRegistry.defaults()
     findings = registry.analyse([unit], ctx)
     rule_ids = {f.rule_id for f in findings}
-    # Expected hits at default thresholds:
+    # Expected hits at the test-calibrated thresholds (see _default_ctx):
     # - size.attribute-count fires on WideRecord (16 attrs > 15)
-    # - size.public-method-count fires on WidePublicSurface (16 public methods > 15)
+    # - size.public-method-count fires on WidePublicSurface (16 public methods > 10)
     # - size.parameter-count fires on big_static (10 params > 5)
     # - size.function-length fires on big_async, outer_function, outer_function.inner_function
     assert "size.attribute-count" in rule_ids
     assert "size.public-method-count" in rule_ids
     assert "size.parameter-count" in rule_ids
     assert "size.function-length" in rule_ids
-    # size.file-length should NOT fire (fixture is well under 400 lines)
+    # size.file-length should NOT fire (fixture is well under 1000 lines)
     assert "size.file-length" not in rule_ids
 
 
 def test_cumulative_fixture_findings_carry_symbol_and_metadata_lines():
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
-    ctx = _default_ctx()
-    findings = RuleRegistry.defaults().analyse([unit], ctx)
+    findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     fl = [f for f in findings if f.rule_id == "size.function-length"]
     assert fl, "expected function-length findings"
-    for f in fl:
-        assert f.symbol  # qualified name
-        assert "lines" in f.metadata
-        assert isinstance(f.metadata["lines"], int)
+    assert all(f.symbol for f in fl), f"missing symbol on: {fl}"
+    assert all("lines" in f.metadata for f in fl), f"missing 'lines' in metadata: {fl}"
+    assert all(isinstance(f.metadata["lines"], int) for f in fl), (
+        f"non-int 'lines' in metadata: {fl}"
+    )
+
+
+_THRESHOLD_METADATA_FIXTURE_SRC = """
+class Example:
+    field = 1
+
+    def method(self, one, two):
+        value = one + two
+        return value
+
+    def second(self):
+        return 2
+
+    def third(self):
+        return 3
+"""
+
+
+def test_size_threshold_findings_carry_standard_threshold_metadata():
+    """Keep size rule threshold metadata aligned with reporter contracts."""
+    ctx = _ctx_with_only(SIZE_RULE_IDS, thresholds={"warning": 0, "error": 9999})
+    findings = RuleRegistry.defaults().analyse([_make_unit(_THRESHOLD_METADATA_FIXTURE_SRC)], ctx)
+    size_findings = [f for f in findings if f.rule_id in SIZE_RULE_IDS]
+
+    assert SIZE_RULE_IDS.issubset({f.rule_id for f in size_findings})
+    assert all(isinstance(f.metadata["measuredValue"], int | float) for f in size_findings)
+    assert all(f.metadata["threshold"] == 0 for f in size_findings)
+    assert all(f.metadata["thresholdDirection"] == "above" for f in size_findings)
+    assert all(f.metadata["thresholdType"] == "warning" for f in size_findings)
 
 
 def test_nested_inner_function_emits_independent_finding():
@@ -254,20 +329,13 @@ def test_findings_deterministic_across_two_runs():
 
 
 def test_config_override_changes_finding_count():
-    # Default function-length threshold = 30/60. Override to 5/10.
+    # Default function-length threshold = 100 (PMD-aligned). Override to 5/10 to widen coverage.
     registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        d = rule.definition()
-        if d.id == "size.function-length":
-            rules[d.id] = RuleSettings(enabled=True, thresholds={"warning": 5, "error": 10})
-        else:
-            rules[d.id] = RuleSettings(enabled=True, thresholds=dict(d.default_thresholds))
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(SIZE_PILLAR_FIXTURE)
-
+    ctx = _ctx_with_threshold_overrides(
+        {"size.function-length": {"warning": 5, "error": 10}},
+    )
     default_findings = registry.analyse([_make_unit(SIZE_PILLAR_FIXTURE)], _default_ctx())
-    overridden_findings = registry.analyse([unit], ctx)
+    overridden_findings = registry.analyse([_make_unit(SIZE_PILLAR_FIXTURE)], ctx)
 
     default_fn_count = sum(1 for f in default_findings if f.rule_id == "size.function-length")
     override_fn_count = sum(1 for f in overridden_findings if f.rule_id == "size.function-length")
@@ -276,17 +344,8 @@ def test_config_override_changes_finding_count():
 
 
 def test_disabling_a_rule_removes_its_findings():
-    registry = RuleRegistry.defaults()
-    rules: dict[str, RuleSettings] = {}
-    for rule in registry.all():
-        d = rule.definition()
-        rules[d.id] = RuleSettings(
-            enabled=(d.id != "size.attribute-count"),
-            thresholds=dict(d.default_thresholds),
-        )
-    ctx = RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
-    unit = _make_unit(SIZE_PILLAR_FIXTURE)
-    findings = registry.analyse([unit], ctx)
+    ctx = _ctx_with_disabled("size.attribute-count")
+    findings = RuleRegistry.defaults().analyse([_make_unit(SIZE_PILLAR_FIXTURE)], ctx)
     assert all(f.rule_id != "size.attribute-count" for f in findings)
 
 

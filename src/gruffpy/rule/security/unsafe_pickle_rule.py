@@ -1,0 +1,166 @@
+"""``security.unsafe-pickle`` - pickle-family deserialisation of non-literal input.
+
+``pickle.loads(b'...')`` against a literal byte string is safe (well, as safe as
+shipping a literal bytes object can be). ``pickle.loads(user_input)`` is the
+canonical RCE vector. The rule fires when the first argument is not a literal.
+
+Also covers the same shape across the pickle-compatible deserialiser family:
+``cPickle`` (legacy), ``pickle.Unpickler(file).load()``, ``dill.loads``/``load``,
+``marshal.loads``/``load`` (bytecode deserialisation - accepts attacker-built
+code objects), ``shelve.open`` (a thin pickle wrapper over DBM), and
+``jsonpickle.decode`` (reconstructs arbitrary classes from JSON).
+"""
+
+import ast
+
+from gruffpy.finding.confidence import Confidence
+from gruffpy.finding.finding import Finding
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.rule_tier import RuleTier
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.definition import RuleDefinition
+from gruffpy.rule.rule import Rule
+from gruffpy.rule.security._security_node_helper import call_target_name
+
+_UNSAFE_LOAD_TARGETS: frozenset[str] = frozenset(
+    {
+        "pickle.loads",
+        "pickle.load",
+        "cPickle.loads",
+        "cPickle.load",
+        "dill.loads",
+        "dill.load",
+        "marshal.loads",
+        "marshal.load",
+        "shelve.open",
+        "jsonpickle.decode",
+    }
+)
+_SOURCE_NEEDLES: tuple[str, ...] = (
+    "pickle",
+    "cPickle",
+    "dill",
+    "marshal",
+    "shelve",
+    "jsonpickle",
+    "Unpickler",
+)
+
+
+class UnsafePickleRule(Rule):
+    """Detect `pickle.load`/`loads` (and `cPickle`/`dill` equivalents) on non-literal input."""
+
+    ID = "security.unsafe-pickle"
+
+    def definition(self) -> RuleDefinition:
+        """Describe the unsafe-pickle rule as a high-confidence ERROR.
+
+        ERROR severity because pickle deserialisation of untrusted input is
+        a textbook RCE vector - there's no defensive ``loads`` mode that
+        makes it safe.
+
+        Returns:
+            Definition for the unsafe-pickle rule under the security pillar.
+        """
+        return RuleDefinition(
+            id=self.ID,
+            name="Unsafe pickle deserialisation",
+            pillar=Pillar.SECURITY,
+            tier=RuleTier.V01,
+            default_severity=Severity.ERROR,
+            confidence=Confidence.HIGH,
+        )
+
+    def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
+        """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal first argument.
+
+        A literal bytes or str first argument is skipped - it can't be
+        attacker-controlled. The chained form
+        ``pickle.Unpickler(file).load()`` is also detected (and the
+        ``cPickle``/``dill`` equivalents) regardless of receiver shape.
+
+        Args:
+            unit: Parsed source file to inspect.
+            context: Rule execution context (unused - no thresholds).
+
+        Returns:
+            One finding per pickle deserialisation call without a literal source.
+        """
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
+            return []
+        definition = self.definition()
+        findings: list[Finding] = []
+        for node in ast.walk(unit.tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = call_target_name(node)
+            label = _unsafe_pickle_label(node, target)
+            if label is None:
+                continue
+            findings.append(_build_finding(definition, unit, node, label))
+        return findings
+
+
+def _unsafe_pickle_label(call: ast.Call, target: str | None) -> str | None:
+    if (
+        target is not None
+        and target in _UNSAFE_LOAD_TARGETS
+        and not _has_safe_literal_first_arg(call)
+    ):
+        return target
+    return _unpickler_load_label(call)
+
+
+def _has_safe_literal_first_arg(call: ast.Call) -> bool:
+    if not call.args:
+        return False
+    first = call.args[0]
+    return isinstance(first, ast.Constant) and isinstance(first.value, bytes | str)
+
+
+def _unpickler_load_label(call: ast.Call) -> str | None:
+    """Return ``pickle.Unpickler.load`` (or cPickle/dill variant) for the chained pattern."""
+    func = call.func
+    if not isinstance(func, ast.Attribute) or func.attr != "load":
+        return None
+    receiver = func.value
+    if not isinstance(receiver, ast.Call):
+        return None
+    receiver_target = call_target_name(receiver)
+    if receiver_target not in {
+        "pickle.Unpickler",
+        "cPickle.Unpickler",
+        "dill.Unpickler",
+    }:
+        return None
+    return f"{receiver_target}.load"
+
+
+def _build_finding(
+    definition: RuleDefinition,
+    unit: AnalysisUnit,
+    call: ast.Call,
+    target: str,
+) -> Finding:
+    return Finding(
+        rule_id=definition.id,
+        message=(
+            f"`{target}(...)` deserialises a non-literal input - pickle-family "
+            "deserialisation is a known RCE vector."
+        ),
+        file_path=unit.file.display_path,
+        line=call.lineno,
+        severity=definition.default_severity,
+        pillar=definition.pillar,
+        tier=definition.tier,
+        confidence=definition.confidence,
+        end_line=call.end_lineno,
+        remediation=(
+            "Use a structured format (JSON, msgpack with strict schema, "
+            "protobuf) for untrusted data. Reserve pickle for trusted internal IPC."
+        ),
+        secondary_pillars=definition.secondary_pillars,
+        metadata={"target": target},
+    )

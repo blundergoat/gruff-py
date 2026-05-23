@@ -8,9 +8,9 @@ terms.
 
 The first matching source wins:
 
-1. `gruff analyse --config <path>`
-2. `.gruff.yaml` in the project root
-3. `[tool.gruff]` in `pyproject.toml`
+1. `gruff-py analyse --config <path>`
+2. `.gruff-py.yaml` in the project root
+3. `[tool.gruff-py]` in `pyproject.toml`
 4. Built-in defaults from `RuleRegistry.defaults()`
 
 Use `--no-config` to skip all config files.
@@ -38,9 +38,12 @@ selection:
 
 rules:
   size.file-length:
+    threshold: 900
+    severity: error
+
+  test-quality.eager-test:
     thresholds:
-      warning: 500
-      error: 900
+      maxAssertions: 5
 
   test-quality.testdox-readability:
     enabled: true
@@ -49,23 +52,27 @@ rules:
 ## pyproject.toml Example
 
 ```toml
-[tool.gruff]
+[tool.gruff-py]
 minimumPythonVersion = "3.11"
 
-[tool.gruff.paths]
+[tool.gruff-py.paths]
 ignore = ["tests/fixtures/**", "generated/**"]
 
-[tool.gruff.allowlists]
+[tool.gruff-py.allowlists]
 acceptedAbbreviations = ["API", "URL"]
 secretPreviews = ["example-token-prefix"]
 
-[tool.gruff.selection]
+[tool.gruff-py.selection]
 excludeRules = ["docs.missing-module-docstring"]
 
-[tool.gruff.rules."size.file-length"]
-thresholds = { warning = 500, error = 900 }
+[tool.gruff-py.rules."size.file-length"]
+threshold = 900
+severity = "error"
 
-[tool.gruff.rules."test-quality.testdox-readability"]
+[tool.gruff-py.rules."test-quality.eager-test"]
+thresholds = { maxAssertions = 5 }
+
+[tool.gruff-py.rules."test-quality.testdox-readability"]
 enabled = true
 ```
 
@@ -109,22 +116,39 @@ Per-rule settings:
 | Key | Type | Meaning |
 |---|---|---|
 | `enabled` | bool | Enable or disable the rule |
-| `thresholds` | table | Numeric threshold overrides |
+| `threshold` | number | Single numeric threshold for rules with warning/error metric defaults |
+| `severity` | string | Finding severity for `threshold`: `warning` or `error` |
+| `thresholds` | table | Named numeric threshold knobs, such as `maxAssertions` or `entropy` |
 | `options` | table | Rule-specific options |
+
+Use `threshold` plus `severity` for metric rules that have warning/error
+defaults. Keep `thresholds` for named tuning values. Do not combine
+`threshold` and `thresholds` in the same rule entry.
 
 Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
 
 ## Ignored Paths
 
-gruff-py skips dependency, build, cache, generated, and VCS directories by
-default, including `.git`, `.venv`, `node_modules`, `vendor`, `dist`, `build`,
-`htmlcov`, `__pycache__`, and common tool caches.
+Source discovery applies three layers of exclusions, in order:
 
-It also skips lockfiles that commonly contain high-entropy hashes, such as
-`uv.lock`, `poetry.lock`, `package-lock.json`, `composer.lock`, `Cargo.lock`,
-and `go.sum`.
+1. **Default-ignored directories.** gruff-py skips dependency, build, cache,
+   generated, and VCS directories: `.git`, `.venv`, `node_modules`, `vendor`,
+   `dist`, `build`, `htmlcov`, `__pycache__`, and common tool caches. It also
+   skips lockfiles that commonly contain high-entropy hashes, such as
+   `uv.lock`, `poetry.lock`, `package-lock.json`, `composer.lock`,
+   `Cargo.lock`, and `go.sum`.
+2. **`.gitignore` exclusions.** Any path the project's `.gitignore` files
+   (root plus nested) exclude is skipped by default. Nested `.gitignore`
+   files override their parents; negation patterns (`!keep.py`) are honored.
+   `.git/info/exclude` and the user's global gitignore are not consulted.
+3. **Configured `paths.ignore` patterns.** Project-relative globs declared
+   in your config layer on top of the previous two.
 
-Use `--include-ignored` when you intentionally want to scan those paths.
+`--include-ignored` bypasses layers 1 and 2 (default-ignored directories
+**and** `.gitignore`). It does not bypass layer 3 - `paths.ignore` is your
+explicit, intentional exclusion list and remains active.
+
+Projects without a `.gitignore` are scanned as before.
 
 ## Display Filters Are Not Config Selection
 
@@ -133,4 +157,3 @@ filter what gets rendered. They do not change scoring or the `--fail-on` exit
 calculation.
 
 Use config `selection` when you want to change which rules run.
-

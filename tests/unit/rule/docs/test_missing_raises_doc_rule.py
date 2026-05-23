@@ -1,4 +1,7 @@
-from gruff.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
+import ast
+
+from gruffpy.rule.docs._helpers import has_raise_in_body
+from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
@@ -34,3 +37,20 @@ def test_nested_function_raise_does_not_trigger_outer():
 def test_function_without_docstring_skipped():
     src = "def f():\n    raise ValueError\n"
     assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def _wrap_in_unary_ops(node: ast.expr, depth: int) -> ast.expr:
+    """Return ``node`` wrapped in ``depth`` nested ``not`` operators."""
+    for _ in range(depth):
+        node = ast.UnaryOp(op=ast.Not(), operand=node)
+    return node
+
+
+def test_deep_expression_tree_does_not_overflow_raise_search():
+    module = ast.parse("def f():\n    pass\n")
+    fn = module.body[0]
+    assert isinstance(fn, ast.FunctionDef)
+
+    fn.body = [ast.Expr(value=_wrap_in_unary_ops(ast.Constant(value=0), depth=2000))]
+
+    assert has_raise_in_body(fn) is False

@@ -1,4 +1,4 @@
-from gruff.rule.security.sql_concatenation_rule import SqlConcatenationRule
+from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
@@ -28,6 +28,25 @@ def test_plus_concat_to_execute_emits():
 
 def test_static_literal_skipped():
     src = "cursor.execute('SELECT * FROM t WHERE id = ?', (user_id,))\n"
+    assert SqlConcatenationRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_quoted_dbapi_placeholder_with_parameters_emits():
+    src = "cursor.execute(\"SELECT * FROM users WHERE username = '%s'\", username)\n"
+    findings = SqlConcatenationRule().analyse(make_unit(src), default_ctx())
+
+    assert len(findings) == 1
+    assert findings[0].metadata["sourceLabel"] == "quoted-placeholder"
+    assert findings[0].metadata["sinkLabel"] == "sql-execution"
+
+
+def test_unquoted_dbapi_placeholder_with_parameters_skipped():
+    src = 'cursor.execute("SELECT * FROM users WHERE username = %s", username)\n'
+    assert SqlConcatenationRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_quoted_placeholder_without_parameters_skipped():
+    src = "cursor.execute(\"SELECT * FROM users WHERE username = '%s'\")\n"
     assert SqlConcatenationRule().analyse(make_unit(src), default_ctx()) == []
 
 

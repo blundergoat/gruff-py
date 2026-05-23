@@ -1,4 +1,4 @@
-from gruff.rule.security.weak_crypto_rule import WeakCryptoRule
+from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
@@ -20,6 +20,29 @@ def test_md5_for_cache_key_skipped():
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
 
-def test_sha256_not_flagged():
+def test_sha256_signature_not_flagged():
     src = "import hashlib\nsignature = hashlib.sha256(payload).hexdigest()\n"
+    assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_sha256_on_password_emits_with_kdf_metadata():
+    src = "import hashlib\npassword_hash = hashlib.sha256(password.encode()).hexdigest()\n"
+    findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
+
+    assert len(findings) == 1
+    assert findings[0].metadata["algorithm"] == "sha256"
+    assert findings[0].metadata["sourceLabel"] == "password-material"
+    assert findings[0].metadata["sinkLabel"] == "fast-hash"
+
+
+def test_sha512_in_password_function_emits():
+    src = (
+        "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
+    )
+    findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_sha256_for_generic_content_skipped():
+    src = "import hashlib\ncontent_digest = hashlib.sha256(file_bytes).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []

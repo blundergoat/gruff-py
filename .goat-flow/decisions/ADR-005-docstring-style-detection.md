@@ -1,4 +1,4 @@
-# ADR-005: Docstring style detection — parser choice
+# ADR-005: Docstring style detection - parser choice
 
 **Status:** Accepted
 **Date:** 2026-05-14
@@ -6,9 +6,9 @@
 
 ## Decision
 
-gruff-py's documentation pillar parses docstrings using **`docstring-parser`** (PyPI, MIT, pure Python, 22 KB wheel, zero runtime dependencies, ships `py.typed`). The library is wrapped behind one in-tree helper, `src/gruff/rule/docs/_docstring_parser.py`, that exposes a `ParsedDocstring` dataclass normalising Google / NumPy / Sphinx-`:param:` output into a single shape consumed by `docs.missing-param-doc`, `docs.missing-return-doc`, `docs.missing-raises-doc`, and `docs.stale-param-doc`.
+gruff-py's documentation pillar parses docstrings using **`docstring-parser`** (PyPI, MIT, pure Python, 22 KB wheel, zero runtime dependencies, ships `py.typed`). The library is wrapped behind one in-tree helper, `src/gruffpy/rule/docs/_docstring_parser.py`, that exposes a `ParsedDocstring` dataclass normalising Google / NumPy / Sphinx-`:param:` output into a single shape consumed by `docs.missing-param-doc`, `docs.missing-return-doc`, `docs.missing-raises-doc`, and `docs.stale-param-doc`.
 
-Style auto-detection sequence inside the wrapper: try the library's Google parser, then NumPy, then Sphinx (`epydoc`/`rest`). If all three fail, the wrapper returns `None` and the field-mismatch rules emit zero findings for that docstring (they require parsable input — presence-only checks like `docs.missing-function-docstring` are unaffected).
+Style auto-detection sequence inside the wrapper: try the library's Google parser, then NumPy, then Sphinx (`epydoc`/`rest`). If all three fail, the wrapper returns `None` and the field-mismatch rules emit zero findings for that docstring (they require parsable input - presence-only checks like `docs.missing-function-docstring` are unaffected).
 
 The library is the only third-party docstring parser pinned by gruff-py. Rules MUST consume `_docstring_parser.py`; rules MUST NOT import `docstring_parser` directly. This isolates the dependency behind one swap point.
 
@@ -22,7 +22,7 @@ Three options are available and the milestone explicitly requires this ADR to ev
 |---|---|---|---|---|
 | **(a) `docstring-parser` on PyPI** | MIT | Active; latest 0.18.0 (April 2026); Python 3.8–3.14 declared support | Returns a typed `Docstring` AST per style; small public surface (`parse(text, style=Style.AUTO)`). `py.typed` marker ships. | **22 KB wheel** (verified via `pip download --no-deps`; 73 KB uncompressed across 9 files); **zero runtime deps**. PyPI JSON metadata's larger figure was bytes, not KB. |
 | **(b) Vendor a fork of pydoclint's parser** | MIT (pydoclint), MIT (`docstring_parser_fork`) | pydoclint itself depends on `docstring_parser_fork` rather than upstream `docstring-parser`. Vendoring means inheriting whatever delta motivated the fork without owning the divergence-tracking work. | pydoclint's parser is tightly coupled to its linting passes; extracting just the parser requires cutting out checker code we don't want. | Smaller than installing pydoclint itself but adds in-tree maintenance load. |
-| **(c) Hand-roll a Google / NumPy / Sphinx tokeniser** | Native | Owned in-tree | Cleanest — produces gruff's own dataclasses directly. | Zero new third-party deps. Estimated ~200–400 LOC plus a fixture corpus for each style's edge cases (indented continuations, mixed type-hint syntax, `Args:` vs `Parameters:`, ReST field-list grouping, type-in-name like `param (int):` vs `param: int`). |
+| **(c) Hand-roll a Google / NumPy / Sphinx tokeniser** | Native | Owned in-tree | Cleanest - produces gruff's own dataclasses directly. | Zero new third-party deps. Estimated ~200–400 LOC plus a fixture corpus for each style's edge cases (indented continuations, mixed type-hint syntax, `Args:` vs `Parameters:`, ReST field-list grouping, type-in-name like `param (int):` vs `param: int`). |
 
 The verified 22 KB wheel removes the install-size argument that initially looked like a strike against (a). With that adjusted, (a) wins on every axis the milestone asked about: license is permissive, maintenance is upstream and active, AST integration is exactly what M06 needs, and the install footprint is smaller than the YAML loader gruff-py already pins.
 
@@ -38,7 +38,7 @@ The verified 22 KB wheel removes the install-size argument that initially looked
 ## Consequences
 
 - `pyproject.toml` `[project] dependencies` gains `docstring-parser>=0.15,<1`. This crosses an Ask First boundary per `CLAUDE.md`; the dep change happens as a separate, explicitly-approved follow-up to landing this ADR. The lower bound 0.15 is the first release with the stable `Style.AUTO` API used by the wrapper; the `<1` upper bound is a SemVer-style guard against a hypothetical 1.0 API rewrite.
-- `src/gruff/rule/docs/_docstring_parser.py` is the only file that imports `docstring_parser`. A grep test in `tests/integration/` enforces the import isolation; rule modules import from the wrapper only.
+- `src/gruffpy/rule/docs/_docstring_parser.py` is the only file that imports `docstring_parser`. A grep test in `tests/integration/` enforces the import isolation; rule modules import from the wrapper only.
 - The wrapper's `ParsedDocstring` dataclass is a frozen, slotted value object (consistent with gruff-py's value-object pattern per the design-decisions memory). Fields: `summary`, `description`, `params` (tuple of `DocstringField`), `returns` (`DocstringField | None`), `raises` (tuple), `style` (enum of `google | numpy | sphinx | unknown`).
 - If the auto-detection sequence returns `unknown`, field-mismatch rules (`missing-param-doc`, `missing-return-doc`, `missing-raises-doc`, `stale-param-doc`) skip the function and emit no findings. Presence-only rules (`missing-module-docstring`, `missing-class-docstring`, `missing-function-docstring`, `useless-docstring`, `todo-density`, `missing-readme`) are unaffected.
 

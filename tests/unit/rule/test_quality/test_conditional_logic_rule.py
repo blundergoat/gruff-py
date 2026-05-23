@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.conditional_logic_rule import ConditionalLogicRule
+from gruffpy.rule.test_quality.conditional_logic_rule import ConditionalLogicRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

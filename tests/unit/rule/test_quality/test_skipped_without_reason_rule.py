@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.skipped_without_reason_rule import SkippedWithoutReasonRule
+from gruffpy.rule.test_quality.skipped_without_reason_rule import SkippedWithoutReasonRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

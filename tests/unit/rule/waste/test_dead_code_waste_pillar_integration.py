@@ -1,4 +1,4 @@
-"""Cumulative integration + dynamism false-positive fixture for M04.
+"""Cumulative integration + dynamism false-positive fixture for the dead-code and waste pillars.
 
 Asserts that on a fixture exercising real Python dynamism (pytest fixtures,
 FastAPI routes, ABCs, Protocols, dataclasses, __all__), the dead-code and
@@ -7,18 +7,18 @@ waste rules produce ZERO findings.
 
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile
 
 DYNAMISM_FIXTURE = '''
 """Dynamism patterns gruff-py should NOT flag.
 
 This fixture lives in tests/ and exercises false-positive triggers for
-M04 dead-code/waste rules.
+the dead-code and waste rules.
 """
 
 from abc import ABC, abstractmethod
@@ -41,7 +41,7 @@ class _AbstractBase(ABC):
 
 
 class _Marker(Protocol):
-    """Protocol marker — empty body is intentional."""
+    """Protocol marker - empty body is intentional."""
 
 
 class _MarkerProtocolMethod(Protocol):
@@ -51,12 +51,12 @@ class _MarkerProtocolMethod(Protocol):
 
 @dataclass
 class _Record:
-    """Dataclass — fields are framework-managed."""
+    """Dataclass - fields are framework-managed."""
 
     _internal: int = 0
 
 
-# pytest fixture pattern — _setup is registered by name, not by reference.
+# pytest fixture pattern - _setup is registered by name, not by reference.
 def _setup(request):
     """Pretend pytest fixture; framework-decorated equivalent skipped by
     has_framework_decorator. This bare form requires __all__ to suppress."""
@@ -64,7 +64,7 @@ def _setup(request):
 
 
 class WithPropertyBacking:
-    """@property backing field — _value is read implicitly via the setter."""
+    """@property backing field - _value is read implicitly via the setter."""
 
     @property
     def value(self):
@@ -80,7 +80,7 @@ def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
         file=SourceFile(
             absolute_path="/dynamism.py",
@@ -127,7 +127,7 @@ def test_dynamism_fixture_emits_only_acceptable_findings():
     target_rule_prefixes = ("dead-code.", "waste.")
     suspect = [f for f in findings if any(f.rule_id.startswith(p) for p in target_rule_prefixes)]
     # Acceptable findings on the bare `_setup` function (no @pytest.fixture
-    # decorator — the fixture intentionally documents the user-facing trap):
+    # decorator - the fixture intentionally documents the user-facing trap):
     # 1. dead-code.unused-private-function: nothing calls _setup
     # 2. waste.unused-parameter on `request`: _setup ignores its arg
     # Both vanish once the user adds @pytest.fixture, demonstrating the

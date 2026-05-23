@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
+from gruffpy.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

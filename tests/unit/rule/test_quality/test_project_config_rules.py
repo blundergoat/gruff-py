@@ -2,23 +2,25 @@
 
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._pytest_config import reset_cache
-from gruff.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
-from gruff.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
-from gruff.rule.test_quality.pytest_coverage_source_missing_rule import (
+import pytest
+
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._pytest_config import reset_cache
+from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
+from gruffpy.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
+from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
 )
-from gruff.rule.test_quality.pytest_deprecations_not_fatal_rule import (
+from gruffpy.rule.test_quality.pytest_deprecations_not_fatal_rule import (
     PytestDeprecationsNotFatalRule,
 )
-from gruff.rule.test_quality.pytest_strict_config_missing_rule import (
+from gruffpy.rule.test_quality.pytest_strict_config_missing_rule import (
     PytestStrictConfigMissingRule,
 )
-from gruff.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
+from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _TEST_FIXTURE = "def test_something():\n    assert 1 + 1 == 2\n"
@@ -41,6 +43,7 @@ def test_strict_config_missing_emits_when_pytest_block_lacks_flags(tmp_path: Pat
     )
     findings = PytestStrictConfigMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
 
 
 def test_strict_config_present_skips(tmp_path: Path):
@@ -52,7 +55,11 @@ def test_strict_config_present_skips(tmp_path: Path):
 
 
 def test_strict_config_rule_skipped_on_non_test_unit(tmp_path: Path):
-    """Project-config rules must not fire on non-test units — gating regression."""
+    """Project-config rules must not fire on non-test units - gating regression.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory holding the synthetic ``pyproject.toml``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '-ra'\n",
@@ -79,6 +86,7 @@ def test_deprecations_not_fatal_emits_when_filterwarnings_silent(tmp_path: Path)
     )
     findings = PytestDeprecationsNotFatalRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
 
 
 def test_deprecations_not_fatal_skipped_with_filterwarnings(tmp_path: Path):
@@ -96,6 +104,19 @@ def test_coverage_source_missing_emits(tmp_path: Path):
     )
     findings = PytestCoverageSourceMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx)
     assert len(findings) == 1
+    assert findings[0].file_path == "pyproject.toml"
+
+
+def test_project_config_rules_skip_when_pyproject_has_no_pytest_config(tmp_path: Path):
+    ctx = _ctx_with_pyproject(
+        tmp_path,
+        '[tool.coverage.run]\nsource = ["my_package"]\n',
+    )
+    unit = make_unit(_TEST_FIXTURE)
+
+    assert PytestStrictConfigMissingRule().analyse(unit, ctx) == []
+    assert PytestDeprecationsNotFatalRule().analyse(unit, ctx) == []
+    assert PytestCoverageSourceMissingRule().analyse(unit, ctx) == []
 
 
 def test_coverage_source_present_skips(tmp_path: Path):
@@ -106,13 +127,21 @@ def test_coverage_source_present_skips(tmp_path: Path):
     assert PytestCoverageSourceMissingRule().analyse(make_unit(_TEST_FIXTURE), ctx) == []
 
 
-def test_opt_in_rules_default_off():
-    """The opt-in test-quality rules must default to enabled=False."""
-    for rule_cls in (MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule):
-        assert rule_cls().definition().default_enabled is False
+@pytest.mark.parametrize(
+    "rule_cls",
+    [MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule],
+    ids=lambda c: c.__name__,
+)
+def test_opt_in_rule_default_off(rule_cls: type) -> None:
+    """The opt-in test-quality rules must default to enabled=False.
+
+    Args:
+        rule_cls: Rule class expected to ship with ``default_enabled=False``.
+    """
+    assert rule_cls().definition().default_enabled is False
 
 
-def test_multiple_aaa_cycles_requires_opt_in(tmp_path: Path):
+def test_multiple_aaa_cycles_requires_opt_in():
     """Default-off rules don't fire through the registry unless explicitly enabled."""
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
     # Verify the rule is in defaults() but its settings.enabled is False.
@@ -121,11 +150,15 @@ def test_multiple_aaa_cycles_requires_opt_in(tmp_path: Path):
 
 
 def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
-    """When opted in, the rule does fire on multi-cycle tests."""
+    """When opted in, the rule does fire on multi-cycle tests.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory used as the project root.
+    """
     rule = MultipleAaaCyclesRule()
     config = AnalysisConfig(
         rules={
-            rule.definition().id: RuleSettings(enabled=True, thresholds={"warning": 1}),
+            rule.definition().id: RuleSettings(enabled=True, thresholds={"maxCycles": 1}),
         }
     )
     ctx = RuleContext(project_root=str(tmp_path), config=config)
@@ -144,7 +177,11 @@ def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
 
 
 def test_testdox_readability_skipped_when_default(tmp_path: Path):
-    """testdox-readability is default-off; even short test names don't fire by default."""
+    """testdox-readability is default-off; even short test names don't fire by default.
+
+    Args:
+        tmp_path: Pytest-provided per-test directory used as the project root.
+    """
     rule = TestdoxReadabilityRule()
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)

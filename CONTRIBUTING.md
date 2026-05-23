@@ -6,7 +6,7 @@ Thanks for taking the time to improve gruff-py.
 
 ```bash
 uv sync --extra dev
-uv run gruff --help
+uv run gruff-py --help
 ```
 
 ## Checks
@@ -34,15 +34,15 @@ When adding or changing a rule:
 - Include severity, confidence, thresholds, and default-enabled status in the
   rule definition.
 - Avoid overlapping with tools that already own style-only checks. For example,
-  ruff owns PEP 8 naming case style; gruff owns naming intent.
+  ruff owns PEP 8 naming case style; gruff-py owns naming intent.
 
 ## Compatibility Boundaries
 
 Be careful with:
 
-- `gruff.analysis.v1`
-- `gruff.hotspot.v1`
-- `gruff.baseline.v1`
+- `gruff-py.analysis.v1`
+- `gruff-py.hotspot.v1`
+- `gruff-py.baseline.v1`
 - finding fingerprint inputs
 - rule IDs
 - score weights and grade bands

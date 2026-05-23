@@ -1,4 +1,4 @@
-from gruff.rule.security.header_injection_rule import HeaderInjectionRule
+from gruffpy.rule.security.header_injection_rule import HeaderInjectionRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

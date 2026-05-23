@@ -1,0 +1,710 @@
+# gruff-py configuration - `.gruff-py.yaml` (ADR-006)
+#
+# This file is dogfood: gruff-py uses it when running `gruff-py analyse src/`
+# against itself. It mirrors the `[tool.gruff-py]` block in `pyproject.toml`.
+# `.gruff-py.yaml` takes precedence over `pyproject.toml` when both exist.
+#
+# The selection.pillars list names every built-in rubric/pillar, and
+# selection.rules plus rules.* name every built-in rule. Rule entries repeat
+# built-in defaults so adding/removing a built-in rule is visible in this file.
+
+minimumPythonVersion: '3.11'
+paths:
+  ignore:
+  - .agents/
+  - .antigravitycli/
+  - .claude/
+  - .codex/
+  - .github/
+  - .goat-flow/
+  - tests/fixtures/**
+allowlists:
+  acceptedAbbreviations:
+  - id
+  - ctx
+  - url
+  - ip
+  - io
+  - ui
+  - fn
+  - uri
+  - db
+  - ok
+  - api
+  - css
+  - html
+  - json
+  - yaml
+  - xml
+  - sql
+  - pk
+  - fk
+  secretPreviews: []
+  # Exempt specific framework-injected symbols, decorators, or fixture paths
+  # from `dead-code.unused-private-function` and `dead-code.unused-private-attribute`.
+  # See `.goat-flow/decisions/ADR-015-dead-code-allowlist.md`.
+  deadCode:
+    symbols: []
+    decorators: []
+    paths: []
+selection:
+  tiers:
+  - v0.1
+  pillars:
+  - complexity       # Cyclomatic, cognitive, Halstead, nesting, and NPATH checks.
+  - maintainability  # Maintainability index checks.
+  - dead-code        # Unused and waste-oriented rules.
+  - design           # Project-level design rules.
+  - documentation    # Docstring presence, stale docs, TODO density, and README checks.
+  - naming           # Intent-layer naming rules; PEP 8 case style stays with Ruff.
+  - security         # Heuristic AST-level dangerous pattern checks.
+  - sensitive-data   # Secret, key, PII, and PHI pattern checks.
+  - size             # File, class, function, parameter, method, and attribute size checks.
+  - test-quality     # Pytest-aware test smells and project config checks.
+  rules:
+  - complexity.cognitive
+  - complexity.cyclomatic
+  - complexity.halstead-volume
+  - complexity.maintainability-index
+  - complexity.nesting-depth
+  - complexity.npath
+  - dead-code.unused-private-attribute
+  - dead-code.unused-private-function
+  - design.single-implementor-protocol
+  - docs.complex-branch-rationale
+  - docs.dataclass-attributes
+  - docs.ignore-directive-reason
+  - docs.missing-class-docstring
+  - docs.missing-function-docstring
+  - docs.missing-module-docstring
+  - docs.missing-param-doc
+  - docs.missing-raises-doc
+  - docs.missing-readme
+  - docs.missing-return-doc
+  - docs.stale-param-doc
+  - docs.todo-density
+  - docs.useless-docstring
+  - naming.abbreviation
+  - naming.boolean-prefix
+  - naming.confusing-name
+  - naming.generic-function
+  - naming.hungarian-notation
+  - naming.identifier-quality
+  - naming.module-name-mismatch
+  - naming.parameter-type-name
+  - naming.short-variable
+  - naming.test-naming-consistency
+  - security.cors-wildcard-with-credentials
+  - security.dangerous-function-call
+  - security.disabled-ssl-verification
+  - security.django-mark-safe
+  - security.django-raw-sql
+  - security.error-suppression
+  - security.extract-compact-user-input
+  - security.flask-debug-enabled
+  - security.hardcoded-bind-all-interfaces
+  - security.hardcoded-framework-secret-key
+  - security.header-injection
+  - security.insecure-random
+  - security.insecure-temp-file
+  - security.insecure-tls-protocol
+  - security.jinja2-autoescape-off
+  - security.paramiko-no-host-key-check
+  - security.path-traversal
+  - security.shell-injection
+  - security.silent-except
+  - security.sql-concatenation
+  - security.ssrf
+  - security.unsafe-pickle
+  - security.unsafe-yaml-load
+  - security.variable-import
+  - security.weak-crypto
+  - security.xxe
+  - sensitive-data.api-key-pattern
+  - sensitive-data.aws-access-key
+  - sensitive-data.database-url-password
+  - sensitive-data.hardcoded-env-value
+  - sensitive-data.high-entropy-string
+  - sensitive-data.jwt-token
+  - sensitive-data.phi-pattern
+  - sensitive-data.pii-test-fixture
+  - sensitive-data.private-key
+  - size.attribute-count
+  - size.average-function-length
+  - size.class-length
+  - size.file-length
+  - size.function-length
+  - size.parameter-count
+  - size.public-method-count
+  - test-quality.conditional-logic
+  - test-quality.eager-test
+  - test-quality.empty-parametrize
+  - test-quality.exception-type-only
+  - test-quality.excessive-mocking
+  - test-quality.extends-production-class
+  - test-quality.global-state-mutation
+  - test-quality.loop-assertion-without-message
+  - test-quality.loop-in-test
+  - test-quality.magic-number-assertion
+  - test-quality.mock-only-test
+  - test-quality.mock-without-expectation
+  - test-quality.mocking-domain-object
+  - test-quality.multiple-aaa-cycles
+  - test-quality.mystery-guest
+  - test-quality.naming-consistency
+  - test-quality.no-assertions
+  - test-quality.parametrize-annotation
+  - test-quality.private-reflection
+  - test-quality.pytest-coverage-source-missing
+  - test-quality.pytest-deprecations-not-fatal
+  - test-quality.pytest-strict-config-missing
+  - test-quality.repeated-structure-missing-parametrize
+  - test-quality.setup-bloat
+  - test-quality.skipped-without-reason
+  - test-quality.sleep-in-test
+  - test-quality.sut-not-called
+  - test-quality.tautological-type-assertion
+  - test-quality.test-function-too-long
+  - test-quality.test-longer-than-sut
+  - test-quality.testdox-readability
+  - test-quality.trivial-assertion
+  - test-quality.trivial-snapshot
+  - test-quality.unused-mock
+  - waste.commented-out-code
+  - waste.empty-class
+  - waste.empty-function
+  - waste.one-line-function
+  - waste.redundant-variable
+  - waste.unreachable-code
+  - waste.unused-import
+  - waste.unused-parameter
+  excludePillars: []
+  excludeRules: []
+rules:
+  # Hard-to-follow branch nesting increases review and change risk.
+  complexity.cognitive:
+    enabled: true
+    threshold: 30
+    severity: error
+  # Too many branch paths make behavior harder to test safely.
+  complexity.cyclomatic:
+    enabled: true
+    threshold: 20
+    severity: error
+  # Dense operators and operands signal logic that is hard to understand.
+  complexity.halstead-volume:
+    enabled: true
+    threshold: 400
+    severity: error
+  # Low maintainability index marks code likely to be costly to change.
+  complexity.maintainability-index:
+    enabled: true
+    threshold: 70
+    severity: error
+  # Deep nesting hides control flow and edge cases.
+  complexity.nesting-depth:
+    enabled: true
+    threshold: 6
+    severity: error
+  # Too many execution paths make complete testing unreliable.
+  complexity.npath:
+    enabled: true
+    threshold: 500
+    severity: error
+  # Unused private attributes add state nobody reads.
+  dead-code.unused-private-attribute:
+    enabled: true
+  # Unused private functions hide stale assumptions and maintenance noise.
+  dead-code.unused-private-function:
+    enabled: true
+  # Protocols or ABCs with one local implementation add abstraction without polymorphism.
+  design.single-implementor-protocol:
+    enabled: true
+    options:
+      externalProtocolBases:
+      - Sized
+      - Iterable
+      - Iterator
+      - Collection
+      - Container
+      - Sequence
+      - Mapping
+      - MutableMapping
+      - Callable
+      - ContextManager
+      - AsyncContextManager
+      additionalExcludedPaths: []
+  # Highly branched code needs either simpler structure or maintainer rationale.
+  docs.complex-branch-rationale:
+    enabled: true
+    options:
+      cyclomatic_warning: 10
+      cognitive_warning: 15
+      private_cyclomatic_warning: 15
+      private_cognitive_warning: 20
+  # Public dataclass payload fields should be documented as part of the contract.
+  docs.dataclass-attributes:
+    enabled: true
+    options:
+      min_fields: 3
+      require_all_fields: false
+      allow_bullets: true
+  # Suppression directives need a reason future maintainers can evaluate.
+  docs.ignore-directive-reason:
+    enabled: true
+  # Classes need docstrings to explain purpose and invariants.
+  docs.missing-class-docstring:
+    enabled: true
+    options:
+      class_dataclass_exempt: false
+  # Functions need docstrings to state behavior beyond the name.
+  docs.missing-function-docstring:
+    enabled: true
+  # Modules need docstrings to orient readers at the file boundary.
+  docs.missing-module-docstring:
+    enabled: true
+  # Parameter docs clarify contracts that signatures do not fully express.
+  docs.missing-param-doc:
+    enabled: true
+  # Raises docs make failure modes visible to callers.
+  docs.missing-raises-doc:
+    enabled: true
+  # A project README gives newcomers a reliable starting point.
+  docs.missing-readme:
+    enabled: true
+  # Return docs clarify meaning, nullability, and collection shape.
+  docs.missing-return-doc:
+    enabled: true
+  # Stale parameter docs mislead callers more than missing docs.
+  docs.stale-param-doc:
+    enabled: true
+  # Dense TODO/FIXME markers expose deferred work becoming hidden debt.
+  docs.todo-density:
+    enabled: true
+    threshold: 10
+    severity: error
+  # Empty or restated docstrings make useful documentation harder to find.
+  docs.useless-docstring:
+    enabled: true
+    options:
+      min_summary_words:
+        module: 6
+        class: 4
+        function: 4
+  # Boolean names should read like predicates at call sites.
+  naming.boolean-prefix:
+    enabled: true
+  # Abbreviations like cfg or req hide intent unless the project explicitly allows them.
+  naming.abbreviation:
+    enabled: false
+  # Catch-all names like Manager or Data hide responsibility.
+  naming.confusing-name:
+    enabled: true
+    options:
+      confusingNames:
+      - Handler
+      - Processor
+      - Manager
+      - Util
+      - Utils
+      - Helper
+      - Helpers
+      - Data
+      - Info
+      - Service
+      - Stuff
+      - Thing
+      - Object
+      - Item
+  # Generic function names hide intent and ownership.
+  naming.generic-function:
+    enabled: true
+    options:
+      genericFunctions:
+      - process
+      - handle
+      - do
+      - run
+      - execute
+      - perform
+      - apply
+      - manage
+      - operate
+  # Hungarian notation repeats type details and obscures domain meaning.
+  naming.hungarian-notation:
+    enabled: true
+  # Placeholder or low-information identifiers slow review.
+  naming.identifier-quality:
+    enabled: true
+  # Modules should have names that match their primary public symbol.
+  naming.module-name-mismatch:
+    enabled: true
+    options:
+      # Module stems whose name reflects role (entry point, server, parser,
+      # multi-function helper) rather than the single class they happen to
+      # host. The rule should not fire on these even though they contain
+      # exactly one public class with a different name.
+      conventionalModuleNames:
+      - constants
+      - exceptions
+      - helpers
+      - protocols
+      - types
+      - cli
+      - dashboard_server
+      - python_parser
+      - _halstead
+      - _secret_scanner_helper
+      - _comment_scanner
+  # Class-typed parameters should include the role of the object.
+  naming.parameter-type-name:
+    enabled: true
+    options:
+      ignoredParameterNames:
+      - id
+      - ctx
+      - url
+      - ip
+      - io
+      - ui
+      - fn
+      - uri
+      - db
+      - ok
+      - api
+      - css
+      - html
+      - json
+      - yaml
+      - xml
+      - sql
+      - pk
+      - fk
+  # Very short variable names are easy to misread outside tiny scopes.
+  naming.short-variable:
+    enabled: true
+    options:
+      acceptedShortNames:
+      - i
+      - j
+      - k
+      - n
+      - m
+      - x
+      - y
+      - z
+      - e
+      - _
+      - f
+  # Test names should follow the project's test naming convention.
+  naming.test-naming-consistency:
+    enabled: true
+  # CORS wildcard origin combined with credentials is a misconfigured policy.
+  security.cors-wildcard-with-credentials:
+    enabled: true
+  # Calls that execute code or perform risky operations need scrutiny.
+  security.dangerous-function-call:
+    enabled: true
+  # Disabling SSL verification removes transport trust checks.
+  security.disabled-ssl-verification:
+    enabled: true
+  # mark_safe on dynamic content disables Django's XSS protection.
+  security.django-mark-safe:
+    enabled: true
+  # Django ORM raw SQL escape hatches with dynamic strings reopen SQLi.
+  security.django-raw-sql:
+    enabled: true
+  # Broad exception suppression can hide failures and security checks.
+  security.error-suppression:
+    enabled: true
+  # Splat-unpacking compact user input can bypass explicit validation.
+  security.extract-compact-user-input:
+    enabled: true
+  # Flask debug mode exposes the Werkzeug debugger and is an RCE in production.
+  security.flask-debug-enabled:
+    enabled: true
+  # Binding to 0.0.0.0 or :: exposes the service on every network interface.
+  security.hardcoded-bind-all-interfaces:
+    enabled: true
+  # Module-scope SECRET_KEY literals in Flask/Django files leak signing keys.
+  security.hardcoded-framework-secret-key:
+    enabled: true
+  # Unsanitized header values can enable response splitting.
+  security.header-injection:
+    enabled: true
+  # Non-cryptographic randomness is unsafe for secrets or tokens.
+  security.insecure-random:
+    enabled: true
+  # mktemp and hardcoded /tmp paths are exposed to TOCTOU and symlink attacks.
+  security.insecure-temp-file:
+    enabled: true
+  # Deprecated SSL/TLS protocol constants accept known-broken ciphers.
+  security.insecure-tls-protocol:
+    enabled: true
+  # Jinja2 environments without autoescape leave templates exposed to XSS.
+  security.jinja2-autoescape-off:
+    enabled: true
+  # paramiko AutoAddPolicy / WarningPolicy accept unknown SSH host keys.
+  security.paramiko-no-host-key-check:
+    enabled: true
+  # User-controlled paths reaching open / Path / shutil are a traversal risk.
+  security.path-traversal:
+    enabled: true
+  # Shell-routed commands can turn strings into command injection.
+  security.shell-injection:
+    enabled: true
+  # Bare except/pass handlers hide failures and defensive checks.
+  security.silent-except:
+    enabled: true
+  # Runtime-composed SQL can introduce injection paths.
+  security.sql-concatenation:
+    enabled: true
+  # User-controlled URLs reaching outbound HTTP clients enable SSRF.
+  security.ssrf:
+    enabled: true
+  # Pickle deserialization can execute attacker-controlled code.
+  security.unsafe-pickle:
+    enabled: true
+  # Unsafe PyYAML loaders can construct attacker-controlled objects.
+  security.unsafe-yaml-load:
+    enabled: true
+  # Dynamic imports from variables can load unexpected code.
+  security.variable-import:
+    enabled: true
+  # Weak hashes are unsuitable for security-sensitive data.
+  security.weak-crypto:
+    enabled: true
+  # Stdlib/lxml XML parsers without defusedxml are vulnerable to XXE.
+  security.xxe:
+    enabled: true
+  # Vendor API key patterns may expose live credentials.
+  sensitive-data.api-key-pattern:
+    enabled: true
+  # AWS access key IDs in source can expose cloud credentials.
+  sensitive-data.aws-access-key:
+    enabled: true
+  # Database URLs with embedded passwords leak service access.
+  sensitive-data.database-url-password:
+    enabled: true
+  # Secret-looking KEY=value assignments should not be committed.
+  sensitive-data.hardcoded-env-value:
+    enabled: true
+  # High-entropy literals may be generated tokens or keys.
+  sensitive-data.high-entropy-string:
+    enabled: true
+  # JWT-shaped literals can expose signed tokens or copied test data.
+  sensitive-data.jwt-token:
+    enabled: true
+  # PHI-looking values in source can expose protected health information.
+  sensitive-data.phi-pattern:
+    enabled: true
+  # PII in fixtures can copy real user data into tests.
+  sensitive-data.pii-test-fixture:
+    enabled: true
+  # Private key material requires immediate removal and rotation.
+  sensitive-data.private-key:
+    enabled: true
+  # Too many attributes suggest an object with too many responsibilities.
+  size.attribute-count:
+    enabled: true
+    threshold: 15
+    severity: error
+  # Classes with long average functions are hard to scan and change.
+  size.average-function-length:
+    enabled: true
+    threshold: 100
+    severity: error
+  # Large classes usually mix responsibilities and slow review.
+  size.class-length:
+    enabled: true
+    threshold: 1000
+    severity: error
+  # Very large files slow navigation and hide unrelated concerns.
+  size.file-length:
+    enabled: true
+    threshold: 1000
+    severity: error
+  # Long functions are harder to understand, test, and refactor.
+  size.function-length:
+    enabled: true
+    threshold: 100
+    severity: error
+  # Long parameter lists make call sites brittle.
+  size.parameter-count:
+    enabled: true
+    threshold: 10
+    severity: error
+  # Too many public methods create a broad and hard-to-test surface.
+  size.public-method-count:
+    enabled: true
+    threshold: 10
+    severity: error
+  # Branching inside tests makes intent and failure modes harder to read.
+  test-quality.conditional-logic:
+    enabled: true
+  # Tests that exercise too much behavior make failures harder to diagnose.
+  test-quality.eager-test:
+    enabled: true
+    thresholds:
+      maxAssertions: 5
+  # Empty parametrization can make tests pass without cases.
+  test-quality.empty-parametrize:
+    enabled: true
+  # Exception assertions should verify more than just broad type shape.
+  test-quality.exception-type-only:
+    enabled: true
+  # Heavy mocking can make tests assert implementation instead of behavior.
+  test-quality.excessive-mocking:
+    enabled: true
+    thresholds:
+      maxMocks: 4
+  # Tests inheriting production classes couple test setup to app design.
+  test-quality.extends-production-class:
+    enabled: true
+  # Mutating global state in tests can leak order-dependent failures.
+  test-quality.global-state-mutation:
+    enabled: true
+  # Loop assertions need messages so failing cases are identifiable.
+  test-quality.loop-assertion-without-message:
+    enabled: true
+  # Loops in tests can hide distinct examples and failure cases.
+  test-quality.loop-in-test:
+    enabled: true
+  # Magic numbers in assertions obscure the expected business meaning.
+  test-quality.magic-number-assertion:
+    enabled: true
+    options:
+      allowed_numbers:
+      - -1
+      - 0
+      - 1
+      - 2
+      - 3
+      - 200
+      - 201
+      - 204
+      - 301
+      - 302
+      - 400
+      - 401
+      - 403
+      - 404
+      - 409
+      - 422
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+  # Tests that only assert mocks can miss real behavior.
+  test-quality.mock-only-test:
+    enabled: true
+  # Mocks should have expectations or assertions tied to behavior.
+  test-quality.mock-without-expectation:
+    enabled: true
+  # Mocking domain objects can replace real contracts with brittle doubles.
+  test-quality.mocking-domain-object:
+    enabled: false
+    options:
+      domain_namespaces: []
+  # Multiple arrange/act/assert cycles make one test cover multiple stories.
+  test-quality.multiple-aaa-cycles:
+    enabled: false
+    thresholds:
+      maxCycles: 2
+  # Tests depending on hidden files or services are hard to reproduce.
+  test-quality.mystery-guest:
+    enabled: true
+  # Test names should consistently describe observed behavior.
+  test-quality.naming-consistency:
+    enabled: true
+  # Tests need assertions or checks that can fail.
+  test-quality.no-assertions:
+    enabled: true
+  # Parametrized tests need IDs or annotations to explain cases.
+  test-quality.parametrize-annotation:
+    enabled: true
+    thresholds:
+      maxCasesWithoutIds: 2
+  # Reflecting into private members ties tests to implementation details.
+  test-quality.private-reflection:
+    enabled: true
+  # Pytest coverage should name source packages explicitly.
+  test-quality.pytest-coverage-source-missing:
+    enabled: true
+  # Pytest should treat deprecations as failures before they accumulate.
+  test-quality.pytest-deprecations-not-fatal:
+    enabled: true
+  # Pytest config should enable strict marker and config handling.
+  test-quality.pytest-strict-config-missing:
+    enabled: true
+  # Repeated test structure should be parametrized to keep cases aligned.
+  test-quality.repeated-structure-missing-parametrize:
+    enabled: true
+    thresholds:
+      minGroupSize: 3
+  # Large setup blocks hide the behavior under test.
+  test-quality.setup-bloat:
+    enabled: true
+    thresholds:
+      maxSetupLines: 30
+  # Skipped tests should explain why they are disabled.
+  test-quality.skipped-without-reason:
+    enabled: true
+  # Sleeps make tests slow and timing-dependent.
+  test-quality.sleep-in-test:
+    enabled: true
+  # Tests should call the system under test, not just setup assertions.
+  test-quality.sut-not-called:
+    enabled: true
+  # Type assertions against constructed literals do not prove behavior.
+  test-quality.tautological-type-assertion:
+    enabled: true
+  # Long test functions are hard to scan and maintain.
+  test-quality.test-function-too-long:
+    enabled: true
+    threshold: 100
+    severity: error
+  # Tests much longer than the SUT may signal excessive setup or assertion noise.
+  test-quality.test-longer-than-sut:
+    enabled: true
+    options:
+      ratio: 2.0
+  # Testdox names should read as useful behavior descriptions.
+  test-quality.testdox-readability:
+    enabled: false
+    options:
+      min_words: 4
+  # Assertions that prove constants or literals create false confidence.
+  test-quality.trivial-assertion:
+    enabled: true
+  # Snapshot tests need meaningful assertions beyond fixture churn.
+  test-quality.trivial-snapshot:
+    enabled: true
+  # Unused mocks add noise and can hide missing interactions.
+  test-quality.unused-mock:
+    enabled: true
+  # Commented-out code is obsolete context that should live in history.
+  waste.commented-out-code:
+    enabled: true
+  # Empty classes usually mean unfinished or unnecessary structure.
+  waste.empty-class:
+    enabled: true
+  # Empty functions usually mean unfinished or obsolete behavior.
+  waste.empty-function:
+    enabled: true
+  # One-line wrappers often add indirection without meaning.
+  waste.one-line-function:
+    enabled: true
+  # Redundant variables add names without clarifying intent.
+  waste.redundant-variable:
+    enabled: true
+  # Statements after exits are unreachable and misleading.
+  waste.unreachable-code:
+    enabled: true
+  # Unused imports add dependency noise and slow navigation.
+  waste.unused-import:
+    enabled: true
+  # Unused parameters signal mismatched interfaces or obsolete data.
+  waste.unused-parameter:
+    enabled: true

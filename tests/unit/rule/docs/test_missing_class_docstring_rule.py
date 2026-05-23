@@ -1,4 +1,7 @@
-from gruff.rule.docs.missing_class_docstring_rule import MissingClassDocstringRule
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.docs.missing_class_docstring_rule import MissingClassDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
@@ -20,9 +23,28 @@ def test_protocol_subclass_skipped():
     assert findings == []
 
 
-def test_dataclass_skipped_by_default():
+def test_dataclass_without_docstring_emits_by_default():
     src = "from dataclasses import dataclass\n\n@dataclass\nclass D:\n    x: int\n"
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].symbol == "D"
+
+
+def test_dataclass_can_be_exempted_by_config():
+    src = "from dataclasses import dataclass\n\n@dataclass\nclass D:\n    x: int\n"
+    rule = MissingClassDocstringRule()
+    ctx = RuleContext(
+        project_root="/",
+        config=AnalysisConfig(
+            rules={
+                rule.definition().id: RuleSettings(
+                    enabled=True,
+                    options={"class_dataclass_exempt": True},
+                )
+            }
+        ),
+    )
+    findings = rule.analyse(make_unit(src), ctx)
     assert findings == []
 
 

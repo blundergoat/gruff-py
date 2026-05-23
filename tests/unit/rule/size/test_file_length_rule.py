@@ -1,12 +1,12 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.size.file_length_rule import FileLengthRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.size.file_length_rule import FileLengthRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(line_count: int) -> AnalysisUnit:
@@ -38,15 +38,24 @@ def test_under_warning_threshold_emits_no_finding():
     assert findings == []
 
 
+_WARNING_BOUNDARY = 100
+_FILE_LINES_OVER_WARNING = 150
+
+
 def test_above_warning_below_error_emits_warning():
-    findings = FileLengthRule().analyse(_make_unit(150), _ctx(warning=100, error=200))
+    findings = FileLengthRule().analyse(
+        _make_unit(_FILE_LINES_OVER_WARNING),
+        _ctx(warning=_WARNING_BOUNDARY, error=200),
+    )
     assert len(findings) == 1
     finding = findings[0]
-    assert finding.severity == Severity.WARNING
-    assert finding.rule_id == "size.file-length"
-    assert finding.metadata["lines"] == 150
-    assert finding.metadata["threshold"] == 100
-    assert finding.metadata["thresholdType"] == "warning"
+    assert (finding.severity, finding.rule_id) == (Severity.WARNING, "size.file-length")
+    relevant_metadata = {k: finding.metadata[k] for k in ("lines", "threshold", "thresholdType")}
+    assert relevant_metadata == {
+        "lines": _FILE_LINES_OVER_WARNING,
+        "threshold": _WARNING_BOUNDARY,
+        "thresholdType": "warning",
+    }
 
 
 def test_above_error_emits_error():
@@ -71,5 +80,5 @@ def test_finding_carries_fingerprint_and_remediation():
 def test_definition_uses_default_thresholds():
     definition = FileLengthRule().definition()
     assert definition.id == "size.file-length"
-    assert definition.default_thresholds == {"warning": 400, "error": 800}
+    assert definition.default_thresholds == {"warning": 1000, "error": 1000}
     assert definition.default_severity == Severity.WARNING

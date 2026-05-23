@@ -1,13 +1,13 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity._halstead import halstead_for
-from gruff.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity._halstead import halstead_for
+from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
@@ -22,12 +22,12 @@ def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 2000, error: int = 5000) -> RuleContext:
+def _ctx(warning: int = 180, error: int = 400) -> RuleContext:
     rule = HalsteadVolumeRule()
     config = AnalysisConfig(
         rules={
@@ -104,7 +104,7 @@ def test_nested_function_not_included():
 
 def test_huge_function_emits_finding():
     # Force vocabulary and length high with both BinOps and Compares.
-    # Volume well over the 2000 threshold -> finding (may be warning OR error).
+    # Volume well over the error threshold -> finding.
     pairs = "\n".join(
         f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}"
         for i in range(60)
@@ -112,48 +112,54 @@ def test_huge_function_emits_finding():
     src = f"def f():\n{pairs}\n"
     findings = HalsteadVolumeRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity in (Severity.WARNING, Severity.ERROR)
-    assert findings[0].metadata["halsteadVolume"] > 2000
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].metadata["halsteadVolume"] > 400
 
 
 def test_definition_uses_default_thresholds():
     d = HalsteadVolumeRule().definition()
     assert d.id == "complexity.halstead-volume"
-    assert d.default_thresholds == {"warning": 2000, "error": 5000}
+    assert d.default_thresholds == {"warning": 180, "error": 400}
+
+
+_RADON_VOLUMES = {
+    "simple": 4.75,
+    "with_branches": 20.68,
+    "with_loop": 13.93,
+    "with_boolops": 15.51,
+    "with_comprehension": 13.93,
+    "a1": 4.75,
+    "a2": 9.51,
+}
+
+
+def _halstead_deltas_against_radon() -> list[float]:
+    """Compute per-function ``|gruff - radon| / radon`` deltas for the cc_fixture.
+
+    Returns:
+        Relative deltas (one per function in ``_RADON_VOLUMES`` that exists in
+        the fixture's parsed AST).
+    """
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
+    tree = ast.parse(fixture.read_text())
+    return [
+        abs(halstead_for(node).volume - _RADON_VOLUMES[node.name]) / _RADON_VOLUMES[node.name]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name in _RADON_VOLUMES
+    ]
 
 
 def test_radon_delta_within_threshold():
     """Cross-check Halstead volume against radon 6.0.1 ground-truth.
 
-    M03 ship gate: ±10% average delta on the ground-truth fixture.
+    Tolerance: ±15% average delta on the ground-truth fixture (relaxed
+    from ±10% due to a documented chained-BoolOp pattern in
+    ``radon_ground_truth.md``; aggregate well under the ±50% kill threshold).
     Run ``uvx radon hal tests/fixtures/complexity/cc_fixture.py -f`` to
-    refresh radon's numbers; update `radon_ground_truth.md` if they change.
-
-    See `radon_ground_truth.md` for known per-function deltas — the chained
-    boolean-operator pattern produces a documented 25% delta; the average
-    stays under 10%.
+    refresh radon's numbers; update ``radon_ground_truth.md`` if they change.
     """
-    from pathlib import Path
-
-    radon_volumes = {
-        "simple": 4.75,
-        "with_branches": 20.68,
-        "with_loop": 13.93,
-        "with_boolops": 15.51,
-        "with_comprehension": 13.93,
-        "a1": 4.75,
-        "a2": 9.51,
-    }
-    fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
-    tree = ast.parse(fixture.read_text())
-    deltas: list[float] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in radon_volumes:
-            gruff_v = halstead_for(node).volume
-            radon_v = radon_volumes[node.name]
-            deltas.append(abs(gruff_v - radon_v) / radon_v)
+    deltas = _halstead_deltas_against_radon()
     average = sum(deltas) / len(deltas)
-    # M03 ship gate: ±15% average delta (relaxed from ±10% due to documented
-    # chained-BoolOp pattern in radon_ground_truth.md; aggregate well under
-    # the ±50% kill threshold). Average across these fixtures: ~10.3%.
     assert average <= 0.15, f"average Halstead delta {average:.1%} exceeds 15%"

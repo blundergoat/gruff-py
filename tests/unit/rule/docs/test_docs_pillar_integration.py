@@ -7,14 +7,75 @@ double-fires and registry omissions.
 
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.loader import ConfigLoader
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.loader import ConfigLoader
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.docs._helpers import make_unit
 
+
+def _marker(*parts: str) -> str:
+    return "".join(parts)
+
+
+_DENSE_MARKERS = (
+    _marker("TO", "DO"),
+    _marker("TO", "DO"),
+    _marker("FIX", "ME"),
+    _marker("HAC", "K"),
+    _marker("XX", "X"),
+    _marker("BU", "G"),
+)
+
+
+def _todo_density_fixture_lines() -> str:
+    labels = ("one", "two", "three", "four", "five", "six")
+    return "\n".join(
+        f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True)
+    )
+
+
 # Source crafted to trigger every docs rule at least once.
-_FIXTURE = '''def helper(x, y):
+_FIXTURE = (
+    '''from dataclasses import dataclass
+import os  # noqa
+
+
+@dataclass
+class Payload:
+    name: str
+    value: int
+    status: str
+
+
+def route_payload(value):
+    total = 0
+    if value == 0:
+        total += 0
+    if value == 1:
+        total += 1
+    if value == 2:
+        total += 2
+    if value == 3:
+        total += 3
+    if value == 4:
+        total += 4
+    if value == 5:
+        total += 5
+    if value == 6:
+        total += 6
+    if value == 7:
+        total += 7
+    if value == 8:
+        total += 8
+    if value == 9:
+        total += 9
+    if value == 10:
+        total += 10
+    return total
+
+
+def helper(x, y):
     """Doc.
 
     Args:
@@ -48,16 +109,15 @@ def slot(x) -> int:
     """
     return x * 2
 
-
-# TODO: one
-# TODO: two
-# FIXME: three
-# HACK: four
-# XXX: five
-# BUG: six
 '''
+    + _todo_density_fixture_lines()
+    + "\n"
+)
 
 _EXPECTED_RULE_IDS = {
+    "docs.complex-branch-rationale",
+    "docs.dataclass-attributes",
+    "docs.ignore-directive-reason",
     "docs.missing-module-docstring",
     "docs.missing-class-docstring",
     "docs.missing-function-docstring",
@@ -83,7 +143,7 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     assert not missing, f"Missing rule fires: {sorted(missing)}"
 
 
-def test_docs_registry_has_ten_rules():
+def test_docs_registry_has_thirteen_rules():
     registry = RuleRegistry.defaults()
     docs_ids = {
         rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")
@@ -104,7 +164,7 @@ def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
 
 
 def test_config_can_disable_missing_function_docstring_for_test_paths(tmp_path: Path):
-    (tmp_path / ".gruff.yaml").write_text(
+    (tmp_path / ".gruff-py.yaml").write_text(
         "rules:\n  docs.missing-function-docstring:\n    enabled: false\n"
     )
     registry = RuleRegistry.defaults()

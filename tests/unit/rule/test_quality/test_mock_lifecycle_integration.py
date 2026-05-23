@@ -2,11 +2,11 @@
 
 Plants patterns for the high-confidence rules and asserts each fires once.
 Also re-checks the memoisation invariant after the full test-quality rule set
-is layered onto the helper — single scope computation per unit.
+is layered onto the helper - single scope computation per unit.
 """
 
-from gruff.rule.registry import RuleRegistry
-from gruff.rule.test_quality._test_quality_node_helper import (
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.rule.test_quality._test_quality_node_helper import (
     compute_count,
     reset_compute_count,
 )
@@ -79,6 +79,10 @@ def test_memoisation_invariant_holds_for_full_pillar():
     assert after - before == 1, f"Memoisation broken: {after - before} computes"
 
 
+# Floor for v0.1: 28 default-on test-quality rules. The full catalogue ships 34.
+_MIN_TEST_QUALITY_RULE_COUNT = 28
+
+
 def test_registry_has_full_test_quality_rule_set():
     """v0.1 ships at least 28 default-on test-quality rules; the full set is 34."""
     ids = {
@@ -86,4 +90,7 @@ def test_registry_has_full_test_quality_rule_set():
         for r in RuleRegistry.defaults().all()
         if r.definition().id.startswith("test-quality.")
     }
-    assert len(ids) >= 28, f"Expected ≥28 test-quality rules; got {len(ids)}: {sorted(ids)}"
+    assert len(ids) >= _MIN_TEST_QUALITY_RULE_COUNT, (
+        f"Expected ≥{_MIN_TEST_QUALITY_RULE_COUNT} test-quality rules; got "
+        f"{len(ids)}: {sorted(ids)}"
+    )

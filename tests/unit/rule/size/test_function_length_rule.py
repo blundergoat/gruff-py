@@ -1,12 +1,12 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.size.function_length_rule import FunctionLengthRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.size.function_length_rule import FunctionLengthRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(source: str) -> AnalysisUnit:
@@ -14,7 +14,7 @@ def _make_unit(source: str) -> AnalysisUnit:
     # mirror PythonFileParser._attach_parents
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -38,17 +38,27 @@ def test_under_warning_threshold_emits_no_finding():
     assert findings == []
 
 
+_WARNING_BOUNDARY = 5
+_BODY_STATEMENT_COUNT = 10
+# A def-line + N body statements = N+1 lines in the AST span.
+_EXPECTED_REPORTED_LINES = _BODY_STATEMENT_COUNT + 1
+
+
 def test_above_warning_below_error_emits_warning():
-    body = "\n".join(["    x = 1"] * 10)
+    body = "\n".join(["    x = 1"] * _BODY_STATEMENT_COUNT)
     source = f"def f():\n{body}\n"
-    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = FunctionLengthRule().analyse(
+        _make_unit(source), _ctx(warning=_WARNING_BOUNDARY, error=20)
+    )
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
-    assert f.symbol == "f"
-    assert f.metadata["lines"] == 11
-    assert f.metadata["threshold"] == 5
-    assert f.metadata["thresholdType"] == "warning"
+    assert (f.severity, f.symbol) == (Severity.WARNING, "f")
+    relevant_metadata = {k: f.metadata[k] for k in ("lines", "threshold", "thresholdType")}
+    assert relevant_metadata == {
+        "lines": _EXPECTED_REPORTED_LINES,
+        "threshold": _WARNING_BOUNDARY,
+        "thresholdType": "warning",
+    }
 
 
 def test_above_error_emits_error():
@@ -111,7 +121,7 @@ def test_lambda_is_considered():
 def test_definition_uses_default_thresholds():
     definition = FunctionLengthRule().definition()
     assert definition.id == "size.function-length"
-    assert definition.default_thresholds == {"warning": 30, "error": 60}
+    assert definition.default_thresholds == {"warning": 100, "error": 100}
 
 
 def test_unit_with_no_tree_returns_empty():

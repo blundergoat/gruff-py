@@ -102,12 +102,13 @@ wheels = [
 ]
 
 [[package]]
-name = "gruff"
-version = "0.1.0.dev0"
+name = "gruff-py"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "docstring-parser" },
+    { name = "pathspec" },
     { name = "pyyaml" },
 ]
 
@@ -125,6 +126,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "docstring-parser", specifier = ">=0.15,<1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "pathspec", specifier = ">=0.12" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6.0" },

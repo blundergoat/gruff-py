@@ -1,4 +1,4 @@
-from gruff.rule.test_quality.empty_parametrize_rule import EmptyParametrizeRule
+from gruffpy.rule.test_quality.empty_parametrize_rule import EmptyParametrizeRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 

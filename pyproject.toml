@@ -3,18 +3,52 @@ requires = ["hatchling>=1.21"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gruff"
-version = "0.1.0.dev0"
+name = "gruff-py"
+version = "0.1.0"
 description = "Python project quality analyser."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
+license = { text = "MIT" }
+license-files = ["LICENSE.md"]
 authors = [{ name = "Matthew Hansen" }]
+keywords = [
+    "linter",
+    "static-analysis",
+    "code-quality",
+    "code-review",
+    "quality-gate",
+    "sarif",
+    "dead-code",
+    "security-scanner",
+    "test-quality",
+    "dashboard",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "click>=8.1",
     "docstring-parser>=0.15,<1",
+    "pathspec>=0.12",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/blundergoat/gruff-py"
+Repository = "https://github.com/blundergoat/gruff-py"
+Issues = "https://github.com/blundergoat/gruff-py/issues"
+Changelog = "https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -26,18 +60,36 @@ dev = [
 ]
 
 [project.scripts]
-gruff = "gruff.cli:main"
+gruff-py = "gruffpy.cli:main"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.agents",
+    "/.claude",
+    "/.codex",
+    "/.goat-flow",
+    "/AGENTS.md",
+    "/CLAUDE.md",
+    "/node_modules",
+    "/package-lock.json",
+    "/package.json",
+    "/perf-out",
+]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gruff"]
+packages = ["src/gruffpy"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/gruff/py.typed" = "gruff/py.typed"
+"src/gruffpy/py.typed" = "gruffpy/py.typed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra -q"
+addopts = "-ra -q --strict-config --strict-markers"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/gruffpy"]
 
 [tool.ruff]
 line-length = 100
@@ -48,12 +100,13 @@ extend-exclude = ["build", "dist", ".venv", ".tox"]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["gruff"]
+known-first-party = ["gruffpy"]
 combine-as-imports = true
 
 [tool.ruff.lint.per-file-ignores]
 # AST visitor dispatch follows `ast.NodeVisitor`'s `visit_<NodeType>` convention.
-"src/gruff/rule/complexity/cognitive_complexity_rule.py" = ["N802"]
+"src/gruffpy/rule/complexity/cognitive_complexity_rule.py" = ["N802"]
+"src/gruffpy/rule/security/unsafe_yaml_load_rule.py" = ["N802"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -64,21 +117,22 @@ docstring-code-format = true
 python_version = "3.11"
 strict = true
 mypy_path = "src"
-files = ["src/gruff"]
+files = ["src/gruffpy"]
 show_error_codes = true
 
-# gruff's own configuration (dogfooding).
+# gruff-py's own configuration (dogfooding).
 # All values are optional; defaults live in the rule registry.
-[tool.gruff]
+[tool.gruff-py]
 
-[tool.gruff.paths]
+[tool.gruff-py.paths]
 ignore = []
 
-[tool.gruff.allowlists]
+[tool.gruff-py.allowlists]
 acceptedAbbreviations = []
 secretPreviews = []
 
-# Per-rule overrides go in [tool.gruff.rules."<rule-id>"]:
-# [tool.gruff.rules."size.file-length"]
+# Per-rule overrides go in [tool.gruff-py.rules."<rule-id>"]:
+# [tool.gruff-py.rules."size.file-length"]
 # enabled = true
-# thresholds = { warning = 400, error = 800 }
+# threshold = 800
+# severity = "error"

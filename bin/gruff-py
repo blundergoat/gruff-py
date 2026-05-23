@@ -25,4 +25,4 @@ fi
 PYTHONPATH="$PACKAGE_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONPATH
 
-exec "$PYTHON" -m gruff "$@"
+exec "$PYTHON" -m gruffpy "$@"

@@ -10,18 +10,16 @@ It is heuristic static analysis. Use it beside tools such as `ruff`, `mypy`,
 
 ## Status
 
-`0.1.0.dev0` is the release-candidate line for the public `0.1` release.
+`0.1.0` is the first public release.
 
 - Python 3.11+
-- 98 rules across 10 active quality pillars
+- 116 rules across 10 active quality pillars
 - Text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF reports
 - Local dashboard served from `127.0.0.1` by default
-- `.gruff.yaml` and `[tool.gruff]` configuration
-- PHP-compatible finding fingerprints and schema strings
-- Typed package marker via `py.typed`
-
-The project metadata currently declares a proprietary license. Replace
-`LICENSE.md` and `pyproject.toml` before publishing as open source.
+- `.gruff-py.yaml` and `[tool.gruff-py]` configuration
+- PHP-compatible finding fingerprints
+- Python import package `gruffpy` with a typed package marker via `py.typed`
+- MIT licensed (see [`LICENSE.md`](LICENSE.md))
 
 ## Install
 
@@ -32,14 +30,14 @@ uv sync
 ./bin/gruff-py --help
 ```
 
-The package entry point is still `gruff`, so `uv run gruff --help` is
+The package entry point is `gruff-py`, so `uv run gruff-py --help` is
 equivalent after `uv sync`.
 
 After the package is published:
 
 ```bash
-pipx install gruff
-gruff --help
+pipx install gruff-py
+gruff-py --help
 ```
 
 ## Quick Start
@@ -47,25 +45,31 @@ gruff --help
 Analyse a project:
 
 ```bash
-uv run gruff analyse src/
+uv run gruff-py analyse src/
 ```
 
 Emit JSON for automation:
 
 ```bash
-uv run gruff analyse src/ --format json --fail-on error > gruff.json
+uv run gruff-py analyse src/ --format json --fail-on error > gruff.json
+```
+
+Emit SARIF for code scanning:
+
+```bash
+uv run gruff-py analyse src/ --format sarif --fail-on none > gruff.sarif
 ```
 
 Create a standalone HTML report:
 
 ```bash
-uv run gruff analyse src/ --format html --report-interactive > gruff-report.html
+uv run gruff-py analyse src/ --format html --report-interactive > gruff-report.html
 ```
 
 Run the local dashboard:
 
 ```bash
-uv run gruff dashboard src/ --report-interactive
+uv run gruff-py dashboard src/ --report-interactive
 ```
 
 Then open:
@@ -77,13 +81,13 @@ http://127.0.0.1:8765/
 ## CLI
 
 ```bash
-gruff [GLOBAL OPTIONS] <command>
-gruff analyse [OPTIONS] [PATHS]...
-gruff report [OPTIONS] [PATHS]...
-gruff summary [OPTIONS] [PATHS]...
-gruff list-rules [OPTIONS]
-gruff dashboard [OPTIONS] [PATHS]...
-gruff completion [SHELL]
+gruff-py [GLOBAL OPTIONS] <command>
+gruff-py analyse [OPTIONS] [PATHS]...
+gruff-py report [OPTIONS] [PATHS]...
+gruff-py summary [OPTIONS] [PATHS]...
+gruff-py list-rules [OPTIONS]
+gruff-py dashboard [OPTIONS] [PATHS]...
+gruff-py completion [SHELL]
 ```
 
 Global options mirror the gruff-php CLI surface: `--silent`, `--quiet`,
@@ -94,15 +98,15 @@ Common `analyse` and `report` options:
 | Option | Meaning |
 |---|---|
 | `--format text` | Terminal summary, the default |
-| `--format json` | Full `gruff.analysis.v1` payload |
+| `--format json` | Full `gruff-py.analysis.v1` payload |
 | `--format html` | Self-contained dark HTML report |
 | `--format markdown` | Pull-request or issue comment summary |
 | `--format github` | GitHub Actions annotation commands |
-| `--format hotspot` | `gruff.hotspot.v1` file offender JSON |
+| `--format hotspot` | `gruff-py.hotspot.v1` file offender JSON |
 | `--format sarif` | SARIF 2.1.0 code-scanning output |
 | `--fail-on error` | Exit non-zero for findings at or above the threshold |
-| `--no-config` | Ignore `.gruff.yaml` and `[tool.gruff]` |
-| `--include-ignored` | Walk normally ignored directories |
+| `--no-config` | Ignore `.gruff-py.yaml` and `[tool.gruff-py]` |
+| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--min-severity warning` | Display only warning/error findings |
 | `--include-pillar documentation` | Display only selected pillar findings |
 | `--exclude-rule docs.missing-function-docstring` | Hide selected rule findings |
@@ -111,12 +115,12 @@ Additional commands:
 
 | Command | Meaning |
 |---|---|
-| `gruff report --format html --output gruff.html` | Render an HTML or JSON report to a file or stdout |
-| `gruff summary --format text` | Print compact per-pillar, top-rule, and top-file counts |
-| `gruff list-rules --format json` | Print registered rule metadata |
-| `gruff list` | List available commands |
-| `gruff help analyse` | Display command help |
-| `gruff completion bash` | Dump a shell completion script |
+| `gruff-py report --format html --output gruff.html` | Render an HTML or JSON report to a file or stdout |
+| `gruff-py summary --format text` | Print compact per-pillar, top-rule, and top-file counts |
+| `gruff-py list-rules --format json` | Print registered rule metadata |
+| `gruff-py list` | List available commands |
+| `gruff-py help analyse` | Display command help |
+| `gruff-py completion bash` | Dump a shell completion script |
 
 Exit codes:
 
@@ -131,11 +135,11 @@ Exit codes:
 Config is optional. Precedence is:
 
 1. `--config <path>`
-2. `.gruff.yaml` in the project root
-3. `[tool.gruff]` in `pyproject.toml`
+2. `.gruff-py.yaml` in the project root
+3. `[tool.gruff-py]` in `pyproject.toml`
 4. Built-in defaults
 
-Example `.gruff.yaml`:
+Example `.gruff-py.yaml`:
 
 ```yaml
 paths:
@@ -148,9 +152,8 @@ selection:
 
 rules:
   size.file-length:
-    thresholds:
-      warning: 500
-      error: 900
+    threshold: 900
+    severity: error
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for the full shape.
@@ -180,9 +183,11 @@ See [Rules](docs/RULES.md) for the rule catalogue.
 - [Reports](docs/REPORTING.md) explains every output format and CI use case.
 - [Dashboard](docs/DASHBOARD.md) documents the local browser dashboard.
 
-The JSON schema string is `gruff.analysis.v1`; hotspot output uses
-`gruff.hotspot.v1`. Finding fingerprints are 16-character SHA-256 derivatives
-kept compatible with the PHP implementation.
+The JSON schema string is `gruff-py.analysis.v1`; hotspot output uses
+`gruff-py.hotspot.v1`. Finding fingerprints are 16-character SHA-256 derivatives
+kept compatible with the PHP implementation. SARIF is rendered from the same
+native report data without changing native schemas or fingerprints; SARIF result
+fingerprints use `partialFingerprints.gruffFingerprint`.
 
 ## Development
 
@@ -203,6 +208,21 @@ make check
 Note that `make check` uses the `lint` target, which runs `ruff check --fix`.
 Use the explicit commands above when you need non-mutating release verification.
 
+### Performance harness
+
+`scripts/test-performance.sh` runs a fixed workload matrix (cold-start,
+analyse on `src/`/`tests/`, reporter variants, synthetic 100/1000-file
+fixtures) with median/p95/min/max wall-clock, peak RSS via
+`/usr/bin/time -v`, and per-rule cost attribution from `cProfile`. Baselines
+live under `scripts/performance-baselines/<host>.json`; pass `--baseline` to
+fail the script on regressions.
+
+```bash
+make perf-quick    # CI smoke: cold-start + analyse-src vs baseline
+make perf          # full suite vs baseline
+make perf-baseline # overwrite the linux-x86_64 baseline with the current run
+```
+
 ## Project Docs
 
 - [Changelog](CHANGELOG.md)
@@ -212,3 +232,11 @@ Use the explicit commands above when you need non-mutating release verification.
 - [Support](SUPPORT.md)
 - [Release checklist](docs/RELEASING.md)
 - [License](LICENSE.md)
+
+## Author
+
+Built by [Matthew Hansen](https://www.blundergoat.com/about).
+
+## License
+
+[MIT](LICENSE)

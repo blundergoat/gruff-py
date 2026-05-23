@@ -3,22 +3,24 @@ import subprocess
 
 import pytest
 
-from gruff.analysis.report import AnalysisReport
-from gruff.finding.confidence import Confidence
-from gruff.finding.finding import Finding
-from gruff.finding.pillar import Pillar
-from gruff.finding.rule_tier import RuleTier
-from gruff.finding.severity import Severity
-from gruff.reporting.finding_display_filter import FindingDisplayFilter
-from gruff.reporting.json_reporter import JsonReporter
-from gruff.scoring.score_calculator import ScoreCalculator
+from gruffpy.analysis.report import AnalysisReport
+from gruffpy.finding.confidence import Confidence
+from gruffpy.finding.finding import Finding
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.rule_tier import RuleTier
+from gruffpy.finding.severity import Severity
+from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
+from gruffpy.reporting.json_reporter import JsonReporter
+from gruffpy.scoring.score_calculator import ScoreCalculator
 
 
+@pytest.mark.skipif(
+    shutil.which("php") is None,
+    reason="php binary not available for JSON byte-equivalence check",
+)
 def test_json_reporter_matches_php_json_encoding_flags():
     php = shutil.which("php")
-    if php is None:
-        pytest.skip("php binary not available for JSON byte-equivalence check")
-
+    assert php is not None  # narrowed by skipif above
     report = _fixture_report()
     python_json = JsonReporter().render(report)
     php_json = _php_pretty_json(php, python_json)

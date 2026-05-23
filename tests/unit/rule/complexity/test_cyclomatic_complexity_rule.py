@@ -1,16 +1,18 @@
 import ast
 from pathlib import Path
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.complexity.cyclomatic_complexity_rule import (
+import pytest
+
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.complexity.cyclomatic_complexity_rule import (
     CyclomaticComplexityRule,
     cyclomatic_for,
 )
-from gruff.rule.context import RuleContext
-from gruff.source.source_file import SourceFile
+from gruffpy.rule.context import RuleContext
+from gruffpy.source.source_file import SourceFile
 
 RADON_GROUND_TRUTH = {
     "simple": 1,
@@ -30,7 +32,7 @@ def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -48,22 +50,39 @@ def _ctx(warning: int = 10, error: int = 20) -> RuleContext:
     return RuleContext(project_root="/", config=config)
 
 
-def test_matches_radon_ground_truth():
-    """Cross-check cyclomatic values against radon 6.0.1 on the fixture file.
+def _function_by_name(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    """Locate the named function definition inside the cc_fixture file.
 
-    Run `uvx radon cc tests/fixtures/complexity/cc_fixture.py -s` to refresh
-    the ground-truth values in `tests/fixtures/complexity/radon_ground_truth.md`.
+    Args:
+        name: Function name to look up in the fixture's parsed AST.
+
+    Returns:
+        The matching ``FunctionDef`` / ``AsyncFunctionDef`` node.
     """
     fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
     tree = ast.parse(fixture.read_text())
-    actual: dict[str, int] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            actual[node.name] = cyclomatic_for(node)
-    for name, expected in RADON_GROUND_TRUTH.items():
-        assert actual[name] == expected, (
-            f"{name}: gruff={actual[name]} but radon ground truth={expected}"
-        )
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"function {name!r} not found in cc_fixture.py")
+
+
+@pytest.mark.parametrize(
+    ("function_name", "expected"),
+    sorted(RADON_GROUND_TRUTH.items()),
+    ids=lambda v: v if isinstance(v, str) else None,
+)
+def test_matches_radon_ground_truth(function_name: str, expected: int) -> None:
+    """Cross-check cyclomatic values against radon 6.0.1 on the fixture file.
+
+    Run ``uvx radon cc tests/fixtures/complexity/cc_fixture.py -s`` to refresh
+    the ground-truth values in ``tests/fixtures/complexity/radon_ground_truth.md``.
+
+    Args:
+        function_name: Function in the cc_fixture file to measure.
+        expected: Radon 6.0.1 reference complexity for that function.
+    """
+    assert cyclomatic_for(_function_by_name(function_name)) == expected
 
 
 def test_simple_function_returns_1():

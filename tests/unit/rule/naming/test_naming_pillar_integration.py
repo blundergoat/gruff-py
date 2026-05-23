@@ -1,20 +1,20 @@
-"""Cumulative integration for the naming pillar (M05).
+"""Cumulative integration for the naming pillar.
 
-Asserts all 9 rules wire into ``RuleRegistry.defaults()`` and exercise
+Asserts all naming rules wire into ``RuleRegistry.defaults()`` and exercise
 expected positives + negatives on a single fixture.
 """
 
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.registry import RuleRegistry
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile
 
 NAMING_FIXTURE = '''
-"""Naming smells across all 9 M05 rules."""
+"""Naming smells across every rule in the naming pillar."""
 
 
 class Handler:  # naming.confusing-name
@@ -24,7 +24,7 @@ class Handler:  # naming.confusing-name
 
 
 class UserService:
-    """Suffix usage — naming.confusing-name should NOT fire."""
+    """Suffix usage - naming.confusing-name should NOT fire."""
 
     def __init__(self, repo: "UserRepository") -> None:
         # parameter-type-name should NOT fire (repo is a prefix of repository)
@@ -46,10 +46,16 @@ def process(x):  # naming.generic-function
     return x
 
 
-def valid(value) -> bool:  # naming.boolean-prefix
+def status(value) -> bool:  # naming.boolean-prefix
     """Bool return without boolean-intent prefix."""
 
     return value > 0
+
+
+def load_cfg():  # naming.abbreviation
+    """Abbreviated function name."""
+
+    return None
 
 
 def main() -> None:
@@ -63,7 +69,7 @@ def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
         file=SourceFile(
             absolute_path=f"/{display_path}",
@@ -88,10 +94,11 @@ def _default_ctx() -> RuleContext:
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
-def test_registry_includes_all_nine_naming_rules():
+def test_registry_includes_all_naming_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
+        "naming.abbreviation",
         "naming.boolean-prefix",
         "naming.confusing-name",
         "naming.generic-function",
@@ -105,15 +112,23 @@ def test_registry_includes_all_nine_naming_rules():
     assert expected.issubset(ids)
 
 
+_EXPECTED_NAMING_RULE_IDS_FIRED = {
+    "naming.confusing-name",
+    "naming.hungarian-notation",
+    "naming.generic-function",
+    "naming.boolean-prefix",
+    "naming.abbreviation",
+    "naming.identifier-quality",
+    "naming.short-variable",
+}
+
+
 def test_naming_rules_fire_on_fixture():
     findings = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    assert "naming.confusing-name" in rule_ids
-    assert "naming.hungarian-notation" in rule_ids
-    assert "naming.generic-function" in rule_ids
-    assert "naming.boolean-prefix" in rule_ids
-    assert "naming.identifier-quality" in rule_ids
-    assert "naming.short-variable" in rule_ids
+    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), (
+        f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
+    )
 
 
 def test_module_name_mismatch_fires_when_filename_wrong():

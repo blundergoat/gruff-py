@@ -1,19 +1,19 @@
 import ast
 
-from gruff.config.analysis_config import AnalysisConfig
-from gruff.config.rule_settings import RuleSettings
-from gruff.finding.severity import Severity
-from gruff.parser.analysis_unit import AnalysisUnit
-from gruff.rule.context import RuleContext
-from gruff.rule.size.attribute_count_rule import AttributeCountRule
-from gruff.source.source_file import SourceFile
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.severity import Severity
+from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.size.attribute_count_rule import AttributeCountRule
+from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -87,7 +87,35 @@ def test_tuple_self_assignment_collects_all_names():
     assert findings[0].metadata["attributes"] == 3
 
 
+def test_typeddict_is_exempt():
+    # TypedDict's job IS to enumerate fields; counting them as "too many
+    # attributes" misses the intent.
+    body = "\n".join(f"    a{i}: int" for i in range(20))
+    source = f"from typing import TypedDict\nclass S(TypedDict, total=False):\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_dataclass_is_exempt():
+    body = "\n".join(f"    a{i}: int = {i}" for i in range(20))
+    source = f"from dataclasses import dataclass\n@dataclass\nclass C:\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_pydantic_basemodel_is_exempt():
+    body = "\n".join(f"    a{i}: int = {i}" for i in range(20))
+    source = f"from pydantic import BaseModel\nclass S(BaseModel):\n{body}\n"
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
+def test_unittest_testcase_is_exempt():
+    init_body = "\n".join(f"        self.a{i} = {i}" for i in range(20))
+    source = (
+        f"import unittest\nclass MyTest(unittest.TestCase):\n    def __init__(self):\n{init_body}\n"
+    )
+    assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
+
+
 def test_definition_uses_default_thresholds():
     d = AttributeCountRule().definition()
     assert d.id == "size.attribute-count"
-    assert d.default_thresholds == {"warning": 15, "error": 25}
+    assert d.default_thresholds == {"warning": 15, "error": 15}

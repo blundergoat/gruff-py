@@ -1,4 +1,4 @@
-from gruff.rule.security.shell_injection_rule import ShellInjectionRule
+from gruffpy.rule.security.shell_injection_rule import ShellInjectionRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

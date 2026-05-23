@@ -1,4 +1,4 @@
-from gruff.rule.docs.stale_param_doc_rule import StaleParamDocRule
+from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
@@ -39,3 +39,30 @@ def test_renamed_param_emits():
     findings = StaleParamDocRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["parameter"] == "old_name"
+
+
+def test_varargs_documented_with_star_does_not_fire():
+    # Docstring parsers preserve the leading `*` literally; signature_param_names
+    # returns the bare identifier. The rule must strip the star before matching.
+    src = (
+        "def f(container, *keys):\n"
+        '    """Read a metric.\n\n'
+        "    Args:\n"
+        "        container: object.\n"
+        "        *keys: candidate keys.\n"
+        '    """\n'
+        "    return container\n"
+    )
+    assert StaleParamDocRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_kwargs_documented_with_double_star_does_not_fire():
+    src = (
+        "def f(**opts):\n"
+        '    """Configure.\n\n'
+        "    Args:\n"
+        "        **opts: keyword options.\n"
+        '    """\n'
+        "    return opts\n"
+    )
+    assert StaleParamDocRule().analyse(make_unit(src), default_ctx()) == []

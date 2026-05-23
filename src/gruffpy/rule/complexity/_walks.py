@@ -1,0 +1,88 @@
+"""Shared helpers for complexity rules.
+
+`iter_functions` walks an AST and yields every function-like node (FunctionDef,
+AsyncFunctionDef, Lambda) with its parent chain. `body_nodes` iterates a
+function body without descending into nested function definitions - nested
+functions get their own findings, so per-function rules must stop at the
+nested-def boundary.
+"""
+
+import ast
+from collections.abc import Iterator
+from typing import cast
+
+FunctionLike = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
+_FUNCTION_CACHE_ATTR = "_gruffpy_function_nodes"
+
+
+def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
+    """Yield every function-like node in an AST, in document order.
+
+    Args:
+        tree: AST root to inspect.
+
+    Returns:
+        Iterator over function, async function, and lambda nodes.
+    """
+    cached = getattr(tree, _FUNCTION_CACHE_ATTR, None)
+    if isinstance(cached, tuple):
+        yield from cast(tuple[FunctionLike, ...], cached)
+        return
+
+    functions = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
+    )
+    setattr(tree, _FUNCTION_CACHE_ATTR, functions)
+    yield from functions
+
+
+def body_nodes(fn: FunctionLike) -> Iterator[ast.AST]:
+    """Walk a function body without descending into nested scopes.
+
+    Walks every AST node in the body, but stops at any nested
+    function/class definition (those are scored independently).
+
+    Yields the function node itself first (so callers may inspect its
+    arguments / decorators), then every descendant outside nested scopes.
+
+    Args:
+        fn: Function-like node whose body should be walked.
+
+    Returns:
+        Iterator over the function-like node and non-nested descendants.
+    """
+    if isinstance(fn, ast.Lambda):
+        # Lambdas have no nested defs to skip; just walk the body expression.
+        yield fn
+        yield from ast.walk(fn.body)
+        return
+
+    yield fn
+    for child in fn.body:
+        yield from _walk_skip_nested(child)
+
+
+def _walk_skip_nested(node: ast.AST) -> Iterator[ast.AST]:
+    yield node
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from _walk_skip_nested(child)
+
+
+def is_wildcard_pattern(pattern: ast.pattern) -> bool:
+    """Return whether a match pattern is a bare wildcard.
+
+    ``MatchAs(pattern=None, name=None)`` is the bare ``_`` (no binding).
+    Named catch-alls like ``case x:`` bind a name and are NOT wildcards
+    in the cyclomatic-counting sense - they are still decisions.
+
+    Args:
+        pattern: Pattern node from a ``match`` case.
+
+    Returns:
+        True for ``case _:`` and equivalent bare-name catch-all patterns.
+    """
+    return isinstance(pattern, ast.MatchAs) and pattern.pattern is None and pattern.name is None

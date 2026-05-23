@@ -1,4 +1,4 @@
-from gruff.rule.docs.missing_module_docstring_rule import MissingModuleDocstringRule
+from gruffpy.rule.docs.missing_module_docstring_rule import MissingModuleDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
@@ -13,6 +13,14 @@ def test_module_without_docstring_emits_one_finding():
     assert len(findings) == 1
     assert findings[0].rule_id == "docs.missing-module-docstring"
     assert findings[0].line == 1
+
+
+def test_test_module_without_docstring_skipped():
+    src = "def test_f():\n    pass\n"
+    findings = MissingModuleDocstringRule().analyse(
+        make_unit(src, display_path="tests/test_example.py"), default_ctx()
+    )
+    assert findings == []
 
 
 def test_empty_module_skipped():

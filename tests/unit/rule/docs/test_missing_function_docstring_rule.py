@@ -1,4 +1,4 @@
-from gruff.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
+from gruffpy.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
@@ -12,6 +12,31 @@ def test_function_without_docstring_emits():
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "f"
+
+
+def test_pytest_function_without_docstring_in_test_file_skipped():
+    src = "def test_service_returns_value():\n    assert service() == 1\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), default_ctx()
+    )
+    assert findings == []
+
+
+def test_pytest_method_without_docstring_in_test_file_skipped():
+    src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), default_ctx()
+    )
+    assert findings == []
+
+
+def test_test_named_function_without_docstring_in_production_file_emits():
+    src = "def test_service_returns_value():\n    return service()\n"
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "src/service_helpers.py"), default_ctx()
+    )
+    assert len(findings) == 1
+    assert findings[0].symbol == "test_service_returns_value"
 
 
 def test_private_function_skipped():
@@ -62,3 +87,46 @@ def test_property_setter_skipped():
         "        self._name = value\n"
     )
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_nested_single_callsite_regex_callback_skipped():
+    # The regex callback `replace` is referenced once inside its enclosing
+    # function - passed to re.sub. Forcing a docstring on this kind of
+    # closure is noise.
+    src = (
+        "import re\n"
+        "def format_codes(text):\n"
+        '    """Format codes."""\n'
+        "    def replace(match):\n"
+        "        return match.group(0)\n"
+        "    return re.sub(r'X', replace, text)\n"
+    )
+    assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_nested_event_generator_passed_once_skipped():
+    # SSE pattern: inner async generator passed once into StreamingResponse.
+    src = (
+        "async def stream_endpoint():\n"
+        '    """SSE endpoint."""\n'
+        "    async def event_generator():\n"
+        "        yield 1\n"
+        "    return StreamingResponse(event_generator(), media_type='text/event-stream')\n"
+    )
+    assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_nested_function_called_twice_still_emits():
+    # Sanity: when the nested function is called multiple times in the
+    # enclosing scope, it's behavioural enough to warrant a docstring.
+    # Proves the single-callsite gate is real.
+    src = (
+        "def outer(xs):\n"
+        '    """Outer."""\n'
+        "    def helper(x):\n"
+        "        return x + 1\n"
+        "    return [helper(x) + helper(y) for x, y in xs]\n"
+    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].symbol == "outer.helper"

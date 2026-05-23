@@ -1,4 +1,4 @@
-from gruff.rule.security.silent_except_rule import SilentExceptRule
+from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 

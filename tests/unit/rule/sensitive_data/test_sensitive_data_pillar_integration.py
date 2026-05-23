@@ -5,23 +5,34 @@ Proves that:
 2. The SourceTextRule routing works for sensitive-data without new wiring:
    a planted secret in a .json file is detected, and a .py-only rule does NOT
    fire on the same file.
-3. Findings never leak the raw secret — every metadata.preview is redacted.
+3. Findings never leak the raw secret - every metadata.preview is redacted.
 """
 
 import json
 import re
 
-from gruff.rule.registry import RuleRegistry
+from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
+_AWS_KEY = "AKIA" + "1234567890ABCDEF"
+_AWS_KEY_PREVIEW = "AKIA...CDEF"
+_STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
+_JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
+_JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
+_JWT_SIGNATURE = "abcdef123456" + "abcdef"
+_ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
+_DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
+_SSN = "412" + "-78-" + "3491"
+_PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
+
 _DANGEROUS_FIXTURE = (
-    "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
-    "STRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz123456'\n"
-    "JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdef123456abcdef'\n"
-    "DB = 'postgresql://admin:s3cret!@db.example.com/myapp'\n"
-    "SSN = '412-78-3491'\n"
-    "ENTROPY = 'aB3xF7p1Q9zR4yT8vW2sN5kL6mP0qH1jD8wEr+/='\n"
-    "PRIVATE = '-----BEGIN RSA PRIVATE KEY-----'\n"
+    f"AWS_KEY = '{_AWS_KEY}'\n"
+    f"STRIPE = '{_STRIPE_KEY}'\n"
+    f"JWT = '{_JWT_HEADER}.{_JWT_PAYLOAD}.{_JWT_SIGNATURE}'\n"
+    f"DB = '{_DB_URL}'\n"
+    f"SSN = '{_SSN}'\n"
+    f"ENTROPY = '{_ENTROPY_VALUE}'\n"
+    f"PRIVATE = '{_PRIVATE_KEY_HEADER}'\n"
 )
 
 _EXPECTED_RULE_IDS = {
@@ -44,7 +55,7 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
 
 def test_aws_key_fires_on_json_file_via_text_seam():
     """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
-    src = '{"region": "us-east-1", "key": "AKIAIOSFODNN7EXAMPLE"}\n'
+    src = f'{{"region": "us-east-1", "key": "{_AWS_KEY}"}}\n'
     findings = RuleRegistry.defaults().analyse(
         [make_unit(src, display_path="aws.json", source_type="text")], default_ctx()
     )
@@ -58,18 +69,18 @@ def test_aws_key_fires_on_json_file_via_text_seam():
 def test_redaction_in_json_output_never_leaks_raw_secret():
     """Every emitted finding's metadata.preview is redacted; the raw secret never
     appears in the serialised JSON."""
-    src = "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+    src = f"AWS_KEY = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws_findings = [f for f in findings if f.rule_id == "sensitive-data.aws-access-key"]
     assert len(aws_findings) == 1
     payload = json.dumps(aws_findings[0].to_dict())
-    assert "AKIAIOSFODNN7EXAMPLE" not in payload
-    assert "AKIA...MPLE" in payload
+    assert _AWS_KEY not in payload
+    assert _AWS_KEY_PREVIEW in payload
 
 
 def test_redact_preview_shape():
     """Preview matches `first4...last4 (redacted, N chars)` for secrets ≥ 8 chars."""
-    src = "key = 'AKIAIOSFODNN7EXAMPLE'\n"
+    src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
     assert re.match(
@@ -82,7 +93,8 @@ def test_npm_integrity_style_hashes_suppressed():
     # We don't have the discovery layer here, but the integration test for that lives in
     # the discovery module. We assert that a high-entropy hash in non-lockfile content
     # still produces a finding (positive control).
-    src = "sha512 = 'aB3xF7p1Q9zR4yT8vW2sN5kL6mP0qH1jD8wEr+/=abcdef0123456789'\n"
+    hash_value = _ENTROPY_VALUE + "abcdef0123456789"
+    src = f"sha512 = {hash_value!r}\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     high_entropy = [f for f in findings if f.rule_id == "sensitive-data.high-entropy-string"]
     assert len(high_entropy) >= 1

@@ -1,9 +1,9 @@
-from gruff.finding.confidence import Confidence
-from gruff.finding.finding import Finding
-from gruff.finding.pillar import Pillar
-from gruff.finding.rule_tier import RuleTier
-from gruff.finding.severity import Severity
-from gruff.scoring.composite_finding_factory import CompositeFindingFactory
+from gruffpy.finding.confidence import Confidence
+from gruffpy.finding.finding import Finding
+from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.rule_tier import RuleTier
+from gruffpy.finding.severity import Severity
+from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 
 
 def _f(
@@ -101,7 +101,7 @@ def test_composite_component_rules_sorted_and_distinct():
 
 
 def test_composite_does_not_fire_on_unrelated_pillars():
-    # naming + docs co-occur on the same symbol — no composite.
+    # naming + docs co-occur on the same symbol - no composite.
     findings = [
         _f("naming.confusing-name", pillar=Pillar.NAMING),
         _f("docs.missing-function-docstring", pillar=Pillar.DOCUMENTATION),
