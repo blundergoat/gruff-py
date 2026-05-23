@@ -91,7 +91,7 @@ def read_pytest_config(project_root: str) -> PytestConfig:
 
 
 def reset_cache() -> None:
-    """Test-only — clear the per-root cache."""
+    """Test-only - clear the per-root cache."""
     _cache.clear()
 
 

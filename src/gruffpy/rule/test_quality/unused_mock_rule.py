@@ -1,4 +1,4 @@
-"""``test-quality.unused-mock`` — mock variable created but never referenced afterwards.
+"""``test-quality.unused-mock`` - mock variable created but never referenced afterwards.
 
 Catches ``mock = Mock(); assert real_thing == 1`` where ``mock`` is never used.
 The mock-detection extension to the helper finds the bindings; this rule scans
@@ -33,7 +33,7 @@ class UnusedMockRule(Rule):
         """Describe the unused-mock rule as a high-confidence warning.
 
         High confidence because the rule looks for any Load-context
-        reference to the mock's name in the test body — a mock with zero
+        reference to the mock's name in the test body - a mock with zero
         such references is dead test scaffolding.
 
         Returns:
@@ -57,7 +57,7 @@ class UnusedMockRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test, listing the unused mock names in the

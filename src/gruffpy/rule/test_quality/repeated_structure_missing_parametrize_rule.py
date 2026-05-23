@@ -1,4 +1,4 @@
-"""``test-quality.repeated-structure-missing-parametrize`` — many near-identical tests.
+"""``test-quality.repeated-structure-missing-parametrize`` - many near-identical tests.
 
 Heuristic: 3+ module-level test functions whose AST bodies, after stripping
 constant values, hash to the same shape. They're candidates for
@@ -32,7 +32,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         """Describe the repeated-structure rule with a ``minGroupSize`` threshold (default 3).
 
         Medium confidence because the structural hash ignores constant
-        values to find shape duplicates — but legitimately distinct tests
+        values to find shape duplicates - but legitimately distinct tests
         can occasionally hash the same when they share boilerplate scaffolding.
 
         Returns:
@@ -52,7 +52,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         """Flag tests sharing a body-shape hash with at least ``minGroupSize - 1`` siblings.
 
         Hashes each test body's structural skeleton (node types, names,
-        attributes — but not constant values) and groups by hash; skips
+        attributes - but not constant values) and groups by hash; skips
         tests that already have a call-style decorator (they're presumed
         intentionally individualised).
 
@@ -89,7 +89,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
                         rule_id=definition.id,
                         message=(
                             f"Test {symbol!r} shares a body shape with {len(fns) - 1} other "
-                            f"test(s) — candidate for @pytest.mark.parametrize."
+                            f"test(s) - candidate for @pytest.mark.parametrize."
                         ),
                         file_path=unit.file.display_path,
                         line=fn.lineno,

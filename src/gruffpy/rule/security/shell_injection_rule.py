@@ -1,4 +1,4 @@
-"""``security.shell-injection`` — subprocess with ``shell=True`` or ``os.system`` on dynamic input.
+"""``security.shell-injection`` - subprocess with ``shell=True`` or ``os.system`` on dynamic input.
 
 Catches:
 
@@ -74,7 +74,7 @@ class ShellInjectionRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per shell-injection call site.

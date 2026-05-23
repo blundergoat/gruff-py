@@ -1,12 +1,12 @@
-"""``security.django-raw-sql`` — Django ORM SQL escape hatches with dynamic strings.
+"""``security.django-raw-sql`` - Django ORM SQL escape hatches with dynamic strings.
 
 The Django ORM's parameterised query paths are safe by default. The escape
-hatches — ``QuerySet.raw()``, ``django.db.models.expressions.RawSQL()`` —
+hatches - ``QuerySet.raw()``, ``django.db.models.expressions.RawSQL()`` -
 accept raw SQL strings; using them with a dynamic string (f-string,
 ``.format()``, ``%`` formatting, ``+`` concat) reintroduces classic
 SQL-injection risk.
 
-``cursor.execute(<dynamic>)`` is intentionally not duplicated here — it is
+``cursor.execute(<dynamic>)`` is intentionally not duplicated here - it is
 covered by ``security.sql-concatenation``. ``QuerySet.extra()`` is out of
 scope for v1 (the SQL injection vectors live inside ``select`` /
 ``where`` / ``tables`` collections, which need a different match shape).
@@ -74,7 +74,7 @@ class DjangoRawSqlRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe raw-SQL escape-hatch call.
@@ -117,7 +117,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{label}(...)` receives a dynamic SQL string — use parameterised arguments instead."
+            f"`{label}(...)` receives a dynamic SQL string - use parameterised arguments instead."
         ),
         file_path=unit.file.display_path,
         line=call.lineno,

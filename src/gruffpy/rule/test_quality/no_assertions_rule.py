@@ -1,4 +1,4 @@
-"""``test-quality.no-assertions`` — test function with zero assertion-like calls.
+"""``test-quality.no-assertions`` - test function with zero assertion-like calls.
 
 Looks for ``assert`` statements, ``self.assertEqual`` / ``self.assertX`` calls,
 and ``pytest.raises`` / ``pytest.warns`` contexts. A test with none of these is
@@ -57,7 +57,7 @@ class NoAssertionsRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test function with zero detected assertions.

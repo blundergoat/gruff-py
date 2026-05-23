@@ -29,7 +29,7 @@ class RuleSelection:
         """Return whether *definition* survives both include and exclude selectors.
 
         Include selectors are OR'd (any tier/pillar/rule match passes).
-        Exclude selectors always win — a rule explicitly excluded never
+        Exclude selectors always win - a rule explicitly excluded never
         runs, regardless of include matches.
 
         Args:

@@ -117,7 +117,7 @@ def test_private_with_hungarian_prefix_fires():
 
 
 def test_unrelated_underscore_does_not_fire():
-    # ``id_field`` is not Hungarian — id is the leading segment but not a type
+    # ``id_field`` is not Hungarian - id is the leading segment but not a type
     # prefix.
     src = "id_field = 0\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())

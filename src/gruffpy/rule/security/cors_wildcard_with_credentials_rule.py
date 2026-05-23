@@ -1,8 +1,8 @@
-"""``security.cors-wildcard-with-credentials`` — CORS wildcard origin + credentials.
+"""``security.cors-wildcard-with-credentials`` - CORS wildcard origin + credentials.
 
 The combination of ``Access-Control-Allow-Origin: *`` and
 ``Access-Control-Allow-Credentials: true`` is forbidden by the CORS spec
-and ignored by browsers — but more importantly, code that *tries* to set
+and ignored by browsers - but more importantly, code that *tries* to set
 both is almost always misconfigured: the developer wanted credentialed
 requests from a specific origin and reached for ``*`` by mistake. When
 a server *can* return credentials to any origin (some implementations
@@ -18,7 +18,7 @@ Match shapes:
 
 The raw header-assignment shape
 (``response.headers["Access-Control-Allow-Origin"] = "*"`` co-located with
-``Allow-Credentials: true``) is out of scope for v1 — it requires
+``Allow-Credentials: true``) is out of scope for v1 - it requires
 intra-function correlation; the Flask-CORS API covers the common case.
 """
 
@@ -81,7 +81,7 @@ class CorsWildcardWithCredentialsRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe CORS configuration call.
@@ -133,7 +133,7 @@ def _build_finding(
         rule_id=definition.id,
         message=(
             "CORS configured with `supports_credentials=True` and a wildcard "
-            "origin — browsers reject this combination and it signals a "
+            "origin - browsers reject this combination and it signals a "
             "misconfigured cross-origin policy."
         ),
         file_path=unit.file.display_path,

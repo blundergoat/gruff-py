@@ -1,4 +1,4 @@
-"""``docs.complex-branch-rationale`` — complex branches need context."""
+"""``docs.complex-branch-rationale`` - complex branches need context."""
 
 import ast
 from typing import Any

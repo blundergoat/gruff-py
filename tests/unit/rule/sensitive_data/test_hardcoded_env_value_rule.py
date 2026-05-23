@@ -22,7 +22,7 @@ def test_env_variable_substitution_skipped():
 
 def test_non_env_file_skipped():
     src = f"API_KEY={_ENV_SECRET}\n"
-    # Same content but in a .py file — rule should skip.
+    # Same content but in a .py file - rule should skip.
     assert HardcodedEnvValueRule().analyse(make_unit(src, "config.py"), default_ctx()) == []
 
 

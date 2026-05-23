@@ -3,11 +3,11 @@
 Detects names whose first underscore-token is a type-prefix:
 ``i_count``, ``s_name``, ``b_is_valid``, ``arr_items``, ``dict_users``,
 ``str_message``, ``int_total``, ``f_ratio``, etc. Python conventions
-explicitly reject this — PEP 8, mypy, type hints make the type self-evident.
+explicitly reject this - PEP 8, mypy, type hints make the type self-evident.
 
 Scope: function/method names, parameter names, local variable assignments,
 class-body attribute assignments. Class names are NOT scanned (a class
-``StrSerializer`` is fine — ``Str`` is the domain, not a type prefix).
+``StrSerializer`` is fine - ``Str`` is the domain, not a type prefix).
 """
 
 import ast
@@ -62,7 +62,7 @@ class HungarianNotationRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the Hungarian-notation rule as a high-confidence warning.
 
-        High confidence because the prefix set is intentionally narrow —
+        High confidence because the prefix set is intentionally narrow -
         false positives on real domain names (``int_id``) erode trust faster
         than missed detections.
 
@@ -88,7 +88,7 @@ class HungarianNotationRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unique ``(name, line)`` identifier with a

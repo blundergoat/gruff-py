@@ -1,4 +1,4 @@
-"""``test-quality.excessive-mocking`` — test creates too many mocks.
+"""``test-quality.excessive-mocking`` - test creates too many mocks.
 
 Default threshold: more than 4 mock factory calls in a single test body.
 """

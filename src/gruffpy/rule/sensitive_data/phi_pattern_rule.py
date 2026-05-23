@@ -1,8 +1,8 @@
-"""``sensitive-data.phi-pattern`` — US-centric protected-health-info shapes.
+"""``sensitive-data.phi-pattern`` - US-centric protected-health-info shapes.
 
 US SSN (``NNN-NN-NNNN``) and a simple Medical Record Number heuristic
 (``MRN: <6-10 digits>`` near the word). Conservative on purpose: US-centric and
-narrow patterns. The rule does NOT promise HIPAA compliance — it surfaces
+narrow patterns. The rule does NOT promise HIPAA compliance - it surfaces
 shapes that warrant manual review.
 """
 
@@ -35,7 +35,7 @@ class PhiPatternRule(SourceTextRule):
 
         ERROR severity because PHI in source is a HIPAA exposure risk;
         medium confidence because the patterns (``NNN-NN-NNNN`` SSN,
-        ``MRN: <digits>``) are narrow but not exhaustive — the rule
+        ``MRN: <digits>``) are narrow but not exhaustive - the rule
         surfaces shapes for review rather than promising compliance.
 
         Returns:
@@ -59,7 +59,7 @@ class PhiPatternRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per non-placeholder SSN or MRN match.

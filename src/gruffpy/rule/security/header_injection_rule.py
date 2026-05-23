@@ -1,4 +1,4 @@
-"""``security.header-injection`` — ``response.headers[<dynamic>] = ...``.
+"""``security.header-injection`` - ``response.headers[<dynamic>] = ...``.
 
 Heuristic: subscript-assignment to an attribute named ``headers`` where the
 subscript key is not a string literal. Scoped to files that import a known
@@ -51,13 +51,13 @@ class HeaderInjectionRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``...headers[<non-literal>] = ...`` in files that import Flask/FastAPI/Django.
 
-        The framework gate is intentional — without it the shape produces
+        The framework gate is intentional - without it the shape produces
         too many false positives on non-web ``headers`` dicts (HTTP
         clients, parser libraries, message queues).
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per dynamic-key header assignment in gated files.
@@ -97,7 +97,7 @@ def _header_injection_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message="Response header key is dynamic — header injection risk.",
+        message="Response header key is dynamic - header injection risk.",
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,

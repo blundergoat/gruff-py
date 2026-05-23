@@ -39,7 +39,7 @@ def default_ctx(project_root: str = "/tmp/no-such-root") -> RuleContext:
     """Build a ``RuleContext`` seeded with every built-in rule at its default settings.
 
     Used by docs-pillar tests that don't need to override thresholds or
-    options — they just want a working context.
+    options - they just want a working context.
 
     Args:
         project_root: Project root recorded on the context (rarely matters

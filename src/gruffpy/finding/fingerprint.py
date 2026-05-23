@@ -21,7 +21,7 @@ def fingerprint_for(
     """Compute the gruff-php-compatible 16-char fingerprint for a finding's identity.
 
     Payload key order is fixed (ruleId, file, line, endLine, column, symbol)
-    so changing it would invalidate baselines across every implementation —
+    so changing it would invalidate baselines across every implementation -
     do not reorder.
 
     Args:
@@ -33,7 +33,7 @@ def fingerprint_for(
         symbol: Qualified symbol name (function/class) when available.
 
     Returns:
-        First 16 hex chars of SHA-256(canonical-JSON(payload)) — matches gruff-php.
+        First 16 hex chars of SHA-256(canonical-JSON(payload)) - matches gruff-php.
     """
     payload = {
         "ruleId": rule_id,

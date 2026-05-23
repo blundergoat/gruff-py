@@ -61,7 +61,7 @@ class OneLineFunctionRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per pure-passthrough wrapper function.

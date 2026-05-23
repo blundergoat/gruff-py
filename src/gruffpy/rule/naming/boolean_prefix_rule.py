@@ -5,10 +5,10 @@ boolean-intent prefix or predicate spelling: ``is_``, ``has_``, ``can_``,
 Detection:
 
 - ``def f() -> bool`` / ``def f() -> "bool"`` / ``def f() -> Optional[bool]``
-  — return-type annotation contains ``bool``.
-- ``x: bool = ...`` — annotated assignment with bool type.
+  - return-type annotation contains ``bool``.
+- ``x: bool = ...`` - annotated assignment with bool type.
 
-Skip dunder names. Skip method overrides (``@override``) — the prefix is
+Skip dunder names. Skip method overrides (``@override``) - the prefix is
 inherited from the parent class signature.
 """
 
@@ -141,7 +141,7 @@ class BooleanPrefixRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per bool-typed function or attribute lacking a
@@ -287,7 +287,7 @@ _UPPER_SNAKE_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*$")
 
 
 def _is_upper_snake_constant(node: ast.AnnAssign, name: str) -> bool:
-    # Module-level (or class-level) UPPER_SNAKE annotated bool — conventional
+    # Module-level (or class-level) UPPER_SNAKE annotated bool - conventional
     # constant declaration. Renaming `ENABLE_PROMPT_CACHE: bool = True` to
     # `is_prompt_cache_enabled` would violate the all-caps constant convention.
     if not _UPPER_SNAKE_PATTERN.fullmatch(name):
@@ -299,7 +299,7 @@ def _is_schema_field(node: ast.AnnAssign) -> bool:
     # Schema-field exemption: when the AnnAssign sits directly inside a class
     # whose role is to declare a schema (pydantic BaseModel / TypedDict /
     # NamedTuple / Enum-like / @dataclass), the field name is part of the
-    # public API contract — renaming `actioned` to `is_actioned` on a pydantic
+    # public API contract - renaming `actioned` to `is_actioned` on a pydantic
     # model would break every JSON consumer.
     for parent in reversed(parent_chain(node)):
         if isinstance(parent, ast.ClassDef):

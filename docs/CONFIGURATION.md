@@ -145,7 +145,7 @@ Source discovery applies three layers of exclusions, in order:
    in your config layer on top of the previous two.
 
 `--include-ignored` bypasses layers 1 and 2 (default-ignored directories
-**and** `.gitignore`). It does not bypass layer 3 — `paths.ignore` is your
+**and** `.gitignore`). It does not bypass layer 3 - `paths.ignore` is your
 explicit, intentional exclusion list and remains active.
 
 Projects without a `.gitignore` are scanned as before.

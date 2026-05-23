@@ -1,10 +1,10 @@
-"""``security.django-mark-safe`` — Django XSS opt-out applied to dynamic content.
+"""``security.django-mark-safe`` - Django XSS opt-out applied to dynamic content.
 
 Django's ``mark_safe()`` (and the related ``SafeString``, ``SafeText``,
 ``format_html``) tell the template engine to skip auto-escaping. Calling
 them on a string literal is fine (the developer is opting out for a known
 trusted constant); calling them on a variable, an f-string, or a
-``.format()`` result is an XSS sink — every value flowing in is rendered
+``.format()`` result is an XSS sink - every value flowing in is rendered
 without escaping.
 
 Matched shapes (Django framework gate required):
@@ -61,7 +61,7 @@ class DjangoMarkSafeRule(Rule):
         WARNING severity because the call may be legitimate when the input
         is provably escaped (e.g. ``escape(x)`` chain); medium confidence
         because the rule cannot prove the upstream provenance of the value
-        being marked safe — only the syntactic absence of a literal or
+        being marked safe - only the syntactic absence of a literal or
         escape call.
 
         Returns:
@@ -86,7 +86,7 @@ class DjangoMarkSafeRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe mark-safe-family call.
@@ -138,7 +138,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{leaf}(...)` applied to non-literal content — XSS risk if the "
+            f"`{leaf}(...)` applied to non-literal content - XSS risk if the "
             "value is user-controlled."
         ),
         file_path=unit.file.display_path,

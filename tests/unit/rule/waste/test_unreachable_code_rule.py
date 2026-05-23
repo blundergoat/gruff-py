@@ -162,7 +162,7 @@ def test_if_nonempty_string_else_is_unreachable():
 
 
 def test_if_true_without_else_emits_nothing():
-    # No orelse means no unreachable branch — body executes, that's normal.
+    # No orelse means no unreachable branch - body executes, that's normal.
     src = "def f():\n    if True:\n        x = 1\n"
     findings = UnreachableCodeRule().analyse(_make_unit(src), _ctx())
     assert findings == []
@@ -202,7 +202,7 @@ def test_if_boolop_does_not_fire():
 
 
 def test_if_attribute_does_not_fire():
-    # `os.path.exists(...)` shape — dynamic, conservative.
+    # `os.path.exists(...)` shape - dynamic, conservative.
     src = "import os\ndef f():\n    if os.environ:\n        x = 1\n"
     findings = UnreachableCodeRule().analyse(_make_unit(src), _ctx())
     assert findings == []

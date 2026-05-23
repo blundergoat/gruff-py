@@ -55,7 +55,7 @@ def test_ipv6_wildcard_emits():
 
 
 def test_run_host_dynamic_skipped():
-    """Non-literal host kwarg is skipped — we cannot prove unsafety."""
+    """Non-literal host kwarg is skipped - we cannot prove unsafety."""
     src = (
         "import os\nfrom flask import Flask\napp = Flask(__name__)\n"
         "app.run(host=os.getenv('HOST'))\n"

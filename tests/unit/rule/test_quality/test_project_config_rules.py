@@ -55,7 +55,7 @@ def test_strict_config_present_skips(tmp_path: Path):
 
 
 def test_strict_config_rule_skipped_on_non_test_unit(tmp_path: Path):
-    """Project-config rules must not fire on non-test units — gating regression.
+    """Project-config rules must not fire on non-test units - gating regression.
 
     Args:
         tmp_path: Pytest-provided per-test directory holding the synthetic ``pyproject.toml``.

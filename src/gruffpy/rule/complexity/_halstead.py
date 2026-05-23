@@ -15,7 +15,7 @@ Definitions:
   expressions). Names that ARE the function itself (i.e. recursion calls)
   are counted like any other Name.
 
-Keywords (``if``, ``return``, ``for``, etc.) are NOT counted as operators —
+Keywords (``if``, ``return``, ``for``, etc.) are NOT counted as operators -
 this matches radon's expression-focused interpretation.
 """
 
@@ -83,7 +83,7 @@ def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
 
     Operands are only counted when they appear inside an operator-bearing
     expression (BinOp, UnaryOp, BoolOp, Compare, AugAssign). Bare Names and
-    Constants in statements (``return x``, ``x = 1``) do NOT contribute —
+    Constants in statements (``return x``, ``x = 1``) do NOT contribute -
     matching radon's expression-focused interpretation.
 
     Args:
@@ -201,13 +201,13 @@ def _has_collected_direct_operand(node: ast.AST, operands: list[str]) -> bool:
 
 
 def _has_collected_opaque_operand(node: ast.AST, operands: list[str]) -> bool:
-    # Call / Subscript / Attribute / Tuple / etc. — treat as opaque operand
+    # Call / Subscript / Attribute / Tuple / etc. - treat as opaque operand
     # atoms keyed by their `ast.unparse` representation. This matches radon's
     # behaviour: ``f(x) + g(x)`` contributes 2 operand atoms, not 4.
     if isinstance(node, ast.Call | ast.Subscript | ast.Attribute):
         try:
             operands.append(ast.unparse(node))
-        except Exception:  # pragma: no cover — defensive
+        except Exception:  # pragma: no cover - defensive
             operands.append(type(node).__name__)
         return True
     return False

@@ -1,4 +1,4 @@
-"""``docs.ignore-directive-reason`` — suppression comments need a reason."""
+"""``docs.ignore-directive-reason`` - suppression comments need a reason."""
 
 import re
 from dataclasses import dataclass

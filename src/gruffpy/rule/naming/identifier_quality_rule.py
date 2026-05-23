@@ -1,6 +1,6 @@
 """Placeholder/generic identifier patterns.
 
-Flags names that signal "I'll rename this later" — ``temp``, ``temp1``,
+Flags names that signal "I'll rename this later" - ``temp``, ``temp1``,
 ``foo``, ``bar``, ``baz``, ``result1``, ``data2``, ``thing``, ``stuff``,
 ``todo``.
 
@@ -41,7 +41,7 @@ class IdentifierQualityRule(Rule):
         """Describe the identifier-quality rule as a high-confidence warning.
 
         High confidence because the matched tokens (``temp``, ``foo``,
-        ``bar``, numbered ``result1``, etc.) are placeholder-only — there
+        ``bar``, numbered ``result1``, etc.) are placeholder-only - there
         are essentially no legitimate domain uses, so false positives are
         rare.
 
@@ -67,7 +67,7 @@ class IdentifierQualityRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per placeholder identifier (variable, parameter,

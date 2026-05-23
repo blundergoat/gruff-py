@@ -1,4 +1,4 @@
-"""``security.jinja2-autoescape-off`` — Jinja2 Environment without autoescape.
+"""``security.jinja2-autoescape-off`` - Jinja2 Environment without autoescape.
 
 Jinja2's ``Environment`` constructor defaults ``autoescape`` to ``False``
 (unlike Flask's preconfigured environment). Templates rendered through such
@@ -8,7 +8,7 @@ application to stored and reflected XSS.
 The rule fires on ``jinja2.Environment(...)`` (and the standard import-alias
 forms) when ``autoescape`` is absent or explicitly ``False``. ``autoescape=True``
 or ``autoescape=select_autoescape(...)`` is treated as safe. Other dynamic
-expressions for ``autoescape`` are skipped (conservative — we cannot prove
+expressions for ``autoescape`` are skipped (conservative - we cannot prove
 unsafety).
 
 Gated to files that import ``jinja2`` to avoid false positives on unrelated
@@ -75,7 +75,7 @@ class Jinja2AutoescapeOffRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per Environment construction without autoescape.

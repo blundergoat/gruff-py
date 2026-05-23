@@ -1,8 +1,8 @@
-"""``test-quality.mock-without-expectation`` — mock created but no ``.assert_*`` call on it.
+"""``test-quality.mock-without-expectation`` - mock created but no ``.assert_*`` call on it.
 
 Catches the pattern where a mock is wired up but its interactions are never
 verified. ``mock.return_value`` or ``mock.side_effect`` configuration alone is
-not enough — the rule wants to see ``mock.assert_called`` / ``assert_called_with``
+not enough - the rule wants to see ``mock.assert_called`` / ``assert_called_with``
 or similar.
 """
 
@@ -34,7 +34,7 @@ class MockWithoutExpectationRule(Rule):
         """Describe the mock-without-expectation rule as a medium-confidence advisory.
 
         Medium confidence because a mock used purely as a stub (return-value
-        producer) is legitimate — the rule can't distinguish "stub" from
+        producer) is legitimate - the rule can't distinguish "stub" from
         "spy that should have been verified" without intent.
 
         Returns:
@@ -58,7 +58,7 @@ class MockWithoutExpectationRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test, listing the unverified mock names in the

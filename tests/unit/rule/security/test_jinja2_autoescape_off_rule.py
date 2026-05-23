@@ -52,7 +52,7 @@ def test_unrelated_environment_class_not_flagged():
 
 
 def test_environment_dynamic_autoescape_skipped_conservative():
-    """Dynamic autoescape value (e.g. config lookup) is skipped — we cannot prove it's False."""
+    """Dynamic autoescape value (e.g. config lookup) is skipped - we cannot prove it's False."""
     src = "import jinja2\nenv = jinja2.Environment(autoescape=settings.AUTOESCAPE)\n"
     assert Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx()) == []
 

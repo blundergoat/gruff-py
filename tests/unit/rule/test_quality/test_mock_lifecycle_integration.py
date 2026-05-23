@@ -2,7 +2,7 @@
 
 Plants patterns for the high-confidence rules and asserts each fires once.
 Also re-checks the memoisation invariant after the full test-quality rule set
-is layered onto the helper — single scope computation per unit.
+is layered onto the helper - single scope computation per unit.
 """
 
 from gruffpy.rule.registry import RuleRegistry

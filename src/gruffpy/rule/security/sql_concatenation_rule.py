@@ -1,4 +1,4 @@
-"""``security.sql-concatenation`` — dynamic SQL passed to an execute()-style call.
+"""``security.sql-concatenation`` - dynamic SQL passed to an execute()-style call.
 
 Fires when a call whose target ends in ``execute`` / ``executemany`` /
 ``executescript`` / ``text`` receives a dynamic string as the first argument
@@ -61,12 +61,12 @@ class SqlConcatenationRule(Rule):
 
         Two shapes trigger findings: a dynamic SQL string (f-string,
         ``.format()``, ``%``, ``+``); and a quoted placeholder (``'?'`` /
-        ``"%s"``) in a parameterised call — the quotes break parameter
+        ``"%s"``) in a parameterised call - the quotes break parameter
         binding by some drivers.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe ``execute`` / ``executemany`` /
@@ -129,11 +129,11 @@ def _sql_concatenation_finding(
 ) -> Finding:
     if source_label == "quoted-placeholder":
         message = (
-            f"`{target}()` manually quotes a SQL placeholder while passing parameters — "
+            f"`{target}()` manually quotes a SQL placeholder while passing parameters - "
             "leave placeholders unquoted."
         )
     else:
-        message = f"`{target}()` receives a dynamic SQL string — use parameterised arguments."
+        message = f"`{target}()` receives a dynamic SQL string - use parameterised arguments."
     return Finding(
         rule_id=definition.id,
         message=message,

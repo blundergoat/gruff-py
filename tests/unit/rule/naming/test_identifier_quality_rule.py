@@ -61,7 +61,7 @@ def test_descriptive_name_does_not_fire():
 
 
 def test_temperature_does_not_fire():
-    # 'temperature' tokenizes to ['temperature'] — first token 'temperature'
+    # 'temperature' tokenizes to ['temperature'] - first token 'temperature'
     # is NOT 'temp'. Make sure we match exact tokens, not prefixes.
     src = "temperature = 20\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())

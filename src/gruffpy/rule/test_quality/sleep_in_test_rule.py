@@ -1,4 +1,4 @@
-"""``test-quality.sleep-in-test`` — ``time.sleep`` or ``asyncio.sleep`` in a test body.
+"""``test-quality.sleep-in-test`` - ``time.sleep`` or ``asyncio.sleep`` in a test body.
 
 Sleep-based waits are a classic source of flaky tests. The rule flags any call
 whose dotted target ends in ``.sleep`` (covering ``time.sleep``, ``asyncio.sleep``,
@@ -57,7 +57,7 @@ class SleepInTestRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per sleep-style call inside a test body.
@@ -78,7 +78,7 @@ class SleepInTestRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=f"Test {symbol!r} contains `{target}(...)` — flake risk.",
+                        message=f"Test {symbol!r} contains `{target}(...)` - flake risk.",
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,

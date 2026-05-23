@@ -1,4 +1,4 @@
-"""``size.average-function-length`` — classes with several long average functions strain readers."""
+"""``size.average-function-length`` - classes with several long average functions strain readers."""
 
 import ast
 
@@ -45,7 +45,7 @@ class AverageFunctionLengthRule(Rule):
         """Emit one finding per class whose mean method length crosses the threshold.
 
         Catches "god classes" that hide behind small methods *and* one giant
-        one — the average reveals the bulk that per-method limits miss.
+        one - the average reveals the bulk that per-method limits miss.
         Requires the class to have at least 3 methods.
 
         Args:

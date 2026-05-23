@@ -101,7 +101,7 @@ def test_composite_component_rules_sorted_and_distinct():
 
 
 def test_composite_does_not_fire_on_unrelated_pillars():
-    # naming + docs co-occur on the same symbol — no composite.
+    # naming + docs co-occur on the same symbol - no composite.
     findings = [
         _f("naming.confusing-name", pillar=Pillar.NAMING),
         _f("docs.missing-function-docstring", pillar=Pillar.DOCUMENTATION),

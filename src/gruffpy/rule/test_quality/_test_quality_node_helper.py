@@ -5,14 +5,14 @@ analyse run, regardless of how many rules read it.
 
 Public surface:
 
-- :func:`scopes_for_unit` — returns a ``{FunctionDef: TestScope}`` mapping for
+- :func:`scopes_for_unit` - returns a ``{FunctionDef: TestScope}`` mapping for
   every function in the unit's tree, classified into test / non-test scope.
-- :func:`test_functions` — iterator over (function, scope) pairs where scope.kind
+- :func:`test_functions` - iterator over (function, scope) pairs where scope.kind
   is one of the test variants. Filters out non-test functions.
-- :func:`is_assertion_call` — recognise ``self.assertEqual(...)``, ``pytest.raises``,
+- :func:`is_assertion_call` - recognise ``self.assertEqual(...)``, ``pytest.raises``,
   ``assert <expr>`` (handled separately at the rule level since ``assert`` is a
   statement, not a call).
-- :func:`compute_count` — instrumentation counter (number of times the scope map
+- :func:`compute_count` - instrumentation counter (number of times the scope map
   was computed). The memoisation gate test reads this to confirm the helper
   memoises correctly.
 """
@@ -162,7 +162,7 @@ def is_mock_factory_call(call: ast.Call) -> bool:
     leaf = target.split(".")[-1]
     if leaf in _MOCK_FACTORY_LEAVES:
         return True
-    # mocker.patch.object(...) / mocker.patch.dict(...) — match the patch root.
+    # mocker.patch.object(...) / mocker.patch.dict(...) - match the patch root.
     parts = target.split(".")
     return any(part == "patch" for part in parts[:-1])
 
@@ -230,7 +230,7 @@ def walk_test_body(
     """Yield every node in a test function body.
 
     A nested ``def helper(): ...`` inside a test is yielded (so rules can see
-    it), but the nested function's body is not — its statements belong to the
+    it), but the nested function's body is not - its statements belong to the
     inner scope, not the test.
 
     Args:

@@ -38,7 +38,7 @@ class WideRecord:
     """Plain class with too many attributes.
 
     Kept as a plain class (not a ``@dataclass``) because
-    ``size.attribute-count`` exempts schema/dataclass shells — the rule's
+    ``size.attribute-count`` exempts schema/dataclass shells - the rule's
     intent is to flag classes with too many fields whose attributes are
     NOT part of a schema/contract, and this fixture exercises that case.
     """

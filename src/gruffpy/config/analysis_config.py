@@ -69,7 +69,7 @@ class AnalysisConfig:
     def rule_settings(self, rule_id: str) -> RuleSettings:
         """Return the merged settings for *rule_id*.
 
-        Raises ``KeyError`` for unknown ids — this is a programming error
+        Raises ``KeyError`` for unknown ids - this is a programming error
         on the caller's part, not a user-input issue (unknown rules in
         user config are flagged separately by the loader).
 

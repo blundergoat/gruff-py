@@ -5,7 +5,7 @@ Allowed by default: ``i``, ``j``, ``k``, ``n``, ``m``, ``x``, ``y``, ``z``,
 ``acceptedShortNames`` per-rule option.
 
 Scope: local assignments (Assign / AnnAssign). Function parameters are
-intentionally NOT scanned — single-char params are common in math-flavoured
+intentionally NOT scanned - single-char params are common in math-flavoured
 code (``def f(x, y, z): ...``) and the parameter rule lives in
 ``naming.parameter-type-name``. Test files are exempt; assertion fixtures and
 table-driven rule tests routinely use tiny local placeholders where this
@@ -57,7 +57,7 @@ class ShortVariableRule(Rule):
         """Flag local single-character assignments not in the accepted-short-name set.
 
         Function parameters are intentionally not scanned (see module
-        docstring — math-flavoured signatures use single-char params), and
+        docstring - math-flavoured signatures use single-char params), and
         test files are skipped because fixture code routinely uses tiny
         placeholders.
 

@@ -1,4 +1,4 @@
-"""``size.parameter-count`` — too many parameters make calls error-prone."""
+"""``size.parameter-count`` - too many parameters make calls error-prone."""
 
 import ast
 

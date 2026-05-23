@@ -5,12 +5,12 @@ Skip:
 - names listed in ``__all__`` (intentional re-exports);
 - ``__init__.py`` modules (any name imported there is plausibly re-exported);
 - imports tagged with ``# noqa`` on the import line;
-- ``from __future__ import …`` directives — these are compile-time
+- ``from __future__ import …`` directives - these are compile-time
   PEP 236 / 563 markers whose name never appears in the runtime
   namespace, so the "is it referenced?" question doesn't apply.
 
 Side-effect imports (``import sentry_sdk.init`` or ``import logging.config``)
-are not yet detected — they typically come in as ``Import`` with multiple
+are not yet detected - they typically come in as ``Import`` with multiple
 dotted names; v0.1 flags only the simple-name case.
 """
 
@@ -39,7 +39,7 @@ class UnusedImportRule(Rule):
 
         High confidence because the rule honours ``__all__`` re-exports,
         skips ``__init__.py`` modules, and parses string annotations
-        (forward references) — the remaining false-positive surface is
+        (forward references) - the remaining false-positive surface is
         side-effect-only imports (``import logging.config``) which the v0.1
         scope intentionally doesn't cover.
 
@@ -63,7 +63,7 @@ class UnusedImportRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unused import alias, located at the alias's line.
@@ -120,7 +120,7 @@ def _collect_imports(tree: ast.AST) -> dict[str, ast.alias]:
                 imports[local] = alias
         elif isinstance(node, ast.ImportFrom):
             if node.module == "__future__":
-                # PEP 236/563 directives — compile-time only, no runtime name to reference.
+                # PEP 236/563 directives - compile-time only, no runtime name to reference.
                 continue
             for alias in node.names:
                 if alias.name == "*":

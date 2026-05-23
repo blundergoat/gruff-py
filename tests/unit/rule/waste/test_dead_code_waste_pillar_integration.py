@@ -41,7 +41,7 @@ class _AbstractBase(ABC):
 
 
 class _Marker(Protocol):
-    """Protocol marker — empty body is intentional."""
+    """Protocol marker - empty body is intentional."""
 
 
 class _MarkerProtocolMethod(Protocol):
@@ -51,12 +51,12 @@ class _MarkerProtocolMethod(Protocol):
 
 @dataclass
 class _Record:
-    """Dataclass — fields are framework-managed."""
+    """Dataclass - fields are framework-managed."""
 
     _internal: int = 0
 
 
-# pytest fixture pattern — _setup is registered by name, not by reference.
+# pytest fixture pattern - _setup is registered by name, not by reference.
 def _setup(request):
     """Pretend pytest fixture; framework-decorated equivalent skipped by
     has_framework_decorator. This bare form requires __all__ to suppress."""
@@ -64,7 +64,7 @@ def _setup(request):
 
 
 class WithPropertyBacking:
-    """@property backing field — _value is read implicitly via the setter."""
+    """@property backing field - _value is read implicitly via the setter."""
 
     @property
     def value(self):
@@ -127,7 +127,7 @@ def test_dynamism_fixture_emits_only_acceptable_findings():
     target_rule_prefixes = ("dead-code.", "waste.")
     suspect = [f for f in findings if any(f.rule_id.startswith(p) for p in target_rule_prefixes)]
     # Acceptable findings on the bare `_setup` function (no @pytest.fixture
-    # decorator — the fixture intentionally documents the user-facing trap):
+    # decorator - the fixture intentionally documents the user-facing trap):
     # 1. dead-code.unused-private-function: nothing calls _setup
     # 2. waste.unused-parameter on `request`: _setup ignores its arg
     # Both vanish once the user adds @pytest.fixture, demonstrating the

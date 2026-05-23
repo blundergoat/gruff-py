@@ -1,4 +1,4 @@
-"""``test-quality.magic-number-assertion`` — assertion against an unexplained numeric literal.
+"""``test-quality.magic-number-assertion`` - assertion against an unexplained numeric literal.
 
 Default allowlist: HTTP status codes (200, 201, 204, 301, 302, 400, 401, 403,
 404, 409, 422, 429, 500, 502, 503, 504) and -1 through 3. Configurable via the

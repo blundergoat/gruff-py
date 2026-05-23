@@ -1,15 +1,15 @@
-"""``security.hardcoded-bind-all-interfaces`` — server bound to 0.0.0.0 / ::.
+"""``security.hardcoded-bind-all-interfaces`` - server bound to 0.0.0.0 / ::.
 
 Binding to ``0.0.0.0`` (IPv4 wildcard) or ``::`` (IPv6 wildcard) exposes a
 server on every network interface. Inside a container or behind a reverse
 proxy this is sometimes deliberate; in application code it is almost always
-a mistake — the developer wanted ``127.0.0.1`` for local-only access.
+a mistake - the developer wanted ``127.0.0.1`` for local-only access.
 
-Match shapes (no framework gate — the address literal is unambiguous):
+Match shapes (no framework gate - the address literal is unambiguous):
 
-- ``<server>.run(..., host="0.0.0.0", ...)`` — Flask, Quart, uvicorn,
+- ``<server>.run(..., host="0.0.0.0", ...)`` - Flask, Quart, uvicorn,
   hypercorn, gunicorn-style apps
-- ``socket.bind(("0.0.0.0", port))`` — stdlib socket
+- ``socket.bind(("0.0.0.0", port))`` - stdlib socket
 - Also fires on ``"::"`` IPv6 wildcard
 
 The rule emits at ``warning`` severity because containerised deploys and
@@ -71,14 +71,14 @@ class HardcodedBindAllInterfacesRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``host=`` kwargs and ``socket.bind`` first-args holding wildcard literals.
 
-        No framework gate — the wildcard address literal is unambiguous
+        No framework gate - the wildcard address literal is unambiguous
         enough to stand alone. Fires once per call site, not once per
         wildcard occurrence inside a call (so ``run(host='0.0.0.0',
         debug=False)`` is one finding, not two).
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per wildcard-bind call site.
@@ -149,7 +149,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"Server binding to wildcard address `{address}` — exposes the "
+            f"Server binding to wildcard address `{address}` - exposes the "
             "service on every network interface."
         ),
         file_path=unit.file.display_path,

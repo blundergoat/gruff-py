@@ -9,8 +9,8 @@ from gruffpy.version import TOOL_NAME, VERSION
 def root_menu(ctx: click.Context) -> str:
     """Render the Symfony-style help screen shown when ``gruff-py`` runs without a subcommand.
 
-    Joins three sections — header (tool/version + usage line), global
-    options, and the available-commands list — into one terminal-friendly
+    Joins three sections - header (tool/version + usage line), global
+    options, and the available-commands list - into one terminal-friendly
     string. ANSI styling honours ``--ansi``/``--no-ansi`` via
     :func:`should_use_color`.
 

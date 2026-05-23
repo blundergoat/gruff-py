@@ -1,4 +1,4 @@
-"""``security.flask-debug-enabled`` — Werkzeug debugger left enabled.
+"""``security.flask-debug-enabled`` - Werkzeug debugger left enabled.
 
 Three shapes, gated to files that import Flask:
 
@@ -30,7 +30,7 @@ _SOURCE_NEEDLES: tuple[str, ...] = ("debug", "DEBUG")
 _REMEDIATION = (
     "Run Flask via a production WSGI server (gunicorn, uWSGI, mod_wsgi) "
     "with debug disabled. The Werkzeug interactive debugger exposes a "
-    "PIN-protected console that allows arbitrary Python execution — never "
+    "PIN-protected console that allows arbitrary Python execution - never "
     "enable it in code that may run in production."
 )
 
@@ -67,12 +67,12 @@ class FlaskDebugEnabledRule(Rule):
 
         File-level framework gate: the rule only fires when the unit
         imports Flask (mirrors ``security.header-injection``'s approach).
-        Non-literal values (``debug=is_dev``) are intentionally skipped —
+        Non-literal values (``debug=is_dev``) are intentionally skipped -
         only literal ``True`` triggers, to keep false-positive rate low.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per literal-true debug-enabling shape.
@@ -154,7 +154,7 @@ def _build_finding(
     end_line = getattr(node, "end_lineno", None)
     return Finding(
         rule_id=definition.id,
-        message=f"Flask debug mode enabled via `{label}` — exposes the Werkzeug debugger.",
+        message=f"Flask debug mode enabled via `{label}` - exposes the Werkzeug debugger.",
         file_path=unit.file.display_path,
         line=line,
         severity=definition.default_severity,

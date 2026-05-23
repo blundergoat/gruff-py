@@ -1,4 +1,4 @@
-"""``test-quality.skipped-without-reason`` — ``@pytest.mark.skip`` without a reason kwarg.
+"""``test-quality.skipped-without-reason`` - ``@pytest.mark.skip`` without a reason kwarg.
 
 Skips without context become permanent. The rule requires a non-empty ``reason``
 keyword argument (or first positional string for ``unittest.skip``).
@@ -55,7 +55,7 @@ class SkippedWithoutReasonRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test decorated with a reasonless skip.

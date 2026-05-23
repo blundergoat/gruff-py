@@ -24,7 +24,7 @@ class Handler:  # naming.confusing-name
 
 
 class UserService:
-    """Suffix usage — naming.confusing-name should NOT fire."""
+    """Suffix usage - naming.confusing-name should NOT fire."""
 
     def __init__(self, repo: "UserRepository") -> None:
         # parameter-type-name should NOT fire (repo is a prefix of repository)

@@ -43,7 +43,7 @@ def test_cors_credentials_false_skipped():
 
 
 def test_cors_wildcard_in_list_with_other_origins_emits():
-    """If ['*', 'https://x'] is passed, the wildcard wins — fire."""
+    """If ['*', 'https://x'] is passed, the wildcard wins - fire."""
     src = (
         "from flask_cors import CORS\n"
         "CORS(app, supports_credentials=True, origins=['*', 'https://x'])\n"

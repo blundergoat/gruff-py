@@ -1,4 +1,4 @@
-"""``sensitive-data.hardcoded-env-value`` — .env file with a secret-looking value.
+"""``sensitive-data.hardcoded-env-value`` - .env file with a secret-looking value.
 
 Fires on lines of the shape ``KEY=value`` inside ``.env`` / ``.env.*`` files
 where the key name suggests a secret (``KEY``, ``SECRET``, ``TOKEN``, ``PASSWORD``,
@@ -70,7 +70,7 @@ class HardcodedEnvValueRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per ``.env`` line whose value crosses the
@@ -86,7 +86,7 @@ class HardcodedEnvValueRule(SourceTextRule):
             if value in _PLACEHOLDER_VALUES or len(value) < _MIN_VALUE_LENGTH:
                 continue
             if value.startswith("${") or value.startswith("$"):
-                continue  # Variable interpolation — not a literal secret.
+                continue  # Variable interpolation - not a literal secret.
             if shannon_entropy(value) < _ENTROPY_THRESHOLD:
                 continue
             line = unit.source.count("\n", 0, match.start()) + 1

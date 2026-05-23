@@ -1,4 +1,4 @@
-"""``sensitive-data.high-entropy-string`` — generic Shannon-entropy detector.
+"""``sensitive-data.high-entropy-string`` - generic Shannon-entropy detector.
 
 Walks the file looking for substrings of at least 20 base64-alphabet characters
 whose Shannon entropy exceeds 4.5 bits/char. Suppresses common false-positive
@@ -58,12 +58,12 @@ class HighEntropyStringRule(SourceTextRule):
         """Flag 20+ char base64-alphabet runs whose Shannon entropy exceeds 4.5 bits/char.
 
         Benign-shape suppressions filter out filesystem paths (multiple
-        ``/``), PascalCase identifiers, short hex (< 40 chars — probably
+        ``/``), PascalCase identifiers, short hex (< 40 chars - probably
         a checksum), and snake_case names without digits.
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per high-entropy substring that passes the
@@ -81,7 +81,7 @@ class HighEntropyStringRule(SourceTextRule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message="High-entropy string — possible secret literal.",
+                    message="High-entropy string - possible secret literal.",
                     file_path=unit.file.display_path,
                     line=line,
                     severity=definition.default_severity,

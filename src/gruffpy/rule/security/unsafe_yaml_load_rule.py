@@ -1,4 +1,4 @@
-"""``security.unsafe-yaml-load`` — PyYAML loaders that can construct objects."""
+"""``security.unsafe-yaml-load`` - PyYAML loaders that can construct objects."""
 
 import ast
 from dataclasses import dataclass
@@ -35,7 +35,7 @@ class UnsafeYamlLoadRule(Rule):
         """Describe the unsafe-yaml-load rule as a high-confidence ERROR.
 
         ERROR severity because ``yaml.load`` without an explicit safe Loader
-        constructs arbitrary Python objects from input — a well-known RCE
+        constructs arbitrary Python objects from input - a well-known RCE
         vector. High confidence because the rule matches both the explicit
         ``yaml.unsafe_load`` call and the bare ``yaml.load(...)`` form,
         respecting import aliases.
@@ -63,7 +63,7 @@ class UnsafeYamlLoadRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe ``yaml.load`` / ``yaml.unsafe_load`` call.

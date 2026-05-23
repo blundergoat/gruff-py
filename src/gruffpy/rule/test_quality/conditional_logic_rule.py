@@ -1,7 +1,7 @@
-"""``test-quality.conditional-logic`` — ``if`` / ``elif`` / ``match`` in a test body.
+"""``test-quality.conditional-logic`` - ``if`` / ``elif`` / ``match`` in a test body.
 
 Tests should be deterministic. Conditional logic inside a test body usually
-means the test is doing two things in one place — split it.
+means the test is doing two things in one place - split it.
 """
 
 import ast
@@ -54,7 +54,7 @@ class ConditionalLogicRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test function containing branching control flow,
@@ -74,7 +74,7 @@ class ConditionalLogicRule(Rule):
                     Finding(
                         rule_id=definition.id,
                         message=(
-                            f"Test {symbol!r} contains conditional logic — split into "
+                            f"Test {symbol!r} contains conditional logic - split into "
                             f"parametrised cases."
                         ),
                         file_path=unit.file.display_path,

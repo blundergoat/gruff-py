@@ -52,7 +52,7 @@ class UnreachableCodeRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unreachable statement (at most one per terminator block).
@@ -98,7 +98,7 @@ class UnreachableCodeRule(Rule):
 
 
 def _iter_blocks(tree: ast.AST) -> Iterator[list[ast.stmt]]:
-    """Yield every list[stmt] block in *tree* — function bodies, if/else/elif,
+    """Yield every list[stmt] block in *tree* - function bodies, if/else/elif,
     for/while bodies + orelse, try body + handlers + orelse + finalbody,
     match cases, with/AsyncWith bodies."""
     for node in ast.walk(tree):

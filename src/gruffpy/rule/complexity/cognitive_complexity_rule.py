@@ -2,14 +2,14 @@
 
 Increment rules:
 
-- **B1** — +1 for each control-flow break: ``if``/``elif``/``else``, ``for``,
+- **B1** - +1 for each control-flow break: ``if``/``elif``/``else``, ``for``,
   ``while``, ``except`` handler, ``IfExp`` (ternary), ``match`` (the
   ``match`` itself; cases do NOT add another B1), recursion (``Call`` to
   the enclosing function by name).
-- **B2** — additional ``+nesting_level`` for each control structure nested
+- **B2** - additional ``+nesting_level`` for each control structure nested
   inside another control structure. Nesting resets on entry to a nested
   function/lambda body.
-- **B3** — +1 per ``BoolOp`` node (each `and`/`or` sequence). Mixed-operator
+- **B3** - +1 per ``BoolOp`` node (each `and`/`or` sequence). Mixed-operator
   expressions parse as multiple ``BoolOp`` nodes (e.g. ``a and b or c`` is two).
 """
 
@@ -205,7 +205,7 @@ class _Counter:
         for stmt in node.body:
             self.visit(stmt, nesting + 1)
         if node.orelse:
-            # `for ... else` / `while ... else` — count the else as +1 (no nesting)
+            # `for ... else` / `while ... else` - count the else as +1 (no nesting)
             self.score += 1
             for stmt in node.orelse:
                 self.visit(stmt, nesting + 1)
@@ -246,7 +246,7 @@ class _Counter:
         self.visit(node.subject, nesting)
 
     def _visit_Lambda(self, node: ast.Lambda, nesting: int) -> None:
-        # Nested lambda inside another function — the lambda body is a new
+        # Nested lambda inside another function - the lambda body is a new
         # scope; nesting resets to 0 for its body, but the *outer* function's
         # cognitive complexity does not include the lambda's interior (it
         # gets its own finding via iter_functions). Walk only the args
@@ -280,7 +280,7 @@ class _Counter:
                 self.visit(kw_default, nesting)
 
     def _visit_ClassDef(self, node: ast.ClassDef, nesting: int) -> None:
-        # Like nested functions — walk decorators + base expressions only.
+        # Like nested functions - walk decorators + base expressions only.
         for decorator in node.decorator_list:
             self.visit(decorator, nesting)
         for base in node.bases:

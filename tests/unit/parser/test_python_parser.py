@@ -20,11 +20,11 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(
         """Stub for ``ast.parse`` that surfaces the canonical CPython post-3.12 shape error.
 
         Real CPython raises ``ValueError`` (not ``SyntaxError``) for this
-        family of malformed AST node — the parser's diagnostic path must
+        family of malformed AST node - the parser's diagnostic path must
         catch both.
 
         Returns:
-            Never returns — always raises.
+            Never returns - always raises.
 
         Raises:
             ValueError: Always, mimicking CPython's malformed-Constant error.

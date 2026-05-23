@@ -113,7 +113,7 @@ import yaml
 
 
 def process(items):
-    """Safe equivalents — every line is the recommended alternative."""
+    """Safe equivalents - every line is the recommended alternative."""
     requests.get("https://api.example.com", verify=True)
     yaml.safe_load(items["yaml"])
     cursor.execute("SELECT * FROM t WHERE id = ?", (items["id"],))

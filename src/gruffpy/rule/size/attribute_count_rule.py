@@ -1,4 +1,4 @@
-"""``size.attribute-count`` — too many attributes signal an unfocused class."""
+"""``size.attribute-count`` - too many attributes signal an unfocused class."""
 
 import ast
 

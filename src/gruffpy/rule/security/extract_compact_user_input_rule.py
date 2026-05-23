@@ -1,4 +1,4 @@
-"""``security.extract-compact-user-input`` — splat-unpacking of request data into kwargs.
+"""``security.extract-compact-user-input`` - splat-unpacking of request data into kwargs.
 
 Python equivalent of PHP's ``extract()`` / ``compact()`` smell. Catches:
 
@@ -59,14 +59,14 @@ class ExtractCompactUserInputRule(Rule):
         """Flag ``f(**request.<attr>)`` patterns across major web frameworks.
 
         Splatting user-controlled dicts into kwargs is Python's analogue of
-        PHP's ``extract()`` — the attacker chooses the parameter names that
+        PHP's ``extract()`` - the attacker chooses the parameter names that
         get bound. Covers Flask/Django/FastAPI access patterns (``.json``,
         ``.form``, ``.args``, ``.GET``/``.POST``/``.data``,
         ``.query_params``, ``.values``).
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per call site that splats a request attribute.

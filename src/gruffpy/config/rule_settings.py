@@ -22,7 +22,7 @@ class SeverityThreshold:
 
 @dataclass(frozen=True, slots=True)
 class ThresholdMatch:
-    """Result of a threshold check — the value that fired and the matched severity."""
+    """Result of a threshold check - the value that fired and the matched severity."""
 
     threshold: int | float
     severity: Severity
@@ -159,7 +159,7 @@ class RuleSettings:
         """Return *name* as a list-of-strings, validating element types.
 
         Defaults to an empty list when *name* is absent. Raises
-        ``TypeError`` if the option is set but not a ``list[str]`` — a
+        ``TypeError`` if the option is set but not a ``list[str]`` - a
         config error worth surfacing loudly.
 
         Args:

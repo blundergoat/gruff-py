@@ -1,4 +1,4 @@
-"""``sensitive-data.pii-test-fixture`` — realistic PII in test fixtures.
+"""``sensitive-data.pii-test-fixture`` - realistic PII in test fixtures.
 
 Fires on emails / phone numbers / addresses that look real (not placeholder
 domains, not ``555`` US-test prefixes). Scoped to test paths so production
@@ -75,7 +75,7 @@ class PiiTestFixtureRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per realistic email or phone in a test/fixture file.

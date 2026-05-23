@@ -1,4 +1,4 @@
-"""``sensitive-data.database-url-password`` — credentialled DB connection URL.
+"""``sensitive-data.database-url-password`` - credentialled DB connection URL.
 
 Pattern: ``<scheme>://<user>:<password>@<host>`` where the password is not a
 placeholder (``password``, ``changeme``, ``xxx``, ``***``, blank). Covers
@@ -89,7 +89,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per database URL whose password is not a placeholder.

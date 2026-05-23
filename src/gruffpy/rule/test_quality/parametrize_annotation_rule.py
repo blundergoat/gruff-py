@@ -1,6 +1,6 @@
-"""``test-quality.parametrize-annotation`` — ``@parametrize`` without an ``ids=`` argument.
+"""``test-quality.parametrize-annotation`` - ``@parametrize`` without an ``ids=`` argument.
 
-Without ``ids=``, pytest names cases by their repr — opaque output when a case
+Without ``ids=``, pytest names cases by their repr - opaque output when a case
 fails. The rule fires when more than two cases are provided without an ``ids``
 labelling.
 """

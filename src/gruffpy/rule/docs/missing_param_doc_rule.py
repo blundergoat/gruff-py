@@ -1,4 +1,4 @@
-"""``docs.missing-param-doc`` — documented function with an undocumented parameter.
+"""``docs.missing-param-doc`` - documented function with an undocumented parameter.
 
 Fires for each signature parameter that has no matching ``@param`` / ``Args:`` /
 ``Parameters`` entry in a public function's docstring. Skips ``self`` / ``cls``,

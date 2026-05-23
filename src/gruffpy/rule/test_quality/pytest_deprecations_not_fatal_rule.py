@@ -1,4 +1,4 @@
-"""``test-quality.pytest-deprecations-not-fatal`` — DeprecationWarning not escalated to error.
+"""``test-quality.pytest-deprecations-not-fatal`` - DeprecationWarning not escalated to error.
 
 Letting deprecations stay warnings means a deprecated API gets re-introduced
 silently and breaks on the eventual removal. The rule wants

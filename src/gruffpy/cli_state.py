@@ -44,7 +44,7 @@ def state(ctx: click.Context | None = None) -> CliState:
         ctx: Explicit Click context; defaults to the current active one.
 
     Returns:
-        Shared CLI state — never ``None``.
+        Shared CLI state - never ``None``.
     """
     current = ctx or click.get_current_context(silent=True)
     while current is not None:

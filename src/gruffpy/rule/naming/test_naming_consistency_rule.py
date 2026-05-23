@@ -2,9 +2,9 @@
 
 Conventions detected:
 
-- ``test_<snake_case>`` — pytest module-level convention.
-- ``test<camelCase>`` — unittest-camelCase (rare in Python but seen in ports).
-- ``Test<CapWords>`` — class-style: ``class TestUserService`` (no extra
+- ``test_<snake_case>`` - pytest module-level convention.
+- ``test<camelCase>`` - unittest-camelCase (rare in Python but seen in ports).
+- ``Test<CapWords>`` - class-style: ``class TestUserService`` (no extra
   signal; only flag if naming styles for *functions* differ).
 
 The rule fires when a single test file contains ≥2 distinct naming styles
@@ -69,7 +69,7 @@ class TestNamingConsistencyRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             Empty list, or a single file-anchored finding summarising the

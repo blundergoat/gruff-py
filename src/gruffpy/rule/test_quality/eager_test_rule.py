@@ -1,4 +1,4 @@
-"""``test-quality.eager-test`` — test asserts against many unrelated values.
+"""``test-quality.eager-test`` - test asserts against many unrelated values.
 
 Heuristic: a test that contains more than N top-level ``assert`` statements
 (default: 5) is probably testing multiple behaviours. Split it.
@@ -31,7 +31,7 @@ class EagerTestRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the eager-test rule with a configurable assertion threshold (default 5).
 
-        Medium confidence because the threshold is a heuristic — a few extra
+        Medium confidence because the threshold is a heuristic - a few extra
         asserts on the same outcome are fine; this rule catches tests that
         verify several unrelated behaviours at once.
 
@@ -96,7 +96,7 @@ class EagerTestRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=("Split the test into focused cases — one behaviour per test."),
+                    remediation=("Split the test into focused cases - one behaviour per test."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"assertions": count, "threshold": threshold},
                 ),

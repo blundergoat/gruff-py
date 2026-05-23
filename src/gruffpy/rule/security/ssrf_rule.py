@@ -1,4 +1,4 @@
-"""``security.ssrf`` — HTTP client calls reached by user-controlled URLs.
+"""``security.ssrf`` - HTTP client calls reached by user-controlled URLs.
 
 Server-Side Request Forgery: an attacker who can influence the URL passed
 to an outbound HTTP client can pivot the server into making requests to
@@ -13,15 +13,15 @@ source in the same function.
 Recognised sinks (gated by ``requests`` / ``httpx`` / ``urllib`` / ``urllib3``
 import):
 
-- ``requests.get/post/put/patch/delete/head/options(<url>, ...)`` —
+- ``requests.get/post/put/patch/delete/head/options(<url>, ...)`` -
   first argument is the URL.
-- ``requests.request("GET", <url>, ...)`` — second argument is the URL.
-- ``httpx.get/post/put/patch/delete/head/options(<url>, ...)`` — same.
-- ``httpx.request("GET", <url>, ...)`` — second argument.
-- ``urlopen(<url>, ...)`` (from ``urllib.request``) — first argument.
+- ``requests.request("GET", <url>, ...)`` - second argument is the URL.
+- ``httpx.get/post/put/patch/delete/head/options(<url>, ...)`` - same.
+- ``httpx.request("GET", <url>, ...)`` - second argument.
+- ``urlopen(<url>, ...)`` (from ``urllib.request``) - first argument.
 
 Aliased imports (``import requests as r``, chained
-``requests.Session().get(...)`` shapes) are out of scope for v1 — they
+``requests.Session().get(...)`` shapes) are out of scope for v1 - they
 require import-graph or symbolic-receiver tracking.
 """
 
@@ -53,7 +53,7 @@ _REMEDIATION = (
     "URLs) before passing it to the client. Reject URLs that resolve to "
     "private / link-local / loopback addresses if external-only fetches "
     "are required. `urllib.parse.urlparse(...).netloc` returns a string "
-    "the developer still has to compare against an allow-list — calling "
+    "the developer still has to compare against an allow-list - calling "
     "it alone is not a sanitiser."
 )
 
@@ -88,7 +88,7 @@ class SsrfRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per call site whose URL argument is tainted.
@@ -149,7 +149,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{target}(...)` receives a user-controlled URL — SSRF risk via "
+            f"`{target}(...)` receives a user-controlled URL - SSRF risk via "
             "internal services, cloud metadata, or other reachable targets."
         ),
         file_path=unit.file.display_path,

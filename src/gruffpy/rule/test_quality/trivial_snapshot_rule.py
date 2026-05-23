@@ -1,4 +1,4 @@
-"""``test-quality.trivial-snapshot`` — assertion compares against a large hardcoded literal.
+"""``test-quality.trivial-snapshot`` - assertion compares against a large hardcoded literal.
 
 Snapshot tests that pin against a literal tuple / list / dict of substantial
 size are brittle: any production change updates the snapshot mechanically
@@ -59,7 +59,7 @@ class TrivialSnapshotRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per assert whose test expression embeds a 10+
@@ -82,7 +82,7 @@ class TrivialSnapshotRule(Rule):
                     Finding(
                         rule_id=definition.id,
                         message=(
-                            f"Test {symbol!r} asserts against a large literal — brittle snapshot."
+                            f"Test {symbol!r} asserts against a large literal - brittle snapshot."
                         ),
                         file_path=unit.file.display_path,
                         line=node.lineno,

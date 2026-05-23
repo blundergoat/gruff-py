@@ -60,7 +60,7 @@ class EmptyClassRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per non-exempt class with an empty body.

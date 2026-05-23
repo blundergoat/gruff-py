@@ -1,4 +1,4 @@
-"""``test-quality.private-reflection`` — test accesses ``_x`` / ``__x`` of the SUT.
+"""``test-quality.private-reflection`` - test accesses ``_x`` / ``__x`` of the SUT.
 
 Tests that reach into private attributes are tightly coupled to implementation.
 Catches ``obj._private``, ``ClassName._private``, and dunder-mangled access
@@ -56,7 +56,7 @@ class PrivateReflectionRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test reaching into a private attribute (capped

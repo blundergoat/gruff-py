@@ -129,7 +129,7 @@ def is_dynamic_string(node: ast.expr) -> bool:
     """Return whether an expression builds a string from runtime values.
 
     These are the four shapes that produce strings whose contents depend on
-    runtime values — i.e. the classic SQL-concat / shell-concat anti-patterns.
+    runtime values - i.e. the classic SQL-concat / shell-concat anti-patterns.
 
     Args:
         node: Expression to inspect.

@@ -1,4 +1,4 @@
-"""``docs.missing-module-docstring`` — module without a top-of-file docstring.
+"""``docs.missing-module-docstring`` - module without a top-of-file docstring.
 
 Skips empty modules and ``__init__.py`` files that contain only imports
 and ``__all__`` declarations (re-export shims).

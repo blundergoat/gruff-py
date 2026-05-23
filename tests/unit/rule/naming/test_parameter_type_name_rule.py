@@ -35,7 +35,7 @@ def test_repo_repository_fires():
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     # repo doesn't match 'repository'; repo IS a prefix of 'repository' actually
     # so under the prefix-acceptance rule we wouldn't fire. Let me check...
-    # Hmm — `expected.startswith(arg.arg)` = 'repository'.startswith('repo') = True.
+    # Hmm - `expected.startswith(arg.arg)` = 'repository'.startswith('repo') = True.
     # So 'repo' is acceptable. Bump to a non-prefix to test the firing case.
     assert findings == []
 
@@ -113,7 +113,7 @@ def test_real_parameter_named_payload_still_fires():
 def test_self_skipped():
     src = "class C:\n    def m(self, x: UserService): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
-    # Only `x` should fire — `self` is skipped.
+    # Only `x` should fire - `self` is skipped.
     assert len(findings) == 1
     assert findings[0].metadata["parameter"] == "x"
 
@@ -210,7 +210,7 @@ def test_no_annotation_does_not_fire():
 
 
 def test_primitive_annotation_does_not_fire():
-    # ``int``, ``str``, ``bool`` are lowercase — not class-like.
+    # ``int``, ``str``, ``bool`` are lowercase - not class-like.
     src = "def f(count: int, name: str): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert findings == []

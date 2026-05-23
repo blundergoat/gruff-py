@@ -2,7 +2,7 @@
 
 `iter_functions` walks an AST and yields every function-like node (FunctionDef,
 AsyncFunctionDef, Lambda) with its parent chain. `body_nodes` iterates a
-function body without descending into nested function definitions — nested
+function body without descending into nested function definitions - nested
 functions get their own findings, so per-function rules must stop at the
 nested-def boundary.
 """
@@ -77,7 +77,7 @@ def is_wildcard_pattern(pattern: ast.pattern) -> bool:
 
     ``MatchAs(pattern=None, name=None)`` is the bare ``_`` (no binding).
     Named catch-alls like ``case x:`` bind a name and are NOT wildcards
-    in the cyclomatic-counting sense — they are still decisions.
+    in the cyclomatic-counting sense - they are still decisions.
 
     Args:
         pattern: Pattern node from a ``match`` case.

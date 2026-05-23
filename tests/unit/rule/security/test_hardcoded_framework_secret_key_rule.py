@@ -14,7 +14,7 @@ def test_flask_app_module_scope_secret_key_emits():
     src = "from flask import Flask\nSECRET_KEY = 'dev'\n"
     findings = HardcodedFrameworkSecretKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
-    # Even short / obviously-dev strings fire — the shape is the smell.
+    # Even short / obviously-dev strings fire - the shape is the smell.
 
 
 def test_secret_key_from_env_skipped():

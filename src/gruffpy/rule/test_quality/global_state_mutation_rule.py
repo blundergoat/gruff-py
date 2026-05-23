@@ -1,4 +1,4 @@
-"""``test-quality.global-state-mutation`` — test assigns to a module-level name.
+"""``test-quality.global-state-mutation`` - test assigns to a module-level name.
 
 Detects ``global x; x = ...`` and direct module-level rebinding from within
 a test, which leaks state between tests.
@@ -31,7 +31,7 @@ class GlobalStateMutationRule(Rule):
         """Describe the global-state-mutation rule as a medium-confidence warning.
 
         Medium confidence because v0.1 detects only the explicit ``global``
-        declaration shape — direct module-level rebinding without ``global``
+        declaration shape - direct module-level rebinding without ``global``
         is not yet caught.
 
         Returns:
@@ -55,7 +55,7 @@ class GlobalStateMutationRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test that uses ``global``, with the affected

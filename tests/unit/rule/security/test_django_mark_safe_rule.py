@@ -61,7 +61,7 @@ def test_format_html_dynamic_template_emits():
 
 
 def test_format_html_literal_template_skipped():
-    """format_html with a literal template escapes its args — the standard safe pattern."""
+    """format_html with a literal template escapes its args - the standard safe pattern."""
     src = (
         "from django.utils.html import format_html\n"
         "def render(x):\n    return format_html('<b>{}</b>', x)\n"
@@ -79,7 +79,7 @@ def test_dotted_mark_safe_call_emits():
 
 
 def test_non_django_file_skipped():
-    """File without Django import — same shapes do not fire."""
+    """File without Django import - same shapes do not fire."""
     src = "def mark_safe(x):\n    return x\nmark_safe(payload)\n"
     assert DjangoMarkSafeRule().analyse(make_unit(src), default_ctx()) == []
 

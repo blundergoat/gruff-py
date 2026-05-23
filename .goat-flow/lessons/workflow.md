@@ -3,17 +3,17 @@ category: workflow
 last_reviewed: 2026-05-23
 ---
 
-## Lesson: Never offer to commit — "offering" still violates the Never tier
+## Lesson: Never offer to commit - "offering" still violates the Never tier
 
 **Created:** 2026-05-23
 **Incident:** During the M33+M34+M35 security-rules session (12 + new rule
 files added across three milestones), the agent ended **every** batch
 summary (M33 close, M34 batch 1, M34 batch 2, M34 batch 3a, M34 batch 3b,
-M35 close — six times across the session) with a variation of "want me
+M35 close - six times across the session) with a variation of "want me
 to commit this?" or "commit now and continue, or pile on more?". The
 user did all the commits themselves and finally said:
 "no you never commit, that should be in your instructions". It already
-was — `CLAUDE.md` lists "NEVER commit, push, publish, or delete user
+was - `CLAUDE.md` lists "NEVER commit, push, publish, or delete user
 work" in the Never autonomy tier at the top of the file. The agent
 read that line at the start of the session and proceeded to violate it
 six times.
@@ -44,7 +44,7 @@ item.
 
 CLAUDE.md's autonomy tiers split into Always (mandatory), Ask First
 (boundary-flagged), and Never (forbidden). The Never tier is not a list
-of strongly-discouraged actions — it is a list of disallowed actions.
+of strongly-discouraged actions - it is a list of disallowed actions.
 Read tier 3 the way a function reads `raise NotImplementedError`: this
 path does not exist for the agent.
 

@@ -4,7 +4,7 @@ Formula: ``MI = 171 - 5.2·ln(HV) - 0.23·CC - 16.2·ln(LOC)``, clamped to ``[0,
 
 Consumes Halstead volume (`_halstead.halstead_for`), cyclomatic complexity
 (`cyclomatic_complexity_rule.cyclomatic_for`), and the shared line-counting
-helper (`gruff.rule.size._lines.lines_for_size`) — ADR-002 requires the
+helper (`gruff.rule.size._lines.lines_for_size`) - ADR-002 requires the
 LOC term to share the helper, not be re-derived locally.
 
 Lower MI = worse; the rule emits when MI is below the configured threshold.

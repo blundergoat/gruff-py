@@ -1,4 +1,4 @@
-"""``security.paramiko-no-host-key-check`` — SSH connections that accept any host key.
+"""``security.paramiko-no-host-key-check`` - SSH connections that accept any host key.
 
 ``paramiko.AutoAddPolicy()`` and ``paramiko.WarningPolicy()`` cause an SSH
 client to accept (or merely log) unknown host keys. Both bypass the central
@@ -74,7 +74,7 @@ class ParamikoNoHostKeyCheckRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per AutoAddPolicy / WarningPolicy instantiation.
@@ -154,7 +154,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=f"`paramiko.{leaf}()` accepts unknown SSH host keys — MITM risk.",
+        message=f"`paramiko.{leaf}()` accepts unknown SSH host keys - MITM risk.",
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -60,7 +60,7 @@ class RuleDefinition:
     def get_description(self) -> str:
         """Return the human-readable description, falling back to the rule name.
 
-        SARIF and other consumers want a sentence — the ``description``
+        SARIF and other consumers want a sentence - the ``description``
         field is optional, so reporters call this rather than testing for
         emptiness themselves.
 

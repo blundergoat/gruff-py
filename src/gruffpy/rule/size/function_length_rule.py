@@ -1,4 +1,4 @@
-"""``size.function-length`` — long functions are harder to test and safely modify."""
+"""``size.function-length`` - long functions are harder to test and safely modify."""
 
 import ast
 

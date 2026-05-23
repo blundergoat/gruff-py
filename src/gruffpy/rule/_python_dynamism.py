@@ -5,7 +5,7 @@ by Python's dynamic patterns: pytest fixtures, Click commands, Flask/FastAPI
 routes, abstract base classes, Protocols, dataclasses, and ``__all__``
 re-exports.
 
-Each predicate is intentionally conservative — false negatives (missed
+Each predicate is intentionally conservative - false negatives (missed
 exemptions) are user-tunable via per-rule config; false positives are not
 (they erode trust in the analyser, per `gruff-py/.goat-flow/footguns/`).
 
@@ -16,7 +16,7 @@ when the node should be treated as "active" by the calling rule.
 import ast
 
 # Decorators whose presence on a function/method means that name IS referenced
-# by an external framework — never flag the function as unused.
+# by an external framework - never flag the function as unused.
 _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
     {
         # pytest
@@ -50,7 +50,7 @@ _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
         "overload",
         "override",
         "final",
-        # property family — @property setters/getters are framework-style
+        # property family - @property setters/getters are framework-style
         "property",
         "setter",
         "getter",
@@ -123,7 +123,7 @@ _FRAMEWORK_BASE_HINTS: frozenset[str] = frozenset(
         "IntEnum",
         "StrEnum",
         "Flag",
-        # pydantic — same role as TypedDict for naming/size purposes: the class
+        # pydantic - same role as TypedDict for naming/size purposes: the class
         # IS a schema declaration, so its field shape is part of its API contract.
         "BaseModel",
         "RootModel",
@@ -152,9 +152,9 @@ def is_test_class(cls: ast.ClassDef) -> bool:
     Recognised shapes:
 
     - ``class FooTest(unittest.TestCase):`` / ``class FooTest(TestCase):`` /
-      ``class FooTest(IsolatedAsyncioTestCase):`` — anything ending in
+      ``class FooTest(IsolatedAsyncioTestCase):`` - anything ending in
       ``TestCase`` (covers most subclassed test bases).
-    - ``class TestFoo:`` — pytest's name-based collection convention; a
+    - ``class TestFoo:`` - pytest's name-based collection convention; a
       fallback when the import chain is opaque or the test base is
       provided by a fixture/conftest.
 
@@ -194,7 +194,7 @@ def module_all_names(tree: ast.AST) -> frozenset[str]:
     """Return the string names declared by a module-level ``__all__``.
 
     Only static lists/tuples of string constants are recognised. Dynamic
-    constructions are treated as "no __all__" — conservative on purpose.
+    constructions are treated as "no __all__" - conservative on purpose.
 
     Args:
         tree: Module AST to inspect.

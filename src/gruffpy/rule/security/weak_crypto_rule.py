@@ -1,4 +1,4 @@
-"""``security.weak-crypto`` — MD5 / SHA1 used for security-smelling work.
+"""``security.weak-crypto`` - MD5 / SHA1 used for security-smelling work.
 
 Fires on ``hashlib.md5(...)`` or ``hashlib.sha1(...)`` when the surrounding
 context suggests crypto rather than non-crypto hashing (cache key, content
@@ -73,13 +73,13 @@ class WeakCryptoRule(Rule):
         - ``hashlib.md5/sha1(...)`` when the argument or enclosing scope
           carries a security-smelling name (``token``, ``signature``, etc.);
         - ``hashlib.sha256/sha512(...)`` when the surrounding context smells
-          like password hashing — fast cryptographic hashes are too quick
+          like password hashing - fast cryptographic hashes are too quick
           for password storage and should be replaced with a KDF
           (``scrypt``/``argon2``/``bcrypt``).
 
         Args:
             unit: Parsed source file to inspect (with parent links).
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per weak-algorithm-in-security-context call.
@@ -133,7 +133,7 @@ def _finding_for_call(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`hashlib.{algorithm}` used in a security-smelling context — "
+            f"`hashlib.{algorithm}` used in a security-smelling context - "
             f"prefer SHA-256+ or a password-hashing KDF."
         ),
         file_path=file_path,
@@ -161,7 +161,7 @@ def _weak_algorithm(target: str) -> str | None:
     if target in {"hashlib.md5", "hashlib.sha1"}:
         return target.split(".")[-1]
     if target in _WEAK_ALGORITHMS:
-        # `from hashlib import md5` style — bare name match.
+        # `from hashlib import md5` style - bare name match.
         return target
     return None
 

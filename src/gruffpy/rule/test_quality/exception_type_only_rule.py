@@ -1,4 +1,4 @@
-"""``test-quality.exception-type-only`` — ``pytest.raises(Exception)`` without ``match=``.
+"""``test-quality.exception-type-only`` - ``pytest.raises(Exception)`` without ``match=``.
 
 Catching just the type doesn't verify *which* error was raised. The rule fires
 on ``pytest.raises`` / ``pytest.warns`` contexts that omit the ``match`` argument
@@ -53,11 +53,11 @@ class ExceptionTypeOnlyRule(Rule):
 
         Only fires when the caught type is wide (``Exception`` or
         ``BaseException``, by name or attribute) AND no ``match`` keyword is
-        provided — narrow types like ``ValueError`` are presumed intentional.
+        provided - narrow types like ``ValueError`` are presumed intentional.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per type-only wide-exception assertion.

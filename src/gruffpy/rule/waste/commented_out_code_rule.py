@@ -4,7 +4,7 @@ Two-stage heuristic:
 
 1. A cheap regex pre-filter rejects most comment styles ("TODO:", english
    prose, license headers, etc.) without invoking the parser.
-2. Remaining candidates go through ``ast.parse`` — if the parser accepts
+2. Remaining candidates go through ``ast.parse`` - if the parser accepts
    them, the comment is flagged.
 
 Confidence: LOW. False positives are easy on prose comments that happen to
@@ -66,7 +66,7 @@ class CommentedOutCodeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the commented-out-code rule as a low-confidence advisory.
 
-        Low confidence reflects the parser-based heuristic — prose comments
+        Low confidence reflects the parser-based heuristic - prose comments
         that happen to look like Python (``# x is the same as y``) can trip it.
 
         Returns:
@@ -90,7 +90,7 @@ class CommentedOutCodeRule(Rule):
 
         Args:
             unit: Parsed source file (only ``unit.source`` is used here).
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per line whose comment body re-parses as Python code.

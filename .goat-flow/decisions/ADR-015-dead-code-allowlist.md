@@ -36,12 +36,12 @@ dynamism safeguards are sufficient or out of scope for v0.1.
 
 Each allowlist axis is a list of strings:
 
-- `symbols` — exact qualified names (e.g. `ClassName.method_name`).
+- `symbols` - exact qualified names (e.g. `ClassName.method_name`).
   Match is exact-string against the rule's `symbol` finding field. No globbing.
-- `decorators` — decorator names. Match is exact-string against the rightmost
+- `decorators` - decorator names. Match is exact-string against the rightmost
   attribute of the decorator expression (`@register_event`, `@app.route` matches
   `app.route`, `@functools.wraps(x)` matches `functools.wraps`).
-- `paths` — glob patterns evaluated with `fnmatch.fnmatchcase` against the
+- `paths` - glob patterns evaluated with `fnmatch.fnmatchcase` against the
   finding's `file_path` (display path, forward slashes). `**` matches any
   path segments.
 
@@ -57,12 +57,12 @@ unused but are loaded dynamically.
 
 Existing mechanisms:
 
-- `paths.ignore` filters source discovery — too coarse: it removes the file
+- `paths.ignore` filters source discovery - too coarse: it removes the file
   from analysis entirely, losing other-rule findings.
-- Suppression comments (ADR-008) — local but require touching every callsite,
+- Suppression comments (ADR-008) - local but require touching every callsite,
   which is exactly the wrong direction when the framework adds the implicit
   reference.
-- `_python_dynamism` heuristic safeguards inside rules — already catches
+- `_python_dynamism` heuristic safeguards inside rules - already catches
   `__all__`, `getattr`, decorator-injection patterns; allowlist is for the
   cases the heuristic can't infer.
 

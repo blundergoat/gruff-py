@@ -60,7 +60,7 @@ class ConfusingNameRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag standalone class names that exactly match a configured vague name.
 
-        Exact match only — ``UserService`` is fine because ``Service`` is a
+        Exact match only - ``UserService`` is fine because ``Service`` is a
         suffix; ``Service`` alone is not. The blocklist comes from rule
         options with a fallback to a curated default set.
 

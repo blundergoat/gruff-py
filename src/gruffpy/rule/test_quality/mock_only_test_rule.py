@@ -1,4 +1,4 @@
-"""``test-quality.mock-only-test`` — test never calls anything that isn't a mock.
+"""``test-quality.mock-only-test`` - test never calls anything that isn't a mock.
 
 Heuristic: every call in the test body either is a mock factory, an interaction
 with a mock-bound name (``mock.return_value = ...``), or a framework assertion.
@@ -36,7 +36,7 @@ class MockOnlyTestRule(Rule):
         """Describe the mock-only-test rule as a medium-confidence warning.
 
         Medium confidence because the heuristic ignores framework/builtin
-        calls and mock-bound calls — but a clever test that constructs real
+        calls and mock-bound calls - but a clever test that constructs real
         objects via factory functions named like mocks could still false-
         positive.
 
@@ -61,7 +61,7 @@ class MockOnlyTestRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test whose only call targets are mocks or
@@ -82,7 +82,7 @@ class MockOnlyTestRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=f"Test {symbol!r} only exercises mocks — no real code is called.",
+                    message=f"Test {symbol!r} only exercises mocks - no real code is called.",
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,

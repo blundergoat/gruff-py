@@ -1,6 +1,6 @@
-"""``test-quality.loop-assertion-without-message`` — ``assert`` inside a loop with no message.
+"""``test-quality.loop-assertion-without-message`` - ``assert`` inside a loop with no message.
 
-When an assertion inside a loop fails, the report tells you what — but not
+When an assertion inside a loop fails, the report tells you what - but not
 which iteration. The rule fires when an assert nested in a for/while has no
 message argument.
 """
@@ -33,7 +33,7 @@ class LoopAssertionWithoutMessageRule(Rule):
 
         Medium confidence: a missing message on a loop assertion is a real
         debuggability problem, but a fix is often "split into parametrize"
-        rather than "add a message" — so the advice is contextual.
+        rather than "add a message" - so the advice is contextual.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -56,7 +56,7 @@ class LoopAssertionWithoutMessageRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per loop whose inner assert omits a message.

@@ -1,4 +1,4 @@
-"""``test-quality.testdox-readability`` (opt-in) — test name reads as a sentence.
+"""``test-quality.testdox-readability`` (opt-in) - test name reads as a sentence.
 
 Heuristic: test name has fewer than ``min_words`` lowercase-word tokens after
 stripping the ``test_`` prefix. Default-off; an enforcement preference, not a
@@ -29,7 +29,7 @@ class TestdoxReadabilityRule(Rule):
         Low confidence and default-off because word-count is a crude proxy
         for readability: ``test_login_succeeds_with_valid_credentials``
         reads well at 5 tokens, but ``test_x_y_z`` is only stylistically bad
-        — not wrong.
+        - not wrong.
 
         Returns:
             Definition with ``default_enabled=False`` and the ``min_words``
@@ -78,7 +78,7 @@ class TestdoxReadabilityRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Test {symbol!r} name has only {len(words)} word(s) — aim for "
+                        f"Test {symbol!r} name has only {len(words)} word(s) - aim for "
                         f"at least {min_words} for a sentence-like description."
                     ),
                     file_path=unit.file.display_path,

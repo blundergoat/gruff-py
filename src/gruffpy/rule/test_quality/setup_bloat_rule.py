@@ -1,4 +1,4 @@
-"""``test-quality.setup-bloat`` — ``setUp`` / ``setup_method`` / fixture is too long.
+"""``test-quality.setup-bloat`` - ``setUp`` / ``setup_method`` / fixture is too long.
 
 A setup that's longer than the typical test signals over-shared state. Default
 threshold: 30 lines. Uses the ``lines_for_size`` helper.
@@ -94,7 +94,7 @@ class SetupBloatRule(Rule):
                     end_line=node.end_lineno,
                     symbol=symbol,
                     remediation=(
-                        "Shrink the shared setup — extract object factories, narrow what "
+                        "Shrink the shared setup - extract object factories, narrow what "
                         "each test actually needs."
                     ),
                     secondary_pillars=definition.secondary_pillars,

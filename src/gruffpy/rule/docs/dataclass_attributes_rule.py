@@ -1,4 +1,4 @@
-"""``docs.dataclass-attributes`` — public dataclass payloads need field context."""
+"""``docs.dataclass-attributes`` - public dataclass payloads need field context."""
 
 import ast
 import re

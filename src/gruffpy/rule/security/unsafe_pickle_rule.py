@@ -1,4 +1,4 @@
-"""``security.unsafe-pickle`` — pickle-family deserialisation of non-literal input.
+"""``security.unsafe-pickle`` - pickle-family deserialisation of non-literal input.
 
 ``pickle.loads(b'...')`` against a literal byte string is safe (well, as safe as
 shipping a literal bytes object can be). ``pickle.loads(user_input)`` is the
@@ -6,7 +6,7 @@ canonical RCE vector. The rule fires when the first argument is not a literal.
 
 Also covers the same shape across the pickle-compatible deserialiser family:
 ``cPickle`` (legacy), ``pickle.Unpickler(file).load()``, ``dill.loads``/``load``,
-``marshal.loads``/``load`` (bytecode deserialisation — accepts attacker-built
+``marshal.loads``/``load`` (bytecode deserialisation - accepts attacker-built
 code objects), ``shelve.open`` (a thin pickle wrapper over DBM), and
 ``jsonpickle.decode`` (reconstructs arbitrary classes from JSON).
 """
@@ -58,7 +58,7 @@ class UnsafePickleRule(Rule):
         """Describe the unsafe-pickle rule as a high-confidence ERROR.
 
         ERROR severity because pickle deserialisation of untrusted input is
-        a textbook RCE vector — there's no defensive ``loads`` mode that
+        a textbook RCE vector - there's no defensive ``loads`` mode that
         makes it safe.
 
         Returns:
@@ -76,14 +76,14 @@ class UnsafePickleRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal first argument.
 
-        A literal bytes or str first argument is skipped — it can't be
+        A literal bytes or str first argument is skipped - it can't be
         attacker-controlled. The chained form
         ``pickle.Unpickler(file).load()`` is also detected (and the
         ``cPickle``/``dill`` equivalents) regardless of receiver shape.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per pickle deserialisation call without a literal source.
@@ -147,7 +147,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{target}(...)` deserialises a non-literal input — pickle-family "
+            f"`{target}(...)` deserialises a non-literal input - pickle-family "
             "deserialisation is a known RCE vector."
         ),
         file_path=unit.file.display_path,

@@ -2,12 +2,12 @@
 
 ## Read In This Order
 
-To get oriented quickly, read these four files in order — they cover the orchestration backbone end to end:
+To get oriented quickly, read these four files in order - they cover the orchestration backbone end to end:
 
-1. `src/gruffpy/cli.py` — entrypoint, flag wiring, exit-code selection.
-2. `src/gruffpy/rule/registry.py` — what rules exist, how per-unit and project-level rules run, how findings deduplicate.
-3. `src/gruffpy/analysis/schema.py` — the `gruff-py.analysis.v1` / `gruff-py.baseline.v1` / `gruff-py.hotspot.v1` schema strings and `AnalysisReport.to_dict()` shape.
-4. `src/gruffpy/finding/fingerprint.py` — the PHP-compatible fingerprint algorithm.
+1. `src/gruffpy/cli.py` - entrypoint, flag wiring, exit-code selection.
+2. `src/gruffpy/rule/registry.py` - what rules exist, how per-unit and project-level rules run, how findings deduplicate.
+3. `src/gruffpy/analysis/schema.py` - the `gruff-py.analysis.v1` / `gruff-py.baseline.v1` / `gruff-py.hotspot.v1` schema strings and `AnalysisReport.to_dict()` shape.
+4. `src/gruffpy/finding/fingerprint.py` - the PHP-compatible fingerprint algorithm.
 
 ## Source Tree
 
@@ -24,7 +24,7 @@ To get oriented quickly, read these four files in order — they cover the orche
 - `src/gruffpy/rule/size/` = file/class/function length and parameter/attribute count rules.
 - `src/gruffpy/rule/complexity/` = cyclomatic, cognitive, Halstead volume, maintainability index, nesting depth, and NPATH rules.
 - `src/gruffpy/rule/dead_code/` and `src/gruffpy/rule/waste/` = unused private symbols, empty bodies, unreachable code, redundant variables, and unused imports/parameters.
-- `src/gruffpy/rule/naming/` = intent-layer naming rules (PEP 8 case style is delegated to ruff's `N` rules — see ADR-004).
+- `src/gruffpy/rule/naming/` = intent-layer naming rules (PEP 8 case style is delegated to ruff's `N` rules - see ADR-004).
 - `src/gruffpy/rule/docs/` = docstring presence, parameter/return/raises consistency parsed via `docstring-parser` (ADR-005), TODO density, and missing-README checks.
 - `src/gruffpy/rule/security/` = heuristic AST-level dangerous patterns (eval/exec, unsafe pickle, SQL concat, weak crypto, shell injection, disabled SSL verify, and more).
 - `src/gruffpy/rule/sensitive_data/` = secrets and PHI/PII scanners; subclass `SourceTextRule` and run on text files as well as Python.

@@ -1,4 +1,4 @@
-"""``test-quality.pytest-coverage-source-missing`` — ``[tool.coverage.run].source`` empty or absent.
+"""``test-quality.pytest-coverage-source-missing`` - ``[tool.coverage.run].source`` empty or absent.
 
 Without an explicit source list, coverage measurement is implicit and
 misses modules that aren't imported during the suite. The rule wants
@@ -69,7 +69,7 @@ class PytestCoverageSourceMissingRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message="Coverage `source` is empty or absent — coverage may be incomplete.",
+                message="Coverage `source` is empty or absent - coverage may be incomplete.",
                 file_path="pyproject.toml",
                 line=None,
                 severity=definition.default_severity,

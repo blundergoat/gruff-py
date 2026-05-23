@@ -1,4 +1,4 @@
-"""``test-quality.sut-not-called`` — test body has no call to a function under test.
+"""``test-quality.sut-not-called`` - test body has no call to a function under test.
 
 Heuristic: scan the test body for calls whose target is NOT one of:
 
@@ -82,7 +82,7 @@ class SutNotCalledRule(Rule):
 
         Medium confidence because identifying "SUT" without project context
         is impossible; the rule reports tests whose every call is a
-        framework, builtin, or mock — a strong negative signal but not a
+        framework, builtin, or mock - a strong negative signal but not a
         proof.
 
         Returns:
@@ -109,7 +109,7 @@ class SutNotCalledRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test whose body never reaches non-framework code.
@@ -129,7 +129,7 @@ class SutNotCalledRule(Rule):
                     rule_id=definition.id,
                     message=(
                         f"Test {symbol!r} never calls a non-framework, non-mock function "
-                        f"— is the SUT exercised?"
+                        f"- is the SUT exercised?"
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
@@ -186,9 +186,9 @@ def _is_ignored_call_target(target: str) -> bool:
 
 
 def _is_module_level_name_read(node: ast.AST, module_names: frozenset[str]) -> bool:
-    # A read of any name introduced at module level — whether by `import`,
+    # A read of any name introduced at module level - whether by `import`,
     # `from X import Y`, or a module-level `NAME = ...` / `NAME: T = ...`
-    # assignment — is a SUT touch. The test author put it at module level
+    # assignment - is a SUT touch. The test author put it at module level
     # for a reason: it's either the SUT itself or a fixture computed from
     # the SUT's source. Module-level locals like ``MODULE_SOURCE =
     # _read_metadata_builder_source()`` ARE the SUT in schema/prompt-contract
@@ -197,7 +197,7 @@ def _is_module_level_name_read(node: ast.AST, module_names: frozenset[str]) -> b
 
 
 def _is_schema_inspection_access(node: ast.AST) -> bool:
-    # `Foo.model_fields` / `Foo.__annotations__` / `Foo.__fields__` — pydantic
+    # `Foo.model_fields` / `Foo.__annotations__` / `Foo.__fields__` - pydantic
     # / dataclass / TypedDict schema-inspection accessors. A test that reads
     # them is exercising the schema declaration regardless of receiver origin.
     return isinstance(node, ast.Attribute) and node.attr in _SCHEMA_INSPECTION_ATTRS
@@ -211,7 +211,7 @@ _TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset(
 def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:
     # Collects (a) names bound by module-level imports, plus (b) names bound
     # by module-level ``X = ...`` / ``X: T = ...`` assignments. Both shapes
-    # represent the test author's chosen "things this file is about" — reading
+    # represent the test author's chosen "things this file is about" - reading
     # any of them from a test body counts as a SUT touch.
     #
     # Test-framework imports are excluded (e.g. `import pytest`, `from
@@ -226,7 +226,7 @@ def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:
         return frozenset(names)
     for stmt in tree.body:
         _collect_from_module_statement(stmt, names)
-    # Also pick up ``if TYPE_CHECKING:`` imports — they participate in name
+    # Also pick up ``if TYPE_CHECKING:`` imports - they participate in name
     # binding even when guarded.
     for walked in ast.walk(tree):
         if isinstance(walked, ast.If):

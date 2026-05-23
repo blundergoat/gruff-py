@@ -28,7 +28,7 @@ Cross-impl users (gruff-php / gruff-ts) can copy the same `.gruff.yaml` between 
 
 When loading, gruff-py uses this priority order, picking the **first** that exists:
 
-1. **CLI `--config <path>`** — explicit, format auto-detected by extension (`.yaml`/`.yml` → YAML; `.toml` → TOML; anything else → TOML for legacy).
+1. **CLI `--config <path>`** - explicit, format auto-detected by extension (`.yaml`/`.yml` → YAML; `.toml` → TOML; anything else → TOML for legacy).
 2. **`.gruff.yaml`** at the project root.
 3. **`pyproject.toml`** `[tool.gruff-py]` at the project root.
 4. **Built-in defaults** from `RuleRegistry.defaults()`.
@@ -44,15 +44,15 @@ gruff-php and gruff-ts ship with `.gruff.yaml` as the canonical config. Python u
 | Option | What fails | Why rejected or accepted |
 | --- | --- | --- |
 | **Both `.gruff.yaml` and `pyproject.toml` supported, YAML wins** (accepted) | Adds a runtime dep (`pyyaml`); users surprised by precedence may misconfigure. | Accepted: cross-impl ergonomic parity + Python idiom preserved. Surface the loaded source in `gruff-py analyse` to mitigate precedence surprise. |
-| `.gruff.yaml` only — drop pyproject.toml support | Strictest cross-impl parity, but breaks existing dogfood config in `pyproject.toml`; forces every Python user into a new file. | Rejected: migration cost outweighs parity gain. |
-| `pyproject.toml` only — never accept YAML | Closest to Python convention. | Rejected: doesn't solve the cross-impl-ergonomic problem the user surfaced. |
+| `.gruff.yaml` only - drop pyproject.toml support | Strictest cross-impl parity, but breaks existing dogfood config in `pyproject.toml`; forces every Python user into a new file. | Rejected: migration cost outweighs parity gain. |
+| `pyproject.toml` only - never accept YAML | Closest to Python convention. | Rejected: doesn't solve the cross-impl-ergonomic problem the user surfaced. |
 | Different YAML keys than gruff-php (Python-native names) | Easier for Python users; harder for cross-impl users. | Rejected: same option names is the load-bearing parity benefit. |
 
 ## Consequences
 
-- `pyyaml>=6.0` becomes a runtime dependency (~500KB install). `safe_load` only — no arbitrary tag construction. Crosses the Ask First boundary in `CLAUDE.md` for `pyproject.toml` dependency edits.
+- `pyyaml>=6.0` becomes a runtime dependency (~500KB install). `safe_load` only - no arbitrary tag construction. Crosses the Ask First boundary in `CLAUDE.md` for `pyproject.toml` dependency edits.
 - `[tool.gruff-py.rules]` in TOML uses keys like `"size.file-length"` (quoted because of the dot). In YAML, the same key is `rules.size.file-length` (unquoted; dots in YAML keys are legal). Both forms produce the same `AnalysisConfig` shape.
-- Cross-impl JSON byte-equivalence (per `.goat-flow/footguns/compatibility.md`) is unaffected — config affects WHICH rules run, not the JSON shape they emit.
+- Cross-impl JSON byte-equivalence (per `.goat-flow/footguns/compatibility.md`) is unaffected - config affects WHICH rules run, not the JSON shape they emit.
 
 ## Reversibility
 

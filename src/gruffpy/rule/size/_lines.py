@@ -1,7 +1,7 @@
 """Shared line-counting helper for size pillar rules.
 
-Defined by ADR-002. Returns the raw line span — decorator line through
-`end_lineno`, inclusive — for every AST node the size pillar scores. Cross-impl
+Defined by ADR-002. Returns the raw line span - decorator line through
+`end_lineno`, inclusive - for every AST node the size pillar scores. Cross-impl
 parity with gruff-php depends on this being the single source of truth.
 """
 

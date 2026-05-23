@@ -1,7 +1,7 @@
-"""``sensitive-data.private-key`` — PEM-formatted private key header in source.
+"""``sensitive-data.private-key`` - PEM-formatted private key header in source.
 
 Detects ``-----BEGIN <ANY> PRIVATE KEY-----`` for RSA, EC, DSA, ED25519, and
-OpenSSH formats. The header alone is sufficient signal — the rest of the PEM
+OpenSSH formats. The header alone is sufficient signal - the rest of the PEM
 body doesn't need to validate to confirm the leak.
 """
 
@@ -51,13 +51,13 @@ class PrivateKeyRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag any ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM header in source.
 
-        Covers RSA, EC, DSA, ED25519, and OpenSSH variants — the rule
+        Covers RSA, EC, DSA, ED25519, and OpenSSH variants - the rule
         doesn't validate the rest of the PEM body because committed
         headers alone leak the intent and require rotation.
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per PEM header occurrence.

@@ -1,4 +1,4 @@
-# ADR-005: Docstring style detection — parser choice
+# ADR-005: Docstring style detection - parser choice
 
 **Status:** Accepted
 **Date:** 2026-05-14
@@ -8,7 +8,7 @@
 
 gruff-py's documentation pillar parses docstrings using **`docstring-parser`** (PyPI, MIT, pure Python, 22 KB wheel, zero runtime dependencies, ships `py.typed`). The library is wrapped behind one in-tree helper, `src/gruffpy/rule/docs/_docstring_parser.py`, that exposes a `ParsedDocstring` dataclass normalising Google / NumPy / Sphinx-`:param:` output into a single shape consumed by `docs.missing-param-doc`, `docs.missing-return-doc`, `docs.missing-raises-doc`, and `docs.stale-param-doc`.
 
-Style auto-detection sequence inside the wrapper: try the library's Google parser, then NumPy, then Sphinx (`epydoc`/`rest`). If all three fail, the wrapper returns `None` and the field-mismatch rules emit zero findings for that docstring (they require parsable input — presence-only checks like `docs.missing-function-docstring` are unaffected).
+Style auto-detection sequence inside the wrapper: try the library's Google parser, then NumPy, then Sphinx (`epydoc`/`rest`). If all three fail, the wrapper returns `None` and the field-mismatch rules emit zero findings for that docstring (they require parsable input - presence-only checks like `docs.missing-function-docstring` are unaffected).
 
 The library is the only third-party docstring parser pinned by gruff-py. Rules MUST consume `_docstring_parser.py`; rules MUST NOT import `docstring_parser` directly. This isolates the dependency behind one swap point.
 
@@ -22,7 +22,7 @@ Three options are available and the milestone explicitly requires this ADR to ev
 |---|---|---|---|---|
 | **(a) `docstring-parser` on PyPI** | MIT | Active; latest 0.18.0 (April 2026); Python 3.8–3.14 declared support | Returns a typed `Docstring` AST per style; small public surface (`parse(text, style=Style.AUTO)`). `py.typed` marker ships. | **22 KB wheel** (verified via `pip download --no-deps`; 73 KB uncompressed across 9 files); **zero runtime deps**. PyPI JSON metadata's larger figure was bytes, not KB. |
 | **(b) Vendor a fork of pydoclint's parser** | MIT (pydoclint), MIT (`docstring_parser_fork`) | pydoclint itself depends on `docstring_parser_fork` rather than upstream `docstring-parser`. Vendoring means inheriting whatever delta motivated the fork without owning the divergence-tracking work. | pydoclint's parser is tightly coupled to its linting passes; extracting just the parser requires cutting out checker code we don't want. | Smaller than installing pydoclint itself but adds in-tree maintenance load. |
-| **(c) Hand-roll a Google / NumPy / Sphinx tokeniser** | Native | Owned in-tree | Cleanest — produces gruff's own dataclasses directly. | Zero new third-party deps. Estimated ~200–400 LOC plus a fixture corpus for each style's edge cases (indented continuations, mixed type-hint syntax, `Args:` vs `Parameters:`, ReST field-list grouping, type-in-name like `param (int):` vs `param: int`). |
+| **(c) Hand-roll a Google / NumPy / Sphinx tokeniser** | Native | Owned in-tree | Cleanest - produces gruff's own dataclasses directly. | Zero new third-party deps. Estimated ~200–400 LOC plus a fixture corpus for each style's edge cases (indented continuations, mixed type-hint syntax, `Args:` vs `Parameters:`, ReST field-list grouping, type-in-name like `param (int):` vs `param: int`). |
 
 The verified 22 KB wheel removes the install-size argument that initially looked like a strike against (a). With that adjusted, (a) wins on every axis the milestone asked about: license is permissive, maintenance is upstream and active, AST integration is exactly what M06 needs, and the install footprint is smaller than the YAML loader gruff-py already pins.
 

@@ -1,4 +1,4 @@
-"""``security.variable-import`` — dynamic module name passed to importlib / ``__import__``.
+"""``security.variable-import`` - dynamic module name passed to importlib / ``__import__``.
 
 Fires on ``importlib.import_module(<non-literal>)`` and ``__import__(<non-literal>)``.
 ``exec("import " + name)`` is caught by ``security.dangerous-function-call`` so
@@ -61,7 +61,7 @@ class VariableImportRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per dynamic-module-name import call.

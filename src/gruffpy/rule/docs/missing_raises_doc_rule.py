@@ -1,4 +1,4 @@
-"""``docs.missing-raises-doc`` — documented function that raises but lacks a Raises section.
+"""``docs.missing-raises-doc`` - documented function that raises but lacks a Raises section.
 
 Public functions only. Walks the body for ``raise`` statements, stopping at
 nested function/lambda boundaries (those raises belong to the nested scope).

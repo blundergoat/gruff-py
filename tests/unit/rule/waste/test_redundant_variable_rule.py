@@ -43,7 +43,7 @@ def test_assign_then_return_with_complex_rhs_fires():
 
 
 def test_variable_used_elsewhere_does_not_fire():
-    # x is used in the print statement BEFORE the return — not redundant.
+    # x is used in the print statement BEFORE the return - not redundant.
     src = "def f():\n    x = 1\n    print(x)\n    x = 2\n    return x\n"
     findings = RedundantVariableRule().analyse(_unit(src), _ctx())
     assert findings == []

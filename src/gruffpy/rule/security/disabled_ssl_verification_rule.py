@@ -1,4 +1,4 @@
-"""``security.disabled-ssl-verification`` — explicit SSL/TLS verify disablement.
+"""``security.disabled-ssl-verification`` - explicit SSL/TLS verify disablement.
 
 Catches:
 
@@ -75,7 +75,7 @@ class DisabledSslVerificationRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per TLS-verification-disabling call site.

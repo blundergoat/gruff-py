@@ -1,4 +1,4 @@
-"""``docs.todo-density`` — too many TODO/FIXME/HACK/XXX/BUG markers per 1000 lines.
+"""``docs.todo-density`` - too many TODO/FIXME/HACK/XXX/BUG markers per 1000 lines.
 
 Operates on file content (comments and string literals), not the AST. Density is
 ``markers / max(1, line_count) * 1000`` and compared against the configured

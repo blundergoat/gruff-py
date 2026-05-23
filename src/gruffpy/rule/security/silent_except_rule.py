@@ -1,7 +1,7 @@
-"""``security.silent-except`` — ``except:`` or ``except Exception:`` body is pass-only.
+"""``security.silent-except`` - ``except:`` or ``except Exception:`` body is pass-only.
 
 Suppressed when the handler body contains any logging call (``logger.error``,
-``logging.exception``, ``print``, etc.) — that's not silent, even if the
+``logging.exception``, ``print``, etc.) - that's not silent, even if the
 exception is then swallowed.
 """
 
@@ -53,12 +53,12 @@ class SilentExceptRule(Rule):
         """Flag ``except:`` / ``except Exception:`` whose body is just ``pass`` / ``...``.
 
         A logging call in the handler (``logger.error``,
-        ``logging.exception``, ``print``, etc.) defuses the rule — the
+        ``logging.exception``, ``print``, etc.) defuses the rule - the
         exception is observable even when swallowed.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per pass-only wide ``except`` handler that doesn't log.

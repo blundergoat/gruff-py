@@ -69,7 +69,7 @@ def test_classmethod_excludes_cls():
 def test_module_level_function_does_not_exclude_first_arg():
     # 5 module-level params -> at threshold (not above) -> no finding
     source = "def f(self, a, b, c, d):\n    return a\n"
-    # 'self' is just a name when not inside a class — counts as a parameter
+    # 'self' is just a name when not inside a class - counts as a parameter
     findings = ParameterCountRule().analyse(_make_unit(source), _ctx())
     assert findings == []
 

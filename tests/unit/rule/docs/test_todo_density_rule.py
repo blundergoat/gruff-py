@@ -33,7 +33,7 @@ def test_low_density_emits_nothing():
     body = "\n".join(f"x{i} = {i}" for i in range(100))
     src = f"# {_todo_marker()}: refactor\n{body}\n"
     findings = TodoDensityRule().analyse(make_unit(src), default_ctx())
-    # 1 marker in ~101 lines = ~10/1000 — at threshold, NOT above. No finding.
+    # 1 marker in ~101 lines = ~10/1000 - at threshold, NOT above. No finding.
     assert findings == []
 
 

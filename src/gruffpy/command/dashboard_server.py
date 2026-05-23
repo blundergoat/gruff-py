@@ -153,7 +153,7 @@ def create_dashboard_server(
 
             Args:
                 format: Printf-style format from the base handler.
-                args: Format arguments — discarded.
+                args: Format arguments - discarded.
             """
             return
 

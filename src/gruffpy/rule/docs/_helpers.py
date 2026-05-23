@@ -118,7 +118,7 @@ def has_none_only_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Return whether a function's return annotation is exactly ``None``.
 
     Used by ``docs.missing-return-doc`` to skip void-typed functions.
-    Functions without any return annotation are NOT considered void here —
+    Functions without any return annotation are NOT considered void here -
     the rule already requires an explicit non-None annotation before firing.
 
     Args:

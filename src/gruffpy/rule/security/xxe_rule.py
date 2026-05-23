@@ -1,10 +1,10 @@
-"""``security.xxe`` — stdlib / lxml XML parsers vulnerable to external entities.
+"""``security.xxe`` - stdlib / lxml XML parsers vulnerable to external entities.
 
 Catches calls to ``xml.etree.ElementTree.parse/fromstring/iterparse``,
 ``xml.sax.parse/parseString``, ``xml.dom.minidom.parse/parseString``,
 ``xml.dom.pulldom.parse/parseString``, and ``lxml.etree.parse/fromstring``.
 
-Suppresses the entire file when ``defusedxml`` is imported — assumes the
+Suppresses the entire file when ``defusedxml`` is imported - assumes the
 developer is migrating to defusedxml's hardened parsers and that any
 remaining stdlib calls are part of a transitional state.
 
@@ -93,7 +93,7 @@ class XxeRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unsafe XML parser call.
@@ -208,7 +208,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"`{target}(...)` parses XML without external-entity protections — "
+            f"`{target}(...)` parses XML without external-entity protections - "
             "XXE / billion-laughs risk."
         ),
         file_path=unit.file.display_path,

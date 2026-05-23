@@ -248,7 +248,7 @@ def compute_exit_code(
 ) -> int:
     """Derive the CLI exit code from the analysis outcome.
 
-    Exit code 2 (diagnostics) wins over 1 (findings) — a parse error
+    Exit code 2 (diagnostics) wins over 1 (findings) - a parse error
     surfaces even when the project is otherwise clean.
 
     Args:

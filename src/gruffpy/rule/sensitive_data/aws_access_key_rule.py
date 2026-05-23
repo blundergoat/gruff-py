@@ -1,4 +1,4 @@
-"""``sensitive-data.aws-access-key`` — AWS access key ID literal.
+"""``sensitive-data.aws-access-key`` - AWS access key ID literal.
 
 Pattern: ``AKIA`` + 16 uppercase alphanumeric chars. AWS access key IDs are
 20-character strings starting with ``AKIA`` (long-term keys) or ``ASIA``
@@ -59,7 +59,7 @@ class AwsAccessKeyRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per non-placeholder AWS access key literal.

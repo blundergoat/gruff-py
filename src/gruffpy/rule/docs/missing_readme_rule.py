@@ -1,4 +1,4 @@
-"""``docs.missing-readme`` — project root has no README.md / .rst / extensionless README.
+"""``docs.missing-readme`` - project root has no README.md / .rst / extensionless README.
 
 Project-scoped: every unit emits the same finding when the README is absent;
 the registry's deduplication collapses them to one. Net behaviour is "at most

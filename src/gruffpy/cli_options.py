@@ -21,7 +21,7 @@ def bind_root_group(root: click.Group) -> None:
     """Register *root* as the parent Click group that ``@<command>_command`` decorators attach to.
 
     Must be called once during CLI bootstrap before any ``@analyse_command``
-    / ``@dashboard_command`` / etc. decorator runs — otherwise ``_command``
+    / ``@dashboard_command`` / etc. decorator runs - otherwise ``_command``
     raises ``RuntimeError``.
 
     Args:

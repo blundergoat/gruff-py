@@ -5,7 +5,7 @@ Proves that:
 2. The SourceTextRule routing works for sensitive-data without new wiring:
    a planted secret in a .json file is detected, and a .py-only rule does NOT
    fire on the same file.
-3. Findings never leak the raw secret — every metadata.preview is redacted.
+3. Findings never leak the raw secret - every metadata.preview is redacted.
 """
 
 import json

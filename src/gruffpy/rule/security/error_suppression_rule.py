@@ -1,9 +1,9 @@
-"""``security.error-suppression`` — wide-exception suppression patterns.
+"""``security.error-suppression`` - wide-exception suppression patterns.
 
 Catches:
 
 - ``contextlib.suppress(Exception)`` / ``suppress(BaseException)``
-- ``try: ... except (Exception, BaseException): ...`` — tuple of wide types
+- ``try: ... except (Exception, BaseException): ...`` - tuple of wide types
 
 Distinct from ``security.silent-except``: that rule needs a pass-only body;
 this rule fires on the *type* shape regardless of body, because catching
@@ -37,7 +37,7 @@ class ErrorSuppressionRule(Rule):
 
         Advisory rather than warning because there are legitimate cases
         (top-level event loops, plugin sandboxes) where catching
-        ``Exception`` is intentional — narrower than ``BaseException`` and
+        ``Exception`` is intentional - narrower than ``BaseException`` and
         well-thought-out.
 
         Returns:
@@ -60,12 +60,12 @@ class ErrorSuppressionRule(Rule):
         ``suppress(BaseException)``; and ``except (Exception, ...)`` /
         ``except (BaseException, ...)`` tuple handlers. The plain
         ``except Exception:`` shape with a pass-only body is handled by
-        ``security.silent-except`` — this rule complements that one by
+        ``security.silent-except`` - this rule complements that one by
         catching the type-shape signal regardless of body.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per wide-suppression shape (``with suppress(...)``

@@ -19,7 +19,7 @@ def make_unit(
     """Build a text-typed ``AnalysisUnit`` (``tree=None``) for ``SourceTextRule`` tests.
 
     Sensitive-data rules subclass :class:`SourceTextRule` and operate on
-    ``unit.source`` directly — they never need the AST, so leaving the tree
+    ``unit.source`` directly - they never need the AST, so leaving the tree
     unset matches what the registry hands them at runtime.
 
     Args:

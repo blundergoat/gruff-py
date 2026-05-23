@@ -1,4 +1,4 @@
-"""``test-quality.trivial-assertion`` — ``assert True``, ``assert 1``, etc.
+"""``test-quality.trivial-assertion`` - ``assert True``, ``assert 1``, etc.
 
 Flags assertions whose left-hand side evaluates the same way every run:
 literal truthy/falsy constants, ``assert not False``, and ``self.assertTrue(True)``.
@@ -31,7 +31,7 @@ class TrivialAssertionRule(Rule):
         """Describe the trivial-assertion rule as a high-confidence warning.
 
         High confidence because ``assert True``, ``assert 1``, and
-        ``assert 1 == 1`` shapes are syntactically constant — there's no
+        ``assert 1 == 1`` shapes are syntactically constant - there's no
         legitimate runtime case where they need to be in test code.
 
         Returns:
@@ -55,7 +55,7 @@ class TrivialAssertionRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per trivial assert.

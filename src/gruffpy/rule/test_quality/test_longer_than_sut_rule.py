@@ -1,4 +1,4 @@
-"""``test-quality.test-longer-than-sut`` — test function longer than the SUT it exercises.
+"""``test-quality.test-longer-than-sut`` - test function longer than the SUT it exercises.
 
 Best-effort: identify the *target* function from the test's name
 (``test_my_function`` → ``my_function``) and compare line counts. If the test is
@@ -33,7 +33,7 @@ class TestLongerThanSutRule(Rule):
 
         Medium confidence because the SUT lookup is best-effort: only tests
         named ``test_<sut>`` get matched against an in-unit function named
-        ``<sut>`` — cross-module SUTs and method tests don't pair up.
+        ``<sut>`` - cross-module SUTs and method tests don't pair up.
 
         Returns:
             Definition with the ``ratio`` option (test-to-SUT line ratio

@@ -1,4 +1,4 @@
-"""``docs.missing-return-doc`` — non-None return type but no Returns section.
+"""``docs.missing-return-doc`` - non-None return type but no Returns section.
 
 Fires on documented public functions whose declared return type is not ``None``
 and whose docstring lacks a Returns / :returns: entry. Skips functions that

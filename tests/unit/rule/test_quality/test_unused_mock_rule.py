@@ -25,7 +25,7 @@ def test_used_mock_skipped():
 
 
 def test_bespoke_fake_not_treated_as_mock():
-    """Mock-recognition is bounded to documented mock factories — bespoke fakes are fine."""
+    """Mock-recognition is bounded to documented mock factories - bespoke fakes are fine."""
     src = (
         "class FakeService:\n    pass\n"
         "def test_foo():\n"

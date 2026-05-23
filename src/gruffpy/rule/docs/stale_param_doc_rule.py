@@ -1,4 +1,4 @@
-"""``docs.stale-param-doc`` — docstring documents a parameter not in the signature.
+"""``docs.stale-param-doc`` - docstring documents a parameter not in the signature.
 
 High-confidence rename / leftover detector. Skips ``*args``/``**kwargs`` wildcard
 matches and the implicit ``self`` / ``cls`` slot.

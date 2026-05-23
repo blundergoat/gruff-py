@@ -215,7 +215,7 @@ def test_declines_suffix_does_not_fire():
 
 def test_classify_verb_still_fires():
     # Sanity: not every verb is a predicate. `classify` returns a label, not
-    # a bool — a function called `_classify_caller_phone` that returns bool
+    # a bool - a function called `_classify_caller_phone` that returns bool
     # legitimately deserves the rename suggestion. Proves the verb allowlist
     # didn't over-broaden into "every verb".
     src = "def _classify_caller_phone(p: str) -> bool:\n    return True\n"

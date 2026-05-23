@@ -1,11 +1,11 @@
-"""``docs.useless-docstring`` — docstring without enough useful context.
+"""``docs.useless-docstring`` - docstring without enough useful context.
 
 Heuristics:
 
 - public function summary restates the function name/signature;
 - module/class/function summary is too thin after removing generic words.
 
-Conservative — docstrings with a description body or structured Params /
+Conservative - docstrings with a description body or structured Params /
 Returns / Raises sections are accepted. Dunder methods are exempt because
 constructors and other framework hooks often have one-liners by convention.
 """

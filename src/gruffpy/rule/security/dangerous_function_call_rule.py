@@ -1,4 +1,4 @@
-"""``security.dangerous-function-call`` — eval / exec / compile / dynamic __import__.
+"""``security.dangerous-function-call`` - eval / exec / compile / dynamic __import__.
 
 Fires unconditionally on ``eval``, ``exec``, and ``compile``. ``__import__``
 is only flagged when called with a non-literal first argument (literal
@@ -59,7 +59,7 @@ class DangerousFunctionCallRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per matching call site.
@@ -104,7 +104,7 @@ def _dangerous_call_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(f"Dangerous call to `{kind}()` — arbitrary code execution surface."),
+        message=(f"Dangerous call to `{kind}()` - arbitrary code execution surface."),
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,

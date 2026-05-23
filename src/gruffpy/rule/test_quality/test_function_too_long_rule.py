@@ -1,4 +1,4 @@
-"""``test-quality.test-function-too-long`` — test function exceeds line threshold.
+"""``test-quality.test-function-too-long`` - test function exceeds line threshold.
 
 Consumes the ``lines_for_size`` helper per ADR-002 so the line count
 matches the size pillar's policy byte-for-byte.
@@ -27,7 +27,7 @@ class TestFunctionTooLongRule(Rule):
 
         High confidence because line count is a deterministic structural
         metric; long tests reliably hide multiple behaviours and resist
-        future maintenance. Single-threshold per project convention —
+        future maintenance. Single-threshold per project convention -
         projects can split into separate warning/error tiers by setting
         distinct values for the ``warning`` and ``error`` keys in config.
 

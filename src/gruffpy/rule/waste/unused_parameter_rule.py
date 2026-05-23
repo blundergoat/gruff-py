@@ -73,7 +73,7 @@ class UnusedParameterRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per unused parameter, anchored at the parameter's line.

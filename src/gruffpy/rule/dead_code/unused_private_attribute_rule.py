@@ -7,7 +7,7 @@ Skip:
   named ``x``);
 - classes extending ABC/Protocol (framework hooks);
 - name-mangled attributes that the body accesses with the mangled form
-  (``self.__x`` → ``self._Cls__x`` at runtime — out of scope for v0.1).
+  (``self.__x`` → ``self._Cls__x`` at runtime - out of scope for v0.1).
 """
 
 import ast

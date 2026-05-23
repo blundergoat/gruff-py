@@ -6,7 +6,7 @@
 
 ## Decision
 
-A **composite finding** synthesized by `CompositeFindingFactory` is a `Finding` like any other and is fingerprinted by the existing `fingerprint_for(...)` algorithm in `src/gruffpy/finding/fingerprint.py`. The fields fed into the fingerprint are exactly the same as for per-unit findings — `(ruleId, file, line, endLine, column, symbol)` — encoded with PHP-style slash escaping before SHA-256, truncated to 16 hex characters.
+A **composite finding** synthesized by `CompositeFindingFactory` is a `Finding` like any other and is fingerprinted by the existing `fingerprint_for(...)` algorithm in `src/gruffpy/finding/fingerprint.py`. The fields fed into the fingerprint are exactly the same as for per-unit findings - `(ruleId, file, line, endLine, column, symbol)` - encoded with PHP-style slash escaping before SHA-256, truncated to 16 hex characters.
 
 For `design.god-method` specifically:
 
@@ -25,7 +25,7 @@ The `message` template for `design.god-method` is:
 Symbol '<symbol>' is a god method: <N> overlapping size/complexity findings on <file>:<line>.
 ```
 
-where `<N>` is `len(componentRules)`. The message is NOT part of the fingerprint (the fingerprint algorithm excludes `message`), but it IS part of the dedupe key in `RuleRegistry._deduplicate` — and must match gruff-php's template byte-for-byte. (See `gruff-php/src/Scoring/CompositeFindingFactory.php::messageFor()` for the reference template; gruff-py replicates the exact `printf`-style output.)
+where `<N>` is `len(componentRules)`. The message is NOT part of the fingerprint (the fingerprint algorithm excludes `message`), but it IS part of the dedupe key in `RuleRegistry._deduplicate` - and must match gruff-php's template byte-for-byte. (See `gruff-php/src/Scoring/CompositeFindingFactory.php::messageFor()` for the reference template; gruff-py replicates the exact `printf`-style output.)
 
 ## Context
 
@@ -37,7 +37,7 @@ Without a locked fingerprint policy, the order of contributing rule IDs in `meta
 
 | Option | What fails | Why rejected or accepted |
 | --- | --- | --- |
-| **Lock fingerprint inputs exactly as above** (accepted) | Couples composite to the per-unit fingerprint algorithm; any change in `fingerprint_for(...)` propagates to composites. | Accepted: that coupling is correct — composites ARE findings, so they MUST share the algorithm. |
+| **Lock fingerprint inputs exactly as above** (accepted) | Couples composite to the per-unit fingerprint algorithm; any change in `fingerprint_for(...)` propagates to composites. | Accepted: that coupling is correct - composites ARE findings, so they MUST share the algorithm. |
 | Use a separate fingerprint algorithm for composites | Doubles the cross-impl surface area; gruff-php and gruff-py have to maintain two algorithms in lockstep. | Rejected: needlessly increases drift risk. |
 | Hash the contributing findings' fingerprints | Order-dependent; would require sorting fingerprints; gruff-php does not do this. | Rejected: diverges from gruff-php. |
 | Skip fingerprinting composites | Breaks baseline diff for `design.god-method`; user can never suppress a specific composite. | Rejected: composites must be baseline-suppressible like any finding. |
@@ -52,5 +52,5 @@ Without a locked fingerprint policy, the order of contributing rule IDs in `meta
 
 **One-way door**, same compatibility constraint as ADR-002 and ADR-003. Revisit triggers:
 
-- gruff-php changes its `CompositeFindingFactory::messageFor()` template — coordinate the same change on gruff-py side and bump the baseline schema.
-- The `fingerprint_for(...)` algorithm changes — propagate through composites.
+- gruff-php changes its `CompositeFindingFactory::messageFor()` template - coordinate the same change on gruff-py side and bump the baseline schema.
+- The `fingerprint_for(...)` algorithm changes - propagate through composites.

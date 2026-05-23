@@ -1,4 +1,4 @@
-"""``size.public-method-count`` — too many public methods widen the maintenance surface."""
+"""``size.public-method-count`` - too many public methods widen the maintenance surface."""
 
 import ast
 
@@ -44,7 +44,7 @@ class PublicMethodCountRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per class whose public-method count exceeds the threshold.
 
-        Only direct methods of the class body are counted — nested classes
+        Only direct methods of the class body are counted - nested classes
         are reported separately. The metric is a proxy for the size of the
         class's external API.
 

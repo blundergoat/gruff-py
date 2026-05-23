@@ -58,7 +58,7 @@ def test_non_flask_file_skipped():
 
 
 def test_other_run_with_debug_in_flask_file_emits():
-    """In a Flask file, any *.run(debug=True) is flagged — framework gate is file-level."""
+    """In a Flask file, any *.run(debug=True) is flagged - framework gate is file-level."""
     src = "from flask import Flask\nfrom unrelated import worker\nworker.run(debug=True)\n"
     findings = FlaskDebugEnabledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1

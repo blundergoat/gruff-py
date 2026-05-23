@@ -1,8 +1,8 @@
-"""``security.insecure-temp-file`` — race-prone temp-file APIs and hardcoded /tmp paths.
+"""``security.insecure-temp-file`` - race-prone temp-file APIs and hardcoded /tmp paths.
 
 Two unsafe patterns:
 
-- ``tempfile.mktemp()`` — returns a path without creating the file, leaving
+- ``tempfile.mktemp()`` - returns a path without creating the file, leaving
   a TOCTOU window in which an attacker can pre-create the path (often as a
   symlink). The replacement is ``tempfile.mkstemp()`` /
   ``tempfile.NamedTemporaryFile()``, which atomically create the file.
@@ -36,7 +36,7 @@ _FILE_API_LEAVES: frozenset[str] = frozenset(
 _PATH_CONSTRUCTORS: frozenset[str] = frozenset({"Path", "PurePath", "PosixPath", "PurePosixPath"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("mktemp", "/tmp/", "/var/tmp/")
 _MKTEMP_REMEDIATION = (
-    "Use `tempfile.NamedTemporaryFile()` or `tempfile.mkstemp()` — both "
+    "Use `tempfile.NamedTemporaryFile()` or `tempfile.mkstemp()` - both "
     "atomically create the file, eliminating the TOCTOU window that "
     "`mktemp()` leaves open."
 )
@@ -78,7 +78,7 @@ class InsecureTempFileRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per mktemp call or per hardcoded /tmp path passed
@@ -130,7 +130,7 @@ def _build_mktemp_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            "`tempfile.mktemp()` returns a path without creating the file — TOCTOU race risk."
+            "`tempfile.mktemp()` returns a path without creating the file - TOCTOU race risk."
         ),
         file_path=unit.file.display_path,
         line=call.lineno,
@@ -163,7 +163,7 @@ def _build_tmp_path_finding(
         rule_id=definition.id,
         message=(
             f"`{leaf}('{matched_literal}'...)` uses a hardcoded world-writeable "
-            "tmp path — symlink / race risk."
+            "tmp path - symlink / race risk."
         ),
         file_path=unit.file.display_path,
         line=call.lineno,

@@ -1,4 +1,4 @@
-"""``test-quality.pytest-strict-config-missing`` — pyproject lacks strict pytest flags.
+"""``test-quality.pytest-strict-config-missing`` - pyproject lacks strict pytest flags.
 
 Fires at most once per analyse run, gated on at least one test-shaped unit
 being in scope (no point flagging configuration on a non-test analyse).

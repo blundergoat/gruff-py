@@ -1,4 +1,4 @@
-"""``docs.missing-function-docstring`` — public function/method without a docstring.
+"""``docs.missing-function-docstring`` - public function/method without a docstring.
 
 Public = the name does not start with ``_``. Dunder methods, abstract methods,
 pytest-style ``test_*`` functions in test files, ``@typing.overload`` stubs,
@@ -108,7 +108,7 @@ def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> b
     # Nested function whose name is referenced at most once inside the
     # enclosing function is treated as a closure / one-shot callback (regex
     # sub callbacks, SSE `event_generator`, mock-class method stubs). Forcing
-    # a docstring on these is noise — the call-site context already documents
+    # a docstring on these is noise - the call-site context already documents
     # intent.
     enclosing = next(
         (p for p in reversed(parents) if isinstance(p, ast.FunctionDef | ast.AsyncFunctionDef)),
@@ -125,7 +125,7 @@ def _name_reference_count_excluding(root: ast.AST, name: str, exclude: ast.AST) 
     while stack:
         current = stack.pop()
         if current is exclude:
-            # Don't descend into the closure's own body — recursive references
+            # Don't descend into the closure's own body - recursive references
             # inside the closure shouldn't count toward "external callsites".
             continue
         if isinstance(current, ast.Name) and current.id == name:

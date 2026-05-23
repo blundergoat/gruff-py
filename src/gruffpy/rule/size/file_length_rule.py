@@ -1,4 +1,4 @@
-"""``size.file-length`` — very large files slow navigation and review."""
+"""``size.file-length`` - very large files slow navigation and review."""
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding

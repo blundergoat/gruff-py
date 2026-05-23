@@ -54,11 +54,11 @@ class EmptyFunctionRule(Rule):
         """Flag functions and methods whose body is just ``pass`` or ``...``.
 
         Skips abstract methods, ``@typing.overload`` stubs, Protocol stubs,
-        and framework-hook decorators — these legitimately have empty bodies.
+        and framework-hook decorators - these legitimately have empty bodies.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per non-exempt empty function definition.

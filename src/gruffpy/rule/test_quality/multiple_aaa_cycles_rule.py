@@ -1,4 +1,4 @@
-"""``test-quality.multiple-aaa-cycles`` (opt-in) — test executes multiple Arrange-Act-Assert cycles.
+"""``test-quality.multiple-aaa-cycles`` (opt-in) - test executes multiple Arrange-Act-Assert cycles.
 
 Heuristic: a test that has assertions interleaved with non-assertion statements
 multiple times probably exercises multiple behaviours. Default-off; users
@@ -32,7 +32,7 @@ class MultipleAaaCyclesRule(Rule):
         """Describe the multiple-AAA-cycles rule as an opt-in low-confidence stylistic advisory.
 
         Low confidence and default-off because identifying "cycles" by
-        assert-block boundaries is fuzzy — interleaved arrange/assert
+        assert-block boundaries is fuzzy - interleaved arrange/assert
         statements can look like multiple cycles when they aren't.
 
         Returns:

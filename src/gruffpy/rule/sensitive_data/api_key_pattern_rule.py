@@ -1,4 +1,4 @@
-"""``sensitive-data.api-key-pattern`` — vendor API key shapes.
+"""``sensitive-data.api-key-pattern`` - vendor API key shapes.
 
 Recognises Stripe (``sk_live_*``/``rk_live_*``), GitHub (``ghp_*``/``gho_*``/
 ``ghu_*``/``ghs_*``/``ghr_*``), Slack (``xoxb-*``/``xoxp-*``/``xoxa-*``/
@@ -71,7 +71,7 @@ class ApiKeyPatternRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per detected vendor key, with a redacted preview.

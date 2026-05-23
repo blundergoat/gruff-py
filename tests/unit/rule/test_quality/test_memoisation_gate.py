@@ -2,7 +2,7 @@
 
 The helper MUST memoise across rules. This test diffs the ``compute_count``
 counter before/after invoking the full registry on a single unit and asserts
-the delta is 1, not N — proving every test-quality rule shares the cached scope.
+the delta is 1, not N - proving every test-quality rule shares the cached scope.
 """
 
 from gruffpy.rule.registry import RuleRegistry

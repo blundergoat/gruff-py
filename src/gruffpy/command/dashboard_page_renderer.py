@@ -17,7 +17,7 @@ class DashboardPageRenderer:
     def dashboard_html(self, state: dict[str, str]) -> str:
         """Return the dashboard shell page seeded with *state* in the form fields.
 
-        Inlines CSS and JS so the shell is fully self-contained — no external
+        Inlines CSS and JS so the shell is fully self-contained - no external
         asset fetches, mirroring gruff-php's no-assets dashboard.
 
         Args:
@@ -154,7 +154,7 @@ class DashboardPageRenderer:
     def loading_frame(self) -> str:
         """Return the ``Ready to scan.`` placeholder injected via the iframe ``srcdoc``.
 
-        Shown until the first ``/scan`` response loads — keeps the dashboard
+        Shown until the first ``/scan`` response loads - keeps the dashboard
         visually consistent on initial paint.
 
         Returns:

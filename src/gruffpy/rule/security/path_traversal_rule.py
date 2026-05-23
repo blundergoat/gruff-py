@@ -1,4 +1,4 @@
-"""``security.path-traversal`` — filesystem sinks reached by user-controlled paths.
+"""``security.path-traversal`` - filesystem sinks reached by user-controlled paths.
 
 When user-controlled input flows into a file-API call (``open``,
 ``shutil.copyfile``, ``pathlib.Path(...).read_text()``), the path can
@@ -12,17 +12,17 @@ source in the same function.
 
 Recognised sinks (file gated to web-framework imports):
 
-- ``open(<path>, ...)`` — first argument.
-- ``os.remove(<path>)``, ``os.unlink(<path>)`` — first argument.
-- ``shutil.copyfile/copy/copy2/move/rename(<src>, ...)`` — source argument.
+- ``open(<path>, ...)`` - first argument.
+- ``os.remove(<path>)``, ``os.unlink(<path>)`` - first argument.
+- ``shutil.copyfile/copy/copy2/move/rename(<src>, ...)`` - source argument.
 - ``pathlib.Path(<path>).read_text/read_bytes/write_text/write_bytes/open(...)``
-  — chained shape; the rule inspects the path passed to ``Path(...)``.
+  - chained shape; the rule inspects the path passed to ``Path(...)``.
 
 Recognised sanitisers (their return values are treated as untainted):
 
-- ``secure_filename`` (Werkzeug) — strips ``..``, absolute prefixes, and
+- ``secure_filename`` (Werkzeug) - strips ``..``, absolute prefixes, and
   separators.
-- ``os.path.basename`` — strips any directory component.
+- ``os.path.basename`` - strips any directory component.
 
 The assigned-then-called form (``p = Path(tainted); p.read_text()``)
 requires Path-aware identifier propagation and is out of scope for v1.
@@ -105,7 +105,7 @@ class PathTraversalRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per call site whose path argument is tainted.
@@ -170,7 +170,7 @@ def _build_finding(
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,
-        message=(f"`{target}(...)` reads/writes a user-controlled path — path traversal risk."),
+        message=(f"`{target}(...)` reads/writes a user-controlled path - path traversal risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -1,14 +1,14 @@
 """Private function/method never called in its enclosing scope.
 
 A private function/method has a name starting with ``_`` (single underscore)
-or ``__`` (double underscore — name-mangled). The rule scans the enclosing
+or ``__`` (double underscore - name-mangled). The rule scans the enclosing
 scope (module for module-level functions, class for methods) and reports
 when the name is never referenced.
 
 Skip:
 
 - names listed in ``__all__`` (intentional re-exports);
-- dunder methods (``__init__``, ``__repr__``, etc.) — they ARE callable by
+- dunder methods (``__init__``, ``__repr__``, etc.) - they ARE callable by
   the framework even when not explicitly referenced;
 - abstract methods, overload stubs, Protocol method stubs;
 - methods of classes extending a framework base (the protocol calls them);

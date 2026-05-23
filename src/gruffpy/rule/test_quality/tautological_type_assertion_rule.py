@@ -1,4 +1,4 @@
-"""``test-quality.tautological-type-assertion`` — ``isinstance(x, type(x))`` and friends.
+"""``test-quality.tautological-type-assertion`` - ``isinstance(x, type(x))`` and friends.
 
 Detects assertion-shaped expressions that are always true:
 
@@ -35,7 +35,7 @@ class TautologicalTypeAssertionRule(Rule):
         """Describe the tautological-type-assertion rule as a medium-confidence advisory.
 
         Medium confidence because the rule's structural-equality check is
-        intentionally shallow — it catches ``isinstance(x, type(x))`` and
+        intentionally shallow - it catches ``isinstance(x, type(x))`` and
         ``type(x) is type(x)`` but not semantically equivalent rewrites.
 
         Returns:
@@ -59,7 +59,7 @@ class TautologicalTypeAssertionRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per ``assert`` whose ``test`` matches a tautological
@@ -81,7 +81,7 @@ class TautologicalTypeAssertionRule(Rule):
                     Finding(
                         rule_id=definition.id,
                         message=(
-                            f"Test {symbol!r} asserts a tautological type relation — always true."
+                            f"Test {symbol!r} asserts a tautological type relation - always true."
                         ),
                         file_path=unit.file.display_path,
                         line=node.lineno,
@@ -124,7 +124,7 @@ def _is_tautology(expr: ast.expr) -> bool:
 
 
 def _is_same_expr(a: ast.expr, b: ast.expr) -> bool:
-    """Shallow structural equality — good enough for tautology detection."""
+    """Shallow structural equality - good enough for tautology detection."""
     if type(a) is not type(b):
         return False
     if isinstance(a, ast.Name) and isinstance(b, ast.Name):

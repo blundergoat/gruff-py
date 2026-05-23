@@ -1,4 +1,4 @@
-"""``test-quality.empty-parametrize`` — ``@pytest.mark.parametrize`` with an empty cases list.
+"""``test-quality.empty-parametrize`` - ``@pytest.mark.parametrize`` with an empty cases list.
 
 A parametrize decorator with an empty list silently skips the test.
 """
@@ -28,7 +28,7 @@ class EmptyParametrizeRule(Rule):
         """Describe the empty-parametrize rule as a high-confidence warning.
 
         High confidence because an empty cases list to ``@pytest.mark.parametrize``
-        is unambiguously a bug — pytest silently skips the test rather than
+        is unambiguously a bug - pytest silently skips the test rather than
         flagging it.
 
         Returns:
@@ -52,7 +52,7 @@ class EmptyParametrizeRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per parametrize decorator with an empty cases sequence.

@@ -1,4 +1,4 @@
-"""``test-quality.naming-consistency`` — mixed test-naming conventions in one file.
+"""``test-quality.naming-consistency`` - mixed test-naming conventions in one file.
 
 Emits once per file where two or more of these conventions coexist among
 module-level test functions / classes:
@@ -55,7 +55,7 @@ class NamingConsistencyRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             A single file-anchored finding listing the observed conventions,

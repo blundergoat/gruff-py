@@ -7,7 +7,7 @@ Implements the bounded posture documented in
 - explicit, finite source set (web-framework request attrs + FastAPI
   parameter sources);
 - explicit sanitiser allowlist passed in by each consumer rule;
-- conservative branch joins (intersection — a name stays tainted only if
+- conservative branch joins (intersection - a name stays tainted only if
   tainted in every branch);
 - reassignment kills taint; augmented assignment preserves taint;
 - nested function bodies analyse with a fresh scope;

@@ -1,11 +1,11 @@
-"""``security.hardcoded-framework-secret-key`` — Flask/Django SECRET_KEY = '<literal>'.
+"""``security.hardcoded-framework-secret-key`` - Flask/Django SECRET_KEY = '<literal>'.
 
 A module-scope assignment of the form ``SECRET_KEY = "..."`` in a file that
 imports Flask or Django is the canonical anti-pattern: the secret is now
 in version control, in every developer's checkout, and unrotatable across
 environments.
 
-The rule is distinct from ``sensitive-data.high-entropy-string`` —
+The rule is distinct from ``sensitive-data.high-entropy-string`` -
 high-entropy fires on the literal's randomness, this rule fires on the
 *shape* (``SECRET_KEY = "..."``) regardless of how innocuous the literal
 looks. A development placeholder like ``SECRET_KEY = "dev-key"`` is also
@@ -68,14 +68,14 @@ class HardcodedFrameworkSecretKeyRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag module-scope ``SECRET_KEY = "..."`` in Flask/Django files.
 
-        Walks only the module body — assignments inside functions, classes,
+        Walks only the module body - assignments inside functions, classes,
         or branches are skipped. The framework gate (Flask or Django
         imported) keeps the rule from firing on unrelated modules that
         happen to have a constant named ``SECRET_KEY``.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per module-scope SECRET_KEY assignment with a
@@ -126,7 +126,7 @@ def _build_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            "Module-scope `SECRET_KEY` is assigned a string literal — read "
+            "Module-scope `SECRET_KEY` is assigned a string literal - read "
             "it from the environment instead."
         ),
         file_path=unit.file.display_path,

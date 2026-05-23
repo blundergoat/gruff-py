@@ -1,4 +1,4 @@
-"""``test-quality.mystery-guest`` — test depends on opaque external state.
+"""``test-quality.mystery-guest`` - test depends on opaque external state.
 
 Heuristic: the test calls ``open(...)``, ``requests.*``, ``urllib.*``,
 ``socket.*``, or other clear network / filesystem / DB I/O without using a
@@ -64,7 +64,7 @@ class MysteryGuestRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test that reaches into external state, with the
@@ -84,7 +84,7 @@ class MysteryGuestRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Test {symbol!r} touches external state via `{target_found}` — "
+                        f"Test {symbol!r} touches external state via `{target_found}` - "
                         f"non-hermetic dependency."
                     ),
                     file_path=unit.file.display_path,

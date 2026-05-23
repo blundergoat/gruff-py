@@ -1,4 +1,4 @@
-"""``test-quality.loop-in-test`` — ``for`` / ``while`` in a test body.
+"""``test-quality.loop-in-test`` - ``for`` / ``while`` in a test body.
 
 Loops in tests hide assertion-per-iteration semantics and obscure failure
 attribution. Prefer ``@pytest.mark.parametrize`` for case enumeration.
@@ -32,7 +32,7 @@ class LoopInTestRule(Rule):
 
         Medium confidence: most loops in tests do hide per-iteration assertions
         that should be parametrised, but some legitimate cases exist (setting
-        up fixture data) — hence advisory rather than warning.
+        up fixture data) - hence advisory rather than warning.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -55,7 +55,7 @@ class LoopInTestRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per test function containing a loop, anchored at the
@@ -75,7 +75,7 @@ class LoopInTestRule(Rule):
                     Finding(
                         rule_id=definition.id,
                         message=(
-                            f"Test {symbol!r} contains a loop — prefer "
+                            f"Test {symbol!r} contains a loop - prefer "
                             f"`@pytest.mark.parametrize` for case enumeration."
                         ),
                         file_path=unit.file.display_path,

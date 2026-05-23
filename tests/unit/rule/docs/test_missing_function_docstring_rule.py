@@ -91,7 +91,7 @@ def test_property_setter_skipped():
 
 def test_nested_single_callsite_regex_callback_skipped():
     # The regex callback `replace` is referenced once inside its enclosing
-    # function — passed to re.sub. Forcing a docstring on this kind of
+    # function - passed to re.sub. Forcing a docstring on this kind of
     # closure is noise.
     src = (
         "import re\n"

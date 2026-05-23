@@ -1,4 +1,4 @@
-"""``sensitive-data.jwt-token`` — JWT literal in source.
+"""``sensitive-data.jwt-token`` - JWT literal in source.
 
 Pattern: three base64url segments joined by ``.``. The header almost always
 starts ``eyJ`` (the base64 of ``{"``). False positives are possible on
@@ -32,7 +32,7 @@ class JwtTokenRule(SourceTextRule):
         """Describe the JWT-token rule as a high-confidence warning.
 
         The ``eyJ`` prefix corresponds to the base64 of the standard JWT
-        header ``{"`` — false positives are rare even on large corpora.
+        header ``{"`` - false positives are rare even on large corpora.
 
         Returns:
             Definition for the JWT-token rule under the sensitive-data pillar.
@@ -51,7 +51,7 @@ class JwtTokenRule(SourceTextRule):
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per JWT-shaped triplet, with a redacted preview.

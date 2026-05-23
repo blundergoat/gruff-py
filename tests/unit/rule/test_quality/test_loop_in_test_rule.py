@@ -20,6 +20,6 @@ def test_no_loop_skipped():
 
 
 def test_list_comprehension_not_flagged():
-    """Comprehensions aren't statement-level loops — they're expressions."""
+    """Comprehensions aren't statement-level loops - they're expressions."""
     src = "def test_foo():\n    xs = [i for i in range(3)]\n    assert len(xs) == 3\n"
     assert LoopInTestRule().analyse(make_unit(src), default_ctx()) == []

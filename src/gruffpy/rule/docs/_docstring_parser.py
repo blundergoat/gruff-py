@@ -74,7 +74,7 @@ def parse_docstring(text: str) -> ParsedDocstring | None:
 
     Returns a :class:`ParsedDocstring` with summary, description, and
     normalised param/return/raises tuples. ``None`` is returned only when
-    *text* is empty, whitespace-only, or the parser raises — in which case
+    *text* is empty, whitespace-only, or the parser raises - in which case
     field-mismatch rules should skip the docstring rather than emit findings.
 
     Args:

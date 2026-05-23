@@ -1,4 +1,4 @@
-"""``test-quality.mocking-domain-object`` (opt-in) — mock factory wraps a domain type.
+"""``test-quality.mocking-domain-object`` (opt-in) - mock factory wraps a domain type.
 
 Configurable: requires ``domain_namespaces`` option (list of dotted prefixes
 that identify the project's domain types). The rule fires when a mock factory's
@@ -33,7 +33,7 @@ class MockingDomainObjectRule(Rule):
         """Describe the mocking-domain-object rule as an opt-in medium-confidence advisory.
 
         Default-disabled because the rule cannot identify "domain"
-        namespaces without project-specific configuration — users must
+        namespaces without project-specific configuration - users must
         opt in by listing dotted prefixes in ``domain_namespaces``.
 
         Returns:

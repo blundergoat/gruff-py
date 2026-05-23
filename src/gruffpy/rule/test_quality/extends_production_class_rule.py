@@ -1,4 +1,4 @@
-"""``test-quality.extends-production-class`` — test class inherits from production code.
+"""``test-quality.extends-production-class`` - test class inherits from production code.
 
 Tests should not subclass the code they're testing. Doing so couples the test to
 internal behaviour and risks bypassing the public API. The rule fires on
@@ -68,7 +68,7 @@ class ExtendsProductionClassRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per offending ``Test*`` class.

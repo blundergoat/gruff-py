@@ -1,4 +1,4 @@
-"""``docs.missing-class-docstring`` — ``class Foo`` without a docstring.
+"""``docs.missing-class-docstring`` - ``class Foo`` without a docstring.
 
 Exempts Protocols, ABCs, TypedDicts, NamedTuples, Enum-like bases, and
 ``@dataclass``-decorated classes only when ``class_dataclass_exempt`` is set

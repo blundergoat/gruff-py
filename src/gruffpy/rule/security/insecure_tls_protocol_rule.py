@@ -1,4 +1,4 @@
-"""``security.insecure-tls-protocol`` — explicit downgrade to SSLv2/v3 or TLSv1/1.1.
+"""``security.insecure-tls-protocol`` - explicit downgrade to SSLv2/v3 or TLSv1/1.1.
 
 Matches ``ssl.<protocol>`` attribute references where the protocol is one of
 the deprecated constants (``PROTOCOL_SSLv2``, ``PROTOCOL_SSLv3``,
@@ -39,7 +39,7 @@ _SOURCE_NEEDLES: tuple[str, ...] = (
     "PROTOCOL_SSLv23",
 )
 _REMEDIATION = (
-    "Use a modern TLS protocol — prefer `ssl.PROTOCOL_TLS_CLIENT` or "
+    "Use a modern TLS protocol - prefer `ssl.PROTOCOL_TLS_CLIENT` or "
     "`ssl.PROTOCOL_TLS_SERVER`, or `ssl.PROTOCOL_TLSv1_2` if a specific "
     "version is required. SSLv2, SSLv3, TLSv1, and TLSv1.1 have known "
     "vulnerabilities and are deprecated."
@@ -56,7 +56,7 @@ class InsecureTlsProtocolRule(Rule):
 
         ERROR severity because SSLv2/v3 and TLSv1/v1.1 are known-broken
         protocols; high confidence because the matched attribute names are
-        unambiguous — they exist only to be passed to SSL context
+        unambiguous - they exist only to be passed to SSL context
         constructors.
 
         Returns:
@@ -78,12 +78,12 @@ class InsecureTlsProtocolRule(Rule):
         The rule matches the ``ssl.<weak-protocol>`` attribute shape
         anywhere it appears (assignment, argument, return). The
         ``from ssl import PROTOCOL_TLSv1`` shape followed by a bare-name
-        reference is intentionally not matched — that import shape is rare
+        reference is intentionally not matched - that import shape is rare
         and the false-positive cost of bare-name reuse would dominate.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per insecure-protocol attribute reference.

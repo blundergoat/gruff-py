@@ -1,7 +1,7 @@
 """Parameter name doesn't match its type-hint role.
 
 When a parameter is annotated ``repo: Repository``, the conventional name is
-``repository`` — the short ``repo`` form makes calls less self-documenting.
+``repository`` - the short ``repo`` form makes calls less self-documenting.
 
 Detection:
 
@@ -374,7 +374,7 @@ def _has_shared_token(param_name: str, expected: str) -> bool:
     Both inputs are tokenised; if the lowercase token set of *param_name*
     intersects the lowercase token set of *expected*, the param is considered
     semantically related to the type. Single-letter tokens are excluded
-    (they're too common — `x`, `n`).
+    (they're too common - `x`, `n`).
     """
     param_tokens = {t for t in lower_tokens(param_name) if len(t) > 1}
     expected_tokens = {t for t in expected.split("_") if len(t) > 1}

@@ -1,4 +1,4 @@
-"""``security.insecure-random`` — ``random.*`` used for security-sensitive values.
+"""``security.insecure-random`` - ``random.*`` used for security-sensitive values.
 
 Fires on ``random.random / randint / choice / randbytes / getrandbits / uniform``
 when the call's assignment target or enclosing function name suggests
@@ -71,7 +71,7 @@ class InsecureRandomRule(Rule):
 
         Args:
             unit: Parsed source file to inspect (with parent links).
-            context: Rule execution context (unused — no thresholds).
+            context: Rule execution context (unused - no thresholds).
 
         Returns:
             One finding per ``random.X`` call in a security-smelling scope.
@@ -94,7 +94,7 @@ class InsecureRandomRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"`{target}` used for a security-smelling value — "
+                        f"`{target}` used for a security-smelling value - "
                         f"`random` is not cryptographically secure."
                     ),
                     file_path=unit.file.display_path,
