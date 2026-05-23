@@ -1,6 +1,6 @@
 """Cumulative integration test for the size pillar.
 
-Exercises every M02 size rule end-to-end via `RuleRegistry.defaults()`. Edge
+Exercises every size rule end-to-end via `RuleRegistry.defaults()`. Edge
 cases (decorators, multi-line signatures, nested classes/functions, async,
 dataclasses, abstract methods, @override) are covered in a single fixture.
 """
@@ -24,11 +24,11 @@ SIZE_RULE_IDS = {
     "size.public-method-count",
 }
 
-# Edge fixture: small but exercises the patterns called out in M02
-# Assumptions (decorators counted, multi-line sigs counted, nested
-# def/class emit independent findings, async included, dataclass fields
-# count toward attribute-count, abstract/override decorators don't change
-# size-rule behaviour).
+# Edge fixture: small but exercises every size-rule edge case the pillar
+# documents (decorators counted, multi-line sigs counted, nested def/class
+# emit independent findings, async included, dataclass fields count toward
+# attribute-count, abstract/override decorators don't change size-rule
+# behaviour).
 SIZE_PILLAR_FIXTURE = '''
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -37,10 +37,10 @@ from dataclasses import dataclass
 class WideRecord:
     """Plain class with too many attributes.
 
-    Was a ``@dataclass`` until M37 added a schema/dataclass exemption to
-    ``size.attribute-count``. The rule's intent (flag classes with too
-    many fields) holds for plain classes whose attributes are not part
-    of a schema/contract; the fixture exercises that case.
+    Kept as a plain class (not a ``@dataclass``) because
+    ``size.attribute-count`` exempts schema/dataclass shells — the rule's
+    intent is to flag classes with too many fields whose attributes are
+    NOT part of a schema/contract, and this fixture exercises that case.
     """
 
     a: int = 0

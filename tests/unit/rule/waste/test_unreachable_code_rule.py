@@ -98,7 +98,7 @@ def test_definition():
     assert d.id == "waste.unreachable-code"
 
 
-# --- Literal-condition reachability (M18) ---
+# --- Literal-condition reachability ---
 
 
 def test_if_false_body_is_unreachable():

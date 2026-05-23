@@ -82,7 +82,7 @@ def test_configurable_ignored():
 def test_websocket_parameter_is_accepted():
     # FastAPI/Starlette convention: `websocket` is the canonical lowercase name;
     # rewriting it to `web_socket` would go against the entire Python websocket
-    # ecosystem. Source: 2026-05-23 healthkit dogfood.
+    # ecosystem.
     src = "async def ws_handler(websocket: WebSocket): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert findings == []

@@ -109,7 +109,7 @@ def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> b
     # enclosing function is treated as a closure / one-shot callback (regex
     # sub callbacks, SSE `event_generator`, mock-class method stubs). Forcing
     # a docstring on these is noise — the call-site context already documents
-    # intent. Source: 2026-05-23 healthkit dogfood (17 of 44 hits).
+    # intent.
     enclosing = next(
         (p for p in reversed(parents) if isinstance(p, ast.FunctionDef | ast.AsyncFunctionDef)),
         None,

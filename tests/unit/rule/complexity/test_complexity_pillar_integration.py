@@ -20,7 +20,7 @@ COMPLEXITY_RULE_IDS = {
 }
 
 COMPLEXITY_FIXTURE = '''
-"""Fixture exercising the M03 complexity rules."""
+"""Fixture exercising every complexity rule."""
 
 
 def shallow(x):

@@ -1,8 +1,8 @@
 """NPATH complexity per function.
 
-NPATH (Nejmeh 1988) is the count of possible acyclic paths through a function.
-Per the M03 spec: product of decision-point counts per linear segment; cap at
-5000 to keep `metadata.npath` bounded.
+NPATH (Nejmeh 1988) is the count of possible acyclic paths through a function:
+product of decision-point counts per linear segment, capped at 5000 to keep
+`metadata.npath` bounded.
 
 Recurrences used:
 

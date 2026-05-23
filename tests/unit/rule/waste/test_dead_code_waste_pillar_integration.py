@@ -1,4 +1,4 @@
-"""Cumulative integration + dynamism false-positive fixture for M04.
+"""Cumulative integration + dynamism false-positive fixture for the dead-code and waste pillars.
 
 Asserts that on a fixture exercising real Python dynamism (pytest fixtures,
 FastAPI routes, ABCs, Protocols, dataclasses, __all__), the dead-code and
@@ -18,7 +18,7 @@ DYNAMISM_FIXTURE = '''
 """Dynamism patterns gruff-py should NOT flag.
 
 This fixture lives in tests/ and exercises false-positive triggers for
-M04 dead-code/waste rules.
+the dead-code and waste rules.
 """
 
 from abc import ABC, abstractmethod

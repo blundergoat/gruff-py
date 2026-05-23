@@ -92,8 +92,7 @@ def test_property_setter_skipped():
 def test_nested_single_callsite_regex_callback_skipped():
     # The regex callback `replace` is referenced once inside its enclosing
     # function — passed to re.sub. Forcing a docstring on this kind of
-    # closure is noise. Source: 2026-05-23 healthkit dogfood
-    # (_format_voice_reference_codes.replace).
+    # closure is noise.
     src = (
         "import re\n"
         "def format_codes(text):\n"

@@ -1,4 +1,4 @@
-"""End-to-end CLI test for gitignore-aware source discovery (M12)."""
+"""End-to-end CLI test for gitignore-aware source discovery."""
 
 import json
 from pathlib import Path

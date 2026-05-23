@@ -3,7 +3,7 @@
 Formula: ``MI = 171 - 5.2·ln(HV) - 0.23·CC - 16.2·ln(LOC)``, clamped to ``[0, 100]``.
 
 Consumes Halstead volume (`_halstead.halstead_for`), cyclomatic complexity
-(`cyclomatic_complexity_rule.cyclomatic_for`), and the M02 line-counting
+(`cyclomatic_complexity_rule.cyclomatic_for`), and the shared line-counting
 helper (`gruff.rule.size._lines.lines_for_size`) — ADR-002 requires the
 LOC term to share the helper, not be re-derived locally.
 
@@ -108,7 +108,7 @@ class MaintainabilityIndexRule(Rule):
 def maintainability_index_for(fn: FunctionLike) -> float:
     """Compute maintainability index for a function-like node.
 
-    Uses the M02 `lines_for_size()` helper for LOC so this rule does not
+    Uses the shared `lines_for_size()` helper for LOC so this rule does not
     re-derive line counts (ADR-002 cross-impl invariant).
 
     Args:

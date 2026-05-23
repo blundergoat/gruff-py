@@ -39,7 +39,6 @@ def test_constant_contract_test_reading_imported_name_skipped():
     # imported module-level value (a prompt string, a list of allowed
     # values). The test is exercising the import; SUT-call detection
     # should treat the imported-name read as a SUT touch.
-    # Source: 2026-05-23 healthkit dogfood.
     src = (
         "from x import BOOKING_AGENT_SYSTEM_PROMPT\n"
         "def test_prompt_does_not_contain_voice_guidance():\n"
@@ -84,8 +83,6 @@ def test_module_level_computed_constant_read_skipped():
     # Schema/prompt-contract tests read the SUT's source via a module-level
     # helper at import time and stash it in a constant; tests then assert
     # against the constant's content. The constant IS the SUT.
-    # Source: 2026-05-23 healthkit dogfood
-    # (test_file_metadata_builder_prompt.MODULE_SOURCE).
     src = (
         "import pathlib\n"
         "def _read_source():\n"

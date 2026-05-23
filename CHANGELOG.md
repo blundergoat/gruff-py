@@ -14,10 +14,9 @@ First public release.
 
 ### Fixed
 
-False-positive precision sweep from the 2026-05-23 healthkit/strands_agents
-dogfood scan (53 Python files, 425 baseline findings). Total reduction:
-**425 → 335** (-21%) across nine rules; no rule's contract, severity, or
-fingerprint inputs changed.
+False-positive precision sweep against a 53-file dogfood project (425 baseline
+findings). Total reduction: **425 → 335** (-21%) across nine rules; no rule's
+contract, severity, or fingerprint inputs changed.
 
 - `waste.unused-import` no longer flags `from __future__ import …`
   directives (PEP 236 / 563 markers have no runtime name to reference).

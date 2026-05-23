@@ -154,7 +154,7 @@ def _halstead_deltas_against_radon() -> list[float]:
 def test_radon_delta_within_threshold():
     """Cross-check Halstead volume against radon 6.0.1 ground-truth.
 
-    M03 ship gate: ±15% average delta on the ground-truth fixture (relaxed
+    Tolerance: ±15% average delta on the ground-truth fixture (relaxed
     from ±10% due to a documented chained-BoolOp pattern in
     ``radon_ground_truth.md``; aggregate well under the ±50% kill threshold).
     Run ``uvx radon hal tests/fixtures/complexity/cc_fixture.py -f`` to

@@ -1,4 +1,4 @@
-"""Cumulative integration for the naming pillar (M05 + M25).
+"""Cumulative integration for the naming pillar.
 
 Asserts all naming rules wire into ``RuleRegistry.defaults()`` and exercise
 expected positives + negatives on a single fixture.
@@ -14,7 +14,7 @@ from gruffpy.rule.registry import RuleRegistry
 from gruffpy.source.source_file import SourceFile
 
 NAMING_FIXTURE = '''
-"""Naming smells across all 9 M05 rules."""
+"""Naming smells across every rule in the naming pillar."""
 
 
 class Handler:  # naming.confusing-name

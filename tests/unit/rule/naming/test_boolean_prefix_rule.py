@@ -152,7 +152,7 @@ def test_dunder_skipped():
 def test_upper_snake_module_constant_does_not_fire():
     # Module-level all-caps constants follow Python convention; renaming
     # `ENABLE_PROMPT_CACHE: bool = True` to `is_prompt_cache_enabled` would
-    # break the convention. Source: 2026-05-23 healthkit dogfood.
+    # break the convention.
     src = "ENABLE_PROMPT_CACHE: bool = True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
@@ -195,7 +195,7 @@ def test_plain_class_bool_field_still_fires():
 
 
 def test_looks_like_prefix_does_not_fire():
-    # Verb-shaped English predicate; 2026-05-23 healthkit dogfood added this.
+    # `looks_like_*` is a verb-shaped English predicate; counts as boolean-prefixed.
     src = "def _looks_like_phone(s: str) -> bool:\n    return True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []

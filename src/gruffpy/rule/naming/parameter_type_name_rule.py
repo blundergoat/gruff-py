@@ -36,7 +36,7 @@ from gruffpy.rule.rule import Rule
 # lowercase spelling across Starlette / FastAPI / the `websockets` library
 # (suggesting `web_socket` is wrong); `req` / `request` are the standard
 # FastAPI handler parameter names; `ws` / `msg` are the equally idiomatic
-# short forms. Source: 2026-05-23 healthkit dogfood.
+# short forms.
 _ACCEPTED_PARAMETER_NAMES: frozenset[str] = frozenset({"websocket", "req", "request", "ws", "msg"})
 _TRIM_SUFFIXES: tuple[str, ...] = (
     "Service",

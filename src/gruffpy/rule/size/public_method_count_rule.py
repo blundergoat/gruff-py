@@ -111,7 +111,7 @@ def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
     # Test classes have one method per test case by design; counting them
     # against an API-surface threshold yields no useful signal. Schema bases
     # (TypedDict, BaseModel, NamedTuple, Enum-like) also do not represent
-    # behavioural surface area. Source: 2026-05-23 healthkit dogfood.
+    # behavioural surface area.
     return is_test_class(cls) or has_framework_base(cls) or has_dataclass_decorator(cls)
 
 

@@ -89,8 +89,7 @@ def test_tuple_self_assignment_collects_all_names():
 
 def test_typeddict_is_exempt():
     # TypedDict's job IS to enumerate fields; counting them as "too many
-    # attributes" misses the intent. Source: 2026-05-23 healthkit
-    # dogfood (VoiceSession TypedDict with 16 fields).
+    # attributes" misses the intent.
     body = "\n".join(f"    a{i}: int" for i in range(20))
     source = f"from typing import TypedDict\nclass S(TypedDict, total=False):\n{body}\n"
     assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []

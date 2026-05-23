@@ -114,7 +114,6 @@ def _is_exempt_from_attribute_count(cls: ast.ClassDef) -> bool:
     # enumerate their fields by design; counting them against an
     # "unfocused class" threshold misses the intent. Test classes likewise
     # carry per-case fixture attributes that aren't behavioural state.
-    # Source: 2026-05-23 healthkit dogfood (e.g. ``VoiceSession(TypedDict)``).
     return is_test_class(cls) or has_framework_base(cls) or has_dataclass_decorator(cls)
 
 

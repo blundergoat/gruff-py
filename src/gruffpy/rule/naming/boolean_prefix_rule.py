@@ -62,8 +62,8 @@ _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
         "will",
     }
 )
-# Suffix predicates added from 2026-05-23 healthkit dogfood; verb-shaped English
-# predicates where the action verb sits at the end of the identifier.
+# Verb-shaped English predicates where the action verb sits at the end of the
+# identifier (e.g. ``input_affirms``, ``request_matches``).
 _BOOLEAN_VERB_SUFFIXES: frozenset[str] = frozenset({"affirms", "declines", "matches"})
 _BOOLEAN_ADJECTIVES: frozenset[str] = frozenset(
     {

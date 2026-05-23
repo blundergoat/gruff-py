@@ -65,9 +65,8 @@ _BUILTIN_LEAVES: frozenset[str] = frozenset(
     {"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"}
 )
 # Schema-inspection accessors: a test that reads any of these IS exercising
-# the schema declaration, even when there's no callable SUT.
-# Source: 2026-05-23 healthkit dogfood (schema-contract tests asserting on
-# `ReferralDetails.model_fields` etc.).
+# the schema declaration, even when there's no callable SUT (e.g. a contract
+# test asserting on ``MyModel.model_fields``).
 _SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset(
     {"model_fields", "__annotations__", "__fields__", "model_config"}
 )
@@ -192,8 +191,8 @@ def _is_module_level_name_read(node: ast.AST, module_names: frozenset[str]) -> b
     # assignment — is a SUT touch. The test author put it at module level
     # for a reason: it's either the SUT itself or a fixture computed from
     # the SUT's source. Module-level locals like ``MODULE_SOURCE =
-    # _read_metadata_builder_source()`` (2026-05-23 healthkit dogfood) IS
-    # the SUT in schema/prompt-contract tests.
+    # _read_metadata_builder_source()`` ARE the SUT in schema/prompt-contract
+    # tests.
     return isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in module_names
 
 

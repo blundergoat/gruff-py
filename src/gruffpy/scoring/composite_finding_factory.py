@@ -20,7 +20,7 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 
-# Per the M03 plan: only these rules contribute to design.god-method.
+# Only these rules contribute to design.god-method.
 _COMPLEXITY_CONTRIBUTORS = frozenset(
     {
         "complexity.cognitive",

@@ -1,4 +1,4 @@
-"""Python dynamism allowlist (M04).
+"""Python dynamism allowlist.
 
 Helper used by dead-code and waste rules to suppress false positives caused
 by Python's dynamic patterns: pytest fixtures, Click commands, Flask/FastAPI
