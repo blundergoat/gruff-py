@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/publish-pypi.sh - publish gruff-py to TestPyPI (default) or PyPI.
+# scripts/publish-pypi.sh - publish gruff-py to PyPI.
 #
 # Verifies version agreement, runs preflight checks, builds, and uploads via
 # `uv publish`. Reads UV_PUBLISH_TOKEN from the environment.
@@ -13,7 +13,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 
-PYPI_TARGET="testpypi"
 SKIP_CHECKS=0
 SKIP_BUILD=0
 ASSUME_YES=0
@@ -39,20 +38,18 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/publish-pypi.sh [options]
 
-Publish the gruff-py wheel and sdist to TestPyPI (default) or PyPI.
+Publish the gruff-py wheel and sdist to PyPI.
 
 Options:
-  --pypi           Publish to PyPI (default: TestPyPI).
   --skip-checks    Skip preflight checks (ruff/mypy/pytest/rule-docs).
   --skip-build     Skip `uv build`; reuse existing dist/ contents.
   --yes, -y        Skip the interactive y/N confirmation.
-  --allow-dirty    Allow uncommitted changes when targeting --pypi.
+  --allow-dirty    Allow uncommitted changes when publishing.
   -h, --help       Show this help.
 
 Environment:
   UV_PUBLISH_TOKEN  PyPI API token. Required.
-                      PyPI:     https://pypi.org/manage/account/token/
-                      TestPyPI: https://test.pypi.org/manage/account/token/
+                      https://pypi.org/manage/account/token/
   NO_COLOR          Disable ANSI color output.
 
 This script does NOT:
@@ -61,14 +58,11 @@ This script does NOT:
   - bump versions (use scripts/bump-version.sh)
 
 Examples:
-  # Dry-style validation against TestPyPI (default).
-  UV_PUBLISH_TOKEN=pypi-... scripts/publish-pypi.sh
-
   # Real release to PyPI, no prompts.
-  UV_PUBLISH_TOKEN=pypi-... scripts/publish-pypi.sh --pypi --yes
+  UV_PUBLISH_TOKEN=pypi-... scripts/publish-pypi.sh --yes
 
-  # Reuse a wheel you just built and pushed to TestPyPI.
-  UV_PUBLISH_TOKEN=pypi-... scripts/publish-pypi.sh --pypi --skip-build
+  # Reuse a wheel you just built.
+  UV_PUBLISH_TOKEN=pypi-... scripts/publish-pypi.sh --skip-build
 USAGE
 }
 
@@ -107,14 +101,14 @@ check_clean_working_tree() {
     return 0
   fi
 
-  if [[ "$PYPI_TARGET" == "pypi" && "$ALLOW_DIRTY" -eq 0 ]]; then
+  if [[ "$ALLOW_DIRTY" -eq 0 ]]; then
     err "Working tree has uncommitted changes:"
     printf '%s\n' "$status_output" | sed 's/^/    /' >&2
     err "Refuse to publish dirty state to PyPI. Commit or stash, then retry."
     err "Override with --allow-dirty if you really mean it."
     return 1
   fi
-  warn "Working tree has uncommitted changes (proceeding — target is TestPyPI or --allow-dirty was set)."
+  warn "Working tree has uncommitted changes (proceeding because --allow-dirty was set)."
 }
 
 run_checks() {
@@ -172,11 +166,7 @@ confirm() {
 
 do_publish() {
   local version="$1"
-  local publish_args=()
-  if [[ "$PYPI_TARGET" == "testpypi" ]]; then
-    publish_args+=(--publish-url "https://test.pypi.org/legacy/")
-  fi
-  publish_args+=(
+  local publish_args=(
     "$DIST_DIR/gruff_py-${version}-py3-none-any.whl"
     "$DIST_DIR/gruff_py-${version}.tar.gz"
   )
@@ -187,7 +177,6 @@ main() {
   while (($#)); do
     case "$1" in
       --pypi)
-        PYPI_TARGET="pypi"
         ;;
       --skip-checks)
         SKIP_CHECKS=1
@@ -222,12 +211,15 @@ main() {
   fi
 
   if [[ -z "${UV_PUBLISH_TOKEN:-}" ]]; then
-    err "UV_PUBLISH_TOKEN is not set."
-    if [[ "$PYPI_TARGET" == "pypi" ]]; then
-      err "Get a token at https://pypi.org/manage/account/token/"
-    else
-      err "Get a TestPyPI token at https://test.pypi.org/manage/account/token/"
-    fi
+    cat >&2 <<'TOKEN_HELP'
+  read -rsp "PyPI token: " UV_PUBLISH_TOKEN; echo
+  export UV_PUBLISH_TOKEN
+  scripts/publish-pypi.sh
+
+  Get the token from:
+
+  https://pypi.org/manage/account/token/
+TOKEN_HELP
     return 1
   fi
 
@@ -255,15 +247,8 @@ main() {
 
   verify_dist "$version" || return 1
 
-  local repo_label
-  if [[ "$PYPI_TARGET" == "pypi" ]]; then
-    repo_label="${RED}${BOLD}PyPI (production)${RESET}"
-  else
-    repo_label="${BOLD}TestPyPI${RESET}"
-  fi
-
   printf '\n'
-  printf '  About to publish %sgruff-py %s%s to %s\n' "$BOLD" "$version" "$RESET" "$repo_label"
+  printf '  About to publish %sgruff-py %s%s to %s\n' "$BOLD" "$version" "$RESET" "${RED}${BOLD}PyPI (production)${RESET}"
   printf '    %s%s%s\n' "$DIM" "$DIST_DIR/gruff_py-${version}-py3-none-any.whl" "$RESET"
   printf '    %s%s%s\n\n' "$DIM" "$DIST_DIR/gruff_py-${version}.tar.gz" "$RESET"
 
@@ -273,34 +258,14 @@ main() {
   fi
 
   do_publish "$version" || return 1
-  ok "Published gruff-py $version to $PYPI_TARGET."
+  ok "Published gruff-py $version to PyPI."
 
-  local tag_hint
-  if [[ "$PYPI_TARGET" == "pypi" ]]; then
-    tag_hint=$(cat <<TAG
-
+  cat <<TAG
 Next steps (see docs/RELEASING.md):
   - Tag the release commit: git tag v${version}
   - Push the tag:           git push --tags
   - Draft GitHub release notes from CHANGELOG.md [${version}].
 TAG
-    )
-  else
-    tag_hint=$(cat <<TEST
-
-TestPyPI install check (run in a clean venv):
-  uv venv /tmp/gruff-testpypi --python 3.11 --clear
-  uv pip install --python /tmp/gruff-testpypi/bin/python \\
-    --index-url https://test.pypi.org/simple/ \\
-    --extra-index-url https://pypi.org/simple/ \\
-    gruff-py==${version}
-  /tmp/gruff-testpypi/bin/gruff-py --version
-
-When ready for the real release, re-run with --pypi.
-TEST
-    )
-  fi
-  printf '%s\n' "$tag_hint"
 }
 
 main "$@"
