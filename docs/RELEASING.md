@@ -65,14 +65,29 @@ Smoke-test the built wheel in a clean environment before publishing.
 
 Only publish after metadata, license, docs, and verification are settled.
 
-Suggested flow:
+Use `scripts/publish-pypi.sh`. It re-runs preflight checks, rebuilds the
+wheel and sdist, verifies them against the current version, prompts for
+confirmation, and uploads via `uv publish`. It does **not** commit, tag,
+or push.
+
+The script reads `UV_PUBLISH_TOKEN` from the environment. Get tokens at
+<https://pypi.org/manage/account/token/> and
+<https://test.pypi.org/manage/account/token/>.
+
+Validate on TestPyPI first:
 
 ```bash
-uv build
-uv publish
+UV_PUBLISH_TOKEN=<test-pypi-token> scripts/publish-pypi.sh
 ```
 
-Use TestPyPI first when validating release-mechanics changes.
+Then publish to PyPI:
+
+```bash
+UV_PUBLISH_TOKEN=<pypi-token> scripts/publish-pypi.sh --pypi
+```
+
+Run `scripts/publish-pypi.sh --help` for `--skip-checks`, `--skip-build`,
+`--yes`, and `--allow-dirty`.
 
 ## Tag And Announce
 

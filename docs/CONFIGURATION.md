@@ -4,6 +4,14 @@ gruff-py works without a config file. Configuration is only needed when you
 want to ignore paths, select rules, adjust thresholds, or allow known safe
 terms.
 
+## Generating a default `.gruff-py.yaml`
+
+Run `gruff-py init` to write a default `.gruff-py.yaml` in the current
+directory. The generated file mirrors `RuleRegistry.defaults()`: every
+built-in rule with its default `enabled`, `thresholds`, and `options`,
+plus empty `paths.ignore`, allowlists, and selection lists. Re-run with
+`--force` to overwrite an existing file.
+
 ## Precedence
 
 The first matching source wins:

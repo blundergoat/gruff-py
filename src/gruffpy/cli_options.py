@@ -250,6 +250,20 @@ def help_command_decorator(function: _F) -> _F:
     return apply_decorators(function, _HELP_COMMAND_DECORATORS)
 
 
+def init_command(function: _F) -> _F:
+    """Wire *function* up as the ``init`` subcommand for writing a default ``.gruff-py.yaml``.
+
+    Adds ``--force`` to overwrite an existing file on top of the global flags.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff init``.
+    """
+    return apply_decorators(function, _INIT_COMMAND_DECORATORS)
+
+
 def completion_command(function: _F) -> _F:
     """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
 
@@ -765,5 +779,16 @@ _COMPLETION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     _option("--debug", is_flag=True, help="Tail the completion debug log."),
     _argument("shell", required=False),
+    _command(),
+)
+
+_INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--force",
+        is_flag=True,
+        default=False,
+        help="Overwrite an existing .gruff-py.yaml file.",
+    ),
     _command(),
 )

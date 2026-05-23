@@ -12,6 +12,7 @@ _EXPECTED_ROOT_COMMANDS = (
     "completion",
     "dashboard",
     "help",
+    "init",
     "list",
     "list-rules",
     "report",
@@ -100,6 +101,63 @@ def test_cli_list_rules_json_lists_rule_metadata():
     rule = payload["rules"][0]
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
+
+
+def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["init"])
+
+    target = tmp_path / ".gruff-py.yaml"
+    assert result.exit_code == 0, result.output
+    assert target.exists()
+    assert result.output == f"Wrote {target}\n"
+    assert target.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+
+
+def test_cli_init_refuses_to_overwrite_existing_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text("# do not clobber\n")
+
+    result = CliRunner().invoke(main, ["init"])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert existing.read_text() == "# do not clobber\n"
+
+
+def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "none", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Generate a default config" not in result.output
+    assert not (tmp_path / ".gruff-py.yaml").exists()
+
+
+def test_cli_init_force_overwrites_existing_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text("# do not clobber\n")
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code == 0, result.output
+    assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -25,6 +25,7 @@ from gruffpy.cli_options import (
     completion_command as _completion_command,
     dashboard_command as _dashboard_command,
     help_command_decorator as _help_command_decorator,
+    init_command as _init_command,
     list_command as _list_command,
     list_rules_command as _list_rules_command,
     metric_calibration_command as _metric_calibration_command,
@@ -33,6 +34,7 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.command.init_config import existing_config_source, render_default_config_yaml
 from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
@@ -201,6 +203,7 @@ def analyse(**kwargs: Any) -> None:
         kwargs: Click-supplied arguments and options.
     """
     request = _analysis_request(kwargs, output_key="output_format")
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     report = _run_analysis_for_cli(request)
     _write_stdout(
         _render_report(
@@ -224,7 +227,9 @@ def dashboard(**kwargs: Any) -> None:
     Raises:
         click.ClickException: If the project root or port is invalid.
     """
-    server = _dashboard_server(_dashboard_request(kwargs))
+    request = _dashboard_request(kwargs)
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
+    server = _dashboard_server(request)
     bound_host, actual_port = server.server_address[:2]
     actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
     _write_stdout(f"{TOOL_NAME} dashboard serving at http://{actual_host}:{actual_port}/\n")
@@ -261,6 +266,26 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
     )
 
 
+@_init_command
+def init(force: bool) -> None:
+    """Write a default ``.gruff-py.yaml`` to the current directory.
+
+    Args:
+        force: When True, overwrite an existing config file.
+
+    Raises:
+        click.ClickException: When ``.gruff-py.yaml`` already exists and
+            ``--force`` was not supplied.
+    """
+    target = Path.cwd() / ".gruff-py.yaml"
+    if target.exists() and not force:
+        raise click.ClickException(
+            f"{target.name} already exists. Re-run with --force to overwrite."
+        )
+    target.write_text(render_default_config_yaml())
+    _write_stdout(f"Wrote {target}\n")
+
+
 @_list_rules_command
 def list_rules(rule_format: str) -> None:
     """List gruff rule metadata.
@@ -285,6 +310,7 @@ def report(**kwargs: Any) -> None:
     """
     request = _analysis_request(kwargs, output_key="report_format")
     output_path = cast(Path | None, kwargs["output_path"])
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     analysis_report = _run_analysis_for_cli(request)
     rendered = _render_report(
         analysis_report,
@@ -314,10 +340,10 @@ def summary(**kwargs: Any) -> None:
     summary_format = cast(str, kwargs["summary_format"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
+    request = _summary_analysis_request(kwargs, summary_format=summary_format)
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     start = time.perf_counter()
-    analysis_report = _run_analysis_for_cli(
-        _summary_analysis_request(kwargs, summary_format=summary_format)
-    )
+    analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
         _write_stdout(json.dumps(_summary_payload(analysis_report, top, elapsed_seconds), indent=4))
@@ -477,6 +503,36 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
     )
+
+
+def _maybe_prompt_to_init_config(config_path: Path | None, no_config: bool) -> None:
+    """Offer to generate a default ``.gruff-py.yaml`` when none exists.
+
+    Silently skips when the user has opted out (``--config``, ``--no-config``,
+    or ``--no-interaction``), when stdin is not a TTY (e.g. CI, piped
+    invocations), or when any config source is already discoverable.
+
+    Args:
+        config_path: Explicit ``--config`` path, or ``None`` for auto-discovery.
+        no_config: Whether ``--no-config`` was passed.
+    """
+    if config_path is not None or no_config:
+        return
+    if _state().is_interaction_disabled:
+        return
+    if not sys.stdin.isatty():
+        return
+    project_root = Path.cwd()
+    if existing_config_source(project_root) is not None:
+        return
+    if not click.confirm(
+        "No .gruff-py.yaml found. Generate a default config now?",
+        default=False,
+    ):
+        return
+    target = project_root / ".gruff-py.yaml"
+    target.write_text(render_default_config_yaml())
+    click.echo(f"Wrote {target}")
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
