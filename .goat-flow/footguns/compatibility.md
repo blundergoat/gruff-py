@@ -1,6 +1,6 @@
 ---
 category: compatibility
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 ## Footgun: Finding fingerprints depend on PHP-style JSON bytes
@@ -19,6 +19,20 @@ The non-obvious failure mode is that "simplifying" JSON encoding, changing slash
 `AnalysisConfig` is a frozen dataclass, but its `rules` field is a mutable dictionary. Evidence anchors: `src/gruffpy/config/analysis_config.py` (search: `rules: dict[str, RuleSettings]`) and `src/gruffpy/config/analysis_config.py` (search: `def with_rule_settings`).
 
 The non-obvious failure mode is that in-place mutation of `config.rules` can leak across contexts even though the object looks immutable. Use the `with_*` helpers or construct a fresh config when changing settings.
+
+## Footgun: Compatibility CLI flags can be help-only
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Tags:** hallucination-risk: high
+
+Some CLI flags exist for sibling-port surface compatibility before their runtime
+plumbing exists. Evidence anchors: `src/gruffpy/cli_options.py` (search:
+`expose_value=False`) and `src/gruffpy/cli.py` (search: `def _analysis_request`).
+
+The non-obvious failure mode is that Click help can advertise a flag that is
+accepted but discarded before `run_analysis()`. Before documenting a compatibility
+flag as a workflow, prove the option value reaches the runtime request and add an
+integration test for its side effect.
 
 ## Resolved Entries
 

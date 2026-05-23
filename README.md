@@ -106,7 +106,10 @@ Common `analyse` and `report` options:
 | `--format sarif` | SARIF 2.1.0 code-scanning output |
 | `--fail-on error` | Exit non-zero for findings at or above the threshold |
 | `--no-config` | Ignore `.gruff-py.yaml` and `[tool.gruff-py]` |
-| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
+| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions; `paths.ignore` still applies |
+| `--generate-baseline` | Write current findings to `gruff-baseline.json` after review |
+| `--baseline` | Suppress findings that match `gruff-baseline.json` or the given baseline path |
+| `--no-baseline` | Audit without applying the default baseline |
 | `--min-severity warning` | Display only warning/error findings |
 | `--include-pillar documentation` | Display only selected pillar findings |
 | `--exclude-rule docs.missing-function-docstring` | Hide selected rule findings |
@@ -157,6 +160,19 @@ rules:
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for the full shape.
+
+## Adoption Baselines
+
+On an existing project, first review the findings. If you want future runs to
+focus on new debt, generate a baseline:
+
+```bash
+gruff-py analyse . --generate-baseline --fail-on none
+```
+
+Future `analyse` and `report` runs auto-apply `gruff-baseline.json` when it is
+present. Use `gruff-py analyse . --no-baseline` to audit without it, or
+`gruff-py analyse . --baseline path/to/baseline.json` for an explicit file.
 
 ## Quality Pillars
 

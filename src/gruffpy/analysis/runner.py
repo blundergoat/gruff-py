@@ -2,7 +2,14 @@
 
 from pathlib import Path
 
-from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.baseline import (
+    BaselineError,
+    BaselineReport,
+    apply_baseline,
+    default_baseline_path,
+    generate_baseline,
+)
+from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
@@ -35,6 +42,9 @@ def run_analysis(
     include_ignored: bool,
     project_root: Path,
     display_filter: FindingDisplayFilter,
+    baseline_path: Path | None = None,
+    generate_baseline_path: Path | None = None,
+    no_baseline: bool = False,
 ) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
@@ -53,6 +63,9 @@ def run_analysis(
         include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
         project_root: Resolved project root used for path display and discovery.
         display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
+        baseline_path: Optional baseline file to apply.
+        generate_baseline_path: Optional baseline file to write from current findings.
+        no_baseline: When true, skip explicit and default baseline application.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
@@ -84,6 +97,14 @@ def run_analysis(
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
+    baseline_report = _handle_baseline(
+        project_root=project_root,
+        findings=findings,
+        diagnostics=diagnostics,
+        baseline_path=baseline_path,
+        generate_baseline_path=generate_baseline_path,
+        no_baseline=no_baseline,
+    )
     score = ScoreCalculator().calculate(findings)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
@@ -104,6 +125,7 @@ def run_analysis(
         config_path=config_loaded_from,
         score=score,
         filters=display_filter,
+        extensions=ReportExtensions(baseline=baseline_report),
     )
 
 
@@ -141,6 +163,76 @@ def _collect_findings(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
     )
     return findings
+
+
+def _handle_baseline(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    baseline_path: Path | None,
+    generate_baseline_path: Path | None,
+    no_baseline: bool,
+) -> BaselineReport | None:
+    if generate_baseline_path is not None and baseline_path is not None:
+        diagnostics.append(
+            RunDiagnostic(
+                type="baseline-error",
+                message="--baseline and --generate-baseline are mutually exclusive.",
+            )
+        )
+        return None
+    if no_baseline and baseline_path is not None:
+        diagnostics.append(
+            RunDiagnostic(
+                type="baseline-error",
+                message="--no-baseline cannot be combined with --baseline.",
+                path=str(baseline_path),
+            )
+        )
+        return None
+    if generate_baseline_path is not None:
+        try:
+            return generate_baseline(
+                project_root=project_root,
+                path=generate_baseline_path,
+                findings=findings,
+            )
+        except BaselineError as exc:
+            diagnostics.append(
+                RunDiagnostic(
+                    type="baseline-error",
+                    message=str(exc),
+                    path=str(generate_baseline_path),
+                )
+            )
+            return None
+    if no_baseline:
+        return None
+
+    selected_path = baseline_path
+    source = "explicit"
+    if selected_path is None:
+        default_path = default_baseline_path(project_root)
+        if not default_path.is_file():
+            return None
+        selected_path = Path(default_path.name)
+        source = "default"
+
+    try:
+        result = apply_baseline(
+            project_root=project_root,
+            path=selected_path,
+            findings=findings,
+            source=source,
+        )
+    except BaselineError as exc:
+        diagnostics.append(
+            RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path))
+        )
+        return None
+    findings[:] = result.findings
+    return result.report
 
 
 def _load_analysis_config(

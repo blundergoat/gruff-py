@@ -90,6 +90,9 @@ class _AnalysisCliRequest:
     exclude_pillar: tuple[str, ...]
     include_rule: tuple[str, ...]
     exclude_rule: tuple[str, ...]
+    baseline_path: Path | None
+    generate_baseline_path: Path | None
+    should_skip_baseline: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,7 +286,7 @@ def init(force: bool) -> None:
             f"{target.name} already exists. Re-run with --force to overwrite."
         )
     target.write_text(render_default_config_yaml())
-    _write_stdout(f"Wrote {target}\n")
+    _write_stdout(_init_success_message(target))
 
 
 @_list_rules_command
@@ -466,6 +469,9 @@ def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _Analysi
         exclude_pillar=cast(tuple[str, ...], kwargs["exclude_pillar"]),
         include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
+        baseline_path=cast(Path | None, kwargs.get("baseline_path")),
+        generate_baseline_path=cast(Path | None, kwargs.get("generate_baseline_path")),
+        should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
     )
 
 
@@ -488,6 +494,9 @@ def _summary_analysis_request(
         exclude_pillar=(),
         include_rule=(),
         exclude_rule=(),
+        baseline_path=None,
+        generate_baseline_path=None,
+        should_skip_baseline=True,
     )
 
 
@@ -532,7 +541,7 @@ def _maybe_prompt_to_init_config(config_path: Path | None, no_config: bool) -> N
         return
     target = project_root / ".gruff-py.yaml"
     target.write_text(render_default_config_yaml())
-    click.echo(f"Wrote {target}")
+    click.echo(_init_success_message(target), nl=False)
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
@@ -552,6 +561,9 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,
+        baseline_path=request.baseline_path,
+        generate_baseline_path=request.generate_baseline_path,
+        no_baseline=request.should_skip_baseline,
     )
 
 
@@ -628,7 +640,43 @@ def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> s
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
+    _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
+
+
+def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
+    hints: list[str] = []
+    if summary["ignored"]:
+        hints.append(
+            "Ignored paths: add --include-ignored to include built-in and .gitignore "
+            "exclusions; configured paths.ignore still applies."
+        )
+    if summary["findings"]:
+        hints.append(
+            "Baseline: after review, run "
+            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
+            "to accept current findings as known debt."
+        )
+    if not hints:
+        return
+    lines.extend(["", "Next steps:"])
+    lines.extend(f"  {hint}" for hint in hints)
+
+
+def _generate_baseline_command(paths: list[str]) -> str:
+    command_paths = paths or ["."]
+    joined_paths = " ".join(shlex.quote(path) for path in command_paths)
+    return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
+
+
+def _init_success_message(target: Path) -> str:
+    return (
+        f"Wrote {target}\n\n"
+        "Next: after reviewing current findings, run:\n"
+        f"  {TOOL_NAME} analyse . --generate-baseline --fail-on none\n"
+        "Future analyse/report runs auto-apply gruff-baseline.json; "
+        f"use `{TOOL_NAME} analyse . --no-baseline` to audit without it.\n"
+    )
 
 
 def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:

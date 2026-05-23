@@ -111,8 +111,10 @@ def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.Monk
     target = tmp_path / ".gruff-py.yaml"
     assert result.exit_code == 0, result.output
     assert target.exists()
-    assert result.output == f"Wrote {target}\n"
+    assert result.output.startswith(f"Wrote {target}\n")
+    assert "gruff-py analyse . --generate-baseline" in result.output
     assert target.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+    assert "Built-in ignores and .gitignore already apply" in target.read_text()
 
 
 def test_cli_init_refuses_to_overwrite_existing_config(
@@ -160,6 +162,88 @@ def test_cli_init_force_overwrites_existing_config(
     assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
 
 
+def test_cli_analyse_generate_baseline_then_auto_applies_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("def f():\n    pass\n")
+
+    generated = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "src",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--generate-baseline",
+        ],
+    )
+
+    baseline_path = tmp_path / "gruff-baseline.json"
+    assert generated.exit_code == 0, generated.output
+    assert baseline_path.exists()
+    generated_payload = json.loads(generated.output)
+    baseline_payload = json.loads(baseline_path.read_text())
+    assert baseline_payload["schemaVersion"] == "gruff-py.baseline.v1"
+    assert len(baseline_payload["findings"]) == len(generated_payload["findings"])
+    assert generated_payload["baseline"] == {
+        "path": "gruff-baseline.json",
+        "generated": True,
+        "totalEntries": len(generated_payload["findings"]),
+        "suppressedFindings": 0,
+        "staleEvaluation": "generated",
+        "staleEntries": 0,
+        "source": "default",
+        "stale": [],
+    }
+
+    applied = CliRunner().invoke(
+        main,
+        ["analyse", "src", "--format", "json", "--fail-on", "warning", "--no-config"],
+    )
+
+    assert applied.exit_code == 0, applied.output
+    applied_payload = json.loads(applied.output)
+    assert applied_payload["findings"] == []
+    assert applied_payload["baseline"]["source"] == "default"
+    assert applied_payload["baseline"]["generated"] is False
+    assert applied_payload["baseline"]["suppressedFindings"] == len(generated_payload["findings"])
+
+
+def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "src",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--baseline",
+            "--generate-baseline",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "baseline-error"
+    assert "mutually exclusive" in payload["diagnostics"][0]["message"]
+
+
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -199,6 +283,7 @@ def test_cli_summary_json_is_compact_digest(
     elapsed = summary["elapsedSeconds"]
     assert summary["paths"] == ["src"]
     assert isinstance(elapsed, int | float) and elapsed >= 0
+    assert "Next steps" not in result.output
 
 
 def test_cli_summary_text_includes_path_and_elapsed(
@@ -214,6 +299,27 @@ def test_cli_summary_text_includes_path_and_elapsed(
     assert result.exit_code == 0, result.output
     assert "Path: src" in result.output
     assert "Elapsed:" in result.output
+    assert "Baseline:" in result.output
+    assert "gruff-py analyse src --generate-baseline" in result.output
+
+
+def test_cli_summary_text_hints_when_paths_were_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    (generated / "ignored.py").write_text("x = 2\n")
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "."])
+
+    assert result.exit_code == 0, result.output
+    assert "1 ignored" in result.output
+    assert "--include-ignored" in result.output
+    assert "configured paths.ignore still applies" in result.output
 
 
 def test_cli_metric_calibration_json_is_developer_dump(

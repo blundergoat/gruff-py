@@ -6,6 +6,7 @@ from typing import Any, TypeVar, cast
 
 import click
 
+from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME
 from gruffpy.cli_state import state as _state
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
@@ -69,6 +70,23 @@ def _ignored_path_option(name: str, help_text: str) -> Callable[[_F], _F]:
         type=click.Path(path_type=Path),
         default=None,
         expose_value=False,
+        help=help_text,
+    )
+
+
+def _optional_path_option(
+    name: str,
+    parameter_name: str,
+    help_text: str,
+    default_value: str,
+) -> Callable[[_F], _F]:
+    return click.option(
+        name,
+        parameter_name,
+        type=click.Path(path_type=Path),
+        default=None,
+        is_flag=False,
+        flag_value=default_value,
         help=help_text,
     )
 
@@ -356,16 +374,26 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _ignored_path_option(
+    _optional_path_option(
         "--baseline",
+        "baseline_path",
         "Suppress findings that match a gruff baseline JSON file. "
-        'Defaults to "gruff-baseline.json".',
+        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when present.',
+        DEFAULT_BASELINE_FILENAME,
     ),
-    _ignored_path_option(
+    _optional_path_option(
         "--generate-baseline",
-        'Write current findings to a gruff baseline JSON file. Defaults to "gruff-baseline.json".',
+        "generate_baseline_path",
+        "Write current findings to a gruff baseline JSON file. "
+        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when no path is given.',
+        DEFAULT_BASELINE_FILENAME,
     ),
-    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+    _option(
+        "--no-baseline",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default baseline file for this run.",
+    ),
 )
 
 _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -386,12 +414,19 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _ignored_path_option(
+    _optional_path_option(
         "--baseline",
+        "baseline_path",
         "Suppress findings that match a gruff baseline JSON file. "
-        'Defaults to "gruff-baseline.json".',
+        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when present.',
+        DEFAULT_BASELINE_FILENAME,
     ),
-    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+    _option(
+        "--no-baseline",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default baseline file for this run.",
+    ),
 )
 
 _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -427,7 +462,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--report-interactive",
@@ -494,7 +529,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--no-baseline",
@@ -616,7 +651,7 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--report-interactive",
@@ -676,7 +711,7 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--top",
@@ -716,7 +751,7 @@ _METRIC_CALIBRATION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--top",

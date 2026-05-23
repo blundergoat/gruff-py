@@ -12,6 +12,11 @@ built-in rule with its default `enabled`, `thresholds`, and `options`,
 plus empty `paths.ignore`, allowlists, and selection lists. Re-run with
 `--force` to overwrite an existing file.
 
+The generated file also notes that built-in ignored paths and `.gitignore`
+already apply before `paths.ignore`. After reviewing a first scan, run
+`gruff-py analyse . --generate-baseline --fail-on none` if you want future
+runs to treat current findings as known debt.
+
 ## Precedence
 
 The first matching source wins:
@@ -157,6 +162,25 @@ Source discovery applies three layers of exclusions, in order:
 explicit, intentional exclusion list and remains active.
 
 Projects without a `.gitignore` are scanned as before.
+
+## Baselines
+
+Baselines are for incremental adoption on existing projects. After reviewing
+the current findings, generate a baseline:
+
+```bash
+gruff-py analyse . --generate-baseline --fail-on none
+```
+
+This writes `gruff-baseline.json` using `gruff-py.baseline.v1` and leaves the
+current run's findings visible. Future `analyse` and `report` runs apply that
+default baseline automatically, suppressing findings whose fingerprint, rule
+id, and file still match. Use `--baseline <path>` for an explicit baseline, or
+`--no-baseline` to audit without any baseline.
+
+Generate and apply baselines with the same paths, config, and ignore flags you
+plan to use in CI; the baseline only records findings from the files scanned in
+that run.
 
 ## Display Filters Are Not Config Selection
 
