@@ -26,8 +26,34 @@ class BaselineError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class BaselineOptions:
+    """CLI-selected baseline mode bundled for the analysis pipeline.
+
+    Attributes:
+        apply_path: Explicit baseline to suppress matched findings, or ``None``
+            to fall back to the conventional ``gruff-baseline.json``.
+        generate_path: When set, write current findings to this path instead of
+            applying a baseline; mutually exclusive with ``apply_path``.
+        disabled: When true, skip both explicit and default baseline application.
+    """
+
+    apply_path: Path | None = None
+    generate_path: Path | None = None
+    disabled: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class BaselineEntry:
-    """One persisted finding identity used for baseline suppression."""
+    """One persisted finding identity used for baseline suppression.
+
+    Attributes:
+        fingerprint: Cross-implementation finding fingerprint.
+        rule_id: Rule that produced the finding.
+        file_path: Project-relative source path the finding refers to.
+        line: 1-based line number, or ``None`` for file-level findings.
+        symbol: Symbol name attached to the finding, when applicable.
+        message: Human-readable finding message captured at baseline time.
+    """
 
     fingerprint: str
     rule_id: str
@@ -38,7 +64,14 @@ class BaselineEntry:
 
     @classmethod
     def from_finding(cls, finding: Finding) -> BaselineEntry:
-        """Build a baseline entry from a live finding."""
+        """Build a baseline entry from a live finding.
+
+        Args:
+            finding: Live finding whose identity will be recorded.
+
+        Returns:
+            Persisted entry that round-trips to the same baseline row.
+        """
         return cls(
             fingerprint=finding.fingerprint(),
             rule_id=finding.rule_id,
@@ -50,7 +83,18 @@ class BaselineEntry:
 
     @classmethod
     def from_dict(cls, row: dict[str, Any], index: int) -> BaselineEntry:
-        """Parse a baseline row, accepting Python and sibling baseline key names."""
+        """Parse a baseline row, accepting Python and sibling baseline key names.
+
+        Args:
+            row: Raw JSON object from the ``findings`` array of a baseline file.
+            index: Zero-based row position, used to make error messages locatable.
+
+        Returns:
+            Parsed entry ready for matching against live findings.
+
+        Raises:
+            BaselineError: When required keys are missing or have the wrong type.
+        """
         fingerprint = _required_string(row, "fingerprint", index)
         rule_id = _required_string(row, "ruleId", index)
         file_path = _baseline_file_path(row, index)
@@ -77,7 +121,11 @@ class BaselineEntry:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the entry to the ``gruff-py.baseline.v1`` row shape."""
+        """Serialise the entry to the ``gruff-py.baseline.v1`` row shape.
+
+        Returns:
+            JSON-ready row matching the schema written to baseline files.
+        """
         return {
             "fingerprint": self.fingerprint,
             "ruleId": self.rule_id,
@@ -88,7 +136,11 @@ class BaselineEntry:
         }
 
     def key(self) -> tuple[str, str, str]:
-        """Return the exact identity tuple used to match live findings."""
+        """Return the exact identity tuple used to match live findings.
+
+        Returns:
+            ``(fingerprint, rule_id, file_path)`` tuple, the canonical match key.
+        """
         return (self.fingerprint, self.rule_id, self.file_path)
 
 
@@ -102,7 +154,17 @@ class BaselineData:
 
 @dataclass(frozen=True, slots=True)
 class BaselineReport:
-    """Report metadata describing baseline generation or suppression."""
+    """Report metadata describing baseline generation or suppression.
+
+    Attributes:
+        path: Display path for the baseline file as it appears in the report.
+        generated: True when this run wrote the baseline; False when it applied one.
+        total_entries: Number of entries persisted in (or matched against) the baseline.
+        suppressed_findings: Live findings hidden by matching baseline entries.
+        stale_evaluation: Scope used to judge stale entries (``generated``/``full-project``).
+        stale_entries: Entries that no longer match any live finding.
+        source: ``explicit`` when the path came from a flag, ``default`` when auto-loaded.
+    """
 
     path: str
     generated: bool
@@ -113,7 +175,11 @@ class BaselineReport:
     source: str = "explicit"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise baseline metadata into the analysis report extension."""
+        """Serialise baseline metadata into the analysis report extension.
+
+        Returns:
+            JSON-ready dict matching the ``baseline`` field of analysis reports.
+        """
         return {
             "path": self.path,
             "generated": self.generated,
@@ -141,13 +207,24 @@ class BaselineStore:
         self._project_root = Path(project_root)
 
     def read(self, path: str | Path) -> BaselineData:
-        """Read and validate a baseline file."""
+        """Read and validate a baseline file.
+
+        Args:
+            path: Baseline location relative to the project root (or absolute).
+
+        Returns:
+            Parsed baseline data with entries ready to match against findings.
+
+        Raises:
+            BaselineError: When the file is missing, unreadable, malformed JSON,
+                or has an unrecognised ``schemaVersion``.
+        """
         display_path = _display_path(path)
-        absolute = self._absolute_path(path)
-        if not absolute.is_file():
+        absolute_path = self._absolute_path(path)
+        if not absolute_path.is_file():
             raise BaselineError(f"Baseline file not found: {display_path}")
         try:
-            payload = json.loads(absolute.read_text())
+            payload = json.loads(absolute_path.read_text())
         except OSError as exc:
             raise BaselineError(f"Unable to read baseline file: {display_path}") from exc
         except json.JSONDecodeError as exc:
@@ -158,26 +235,39 @@ class BaselineStore:
         if schema not in ACCEPTED_BASELINE_SCHEMA_VERSIONS:
             raise BaselineError(f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}".')
         return BaselineData(
-            path=_report_path(self._project_root, path, absolute),
+            path=_report_path(self._project_root, path, absolute_path),
             entries=_entries_from_payload(payload),
         )
 
     def write(self, path: str | Path, findings: list[Finding]) -> BaselineData:
-        """Write *findings* to a baseline file atomically."""
+        """Write ``findings`` to a baseline file atomically.
+
+        Args:
+            path: Destination relative to the project root (or absolute).
+            findings: Findings whose identities will be persisted as entries.
+
+        Returns:
+            ``BaselineData`` describing the file just written.
+
+        Raises:
+            BaselineError: When the file or its parent directory cannot be written.
+        """
         entries = tuple(BaselineEntry.from_finding(finding) for finding in findings)
-        absolute = self._absolute_path(path)
+        absolute_path = self._absolute_path(path)
         try:
-            absolute.parent.mkdir(parents=True, exist_ok=True)
+            absolute_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 "schemaVersion": BASELINE_SCHEMA_VERSION,
                 "generatedAt": datetime.now(UTC).isoformat(),
                 "findings": [entry.to_dict() for entry in entries],
             }
             text = json.dumps(payload, indent=4) + "\n"
-            _atomic_write_text(absolute, text)
+            _atomic_write_text(absolute_path, text)
         except OSError as exc:
             raise BaselineError(f"Unable to write baseline file: {_display_path(path)}") from exc
-        return BaselineData(path=_report_path(self._project_root, path, absolute), entries=entries)
+        return BaselineData(
+            path=_report_path(self._project_root, path, absolute_path), entries=entries
+        )
 
     def _absolute_path(self, path: str | Path) -> Path:
         candidate = Path(path)
@@ -192,7 +282,16 @@ def generate_baseline(
     path: str | Path,
     findings: list[Finding],
 ) -> BaselineReport:
-    """Persist current findings as accepted debt without suppressing them."""
+    """Persist current findings as accepted debt without suppressing them.
+
+    Args:
+        project_root: Resolved project root used for display-path normalisation.
+        path: Destination baseline file (relative or absolute).
+        findings: Findings to record as the new baseline.
+
+    Returns:
+        Report describing the just-written baseline.
+    """
     data = BaselineStore(project_root).write(path, findings)
     return BaselineReport(
         path=data.path,
@@ -211,7 +310,17 @@ def apply_baseline(
     findings: list[Finding],
     source: str,
 ) -> BaselineApplyResult:
-    """Suppress findings that match entries in *path*."""
+    """Suppress findings that match entries in ``path``.
+
+    Args:
+        project_root: Resolved project root used for display-path normalisation.
+        path: Baseline file to read.
+        findings: Live findings to filter against the baseline.
+        source: Origin label recorded on the resulting report (``explicit``/``default``).
+
+    Returns:
+        Filtered findings plus baseline report metadata.
+    """
     baseline = BaselineStore(project_root).read(path)
     entries_by_key = {entry.key(): entry for entry in baseline.entries}
     matched_keys: set[tuple[str, str, str]] = set()
@@ -242,7 +351,14 @@ def apply_baseline(
 
 
 def default_baseline_path(project_root: str | Path) -> Path:
-    """Return the conventional project-root baseline path."""
+    """Return the conventional project-root baseline path.
+
+    Args:
+        project_root: Project root that anchors the default baseline filename.
+
+    Returns:
+        Absolute path to the conventional ``gruff-baseline.json`` location.
+    """
     return Path(project_root) / DEFAULT_BASELINE_FILENAME
 
 
@@ -278,16 +394,16 @@ def _baseline_file_path(row: dict[str, Any], index: int) -> str:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
-    fd, temp_path = tempfile.mkstemp(prefix="gruff-baseline-", dir=str(path.parent), text=True)
+    fd, staging_path = tempfile.mkstemp(prefix="gruff-baseline-", dir=str(path.parent), text=True)
     try:
         with os.fdopen(fd, "w") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_path, path)
+        os.replace(staging_path, path)
     except Exception:
         with suppress(OSError):
-            os.unlink(temp_path)
+            os.unlink(staging_path)
         raise
 
 
@@ -295,14 +411,14 @@ def _display_path(path: str | Path) -> str:
     return str(path).replace("\\", "/")
 
 
-def _report_path(project_root: Path, requested: str | Path, absolute: Path) -> str:
+def _report_path(project_root: Path, requested: str | Path, absolute_path: Path) -> str:
     requested_path = Path(requested)
     if not requested_path.is_absolute():
         return _display_path(requested)
     try:
-        return _display_path(absolute.relative_to(project_root))
+        return _display_path(absolute_path.relative_to(project_root))
     except ValueError:
-        return _display_path(absolute)
+        return _display_path(absolute_path)
 
 
 def _baseline_source(path: str | Path) -> str:

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from gruffpy.analysis.baseline import (
     BaselineError,
+    BaselineOptions,
     BaselineReport,
     apply_baseline,
     default_baseline_path,
@@ -42,9 +43,7 @@ def run_analysis(
     include_ignored: bool,
     project_root: Path,
     display_filter: FindingDisplayFilter,
-    baseline_path: Path | None = None,
-    generate_baseline_path: Path | None = None,
-    no_baseline: bool = False,
+    baseline: BaselineOptions | None = None,
 ) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
@@ -63,13 +62,12 @@ def run_analysis(
         include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
         project_root: Resolved project root used for path display and discovery.
         display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
-        baseline_path: Optional baseline file to apply.
-        generate_baseline_path: Optional baseline file to write from current findings.
-        no_baseline: When true, skip explicit and default baseline application.
+        baseline: Baseline apply/generate/disable selection.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
     """
+    baseline_options = baseline if baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics = _load_analysis_config(
         project_root=project_root,
@@ -101,9 +99,7 @@ def run_analysis(
         project_root=project_root,
         findings=findings,
         diagnostics=diagnostics,
-        baseline_path=baseline_path,
-        generate_baseline_path=generate_baseline_path,
-        no_baseline=no_baseline,
+        options=baseline_options,
     )
     score = ScoreCalculator().calculate(findings)
 
@@ -170,55 +166,68 @@ def _handle_baseline(
     project_root: Path,
     findings: list[Finding],
     diagnostics: list[RunDiagnostic],
-    baseline_path: Path | None,
-    generate_baseline_path: Path | None,
-    no_baseline: bool,
+    options: BaselineOptions,
 ) -> BaselineReport | None:
-    if generate_baseline_path is not None and baseline_path is not None:
-        diagnostics.append(
-            RunDiagnostic(
-                type="baseline-error",
-                message="--baseline and --generate-baseline are mutually exclusive.",
-            )
-        )
+    conflict = _baseline_option_conflict(options)
+    if conflict is not None:
+        diagnostics.append(conflict)
         return None
-    if no_baseline and baseline_path is not None:
-        diagnostics.append(
-            RunDiagnostic(
-                type="baseline-error",
-                message="--no-baseline cannot be combined with --baseline.",
-                path=str(baseline_path),
-            )
+    if options.generate_path is not None:
+        return _generate_baseline_safely(
+            project_root=project_root,
+            findings=findings,
+            diagnostics=diagnostics,
+            path=options.generate_path,
         )
+    if options.disabled:
         return None
-    if generate_baseline_path is not None:
-        try:
-            return generate_baseline(
-                project_root=project_root,
-                path=generate_baseline_path,
-                findings=findings,
-            )
-        except BaselineError as exc:
-            diagnostics.append(
-                RunDiagnostic(
-                    type="baseline-error",
-                    message=str(exc),
-                    path=str(generate_baseline_path),
-                )
-            )
-            return None
-    if no_baseline:
+    return _apply_baseline_if_present(
+        project_root=project_root,
+        findings=findings,
+        diagnostics=diagnostics,
+        explicit_path=options.apply_path,
+    )
+
+
+def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
+    if options.generate_path is not None and options.apply_path is not None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message="--baseline and --generate-baseline are mutually exclusive.",
+        )
+    if options.disabled and options.apply_path is not None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message="--no-baseline cannot be combined with --baseline.",
+            path=str(options.apply_path),
+        )
+    return None
+
+
+def _generate_baseline_safely(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    path: Path,
+) -> BaselineReport | None:
+    try:
+        return generate_baseline(project_root=project_root, path=path, findings=findings)
+    except BaselineError as exc:
+        diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(path)))
         return None
 
-    selected_path = baseline_path
-    source = "explicit"
+
+def _apply_baseline_if_present(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    explicit_path: Path | None,
+) -> BaselineReport | None:
+    selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
     if selected_path is None:
-        default_path = default_baseline_path(project_root)
-        if not default_path.is_file():
-            return None
-        selected_path = Path(default_path.name)
-        source = "default"
-
+        return None
     try:
         result = apply_baseline(
             project_root=project_root,
@@ -233,6 +242,17 @@ def _handle_baseline(
         return None
     findings[:] = result.findings
     return result.report
+
+
+def _resolve_baseline_selection(
+    project_root: Path, explicit_path: Path | None
+) -> tuple[Path | None, str]:
+    if explicit_path is not None:
+        return explicit_path, "explicit"
+    default_path = default_baseline_path(project_root)
+    if not default_path.is_file():
+        return None, "default"
+    return Path(default_path.name), "default"
 
 
 def _load_analysis_config(

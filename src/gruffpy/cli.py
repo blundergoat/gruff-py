@@ -14,6 +14,7 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
+from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
@@ -561,9 +562,11 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,
-        baseline_path=request.baseline_path,
-        generate_baseline_path=request.generate_baseline_path,
-        no_baseline=request.should_skip_baseline,
+        baseline=BaselineOptions(
+            apply_path=request.baseline_path,
+            generate_path=request.generate_baseline_path,
+            disabled=request.should_skip_baseline,
+        ),
     )
 
 
@@ -669,9 +672,9 @@ def _generate_baseline_command(paths: list[str]) -> str:
     return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
 
 
-def _init_success_message(target: Path) -> str:
+def _init_success_message(config_path: Path) -> str:
     return (
-        f"Wrote {target}\n\n"
+        f"Wrote {config_path}\n\n"
         "Next: after reviewing current findings, run:\n"
         f"  {TOOL_NAME} analyse . --generate-baseline --fail-on none\n"
         "Future analyse/report runs auto-apply gruff-baseline.json; "
