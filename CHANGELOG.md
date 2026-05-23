@@ -95,7 +95,7 @@ fingerprint inputs changed.
 
 ### Rule Catalogue
 
-- 103 rules are registered in `RuleRegistry.defaults()`.
+- 116 rules are registered in `RuleRegistry.defaults()`.
 - Active pillars in `0.1`: `size`, `complexity`, `maintainability`,
   `dead-code`, `naming`, `documentation`, `security`, `sensitive-data`,
   `test-quality`, and `design`.
@@ -106,7 +106,7 @@ fingerprint inputs changed.
   - `dead-code`: 10
   - `naming`: 10
   - `documentation`: 13
-  - `security`: 13
+  - `security`: 26
   - `sensitive-data`: 9
   - `test-quality`: 34
   - `design`: 1
