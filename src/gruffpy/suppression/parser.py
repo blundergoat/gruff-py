@@ -12,6 +12,7 @@ _DIRECTIVE_RE = re.compile(
 )
 _GRUFF_COMMENT_RE = re.compile(r"\bgruff\s*:\s*(?P<body>.*)", re.IGNORECASE)
 _RULE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
+_REASON_SUFFIX_RE = re.compile(r"\s+(?:--?|#).*$")
 
 SuppressionDirective = Literal["disable", "disable-next", "disable-file"]
 _VALID_DIRECTIVES: frozenset[str] = frozenset({"disable", "disable-next", "disable-file"})
@@ -173,7 +174,7 @@ def _parse_directive_parts(
     body: str,
     line: int,
 ) -> tuple[_DirectiveParts | None, tuple[SuppressionDiagnostic, ...]]:
-    match = _DIRECTIVE_RE.match(body)
+    match = _DIRECTIVE_RE.match(_REASON_SUFFIX_RE.sub("", body))
     if match is None:
         return None, _invalid_comment(line, "Malformed gruff suppression comment.").diagnostics
 

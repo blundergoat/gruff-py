@@ -108,7 +108,9 @@ class ConfigLoader:
             )
         toml_section = self._load_toml_section(path)
         if toml_section is None:
-            return self._defaults, path
+            raise ConfigError(
+                f"Config file {path} has no {TOML_TABLE} or {LEGACY_TOML_TABLE} table."
+            )
         return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:

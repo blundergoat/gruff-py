@@ -85,34 +85,38 @@ class UnsafeYamlLoadRule(Rule):
 
 @dataclass(frozen=True, slots=True)
 class _YamlAliases:
-    """Import alias map for normalizing references to ``yaml`` members."""
+    """Resolves PyYAML names through imports and module-level loader assignments.
 
-    aliases: dict[str, str]
+    Imports are order-independent (hoisted by Python at module load).
+    Module-level loader assignments are tracked with their source lineno so
+    a call only sees assignments that appear lexically before it; this
+    prevents a later ``loader = yaml.SafeLoader`` from masking an earlier
+    ``yaml.load(..., Loader=loader)`` and also avoids leaking function-local
+    aliases out of their defining scope.
+    """
+
+    imports: dict[str, str]
+    loader_assignments: tuple[tuple[int, str, str], ...]
 
     @classmethod
     def from_tree(cls, tree: ast.AST) -> "_YamlAliases":
-        """Build YAML import aliases from a parsed module.
+        """Build YAML imports and module-level loader assignments.
 
         Args:
-            tree: Module AST to inspect for PyYAML imports.
+            tree: Module AST to inspect for PyYAML usage.
 
         Returns:
-            Alias map that resolves direct and aliased PyYAML references.
+            Resolver wrapping imports plus ordered loader assignments.
         """
-        aliases: dict[str, str] = {"yaml": "yaml"}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                _record_yaml_import_aliases(node, aliases)
-            elif isinstance(node, ast.ImportFrom) and node.module == "yaml":
-                _record_yaml_from_import_aliases(node, aliases)
-            elif isinstance(node, ast.Assign):
-                _record_yaml_loader_assignments(node.targets, node.value, aliases)
-            elif isinstance(node, ast.AnnAssign):
-                _record_yaml_loader_assignments([node.target], node.value, aliases)
-        return cls(aliases)
+        collector = _AliasCollector()
+        collector.visit(tree)
+        return cls(collector.imports, tuple(collector.loader_assignments))
 
     def normalize(self, target: str | None) -> str | None:
-        """Normalize a call target through the collected YAML aliases.
+        """Rewrite *target* through known PyYAML import aliases.
+
+        Used for call targets like ``yaml.load``; ignores loader assignments
+        which require lexical-order resolution via :meth:`resolve_loader`.
 
         Args:
             target: Dotted call target, or None when the call is dynamic.
@@ -123,10 +127,79 @@ class _YamlAliases:
         if target is None:
             return None
         parts = target.split(".")
-        replacement = self.aliases.get(parts[0])
+        replacement = self.imports.get(parts[0])
         if replacement is None:
             return target
         return ".".join((replacement, *parts[1:]))
+
+    def resolve_loader(self, target: str | None, call_lineno: int) -> str | None:
+        """Resolve a loader-argument name at a call site.
+
+        Args:
+            target: Dotted loader expression at the call site.
+            call_lineno: Source line of the enclosing call; assignments at
+                or after this line are not visible to the call.
+
+        Returns:
+            Normalized loader target, or *target* when no alias applies.
+        """
+        normalized = self.normalize(target)
+        if normalized != target:
+            return normalized
+        if target is None or "." in target:
+            return normalized
+        latest: str | None = None
+        for lineno, name, value in self.loader_assignments:
+            if name == target and lineno < call_lineno:
+                latest = value
+        return latest if latest is not None else normalized
+
+
+class _AliasCollector(ast.NodeVisitor):
+    """Collects PyYAML imports plus module-level loader assignments."""
+
+    def __init__(self) -> None:
+        self.imports: dict[str, str] = {"yaml": "yaml"}
+        self.loader_assignments: list[tuple[int, str, str]] = []
+        self._scope_depth = 0
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._scope_depth += 1
+        self.generic_visit(node)
+        self._scope_depth -= 1
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._scope_depth += 1
+        self.generic_visit(node)
+        self._scope_depth -= 1
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._scope_depth += 1
+        self.generic_visit(node)
+        self._scope_depth -= 1
+
+    def visit_Import(self, node: ast.Import) -> None:
+        _record_yaml_import_aliases(node, self.imports)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module == "yaml":
+            _record_yaml_from_import_aliases(node, self.imports)
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        if self._scope_depth == 0:
+            _record_yaml_loader_assignments(
+                node.targets, node.value, self.imports, self.loader_assignments, node.lineno
+            )
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if self._scope_depth == 0:
+            _record_yaml_loader_assignments(
+                [node.target], node.value, self.imports, self.loader_assignments, node.lineno
+            )
+        self.generic_visit(node)
 
 
 def _record_yaml_import_aliases(node: ast.Import, aliases: dict[str, str]) -> None:
@@ -146,16 +219,18 @@ def _record_yaml_from_import_aliases(node: ast.ImportFrom, aliases: dict[str, st
 def _record_yaml_loader_assignments(
     targets: list[ast.expr],
     value: ast.expr | None,
-    aliases: dict[str, str],
+    imports: dict[str, str],
+    loader_assignments: list[tuple[int, str, str]],
+    lineno: int,
 ) -> None:
     if value is None:
         return
-    loader_target = _normalize_with_aliases(call_target_name_from_expr(value), aliases)
+    loader_target = _normalize_with_imports(call_target_name_from_expr(value), imports)
     if loader_target not in _SAFE_LOADERS and loader_target not in _UNSAFE_LOADERS:
         return
     for target in targets:
         if isinstance(target, ast.Name):
-            aliases[target.id] = loader_target
+            loader_assignments.append((lineno, target.id, loader_target))
 
 
 def _is_unsafe_yaml_call(
@@ -170,17 +245,15 @@ def _is_unsafe_yaml_call(
     loader = _loader_argument(call)
     if loader is None:
         return True
-    loader_target = aliases.normalize(call_target_name_from_expr(loader))
-    if loader_target in _SAFE_LOADERS:
-        return False
-    return loader_target in _UNSAFE_LOADERS
+    loader_target = aliases.resolve_loader(call_target_name_from_expr(loader), call.lineno)
+    return loader_target not in _SAFE_LOADERS
 
 
-def _normalize_with_aliases(target: str | None, aliases: dict[str, str]) -> str | None:
+def _normalize_with_imports(target: str | None, imports: dict[str, str]) -> str | None:
     if target is None:
         return None
     parts = target.split(".")
-    replacement = aliases.get(parts[0])
+    replacement = imports.get(parts[0])
     if replacement is None:
         return target
     return ".".join((replacement, *parts[1:]))

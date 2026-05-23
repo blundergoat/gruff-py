@@ -71,3 +71,22 @@ def test_yaml_load_with_indirect_safe_loader_skipped():
 def test_unknown_load_skipped():
     src = "load(data)\n"
     assert UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_safe_loader_assignment_after_call_does_not_mask_unsafe_call():
+    src = "import yaml\nyaml.load(data, Loader=loader)\nloader = yaml.SafeLoader\n"
+    findings = UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx())
+    assert [f.metadata["target"] for f in findings] == ["yaml.load"]
+
+
+def test_function_scoped_safe_loader_does_not_leak_to_other_function():
+    src = (
+        "import yaml\n"
+        "def safe_setup():\n"
+        "    loader = yaml.SafeLoader\n"
+        "    return loader\n"
+        "def attack(data):\n"
+        "    yaml.load(data, Loader=loader)\n"
+    )
+    findings = UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx())
+    assert [f.metadata["target"] for f in findings] == ["yaml.load"]

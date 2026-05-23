@@ -424,6 +424,17 @@ def _load_metric_config(
 ) -> tuple[AnalysisConfig, str | None, list[MetricDiagnostic]]:
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
+    if no_config and config_path is not None:
+        return (
+            config,
+            None,
+            [
+                MetricDiagnostic(
+                    type="config-error",
+                    message="--no-config cannot be combined with an explicit --config path.",
+                )
+            ],
+        )
     if no_config:
         return config, None, []
 

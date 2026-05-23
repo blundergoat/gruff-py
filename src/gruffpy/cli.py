@@ -482,12 +482,8 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
-        include_pillars=tuple(
-            Pillar(value) for value in _split_repeated_csv(request.include_pillar)
-        ),
-        exclude_pillars=tuple(
-            Pillar(value) for value in _split_repeated_csv(request.exclude_pillar)
-        ),
+        include_pillars=_parse_pillar_values("--include-pillar", request.include_pillar),
+        exclude_pillars=_parse_pillar_values("--exclude-pillar", request.exclude_pillar),
         include_rules=_split_repeated_csv(request.include_rule),
         exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
@@ -638,6 +634,20 @@ def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
             if stripped:
                 items.append(stripped)
     return tuple(dict.fromkeys(items))
+
+
+def _parse_pillar_values(option: str, values: tuple[str, ...]) -> tuple[Pillar, ...]:
+    parsed: list[Pillar] = []
+    valid = sorted(p.value for p in Pillar)
+    for raw in _split_repeated_csv(values):
+        try:
+            parsed.append(Pillar(raw))
+        except ValueError as exc:
+            raise click.BadParameter(
+                f"invalid pillar {raw!r} (choose from {', '.join(valid)})",
+                param_hint=option,
+            ) from exc
+    return tuple(parsed)
 
 
 def _write_stdout(text: str) -> None:

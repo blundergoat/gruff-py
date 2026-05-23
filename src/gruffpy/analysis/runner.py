@@ -151,6 +151,17 @@ def _load_analysis_config(
     registry: RuleRegistry,
 ) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic]]:
     config = AnalysisConfig.from_registry(registry)
+    if no_config and config_path is not None:
+        return (
+            config,
+            None,
+            [
+                RunDiagnostic(
+                    type="config-error",
+                    message="--no-config cannot be combined with an explicit --config path.",
+                )
+            ],
+        )
     if no_config:
         return config, None, []
 

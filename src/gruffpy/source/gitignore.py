@@ -71,6 +71,8 @@ class GitignoreMatcher:
             rel = abs_path.relative_to(self.root)
         except ValueError:
             return False
+        if any(part == ".." for part in rel.parts):
+            return False
 
         applicable_dirs = [self.root]
         current_dir = self.root

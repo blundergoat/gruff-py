@@ -194,6 +194,8 @@ class SourceDiscovery:
             current = stack.pop()
             for entry in self._directory_entries(current):
                 is_dir = entry.is_dir()
+                if is_dir and entry.is_symlink():
+                    continue
                 if self._should_skip_entry(entry, include_ignored, patterns, is_dir, ignored_paths):
                     continue
                 if is_dir:
