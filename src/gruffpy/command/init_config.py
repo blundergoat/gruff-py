@@ -140,7 +140,7 @@ def existing_config_source(project_root: Path) -> Path | None:
         with open(pyproject, "rb") as f:
             data = tomllib.load(f)
     except OSError:
-        return None
+        return pyproject
     except tomllib.TOMLDecodeError:
         return pyproject
     tool = data.get("tool")

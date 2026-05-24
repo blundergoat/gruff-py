@@ -110,6 +110,23 @@ def test_existing_config_source_reports_unparseable_pyproject(tmp_path: Path) ->
     assert existing_config_source(tmp_path) == pyproject
 
 
+def test_existing_config_source_reports_unreadable_pyproject(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[tool.gruff-py]\n")
+    pyproject.chmod(0)
+    try:
+        if os.access(pyproject, os.R_OK):
+            pytest.skip(
+                "Filesystem does not enforce read permission denial (likely running as root)."
+            )
+        assert existing_config_source(tmp_path) == pyproject
+    finally:
+        pyproject.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
 def test_existing_ignored_path_patterns_reads_yaml_ignore_list(tmp_path: Path) -> None:
     target = tmp_path / ".gruff-py.yaml"
     target.write_text("paths:\n  ignore:\n    - generated/**\n    - .codex/\n")

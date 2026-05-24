@@ -90,3 +90,26 @@ def test_literal_only_statements_do_not_count_as_cycles():
         "    assert z == 3\n"
     )
     assert MultipleAaaCyclesRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_nested_def_between_asserts_does_not_end_cycle():
+    src = (
+        "def test_foo():\n"
+        "    a = run()\n"
+        "    assert a == 1\n"
+        "    def helper():\n"
+        "        return foo()\n"
+        "    assert helper.__name__ == 'helper'\n"
+    )
+    assert MultipleAaaCyclesRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_lambda_between_asserts_does_not_end_cycle():
+    src = (
+        "def test_foo():\n"
+        "    a = run()\n"
+        "    assert a == 1\n"
+        "    handler = lambda: side_effect()\n"
+        "    assert handler is not None\n"
+    )
+    assert MultipleAaaCyclesRule().analyse(make_unit(src), default_ctx()) == []

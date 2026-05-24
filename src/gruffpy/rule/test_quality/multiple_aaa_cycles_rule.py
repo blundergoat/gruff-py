@@ -137,5 +137,32 @@ def _is_assertion_stmt(stmt: ast.stmt) -> bool:
 
 
 def _has_call(stmt: ast.stmt) -> bool:
-    """Return whether *stmt* contains any function/method call expression."""
-    return any(isinstance(node, ast.Call) for node in ast.walk(stmt))
+    """Return whether *stmt* contains any function/method call expression.
+
+    Nested function, class, and lambda bodies are skipped: a call inside
+    a helper defined between asserts is not executed at that point and
+    must not end the surrounding assert block.
+    """
+
+    class _CallFinder(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.found = False
+
+        def visit_Call(self, _: ast.Call) -> None:  # noqa: N802 - ast visitor naming
+            self.found = True
+
+        def visit_FunctionDef(self, _: ast.FunctionDef) -> None:  # noqa: N802
+            return
+
+        def visit_AsyncFunctionDef(self, _: ast.AsyncFunctionDef) -> None:  # noqa: N802
+            return
+
+        def visit_ClassDef(self, _: ast.ClassDef) -> None:  # noqa: N802
+            return
+
+        def visit_Lambda(self, _: ast.Lambda) -> None:  # noqa: N802
+            return
+
+    finder = _CallFinder()
+    finder.visit(stmt)
+    return finder.found

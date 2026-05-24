@@ -225,7 +225,7 @@ class BaselineStore:
         if not absolute_path.is_file():
             raise BaselineError(f"Baseline file not found: {display_path}")
         try:
-            payload = json.loads(absolute_path.read_text())
+            payload = json.loads(absolute_path.read_text(encoding="utf-8"))
         except OSError as exc:
             raise BaselineError(f"Unable to read baseline file: {display_path}") from exc
         except UnicodeDecodeError as exc:
@@ -401,14 +401,16 @@ def _baseline_file_path(row: dict[str, Any], index: int) -> str:
     if value is None:
         value = row.get("filePath")
     if not isinstance(value, str) or value == "":
-        raise BaselineError(f'Baseline finding {index} must include non-empty "file".')
+        raise BaselineError(
+            f'Baseline finding {index} must include non-empty "file" (or legacy "filePath").'
+        )
     return value
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
     fd, staging_path = tempfile.mkstemp(prefix="gruff-baseline-", dir=str(path.parent), text=True)
     try:
-        with os.fdopen(fd, "w") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
