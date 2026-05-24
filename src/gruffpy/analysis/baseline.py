@@ -161,7 +161,8 @@ class BaselineReport:
         generated: True when this run wrote the baseline; False when it applied one.
         total_entries: Number of entries persisted in (or matched against) the baseline.
         suppressed_findings: Live findings hidden by matching baseline entries.
-        stale_evaluation: Scope used to judge stale entries (``generated``/``full-project``).
+        stale_evaluation: Scope used to judge stale entries
+            (``generated``/``full-project``/``partial-scope``).
         stale_entries: Entries that no longer match any live finding.
         source: ``explicit`` when the path came from a flag, ``default`` when auto-loaded.
     """
@@ -227,13 +228,16 @@ class BaselineStore:
             payload = json.loads(absolute_path.read_text())
         except OSError as exc:
             raise BaselineError(f"Unable to read baseline file: {display_path}") from exc
+        except UnicodeDecodeError as exc:
+            raise BaselineError(f"Baseline file is not valid UTF-8: {display_path}") from exc
         except json.JSONDecodeError as exc:
             raise BaselineError(f"Invalid baseline JSON: {exc.msg}") from exc
         if not isinstance(payload, dict):
             raise BaselineError("Baseline root must be a JSON object.")
         schema = payload.get("schemaVersion")
         if schema not in ACCEPTED_BASELINE_SCHEMA_VERSIONS:
-            raise BaselineError(f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}".')
+            accepted = ", ".join(f'"{v}"' for v in sorted(ACCEPTED_BASELINE_SCHEMA_VERSIONS))
+            raise BaselineError(f"Baseline schemaVersion must be one of: {accepted}.")
         return BaselineData(
             path=_report_path(self._project_root, path, absolute_path),
             entries=_entries_from_payload(payload),
@@ -309,6 +313,7 @@ def apply_baseline(
     path: str | Path,
     findings: list[Finding],
     source: str,
+    scan_scope: str = "full-project",
 ) -> BaselineApplyResult:
     """Suppress findings that match entries in ``path``.
 
@@ -317,6 +322,10 @@ def apply_baseline(
         path: Baseline file to read.
         findings: Live findings to filter against the baseline.
         source: Origin label recorded on the resulting report (``explicit``/``default``).
+        scan_scope: ``full-project`` when the current run scanned the whole
+            project, ``partial-scope`` when paths narrowed the scan. Partial
+            scans skip stale-entry reporting because an unmatched baseline row
+            could simply belong to a file the current scan did not visit.
 
     Returns:
         Filtered findings plus baseline report metadata.
@@ -335,7 +344,10 @@ def apply_baseline(
             continue
         filtered.append(finding)
 
-    stale = tuple(entry for entry in baseline.entries if entry.key() not in matched_keys)
+    if scan_scope == "full-project":
+        stale = tuple(entry for entry in baseline.entries if entry.key() not in matched_keys)
+    else:
+        stale = ()
     return BaselineApplyResult(
         findings=filtered,
         report=BaselineReport(
@@ -343,7 +355,7 @@ def apply_baseline(
             generated=False,
             total_entries=len(baseline.entries),
             suppressed_findings=suppressed,
-            stale_evaluation="full-project",
+            stale_evaluation=scan_scope,
             stale_entries=stale,
             source=source,
         ),
@@ -367,7 +379,7 @@ def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
     if rows is None:
         rows = payload.get("entries")
     if not isinstance(rows, list):
-        raise BaselineError('Baseline key "findings" must be a list.')
+        raise BaselineError('Baseline key "findings" (or legacy "entries") must be a list.')
 
     entries: list[BaselineEntry] = []
     for index, row in enumerate(rows):
@@ -422,4 +434,4 @@ def _report_path(project_root: Path, requested: str | Path, absolute_path: Path)
 
 
 def _baseline_source(path: str | Path) -> str:
-    return "default" if Path(path) == Path(DEFAULT_BASELINE_FILENAME) else "explicit"
+    return "default" if Path(path).name == DEFAULT_BASELINE_FILENAME else "explicit"

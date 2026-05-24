@@ -119,6 +119,7 @@ run_checks() {
 }
 
 clean_dist() {
+  mkdir -p "$DIST_DIR"
   find "$DIST_DIR" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -delete
 }
 

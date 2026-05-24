@@ -17,31 +17,32 @@ disabled=False). Evidence anchors: `src/gruffpy/analysis/runner.py`
 
 The non-obvious failure mode is that "no baseline argument" does NOT mean "no
 baseline applied" - the resolver looks for `gruff-baseline.json` in the project
-root and silently suppresses every matching finding with `source="default"`.
-An empirical reproduction (run analysis, write baseline, re-run without
-`baseline=`) shows 4 findings collapse to 0 with `suppressed_findings=4`.
-`command/dashboard_server.py` (search: `report = run_analysis`) currently calls
-the pipeline without any baseline argument, and its compat
-`--no-baseline`/`--baseline` flags at `src/gruffpy/cli_options.py`
-(search: `_DASHBOARD_COMMAND_DECORATORS`) are `expose_value=False`, so dashboard
-users cannot opt out. Any caller that does not want this behaviour must pass
-`baseline=BaselineOptions(disabled=True)` explicitly.
+root and silently suppresses every matching finding with `source="default"`. An
+empirical reproduction (run analysis, write baseline, re-run without `baseline=`)
+shows 4 findings collapse to 0 with `suppressed_findings=4`. Any caller that
+does not want this behaviour must pass `baseline=BaselineOptions(disabled=True)`
+explicitly; the dashboard pathway in `src/gruffpy/command/dashboard_server.py`
+(search: `baseline=BaselineOptions(disabled=True)`) is the current reference
+example. New `run_analysis` callers should choose explicitly between
+auto-apply, explicit baseline, or disabled; do not rely on the default.
 
-## Footgun: apply_baseline reports stale-evaluation as "full-project" regardless of scan scope
+## Resolved Entries
 
-**Status:** active | **Created:** 2026-05-24 | **Evidence:** OBSERVED
+## Footgun: apply_baseline reported stale-evaluation as "full-project" regardless of scan scope
 
-`apply_baseline` flags every unmatched baseline entry as stale and labels the
-report with `stale_evaluation="full-project"` even when the caller passed a
-narrowed paths tuple such as `("src/pkg",)`. Evidence anchors:
-`src/gruffpy/analysis/baseline.py` (search: `stale_evaluation="full-project"`)
-and `src/gruffpy/analysis/baseline.py` (search: `def apply_baseline`).
+**Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-05-24 | **Evidence:** OBSERVED
 
-The non-obvious failure mode is that a developer who runs `gruff-py analyse
-src/pkg` and then regenerates the baseline based on the reported stale entries
-will drop suppressions for findings outside that subtree. The next full scan
-re-surfaces those findings as new debt even though they were legitimate
-baseline entries the whole time. Until the stale calculation knows the scan
-scope, treat the `stale` list as authoritative only for full-tree analyse runs
-and either pass scope information into `apply_baseline` or skip the stale
-metadata when paths is anything narrower than the project root.
+Historical trap: `apply_baseline` flagged every unmatched baseline entry as
+stale and labelled the report with `stale_evaluation="full-project"` even when
+the caller passed a narrowed paths tuple such as `("src/pkg",)`. A developer
+who ran `gruff-py analyse src/pkg` and regenerated the baseline based on the
+reported stale entries would drop suppressions for findings outside the
+scanned subtree, re-surfacing legitimate debt on the next full scan.
+
+Resolved on 2026-05-24 by adding a `scan_scope` parameter to `apply_baseline`
+(`src/gruffpy/analysis/baseline.py`, search: `def apply_baseline`). The runner
+derives the scope via `_scan_scope(paths)` (`src/gruffpy/analysis/runner.py`,
+search: `def _scan_scope`) and passes `"partial-scope"` whenever `paths` is
+narrower than `(".",)`. Partial scans skip the stale-entry calculation
+entirely; the report still reports `stale_evaluation` so downstream tooling
+can distinguish a vacuously-empty stale list from a full-project audit.

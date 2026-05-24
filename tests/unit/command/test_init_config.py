@@ -104,9 +104,10 @@ def test_existing_config_source_ignores_pyproject_without_gruff_table(tmp_path: 
     assert existing_config_source(tmp_path) is None
 
 
-def test_existing_config_source_ignores_unparseable_pyproject(tmp_path: Path) -> None:
-    (tmp_path / "pyproject.toml").write_text("this is = not = valid toml\n[[")
-    assert existing_config_source(tmp_path) is None
+def test_existing_config_source_reports_unparseable_pyproject(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("this is = not = valid toml\n[[")
+    assert existing_config_source(tmp_path) == pyproject
 
 
 def test_existing_ignored_path_patterns_reads_yaml_ignore_list(tmp_path: Path) -> None:

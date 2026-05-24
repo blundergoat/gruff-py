@@ -11,7 +11,7 @@
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 117 rules across 11 pillars |
+| Rule catalogue | 116 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff-py.analysis.v1` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -64,7 +64,7 @@ uv run gruff-py analyse src/ --fail-on warning
 uv run gruff-py analyse src/ --format sarif --fail-on none > gruff.sarif
 
 # Generate a fresh-start baseline.
-uv run gruff-py analyse src/ --generate-baseline gruff-baseline.json --fail-on none
+uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
 
 # Start the local dashboard.
 uv run gruff-py dashboard src/ --report-interactive
@@ -76,7 +76,7 @@ Open `http://127.0.0.1:8765/` for the dashboard.
 
 | Command | Purpose |
 | --- | --- |
-| `analyse [paths...]` | Run the analyzer and print findings. |
+| `analyse [paths...]` | Run the analyser and print findings. |
 | `summary [paths...]` | Print compact score, pillar, rule, and file summaries. |
 | `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
 | `list-rules` | Print rule metadata as text or JSON. |
@@ -158,7 +158,7 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.1 catalogue contains 117 rules across 11 pillars:
+The v0.1 catalogue contains 116 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
@@ -171,7 +171,7 @@ The v0.1 catalogue contains 117 rules across 11 pillars:
 | `documentation` | 13 |
 | `security` | 26 |
 | `sensitive-data` | 9 |
-| `test-quality` | 34 |
+| `test-quality` | 33 |
 | `design` | 1 |
 
 `coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
@@ -181,8 +181,8 @@ The v0.1 catalogue contains 117 rules across 11 pillars:
 Baselines suppress reviewed findings by fingerprint:
 
 ```bash
-uv run gruff-py analyse src/ --generate-baseline gruff-baseline.json --fail-on none
-uv run gruff-py analyse src/ --baseline gruff-baseline.json --fail-on warning
+uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
+uv run gruff-py analyse src/ --baseline-path gruff-baseline.json --fail-on warning
 uv run gruff-py analyse src/ --no-baseline --fail-on none
 ```
 

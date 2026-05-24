@@ -24,19 +24,33 @@ verify the sdist with a negative grep for `.agents`, `.claude`, `.codex`,
 `.goat-flow`, `AGENTS.md`, `CLAUDE.md`, `node_modules`, `package-lock.json`,
 `package.json`, and `perf-out`.
 
-## Footgun: Shell clean steps fail on the first build because dist/ is absent
+## Footgun: Shell clean steps must tolerate missing build output directories
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
 
-`scripts/publish-pypi.sh` runs `clean_dist` before `uv build`, and `clean_dist`
-calls `find "$DIST_DIR" -maxdepth 1 ...` directly. Evidence anchors:
-`scripts/publish-pypi.sh` (search: `clean_dist()`) and `scripts/publish-pypi.sh`
-(search: `build_package()`).
+`find <dir> -delete` exits non-zero when `<dir>` does not exist. Any clean
+step that pipes `find` failure into `|| return 1` will block the build on a
+fresh clone or after a manual `rm dist/`. Evidence anchor:
+`scripts/publish-pypi.sh` (search: `clean_dist()`) keeps the fixed pattern:
+`mkdir -p "$DIST_DIR"` before `find ... -delete`.
 
-The non-obvious failure mode is that on a fresh clone (or after the user
-deletes `dist/`), `find` prints `No such file or directory` and exits non-zero,
-which trips `build_package`'s `|| return 1` before `uv build` is ever invoked.
-A reproduction in an empty directory confirms `exit_code=1` from the same
-`find` invocation. Any shell step that cleans a build-output directory must
-`mkdir -p` it first or test `[[ -d "$dir" ]]` before invoking `find ... -delete`
-so that the first-run path matches the steady-state path.
+Before adding a new clean step that targets a build-output directory, either
+`mkdir -p` it first or guard with `[[ -d "$dir" ]]` so the first-run path
+matches the steady-state path. A reproduction in an empty directory
+(`exit_code=1` from `find dist/ -maxdepth 1 -delete`) is enough to confirm
+the trap.
+
+## Resolved Entries
+
+## Footgun: clean_dist failed first-run publishes when dist/ was absent
+
+**Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+Historical trap: `scripts/publish-pypi.sh` ran `clean_dist` before `uv build`
+without ensuring `dist/` existed first. On a fresh clone, `find dist/ -maxdepth
+1 -type f ...` returned exit code 1, which trips `build_package`'s
+`|| return 1` and aborted the publish before `uv build` was ever invoked.
+
+Resolved on 2026-05-24 by prepending `mkdir -p "$DIST_DIR"` inside
+`clean_dist`. The active footgun above keeps the broader rule (clean steps
+must tolerate a missing target directory) discoverable for future scripts.

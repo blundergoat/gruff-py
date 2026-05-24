@@ -14,7 +14,7 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
-from gruffpy.analysis.baseline import BaselineOptions
+from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
@@ -237,7 +237,12 @@ def dashboard(**kwargs: Any) -> None:
         click.ClickException: If the project root or port is invalid.
     """
     request = _dashboard_request(kwargs)
-    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
+    dashboard_project_root = (request.project_root or Path.cwd()).resolve()
+    _maybe_prompt_to_init_config(
+        request.config_path,
+        request.should_skip_config,
+        project_root=dashboard_project_root,
+    )
     server = _dashboard_server(request)
     bound_host, actual_port = server.server_address[:2]
     actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
@@ -280,22 +285,32 @@ def init(force: bool) -> None:
     """Write a default ``.gruff-py.yaml`` to the current directory.
 
     Args:
-        force: When True, regenerate an existing config file while preserving paths.ignore.
+        force: When True, regenerate ``.gruff-py.yaml`` even if a config source
+            (``.gruff-py.yaml``, ``.gruff.yaml``, or
+            ``pyproject.toml`` ``[tool.gruff-py]``) already exists.
 
     Raises:
-        click.ClickException: When ``.gruff-py.yaml`` already exists and
-            ``--force`` was not supplied.
+        click.ClickException: When a config source already exists and
+            ``--force`` was not supplied, or when the file cannot be written.
     """
-    target = Path.cwd() / ".gruff-py.yaml"
-    if target.exists() and not force:
+    project_root = Path.cwd()
+    target = project_root / ".gruff-py.yaml"
+    existing = existing_config_source(project_root)
+    if existing is not None and not force:
+        if existing == target:
+            raise click.ClickException(
+                f"{target.name} already exists. Re-run with --force to regenerate it."
+            )
         raise click.ClickException(
-            f"{target.name} already exists. Re-run with --force to regenerate it."
+            f"Existing gruff config found at {existing.name}; writing "
+            f"{target.name} would change discovery precedence. "
+            "Re-run with --force to write it anyway."
         )
     try:
         ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    target.write_text(render_default_config_yaml(ignored_path_patterns))
+    _write_config_file(target, render_default_config_yaml(ignored_path_patterns))
     _write_stdout(_init_success_message(target))
 
 
@@ -304,7 +319,8 @@ def list_rules(rule_format: str) -> None:
     """List gruff rule metadata.
 
     Args:
-        rule_format: Output format, either ``table`` or ``json``.
+        rule_format: Output format - ``json`` for structured output, or ``table``
+            / ``text`` for the human-readable table.
     """
     definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     if rule_format == "json":
@@ -480,9 +496,18 @@ def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _Analysi
         include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
         baseline_path=cast(Path | None, kwargs.get("baseline_path")),
-        generate_baseline_path=cast(Path | None, kwargs.get("generate_baseline_path")),
+        generate_baseline_path=_resolve_generate_baseline_path(kwargs),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
     )
+
+
+def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
+    explicit = cast(Path | None, kwargs.get("generate_baseline_path"))
+    if explicit is not None:
+        return explicit
+    if cast(bool, kwargs.get("generate_baseline", False)):
+        return Path(DEFAULT_BASELINE_FILENAME)
+    return None
 
 
 def _summary_analysis_request(
@@ -524,34 +549,54 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
     )
 
 
-def _maybe_prompt_to_init_config(config_path: Path | None, no_config: bool) -> None:
+def _maybe_prompt_to_init_config(
+    config_path: Path | None,
+    no_config: bool,
+    *,
+    project_root: Path | None = None,
+) -> None:
     """Offer to generate a default ``.gruff-py.yaml`` when none exists.
 
     Silently skips when the user has opted out (``--config``, ``--no-config``,
-    or ``--no-interaction``), when stdin is not a TTY (e.g. CI, piped
-    invocations), or when any config source is already discoverable.
+    ``--no-interaction``, ``--quiet``, or ``--silent``), when stdin is not a
+    TTY (e.g. CI, piped invocations), or when any config source is already
+    discoverable. The prompt and the success message are routed to stderr so
+    accepting the prompt does not corrupt structured stdout (``--format json``,
+    ``--format sarif``, etc.).
 
     Args:
         config_path: Explicit ``--config`` path, or ``None`` for auto-discovery.
         no_config: Whether ``--no-config`` was passed.
+        project_root: Directory the prompt should treat as the project root.
+            Defaults to the current working directory; dashboard callers pass
+            their resolved ``--project`` so the file lands in the scanned
+            project rather than the launch directory.
     """
     if config_path is not None or no_config:
         return
-    if _state().is_interaction_disabled:
+    if _state().is_interaction_disabled or _state().should_suppress_output:
         return
     if not sys.stdin.isatty():
         return
-    project_root = Path.cwd()
-    if existing_config_source(project_root) is not None:
+    target_root = project_root if project_root is not None else Path.cwd()
+    if existing_config_source(target_root) is not None:
         return
     if not click.confirm(
         "No .gruff-py.yaml found. Generate a default config now?",
         default=False,
+        err=True,
     ):
         return
-    target = project_root / ".gruff-py.yaml"
-    target.write_text(render_default_config_yaml())
-    click.echo(_init_success_message(target), nl=False)
+    target = target_root / ".gruff-py.yaml"
+    _write_config_file(target, render_default_config_yaml())
+    click.echo(_init_success_message(target), nl=False, err=True)
+
+
+def _write_config_file(path: Path, content: str) -> None:
+    try:
+        path.write_text(content)
+    except OSError as exc:
+        raise click.ClickException(f"Unable to write {path.name}: {exc}") from exc
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:

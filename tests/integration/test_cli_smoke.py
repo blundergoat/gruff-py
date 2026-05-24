@@ -64,7 +64,13 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
     assert "\x1b[32manalyse\x1b" in result.output
 
 
-_EXPECTED_ANALYSE_LOCAL_OPTIONS = ("--diff", "--diff-vs", "--baseline", "--generate-baseline")
+_EXPECTED_ANALYSE_LOCAL_OPTIONS = (
+    "--diff",
+    "--diff-vs",
+    "--baseline-path",
+    "--generate-baseline",
+    "--generate-baseline-path",
+)
 
 
 def test_cli_command_help_lists_symfony_style_global_options():
@@ -321,7 +327,8 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
             "--fail-on",
             "none",
             "--no-config",
-            "--baseline",
+            "--baseline-path",
+            "gruff-baseline.json",
             "--generate-baseline",
         ],
     )

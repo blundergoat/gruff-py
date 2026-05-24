@@ -81,6 +81,32 @@ When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
 alongside the catalog, generated docs, fixtures, and focused rule tests before
 running broad verification.
 
+## Lesson: Reproduce Click option-parsing claims with CliRunner before reasoning about them
+
+**Created:** 2026-05-24
+**Incident:** While triaging PR review feedback that flagged `gruff-py analyse
+--baseline src` as ambiguous, the agent first reasoned about Click's
+`is_flag=False, flag_value=...` semantics and concluded the bot was right.
+The reasoning was correct, but in a parallel session the agent had to
+double-check whether removing one helper would break the `--baseline-then-path`
+case for any other call site. The actual proof came from a few lines of
+`CliRunner`:
+
+```
+argv=['--baseline', 'src']          -> "paths=() baseline_path='src'"
+argv=['--baseline', 'src', 'tests'] -> "paths=('tests',) baseline_path='src'"
+```
+
+That same six-line reproduction also verified the fix
+(`['--baseline-path', 'baseline.json', 'src']` keeps `src` as a positional) and
+caught a regression test that needed updating, all in under a minute.
+
+When a review (bot or human) makes a CLI behaviour claim - "this option
+consumes the next argument", "this flag corrupts JSON stdout", "this combo
+returns the wrong exit code" - drive the verification with `click.testing.CliRunner`
+before debating Click's grammar. The matrix runs in seconds, the result is
+unambiguous, and the same harness is reusable as a regression test.
+
 ## Lesson: Count registered rules from the runtime registry, not by grepping `_entry(`
 
 **Created:** 2026-05-24

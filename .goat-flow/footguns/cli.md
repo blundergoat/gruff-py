@@ -3,42 +3,65 @@ category: cli
 last_reviewed: 2026-05-24
 ---
 
-## Footgun: Optional-value Click options consume the next positional argument
+## Footgun: Click optional-value options + variadic positionals stay tempting
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
 **Tags:** hallucination-risk: high
 
-`_optional_path_option` builds Click options with `is_flag=False, flag_value=...`
-so a bare `--baseline` falls back to `DEFAULT_BASELINE_FILENAME`. Evidence
-anchors: `src/gruffpy/cli_options.py` (search: `def _optional_path_option`) and
-`src/gruffpy/cli_options.py` (search: `"--generate-baseline"`).
+The underlying Click pattern - declaring an option with `is_flag=False,
+flag_value="..."` so a bare `--option` falls back to a default value - is
+unambiguous on its own, but combines disastrously with a variadic positional
+argument: the next token is always consumed by the option even when the user
+meant it as a positional. The 0.1.1 occurrence used `_optional_path_option`
+for `--baseline` and `--generate-baseline` and was reproduced empirically with
+`CliRunner` before being removed. Evidence anchors:
+`src/gruffpy/cli_options.py` (search: `def _path_option`) shows the replacement
+helper and `tests/integration/test_cli_smoke.py`
+(search: `test_cli_analyse_baseline_option_conflicts_are_diagnostics`) covers
+the new mutex contract.
 
-The non-obvious failure mode is that the analyse command takes a variadic
-`paths` argument, so `gruff-py analyse --baseline src` is parsed as
-`paths=(), baseline_path="src"` and silently scans `.` instead of `src/`. A
-`CliRunner` reproduction confirms this against the current `_optional_path_option`
-shape; the next token is always consumed by the option even when the user meant
-it as a positional path. Before adding another optional-value option, verify
-that no variadic positional follows it, or switch to a pure flag plus a
-separate `--*-path` argument and add an integration test for the
-`option-then-path` shape.
+Before adding any new Click option with optional value semantics (`is_flag=False,
+flag_value=...`), check whether the command takes a variadic positional. If it
+does, prefer splitting into a pure boolean flag plus a separately-named
+required-value option (e.g. `--foo` flag + `--foo-path PATH`) and add a
+`CliRunner` test that exercises the `--option-then-positional` shape.
 
-## Footgun: Interactive init prompt corrupts structured stdout
+## Resolved Entries
 
-**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+## Footgun: Optional-value `--baseline` / `--generate-baseline` consumed the next path
 
-`_maybe_prompt_to_init_config` runs unconditionally for analyse, report, and
-summary when stdin is a TTY and no config source is discovered. Evidence
-anchors: `src/gruffpy/cli.py` (search: `_maybe_prompt_to_init_config(request`)
-and `src/gruffpy/cli.py` (search: `def _maybe_prompt_to_init_config`).
+**Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
 
-The non-obvious failure mode is that the prompt and the `_init_success_message`
-both write to stdout via `click.confirm` and `click.echo`. When the user runs
-`gruff-py analyse --format json` (or `report --format sarif`, or `summary
---format json`) interactively and accepts, the human-readable text is
-prepended to the structured payload and breaks downstream parsers. The prompt
-also fires regardless of `--quiet`/`--silent` because it only consults
-`is_interaction_disabled` and TTY state, not `should_suppress_output`. Gate the
-prompt on a text-shaped output format and on `_state().should_suppress_output`
-before calling `click.confirm`, and route any success message to stderr when the
-command's primary output is structured.
+Historical trap: `_optional_path_option` declared `--baseline` and
+`--generate-baseline` with `is_flag=False, flag_value=DEFAULT_BASELINE_FILENAME`,
+so `gruff-py analyse --baseline src` was parsed as
+`paths=(), baseline_path="src"` and silently scanned `.` instead of `src/`. A
+`CliRunner` reproduction in the same session printed
+`"paths=() baseline_path='src'"` to confirm before the fix.
+
+Resolved on 2026-05-24 by splitting both options into a pure boolean flag plus
+a required-value path option: `--baseline-path PATH`, `--generate-baseline`
+(flag, writes to `gruff-baseline.json`), and `--generate-baseline-path PATH`.
+The helper `_optional_path_option` was replaced with `_path_option`
+(`src/gruffpy/cli_options.py`, search: `def _path_option`). The active footgun
+above keeps the broader trap (Click optional-value + variadic positional)
+discoverable for future option work.
+
+## Footgun: Interactive init prompt corrupted structured stdout
+
+**Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+Historical trap: `_maybe_prompt_to_init_config` wrote the `click.confirm`
+prompt and the `_init_success_message` to stdout. When a user accepted the
+prompt during `gruff-py analyse --format json` (or `report --format sarif`,
+or `summary --format json`), the human-readable text was prepended to the
+structured payload and broke downstream parsers. The prompt also fired
+regardless of `--quiet`/`--silent` because it only consulted
+`is_interaction_disabled` and TTY state.
+
+Resolved on 2026-05-24 in `src/gruffpy/cli.py`
+(search: `def _maybe_prompt_to_init_config`): the function now short-circuits
+on `_state().should_suppress_output`, passes `err=True` to both `click.confirm`
+and the success `click.echo`, and accepts an explicit `project_root` parameter
+so dashboard callers point the prompt at the scanned project rather than
+`Path.cwd()`.

@@ -100,6 +100,7 @@ def run_analysis(
         findings=findings,
         diagnostics=diagnostics,
         options=baseline_options,
+        scan_scope=_scan_scope(paths),
     )
     score = ScoreCalculator().calculate(findings)
 
@@ -167,6 +168,7 @@ def _handle_baseline(
     findings: list[Finding],
     diagnostics: list[RunDiagnostic],
     options: BaselineOptions,
+    scan_scope: str,
 ) -> BaselineReport | None:
     conflict = _baseline_option_conflict(options)
     if conflict is not None:
@@ -186,19 +188,31 @@ def _handle_baseline(
         findings=findings,
         diagnostics=diagnostics,
         explicit_path=options.apply_path,
+        scan_scope=scan_scope,
     )
+
+
+def _scan_scope(paths: tuple[str, ...]) -> str:
+    if not paths:
+        return "full-project"
+    if paths == (".",):
+        return "full-project"
+    return "partial-scope"
 
 
 def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
     if options.generate_path is not None and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message="--baseline and --generate-baseline are mutually exclusive.",
+            message=(
+                "--baseline-path and --generate-baseline/--generate-baseline-path "
+                "are mutually exclusive."
+            ),
         )
     if options.disabled and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message="--no-baseline cannot be combined with --baseline.",
+            message="--no-baseline cannot be combined with --baseline-path.",
             path=str(options.apply_path),
         )
     return None
@@ -224,6 +238,7 @@ def _apply_baseline_if_present(
     findings: list[Finding],
     diagnostics: list[RunDiagnostic],
     explicit_path: Path | None,
+    scan_scope: str,
 ) -> BaselineReport | None:
     selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
     if selected_path is None:
@@ -234,6 +249,7 @@ def _apply_baseline_if_present(
             path=selected_path,
             findings=findings,
             source=source,
+            scan_scope=scan_scope,
         )
     except BaselineError as exc:
         diagnostics.append(

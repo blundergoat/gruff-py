@@ -185,8 +185,8 @@ gruff-py analyse . --generate-baseline --fail-on none
 This writes `gruff-baseline.json` using `gruff-py.baseline.v1` and leaves the
 current run's findings visible. Future `analyse` and `report` runs apply that
 default baseline automatically, suppressing findings whose fingerprint, rule
-id, and file still match. Use `--baseline <path>` for an explicit baseline, or
-`--no-baseline` to audit without any baseline.
+id, and file still match. Use `--baseline-path <path>` for an explicit baseline,
+or `--no-baseline` to audit without any baseline.
 
 Generate and apply baselines with the same paths, config, and ignore flags you
 plan to use in CI; the baseline only records findings from the files scanned in

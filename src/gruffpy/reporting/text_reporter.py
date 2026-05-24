@@ -1,5 +1,7 @@
 """Renders an AnalysisReport as plain text for terminal output."""
 
+import shlex
+
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.finding.finding import Finding
@@ -97,7 +99,7 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
     elif baseline.stale_entries:
         lines.append(
             "  Tip: regenerate after review with "
-            f"`gruff-py analyse . --generate-baseline {baseline.path}`."
+            f"`gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`."
         )
 
 

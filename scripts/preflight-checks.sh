@@ -302,7 +302,7 @@ gruff_py_self_check() {
   local status
   local findings
 
-  output="$(uv run gruff-py analyse src tests --fail-on advisory --format text 2>&1)"
+  output="$(uv run gruff-py analyse src tests --no-baseline --fail-on advisory --format text 2>&1)"
   status=$?
   findings="$(printf '%s\n' "$output" | awk '/^  Findings:/ {sub(/^  Findings: /, ""); print; exit}')"
 

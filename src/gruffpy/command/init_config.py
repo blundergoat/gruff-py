@@ -118,9 +118,10 @@ def existing_config_source(project_root: Path) -> Path | None:
 
     Mirrors :class:`gruffpy.config.loader.ConfigLoader` discovery: prefers
     ``.gruff-py.yaml`` / legacy ``.gruff.yaml``, then falls back to
-    ``pyproject.toml`` ``[tool.gruff-py]`` / ``[tool.gruff]``. Parse failures
-    in ``pyproject.toml`` are ignored here so the analyser surfaces them with
-    its richer error message.
+    ``pyproject.toml`` ``[tool.gruff-py]`` / ``[tool.gruff]``. A
+    ``pyproject.toml`` that exists but cannot be parsed is reported as the
+    existing source so callers do not silently create a competing
+    ``.gruff-py.yaml`` that would mask the original TOML error.
 
     Args:
         project_root: Directory checked for config files.
@@ -138,8 +139,10 @@ def existing_config_source(project_root: Path) -> Path | None:
     try:
         with open(pyproject, "rb") as f:
             data = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
+    except OSError:
         return None
+    except tomllib.TOMLDecodeError:
+        return pyproject
     tool = data.get("tool")
     if not isinstance(tool, dict):
         return None

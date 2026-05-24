@@ -75,19 +75,12 @@ def _ignored_path_option(name: str, help_text: str) -> Callable[[_F], _F]:
     )
 
 
-def _optional_path_option(
-    name: str,
-    parameter_name: str,
-    help_text: str,
-    default_value: str,
-) -> Callable[[_F], _F]:
+def _path_option(name: str, parameter_name: str, help_text: str) -> Callable[[_F], _F]:
     return click.option(
         name,
         parameter_name,
         type=click.Path(path_type=Path),
         default=None,
-        is_flag=False,
-        flag_value=default_value,
         help=help_text,
     )
 
@@ -383,19 +376,22 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _optional_path_option(
-        "--baseline",
+    _path_option(
+        "--baseline-path",
         "baseline_path",
-        "Suppress findings that match a gruff baseline JSON file. "
-        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when present.',
-        DEFAULT_BASELINE_FILENAME,
+        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
     ),
-    _optional_path_option(
+    _option(
         "--generate-baseline",
+        "generate_baseline",
+        is_flag=True,
+        default=False,
+        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}".',
+    ),
+    _path_option(
+        "--generate-baseline-path",
         "generate_baseline_path",
-        "Write current findings to a gruff baseline JSON file. "
-        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when no path is given.',
-        DEFAULT_BASELINE_FILENAME,
+        "Write current findings to this baseline JSON file (implies generation).",
     ),
     _option(
         "--no-baseline",
@@ -423,12 +419,10 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _optional_path_option(
-        "--baseline",
+    _path_option(
+        "--baseline-path",
         "baseline_path",
-        "Suppress findings that match a gruff baseline JSON file. "
-        f'Defaults to "{DEFAULT_BASELINE_FILENAME}" when present.',
-        DEFAULT_BASELINE_FILENAME,
+        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
     ),
     _option(
         "--no-baseline",
@@ -539,20 +533,6 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         is_flag=True,
         default=False,
         help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
-    ),
-    _option(
-        "--no-baseline",
-        is_flag=True,
-        default=False,
-        expose_value=False,
-        help="Skip auto-applying the default baseline file for dashboard scans.",
-    ),
-    _option(
-        "--baseline",
-        type=click.Path(path_type=Path),
-        default=None,
-        expose_value=False,
-        help='Initial gruff baseline JSON path. Defaults to "gruff-baseline.json".',
     ),
     _option(
         "--diff",
