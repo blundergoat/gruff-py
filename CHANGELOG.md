@@ -4,11 +4,18 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+### Changed
+
+- Added the `modernisation.f-string-candidate` rule, bringing the current
+  catalogue to 117 rules across the shared 11-pillar taxonomy.
+
 ## [0.1.0] - 2026-05-23
 
 First public release.
 
-- 116 rules across 10 pillars: size, complexity, maintainability, dead-code, naming, documentation, security, sensitive-data, test-quality, design.
+- 116-rule initial catalogue covering size, complexity, maintainability,
+  dead-code, naming, documentation, security, sensitive-data, test-quality,
+  and design signals.
 - Outputs: text, JSON, HTML, Markdown, GitHub annotations, hotspot, SARIF 2.1.0.
 - Local dashboard; `.gruff-py.yaml` / `[tool.gruff-py]` config; PHP-compatible 16-char fingerprints.
 - Schemas pinned: `gruff-py.analysis.v1`, `gruff-py.hotspot.v1`, `gruff-py.baseline.v1` (reserved).

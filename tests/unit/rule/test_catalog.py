@@ -22,6 +22,7 @@ _PREFIXES_BY_PILLAR = {
     Pillar.COMPLEXITY: ("complexity.",),
     Pillar.MAINTAINABILITY: ("complexity.", "maintainability."),
     Pillar.DEAD_CODE: ("dead-code.", "waste."),
+    Pillar.MODERNISATION: ("modernisation.",),
     Pillar.NAMING: ("naming.",),
     Pillar.DOCUMENTATION: ("docs.",),
     Pillar.SECURITY: ("security.",),

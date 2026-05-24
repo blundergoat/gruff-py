@@ -50,11 +50,10 @@ class AbbreviationRule(Rule):
     ID = "naming.abbreviation"
 
     def definition(self) -> RuleDefinition:
-        """Describe the abbreviation rule, opt-in (``default_enabled=False``).
+        """Describe the abbreviation rule.
 
-        Off by default because the blocklist is opinionated (``ctx``, ``msg``,
-        ``args`` are idiomatic in many codebases); teams enable it when they
-        want to enforce full domain spellings.
+        The blocklist is intentionally configurable because short forms such as
+        ``ctx``, ``msg``, and ``args`` are idiomatic in some codebases.
 
         Returns:
             Definition for the abbreviation rule under the naming pillar.
@@ -66,7 +65,6 @@ class AbbreviationRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

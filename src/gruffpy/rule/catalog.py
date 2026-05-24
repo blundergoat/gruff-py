@@ -29,6 +29,7 @@ from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
+from gruffpy.rule.modernisation.f_string_candidate_rule import FStringCandidateRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.confusing_name_rule import ConfusingNameRule
@@ -437,6 +438,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(StaleParamDocRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
+    _entry(FStringCandidateRule),
     _entry(AbbreviationRule),
     _entry(BooleanPrefixRule),
     _entry(ConfusingNameRule),

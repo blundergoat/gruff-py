@@ -1,4 +1,4 @@
-"""``test-quality.mocking-domain-object`` (opt-in) - mock factory wraps a domain type.
+"""``test-quality.mocking-domain-object`` - mock factory wraps a domain type.
 
 Configurable: requires ``domain_namespaces`` option (list of dotted prefixes
 that identify the project's domain types). The rule fires when a mock factory's
@@ -30,15 +30,13 @@ class MockingDomainObjectRule(Rule):
     ID = "test-quality.mocking-domain-object"
 
     def definition(self) -> RuleDefinition:
-        """Describe the mocking-domain-object rule as an opt-in medium-confidence advisory.
+        """Describe the mocking-domain-object rule as a medium-confidence advisory.
 
-        Default-disabled because the rule cannot identify "domain"
-        namespaces without project-specific configuration - users must
-        opt in by listing dotted prefixes in ``domain_namespaces``.
+        The rule cannot identify "domain" namespaces without project-specific
+        configuration, so it stays silent until ``domain_namespaces`` is set.
 
         Returns:
-            Definition with ``default_enabled=False`` and the
-            ``domain_namespaces`` option seeded to an empty list.
+            Definition with the ``domain_namespaces`` option seeded to an empty list.
         """
         return RuleDefinition(
             id=self.ID,
@@ -47,7 +45,6 @@ class MockingDomainObjectRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_enabled=False,
             default_options={"domain_namespaces": []},
         )
 

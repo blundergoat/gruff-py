@@ -1,8 +1,7 @@
-"""``test-quality.multiple-aaa-cycles`` (opt-in) - test executes multiple Arrange-Act-Assert cycles.
+"""``test-quality.multiple-aaa-cycles`` - test executes multiple Arrange-Act-Assert cycles.
 
 Heuristic: a test that has assertions interleaved with non-assertion statements
-multiple times probably exercises multiple behaviours. Default-off; users
-explicitly enable when they want this stylistic enforcement.
+multiple times probably exercises multiple behaviours.
 """
 
 import ast
@@ -29,15 +28,14 @@ class MultipleAaaCyclesRule(Rule):
     ID = "test-quality.multiple-aaa-cycles"
 
     def definition(self) -> RuleDefinition:
-        """Describe the multiple-AAA-cycles rule as an opt-in low-confidence stylistic advisory.
+        """Describe the multiple-AAA-cycles rule as a low-confidence stylistic advisory.
 
-        Low confidence and default-off because identifying "cycles" by
-        assert-block boundaries is fuzzy - interleaved arrange/assert
-        statements can look like multiple cycles when they aren't.
+        Low confidence reflects that identifying "cycles" by assert-block
+        boundaries is fuzzy - interleaved arrange/assert statements can look
+        like multiple cycles when they are not.
 
         Returns:
-            Definition with ``default_enabled=False`` and a ``maxCycles``
-            threshold defaulting to 2.
+            Definition with a ``maxCycles`` threshold defaulting to 2.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,7 +44,6 @@ class MultipleAaaCyclesRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
-            default_enabled=False,
             default_thresholds={"maxCycles": 2},
         )
 

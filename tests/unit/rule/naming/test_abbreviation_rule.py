@@ -100,7 +100,7 @@ def test_dunder_names_are_skipped():
     assert findings == []
 
 
-def test_definition_is_default_disabled():
+def test_definition_is_default_enabled():
     definition = AbbreviationRule().definition()
     assert definition.id == "naming.abbreviation"
-    assert definition.default_enabled is False
+    assert definition.default_enabled is True

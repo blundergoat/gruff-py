@@ -15,6 +15,7 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
     Pillar.COMPLEXITY,
     Pillar.MAINTAINABILITY,
     Pillar.DEAD_CODE,
+    Pillar.MODERNISATION,
     Pillar.NAMING,
     Pillar.DOCUMENTATION,
     Pillar.SECURITY,
@@ -28,6 +29,7 @@ _PILLAR_NOTES = {
     Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, nesting, and NPATH",
     Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
+    Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
     Pillar.DOCUMENTATION: (
         "Docstring presence and quality, stale docs, TODO density, README presence"
@@ -42,6 +44,7 @@ _GROUP_ORDER = (
     "Size",
     "Complexity And Maintainability",
     "Dead Code And Waste",
+    "Modernisation",
     "Naming",
     "Documentation",
     "Security",
@@ -170,6 +173,8 @@ def _group_for(definition: RuleDefinition) -> str:
             return "Complexity And Maintainability"
         case "dead-code" | "waste":
             return "Dead Code And Waste"
+        case "modernisation":
+            return "Modernisation"
         case "naming":
             return "Naming"
         case "docs":
@@ -287,14 +292,6 @@ def _choosing_rules_lines() -> list[str]:
         "rules:",
         "  docs.missing-function-docstring:",
         "    enabled: false",
-        "```",
-        "",
-        "Enable an opt-in rule:",
-        "",
-        "```yaml",
-        "rules:",
-        "  test-quality.testdox-readability:",
-        "    enabled: true",
         "```",
         "",
         "Set one threshold for a metric rule:",

@@ -1,7 +1,7 @@
-"""``test-quality.testdox-readability`` (opt-in) - test name reads as a sentence.
+"""``test-quality.testdox-readability`` - test name reads as a sentence.
 
 Heuristic: test name has fewer than ``min_words`` lowercase-word tokens after
-stripping the ``test_`` prefix. Default-off; an enforcement preference, not a
+stripping the ``test_`` prefix. This is an enforcement preference, not a
 correctness check.
 """
 
@@ -24,16 +24,15 @@ class TestdoxReadabilityRule(Rule):
     ID = "test-quality.testdox-readability"
 
     def definition(self) -> RuleDefinition:
-        """Describe the testdox-readability rule as an opt-in low-confidence stylistic preference.
+        """Describe the testdox-readability rule as a low-confidence stylistic preference.
 
-        Low confidence and default-off because word-count is a crude proxy
-        for readability: ``test_login_succeeds_with_valid_credentials``
+        Low confidence reflects that word-count is a crude proxy for
+        readability: ``test_login_succeeds_with_valid_credentials``
         reads well at 5 tokens, but ``test_x_y_z`` is only stylistically bad
         - not wrong.
 
         Returns:
-            Definition with ``default_enabled=False`` and the ``min_words``
-            option (default 4).
+            Definition with the ``min_words`` option (default 4).
         """
         return RuleDefinition(
             id=self.ID,
@@ -42,7 +41,6 @@ class TestdoxReadabilityRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
-            default_enabled=False,
             default_options={"min_words": 4},
         )
 
