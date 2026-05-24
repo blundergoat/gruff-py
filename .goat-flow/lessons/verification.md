@@ -81,6 +81,18 @@ When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
 alongside the catalog, generated docs, fixtures, and focused rule tests before
 running broad verification.
 
+## Lesson: Inspect each item's body before bucketing tests for bulk deletion
+
+**Created:** 2026-05-24
+**Incident:** During a test-suite audit, the agent grepped for `def test_definition` across `tests/unit/rule/**/test_*_rule.py`, got 32 matches, and recommended deleting all 32 as "trivial duplicates of catalog membership tests". When the user authorised the deletion, the agent paused to read each body before deleting and discovered the group split cleanly into:
+
+- 17 plain `assert d.id == "<literal>"` (truly trivial, redundant with `tests/unit/rule/test_catalog.py::test_no_concrete_rule_class_is_omitted_from_catalog`).
+- 15 `test_definition_uses_default_thresholds` variants that pinned non-trivial default threshold values — e.g. `tests/unit/rule/size/test_class_length_rule.py` pinned `{"warning": 1000, "error": 1000}` and `tests/unit/rule/complexity/test_npath_complexity_rule.py` pinned `{"warning": 200, "error": 500}`. Those 15 were the only tests pinning the public default thresholds; silently deleting them would have removed the drift guard.
+
+The agent had to interrupt the bulk delete and ask the user which bucket they meant, instead of charging ahead with a 32-test wipe that the recommendation had already framed as homogeneous.
+
+When proposing a bulk action (delete, rename, refactor) over a group identified by a `grep` of name patterns, read each matched body before recommending the action - the matching name is a proxy for "items are equivalent", and only the body proves it. This is the same family as the dead-code lesson (`feedback_read_before_dead_code_claims`) and the runtime-vs-grep lesson above: a name pattern, a count, and a directory listing are all proxies; the artefact's body is the contract.
+
 ## Lesson: Reproduce Click option-parsing claims with CliRunner before reasoning about them
 
 **Created:** 2026-05-24
