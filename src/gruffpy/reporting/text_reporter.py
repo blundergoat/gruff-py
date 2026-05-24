@@ -95,7 +95,13 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
     lines.append(f"  Stale evaluation: {baseline.stale_evaluation}")
     lines.append(f"  Stale entries: {len(baseline.stale_entries)}")
     if baseline.generated:
-        lines.append(f"  Tip: commit {baseline.path} and rerun `gruff-py analyse` to apply it.")
+        if baseline.source == "default":
+            lines.append(f"  Tip: commit {baseline.path} and rerun `gruff-py analyse` to apply it.")
+        else:
+            lines.append(
+                f"  Tip: commit {baseline.path} and rerun with "
+                f"`--baseline-path {shlex.quote(baseline.path)}` to apply it."
+            )
     elif baseline.stale_entries:
         lines.append(
             "  Tip: regenerate after review with "

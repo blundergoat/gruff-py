@@ -193,9 +193,7 @@ def _handle_baseline(
 
 
 def _scan_scope(paths: tuple[str, ...]) -> str:
-    if not paths:
-        return "full-project"
-    if paths == (".",):
+    if not paths or any(p == "." for p in paths):
         return "full-project"
     return "partial-scope"
 
