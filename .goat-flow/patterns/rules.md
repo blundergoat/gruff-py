@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-24
 ---
 
 ## Pattern: Add rules end to end
@@ -28,3 +28,25 @@ same-expression fixture and a negative same-shape/different-receiver fixture.
 Keep the negative fixture close to the rule test, as in
 `tests/unit/rule/test_quality/test_tautological_type_assertion_rule.py`, so
 future simplifications must prove they still distinguish receiver identity.
+
+## Pattern: Use `ast.Call` presence to distinguish Acts from data unpacking
+
+**Context:** Test-quality heuristics often need to discriminate between a
+"real operation" (Act) and "data unpacking" (subscript / attribute access /
+literal or dict-comp restructuring) between assertions. The original
+`test-quality.multiple-aaa-cycles` rule treated *any* non-assert statement
+as a cycle boundary, which over-fired on the common patterns
+`finding = findings[0]`, `payload = json.loads(result.output)`,
+`assert isinstance(x, T)` type-narrowing, and dict-comp restructuring -
+all of which keep the test inside one Assert phase.
+
+**Approach:** When a heuristic must decide "is this a new Act or still the
+Assert phase?", use
+`any(isinstance(n, ast.Call) for n in ast.walk(stmt))` as the boundary
+predicate. Pure attribute / subscript / literal statements with no `Call`
+should not advance rule state. Pair the rule with fixtures that exercise
+*both* shapes - a real-call boundary AND an access-only restructure - so
+future simplifications must keep distinguishing them. See
+`src/gruffpy/rule/test_quality/multiple_aaa_cycles_rule.py` (`_has_call`)
+and the access-only fixtures in
+`tests/unit/rule/test_quality/test_multiple_aaa_cycles_rule.py`.

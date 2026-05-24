@@ -20,7 +20,11 @@ class FStringCandidateRule(Rule):
     ID = "modernisation.f-string-candidate"
 
     def definition(self) -> RuleDefinition:
-        """Return metadata for the f-string modernisation rule."""
+        """Return metadata for the f-string modernisation rule.
+
+        Returns:
+            Definition under the modernisation pillar at advisory severity.
+        """
         return RuleDefinition(
             id=self.ID,
             name="F-string candidate",

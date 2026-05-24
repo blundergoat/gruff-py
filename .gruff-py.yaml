@@ -39,6 +39,11 @@ allowlists:
   - sql
   - pk
   - fk
+  - params
+  - attr
+  - func
+  - idx
+  - tmp
   secretPreviews: []
   deadCode:
     symbols: []

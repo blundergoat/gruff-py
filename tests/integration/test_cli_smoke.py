@@ -68,15 +68,22 @@ _EXPECTED_ANALYSE_LOCAL_OPTIONS = ("--diff", "--diff-vs", "--baseline", "--gener
 
 
 def test_cli_command_help_lists_symfony_style_global_options():
+    """Guard the analyse --help contract: globals, locals, formats, no docstring leakage."""
     result = CliRunner().invoke(main, ["analyse", "--help"])
-    assert result.exit_code == 0
-    missing_global = [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output]
-    missing_local = [o for o in _EXPECTED_ANALYSE_LOCAL_OPTIONS if o not in result.output]
-    assert missing_global == [], f"missing global options in analyse --help: {missing_global}"
-    assert missing_local == [], f"missing local options in analyse --help: {missing_local}"
-    assert "sarif" in result.output
-    assert "Args:" not in result.output
-    assert "Raises:" not in result.output
+    classification = {
+        "exit_code": result.exit_code,
+        "missing_global": [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output],
+        "missing_local": [o for o in _EXPECTED_ANALYSE_LOCAL_OPTIONS if o not in result.output],
+        "missing_sarif": "sarif" not in result.output,
+        "leaked_docstring_sections": [s for s in ("Args:", "Raises:") if s in result.output],
+    }
+    assert classification == {
+        "exit_code": 0,
+        "missing_global": [],
+        "missing_local": [],
+        "missing_sarif": False,
+        "leaked_docstring_sections": [],
+    }
 
 
 _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
