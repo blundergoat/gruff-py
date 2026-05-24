@@ -34,6 +34,27 @@ accepted but discarded before `run_analysis()`. Before documenting a compatibili
 flag as a workflow, prove the option value reaches the runtime request and add an
 integration test for its side effect.
 
+## Footgun: Removing a registered rule ID breaks downstream config loads
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Tags:** hallucination-risk: high
+
+`ConfigLoader` rejects any `rules.<id>` entry whose key is not present in
+`RuleRegistry.defaults()`. Evidence anchors: `src/gruffpy/config/loader.py`
+(search: `Unknown rule id`) and `src/gruffpy/rule/catalog.py` (search:
+`def _entry`).
+
+The non-obvious failure mode is that dropping a previously-shipped rule from
+the catalog turns every downstream config that pinned that rule into a hard
+`ConfigError` at analyse/report time - the analyser fails before scanning
+anything. An empirical reproduction with `test-quality.testdox-readability`
+(removed in commit e8b8814) raises `ConfigError: Unknown rule id
+"test-quality.testdox-readability"` when an upgraded project still mentions the
+ID. Treat rule removals as a public-API break: either keep the ID as a
+deprecated no-op for one release (accept-and-warn in the loader) or call the
+removal out explicitly in release notes and the cross-implementation
+compatibility contract.
+
 ## Resolved Entries
 
 ## Footgun: OutputFormat accepted more formats than reporters implemented

@@ -81,6 +81,25 @@ When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
 alongside the catalog, generated docs, fixtures, and focused rule tests before
 running broad verification.
 
+## Lesson: Count registered rules from the runtime registry, not by grepping `_entry(`
+
+**Created:** 2026-05-24
+**Incident:** While double-checking PR review feedback that flagged a
+README/`docs/rules.md` rule-count mismatch, the agent ran
+`grep -c "_entry(" src/gruffpy/rule/catalog.py`, got `117`, and concluded the
+README (which says 117) was right and `docs/rules.md` (which says 116) was the
+stale one. Running `RuleRegistry.defaults().all()` then reported only 116
+registered rules. The 117th grep hit was the function definition
+`def _entry(factory: RuleFactory)` at the top of the file, not a rule
+registration. The agent had to retract the verdict to the user.
+
+When verifying catalog/registry counts, drive from the actual runtime state -
+`uv run python -c "from gruffpy.rule.registry import RuleRegistry; print(len(list(RuleRegistry.defaults().all())))"` -
+not from raw `grep` of a constructor name, because the function or class
+*definition* will also match. Anchored grep such as `^    _entry(` works too,
+but the registry-driven check is the source of truth and survives any
+catalog-layout refactor.
+
 ## Lesson: Static rule catalog scans must exclude support protocols
 
 **Created:** 2026-05-20
