@@ -115,7 +115,7 @@ run_checks() {
   info "Running preflight checks (this is the same suite as scripts/preflight-checks.sh)..."
   "$SCRIPT_DIR/preflight-checks.sh" \
     --skip-build \
-    --require-unreleased-version || return 1
+    --require-unpublished-pypi || return 1
 }
 
 clean_dist() {
@@ -265,8 +265,6 @@ TOKEN_HELP
 
   cat <<TAG
 Next steps (see docs/releasing.md):
-  - Tag the release commit: git tag v${version}
-  - Push the tag:           git push --tags
   - Draft GitHub release notes from CHANGELOG.md [${version}].
 TAG
 }

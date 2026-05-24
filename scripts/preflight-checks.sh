@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RUN_BUILD=1
 REQUIRE_UNRELEASED_VERSION=0
+REQUIRE_UNPUBLISHED_PYPI=0
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
@@ -75,6 +76,8 @@ Options:
   --require-unreleased-version
                       Fail if the current version already has a local
                       release tag (v<version> or <version>).
+  --require-unpublished-pypi
+                      Fail if the current version already exists on PyPI.
   -h, --help          Show this help.
 USAGE
 }
@@ -192,6 +195,33 @@ command_check() {
   command -v "$command_name" >/dev/null 2>&1
 }
 
+version_exists_on_pypi() {
+  local version=$1
+
+  uv run python - "$version" <<'PY'
+import json
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
+
+version = sys.argv[1]
+try:
+    with urlopen("https://pypi.org/pypi/gruff-py/json", timeout=10) as response:
+        payload = json.load(response)
+except HTTPError as exc:
+    print(f"Could not query PyPI release metadata: HTTP {exc.code}")
+    raise SystemExit(2) from exc
+except URLError as exc:
+    print(f"Could not query PyPI release metadata: {exc.reason}")
+    raise SystemExit(2) from exc
+except TimeoutError as exc:
+    print("Could not query PyPI release metadata: timed out")
+    raise SystemExit(2) from exc
+
+raise SystemExit(0 if version in payload.get("releases", {}) else 1)
+PY
+}
+
 shell_script_paths() {
   find scripts -maxdepth 1 -type f -name '*.sh' | sort
 }
@@ -257,6 +287,26 @@ version_check() {
     fi
 
     printf 'version: %s, no local release tag' "$version"
+    return 0
+  fi
+
+  if ((REQUIRE_UNPUBLISHED_PYPI)); then
+    local pypi_status
+    local pypi_output
+
+    pypi_output="$(version_exists_on_pypi "$version" 2>&1)"
+    pypi_status=$?
+    if ((pypi_status == 0)); then
+      printf 'version %s already exists on PyPI\n' "$version"
+      printf 'Run: scripts/bump-version.sh <new-version>\n'
+      return 1
+    fi
+    if ((pypi_status != 1)); then
+      printf '%s\n' "$pypi_output"
+      return "$pypi_status"
+    fi
+
+    printf 'version: %s, not published on PyPI' "$version"
     return 0
   fi
 
@@ -394,6 +444,9 @@ main() {
         ;;
       --require-unreleased-version)
         REQUIRE_UNRELEASED_VERSION=1
+        ;;
+      --require-unpublished-pypi)
+        REQUIRE_UNPUBLISHED_PYPI=1
         ;;
       -h|--help)
         usage
