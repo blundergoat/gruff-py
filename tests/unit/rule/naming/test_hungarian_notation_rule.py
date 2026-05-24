@@ -128,9 +128,3 @@ def test_ann_assign_fires():
     src = "n_count: int = 0\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
-
-
-def test_definition():
-    d = HungarianNotationRule().definition()
-    assert d.id == "naming.hungarian-notation"
-    assert d.pillar.value == "naming"

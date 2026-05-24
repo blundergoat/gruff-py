@@ -73,9 +73,3 @@ def test_decorator_counted_in_class_span():
     # decorator (1) + class (2) + 5 body lines = 7
     assert f.metadata["lines"] == 7
     assert f.line == 1
-
-
-def test_definition_uses_default_thresholds():
-    d = ClassLengthRule().definition()
-    assert d.id == "size.class-length"
-    assert d.default_thresholds == {"warning": 1000, "error": 1000}

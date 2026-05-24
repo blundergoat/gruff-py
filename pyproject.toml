@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gruff-py"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python project quality analyser."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -57,6 +57,7 @@ dev = [
     "ruff>=0.5",
     "pre-commit>=3.7",
     "types-PyYAML>=6.0",
+    "pip-audit>=2.10.0",
 ]
 
 [project.scripts]

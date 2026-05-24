@@ -6,7 +6,7 @@
 #   - src/gruffpy/version.py VERSION
 #
 # Does NOT commit, tag, publish, or touch CHANGELOG.md. The user owns those
-# steps; see docs/RELEASING.md for the full release checklist.
+# steps; see docs/releasing.md for the full release checklist.
 
 set -uo pipefail
 
@@ -51,12 +51,20 @@ Options:
 
 This script does NOT:
   - commit, tag, or push (the user owns git operations)
-  - edit CHANGELOG.md (move [Unreleased] entries manually per docs/RELEASING.md)
-  - run tests or build the package (run `make check` and `uv build` separately)
+  - edit CHANGELOG.md (move [Unreleased] entries manually per docs/releasing.md)
+  - run release verification (see docs/releasing.md)
 
 Examples:
   scripts/bump-version.sh 0.2.0
   scripts/bump-version.sh --check
+
+Release verification after bumping:
+  uv run ruff check src tests
+  uv run ruff format --check src tests
+  uv run mypy src
+  uv run python -m gruffpy.command.rule_docs --check docs/rules.md
+  uv run pytest
+  uv build
 USAGE
 }
 
@@ -206,10 +214,11 @@ cmd_bump() {
 
   cat <<NEXT
 
-Next steps (see docs/RELEASING.md for the full checklist):
+Next steps (see docs/releasing.md for the full checklist):
   - Move CHANGELOG.md [Unreleased] entries into a new [${new_version}] section.
   - Run: uv run ruff check src tests && uv run ruff format --check src tests
-  - Run: uv run mypy src && uv run pytest
+  - Run: uv run mypy src && uv run python -m gruffpy.command.rule_docs --check docs/rules.md
+  - Run: uv run pytest
   - Run: uv build
   - Review the diff, then commit and tag yourself (e.g. \`git tag v${new_version}\`).
 NEXT

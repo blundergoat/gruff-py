@@ -2,7 +2,15 @@
 
 from pathlib import Path
 
-from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.baseline import (
+    BaselineError,
+    BaselineOptions,
+    BaselineReport,
+    apply_baseline,
+    default_baseline_path,
+    generate_baseline,
+)
+from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.exceptions import ConfigError
@@ -35,6 +43,7 @@ def run_analysis(
     include_ignored: bool,
     project_root: Path,
     display_filter: FindingDisplayFilter,
+    baseline: BaselineOptions | None = None,
 ) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
@@ -53,10 +62,12 @@ def run_analysis(
         include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
         project_root: Resolved project root used for path display and discovery.
         display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
+        baseline: Baseline apply/generate/disable selection.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
     """
+    baseline_options = baseline if baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics = _load_analysis_config(
         project_root=project_root,
@@ -84,6 +95,13 @@ def run_analysis(
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
+    baseline_report = _handle_baseline(
+        project_root=project_root,
+        findings=findings,
+        diagnostics=diagnostics,
+        options=baseline_options,
+        scan_scope=_scan_scope(paths),
+    )
     score = ScoreCalculator().calculate(findings)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
@@ -104,6 +122,7 @@ def run_analysis(
         config_path=config_loaded_from,
         score=score,
         filters=display_filter,
+        extensions=ReportExtensions(baseline=baseline_report),
     )
 
 
@@ -141,6 +160,113 @@ def _collect_findings(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
     )
     return findings
+
+
+def _handle_baseline(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    options: BaselineOptions,
+    scan_scope: str,
+) -> BaselineReport | None:
+    conflict = _baseline_option_conflict(options)
+    if conflict is not None:
+        diagnostics.append(conflict)
+        return None
+    if options.generate_path is not None:
+        return _generate_baseline_safely(
+            project_root=project_root,
+            findings=findings,
+            diagnostics=diagnostics,
+            path=options.generate_path,
+        )
+    if options.disabled:
+        return None
+    return _apply_baseline_if_present(
+        project_root=project_root,
+        findings=findings,
+        diagnostics=diagnostics,
+        explicit_path=options.apply_path,
+        scan_scope=scan_scope,
+    )
+
+
+def _scan_scope(paths: tuple[str, ...]) -> str:
+    if not paths or any(p == "." for p in paths):
+        return "full-project"
+    return "partial-scope"
+
+
+def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
+    if options.generate_path is not None and options.apply_path is not None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message=(
+                "--baseline-path and --generate-baseline/--generate-baseline-path "
+                "are mutually exclusive."
+            ),
+        )
+    if options.disabled and options.apply_path is not None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message="--no-baseline cannot be combined with --baseline-path.",
+            path=str(options.apply_path),
+        )
+    return None
+
+
+def _generate_baseline_safely(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    path: Path,
+) -> BaselineReport | None:
+    try:
+        return generate_baseline(project_root=project_root, path=path, findings=findings)
+    except BaselineError as exc:
+        diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(path)))
+        return None
+
+
+def _apply_baseline_if_present(
+    *,
+    project_root: Path,
+    findings: list[Finding],
+    diagnostics: list[RunDiagnostic],
+    explicit_path: Path | None,
+    scan_scope: str,
+) -> BaselineReport | None:
+    selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
+    if selected_path is None:
+        return None
+    try:
+        result = apply_baseline(
+            project_root=project_root,
+            path=selected_path,
+            findings=findings,
+            source=source,
+            scan_scope=scan_scope,
+        )
+    except BaselineError as exc:
+        diagnostics.append(
+            RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path))
+        )
+        return None
+    findings[:] = result.findings
+    return result.report
+
+
+def _resolve_baseline_selection(
+    project_root: Path, explicit_path: Path | None
+) -> tuple[Path | None, str]:
+    if explicit_path is not None:
+        return explicit_path, "explicit"
+    default_path = default_baseline_path(project_root)
+    if not default_path.is_file():
+        return None, "default"
+    return Path(default_path.name), "default"
 
 
 def _load_analysis_config(

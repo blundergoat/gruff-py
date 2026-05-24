@@ -113,8 +113,3 @@ def test_pytest_fixture_skipped():
     src = "import pytest\n@pytest.fixture\ndef _setup(): return 1\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = UnusedPrivateFunctionRule().definition()
-    assert d.id == "dead-code.unused-private-function"

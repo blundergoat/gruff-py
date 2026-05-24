@@ -89,8 +89,3 @@ def test_method_in_class_fires():
     findings = RedundantVariableRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "C.m"
-
-
-def test_definition():
-    d = RedundantVariableRule().definition()
-    assert d.id == "waste.redundant-variable"

@@ -1,4 +1,4 @@
-"""Tests for project-config rules + opt-in test-quality heuristics + gating."""
+"""Tests for project-config rules and test-quality heuristic gating."""
 
 from pathlib import Path
 
@@ -20,7 +20,6 @@ from gruffpy.rule.test_quality.pytest_deprecations_not_fatal_rule import (
 from gruffpy.rule.test_quality.pytest_strict_config_missing_rule import (
     PytestStrictConfigMissingRule,
 )
-from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _TEST_FIXTURE = "def test_something():\n    assert 1 + 1 == 2\n"
@@ -129,28 +128,27 @@ def test_coverage_source_present_skips(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "rule_cls",
-    [MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule],
+    [MockingDomainObjectRule, MultipleAaaCyclesRule],
     ids=lambda c: c.__name__,
 )
-def test_opt_in_rule_default_off(rule_cls: type) -> None:
-    """The opt-in test-quality rules must default to enabled=False.
+def test_test_quality_rules_default_on(rule_cls: type) -> None:
+    """The test-quality rules must default to enabled=True.
 
     Args:
-        rule_cls: Rule class expected to ship with ``default_enabled=False``.
+        rule_cls: Rule class expected to ship with ``default_enabled=True``.
     """
-    assert rule_cls().definition().default_enabled is False
+    assert rule_cls().definition().default_enabled is True
 
 
-def test_multiple_aaa_cycles_requires_opt_in():
-    """Default-off rules don't fire through the registry unless explicitly enabled."""
+def test_multiple_aaa_cycles_enabled_by_default():
+    """Default config keeps multiple-AAA-cycles enabled in the registry."""
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
-    # Verify the rule is in defaults() but its settings.enabled is False.
     settings = config.rule_settings(MultipleAaaCyclesRule.ID)
-    assert settings.enabled is False
+    assert settings.enabled is True
 
 
-def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
-    """When opted in, the rule does fire on multi-cycle tests.
+def test_multiple_aaa_cycles_fires_when_configured(tmp_path: Path):
+    """The rule fires on multi-cycle tests when its threshold is tight.
 
     Args:
         tmp_path: Pytest-provided per-test directory used as the project root.
@@ -164,28 +162,13 @@ def test_multiple_aaa_cycles_fires_when_enabled(tmp_path: Path):
     ctx = RuleContext(project_root=str(tmp_path), config=config)
     src = (
         "def test_x():\n"
-        "    x = 1\n"
+        "    x = compute()\n"
         "    assert x == 1\n"
-        "    y = 2\n"
+        "    y = compute()\n"
         "    assert y == 2\n"
-        "    z = 3\n"
+        "    z = compute()\n"
         "    assert z == 3\n"
     )
     findings = rule.analyse(make_unit(src), ctx)
     assert len(findings) == 1
     assert findings[0].metadata["cycles"] >= 2
-
-
-def test_testdox_readability_skipped_when_default(tmp_path: Path):
-    """testdox-readability is default-off; even short test names don't fire by default.
-
-    Args:
-        tmp_path: Pytest-provided per-test directory used as the project root.
-    """
-    rule = TestdoxReadabilityRule()
-    registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry)
-    ctx = RuleContext(project_root=str(tmp_path), config=config)
-    # Default-off rule must NOT appear in any finding produced by the full registry.
-    findings = registry.analyse([make_unit("def test_x():\n    pass\n")], ctx)
-    assert all(f.rule_id != rule.definition().id for f in findings)

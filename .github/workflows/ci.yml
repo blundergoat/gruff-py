@@ -35,6 +35,9 @@ jobs:
         with:
           scandir: ./scripts
 
+      - name: Dependency audit
+        run: uv run pip-audit --skip-editable --progress-spinner off
+
       - name: Lint
         run: uv run ruff check src tests
 
@@ -45,7 +48,7 @@ jobs:
         run: uv run mypy src
 
       - name: Rule docs
-        run: uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+        run: uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 
       - name: Test
         run: uv run pytest

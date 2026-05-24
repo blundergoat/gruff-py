@@ -148,9 +148,3 @@ def test_module_name_mismatch_silent_when_filename_matches():
     )
     mismatch = [f for f in findings if f.rule_id == "naming.module-name-mismatch"]
     assert mismatch == []
-
-
-def test_findings_deterministic_across_two_runs():
-    a = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
-    b = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
-    assert [f.fingerprint() for f in a] == [f.fingerprint() for f in b]

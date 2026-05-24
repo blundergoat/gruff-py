@@ -1,8 +1,10 @@
-"""``test-quality.multiple-aaa-cycles`` (opt-in) - test executes multiple Arrange-Act-Assert cycles.
+"""``test-quality.multiple-aaa-cycles`` - test executes multiple Arrange-Act-Assert cycles.
 
-Heuristic: a test that has assertions interleaved with non-assertion statements
-multiple times probably exercises multiple behaviours. Default-off; users
-explicitly enable when they want this stylistic enforcement.
+Heuristic: a test that interleaves assertions with **new function calls**
+multiple times probably exercises multiple behaviours. A statement that only
+unpacks an existing value (attribute access, subscript, rebinding, or a
+literal/comprehension with no calls) does not end an assert block - it is
+treated as continuation of the same assertion phase.
 """
 
 import ast
@@ -29,15 +31,15 @@ class MultipleAaaCyclesRule(Rule):
     ID = "test-quality.multiple-aaa-cycles"
 
     def definition(self) -> RuleDefinition:
-        """Describe the multiple-AAA-cycles rule as an opt-in low-confidence stylistic advisory.
+        """Describe the multiple-AAA-cycles rule as a low-confidence stylistic advisory.
 
-        Low confidence and default-off because identifying "cycles" by
-        assert-block boundaries is fuzzy - interleaved arrange/assert
-        statements can look like multiple cycles when they aren't.
+        Low confidence reflects that identifying "cycles" by assert-block
+        boundaries is still fuzzy even after restricting boundaries to
+        call-containing statements - a deserialisation call between asserts
+        can look like a new Act when it is just data unpacking.
 
         Returns:
-            Definition with ``default_enabled=False`` and a ``maxCycles``
-            threshold defaulting to 2.
+            Definition with a ``maxCycles`` threshold defaulting to 2.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,15 +48,16 @@ class MultipleAaaCyclesRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
-            default_enabled=False,
             default_thresholds={"maxCycles": 2},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag tests whose top-level body contains more than ``maxCycles`` assertion blocks.
 
-        A cycle ends each time a non-assertion statement follows an
-        assertion block; the rule fires when the cycle count exceeds the
+        A cycle ends each time a non-assertion statement that contains a
+        function call follows an assertion block; pure data-access
+        statements (attribute, subscript, literal/dict-comp restructuring)
+        do not end a cycle. The rule fires when the cycle count exceeds the
         configured threshold (default: more than 2).
 
         Args:
@@ -103,7 +106,11 @@ class MultipleAaaCyclesRule(Rule):
 def _count_aaa_cycles(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     """Count assertion-block boundaries at the top level of *fn*'s body.
 
-    A "cycle" ends when a non-assertion statement follows an assertion block.
+    A "cycle" ends when a call-containing statement follows an assertion
+    block. Pure data-access statements (attribute, subscript, literal or
+    comprehension restructuring with no function calls) are treated as
+    continuation of the surrounding assert block, since they only unpack
+    values for further assertions rather than introducing a new Act.
     """
     cycles = 0
     in_assert_block = False
@@ -111,7 +118,7 @@ def _count_aaa_cycles(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
         if _is_assertion_stmt(stmt):
             in_assert_block = True
             continue
-        if in_assert_block:
+        if in_assert_block and _has_call(stmt):
             cycles += 1
             in_assert_block = False
     if in_assert_block:
@@ -127,3 +134,39 @@ def _is_assertion_stmt(stmt: ast.stmt) -> bool:
         and isinstance(stmt.value, ast.Call)
         and is_assertion_call(stmt.value)
     )
+
+
+def _has_call(stmt: ast.stmt) -> bool:
+    """Return whether *stmt* contains any function/method call expression.
+
+    Nested function, class, and lambda bodies are skipped: a call inside
+    a helper defined between asserts is not executed at that point and
+    must not end the surrounding assert block.
+    """
+
+    class _CallFinder(ast.NodeVisitor):
+        """Set ``found`` to ``True`` on the first ``Call`` outside nested scopes."""
+
+        def __init__(self) -> None:
+            self.found = False
+
+        def visit_Call(self, _: ast.Call) -> None:  # noqa: N802 - ast visitor naming
+            self.found = True
+
+        def visit_FunctionDef(self, _: ast.FunctionDef) -> None:  # noqa: N802 - ast visitor naming
+            return
+
+        def visit_AsyncFunctionDef(  # noqa: N802 - ast visitor naming
+            self, _: ast.AsyncFunctionDef
+        ) -> None:
+            return
+
+        def visit_ClassDef(self, _: ast.ClassDef) -> None:  # noqa: N802 - ast visitor naming
+            return
+
+        def visit_Lambda(self, _: ast.Lambda) -> None:  # noqa: N802 - ast visitor naming
+            return
+
+    finder = _CallFinder()
+    finder.visit(stmt)
+    return finder.found

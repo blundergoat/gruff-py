@@ -267,16 +267,6 @@ def test_shallow_function_no_complexity_findings():
     assert shallow_complexity_findings == []
 
 
-def test_findings_deterministic_across_two_runs():
-    unit_a = _make_unit(COMPLEXITY_FIXTURE)
-    unit_b = _make_unit(COMPLEXITY_FIXTURE)
-    ctx = _default_ctx()
-    registry = RuleRegistry.defaults()
-    a = registry.analyse([unit_a], ctx)
-    b = registry.analyse([unit_b], ctx)
-    assert [f.fingerprint() for f in a] == [f.fingerprint() for f in b]
-
-
 def test_maintainability_index_uses_maintainability_pillar():
     # Build a function with low MI -> finding pillar = maintainability
     body = "\n".join(

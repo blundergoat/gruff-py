@@ -5,14 +5,16 @@ import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.finding.pillar import Pillar
+from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.catalog import (
     BUILTIN_RULES,
-    RuleDocs,
     catalog_definitions,
     documentation_for_rule,
 )
+from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
+from gruffpy.source.source_file import SourceFile
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RULE_ROOT = _PROJECT_ROOT / "src" / "gruffpy" / "rule"
@@ -22,6 +24,7 @@ _PREFIXES_BY_PILLAR = {
     Pillar.COMPLEXITY: ("complexity.",),
     Pillar.MAINTAINABILITY: ("complexity.", "maintainability."),
     Pillar.DEAD_CODE: ("dead-code.", "waste."),
+    Pillar.MODERNISATION: ("modernisation.",),
     Pillar.NAMING: ("naming.",),
     Pillar.DOCUMENTATION: ("docs.",),
     Pillar.SECURITY: ("security.",),
@@ -73,11 +76,41 @@ def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
     assert concrete_classes == catalog_classes
 
 
-def test_documentation_for_rule_returns_rule_docs_with_payload_round_trip() -> None:
-    sample_id = _ALL_DEFINITIONS[0].id
-    docs = documentation_for_rule(sample_id)
-    assert isinstance(docs, RuleDocs)
-    assert docs.to_payload()["rationale"] == docs.rationale
+_DETERMINISM_FIXTURE = '''
+class LongClassWithBadNamingAndDeadCode:
+    """Mixed-pillar fixture exercising naming, size, dead-code, and complexity."""
+
+    def methodWithCamelCase(self, a, b, c, d, e, f, g, h):
+        x = 1
+        y = 2
+        z = 3
+        for i in range(10):
+            if i > 5:
+                if i < 8:
+                    if i == 7:
+                        print(i)
+        return a + b + c + d + e + f + g + h + x + y + z
+
+
+def _unused_private_helper():
+    pass
+'''
+
+
+def test_registry_analyse_is_deterministic_across_runs() -> None:
+    """Running the full registry on the same source twice produces identical fingerprints."""
+    tree_a = ast.parse(_DETERMINISM_FIXTURE)
+    tree_b = ast.parse(_DETERMINISM_FIXTURE)
+    file = SourceFile(absolute_path="/d.py", display_path="d.py", type="python")
+    unit_a = AnalysisUnit(file=file, source=_DETERMINISM_FIXTURE, tree=tree_a)
+    unit_b = AnalysisUnit(file=file, source=_DETERMINISM_FIXTURE, tree=tree_b)
+    ctx = RuleContext(
+        project_root="/", config=AnalysisConfig.from_registry(RuleRegistry.defaults())
+    )
+    registry = RuleRegistry.defaults()
+    a = registry.analyse([unit_a], ctx)
+    b = registry.analyse([unit_b], ctx)
+    assert [f.fingerprint() for f in a] == [f.fingerprint() for f in b]
 
 
 @pytest.mark.parametrize("definition", _ALL_DEFINITIONS, ids=lambda d: d.id)

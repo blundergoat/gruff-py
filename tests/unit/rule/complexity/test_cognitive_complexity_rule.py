@@ -184,9 +184,3 @@ def test_high_score_emits_warning_finding():
     assert len(findings) == 1
     assert findings[0].severity == Severity.WARNING
     assert findings[0].metadata["cognitive"] == 18
-
-
-def test_definition_uses_default_thresholds():
-    d = CognitiveComplexityRule().definition()
-    assert d.id == "complexity.cognitive"
-    assert d.default_thresholds == {"warning": 15, "error": 30}

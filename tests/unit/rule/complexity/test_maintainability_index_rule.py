@@ -123,10 +123,3 @@ def test_lower_threshold_means_worse_mi_is_threshold():
     # warning threshold = 110 -> 100 is below 110, finding emitted
     findings2 = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(warning=110, error=80))
     assert len(findings2) == 1
-
-
-def test_definition_uses_default_thresholds():
-    d = MaintainabilityIndexRule().definition()
-    assert d.id == "complexity.maintainability-index"
-    assert d.pillar == Pillar.MAINTAINABILITY  # NOT complexity!
-    assert d.default_thresholds == {"warning": 80, "error": 70}

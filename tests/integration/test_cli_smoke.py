@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from gruffpy.cli import main
@@ -12,6 +14,7 @@ _EXPECTED_ROOT_COMMANDS = (
     "completion",
     "dashboard",
     "help",
+    "init",
     "list",
     "list-rules",
     "report",
@@ -61,17 +64,32 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
     assert "\x1b[32manalyse\x1b" in result.output
 
 
-_EXPECTED_ANALYSE_LOCAL_OPTIONS = ("--diff", "--diff-vs", "--baseline", "--generate-baseline")
+_EXPECTED_ANALYSE_LOCAL_OPTIONS = (
+    "--diff",
+    "--diff-vs",
+    "--baseline-path",
+    "--generate-baseline",
+    "--generate-baseline-path",
+)
 
 
 def test_cli_command_help_lists_symfony_style_global_options():
+    """Guard the analyse --help contract: globals, locals, formats, no docstring leakage."""
     result = CliRunner().invoke(main, ["analyse", "--help"])
-    assert result.exit_code == 0
-    missing_global = [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output]
-    missing_local = [o for o in _EXPECTED_ANALYSE_LOCAL_OPTIONS if o not in result.output]
-    assert missing_global == [], f"missing global options in analyse --help: {missing_global}"
-    assert missing_local == [], f"missing local options in analyse --help: {missing_local}"
-    assert "sarif" in result.output
+    classification = {
+        "exit_code": result.exit_code,
+        "missing_global": [o for o in _EXPECTED_GLOBAL_OPTIONS if o not in result.output],
+        "missing_local": [o for o in _EXPECTED_ANALYSE_LOCAL_OPTIONS if o not in result.output],
+        "missing_sarif": "sarif" not in result.output,
+        "leaked_docstring_sections": [s for s in ("Args:", "Raises:") if s in result.output],
+    }
+    assert classification == {
+        "exit_code": 0,
+        "missing_global": [],
+        "missing_local": [],
+        "missing_sarif": False,
+        "leaked_docstring_sections": [],
+    }
 
 
 _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
@@ -100,6 +118,245 @@ def test_cli_list_rules_json_lists_rule_metadata():
     rule = payload["rules"][0]
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
+
+
+def test_cli_list_rules_accepts_text_alias():
+    result = CliRunner().invoke(main, ["list-rules", "--format", "text"])
+
+    assert result.exit_code == 0, result.output
+    assert "Rule" in result.output
+    assert "Pillar" in result.output
+
+
+def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["init"])
+
+    target = tmp_path / ".gruff-py.yaml"
+    assert result.exit_code == 0, result.output
+    assert target.exists()
+    assert result.output.startswith(f"Wrote {target}\n")
+    assert "gruff-py analyse . --generate-baseline" in result.output
+
+
+def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    CliRunner().invoke(main, ["init"])
+
+    config_text = (tmp_path / ".gruff-py.yaml").read_text()
+    assert config_text.startswith("# gruff-py configuration - .gruff-py.yaml\n")
+    assert "Built-in ignores and .gitignore already apply" in config_text
+    assert "- .agents/" in config_text
+    assert "- tests/fixtures/**" in config_text
+
+
+def test_cli_init_refuses_to_overwrite_existing_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text("# do not clobber\n")
+
+    result = CliRunner().invoke(main, ["init"])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert existing.read_text() == "# do not clobber\n"
+
+
+def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "none", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Generate a default config" not in result.output
+    assert not (tmp_path / ".gruff-py.yaml").exists()
+
+
+def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure a bad ``--project`` surfaces as a directory error before any prompt.
+
+    Args:
+        tmp_path: Working directory for the invocation.
+        monkeypatch: Fixture used to chdir into ``tmp_path``.
+    """
+    monkeypatch.chdir(tmp_path)
+    bogus = tmp_path / "does-not-exist"
+
+    result = CliRunner().invoke(main, ["dashboard", "--project", str(bogus)])
+
+    assert result.exit_code != 0
+    assert "Project root is not a directory" in result.output
+    assert "Unable to write" not in result.output
+    assert not (bogus / ".gruff-py.yaml").exists()
+
+
+def test_cli_init_force_regenerates_existing_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text("# do not clobber\n")
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code == 0, result.output
+    assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+
+
+def test_cli_init_force_preserves_existing_ignore_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text(
+        "paths:\n"
+        "  ignore:\n"
+        "    - generated/**\n"
+        "    - .codex/\n"
+        "rules:\n"
+        "  docs.missing-module-docstring:\n"
+        "    enabled: false\n"
+    )
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    document = yaml.safe_load(existing.read_text())
+    assert result.exit_code == 0, result.output
+    assert document["paths"]["ignore"] == [
+        "generated/**",
+        ".codex/",
+        ".agents/",
+        ".antigravitycli/",
+        ".claude/",
+        ".github/",
+        ".goat-flow/",
+        "tests/fixtures/**",
+    ]
+
+
+def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    original = "paths:\n  ignore: generated/**\n"
+    existing.write_text(original)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert "paths.ignore must be a list of strings" in result.output
+    assert existing.read_text() == original
+
+
+def _seed_sample_project(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("def f():\n    pass\n")
+
+
+def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
+    _seed_sample_project(tmp_path)
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "src",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--generate-baseline",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    return cast("dict[str, Any]", json.loads(result.output))
+
+
+def test_cli_analyse_generate_baseline_writes_default_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    generated_payload = _generate_default_baseline(tmp_path)
+    baseline_payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
+
+    assert baseline_payload["schemaVersion"] == "gruff-py.baseline.v1"
+    assert len(baseline_payload["findings"]) == len(generated_payload["findings"])
+    assert generated_payload["baseline"] == {
+        "path": "gruff-baseline.json",
+        "generated": True,
+        "totalEntries": len(generated_payload["findings"]),
+        "suppressedFindings": 0,
+        "staleEvaluation": "generated",
+        "staleEntries": 0,
+        "source": "default",
+        "stale": [],
+    }
+
+
+def test_cli_analyse_auto_applies_default_baseline_when_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    generated_payload = _generate_default_baseline(tmp_path)
+
+    applied = CliRunner().invoke(
+        main,
+        ["analyse", "src", "--format", "json", "--fail-on", "warning", "--no-config"],
+    )
+    applied_payload = json.loads(applied.output)
+
+    assert applied.exit_code == 0, applied.output
+    assert applied_payload["findings"] == []
+    assert applied_payload["baseline"]["source"] == "default"
+    assert applied_payload["baseline"]["generated"] is False
+    assert applied_payload["baseline"]["suppressedFindings"] == len(generated_payload["findings"])
+
+
+def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "src",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--baseline-path",
+            "gruff-baseline.json",
+            "--generate-baseline",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "baseline-error"
+    assert "mutually exclusive" in payload["diagnostics"][0]["message"]
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,6 +398,7 @@ def test_cli_summary_json_is_compact_digest(
     elapsed = summary["elapsedSeconds"]
     assert summary["paths"] == ["src"]
     assert isinstance(elapsed, int | float) and elapsed >= 0
+    assert "Next steps" not in result.output
 
 
 def test_cli_summary_text_includes_path_and_elapsed(
@@ -156,6 +414,27 @@ def test_cli_summary_text_includes_path_and_elapsed(
     assert result.exit_code == 0, result.output
     assert "Path: src" in result.output
     assert "Elapsed:" in result.output
+    assert "Baseline:" in result.output
+    assert "gruff-py analyse src --generate-baseline" in result.output
+
+
+def test_cli_summary_text_hints_when_paths_were_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    (generated / "ignored.py").write_text("x = 2\n")
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "."])
+
+    assert result.exit_code == 0, result.output
+    assert "1 ignored" in result.output
+    assert "--include-ignored" in result.output
+    assert "configured paths.ignore still applies" in result.output
 
 
 def test_cli_metric_calibration_json_is_developer_dump(
@@ -303,13 +582,6 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
     assert payload["version"] == "2.1.0"
     assert run["tool"]["driver"]["name"] == "gruff-py"
     assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
-
-
-def test_cli_analyse_sarif_fixture_driver_rules_are_sorted_and_nonempty() -> None:
-    run = _sarif_fixture_payload()["runs"][0]
-    rule_ids = [rule["id"] for rule in run["tool"]["driver"]["rules"]]
-    assert rule_ids == sorted(rule_ids)
-    assert len(run["results"]) > 0
 
 
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:

@@ -1,134 +1,132 @@
 # gruff-py
 
-`gruff-py` is the Python implementation of **gruff**, an opinionated project
-quality analyser. It walks Python projects, applies a broad rule catalogue, and
-emits scored reports for local review, CI, code scanning, and a browser
-dashboard.
+`gruff-py` is the Python implementation of **gruff**, an opinionated project-quality analyser. It walks Python projects, scores findings across quality pillars, and emits reports for terminals, CI annotations, SARIF consumers, static HTML, and a local dashboard. It is heuristic static analysis; run it beside `ruff`, `mypy`, `pytest`, security scanners, and code review, not instead of them.
 
-It is heuristic static analysis. Use it beside tools such as `ruff`, `mypy`,
-`pytest`, and security scanners, not as a replacement for them.
+## Status At A Glance
 
-## Status
+| Field | Value |
+| --- | --- |
+| Release line | Published `0.1.1` package line |
+| Runtime | Python `3.11+` |
+| Package | `gruff-py` |
+| Import package | `gruffpy` with `py.typed` |
+| Binary | `gruff-py` |
+| Rule catalogue | 116 rules across 11 pillars |
+| Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
+| Analysis schema | `gruff-py.analysis.v1` |
+| Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
+| Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error` |
+| Dashboard | `127.0.0.1:8765` by default |
 
-`0.1.0` is the first public release.
+Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. The Python schemas remain language-prefixed.
 
-- Python 3.11+
-- 116 rules across 10 active quality pillars
-- Text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF reports
-- Local dashboard served from `127.0.0.1` by default
-- `.gruff-py.yaml` and `[tool.gruff-py]` configuration
-- PHP-compatible finding fingerprints
-- Python import package `gruffpy` with a typed package marker via `py.typed`
-- MIT licensed (see [`LICENSE.md`](LICENSE.md))
+## Requirements
+
+- Python `3.11+`.
+- `uv` for source-checkout development.
+- Git only for diff and branch-review modes.
+- Optional external mutation tooling only when mutation flags are explicitly used.
 
 ## Install
 
-From this repository:
+Install as a project dev dependency:
+
+```bash
+uv add --dev gruff-py
+uv run gruff-py init
+uv run gruff-py summary
+```
+
+From a source checkout:
 
 ```bash
 uv sync
+uv run gruff-py --help
 ./bin/gruff-py --help
-```
-
-The package entry point is `gruff-py`, so `uv run gruff-py --help` is
-equivalent after `uv sync`.
-
-After the package is published:
-
-```bash
-pipx install gruff-py
-gruff-py --help
 ```
 
 ## Quick Start
 
-Analyse a project:
-
 ```bash
-uv run gruff-py analyse src/
-```
+# Create the project config.
+uv run gruff-py init
 
-Emit JSON for automation:
+# Review the current finding mix.
+uv run gruff-py summary
 
-```bash
-uv run gruff-py analyse src/ --format json --fail-on error > gruff.json
-```
+# Explore without failing because of findings.
+uv run gruff-py analyse src/ --fail-on none
 
-Emit SARIF for code scanning:
+# Gate on warning and error findings.
+uv run gruff-py analyse src/ --fail-on warning
 
-```bash
+# Emit SARIF for code scanning.
 uv run gruff-py analyse src/ --format sarif --fail-on none > gruff.sarif
-```
 
-Create a standalone HTML report:
+# Generate a fresh-start baseline.
+uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
 
-```bash
-uv run gruff-py analyse src/ --format html --report-interactive > gruff-report.html
-```
-
-Run the local dashboard:
-
-```bash
+# Start the local dashboard.
 uv run gruff-py dashboard src/ --report-interactive
 ```
 
-Then open:
+Open `http://127.0.0.1:8765/` for the dashboard.
 
-```text
-http://127.0.0.1:8765/
-```
+## Commands
 
-## CLI
+| Command | Purpose |
+| --- | --- |
+| `analyse [paths...]` | Run the analyser and print findings. |
+| `summary [paths...]` | Print compact score, pillar, rule, and file summaries. |
+| `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
+| `list-rules` | Print rule metadata as text or JSON. |
+| `dashboard [paths...]` | Serve the local browser dashboard. |
+| `completion [shell]` | Print a shell completion script. |
+| `list`, `help` | Show command lists and command-specific help. |
 
-```bash
-gruff-py [GLOBAL OPTIONS] <command>
-gruff-py analyse [OPTIONS] [PATHS]...
-gruff-py report [OPTIONS] [PATHS]...
-gruff-py summary [OPTIONS] [PATHS]...
-gruff-py list-rules [OPTIONS]
-gruff-py dashboard [OPTIONS] [PATHS]...
-gruff-py completion [SHELL]
-```
+Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--version`, `--ansi` / `--no-ansi`, `--no-interaction`, and `--verbose`.
 
-Global options mirror the gruff-php CLI surface: `--silent`, `--quiet`,
-`--version`, `--ansi` / `--no-ansi`, `--no-interaction`, and `--verbose`.
+## Output Formats
 
-Common `analyse` and `report` options:
+`analyse --format <fmt>` accepts:
 
-| Option | Meaning |
-|---|---|
-| `--format text` | Terminal summary, the default |
-| `--format json` | Full `gruff-py.analysis.v1` payload |
-| `--format html` | Self-contained dark HTML report |
-| `--format markdown` | Pull-request or issue comment summary |
-| `--format github` | GitHub Actions annotation commands |
-| `--format hotspot` | `gruff-py.hotspot.v1` file offender JSON |
-| `--format sarif` | SARIF 2.1.0 code-scanning output |
-| `--fail-on error` | Exit non-zero for findings at or above the threshold |
-| `--no-config` | Ignore `.gruff-py.yaml` and `[tool.gruff-py]` |
-| `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
-| `--min-severity warning` | Display only warning/error findings |
-| `--include-pillar documentation` | Display only selected pillar findings |
-| `--exclude-rule docs.missing-function-docstring` | Hide selected rule findings |
+| Format | Use it for |
+| --- | --- |
+| `text` | Human terminal output. |
+| `json` | Full `gruff-py.analysis.v1` report. |
+| `html` | Self-contained inspection report. |
+| `markdown` | Pull-request or issue comment summary. |
+| `github` | GitHub Actions workflow annotations. |
+| `hotspot` | `gruff-py.hotspot.v1` file-offender JSON. |
+| `sarif` | SARIF 2.1.0 for code scanning. |
 
-Additional commands:
+`report --format <fmt>` accepts `html` and `json`.
 
-| Command | Meaning |
-|---|---|
-| `gruff-py report --format html --output gruff.html` | Render an HTML or JSON report to a file or stdout |
-| `gruff-py summary --format text` | Print compact per-pillar, top-rule, and top-file counts |
-| `gruff-py list-rules --format json` | Print registered rule metadata |
-| `gruff-py list` | List available commands |
-| `gruff-py help analyse` | Display command help |
-| `gruff-py completion bash` | Dump a shell completion script |
-
-Exit codes:
+## Exit Codes
 
 | Code | Meaning |
-|---|---|
-| `0` | Run completed and no finding reached `--fail-on` |
-| `1` | At least one finding reached `--fail-on` |
-| `2` | Input, parse, or configuration diagnostic |
+| --- | --- |
+| `0` | Run completed and no finding met `--fail-on`. |
+| `1` | At least one finding met `--fail-on`. |
+| `2` | Fatal diagnostic such as input, parse, configuration, baseline, or diff failure. |
+
+`analyse` defaults to `--fail-on error`.
+
+## CI Usage
+
+Generic CI command:
+
+```bash
+uv run gruff-py analyse src tests --format github --fail-on warning
+```
+
+SARIF jobs can write an artifact for code scanning:
+
+```bash
+uv run gruff-py analyse src tests --format sarif --fail-on none > gruff-py.sarif
+```
+
+Use `--no-baseline` for security-focused gates where adoption baselines should not hide new error-severity findings.
 
 ## Configuration
 
@@ -156,38 +154,74 @@ rules:
     severity: error
 ```
 
-See [Configuration](docs/CONFIGURATION.md) for the full shape.
+See [Configuration](docs/configuration.md) for the full shape.
 
-## Quality Pillars
+## Rules And Pillars
 
-gruff-py scores findings across these active pillars:
+The v0.1 catalogue contains 116 rules across 11 pillars:
 
-- `size`
-- `complexity`
-- `maintainability`
-- `dead-code`
-- `naming`
-- `documentation`
-- `security`
-- `sensitive-data`
-- `test-quality`
-- `design`
+| Pillar | Rules |
+| --- | ---: |
+| `size` | 7 |
+| `complexity` | 5 |
+| `maintainability` | 1 |
+| `dead-code` | 10 |
+| `modernisation` | 1 |
+| `naming` | 10 |
+| `documentation` | 13 |
+| `security` | 26 |
+| `sensitive-data` | 9 |
+| `test-quality` | 33 |
+| `design` | 1 |
 
-`modernisation`, `coupling`, `architecture`, and `mutation` are reserved schema
-or future catalogue names. They do not all have shipping rules in `0.1`.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
-See [Rules](docs/RULES.md) for the rule catalogue.
+## Baselines And Changed-Code Scans
 
-## Reports And Dashboard
+Baselines suppress reviewed findings by fingerprint:
 
-- [Reports](docs/REPORTING.md) explains every output format and CI use case.
-- [Dashboard](docs/DASHBOARD.md) documents the local browser dashboard.
+```bash
+uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
+uv run gruff-py analyse src/ --baseline-path gruff-baseline.json --fail-on warning
+uv run gruff-py analyse src/ --no-baseline --fail-on none
+```
 
-The JSON schema string is `gruff-py.analysis.v1`; hotspot output uses
-`gruff-py.hotspot.v1`. Finding fingerprints are 16-character SHA-256 derivatives
-kept compatible with the PHP implementation. SARIF is rendered from the same
-native report data without changing native schemas or fingerprints; SARIF result
-fingerprints use `partialFingerprints.gruffFingerprint`.
+Changed-code scans can filter to changed lines or compare against a base ref:
+
+```bash
+uv run gruff-py analyse src/ --diff staged --format github --fail-on warning
+uv run gruff-py analyse src/ --diff-vs origin/main --changed-only --fail-on none
+```
+
+Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered output without changing which rules execute.
+
+## Dashboard
+
+```bash
+uv run gruff-py dashboard src/ --host 127.0.0.1 --port 8765 --report-interactive
+```
+
+The dashboard serves a local browser UI for repeated scans. It has no authentication and is intended for local development; keep it on loopback unless the network is trusted. See [Dashboard](docs/dashboard.md) for supported controls and safety notes.
+
+In polyglot repositories, remember that `gruff-go`, `gruff-php`, and `gruff-py` all default to port `8765`; use `--port` when running multiple dashboards at the same time.
+
+## Trust Boundary
+
+Default scans are local source inspections. `gruff-py` parses Python source and selected project metadata; it does not execute target application code, run tests, query vulnerability feeds, or contact package registries. Git is used only for explicit diff modes. External mutation tooling is used only when explicitly requested by mutation flags. Sensitive-data previews are redacted before they reach terminal, JSON, SARIF, GitHub, Markdown, hotspot, or HTML output.
+
+## Stability Contract
+
+The `0.1.x` line treats rule IDs, finding fingerprints, baseline identity, `gruff-py.analysis.v1`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, SARIF rendering, and CLI exit semantics as compatibility-sensitive. Breaking changes should be tagged as a future minor release and recorded in [`CHANGELOG.md`](CHANGELOG.md).
+
+## How It Compares
+
+| Tool | Relationship |
+| --- | --- |
+| `ruff` | Fast linting and formatting. `gruff-py` adds scoring, baselines, reports, dashboard, and project-quality rules. |
+| `mypy` / Pyright | Type checking. `gruff-py` does not prove type correctness. |
+| `pytest` | Runtime tests. `gruff-py` can flag test-quality smells but does not prove behavior. |
+| Bandit / Semgrep / vulnerability scanners | Security-focused checks. `gruff-py` reports local static signals and does not replace specialized scanners. |
+| Vulture / dead-code tools | Focused unused-code detection. `gruff-py` includes broader quality scoring and reporting. |
 
 ## Development
 
@@ -197,41 +231,23 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy src
 uv run pytest
-```
-
-The Makefile mirrors these commands:
-
-```bash
 make check
 ```
 
-Note that `make check` uses the `lint` target, which runs `ruff check --fix`.
-Use the explicit commands above when you need non-mutating release verification.
+`make check` uses the `lint` target, which runs `ruff check --fix`. Use the explicit commands above when you need non-mutating release verification.
 
-### Performance harness
-
-`scripts/test-performance.sh` runs a fixed workload matrix (cold-start,
-analyse on `src/`/`tests/`, reporter variants, synthetic 100/1000-file
-fixtures) with median/p95/min/max wall-clock, peak RSS via
-`/usr/bin/time -v`, and per-rule cost attribution from `cProfile`. Baselines
-live under `scripts/performance-baselines/<host>.json`; pass `--baseline` to
-fail the script on regressions.
-
-```bash
-make perf-quick    # CI smoke: cold-start + analyse-src vs baseline
-make perf          # full suite vs baseline
-make perf-baseline # overwrite the linux-x86_64 baseline with the current run
-```
-
-## Project Docs
+## Documentation
 
 - [Changelog](CHANGELOG.md)
+- [Configuration](docs/configuration.md)
+- [Rules](docs/rules.md)
+- [Reports](docs/reporting.md)
+- [Dashboard](docs/dashboard.md)
+- [Release checklist](docs/releasing.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security](SECURITY.md)
 - [Support](SUPPORT.md)
-- [Release checklist](docs/RELEASING.md)
-- [License](LICENSE.md)
 
 ## Author
 
@@ -239,4 +255,4 @@ Built by [Matthew Hansen](https://www.blundergoat.com/about).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE.md)

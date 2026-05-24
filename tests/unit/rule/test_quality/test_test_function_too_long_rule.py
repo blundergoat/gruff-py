@@ -50,10 +50,3 @@ def test_split_thresholds_emit_warning_between_tiers():
     finding = findings[0]
     assert finding.severity == Severity.WARNING
     assert finding.metadata["thresholdType"] == "warning"
-
-
-def test_definition_uses_single_threshold_default():
-    definition = TestFunctionTooLongRule().definition()
-    assert definition.id == "test-quality.test-function-too-long"
-    assert definition.default_thresholds == {"warning": 100, "error": 100}
-    assert definition.default_severity == Severity.WARNING

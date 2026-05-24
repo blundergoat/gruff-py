@@ -15,6 +15,7 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
     Pillar.COMPLEXITY,
     Pillar.MAINTAINABILITY,
     Pillar.DEAD_CODE,
+    Pillar.MODERNISATION,
     Pillar.NAMING,
     Pillar.DOCUMENTATION,
     Pillar.SECURITY,
@@ -28,6 +29,7 @@ _PILLAR_NOTES = {
     Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, nesting, and NPATH",
     Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
+    Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
     Pillar.DOCUMENTATION: (
         "Docstring presence and quality, stale docs, TODO density, README presence"
@@ -42,6 +44,7 @@ _GROUP_ORDER = (
     "Size",
     "Complexity And Maintainability",
     "Dead Code And Waste",
+    "Modernisation",
     "Naming",
     "Documentation",
     "Security",
@@ -70,7 +73,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         f"gruff-py `0.1` registers {len(definitions)} rules in `RuleRegistry.defaults()`.",
         "",
         "This file is generated from the first-party built-in rule catalog.",
-        "Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.",
+        "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
         "",
         "## Pillar Summary",
         "",
@@ -139,8 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         ``0`` on success or when docs are current; ``1`` if ``--check`` fails.
     """
-    parser = argparse.ArgumentParser(description="Generate or check docs/RULES.md.")
-    parser.add_argument("path", nargs="?", default="docs/RULES.md")
+    parser = argparse.ArgumentParser(description="Generate or check docs/rules.md.")
+    parser.add_argument("path", nargs="?", default="docs/rules.md")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Fail if the docs are not current.")
     mode.add_argument("--write", action="store_true", help="Rewrite the docs file.")
@@ -170,6 +173,8 @@ def _group_for(definition: RuleDefinition) -> str:
             return "Complexity And Maintainability"
         case "dead-code" | "waste":
             return "Dead Code And Waste"
+        case "modernisation":
+            return "Modernisation"
         case "naming":
             return "Naming"
         case "docs":
@@ -287,14 +292,6 @@ def _choosing_rules_lines() -> list[str]:
         "rules:",
         "  docs.missing-function-docstring:",
         "    enabled: false",
-        "```",
-        "",
-        "Enable an opt-in rule:",
-        "",
-        "```yaml",
-        "rules:",
-        "  test-quality.testdox-readability:",
-        "    enabled: true",
         "```",
         "",
         "Set one threshold for a metric rule:",

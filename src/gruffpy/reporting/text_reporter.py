@@ -1,5 +1,7 @@
 """Renders an AnalysisReport as plain text for terminal output."""
 
+import shlex
+
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.finding.finding import Finding
@@ -38,6 +40,7 @@ class TextReporter:
         _append_path_section(lines, "Ignored paths", report.ignored_paths)
         _append_path_section(lines, "Missing paths", report.missing_paths)
         _append_diagnostics(lines, report.diagnostics)
+        _append_baseline(lines, report)
         _append_score(lines, report)
         _append_findings(lines, report.findings)
 
@@ -76,6 +79,34 @@ def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]
             lines.append(f"  [{prefix}] {diagnostic.message}")
         else:
             lines.append(f"  [{prefix}] {location} {diagnostic.message}")
+
+
+def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
+    baseline = report.extensions.baseline
+    if baseline is None:
+        return
+    lines.append("")
+    lines.append("Baseline")
+    lines.append(f"  Path: {baseline.path}")
+    lines.append(f"  Source: {baseline.source}")
+    lines.append(f"  Entries: {baseline.total_entries}")
+    lines.append(f"  Generated: {'yes' if baseline.generated else 'no'}")
+    lines.append(f"  Suppressed findings: {baseline.suppressed_findings}")
+    lines.append(f"  Stale evaluation: {baseline.stale_evaluation}")
+    lines.append(f"  Stale entries: {len(baseline.stale_entries)}")
+    if baseline.generated:
+        if baseline.source == "default":
+            lines.append(f"  Tip: commit {baseline.path} and rerun `gruff-py analyse` to apply it.")
+        else:
+            lines.append(
+                f"  Tip: commit {baseline.path} and rerun with "
+                f"`--baseline-path {shlex.quote(baseline.path)}` to apply it."
+            )
+    elif baseline.stale_entries:
+        lines.append(
+            "  Tip: regenerate after review with "
+            f"`gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`."
+        )
 
 
 def _append_score(lines: list[str], report: AnalysisReport) -> None:

@@ -72,9 +72,3 @@ def test_configurable_replaces_defaults():
         _ctx(options={"confusingNames": ["ZZZ"]}),
     )
     assert findings == []
-
-
-def test_definition():
-    d = ConfusingNameRule().definition()
-    assert d.id == "naming.confusing-name"
-    assert "Handler" in d.default_options["confusingNames"]

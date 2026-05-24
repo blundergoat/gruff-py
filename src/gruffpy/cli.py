@@ -14,6 +14,7 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
+from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
@@ -25,6 +26,7 @@ from gruffpy.cli_options import (
     completion_command as _completion_command,
     dashboard_command as _dashboard_command,
     help_command_decorator as _help_command_decorator,
+    init_command as _init_command,
     list_command as _list_command,
     list_rules_command as _list_rules_command,
     metric_calibration_command as _metric_calibration_command,
@@ -33,11 +35,17 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.command.init_config import (
+    existing_config_source,
+    existing_ignored_path_patterns,
+    render_default_config_yaml,
+)
 from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
     render_metric_calibration_text,
 )
+from gruffpy.config.exceptions import ConfigError
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.pillar import Pillar
@@ -88,6 +96,9 @@ class _AnalysisCliRequest:
     exclude_pillar: tuple[str, ...]
     include_rule: tuple[str, ...]
     exclude_rule: tuple[str, ...]
+    baseline_path: Path | None
+    generate_baseline_path: Path | None
+    should_skip_baseline: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +212,7 @@ def analyse(**kwargs: Any) -> None:
         kwargs: Click-supplied arguments and options.
     """
     request = _analysis_request(kwargs, output_key="output_format")
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     report = _run_analysis_for_cli(request)
     _write_stdout(
         _render_report(
@@ -224,7 +236,16 @@ def dashboard(**kwargs: Any) -> None:
     Raises:
         click.ClickException: If the project root or port is invalid.
     """
-    server = _dashboard_server(_dashboard_request(kwargs))
+    request = _dashboard_request(kwargs)
+    dashboard_project_root = (request.project_root or Path.cwd()).resolve()
+    if not dashboard_project_root.is_dir():
+        raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
+    _maybe_prompt_to_init_config(
+        request.config_path,
+        request.should_skip_config,
+        project_root=dashboard_project_root,
+    )
+    server = _dashboard_server(request)
     bound_host, actual_port = server.server_address[:2]
     actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
     _write_stdout(f"{TOOL_NAME} dashboard serving at http://{actual_host}:{actual_port}/\n")
@@ -261,12 +282,47 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
     )
 
 
+@_init_command
+def init(force: bool) -> None:
+    """Write a default ``.gruff-py.yaml`` to the current directory.
+
+    Args:
+        force: When True, regenerate ``.gruff-py.yaml`` even if a config source
+            (``.gruff-py.yaml``, ``.gruff.yaml``, or
+            ``pyproject.toml`` ``[tool.gruff-py]``) already exists.
+
+    Raises:
+        click.ClickException: When a config source already exists and
+            ``--force`` was not supplied, or when the file cannot be written.
+    """
+    project_root = Path.cwd()
+    target = project_root / ".gruff-py.yaml"
+    existing = existing_config_source(project_root)
+    if existing is not None and not force:
+        if existing == target:
+            raise click.ClickException(
+                f"{target.name} already exists. Re-run with --force to regenerate it."
+            )
+        raise click.ClickException(
+            f"Existing gruff config found at {existing.name}; writing "
+            f"{target.name} would change discovery precedence. "
+            "Re-run with --force to write it anyway."
+        )
+    try:
+        ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _write_config_file(target, render_default_config_yaml(ignored_path_patterns))
+    _write_stdout(_init_success_message(target))
+
+
 @_list_rules_command
 def list_rules(rule_format: str) -> None:
     """List gruff rule metadata.
 
     Args:
-        rule_format: Output format, either ``table`` or ``json``.
+        rule_format: Output format - ``json`` for structured output, or ``table``
+            / ``text`` for the human-readable table.
     """
     definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     if rule_format == "json":
@@ -285,6 +341,7 @@ def report(**kwargs: Any) -> None:
     """
     request = _analysis_request(kwargs, output_key="report_format")
     output_path = cast(Path | None, kwargs["output_path"])
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     analysis_report = _run_analysis_for_cli(request)
     rendered = _render_report(
         analysis_report,
@@ -314,10 +371,10 @@ def summary(**kwargs: Any) -> None:
     summary_format = cast(str, kwargs["summary_format"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
+    request = _summary_analysis_request(kwargs, summary_format=summary_format)
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     start = time.perf_counter()
-    analysis_report = _run_analysis_for_cli(
-        _summary_analysis_request(kwargs, summary_format=summary_format)
-    )
+    analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
         _write_stdout(json.dumps(_summary_payload(analysis_report, top, elapsed_seconds), indent=4))
@@ -440,7 +497,19 @@ def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _Analysi
         exclude_pillar=cast(tuple[str, ...], kwargs["exclude_pillar"]),
         include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
+        baseline_path=cast(Path | None, kwargs.get("baseline_path")),
+        generate_baseline_path=_resolve_generate_baseline_path(kwargs),
+        should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
     )
+
+
+def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
+    explicit = cast(Path | None, kwargs.get("generate_baseline_path"))
+    if explicit is not None:
+        return explicit
+    if cast(bool, kwargs.get("generate_baseline", False)):
+        return Path(DEFAULT_BASELINE_FILENAME)
+    return None
 
 
 def _summary_analysis_request(
@@ -462,6 +531,9 @@ def _summary_analysis_request(
         exclude_pillar=(),
         include_rule=(),
         exclude_rule=(),
+        baseline_path=None,
+        generate_baseline_path=None,
+        should_skip_baseline=True,
     )
 
 
@@ -477,6 +549,56 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
     )
+
+
+def _maybe_prompt_to_init_config(
+    config_path: Path | None,
+    no_config: bool,
+    *,
+    project_root: Path | None = None,
+) -> None:
+    """Offer to generate a default ``.gruff-py.yaml`` when none exists.
+
+    Silently skips when the user has opted out (``--config``, ``--no-config``,
+    ``--no-interaction``, ``--quiet``, or ``--silent``), when stdin is not a
+    TTY (e.g. CI, piped invocations), or when any config source is already
+    discoverable. The prompt and the success message are routed to stderr so
+    accepting the prompt does not corrupt structured stdout (``--format json``,
+    ``--format sarif``, etc.).
+
+    Args:
+        config_path: Explicit ``--config`` path, or ``None`` for auto-discovery.
+        no_config: Whether ``--no-config`` was passed.
+        project_root: Directory the prompt should treat as the project root.
+            Defaults to the current working directory; dashboard callers pass
+            their resolved ``--project`` so the file lands in the scanned
+            project rather than the launch directory.
+    """
+    if config_path is not None or no_config:
+        return
+    if _state().is_interaction_disabled or _state().should_suppress_output:
+        return
+    if not sys.stdin.isatty():
+        return
+    target_root = project_root if project_root is not None else Path.cwd()
+    if existing_config_source(target_root) is not None:
+        return
+    if not click.confirm(
+        "No .gruff-py.yaml found. Generate a default config now?",
+        default=False,
+        err=True,
+    ):
+        return
+    target = target_root / ".gruff-py.yaml"
+    _write_config_file(target, render_default_config_yaml())
+    click.echo(_init_success_message(target), nl=False, err=True)
+
+
+def _write_config_file(path: Path, content: str) -> None:
+    try:
+        path.write_text(content)
+    except OSError as exc:
+        raise click.ClickException(f"Unable to write {path.name}: {exc}") from exc
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
@@ -496,6 +618,11 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,
+        baseline=BaselineOptions(
+            apply_path=request.baseline_path,
+            generate_path=request.generate_baseline_path,
+            disabled=request.should_skip_baseline,
+        ),
     )
 
 
@@ -572,7 +699,43 @@ def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> s
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
+    _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
+
+
+def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
+    hints: list[str] = []
+    if summary["ignored"]:
+        hints.append(
+            "Ignored paths: add --include-ignored to include built-in and .gitignore "
+            "exclusions; configured paths.ignore still applies."
+        )
+    if summary["findings"]:
+        hints.append(
+            "Baseline: after review, run "
+            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
+            "to accept current findings as known debt."
+        )
+    if not hints:
+        return
+    lines.extend(["", "Next steps:"])
+    lines.extend(f"  {hint}" for hint in hints)
+
+
+def _generate_baseline_command(paths: list[str]) -> str:
+    command_paths = paths or ["."]
+    joined_paths = " ".join(shlex.quote(path) for path in command_paths)
+    return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
+
+
+def _init_success_message(config_path: Path) -> str:
+    return (
+        f"Wrote {config_path}\n\n"
+        "Next: after reviewing current findings, run:\n"
+        f"  {TOOL_NAME} analyse . --generate-baseline --fail-on none\n"
+        "Future analyse/report runs auto-apply gruff-baseline.json; "
+        f"use `{TOOL_NAME} analyse . --no-baseline` to audit without it.\n"
+    )
 
 
 def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:

@@ -95,8 +95,3 @@ def test_assigned_in_one_method_read_in_another():
     )
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = UnusedPrivateAttributeRule().definition()
-    assert d.id == "dead-code.unused-private-attribute"

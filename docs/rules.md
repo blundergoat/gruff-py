@@ -3,7 +3,7 @@
 gruff-py `0.1` registers 116 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
-Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
+Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
 
 ## Pillar Summary
 
@@ -13,11 +13,12 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 | `complexity` | 5 | Cyclomatic, cognitive, Halstead, nesting, and NPATH |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
+| `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 26 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
-| `test-quality` | 34 | Pytest-aware test smells and project config checks |
+| `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
 
 ## Rule IDs
@@ -54,9 +55,13 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `waste.unused-import`
 - `waste.unused-parameter`
 
+### Modernisation
+
+- `modernisation.f-string-candidate`
+
 ### Naming
 
-- `naming.abbreviation` (default off)
+- `naming.abbreviation`
 - `naming.boolean-prefix`
 - `naming.confusing-name`
 - `naming.generic-function`
@@ -138,8 +143,8 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `test-quality.magic-number-assertion`
 - `test-quality.mock-only-test`
 - `test-quality.mock-without-expectation`
-- `test-quality.mocking-domain-object` (default off)
-- `test-quality.multiple-aaa-cycles` (default off)
+- `test-quality.mocking-domain-object`
+- `test-quality.multiple-aaa-cycles`
 - `test-quality.mystery-guest`
 - `test-quality.naming-consistency`
 - `test-quality.no-assertions`
@@ -156,7 +161,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify
 - `test-quality.tautological-type-assertion`
 - `test-quality.test-function-too-long`
 - `test-quality.test-longer-than-sut`
-- `test-quality.testdox-readability` (default off)
 - `test-quality.trivial-assertion`
 - `test-quality.trivial-snapshot`
 - `test-quality.unused-mock`
@@ -507,6 +511,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
 - Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
 
+### `modernisation.f-string-candidate`
+
+- Name: F-string candidate
+- Pillar: `modernisation`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `modernisation.f-string-candidate` protects the modernisation pillar by flagging f-string candidate before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported f-string candidate directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Bad example: Code that triggers `modernisation.f-string-candidate` leaves f-string candidate unaddressed.
+- Good example: Code that satisfies `modernisation.f-string-candidate` makes f-string candidate explicit or simpler.
+
 ### `naming.abbreviation`
 
 - Name: Abbreviation
@@ -514,7 +532,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: no
+- Default enabled: yes
 - Rationale: `naming.abbreviation` protects the naming pillar by flagging abbreviation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported abbreviation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -1456,7 +1474,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: no
+- Default enabled: yes
 - Rationale: `test-quality.mocking-domain-object` protects the test-quality pillar by flagging mocking domain object before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported mocking domain object directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -1471,7 +1489,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `low`
-- Default enabled: no
+- Default enabled: yes
 - Rationale: `test-quality.multiple-aaa-cycles` protects the test-quality pillar by flagging multiple aaa cycles before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported multiple aaa cycles directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
@@ -1710,21 +1728,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `test-quality.test-longer-than-sut` leaves test longer than sut unaddressed.
 - Good example: Code that satisfies `test-quality.test-longer-than-sut` makes test longer than sut explicit or simpler.
 
-### `test-quality.testdox-readability`
-
-- Name: Testdox readability
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `low`
-- Default enabled: no
-- Rationale: `test-quality.testdox-readability` protects the test-quality pillar by flagging testdox readability before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported testdox readability directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Options: `min_words` = `4`
-- Bad example: Code that triggers `test-quality.testdox-readability` leaves testdox readability unaddressed.
-- Good example: Code that satisfies `test-quality.testdox-readability` makes testdox readability explicit or simpler.
-
 ### `test-quality.trivial-assertion`
 
 - Name: Trivial assertion
@@ -1919,14 +1922,6 @@ Disable a rule:
 rules:
   docs.missing-function-docstring:
     enabled: false
-```
-
-Enable an opt-in rule:
-
-```yaml
-rules:
-  test-quality.testdox-readability:
-    enabled: true
 ```
 
 Set one threshold for a metric rule:

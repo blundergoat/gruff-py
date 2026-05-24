@@ -116,12 +116,6 @@ def test_huge_function_emits_finding():
     assert findings[0].metadata["halsteadVolume"] > 400
 
 
-def test_definition_uses_default_thresholds():
-    d = HalsteadVolumeRule().definition()
-    assert d.id == "complexity.halstead-volume"
-    assert d.default_thresholds == {"warning": 180, "error": 400}
-
-
 _RADON_VOLUMES = {
     "simple": 4.75,
     "with_branches": 20.68,

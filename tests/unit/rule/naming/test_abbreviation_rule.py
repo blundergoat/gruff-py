@@ -50,6 +50,12 @@ def test_parameter_abbreviation_fires():
     assert findings[0].metadata["abbreviation"] == "req"
 
 
+def test_standard_variadic_names_are_skipped():
+    src = "def build(*args: object, **kwargs: object) -> None:\n    pass\n"
+    findings = AbbreviationRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
 def test_local_variable_abbreviation_fires_once_per_identifier():
     src = "def f() -> None:\n    msg = 'hello'\n    msg = 'again'\n"
     findings = AbbreviationRule().analyse(_unit(src), _ctx())
@@ -98,9 +104,3 @@ def test_dunder_names_are_skipped():
     src = "def __ctx__() -> None:\n    pass\n"
     findings = AbbreviationRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition_is_default_disabled():
-    definition = AbbreviationRule().definition()
-    assert definition.id == "naming.abbreviation"
-    assert definition.default_enabled is False

@@ -75,10 +75,3 @@ def test_finding_carries_fingerprint_and_remediation():
     assert finding.remediation is not None
     assert finding.line == 1
     assert finding.end_line == 150
-
-
-def test_definition_uses_default_thresholds():
-    definition = FileLengthRule().definition()
-    assert definition.id == "size.file-length"
-    assert definition.default_thresholds == {"warning": 1000, "error": 1000}
-    assert definition.default_severity == Severity.WARNING

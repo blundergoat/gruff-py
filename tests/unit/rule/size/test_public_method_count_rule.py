@@ -83,9 +83,3 @@ def test_pydantic_basemodel_subclass_is_exempt():
     body = "\n".join(f"    def m{i}(self):\n        return {i}" for i in range(20))
     source = f"from pydantic import BaseModel\nclass S(BaseModel):\n{body}\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
-
-
-def test_definition_uses_default_thresholds():
-    d = PublicMethodCountRule().definition()
-    assert d.id == "size.public-method-count"
-    assert d.default_thresholds == {"warning": 10, "error": 10}

@@ -29,6 +29,7 @@ from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
+from gruffpy.rule.modernisation.f_string_candidate_rule import FStringCandidateRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.confusing_name_rule import ConfusingNameRule
@@ -134,7 +135,6 @@ from gruffpy.rule.test_quality.tautological_type_assertion_rule import (
 )
 from gruffpy.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
 from gruffpy.rule.test_quality.test_longer_than_sut_rule import TestLongerThanSutRule
-from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from gruffpy.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
 from gruffpy.rule.test_quality.trivial_snapshot_rule import TrivialSnapshotRule
 from gruffpy.rule.test_quality.unused_mock_rule import UnusedMockRule
@@ -437,6 +437,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(StaleParamDocRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
+    _entry(FStringCandidateRule),
     _entry(AbbreviationRule),
     _entry(BooleanPrefixRule),
     _entry(ConfusingNameRule),
@@ -512,7 +513,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(TautologicalTypeAssertionRule),
     _entry(TestFunctionTooLongRule),
     _entry(TestLongerThanSutRule),
-    _entry(TestdoxReadabilityRule),
     _entry(TrivialAssertionRule),
     _entry(TrivialSnapshotRule),
     _entry(UnusedMockRule),

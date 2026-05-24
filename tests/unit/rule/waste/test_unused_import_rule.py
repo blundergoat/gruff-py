@@ -147,8 +147,3 @@ def test_future_import_does_not_mask_unrelated_unused_import():
     findings = UnusedImportRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["name"] == "os"
-
-
-def test_definition():
-    d = UnusedImportRule().definition()
-    assert d.id == "waste.unused-import"

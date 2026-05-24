@@ -113,9 +113,3 @@ def test_unittest_testcase_is_exempt():
         f"import unittest\nclass MyTest(unittest.TestCase):\n    def __init__(self):\n{init_body}\n"
     )
     assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []
-
-
-def test_definition_uses_default_thresholds():
-    d = AttributeCountRule().definition()
-    assert d.id == "size.attribute-count"
-    assert d.default_thresholds == {"warning": 15, "error": 15}

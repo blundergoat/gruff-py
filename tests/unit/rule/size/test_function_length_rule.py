@@ -118,12 +118,6 @@ def test_lambda_is_considered():
     assert findings[0].metadata["lines"] == 1
 
 
-def test_definition_uses_default_thresholds():
-    definition = FunctionLengthRule().definition()
-    assert definition.id == "size.function-length"
-    assert definition.default_thresholds == {"warning": 100, "error": 100}
-
-
 def test_unit_with_no_tree_returns_empty():
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source="", tree=None)

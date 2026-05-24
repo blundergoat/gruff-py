@@ -221,8 +221,3 @@ def test_classify_verb_still_fires():
     src = "def _classify_caller_phone(p: str) -> bool:\n    return True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
-
-
-def test_definition():
-    d = BooleanPrefixRule().definition()
-    assert d.id == "naming.boolean-prefix"

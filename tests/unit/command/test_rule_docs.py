@@ -23,7 +23,7 @@ def test_rendered_rule_docs_include_catalog_details() -> None:
 
 
 def test_committed_rules_doc_is_current() -> None:
-    assert check_rules_markdown(_PROJECT_ROOT / "docs/RULES.md")
+    assert check_rules_markdown(_PROJECT_ROOT / "docs/rules.md")
 
 
 @pytest.mark.parametrize("rule_id", _DEFAULT_RULE_IDS, ids=lambda r: r)

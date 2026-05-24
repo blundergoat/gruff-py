@@ -88,8 +88,3 @@ def test_kwonly_mismatch_does_not_fire():
     src = "def foo(*, x):\n    return bar(x=1)\n"
     findings = OneLineFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = OneLineFunctionRule().definition()
-    assert d.id == "waste.one-line-function"

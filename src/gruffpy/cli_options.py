@@ -1,11 +1,13 @@
 """Reusable Click option and command decorators shared by the CLI command tree."""
 
+import inspect
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
 import click
 
+from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME
 from gruffpy.cli_state import state as _state
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
@@ -73,6 +75,16 @@ def _ignored_path_option(name: str, help_text: str) -> Callable[[_F], _F]:
     )
 
 
+def _path_option(name: str, parameter_name: str, help_text: str) -> Callable[[_F], _F]:
+    return click.option(
+        name,
+        parameter_name,
+        type=click.Path(path_type=Path),
+        default=None,
+        help=help_text,
+    )
+
+
 def _ignored_int_option(name: str, help_text: str) -> Callable[[_F], _F]:
     return click.option(name, type=int, default=None, expose_value=False, help=help_text)
 
@@ -132,9 +144,17 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
         """
         if _command_root is None:
             raise RuntimeError("CLI root group has not been bound.")
-        return cast(Callable[..., Any], _command_root.command(*args, **attrs)(function))
+        command_attrs = dict(attrs)
+        command_attrs.setdefault("help", _doc_summary(function))
+        return cast(Callable[..., Any], _command_root.command(*args, **command_attrs)(function))
 
     return decorator
+
+
+def _doc_summary(function: Callable[..., Any]) -> str:
+    """Return the first docstring paragraph for Click command help."""
+    doc = inspect.getdoc(function) or ""
+    return doc.split("\n\n", 1)[0]
 
 
 def _pass_context(function: _F) -> _F:
@@ -250,6 +270,20 @@ def help_command_decorator(function: _F) -> _F:
     return apply_decorators(function, _HELP_COMMAND_DECORATORS)
 
 
+def init_command(function: _F) -> _F:
+    """Wire *function* up as the ``init`` subcommand for writing a default ``.gruff-py.yaml``.
+
+    Adds ``--force`` to regenerate an existing file on top of the global flags.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff init``.
+    """
+    return apply_decorators(function, _INIT_COMMAND_DECORATORS)
+
+
 def completion_command(function: _F) -> _F:
     """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
 
@@ -342,16 +376,29 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _ignored_path_option(
-        "--baseline",
-        "Suppress findings that match a gruff baseline JSON file. "
-        'Defaults to "gruff-baseline.json".',
+    _path_option(
+        "--baseline-path",
+        "baseline_path",
+        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
     ),
-    _ignored_path_option(
+    _option(
         "--generate-baseline",
-        'Write current findings to a gruff baseline JSON file. Defaults to "gruff-baseline.json".',
+        "generate_baseline",
+        is_flag=True,
+        default=False,
+        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}".',
     ),
-    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+    _path_option(
+        "--generate-baseline-path",
+        "generate_baseline_path",
+        "Write current findings to this baseline JSON file (implies generation).",
+    ),
+    _option(
+        "--no-baseline",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default baseline file for this run.",
+    ),
 )
 
 _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -372,12 +419,17 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Normalize absolute finding paths relative to this directory for reports.",
     ),
     _ignored_path_option("--history-file", "Append score trend history to this JSON file."),
-    _ignored_path_option(
-        "--baseline",
-        "Suppress findings that match a gruff baseline JSON file. "
-        'Defaults to "gruff-baseline.json".',
+    _path_option(
+        "--baseline-path",
+        "baseline_path",
+        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
     ),
-    _ignored_flag_option("--no-baseline", "Skip auto-applying the default baseline file."),
+    _option(
+        "--no-baseline",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default baseline file for this run.",
+    ),
 )
 
 _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -413,7 +465,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--report-interactive",
@@ -480,21 +532,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
-    ),
-    _option(
-        "--no-baseline",
-        is_flag=True,
-        default=False,
-        expose_value=False,
-        help="Skip auto-applying the default baseline file for dashboard scans.",
-    ),
-    _option(
-        "--baseline",
-        type=click.Path(path_type=Path),
-        default=None,
-        expose_value=False,
-        help='Initial gruff baseline JSON path. Defaults to "gruff-baseline.json".',
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--diff",
@@ -561,10 +599,10 @@ _LIST_RULES_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--format",
         "rule_format",
-        type=click.Choice(["table", "json"]),
+        type=click.Choice(["text", "table", "json"]),
         default="table",
         show_default=True,
-        help="Output format: table or json.",
+        help="Output format: text, table, or json.",
     ),
     _command("list-rules"),
 )
@@ -602,7 +640,7 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--report-interactive",
@@ -662,7 +700,7 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--top",
@@ -702,7 +740,7 @@ _METRIC_CALIBRATION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--include-ignored",
         is_flag=True,
         default=False,
-        help="Scan files under default-ignored directories and .gitignore exclusions.",
+        help="Scan default-ignored and .gitignore paths; configured paths.ignore still applies.",
     ),
     _option(
         "--top",
@@ -765,5 +803,16 @@ _COMPLETION_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     _option("--debug", is_flag=True, help="Tail the completion debug log."),
     _argument("shell", required=False),
+    _command(),
+)
+
+_INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--force",
+        is_flag=True,
+        default=False,
+        help="Regenerate an existing .gruff-py.yaml file, preserving paths.ignore.",
+    ),
     _command(),
 )

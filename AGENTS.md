@@ -14,7 +14,7 @@ Workspace boundary: this checkout is the selected target project and controlling
 ## Autonomy Tiers
 **Always:** read relevant `src/gruffpy/`, `tests/`, `docs/`, `pyproject.toml`, and `.goat-flow/` files before changes; declare scope before writes; verify changed surfaces with focused commands.
 **Ask First:** before touching risky boundaries, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
-Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprint.py`, `src/gruffpy/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit codes in `src/gruffpy/cli.py`, `src/gruffpy/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency, packaging, or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, `Makefile`, and `docs/RELEASING.md`; CI/hooks/agent config in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.codex/`, `.agents/skills/`, and peer agent files; public rule IDs, config keys, schemas, or output formats across `src/gruffpy/rule/`, `src/gruffpy/config/`, `src/gruffpy/finding/`, and `src/gruffpy/scoring/`.
+Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprint.py`, `src/gruffpy/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit codes in `src/gruffpy/cli.py`, `src/gruffpy/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency, packaging, or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, `Makefile`, and `docs/releasing.md`; CI/hooks/agent config in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.codex/`, `.agents/skills/`, and peer agent files; public rule IDs, config keys, schemas, or output formats across `src/gruffpy/rule/`, `src/gruffpy/config/`, `src/gruffpy/finding/`, and `src/gruffpy/scoring/`.
 **Never:** edit secrets or `.env*` files; commit, push, publish, delete user work, or modify `CLAUDE.md` unless explicitly asked; use `make lint` or `make check` as non-mutating verification because ruff runs with `--fix`; invent compatibility claims without tests or code evidence.
 
 ## Hard Rules
@@ -38,7 +38,7 @@ Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprin
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy src
-uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 uv run pytest
 uv build
 uv run gruff-py analyse src/

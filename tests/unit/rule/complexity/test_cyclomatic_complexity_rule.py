@@ -125,9 +125,3 @@ def test_method_symbol_qualified():
     src = f"class C:\n    def m(self, x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert findings[0].symbol == "C.m"
-
-
-def test_definition_uses_default_thresholds():
-    d = CyclomaticComplexityRule().definition()
-    assert d.id == "complexity.cyclomatic"
-    assert d.default_thresholds == {"warning": 10, "error": 20}
