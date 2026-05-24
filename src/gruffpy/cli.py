@@ -35,12 +35,17 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
-from gruffpy.command.init_config import existing_config_source, render_default_config_yaml
+from gruffpy.command.init_config import (
+    existing_config_source,
+    existing_ignored_path_patterns,
+    render_default_config_yaml,
+)
 from gruffpy.command.metric_calibration import (
     build_metric_calibration_report,
     metric_calibration_payload,
     render_metric_calibration_text,
 )
+from gruffpy.config.exceptions import ConfigError
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.pillar import Pillar
@@ -275,7 +280,7 @@ def init(force: bool) -> None:
     """Write a default ``.gruff-py.yaml`` to the current directory.
 
     Args:
-        force: When True, overwrite an existing config file.
+        force: When True, regenerate an existing config file while preserving paths.ignore.
 
     Raises:
         click.ClickException: When ``.gruff-py.yaml`` already exists and
@@ -284,9 +289,13 @@ def init(force: bool) -> None:
     target = Path.cwd() / ".gruff-py.yaml"
     if target.exists() and not force:
         raise click.ClickException(
-            f"{target.name} already exists. Re-run with --force to overwrite."
+            f"{target.name} already exists. Re-run with --force to regenerate it."
         )
-    target.write_text(render_default_config_yaml())
+    try:
+        ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    target.write_text(render_default_config_yaml(ignored_path_patterns))
     _write_stdout(_init_success_message(target))
 
 

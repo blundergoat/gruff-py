@@ -280,7 +280,7 @@ def help_command_decorator(function: _F) -> _F:
 def init_command(function: _F) -> _F:
     """Wire *function* up as the ``init`` subcommand for writing a default ``.gruff-py.yaml``.
 
-    Adds ``--force`` to overwrite an existing file on top of the global flags.
+    Adds ``--force`` to regenerate an existing file on top of the global flags.
 
     Args:
         function: The command implementation.
@@ -832,7 +832,7 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--force",
         is_flag=True,
         default=False,
-        help="Overwrite an existing .gruff-py.yaml file.",
+        help="Regenerate an existing .gruff-py.yaml file, preserving paths.ignore.",
     ),
     _command(),
 )

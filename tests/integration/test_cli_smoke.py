@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from gruffpy.cli import main
@@ -134,6 +135,8 @@ def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.Mon
     config_text = (tmp_path / ".gruff-py.yaml").read_text()
     assert config_text.startswith("# gruff-py configuration - .gruff-py.yaml\n")
     assert "Built-in ignores and .gitignore already apply" in config_text
+    assert "- .agents/" in config_text
+    assert "- tests/fixtures/**" in config_text
 
 
 def test_cli_init_refuses_to_overwrite_existing_config(
@@ -168,7 +171,7 @@ def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
     assert not (tmp_path / ".gruff-py.yaml").exists()
 
 
-def test_cli_init_force_overwrites_existing_config(
+def test_cli_init_force_regenerates_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -179,6 +182,52 @@ def test_cli_init_force_overwrites_existing_config(
 
     assert result.exit_code == 0, result.output
     assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+
+
+def test_cli_init_force_preserves_existing_ignore_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    existing.write_text(
+        "paths:\n"
+        "  ignore:\n"
+        "    - generated/**\n"
+        "    - .codex/\n"
+        "rules:\n"
+        "  docs.missing-module-docstring:\n"
+        "    enabled: false\n"
+    )
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    document = yaml.safe_load(existing.read_text())
+    assert result.exit_code == 0, result.output
+    assert document["paths"]["ignore"] == [
+        "generated/**",
+        ".codex/",
+        ".agents/",
+        ".antigravitycli/",
+        ".claude/",
+        ".github/",
+        ".goat-flow/",
+        "tests/fixtures/**",
+    ]
+
+
+def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / ".gruff-py.yaml"
+    original = "paths:\n  ignore: generated/**\n"
+    existing.write_text(original)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert "paths.ignore must be a list of strings" in result.output
+    assert existing.read_text() == original
 
 
 def _seed_sample_project(tmp_path: Path) -> None:

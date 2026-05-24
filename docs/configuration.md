@@ -9,8 +9,9 @@ terms.
 Run `gruff-py init` to write a default `.gruff-py.yaml` in the current
 directory. The generated file mirrors `RuleRegistry.defaults()`: every
 built-in rule with its default `enabled`, `thresholds`, and `options`,
-plus empty `paths.ignore`, allowlists, and selection lists. Re-run with
-`--force` to overwrite an existing file.
+plus starter `paths.ignore` entries for local agent/tooling directories and
+test fixtures. Allowlists and selection lists are empty. Re-run with `--force`
+to regenerate an existing file while preserving its `paths.ignore` entries.
 
 The generated file also notes that built-in ignored paths and `.gitignore`
 already apply before `paths.ignore`. After reviewing a first scan, run
@@ -35,6 +36,12 @@ minimumPythonVersion: "3.11"
 
 paths:
   ignore:
+    - ".agents/"
+    - ".antigravitycli/"
+    - ".claude/"
+    - ".codex/"
+    - ".github/"
+    - ".goat-flow/"
     - "tests/fixtures/**"
     - "generated/**"
 
@@ -66,7 +73,16 @@ rules:
 minimumPythonVersion = "3.11"
 
 [tool.gruff-py.paths]
-ignore = ["tests/fixtures/**", "generated/**"]
+ignore = [
+    ".agents/",
+    ".antigravitycli/",
+    ".claude/",
+    ".codex/",
+    ".github/",
+    ".goat-flow/",
+    "tests/fixtures/**",
+    "generated/**",
+]
 
 [tool.gruff-py.allowlists]
 acceptedAbbreviations = ["API", "URL"]
