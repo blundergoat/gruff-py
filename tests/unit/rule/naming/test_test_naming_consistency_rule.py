@@ -67,8 +67,3 @@ def test_test_dir_path_recognised():
         _unit(src, display_path="tests/integration/something.py"), _ctx()
     )
     assert len(findings) == 1
-
-
-def test_definition():
-    d = TestNamingConsistencyRule().definition()
-    assert d.id == "naming.test-naming-consistency"

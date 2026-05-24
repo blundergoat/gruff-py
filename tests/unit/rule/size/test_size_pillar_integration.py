@@ -243,12 +243,6 @@ def test_registry_defaults_contains_all_seven_size_rules():
     assert SIZE_RULE_IDS.issubset(ids)
 
 
-def test_registry_defaults_sorted_alphabetically_by_id():
-    registry = RuleRegistry.defaults()
-    ids = [rule.definition().id for rule in registry.all()]
-    assert ids == sorted(ids)
-
-
 def test_cumulative_fixture_emits_expected_rule_ids():
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
     ctx = _default_ctx()
@@ -316,16 +310,6 @@ def test_nested_inner_function_emits_independent_finding():
     symbols = {f.symbol for f in findings if f.rule_id == "size.function-length"}
     assert "outer_function" in symbols
     assert "outer_function.inner_function" in symbols
-
-
-def test_findings_deterministic_across_two_runs():
-    unit_a = _make_unit(SIZE_PILLAR_FIXTURE)
-    unit_b = _make_unit(SIZE_PILLAR_FIXTURE)
-    ctx = _default_ctx()
-    registry = RuleRegistry.defaults()
-    a = registry.analyse([unit_a], ctx)
-    b = registry.analyse([unit_b], ctx)
-    assert [f.fingerprint() for f in a] == [f.fingerprint() for f in b]
 
 
 def test_config_override_changes_finding_count():

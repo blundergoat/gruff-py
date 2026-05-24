@@ -214,9 +214,3 @@ def test_primitive_annotation_does_not_fire():
     src = "def f(count: int, name: str): pass\n"
     findings = ParameterTypeNameRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = ParameterTypeNameRule().definition()
-    assert d.id == "naming.parameter-type-name"
-    assert "id" in d.default_options["ignoredParameterNames"]

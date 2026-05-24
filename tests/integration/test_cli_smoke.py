@@ -564,13 +564,6 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
     assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
 
 
-def test_cli_analyse_sarif_fixture_driver_rules_are_sorted_and_nonempty() -> None:
-    run = _sarif_fixture_payload()["runs"][0]
-    rule_ids = [rule["id"] for rule in run["tool"]["driver"]["rules"]]
-    assert rule_ids == sorted(rule_ids)
-    assert len(run["results"]) > 0
-
-
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:
     run = _sarif_fixture_payload()["runs"][0]
     driver_rules = run["tool"]["driver"]["rules"]

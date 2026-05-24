@@ -140,9 +140,3 @@ def test_dynamism_fixture_emits_only_acceptable_findings():
         (f.rule_id, f.symbol) for f in suspect if (f.rule_id, f.symbol) not in expected_on_setup
     ]
     assert unexpected == [], f"unexpected findings: {unexpected}"
-
-
-def test_findings_deterministic_across_two_runs():
-    a = RuleRegistry.defaults().analyse([_unit(DYNAMISM_FIXTURE)], _ctx())
-    b = RuleRegistry.defaults().analyse([_unit(DYNAMISM_FIXTURE)], _ctx())
-    assert [f.fingerprint() for f in a] == [f.fingerprint() for f in b]

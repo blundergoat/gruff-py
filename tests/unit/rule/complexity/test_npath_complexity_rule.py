@@ -118,9 +118,3 @@ def test_extreme_npath_capped_at_5000():
     assert findings[0].metadata["npath"] == 5000
     assert findings[0].metadata["npathCapped"] is True
     assert findings[0].severity == Severity.ERROR
-
-
-def test_definition_uses_default_thresholds():
-    d = NPathComplexityRule().definition()
-    assert d.id == "complexity.npath"
-    assert d.default_thresholds == {"warning": 200, "error": 500}

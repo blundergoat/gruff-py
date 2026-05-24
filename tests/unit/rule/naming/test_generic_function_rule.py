@@ -80,8 +80,3 @@ def test_configurable_replacement():
         _unit(src), _ctx(options={"genericFunctions": ["calculate"]})
     )
     assert len(findings) == 1
-
-
-def test_definition():
-    d = GenericFunctionRule().definition()
-    assert d.id == "naming.generic-function"

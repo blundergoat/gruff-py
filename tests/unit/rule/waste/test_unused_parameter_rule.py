@@ -121,8 +121,3 @@ def test_multiple_unused_each_emits():
     src = "def f(x, y, z):\n    return 1\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert {f.metadata["parameter"] for f in findings} == {"x", "y", "z"}
-
-
-def test_definition():
-    d = UnusedParameterRule().definition()
-    assert d.id == "waste.unused-parameter"

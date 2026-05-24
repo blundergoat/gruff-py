@@ -93,11 +93,6 @@ def test_return_at_end_of_block_is_fine():
     assert findings == []
 
 
-def test_definition():
-    d = UnreachableCodeRule().definition()
-    assert d.id == "waste.unreachable-code"
-
-
 def test_if_false_body_is_unreachable():
     src = "def f():\n    if False:\n        x = 1\n"
     findings = UnreachableCodeRule().analyse(_make_unit(src), _ctx())

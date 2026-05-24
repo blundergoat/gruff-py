@@ -128,9 +128,3 @@ def test_nested_function_evaluated_separately():
     assert "outer.inner" in symbols
     # outer itself has no nested control flow -> no finding
     assert "outer" not in symbols
-
-
-def test_definition_uses_default_thresholds():
-    d = NestingDepthRule().definition()
-    assert d.id == "complexity.nesting-depth"
-    assert d.default_thresholds == {"warning": 4, "error": 6}

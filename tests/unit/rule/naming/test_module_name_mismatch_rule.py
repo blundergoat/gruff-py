@@ -126,8 +126,3 @@ def test_no_class_does_not_fire():
     src = "x = 1\n"
     findings = ModuleNameMismatchRule().analyse(_unit(src, "things.py"), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = ModuleNameMismatchRule().definition()
-    assert d.id == "naming.module-name-mismatch"

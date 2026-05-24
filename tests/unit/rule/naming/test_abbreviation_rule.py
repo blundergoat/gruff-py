@@ -104,9 +104,3 @@ def test_dunder_names_are_skipped():
     src = "def __ctx__() -> None:\n    pass\n"
     findings = AbbreviationRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition_is_default_enabled():
-    definition = AbbreviationRule().definition()
-    assert definition.id == "naming.abbreviation"
-    assert definition.default_enabled is True

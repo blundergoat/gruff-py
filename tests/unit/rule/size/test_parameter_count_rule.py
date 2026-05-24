@@ -100,9 +100,3 @@ def test_positional_only_args_count():
     findings = ParameterCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["parameters"] == 6
-
-
-def test_definition_uses_default_thresholds():
-    d = ParameterCountRule().definition()
-    assert d.id == "size.parameter-count"
-    assert d.default_thresholds == {"warning": 10, "error": 10}

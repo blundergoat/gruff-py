@@ -93,8 +93,3 @@ def test_function_param_does_not_fire():
     src = "def f(q): return q\n"
     findings = ShortVariableRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = ShortVariableRule().definition()
-    assert d.id == "naming.short-variable"

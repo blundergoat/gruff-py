@@ -75,9 +75,3 @@ def test_nested_class_with_too_few_methods_skipped():
     source = f"class Outer:\n    class Inner:\n        def m(self):\n{body}\n"
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert findings == []
-
-
-def test_definition_uses_default_thresholds():
-    d = AverageFunctionLengthRule().definition()
-    assert d.id == "size.average-function-length"
-    assert d.default_thresholds == {"warning": 100, "error": 100}

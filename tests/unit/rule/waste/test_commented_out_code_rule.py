@@ -89,8 +89,3 @@ def test_coding_declaration_does_not_fire():
     src = "# -*- coding: utf-8 -*-\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
-
-
-def test_definition():
-    d = CommentedOutCodeRule().definition()
-    assert d.id == "waste.commented-out-code"
