@@ -33,14 +33,8 @@ Install as a project dev dependency:
 
 ```bash
 uv add --dev gruff-py
-uv run gruff-py --help
-```
-
-Or install the CLI with `pipx`:
-
-```bash
-pipx install gruff-py
-gruff-py --help
+uv run gruff-py init
+uv run gruff-py summary
 ```
 
 From a source checkout:
@@ -54,6 +48,12 @@ uv run gruff-py --help
 ## Quick Start
 
 ```bash
+# Create the project config.
+uv run gruff-py init
+
+# Review the current finding mix.
+uv run gruff-py summary
+
 # Explore without failing because of findings.
 uv run gruff-py analyse src/ --fail-on none
 
@@ -201,6 +201,8 @@ uv run gruff-py dashboard src/ --host 127.0.0.1 --port 8765 --report-interactive
 ```
 
 The dashboard serves a local browser UI for repeated scans. It has no authentication and is intended for local development; keep it on loopback unless the network is trusted. See [Dashboard](docs/dashboard.md) for supported controls and safety notes.
+
+In polyglot repositories, remember that `gruff-go`, `gruff-php`, and `gruff-py` all default to port `8765`; use `--port` when running multiple dashboards at the same time.
 
 ## Trust Boundary
 

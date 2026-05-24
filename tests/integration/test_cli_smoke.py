@@ -74,6 +74,8 @@ def test_cli_command_help_lists_symfony_style_global_options():
     assert missing_global == [], f"missing global options in analyse --help: {missing_global}"
     assert missing_local == [], f"missing local options in analyse --help: {missing_local}"
     assert "sarif" in result.output
+    assert "Args:" not in result.output
+    assert "Raises:" not in result.output
 
 
 _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
@@ -102,6 +104,14 @@ def test_cli_list_rules_json_lists_rule_metadata():
     rule = payload["rules"][0]
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
+
+
+def test_cli_list_rules_accepts_text_alias():
+    result = CliRunner().invoke(main, ["list-rules", "--format", "text"])
+
+    assert result.exit_code == 0, result.output
+    assert "Rule" in result.output
+    assert "Pillar" in result.output
 
 
 def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,5 +1,6 @@
 """Reusable Click option and command decorators shared by the CLI command tree."""
 
+import inspect
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -150,9 +151,17 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
         """
         if _command_root is None:
             raise RuntimeError("CLI root group has not been bound.")
-        return cast(Callable[..., Any], _command_root.command(*args, **attrs)(function))
+        command_attrs = dict(attrs)
+        command_attrs.setdefault("help", _doc_summary(function))
+        return cast(Callable[..., Any], _command_root.command(*args, **command_attrs)(function))
 
     return decorator
+
+
+def _doc_summary(function: Callable[..., Any]) -> str:
+    """Return the first docstring paragraph for Click command help."""
+    doc = inspect.getdoc(function) or ""
+    return doc.split("\n\n", 1)[0]
 
 
 def _pass_context(function: _F) -> _F:
@@ -610,10 +619,10 @@ _LIST_RULES_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--format",
         "rule_format",
-        type=click.Choice(["table", "json"]),
+        type=click.Choice(["text", "table", "json"]),
         default="table",
         show_default=True,
-        help="Output format: table or json.",
+        help="Output format: text, table, or json.",
     ),
     _command("list-rules"),
 )
