@@ -145,22 +145,26 @@ def _has_call(stmt: ast.stmt) -> bool:
     """
 
     class _CallFinder(ast.NodeVisitor):
+        """Set ``found`` to ``True`` on the first ``Call`` outside nested scopes."""
+
         def __init__(self) -> None:
             self.found = False
 
         def visit_Call(self, _: ast.Call) -> None:  # noqa: N802 - ast visitor naming
             self.found = True
 
-        def visit_FunctionDef(self, _: ast.FunctionDef) -> None:  # noqa: N802
+        def visit_FunctionDef(self, _: ast.FunctionDef) -> None:  # noqa: N802 - ast visitor naming
             return
 
-        def visit_AsyncFunctionDef(self, _: ast.AsyncFunctionDef) -> None:  # noqa: N802
+        def visit_AsyncFunctionDef(  # noqa: N802 - ast visitor naming
+            self, _: ast.AsyncFunctionDef
+        ) -> None:
             return
 
-        def visit_ClassDef(self, _: ast.ClassDef) -> None:  # noqa: N802
+        def visit_ClassDef(self, _: ast.ClassDef) -> None:  # noqa: N802 - ast visitor naming
             return
 
-        def visit_Lambda(self, _: ast.Lambda) -> None:  # noqa: N802
+        def visit_Lambda(self, _: ast.Lambda) -> None:  # noqa: N802 - ast visitor naming
             return
 
     finder = _CallFinder()

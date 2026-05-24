@@ -184,6 +184,26 @@ def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
     assert not (tmp_path / ".gruff-py.yaml").exists()
 
 
+def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure a bad ``--project`` surfaces as a directory error before any prompt.
+
+    Args:
+        tmp_path: Working directory for the invocation.
+        monkeypatch: Fixture used to chdir into ``tmp_path``.
+    """
+    monkeypatch.chdir(tmp_path)
+    bogus = tmp_path / "does-not-exist"
+
+    result = CliRunner().invoke(main, ["dashboard", "--project", str(bogus)])
+
+    assert result.exit_code != 0
+    assert "Project root is not a directory" in result.output
+    assert "Unable to write" not in result.output
+    assert not (bogus / ".gruff-py.yaml").exists()
+
+
 def test_cli_init_force_regenerates_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

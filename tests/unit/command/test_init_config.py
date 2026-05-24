@@ -1,3 +1,5 @@
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -110,18 +112,15 @@ def test_existing_config_source_reports_unparseable_pyproject(tmp_path: Path) ->
     assert existing_config_source(tmp_path) == pyproject
 
 
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="chmod 0 read-denial only enforced on POSIX as a non-root user.",
+)
 def test_existing_config_source_reports_unreadable_pyproject(tmp_path: Path) -> None:
-    import os
-    import stat
-
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[tool.gruff-py]\n")
     pyproject.chmod(0)
     try:
-        if os.access(pyproject, os.R_OK):
-            pytest.skip(
-                "Filesystem does not enforce read permission denial (likely running as root)."
-            )
         assert existing_config_source(tmp_path) == pyproject
     finally:
         pyproject.chmod(stat.S_IRUSR | stat.S_IWUSR)

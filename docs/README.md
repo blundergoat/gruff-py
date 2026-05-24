@@ -17,6 +17,6 @@ Use these docs with the top-level README for the stable user-facing surface.
 
 ## Shared Contract
 
-Cross-language naming and CLI expectations live in
-[`../../CONTRACT.md`](../../CONTRACT.md). Python keeps the hidden
+Cross-language naming and CLI expectations live in `CONTRACT.md` at the
+gruff workspace root (sibling to this package). Python keeps the hidden
 `metric-calibration` command for rule tuning.

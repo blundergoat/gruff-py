@@ -238,6 +238,8 @@ def dashboard(**kwargs: Any) -> None:
     """
     request = _dashboard_request(kwargs)
     dashboard_project_root = (request.project_root or Path.cwd()).resolve()
+    if not dashboard_project_root.is_dir():
+        raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
     _maybe_prompt_to_init_config(
         request.config_path,
         request.should_skip_config,
