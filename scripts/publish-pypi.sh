@@ -114,7 +114,6 @@ check_clean_working_tree() {
 run_checks() {
   info "Running preflight checks (this is the same suite as scripts/preflight-checks.sh)..."
   "$SCRIPT_DIR/preflight-checks.sh" \
-    --skip-gruff-go \
     --skip-build \
     --require-unreleased-version || return 1
 }

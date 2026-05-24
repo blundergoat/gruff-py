@@ -57,9 +57,6 @@ rules:
   test-quality.eager-test:
     thresholds:
       maxAssertions: 5
-
-  test-quality.testdox-readability:
-    enabled: true
 ```
 
 ## pyproject.toml Example
@@ -84,9 +81,6 @@ severity = "error"
 
 [tool.gruff-py.rules."test-quality.eager-test"]
 thresholds = { maxAssertions = 5 }
-
-[tool.gruff-py.rules."test-quality.testdox-readability"]
-enabled = true
 ```
 
 ## Supported Keys

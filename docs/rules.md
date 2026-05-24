@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 117 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 116 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -18,7 +18,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 26 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
-| `test-quality` | 34 | Pytest-aware test smells and project config checks |
+| `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
 
 ## Rule IDs
@@ -161,7 +161,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.tautological-type-assertion`
 - `test-quality.test-function-too-long`
 - `test-quality.test-longer-than-sut`
-- `test-quality.testdox-readability`
 - `test-quality.trivial-assertion`
 - `test-quality.trivial-snapshot`
 - `test-quality.unused-mock`
@@ -1728,21 +1727,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Options: `ratio` = `2.0`
 - Bad example: Code that triggers `test-quality.test-longer-than-sut` leaves test longer than sut unaddressed.
 - Good example: Code that satisfies `test-quality.test-longer-than-sut` makes test longer than sut explicit or simpler.
-
-### `test-quality.testdox-readability`
-
-- Name: Testdox readability
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `low`
-- Default enabled: yes
-- Rationale: `test-quality.testdox-readability` protects the test-quality pillar by flagging testdox readability before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported testdox readability directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Options: `min_words` = `4`
-- Bad example: Code that triggers `test-quality.testdox-readability` leaves testdox readability unaddressed.
-- Good example: Code that satisfies `test-quality.testdox-readability` makes testdox readability explicit or simpler.
 
 ### `test-quality.trivial-assertion`
 

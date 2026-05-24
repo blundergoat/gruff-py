@@ -145,7 +145,7 @@ class AnalysisConfig:
         """Return a new config whose naming-rule allowlist is *abbrevs*.
 
         Consumed by ``naming.abbreviation`` and ``naming.parameter-type-name``
-        to exempt project-standard short forms (``ctx``, ``msg``, ``args``).
+        to exempt project-standard short forms (``ctx``, ``msg``, ``cfg``).
 
         Args:
             abbrevs: Allowed-abbreviation tokens, lowercase.

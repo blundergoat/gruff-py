@@ -20,14 +20,12 @@ from gruffpy.rule.rule import Rule
 
 _ABBREVIATION_BLOCKLIST: frozenset[str] = frozenset(
     {
-        "args",
         "attr",
         "cfg",
         "ctx",
         "defn",
         "func",
         "idx",
-        "kwargs",
         "lst",
         "mgr",
         "msg",
@@ -53,7 +51,7 @@ class AbbreviationRule(Rule):
         """Describe the abbreviation rule.
 
         The blocklist is intentionally configurable because short forms such as
-        ``ctx``, ``msg``, and ``args`` are idiomatic in some codebases.
+        ``ctx`` and ``msg`` are idiomatic in some codebases.
 
         Returns:
             Definition for the abbreviation rule under the naming pillar.

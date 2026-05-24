@@ -41,7 +41,6 @@ _EXPECTED_COUNTS = {
     "test-quality.tautological-type-assertion": 1,
     "test-quality.test-function-too-long": 1,
     "test-quality.test-longer-than-sut": 1,
-    "test-quality.testdox-readability": 2,
     "test-quality.trivial-assertion": 1,
     "test-quality.trivial-snapshot": 1,
     "test-quality.unused-mock": 1,
@@ -77,7 +76,6 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
     for rule_id, options in {
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
         "test-quality.multiple-aaa-cycles": {},
-        "test-quality.testdox-readability": {},
     }.items():
         settings = config.rule_settings(rule_id)
         config = config.with_rule_settings(

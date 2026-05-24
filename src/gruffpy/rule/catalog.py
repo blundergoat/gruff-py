@@ -135,7 +135,6 @@ from gruffpy.rule.test_quality.tautological_type_assertion_rule import (
 )
 from gruffpy.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
 from gruffpy.rule.test_quality.test_longer_than_sut_rule import TestLongerThanSutRule
-from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from gruffpy.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
 from gruffpy.rule.test_quality.trivial_snapshot_rule import TrivialSnapshotRule
 from gruffpy.rule.test_quality.unused_mock_rule import UnusedMockRule
@@ -514,7 +513,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(TautologicalTypeAssertionRule),
     _entry(TestFunctionTooLongRule),
     _entry(TestLongerThanSutRule),
-    _entry(TestdoxReadabilityRule),
     _entry(TrivialAssertionRule),
     _entry(TrivialSnapshotRule),
     _entry(UnusedMockRule),

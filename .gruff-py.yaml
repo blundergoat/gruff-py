@@ -165,7 +165,6 @@ selection:
   - test-quality.tautological-type-assertion
   - test-quality.test-function-too-long
   - test-quality.test-longer-than-sut
-  - test-quality.testdox-readability
   - test-quality.trivial-assertion
   - test-quality.trivial-snapshot
   - test-quality.unused-mock
@@ -563,10 +562,6 @@ rules:
     enabled: true
     options:
       ratio: 2.0
-  test-quality.testdox-readability:
-    enabled: true
-    options:
-      min_words: 4
   test-quality.trivial-assertion:
     enabled: true
   test-quality.trivial-snapshot:

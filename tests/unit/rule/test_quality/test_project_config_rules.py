@@ -20,7 +20,6 @@ from gruffpy.rule.test_quality.pytest_deprecations_not_fatal_rule import (
 from gruffpy.rule.test_quality.pytest_strict_config_missing_rule import (
     PytestStrictConfigMissingRule,
 )
-from gruffpy.rule.test_quality.testdox_readability_rule import TestdoxReadabilityRule
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _TEST_FIXTURE = "def test_something():\n    assert 1 + 1 == 2\n"
@@ -129,7 +128,7 @@ def test_coverage_source_present_skips(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "rule_cls",
-    [MockingDomainObjectRule, MultipleAaaCyclesRule, TestdoxReadabilityRule],
+    [MockingDomainObjectRule, MultipleAaaCyclesRule],
     ids=lambda c: c.__name__,
 )
 def test_test_quality_rules_default_on(rule_cls: type) -> None:
@@ -173,17 +172,3 @@ def test_multiple_aaa_cycles_fires_when_configured(tmp_path: Path):
     findings = rule.analyse(make_unit(src), ctx)
     assert len(findings) == 1
     assert findings[0].metadata["cycles"] >= 2
-
-
-def test_testdox_readability_fires_when_default(tmp_path: Path):
-    """testdox-readability is default-on, so short test names fire by default.
-
-    Args:
-        tmp_path: Pytest-provided per-test directory used as the project root.
-    """
-    rule = TestdoxReadabilityRule()
-    registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry)
-    ctx = RuleContext(project_root=str(tmp_path), config=config)
-    findings = registry.analyse([make_unit("def test_x():\n    pass\n")], ctx)
-    assert any(f.rule_id == rule.definition().id for f in findings)
