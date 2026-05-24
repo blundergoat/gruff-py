@@ -12,6 +12,7 @@ ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 GRUFF_GO_DIR="${GRUFF_GO_DIR:-"$ROOT_DIR/../gruff-go"}"
 RUN_GRUFF_GO=1
 RUN_BUILD=1
+REQUIRE_UNRELEASED_VERSION=0
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
@@ -62,6 +63,8 @@ Usage: scripts/preflight-checks.sh [options]
 Runs the local gruff-py preflight suite:
   - bash syntax check for scripts/*.sh
   - shellcheck for scripts/*.sh when shellcheck is installed
+  - version agreement check for pyproject.toml and src/gruffpy/version.py
+  - dependency vulnerability audit
   - ruff lint and format checks
   - mypy type checking
   - generated rule docs check
@@ -74,6 +77,9 @@ Options:
   --skip-gruff-go     Skip sibling gruff-go checks.
   --gruff-go-dir DIR  Run gruff-go checks in DIR (default: ../gruff-go).
   --skip-build        Skip uv build.
+  --require-unreleased-version
+                      Fail if the current version already has a local
+                      release tag (v<version> or <version>).
   -h, --help          Show this help.
 
 Environment:
@@ -250,6 +256,67 @@ shellcheck_check() {
   shellcheck "${scripts[@]}"
 }
 
+version_check() {
+  local output
+  local version
+  local existing_tags=()
+  local tag
+
+  output="$("$SCRIPT_DIR/bump-version.sh" --check 2>&1)" || {
+    printf '%s\n' "$output"
+    return 1
+  }
+
+  version="$(printf '%s\n' "$output" | awk '/versions agree:/ {print $NF; exit}')"
+  if [[ -z "$version" ]]; then
+    printf 'Could not read agreed version from scripts/bump-version.sh --check output.\n'
+    printf '%s\n' "$output"
+    return 1
+  fi
+
+  if ((REQUIRE_UNRELEASED_VERSION)); then
+    if ! command_check git; then
+      printf 'git is not available on PATH; cannot check release tags.\n'
+      return 127
+    fi
+
+    for tag in "v${version}" "$version"; do
+      if git -C "$ROOT_DIR" rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+        existing_tags+=("$tag")
+      fi
+    done
+
+    if ((${#existing_tags[@]} > 0)); then
+      printf 'version %s already has local release tag(s): %s\n' "$version" "${existing_tags[*]}"
+      printf 'Run: scripts/bump-version.sh <new-version>\n'
+      return 1
+    fi
+
+    printf 'version: %s, no local release tag' "$version"
+    return 0
+  fi
+
+  printf 'version: %s' "$version"
+}
+
+dependency_audit_check() {
+  local output
+  local status
+  local summary
+
+  output="$(uv run pip-audit --skip-editable --progress-spinner off 2>&1)"
+  status=$?
+
+  if ((status == 0)); then
+    summary="$(printf '%s\n' "$output" | grep -E '^No known vulnerabilities found' | tail -1 || true)"
+    printf '%s' "${summary:-$output}"
+  else
+    printf '%s\n' "$output"
+  fi
+
+  return "$status"
+}
+
 ruff_lint_check() {
   uv run ruff check src tests
 }
@@ -263,7 +330,7 @@ mypy_check() {
 }
 
 rule_docs_check() {
-  uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+  uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 }
 
 gruff_py_self_check() {
@@ -419,6 +486,8 @@ summary() {
 main() {
   local bash_status=0
   local shellcheck_status=0
+  local version_status=0
+  local dependency_audit_status=0
   local ruff_lint_status=0
   local ruff_format_status=0
   local mypy_status=0
@@ -448,6 +517,9 @@ main() {
         ;;
       --skip-build)
         RUN_BUILD=0
+        ;;
+      --require-unreleased-version)
+        REQUIRE_UNRELEASED_VERSION=1
         ;;
       -h|--help)
         usage
@@ -490,6 +562,12 @@ main() {
     step "Shellcheck"
     skip "not installed"
   fi
+
+  run_step "Version" version_check
+  version_status=$?
+
+  run_step "Dependency audit" dependency_audit_check
+  dependency_audit_status=$?
 
   run_step "Ruff lint" ruff_lint_check
   ruff_lint_status=$?
@@ -552,6 +630,8 @@ main() {
   if ((
     bash_status != 0 ||
     shellcheck_status != 0 ||
+    version_status != 0 ||
+    dependency_audit_status != 0 ||
     ruff_lint_status != 0 ||
     ruff_format_status != 0 ||
     mypy_status != 0 ||

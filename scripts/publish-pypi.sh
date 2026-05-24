@@ -5,7 +5,7 @@
 # `uv publish`. Reads UV_PUBLISH_TOKEN from the environment.
 #
 # Does NOT commit, tag, push, or edit CHANGELOG.md / version files. The user
-# owns those steps; see docs/RELEASING.md for the full release checklist.
+# owns those steps; see docs/releasing.md for the full release checklist.
 
 set -uo pipefail
 
@@ -54,7 +54,7 @@ Environment:
 
 This script does NOT:
   - commit, tag, or push (the user owns git operations)
-  - edit CHANGELOG.md (see docs/RELEASING.md)
+  - edit CHANGELOG.md (see docs/releasing.md)
   - bump versions (use scripts/bump-version.sh)
 
 Examples:
@@ -113,7 +113,10 @@ check_clean_working_tree() {
 
 run_checks() {
   info "Running preflight checks (this is the same suite as scripts/preflight-checks.sh)..."
-  "$SCRIPT_DIR/preflight-checks.sh" --skip-gruff-go --skip-build || return 1
+  "$SCRIPT_DIR/preflight-checks.sh" \
+    --skip-gruff-go \
+    --skip-build \
+    --require-unreleased-version || return 1
 }
 
 clean_dist() {
@@ -261,7 +264,7 @@ TOKEN_HELP
   ok "Published gruff-py $version to PyPI."
 
   cat <<TAG
-Next steps (see docs/RELEASING.md):
+Next steps (see docs/releasing.md):
   - Tag the release commit: git tag v${version}
   - Push the tag:           git push --tags
   - Draft GitHub release notes from CHANGELOG.md [${version}].

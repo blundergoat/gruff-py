@@ -14,10 +14,10 @@ gruff-py dashboard --help
 
 Useful docs:
 
-- [Configuration](docs/CONFIGURATION.md)
-- [Reporting](docs/REPORTING.md)
-- [Dashboard](docs/DASHBOARD.md)
-- [Rules](docs/RULES.md)
+- [Configuration](docs/configuration.md)
+- [Reporting](docs/reporting.md)
+- [Dashboard](docs/dashboard.md)
+- [Rules](docs/rules.md)
 
 ## Filing Issues
 

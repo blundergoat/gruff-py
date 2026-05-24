@@ -3,7 +3,7 @@
 gruff-py `0.1` registers 116 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
-Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.
+Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
 
 ## Pillar Summary
 

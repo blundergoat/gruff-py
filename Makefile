@@ -37,7 +37,7 @@ typecheck:
 	uv run mypy src
 
 docs-check:
-	uv run python -m gruffpy.command.rule_docs --check docs/RULES.md
+	uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 
 check: lint typecheck docs-check test
 

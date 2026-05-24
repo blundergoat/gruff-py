@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 ## Lesson: Read the rule body before calling a rule dead or leftover
@@ -71,7 +71,7 @@ not include the rationale in the directive payload.
 
 **Created:** 2026-05-20
 **Incident:** Removing `docs.todo-actionability` from
-`src/gruffpy/rule/catalog.py`, generated `docs/RULES.md`, and docs-pillar tests
+`src/gruffpy/rule/catalog.py`, generated `docs/rules.md`, and docs-pillar tests
 left `.gruff-py.yaml` with the stale rule in both `selection.rules` and
 `rules:`. Focused rule/docs tests passed, but full `uv run pytest` failed
 `tests/unit/config/test_gruff_py_yaml_registry_coverage.py` because the dogfood

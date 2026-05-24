@@ -1,6 +1,6 @@
 ---
 category: packaging
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 ## Footgun: Hatchling sdist can include ignored local workspace artifacts
@@ -11,7 +11,7 @@ last_reviewed: 2026-05-20
 Hatchling's source distribution selection can include files that are local-only
 or ignored by nested project workspace rules unless the sdist target excludes
 them explicitly. Evidence anchors: `pyproject.toml` (search:
-`[tool.hatch.build.targets.sdist]`) and `docs/RELEASING.md` (search:
+`[tool.hatch.build.targets.sdist]`) and `docs/releasing.md` (search:
 `Confirm screenshots or dashboard artifacts are not accidentally committed`).
 
 The observed failure mode was `uv build` producing

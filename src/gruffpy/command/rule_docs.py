@@ -70,7 +70,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         f"gruff-py `0.1` registers {len(definitions)} rules in `RuleRegistry.defaults()`.",
         "",
         "This file is generated from the first-party built-in rule catalog.",
-        "Run `uv run python -m gruffpy.command.rule_docs --check docs/RULES.md` to verify it.",
+        "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
         "",
         "## Pillar Summary",
         "",
@@ -139,8 +139,8 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         ``0`` on success or when docs are current; ``1`` if ``--check`` fails.
     """
-    parser = argparse.ArgumentParser(description="Generate or check docs/RULES.md.")
-    parser.add_argument("path", nargs="?", default="docs/RULES.md")
+    parser = argparse.ArgumentParser(description="Generate or check docs/rules.md.")
+    parser.add_argument("path", nargs="?", default="docs/rules.md")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Fail if the docs are not current.")
     mode.add_argument("--write", action="store_true", help="Rewrite the docs file.")
