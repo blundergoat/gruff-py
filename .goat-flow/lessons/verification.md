@@ -150,3 +150,45 @@ the false positive before broader checks.
 When converting dynamic rule discovery to source scanning, explicitly exclude
 support contract modules such as `project_rule.py` and keep the predicate tied
 to concrete rule implementation files, not just filename suffixes.
+
+## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
+
+**Created:** 2026-05-25
+**Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
+added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
+silently clobbering seeded defaults. The functional change was trivial - two
+membership checks - but the self-check `uv run gruff-py analyse src tests
+--fail-on advisory` then surfaced a new `error`-severity finding:
+`complexity.npath` reporting NPATH 972 (>500 error threshold) on
+`ConfigLoader._apply_allowlists`. Evidence anchors: `src/gruffpy/config/loader.py`
+(search: `_validate_string_list_allowlists`) shows the helper split that brought
+NPATH back below 500, and `src/gruffpy/rule/complexity/npath_complexity_rule.py` (search:
+`class NPathComplexityRule`) defines the gate. The fix was to extract two helpers
+(`_validate_string_list_allowlists` and `_apply_present_allowlists`) so each
+function's branch count stayed local.
+
+When extending any function that already had multiple `if` guards or `or`/`and`
+short-circuits, run `uv run gruff-py analyse <changed-file> --fail-on advisory`
+before claiming the change is low-impact - NPATH multiplies branches, so each
+new `if` can push a function past the project's own complexity gate. Prefer
+extracting a per-key helper over chaining additional conditionals at the same
+nesting level.
+
+## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
+
+**Created:** 2026-05-25
+**Incident:** After clearing ten test-quality advisories with inline
+`# gruff: disable-file=<rule-id>` / `disable-next=<rule-id>` directives in
+`tests/integration/test_cli_smoke.py` and `tests/unit/reporting/test_reporters.py`,
+the next `uv run gruff-py analyse src tests --fail-on advisory` run reported
+three `warning`-severity findings from `docs.ignore-directive-reason` complaining
+that suppression directives were "used without a reason." Evidence anchors:
+`src/gruffpy/rule/docs/ignore_directive_reason_rule.py` (search: `class IgnoreDirectiveReasonRule`)
+shows the rule body and `docs/rules.md` (search: `## Suppressing Findings`)
+documents the `--` / `-` / second-`#` reason delimiters the rule expects.
+
+When adding any `# gruff: disable...` directive, always append a short
+rationale after `--` on the same comment, e.g. `# gruff: disable-file=test-quality.eager-test -- smoke tests assert many invariants per call.`
+The dogfood gate ships this rule by default, so suppressions without rationale
+look "clean" locally but fail CI's `--fail-on advisory` step. This applies
+symmetrically to `disable`, `disable-next`, and `disable-file`.
