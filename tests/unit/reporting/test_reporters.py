@@ -156,6 +156,7 @@ def test_markdown_reporter_pillars_table_uses_pillar_score_counts():
         if line.startswith("| documentation |") or line.startswith("| security |")
     ]
     # 7 columns => 8 pipes per row.
+    # gruff: disable-next=test-quality.magic-number-assertion -- 8 pipes is the contract under test.
     assert all(line.count("|") == 8 for line in pillar_lines)
     documentation_row = next(line for line in pillar_lines if line.startswith("| documentation |"))
     security_row = next(line for line in pillar_lines if line.startswith("| security |"))
@@ -463,6 +464,7 @@ def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
     assert "data-findings-list" in html
 
 
+# gruff: disable-next=test-quality.multiple-aaa-cycles -- cohesive single-render check.
 def test_html_reporter_pillars_table_is_canonical_with_seven_columns():
     findings = (
         _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),

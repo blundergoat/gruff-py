@@ -179,14 +179,24 @@ class ConfigLoader:
         unknown = set(allowlists.keys()) - VALID_ALLOWLISTS_KEYS
         if unknown:
             raise ConfigError(f"Unknown [tool.gruff-py.allowlists] keys: {sorted(unknown)}")
+        ConfigLoader._validate_string_list_allowlists(allowlists)
+        return ConfigLoader._apply_present_allowlists(config, allowlists)
+
+    @staticmethod
+    def _validate_string_list_allowlists(allowlists: dict[str, Any]) -> None:
         for key in ("acceptedAbbreviations", "secretPreviews"):
             value = allowlists.get(key, [])
             if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
                 raise ConfigError(f"[tool.gruff-py.allowlists].{key} must be a list of strings.")
-        config = config.with_accepted_abbreviations(
-            tuple(allowlists.get("acceptedAbbreviations", []))
-        )
-        config = config.with_allowed_secret_previews(tuple(allowlists.get("secretPreviews", [])))
+
+    @staticmethod
+    def _apply_present_allowlists(
+        config: AnalysisConfig, allowlists: dict[str, Any]
+    ) -> AnalysisConfig:
+        if "acceptedAbbreviations" in allowlists:
+            config = config.with_accepted_abbreviations(tuple(allowlists["acceptedAbbreviations"]))
+        if "secretPreviews" in allowlists:
+            config = config.with_allowed_secret_previews(tuple(allowlists["secretPreviews"]))
         if "deadCode" in allowlists:
             config = config.with_dead_code_allowlist(
                 _parse_dead_code_allowlist(allowlists["deadCode"])

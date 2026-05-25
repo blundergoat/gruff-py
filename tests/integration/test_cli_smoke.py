@@ -1,3 +1,6 @@
+# gruff: disable-file=test-quality.eager-test -- smoke tests assert many invariants per call.
+# gruff: disable-file=test-quality.loop-in-test -- loops enumerate output rows, not test cases.
+# gruff: disable-file=test-quality.magic-number-assertion -- column positions are the contract.
 import json
 from pathlib import Path
 from typing import Any, cast
