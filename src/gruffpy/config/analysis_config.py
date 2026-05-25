@@ -33,7 +33,27 @@ class AnalysisConfig:
     minimum_python_version: tuple[int, int] = (3, 11)
     rule_selection: RuleSelection = field(default_factory=RuleSelection)
     ignored_path_patterns: tuple[str, ...] = ()
-    accepted_abbreviations: tuple[str, ...] = ()
+    # Seed value matches the gruff-rs/gruff-ts runtime defaults and the
+    # gruff-py init template; project-specific vocabulary should be appended
+    # in the user's config rather than added here.
+    accepted_abbreviations: tuple[str, ...] = (
+        "age",
+        "app",
+        "db",
+        "fs",
+        "id",
+        "io",
+        "key",
+        "log",
+        "max",
+        "min",
+        "now",
+        "raw",
+        "rx",
+        "tx",
+        "ui",
+        "url",
+    )
     allowed_secret_previews: tuple[str, ...] = ()
     dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
 
@@ -144,8 +164,8 @@ class AnalysisConfig:
     def with_accepted_abbreviations(self, abbrevs: tuple[str, ...]) -> "AnalysisConfig":
         """Return a new config whose naming-rule allowlist is *abbrevs*.
 
-        Consumed by ``naming.abbreviation`` and ``naming.parameter-type-name``
-        to exempt project-standard short forms (``ctx``, ``msg``, ``cfg``).
+        Consumed by ``naming.abbreviation`` to exempt project-standard short
+        forms (``ctx``, ``msg``, ``cfg``).
 
         Args:
             abbrevs: Allowed-abbreviation tokens, lowercase.

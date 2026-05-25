@@ -17,6 +17,7 @@ from click.shell_completion import get_completion_class
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
+from gruffpy.analysis.schema import SUMMARY_SCHEMA_VERSION
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
 from gruffpy.cli_options import (
     ClickDecorator,
@@ -652,10 +653,10 @@ def _render_report(
 
 
 def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -> dict[str, Any]:
-    pillar_counts = Counter(finding.pillar.value for finding in report.findings)
     rule_counts = Counter(finding.rule_id for finding in report.findings)
     file_counts = Counter(finding.file_path for finding in report.findings)
     return {
+        "schemaVersion": SUMMARY_SCHEMA_VERSION,
         "summary": {
             "paths": list(report.requested_paths),
             "filesDiscovered": report.files_discovered,
@@ -667,7 +668,7 @@ def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -
             "exitCode": report.exit_code,
             "elapsedSeconds": round(elapsed_seconds, 3),
         },
-        "pillars": dict(sorted(pillar_counts.items())),
+        "pillars": _summary_pillar_rows(report),
         "topRules": _counter_rows(rule_counts, top),
         "topFiles": _counter_rows(file_counts, top),
     }
@@ -688,19 +689,94 @@ def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> s
         f"Findings: {summary['findings']}",
         f"Elapsed: {summary['elapsedSeconds']:.3f}s",
         "",
-        "Per pillar:",
+        "Pillars",
     ]
-    pillars = cast(dict[str, int], payload["pillars"])
-    if pillars:
-        lines.extend(f"  {name}: {count}" for name, count in pillars.items())
-    else:
-        lines.append("  none")
+    lines.extend(_format_pillar_text_rows(cast(list[dict[str, Any]], payload["pillars"])))
     lines.extend(["", "Top rules:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
     _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
+
+
+def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
+    """Build the canonical per-pillar summary rows sorted by findings DESC, pillar ASC.
+
+    Sources grade/score/per-severity data from the ``ScoreReport`` attached to
+    *report* when available; falls back to per-finding counts otherwise.
+    Only applicable pillars appear in the returned list.
+
+    Args:
+        report: Analysis report to summarise.
+
+    Returns:
+        List of pillar dicts shaped per ``gruff.summary.v2``.
+    """
+    rows: list[dict[str, Any]] = []
+    if report.score is None:
+        pillar_counts = Counter(finding.pillar.value for finding in report.findings)
+        severity_counts: dict[str, Counter[str]] = {name: Counter() for name in pillar_counts}
+        for finding in report.findings:
+            severity_counts[finding.pillar.value][finding.severity.value] += 1
+        rows.extend(
+            {
+                "pillar": name,
+                "grade": None,
+                "score": None,
+                "applicable": True,
+                "findings": count,
+                "advisory": severity_counts[name].get("advisory", 0),
+                "warning": severity_counts[name].get("warning", 0),
+                "error": severity_counts[name].get("error", 0),
+                "penalty": 0.0,
+            }
+            for name, count in pillar_counts.items()
+        )
+    else:
+        rows.extend(
+            {
+                "pillar": pillar.pillar,
+                "grade": pillar.grade.letter if pillar.grade is not None else None,
+                "score": pillar.grade.score if pillar.grade is not None else None,
+                "applicable": pillar.applicable,
+                "findings": pillar.findings,
+                "advisory": pillar.advisories,
+                "warning": pillar.warnings,
+                "error": pillar.errors,
+                "penalty": pillar.penalty,
+            }
+            for pillar in report.score.pillars
+            if pillar.applicable
+        )
+    rows.sort(key=lambda row: (-cast(int, row["findings"]), cast(str, row["pillar"])))
+    return rows
+
+
+def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["  none"]
+    pillar_width = max(15, max(len(cast(str, row["pillar"])) for row in rows))
+    lines: list[str] = []
+    for row in rows:
+        grade = cast(str | None, row["grade"])
+        score = cast(float | None, row["score"])
+        grade_text = grade if grade is not None else "-"
+        score_text = f"{score:6.2f}" if score is not None else "  n/a "
+        lines.append(
+            "  "
+            + cast(str, row["pillar"]).ljust(pillar_width)
+            + " "
+            + grade_text
+            + " "
+            + score_text
+            + " "
+            + f"findings={row['findings']}".ljust(15)
+            + f"advisory={row['advisory']}".ljust(15)
+            + f"warning={row['warning']}".ljust(14)
+            + f"error={row['error']}"
+        )
+    return lines
 
 
 def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:

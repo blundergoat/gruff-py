@@ -6,8 +6,7 @@ Allowed by default: ``i``, ``j``, ``k``, ``n``, ``m``, ``x``, ``y``, ``z``,
 
 Scope: local assignments (Assign / AnnAssign). Function parameters are
 intentionally NOT scanned - single-char params are common in math-flavoured
-code (``def f(x, y, z): ...``) and the parameter rule lives in
-``naming.parameter-type-name``. Test files are exempt; assertion fixtures and
+code (``def f(x, y, z): ...``). Test files are exempt; assertion fixtures and
 table-driven rule tests routinely use tiny local placeholders where this
 low-confidence style warning is noisy.
 """

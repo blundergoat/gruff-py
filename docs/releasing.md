@@ -61,9 +61,14 @@ Smoke-test the built wheel in a clean environment before publishing.
 - Confirm fingerprint golden tests pass.
 - Confirm report format names are documented and implemented.
 
+## Tag
+
+Tag and push the release commit before publishing (e.g. `git tag v0.1.0 && git push --tags`).
+
 ## Publishing
 
-Only publish after metadata, license, docs, and verification are settled.
+Only publish after metadata, license, docs, verification, and the release tag
+are settled.
 
 Suggested flow:
 
@@ -73,9 +78,10 @@ uv publish
 ```
 
 Use `scripts/publish-pypi.sh` when you want the local preflight, build, and
-artifact checks to run before publishing.
+artifact checks to run before publishing. The script allows the release tag to
+exist before publishing and fails only when the current version already exists
+on PyPI.
 
-## Tag And Announce
+## Announce
 
-- Tag the commit (e.g. `git tag v0.1.0 && git push --tags`).
 - Draft GitHub release notes from the new `CHANGELOG.md` section.

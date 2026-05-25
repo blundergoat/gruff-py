@@ -40,6 +40,21 @@ matches the steady-state path. A reproduction in an empty directory
 (`exit_code=1` from `find dist/ -maxdepth 1 -delete`) is enough to confirm
 the trap.
 
+## Footgun: publish gates must not assume publish-before-tag release order
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+The release workflow tags before publishing. A publish preflight that rejects
+existing local or remote Git tags will block the intended path even when the
+version is not on PyPI yet. Evidence anchors: `scripts/publish-pypi.sh`
+(search: `--require-unpublished-pypi`), `scripts/preflight-checks.sh` (search:
+`version_exists_on_pypi`), and `docs/releasing.md` (search:
+`Tag and push the release commit before publishing`).
+
+For publish safety, check the package index for an already-used version rather
+than treating `v<version>` as proof of publication. Git tags are release
+provenance in this project, not the PyPI availability source of truth.
+
 ## Resolved Entries
 
 ## Footgun: clean_dist failed first-run publishes when dist/ was absent

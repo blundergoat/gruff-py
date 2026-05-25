@@ -393,12 +393,31 @@ def test_cli_summary_json_is_compact_digest(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert {"summary", "topRules", "topFiles"} <= payload.keys()
+    assert payload["schemaVersion"] == "gruff.summary.v2"
+    assert {"summary", "pillars", "topRules", "topFiles"} <= payload.keys()
     summary = payload["summary"]
     elapsed = summary["elapsedSeconds"]
     assert summary["paths"] == ["src"]
     assert isinstance(elapsed, int | float) and elapsed >= 0
     assert "Next steps" not in result.output
+    assert isinstance(payload["pillars"], list)
+    assert payload["pillars"], "pillars list should not be empty"
+    expected_keys = {
+        "pillar",
+        "grade",
+        "score",
+        "applicable",
+        "findings",
+        "advisory",
+        "warning",
+        "error",
+        "penalty",
+    }
+    assert all(expected_keys <= pillar.keys() for pillar in payload["pillars"])
+    for pillar in payload["pillars"]:
+        assert isinstance(pillar["penalty"], int | float), (
+            f"penalty should be numeric, got {type(pillar['penalty']).__name__}"
+        )
 
 
 def test_cli_summary_text_includes_path_and_elapsed(
@@ -416,6 +435,19 @@ def test_cli_summary_text_includes_path_and_elapsed(
     assert "Elapsed:" in result.output
     assert "Baseline:" in result.output
     assert "gruff-py analyse src --generate-baseline" in result.output
+    assert "\nPillars\n" in result.output
+    pillar_lines = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith("  ") and "findings=" in line and "advisory=" in line
+    ]
+    assert pillar_lines, "expected at least one canonical pillar row"
+    for line in pillar_lines:
+        assert "findings=" in line
+        assert line.index("findings=") == 27
+        assert line.index("advisory=") == 42
+        assert line.index("warning=") == 57
+        assert line.index("error=") == 71
 
 
 def test_cli_summary_text_hints_when_paths_were_ignored(

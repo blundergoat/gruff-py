@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.finding.finding import Finding
+from gruffpy.scoring.pillar_score import PillarScore
 
 
 class MarkdownReporter:
@@ -49,17 +50,12 @@ class MarkdownReporter:
                 "",
                 "## Pillars",
                 "",
-                "| Pillar | Grade | Score | Findings |",
-                "| --- | --- | ---: | ---: |",
+                "| Pillar | Grade | Score | Findings | Advisory | Warning | Error |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
-        if score is not None:
-            for pillar in score.pillars:
-                grade = pillar.grade.letter if pillar.grade is not None else "n/a"
-                value = f"{pillar.grade.score:.2f}" if pillar.grade is not None else "n/a"
-                lines.append(
-                    f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(value)} | {pillar.findings} |"
-                )
+        for pillar in _pillar_summary_rows(report):
+            lines.append(_pillar_row(pillar))
 
         lines.extend(["", "## Findings", ""])
         if not report.findings:
@@ -75,6 +71,35 @@ def _score_value(score: object | None) -> str:
         return "n/a"
     composite = score.composite
     return f"{composite.score:.2f}/100"
+
+
+def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
+    """Return applicable pillar scores sorted by findings DESC, then pillar ASC.
+
+    Mirrors the canonical Phase 2 summary shape used by the HTML reporter: only
+    applicable pillars are included, sourced from the existing ``PillarScore``
+    data without recomputing severity counts or scores.
+
+    Args:
+        report: Analysis report providing the optional ``ScoreReport``.
+
+    Returns:
+        Applicable ``PillarScore`` entries ordered for the canonical table.
+    """
+    if report.score is None:
+        return []
+    applicable = [pillar for pillar in report.score.pillars if pillar.applicable]
+    applicable.sort(key=lambda pillar: (-pillar.findings, pillar.pillar))
+    return applicable
+
+
+def _pillar_row(pillar: PillarScore) -> str:
+    grade = pillar.grade.letter if pillar.grade is not None else "n/a"
+    score = f"{pillar.grade.score:.2f}" if pillar.grade is not None else "n/a"
+    return (
+        f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(score)} | "
+        f"{pillar.findings} | {pillar.advisories} | {pillar.warnings} | {pillar.errors} |"
+    )
 
 
 def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> None:

@@ -27,7 +27,6 @@ class UserService:
     """Suffix usage - naming.confusing-name should NOT fire."""
 
     def __init__(self, repo: "UserRepository") -> None:
-        # parameter-type-name should NOT fire (repo is a prefix of repository)
         self._repo = repo
 
     def is_active(self) -> bool:
@@ -105,7 +104,6 @@ def test_registry_includes_all_naming_rules():
         "naming.hungarian-notation",
         "naming.identifier-quality",
         "naming.module-name-mismatch",
-        "naming.parameter-type-name",
         "naming.short-variable",
         "naming.test-naming-consistency",
     }
