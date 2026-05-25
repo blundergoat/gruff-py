@@ -37,7 +37,6 @@ from gruffpy.rule.naming.generic_function_rule import GenericFunctionRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.naming.module_name_mismatch_rule import ModuleNameMismatchRule
-from gruffpy.rule.naming.parameter_type_name_rule import ParameterTypeNameRule
 from gruffpy.rule.naming.short_variable_rule import ShortVariableRule
 from gruffpy.rule.naming.test_naming_consistency_rule import TestNamingConsistencyRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
@@ -445,7 +444,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HungarianNotationRule),
     _entry(IdentifierQualityRule),
     _entry(ModuleNameMismatchRule),
-    _entry(ParameterTypeNameRule),
     _entry(ShortVariableRule),
     _entry(TestNamingConsistencyRule),
     _entry(CorsWildcardWithCredentialsRule),

@@ -43,12 +43,14 @@ def render_default_config_yaml(existing_ignored_path_patterns: Iterable[str] = (
         YAML string equivalent to ``AnalysisConfig.from_registry(RuleRegistry.defaults())``,
         with starter ``paths.ignore`` entries, in the shape ``ConfigLoader`` accepts.
     """
-    config = AnalysisConfig.from_registry(RuleRegistry.defaults()).with_ignored_path_patterns(
+    registry = RuleRegistry.defaults()
+    config = AnalysisConfig.from_registry(registry).with_ignored_path_patterns(
         _merged_init_ignored_path_patterns(existing_ignored_path_patterns)
     )
-    document = _document_for(config)
-    body = yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
-    return _HEADER + body
+    scaffold = _scaffold_document(config)
+    scaffold_yaml = yaml.safe_dump(scaffold, sort_keys=False, default_flow_style=False)
+    rules_yaml = _render_rules_section(config, registry)
+    return _HEADER + scaffold_yaml + rules_yaml
 
 
 def existing_ignored_path_patterns(config_path: Path) -> tuple[str, ...]:
@@ -88,7 +90,7 @@ def _merged_init_ignored_path_patterns(
     return tuple(merged)
 
 
-def _document_for(config: AnalysisConfig) -> dict[str, Any]:
+def _scaffold_document(config: AnalysisConfig) -> dict[str, Any]:
     major, minor = config.minimum_python_version
     return {
         "minimumPythonVersion": f"{major}.{minor}",
@@ -109,8 +111,30 @@ def _document_for(config: AnalysisConfig) -> dict[str, Any]:
             "excludePillars": list(config.rule_selection.exclude_pillars),
             "excludeRules": list(config.rule_selection.exclude_rules),
         },
-        "rules": {rule_id: _rule_entry(config.rules[rule_id]) for rule_id in sorted(config.rules)},
     }
+
+
+def _render_rules_section(config: AnalysisConfig, registry: RuleRegistry) -> str:
+    """Render the ``rules:`` section with one description comment per rule.
+
+    Each entry is built by ``yaml.safe_dump`` so the value formatting stays
+    in lockstep with the rest of the document; the comment line above the
+    rule key comes from the rule's registry description (falling back to its
+    display name when none is set).
+    """
+    descriptions = {
+        rule.definition().id: rule.definition().get_description() for rule in registry.all()
+    }
+    lines = ["rules:"]
+    for rule_id in sorted(config.rules):
+        lines.append(f"  # {descriptions.get(rule_id, rule_id)}")
+        entry = _rule_entry(config.rules[rule_id])
+        entry_yaml = yaml.safe_dump(
+            {rule_id: entry}, sort_keys=False, default_flow_style=False, indent=2
+        )
+        for line in entry_yaml.rstrip("\n").split("\n"):
+            lines.append("  " + line)
+    return "\n".join(lines) + "\n"
 
 
 def existing_config_source(project_root: Path) -> Path | None:
