@@ -381,6 +381,12 @@ def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_cli_summary_json_is_compact_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """JSON summary emits the v2 schema with pillar rows carrying numeric penalties.
+
+    Args:
+        tmp_path: Working directory for the invocation.
+        monkeypatch: Fixture used to chdir into ``tmp_path``.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -423,6 +429,12 @@ def test_cli_summary_json_is_compact_digest(
 def test_cli_summary_text_includes_path_and_elapsed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Text summary renders Path/Elapsed/Baseline lines and fixed-width pillar columns.
+
+    Args:
+        tmp_path: Working directory for the invocation.
+        monkeypatch: Fixture used to chdir into ``tmp_path``.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -443,11 +455,10 @@ def test_cli_summary_text_includes_path_and_elapsed(
     ]
     assert pillar_lines, "expected at least one canonical pillar row"
     for line in pillar_lines:
-        assert "findings=" in line
-        assert line.index("findings=") == 27
-        assert line.index("advisory=") == 42
-        assert line.index("warning=") == 57
-        assert line.index("error=") == 71
+        assert line.index("findings=") == 27, line
+        assert line.index("advisory=") == 42, line
+        assert line.index("warning=") == 57, line
+        assert line.index("error=") == 71, line
 
 
 def test_cli_summary_text_hints_when_paths_were_ignored(

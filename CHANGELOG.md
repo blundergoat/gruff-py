@@ -2,6 +2,26 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Public API pre-1.0.
 
+## [0.1.2] - 2026-05-25
+
+Self-dogfood cleanup: three CLI/reporter tests gained rationale docstrings and
+loop assertions in the pillar-column smoke test gained debug messages, clearing
+the `docs.complex-branch-rationale` and `test-quality.loop-assertion-without-message`
+findings against the project's own test suite.
+
+### Changed
+
+- `tests/integration/test_cli_smoke.py::test_cli_summary_json_is_compact_digest`
+  and `::test_cli_summary_text_includes_path_and_elapsed` now carry Google-style
+  docstrings describing the invariant under test and the `tmp_path` / `monkeypatch`
+  fixtures.
+- `tests/unit/reporting/test_reporters.py::test_markdown_reporter_pillars_table_uses_pillar_score_counts`
+  now carries a one-line rationale docstring.
+- Pillar-column position assertions in `test_cli_summary_text_includes_path_and_elapsed`
+  now include the offending line as the assertion message, and a redundant
+  `findings=` membership check (already enforced by the filtering comprehension)
+  was removed.
+
 ## [0.1.1] - 2026-05-24
 
 Catalogue still 116 rules across 11 pillars: `modernisation.f-string-candidate`

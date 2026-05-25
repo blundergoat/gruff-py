@@ -133,6 +133,7 @@ def test_markdown_reporter_pillars_table_is_canonical_with_seven_columns():
 
 
 def test_markdown_reporter_pillars_table_uses_pillar_score_counts():
+    """Markdown pillar rows expose the seven canonical columns with correct severity counts."""
     findings = (
         _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
         _finding(
