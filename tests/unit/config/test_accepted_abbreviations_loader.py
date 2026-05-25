@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.rule.registry import RuleRegistry
 
@@ -49,3 +52,31 @@ def test_default_secret_previews_survive_unrelated_allowlists_section(tmp_path: 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
 
     assert config.allowed_secret_previews == _defaults().allowed_secret_previews
+
+
+def test_accepted_abbreviations_rejects_non_list_value(tmp_path: Path):
+    _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: not-a-list\n")
+
+    with pytest.raises(ConfigError, match="acceptedAbbreviations"):
+        ConfigLoader(tmp_path, _defaults()).load()
+
+
+def test_accepted_abbreviations_rejects_non_string_entry(tmp_path: Path):
+    _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations:\n      - ctx\n      - 7\n")
+
+    with pytest.raises(ConfigError, match="acceptedAbbreviations"):
+        ConfigLoader(tmp_path, _defaults()).load()
+
+
+def test_secret_previews_rejects_non_list_value(tmp_path: Path):
+    _yaml(tmp_path, "allowlists:\n  secretPreviews: not-a-list\n")
+
+    with pytest.raises(ConfigError, match="secretPreviews"):
+        ConfigLoader(tmp_path, _defaults()).load()
+
+
+def test_secret_previews_rejects_non_string_entry(tmp_path: Path):
+    _yaml(tmp_path, "allowlists:\n  secretPreviews:\n      - known\n      - 42\n")
+
+    with pytest.raises(ConfigError, match="secretPreviews"):
+        ConfigLoader(tmp_path, _defaults()).load()
