@@ -33,6 +33,7 @@ from gruffpy.cli_options import (
     metric_calibration_command as _metric_calibration_command,
     report_command as _report_command,
     summary_command as _summary_command,
+    was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
@@ -89,6 +90,8 @@ class _AnalysisCliRequest:
     should_skip_config: bool
     output: OutputFormat
     fail_on: FailThreshold
+    was_fail_on_set_on_cli: bool
+    command_name: str
     report_editor_link: str
     should_render_interactive: bool
     should_include_ignored: bool
@@ -212,7 +215,7 @@ def analyse(**kwargs: Any) -> None:
     Args:
         kwargs: Click-supplied arguments and options.
     """
-    request = _analysis_request(kwargs, output_key="output_format")
+    request = _analysis_request(kwargs, output_key="output_format", command_name="analyse")
     _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     report = _run_analysis_for_cli(request)
     _write_stdout(
@@ -340,7 +343,7 @@ def report(**kwargs: Any) -> None:
     Args:
         kwargs: Click-supplied arguments and options.
     """
-    request = _analysis_request(kwargs, output_key="report_format")
+    request = _analysis_request(kwargs, output_key="report_format", command_name="report")
     output_path = cast(Path | None, kwargs["output_path"])
     _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     analysis_report = _run_analysis_for_cli(request)
@@ -483,13 +486,20 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
         _write_stdout("\n")
 
 
-def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _AnalysisCliRequest:
+def _analysis_request(
+    kwargs: Mapping[str, Any],
+    *,
+    output_key: str,
+    command_name: str,
+) -> _AnalysisCliRequest:
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         config_path=cast(Path | None, kwargs["config_path"]),
         should_skip_config=cast(bool, kwargs["no_config"]),
         output=OutputFormat(cast(str, kwargs[output_key])),
         fail_on=FailThreshold(cast(str, kwargs["fail_on"])),
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli(),
+        command_name=command_name,
         report_editor_link=cast(str, kwargs["report_editor_link"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -524,6 +534,8 @@ def _summary_analysis_request(
         should_skip_config=cast(bool, kwargs["no_config"]),
         output=OutputFormat.JSON if summary_format == "json" else OutputFormat.TEXT,
         fail_on=FailThreshold.NONE,
+        was_fail_on_set_on_cli=True,
+        command_name="summary",
         report_editor_link="none",
         should_render_interactive=False,
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -616,6 +628,9 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         no_config=request.should_skip_config,
         output=request.output,
         fail_threshold=request.fail_on,
+        config_severity_command=(
+            "" if request.was_fail_on_set_on_cli else request.command_name
+        ),
         include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,

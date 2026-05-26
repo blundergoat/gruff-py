@@ -7,7 +7,11 @@ from typing import Any
 
 import yaml
 
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
+from gruffpy.config.analysis_config import (
+    MINIMUM_SEVERITY_BINARY_DEFAULTS,
+    AnalysisConfig,
+)
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
@@ -92,7 +96,13 @@ def _merged_init_ignored_path_patterns(
 
 def _scaffold_document(config: AnalysisConfig) -> dict[str, Any]:
     major, minor = config.minimum_python_version
+    minimum_severity = config.minimum_severity or MINIMUM_SEVERITY_BINARY_DEFAULTS
     return {
+        "schemaVersion": CONFIG_SCHEMA_VERSION,
+        "minimumSeverity": {
+            command: minimum_severity[command].value
+            for command in ("analyse", "report", "dashboard")
+        },
         "minimumPythonVersion": f"{major}.{minor}",
         "paths": {"ignore": list(config.ignored_path_patterns)},
         "allowlists": {

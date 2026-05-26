@@ -4,25 +4,42 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
+from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 
 VALID_TOP_LEVEL_KEYS = frozenset(
     {
+        "schemaVersion",
         "minimumPythonVersion",
+        "minimumSeverity",
         "paths",
         "allowlists",
         "selection",
         "rules",
     }
 )
+GATEABLE_COMMANDS = frozenset({"analyse", "report", "dashboard"})
+NON_GATING_COMMANDS = frozenset(
+    {
+        "summary",
+        "list-rules",
+        "metric-calibration",
+        "init",
+        "list",
+        "help",
+        "completion",
+    }
+)
+VALID_MINIMUM_SEVERITY_VALUES = frozenset(f.value for f in FailThreshold)
 VALID_PATHS_KEYS = frozenset({"ignore"})
 VALID_ALLOWLISTS_KEYS = frozenset({"acceptedAbbreviations", "secretPreviews", "deadCode"})
 VALID_DEAD_CODE_ALLOWLIST_KEYS = frozenset({"symbols", "decorators", "paths"})
@@ -139,6 +156,54 @@ class ConfigLoader:
         unknown = set(section.keys()) - VALID_TOP_LEVEL_KEYS
         if unknown:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
+        ConfigLoader._validate_schema_version(section, source)
+        if "minimumSeverity" in section:
+            ConfigLoader._validate_minimum_severity(section["minimumSeverity"], source)
+
+    @staticmethod
+    def _validate_schema_version(section: dict[str, Any], source: str) -> None:
+        if "schemaVersion" not in section:
+            raise ConfigError(
+                f"{source} is missing required 'schemaVersion'. "
+                f"Expected {CONFIG_SCHEMA_VERSION!r}; "
+                f"run `gruff-py init --force` to regenerate."
+            )
+        value = section["schemaVersion"]
+        if value != CONFIG_SCHEMA_VERSION:
+            raise ConfigError(
+                f"{source} has schemaVersion {value!r}; "
+                f"expected {CONFIG_SCHEMA_VERSION!r}. "
+                f"Run `gruff-py init --force` to regenerate."
+            )
+
+    @staticmethod
+    def _validate_minimum_severity(block: Any, source: str) -> None:
+        if not isinstance(block, dict):
+            raise ConfigError(
+                f"{source} minimumSeverity must be a mapping of command name to severity."
+            )
+        errors: list[str] = []
+        for key, value in block.items():
+            if key in NON_GATING_COMMANDS:
+                errors.append(
+                    f"minimumSeverity.{key!r} is a non-gating subcommand; "
+                    f"only {sorted(GATEABLE_COMMANDS)} accept a per-command default."
+                )
+            elif key not in GATEABLE_COMMANDS:
+                errors.append(
+                    f"Unknown minimumSeverity key {key!r}; allowed: {sorted(GATEABLE_COMMANDS)}."
+                )
+            elif not isinstance(value, str):
+                errors.append(
+                    f"minimumSeverity.{key} must be a string; got {type(value).__name__}."
+                )
+            elif value not in VALID_MINIMUM_SEVERITY_VALUES:
+                errors.append(
+                    f"minimumSeverity.{key} has invalid value {value!r}; "
+                    f"allowed: {sorted(VALID_MINIMUM_SEVERITY_VALUES)}."
+                )
+        if errors:
+            raise ConfigError(f"{source} has minimumSeverity errors: {'; '.join(errors)}")
 
     def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
         config = self._defaults
@@ -146,6 +211,11 @@ class ConfigLoader:
         if "minimumPythonVersion" in section:
             config = config.with_minimum_python_version(
                 _parse_python_version(section["minimumPythonVersion"])
+            )
+
+        if "minimumSeverity" in section:
+            config = config.with_minimum_severity(
+                {key: FailThreshold(value) for key, value in section["minimumSeverity"].items()}
             )
 
         applicators = (

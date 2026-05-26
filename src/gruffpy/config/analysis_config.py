@@ -6,9 +6,21 @@ from typing import TYPE_CHECKING
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.fail_threshold import FailThreshold
 
 if TYPE_CHECKING:
     from gruffpy.rule.registry import RuleRegistry
+
+MINIMUM_SEVERITY_BINARY_DEFAULTS: dict[str, FailThreshold] = {
+    "analyse": FailThreshold.ADVISORY,
+    "report": FailThreshold.NONE,
+    "dashboard": FailThreshold.NONE,
+}
+"""Binary defaults for the per-command ``--fail-on`` threshold (ADR-019).
+
+These are the values ``gruff-py init`` writes into the ``minimumSeverity:`` block
+and the values the CLI consumers fall back to when neither a ``--fail-on`` flag
+nor a configured override is set."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +34,10 @@ class AnalysisConfig:
     Attributes:
         rules: Per-rule settings keyed by rule id.
         minimum_python_version: Minimum Python version assumed by modernisation rules.
+        minimum_severity: Per-command ``--fail-on`` defaults sourced from the
+            ``minimumSeverity:`` config block. Keys are gateable subcommand names
+            (``analyse``, ``report``, ``dashboard``); the validator rejects any
+            other key.
         rule_selection: Include and exclude selectors applied before analysis.
         ignored_path_patterns: Configured path globs excluded during discovery.
         accepted_abbreviations: Project-approved abbreviations for naming rules.
@@ -31,6 +47,7 @@ class AnalysisConfig:
 
     rules: dict[str, RuleSettings] = field(default_factory=dict)
     minimum_python_version: tuple[int, int] = (3, 11)
+    minimum_severity: dict[str, FailThreshold] = field(default_factory=dict)
     rule_selection: RuleSelection = field(default_factory=RuleSelection)
     ignored_path_patterns: tuple[str, ...] = ()
     # Seed value matches the gruff-rs/gruff-ts runtime defaults and the
@@ -138,6 +155,23 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the pin updated.
         """
         return replace(self, minimum_python_version=version)
+
+    def with_minimum_severity(self, minimum_severity: dict[str, FailThreshold]) -> "AnalysisConfig":
+        """Return a new config whose per-command ``--fail-on`` defaults are *minimum_severity*.
+
+        Consumed by the analyse / report / dashboard CLI consumers as the
+        middle tier of the precedence rule (CLI flag wins, then this map,
+        then the binary default).
+
+        Args:
+            minimum_severity: Mapping from gateable subcommand name to
+                ``FailThreshold``. Empty mapping means "no per-command
+                override; fall through to the binary default."
+
+        Returns:
+            New ``AnalysisConfig`` with the per-command defaults updated.
+        """
+        return replace(self, minimum_severity=dict(minimum_severity))
 
     def with_rule_selection(self, selection: RuleSelection) -> "AnalysisConfig":
         """Return a new config with the rule include/exclude selection swapped.

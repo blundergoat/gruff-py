@@ -165,6 +165,7 @@ def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
 
 def test_config_can_disable_missing_function_docstring_for_test_paths(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
         "rules:\n  docs.missing-function-docstring:\n    enabled: false\n"
     )
     registry = RuleRegistry.defaults()

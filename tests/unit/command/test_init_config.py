@@ -11,7 +11,10 @@ from gruffpy.command.init_config import (
     existing_ignored_path_patterns,
     render_default_config_yaml,
 )
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.analysis_config import (
+    MINIMUM_SEVERITY_BINARY_DEFAULTS,
+    AnalysisConfig,
+)
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.rule.registry import RuleRegistry
@@ -26,8 +29,10 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
     target = tmp_path / ".gruff-py.yaml"
     target.write_text(render_default_config_yaml())
 
-    defaults = AnalysisConfig.from_registry(RuleRegistry.defaults()).with_ignored_path_patterns(
-        DEFAULT_INIT_IGNORED_PATH_PATTERNS
+    defaults = (
+        AnalysisConfig.from_registry(RuleRegistry.defaults())
+        .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
+        .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
     )
     loader = ConfigLoader(tmp_path, defaults)
     loaded, source = loader.load()

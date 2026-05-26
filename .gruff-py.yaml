@@ -8,6 +8,7 @@
 # selection.rules plus rules.* name every built-in rule. Rule entries repeat
 # built-in defaults so adding/removing a built-in rule is visible in this file.
 
+schemaVersion: gruff-py.config.v0.1
 minimumPythonVersion: '3.11'
 paths:
   ignore:

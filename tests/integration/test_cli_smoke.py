@@ -775,6 +775,7 @@ def test_cli_applies_configured_secret_preview_allowlist(
     stripe_key = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
     (src / "secrets.py").write_text(f"AWS_KEY = '{aws_key}'\nSTRIPE = '{stripe_key}'\n")
     (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
         f"allowlists:\n  secretPreviews:\n    - '{aws_preview}'\n"
     )
 
@@ -826,3 +827,63 @@ def test_cli_fail_on_none_exits_0_even_with_errors(
         ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "src"],
     )
     assert result.exit_code == 0, result.output
+
+
+def test_cli_minimum_severity_config_applies_when_no_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without --fail-on, the loader's minimumSeverity.analyse value gates the run."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    # warning-only file: 500 lines triggers the file-length WARNING threshold but no
+    # error-tier findings.
+    warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
+    (src / "warn.py").write_text(warning_lines)
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
+    )
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
+
+    # Config gates at error; warning findings present but no error findings; exit 0.
+    assert result.exit_code == 0, result.output
+
+
+def test_cli_fail_on_flag_wins_over_minimum_severity_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI flag overrides the config's minimumSeverity.analyse value."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
+    (src / "warn.py").write_text(warning_lines)
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
+    )
+
+    # Config says "error", but --fail-on warning explicitly overrides; warning
+    # findings now trigger exit 1.
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "warning", "src"],
+    )
+
+    assert result.exit_code == 1, result.output
+
+
+def test_cli_minimum_severity_analyse_binary_default_is_advisory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without config and without --fail-on, the analyse binary default is advisory."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    # File with no docstring — emits a docs.missing-module-docstring advisory.
+    (src / "foo.py").write_text("def public_thing():\n    return 1\n")
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "--no-config", "src"])
+
+    # Advisory finding present + binary default is advisory → exit 1.
+    assert result.exit_code == 1, result.output
