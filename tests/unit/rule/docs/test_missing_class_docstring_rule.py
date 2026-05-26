@@ -15,6 +15,8 @@ def test_class_without_docstring_emits():
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "C"
+    assert "needs a brief intent description" in findings[0].message
+    assert "has no docstring" not in findings[0].message
 
 
 def test_protocol_subclass_skipped():

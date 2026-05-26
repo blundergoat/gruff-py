@@ -26,6 +26,8 @@ def test_missing_param_emits_per_undocumented():
     )
     findings = MissingParamDocRule().analyse(make_unit(src), default_ctx())
     assert sorted(f.metadata["parameter"] for f in findings) == ["y", "z"]
+    assert all("needs a docstring entry describing parameter" in f.message for f in findings)
+    assert all("has no docstring entry" not in f.message for f in findings)
 
 
 def test_no_param_section_emits_single_consolidated_finding():
@@ -33,6 +35,8 @@ def test_no_param_section_emits_single_consolidated_finding():
     findings = MissingParamDocRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["parameters"] == ["x", "y", "z"]
+    assert "needs docstring entries describing" in findings[0].message
+    assert "has no docstring entries" not in findings[0].message
 
 
 def test_private_function_skipped():

@@ -13,6 +13,8 @@ def test_module_without_docstring_emits_one_finding():
     assert len(findings) == 1
     assert findings[0].rule_id == "docs.missing-module-docstring"
     assert findings[0].line == 1
+    assert "needs a top-of-file docstring" in findings[0].message
+    assert "has no top-of-file" not in findings[0].message
 
 
 def test_test_module_without_docstring_skipped():

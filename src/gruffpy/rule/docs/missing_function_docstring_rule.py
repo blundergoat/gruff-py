@@ -143,7 +143,7 @@ def _missing_function_docstring_finding(
     symbol = qualified_symbol(node, parents)
     return Finding(
         rule_id=definition.id,
-        message=f"Function {symbol!r} has no docstring.",
+        message=f"Function {symbol!r} needs a brief intent description in its docstring.",
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,
@@ -152,7 +152,10 @@ def _missing_function_docstring_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=("Add a docstring explaining the function's contract and any side effects."),
+        remediation=(
+            "Summarise the function's contract: what it does, what it returns at the edge, "
+            "and what the caller must satisfy. Describe behaviour, not the signature."
+        ),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

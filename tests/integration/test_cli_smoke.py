@@ -665,6 +665,26 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "Score" in result.output
 
 
+def test_cli_analyse_docs_messages_describe_intent_not_absence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard against the agent-ergonomics trap: docs.missing-* messages must say what
+    the docstring should *contain*, not just that one is absent. Agents trained on
+    'no boilerplate' instructions misread 'has no docstring' as a request for
+    restate-the-signature filler and decline to act."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "foo.py").write_text("def public_thing():\n    return 1\n")
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "text", "--fail-on", "none", "--no-config", "src"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "needs a brief intent description" in result.output
+    assert "has no docstring" not in result.output
+
+
 def test_cli_analyse_html_format_renders_html(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

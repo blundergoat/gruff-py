@@ -12,6 +12,8 @@ def test_function_without_docstring_emits():
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "f"
+    assert "needs a brief intent description" in findings[0].message
+    assert "has no docstring" not in findings[0].message
 
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
