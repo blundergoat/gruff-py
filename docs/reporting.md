@@ -42,6 +42,13 @@ gruff-py summary src/ --format json --top 5
 The digest includes file counts, per-pillar counts, top rules, and top file
 offenders.
 
+## Severity Gate
+
+`analyse` and `report` consult the `minimumSeverity:` config block for the
+`--fail-on` default when the CLI flag is not passed explicitly. See
+[Configuration → Severity Gate](configuration.md#severity-gate) for the
+precedence rule and accepted values.
+
 ## JSON
 
 JSON reports use schema string `gruff-py.analysis.v1`.

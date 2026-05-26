@@ -18,6 +18,7 @@ from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.analysis.schema import SUMMARY_SCHEMA_VERSION
+from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
 from gruffpy.cli_options import (
     ClickDecorator,
@@ -36,10 +37,11 @@ from gruffpy.cli_options import (
     was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
-from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
     existing_ignored_path_patterns,
+    existing_minimum_severity,
     render_default_config_yaml,
 )
 from gruffpy.command.metric_calibration import (
@@ -103,21 +105,6 @@ class _AnalysisCliRequest:
     baseline_path: Path | None
     generate_baseline_path: Path | None
     should_skip_baseline: bool
-
-
-@dataclass(frozen=True, slots=True)
-class _DashboardCliRequest:
-    """Bundle of validated ``dashboard`` CLI flags before the server is started."""
-
-    paths: tuple[str, ...]
-    project_root: Path | None
-    host: str
-    port: int
-    fail_on: str
-    config_path: Path | None
-    should_skip_config: bool
-    should_include_ignored: bool
-    should_render_interactive: bool
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -269,15 +256,7 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
     if request.port < 0 or request.port > 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
 
-    initial_state = DashboardState(
-        project=str(project),
-        paths=" ".join(shlex.quote(path) for path in (request.paths or (".",))),
-        fail_on=request.fail_on,
-        config=str(request.config_path) if request.config_path is not None else "",
-        no_config=request.should_skip_config,
-        include_ignored=request.should_include_ignored,
-        report_interactive=request.should_render_interactive,
-    )
+    initial_state = build_initial_dashboard_state(request, project)
     return create_dashboard_server(
         host=request.host,
         port=request.port,
@@ -314,9 +293,16 @@ def init(force: bool) -> None:
         )
     try:
         ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
+        preserved_minimum_severity = existing_minimum_severity(target) if target.exists() else {}
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    _write_config_file(target, render_default_config_yaml(ignored_path_patterns))
+    _write_config_file(
+        target,
+        render_default_config_yaml(
+            ignored_path_patterns,
+            existing_minimum_severity=preserved_minimum_severity,
+        ),
+    )
     _write_stdout(_init_success_message(target))
 
 
@@ -557,6 +543,7 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
         host=cast(str, kwargs["host"]),
         port=cast(int, kwargs["port"]),
         fail_on=cast(str, kwargs["fail_on"]),
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli(),
         config_path=cast(Path | None, kwargs["config_path"]),
         should_skip_config=cast(bool, kwargs["no_config"]),
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -628,9 +615,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         no_config=request.should_skip_config,
         output=request.output,
         fail_threshold=request.fail_on,
-        config_severity_command=(
-            "" if request.was_fail_on_set_on_cli else request.command_name
-        ),
+        config_severity_command=("" if request.was_fail_on_set_on_cli else request.command_name),
         include_ignored=request.should_include_ignored,
         project_root=Path.cwd(),
         display_filter=display_filter,

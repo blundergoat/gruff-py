@@ -15,7 +15,7 @@
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff-py.analysis.v1` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
-| Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error` |
+| Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `minimumSeverity:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
 Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. The Python schemas remain language-prefixed.
@@ -110,7 +110,9 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 | `1` | At least one finding met `--fail-on`. |
 | `2` | Fatal diagnostic such as input, parse, configuration, baseline, or diff failure. |
 
-`analyse` defaults to `--fail-on error`.
+`analyse` defaults to `--fail-on advisory`. Set
+`minimumSeverity.analyse` in `.gruff-py.yaml` to change the default
+per-project (see [docs/configuration.md](docs/configuration.md#severity-gate)).
 
 ## CI Usage
 

@@ -2,7 +2,92 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Public API pre-1.0.
 
-## [0.1.2] - 2026-05-25
+## [Unreleased]
+
+Adds the cross-port `minimumSeverity:` config dimension (analyse / report /
+dashboard keys; `advisory | warning | error | none` values) and the first
+`gruff-py.config.v0.1` schema literal. `analyse --fail-on` flips its binary
+default from `error` to `advisory` to match the "show everything and fail
+if anything is wrong" philosophy. `docs.missing-*` rule messages are
+reworded to describe what the docstring should contain rather than its
+absence — the previous "has no docstring" phrasing was rejected on principle
+by engineering agents trained on no-boilerplate instructions.
+
+**Cross-port status:** Aligns gruff-py with the family-wide
+`minimumSeverity:` dimension. The off-switch value is `none`, not `never`.
+gruff-go's current 0.1.2 draft uses `never`; the family-wide decision is
+`none` and gruff-go is expected to flip in a separate sibling-port
+workstream. gruff-rs / gruff-ts / gruff-php have not yet adopted the key.
+
+### Added
+
+- `minimumSeverity:` top-level config block in `.gruff-py.yaml` and
+  `[tool.gruff-py.minimumSeverity]` in `pyproject.toml`. Keys are the
+  gateable subcommand names (`analyse`, `report`, `dashboard`); the
+  validator rejects every other key (including non-gating subcommands
+  like `summary`) and rejects every value outside
+  `{advisory, warning, error, none}` — no aliases for `never`, `off`,
+  `medium`, `info`, etc. Precedence: CLI `--fail-on` flag > config key
+  > binary default per subcommand. See ADR-019.
+- `schemaVersion: gruff-py.config.v0.1` literal at the top of every
+  `.gruff-py.yaml` / `[tool.gruff-py]` block, declared via the new
+  `CONFIG_SCHEMA_VERSION` constant in `src/gruffpy/analysis/schema.py`
+  and re-exported from `gruffpy.analysis`. Pre-existing config files
+  without `schemaVersion:` are rejected on load with guidance to run
+  `gruff-py init --force` to regenerate. No back-compat shim.
+- `AnalysisConfig.minimum_severity: dict[str, FailThreshold]` field
+  alongside a `with_minimum_severity` helper, plus the
+  `MINIMUM_SEVERITY_BINARY_DEFAULTS` constant naming the three binary
+  defaults (`analyse: advisory`, `report: none`, `dashboard: none`).
+- `was_fail_on_set_on_cli()` helper in `src/gruffpy/cli_options.py`
+  that uses `click.get_parameter_source` to distinguish a user-passed
+  `--fail-on` flag from Click's default-value fill-in. The analyse and
+  report CLI consumers consult it before reading the config map.
+- `ADR-019-per-command-minimum-severity.md` documenting the precedence
+  rule, the accept-sets for keys and values, the rejected alternatives
+  (`defaults.failOn`, `severityThreshold`, `exitOn`, flat per-command
+  keys, silent-accept of non-gating keys), the analyse default flip,
+  and the new schema-version literal.
+- 10 precedence tests in
+  `tests/unit/config/test_minimum_severity_precedence.py` covering
+  YAML and TOML parsing, the rejection cases for non-gating keys
+  (including `summary`), unknown values (`medium`), rejected sibling-
+  port aliases (`never`), missing `schemaVersion:`, and wrong
+  `schemaVersion:`.
+- 3 CLI integration tests in `tests/integration/test_cli_smoke.py`
+  exercising the full precedence chain end-to-end (config applies
+  when no flag, CLI flag wins over config, binary default applies
+  with neither).
+- Pattern under `.goat-flow/patterns/rules.md` capturing the
+  "frame rule messages by what the user should add, not what's
+  absent" principle that drove the `docs.missing-*` reword.
+
+### Changed
+
+- **Behaviour:** `analyse --fail-on` binary default flips from `error`
+  to `advisory`. Users relying on the previous default should set
+  `minimumSeverity.analyse: error` in their config or pass
+  `--fail-on error` explicitly. CI configurations that omitted
+  `--fail-on` will now exit 1 on any advisory finding where they
+  previously only exited 1 on error-tier findings.
+- `docs.missing-*` rule wording: function, class, module, param (both
+  consolidated and per-parameter), return-doc, and raises-doc rules
+  now phrase their `message=` as `<thing> needs <what's required>`
+  rather than `<thing> has no <X>`. Engineering agents trained on
+  "no boilerplate" instructions previously misread the absence-framed
+  message as a request for restate-the-signature filler. The trigger
+  conditions are unchanged; rule fingerprints are byte-for-byte
+  unchanged (rule id and rule structure didn't move).
+- `gruff-py init` now writes `schemaVersion:` at the top of the
+  rendered YAML followed by a canonical `minimumSeverity:` block
+  with the three binary defaults. The existing `paths.ignore`
+  preservation behaviour is unchanged.
+
+### Fixed
+
+- `tests/integration/test_gitignore_e2e.py` invocations gain explicit
+  `--fail-on none` so the path-discovery assertions no longer trip
+  on the analyse default flip.
 
 Catalogue drops to 115 rules across 11 pillars after retiring
 `naming.parameter-type-name`. Summary output gains a canonical pillar-row shape

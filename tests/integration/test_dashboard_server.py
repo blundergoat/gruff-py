@@ -5,7 +5,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
 
+import pytest
+
+from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.config.exceptions import ConfigError
 
 _EXPECTED_SHELL_SUBSTRINGS = (
     "gruff-py dashboard",
@@ -52,6 +56,99 @@ def test_dashboard_scan_returns_error_html_for_invalid_project(tmp_path: Path):
 
     assert "Project root is not an existing directory." in body
     assert "/no/such/project" in body
+
+
+def _dashboard_request(
+    *,
+    project_root: Path,
+    fail_on: str = "none",
+    was_fail_on_set_on_cli: bool = False,
+    config_path: Path | None = None,
+    should_skip_config: bool = False,
+) -> _DashboardCliRequest:
+    return _DashboardCliRequest(
+        paths=(".",),
+        project_root=project_root,
+        host="127.0.0.1",
+        port=0,
+        fail_on=fail_on,
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli,
+        config_path=config_path,
+        should_skip_config=should_skip_config,
+        should_include_ignored=False,
+        should_render_interactive=False,
+    )
+
+
+def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
+    tmp_path: Path,
+) -> None:
+    """Config's minimumSeverity.dashboard seeds the initial DashboardState.fail_on."""
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "error"
+
+
+def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_key(
+    tmp_path: Path,
+) -> None:
+    """When config has no minimumSeverity.dashboard, the binary default 'none' applies."""
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "none"
+
+
+def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
+    tmp_path: Path,
+) -> None:
+    """An explicit --fail-on flag wins over config.minimumSeverity.dashboard."""
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(
+        project_root=tmp_path,
+        fail_on="warning",
+        was_fail_on_set_on_cli=True,
+    )
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "warning"
+
+
+def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
+    tmp_path: Path,
+) -> None:
+    """--no-config bypasses config lookup; the Click default flows through."""
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path, should_skip_config=True)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "none"
+
+
+def test_dashboard_initial_state_surfaces_config_errors_at_startup(
+    tmp_path: Path,
+) -> None:
+    """A malformed config (e.g. missing schemaVersion) surfaces at dashboard startup."""
+    (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  dashboard: error\n")
+    request = _dashboard_request(project_root=tmp_path)
+
+    with pytest.raises(ConfigError, match="schemaVersion"):
+        build_initial_dashboard_state(request, tmp_path)
 
 
 @contextmanager
