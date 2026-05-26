@@ -13,7 +13,6 @@ from gruffpy.analysis.baseline import (
 from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
@@ -128,6 +127,7 @@ def run_analysis(
         score=score,
         filters=display_filter,
         extensions=ReportExtensions(baseline=baseline_report),
+        output_volume_hint_threshold=config.output_volume_hint_threshold,
     )
 
 
@@ -297,10 +297,7 @@ def _load_analysis_config(
         return config, None, []
 
     loader = ConfigLoader(project_root, config)
-    try:
-        loaded_config, source = loader.load(config_path)
-    except ConfigError as exc:
-        return config, None, [RunDiagnostic(type="config-error", message=str(exc))]
+    loaded_config, source = loader.load(config_path)
 
     return loaded_config, str(source) if source is not None else None, []
 

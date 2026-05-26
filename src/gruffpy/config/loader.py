@@ -21,6 +21,7 @@ VALID_TOP_LEVEL_KEYS = frozenset(
         "schemaVersion",
         "minimumPythonVersion",
         "minimumSeverity",
+        "outputVolumeHintThreshold",
         "paths",
         "allowlists",
         "selection",
@@ -159,6 +160,10 @@ class ConfigLoader:
         ConfigLoader._validate_schema_version(section, source)
         if "minimumSeverity" in section:
             ConfigLoader._validate_minimum_severity(section["minimumSeverity"], source)
+        if "outputVolumeHintThreshold" in section:
+            ConfigLoader._validate_output_volume_hint_threshold(
+                section["outputVolumeHintThreshold"], source
+            )
 
     @staticmethod
     def _validate_schema_version(section: dict[str, Any], source: str) -> None:
@@ -205,6 +210,19 @@ class ConfigLoader:
         if errors:
             raise ConfigError(f"{source} has minimumSeverity errors: {'; '.join(errors)}")
 
+    @staticmethod
+    def _validate_output_volume_hint_threshold(value: Any, source: str) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(
+                f"{source} outputVolumeHintThreshold must be a non-negative integer; "
+                f"got {type(value).__name__}."
+            )
+        if value < 0:
+            raise ConfigError(
+                f"{source} outputVolumeHintThreshold must be >= 0; got {value} "
+                f"(set to 0 to disable the hint)."
+            )
+
     def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
         config = self._defaults
 
@@ -217,6 +235,9 @@ class ConfigLoader:
             config = config.with_minimum_severity(
                 {key: FailThreshold(value) for key, value in section["minimumSeverity"].items()}
             )
+
+        if "outputVolumeHintThreshold" in section:
+            config = config.with_output_volume_hint_threshold(section["outputVolumeHintThreshold"])
 
         applicators = (
             ("paths", self._apply_paths),

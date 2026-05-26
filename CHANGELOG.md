@@ -91,6 +91,53 @@ workstream. gruff-rs / gruff-ts / gruff-php have not yet adopted the key.
   `tests/integration/test_dashboard_server.py` covering config-applies,
   fall-back to binary default, explicit-CLI-wins, `--no-config` bypass,
   and config-error propagation at startup.
+- `gruff-py summary --group-by=rule` replaces the default `Top rules:`
+  block with a count / rule-id / severity / confidence table sourced
+  from a new `AnalysisReport.finding_counts_by_rule()` accessor. Rows
+  sort by count descending, rule-id ascending; `--top N` caps the row
+  count (default 10). JSON output additively gains a `groupedRules`
+  field with `{shown, total, rows}`; the existing `topRules` field is
+  unchanged for back-compat.
+- `gruff-py analyse --format text` appends a one-line hint pointing at
+  `summary --group-by=rule` when the run produces at least
+  `outputVolumeHintThreshold` findings (default 50; set to 0 to disable).
+  The hint is text-format-only; JSON, HTML, Markdown, GitHub
+  annotations, hotspot, and SARIF outputs are never altered.
+- New top-level `outputVolumeHintThreshold:` config key (non-negative
+  integer) in `.gruff-py.yaml` and `[tool.gruff-py]`, surfaced through
+  `AnalysisConfig.output_volume_hint_threshold` and threaded into
+  `AnalysisReport` so `TextReporter` can read it without dragging the
+  full config across the reporter boundary.
+- New `docs/triage.md` documenting the rule-grouped triage workflow.
+- `gruff-py list-rules <rule_id>` explain mode: a deep view of one
+  rule's header, rationale, fix guidance, examples, default options
+  (with one-line descriptions), every escape-hatch config key path,
+  confidence rationale, documented false-positive shapes, and related
+  rules. `--format table` coerces to text for the single-rule view;
+  `--format json` emits the structured payload. Unknown ids exit 1
+  with `difflib.get_close_matches` suggestions. The default no-positional
+  `list-rules` behaviour is unchanged.
+- Two new `RuleDocs` fields in `src/gruffpy/rule/catalog.py`:
+  `option_descriptions: dict[str, str]` (one-liner per public option key)
+  and `false_positive_shapes: tuple[FalsePositiveShape, ...]` (shape +
+  mitigation). The 12 rules with non-empty `default_options` ship with
+  populated option descriptions; false-positive shapes start empty and
+  grow over time as users hit them. JSON output adds `optionDescriptions`
+  and `falsePositiveShapes` keys only when non-empty (back-compat).
+- New module-level `RELATED_RULES: dict[str, tuple[str, ...]]` map in
+  `src/gruffpy/rule/catalog.py` covering 41 rules across the naming,
+  docs.missing-*, complexity/size, waste, and dead-code families. Each
+  entry lists up to 4 siblings; symmetric where appropriate.
+- New `docs/explain.md` documenting the explain-mode contract.
+- `ConfigError` raised by the loader now propagates out of
+  `run_analysis` and converts to `click.ClickException` at the CLI
+  boundary (clean stderr line + exit 1, no traceback, no silent
+  fallback to defaults). Previously the runner caught the exception
+  and converted it to a `RunDiagnostic` that the `summary` reporter
+  did not render, so a `pyproject.toml` with `[tool.gruff-py]` but no
+  `schemaVersion` would silently run with default config. Pattern at
+  `.goat-flow/patterns/error-handling.md`; footgun at
+  `.goat-flow/footguns/config.md`.
 
 ### Changed
 

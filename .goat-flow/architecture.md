@@ -42,6 +42,10 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 `FindingDisplayFilter` applies display-only filters after scoring and exit-code selection, recording the active filter set under `run.filters`. The `gruff-py.hotspot.v1` schema is declared in `src/gruffpy/analysis/schema.py` and emitted by `HotspotReporter`.
 
+`summary --group-by=rule` replaces the default `Top rules:` block with a count / rule-id / severity / confidence table sourced from `AnalysisReport.finding_counts_by_rule()`; the JSON output additively gains a `groupedRules` field while `topRules` stays unchanged for back-compat. When `analyse --format text` produces at least `outputVolumeHintThreshold` findings (default 50; set to 0 to disable), `TextReporter` appends a footer hint pointing at the grouped summary mode. The threshold lives on `AnalysisConfig.output_volume_hint_threshold` and is configurable via the top-level `outputVolumeHintThreshold:` key.
+
+`list-rules` accepts an optional positional `<rule_id>`. Without it, the command renders today's catalogue (table or JSON). With a known id, it renders an explain-mode detail view of one rule's header, rationale, fix guidance, examples, default options (with one-line `RuleDocs.option_descriptions` text), escape hatches, false-positive shapes (`RuleDocs.false_positive_shapes`), and related rules (`RELATED_RULES` map in `src/gruffpy/rule/catalog.py`). `--format table` coerces to text for the single-rule view since one record has no table. Unknown ids exit 1 with `difflib.get_close_matches` suggestions.
+
 ## Deployment / Operations
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `ruff check`, `ruff format --check`, `mypy`, and `pytest`.

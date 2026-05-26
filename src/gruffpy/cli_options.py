@@ -626,6 +626,7 @@ _LIST_RULES_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help="Output format: text, table, or json.",
     ),
+    _argument("rule_id", nargs=1, required=False, type=str),
     _command("list-rules"),
 )
 
@@ -730,6 +731,18 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=10,
         show_default=True,
         help="How many top rules and file offenders to list.",
+    ),
+    _option(
+        "--group-by",
+        "group_by",
+        type=click.Choice(["none", "rule"]),
+        default="none",
+        show_default=True,
+        help=(
+            "Group findings by an axis instead of the default digest. "
+            "'rule' replaces the top-rules block with a count / rule-id / "
+            "severity / confidence table."
+        ),
     ),
     _option(
         "--format",

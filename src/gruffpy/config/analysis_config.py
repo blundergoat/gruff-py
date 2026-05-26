@@ -43,6 +43,9 @@ class AnalysisConfig:
         accepted_abbreviations: Project-approved abbreviations for naming rules.
         allowed_secret_previews: Redacted secret previews allowed by config.
         dead_code_allowlist: Symbols, decorators, and paths allowed for dead-code rules.
+        output_volume_hint_threshold: Finding count at which ``analyse --format text``
+            appends a hint pointing at ``summary --group-by=rule``. ``0`` disables the
+            hint entirely.
     """
 
     rules: dict[str, RuleSettings] = field(default_factory=dict)
@@ -73,6 +76,7 @@ class AnalysisConfig:
     )
     allowed_secret_previews: tuple[str, ...] = ()
     dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
+    output_volume_hint_threshold: int = 50
 
     def __post_init__(self) -> None:
         if self.minimum_python_version < (3, 11):
@@ -222,6 +226,9 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the allowlist updated.
         """
         return replace(self, allowed_secret_previews=previews)
+
+    def with_output_volume_hint_threshold(self, threshold: int) -> "AnalysisConfig":
+        return replace(self, output_volume_hint_threshold=threshold)
 
     def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":
         """Return a new config whose dead-code allowlist is *allowlist*.

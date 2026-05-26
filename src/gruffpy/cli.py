@@ -1,5 +1,6 @@
 """Click-based CLI entry point for `gruff-py`."""
 
+import difflib
 import json
 import os
 import shlex
@@ -62,7 +63,7 @@ from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.reporting.markdown_reporter import MarkdownReporter
 from gruffpy.reporting.sarif_reporter import SarifReporter
 from gruffpy.reporting.text_reporter import TextReporter
-from gruffpy.rule.catalog import documentation_for_rule
+from gruffpy.rule.catalog import RELATED_RULES, RuleDocs, documentation_for_rule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import TOOL_NAME, VERSION
@@ -307,19 +308,43 @@ def init(force: bool) -> None:
 
 
 @_list_rules_command
-def list_rules(rule_format: str) -> None:
-    """List gruff rule metadata.
+def list_rules(rule_format: str, rule_id: str | None) -> None:
+    """List gruff rule metadata, or explain one rule when ``rule_id`` is given.
 
     Args:
         rule_format: Output format - ``json`` for structured output, or ``table``
-            / ``text`` for the human-readable table.
+            / ``text`` for the human-readable table. Ignored for single-rule mode
+            where ``table`` coerces to ``text`` since one record has no table.
+        rule_id: Optional rule id to render the detail/explain view for.
     """
-    definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
+    registry = RuleRegistry.defaults()
+    if rule_id is not None:
+        _list_rules_detail(registry, rule_id, rule_format)
+        return
+    definitions = [rule.definition() for rule in registry.all()]
     if rule_format == "json":
         _write_stdout(json.dumps({"rules": [_rule_payload(d) for d in definitions]}, indent=4))
         _write_stdout("\n")
         return
     _write_stdout(_format_rule_table(definitions))
+
+
+def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -> None:
+    if not registry.has(rule_id):
+        all_ids = [rule.definition().id for rule in registry.all()]
+        suggestions = difflib.get_close_matches(rule_id, all_ids, n=3)
+        lines = [f"Unknown rule: {rule_id}"]
+        if suggestions:
+            lines.append(f"Did you mean: {', '.join(suggestions)}?")
+        raise click.ClickException("\n".join(lines))
+    definition = registry.get(rule_id).definition()
+    docs = documentation_for_rule(rule_id)
+    related = RELATED_RULES.get(rule_id, ())
+    if rule_format == "json":
+        _write_stdout(json.dumps(_rule_detail_payload(definition, docs, related), indent=4))
+        _write_stdout("\n")
+        return
+    _write_stdout(_format_rule_detail(definition, docs, related))
 
 
 @_report_command
@@ -359,6 +384,7 @@ def summary(**kwargs: Any) -> None:
     """
     top = cast(int, kwargs["top"])
     summary_format = cast(str, kwargs["summary_format"])
+    group_by = cast(str, kwargs["group_by"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
     request = _summary_analysis_request(kwargs, summary_format=summary_format)
@@ -367,10 +393,15 @@ def summary(**kwargs: Any) -> None:
     analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
-        _write_stdout(json.dumps(_summary_payload(analysis_report, top, elapsed_seconds), indent=4))
+        _write_stdout(
+            json.dumps(
+                _summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
+                indent=4,
+            )
+        )
         _write_stdout("\n")
     else:
-        _write_stdout(_summary_text(analysis_report, top, elapsed_seconds))
+        _write_stdout(_summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
     sys.exit(analysis_report.exit_code)
 
 
@@ -609,22 +640,27 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_rules=_split_repeated_csv(request.include_rule),
         exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
-    return run_analysis(
-        paths=request.paths,
-        config_path=request.config_path,
-        no_config=request.should_skip_config,
-        output=request.output,
-        fail_threshold=request.fail_on,
-        config_severity_command=("" if request.was_fail_on_set_on_cli else request.command_name),
-        include_ignored=request.should_include_ignored,
-        project_root=Path.cwd(),
-        display_filter=display_filter,
-        baseline=BaselineOptions(
-            apply_path=request.baseline_path,
-            generate_path=request.generate_baseline_path,
-            disabled=request.should_skip_baseline,
-        ),
-    )
+    try:
+        return run_analysis(
+            paths=request.paths,
+            config_path=request.config_path,
+            no_config=request.should_skip_config,
+            output=request.output,
+            fail_threshold=request.fail_on,
+            config_severity_command=(
+                "" if request.was_fail_on_set_on_cli else request.command_name
+            ),
+            include_ignored=request.should_include_ignored,
+            project_root=Path.cwd(),
+            display_filter=display_filter,
+            baseline=BaselineOptions(
+                apply_path=request.baseline_path,
+                generate_path=request.generate_baseline_path,
+                disabled=request.should_skip_baseline,
+            ),
+        )
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _render_report(
@@ -652,10 +688,16 @@ def _render_report(
             return TextReporter().render(report)
 
 
-def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -> dict[str, Any]:
+def _summary_payload(
+    report: AnalysisReport,
+    top: int,
+    elapsed_seconds: float,
+    *,
+    group_by: str = "none",
+) -> dict[str, Any]:
     rule_counts = Counter(finding.rule_id for finding in report.findings)
     file_counts = Counter(finding.file_path for finding in report.findings)
-    return {
+    payload: dict[str, Any] = {
         "schemaVersion": SUMMARY_SCHEMA_VERSION,
         "summary": {
             "paths": list(report.requested_paths),
@@ -672,10 +714,24 @@ def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -
         "topRules": _counter_rows(rule_counts, top),
         "topFiles": _counter_rows(file_counts, top),
     }
+    if group_by == "rule":
+        rule_rows = report.finding_counts_by_rule()
+        payload["groupedRules"] = {
+            "shown": min(top, len(rule_rows)),
+            "total": len(rule_rows),
+            "rows": rule_rows[:top],
+        }
+    return payload
 
 
-def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> str:
-    payload = _summary_payload(report, top, elapsed_seconds)
+def _summary_text(
+    report: AnalysisReport,
+    top: int,
+    elapsed_seconds: float,
+    *,
+    group_by: str = "none",
+) -> str:
+    payload = _summary_payload(report, top, elapsed_seconds, group_by=group_by)
     summary = payload["summary"]
     paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
     lines = [
@@ -692,12 +748,36 @@ def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> s
         "Pillars",
     ]
     lines.extend(_format_pillar_text_rows(cast(list[dict[str, Any]], payload["pillars"])))
-    lines.extend(["", "Top rules:"])
-    lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
+    if group_by == "rule":
+        lines.append("")
+        lines.extend(_format_grouped_rule_rows(cast(dict[str, Any], payload["groupedRules"])))
+    else:
+        lines.extend(["", "Top rules:"])
+        lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
     _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
+
+
+def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
+    rows = cast(list[dict[str, Any]], grouped["rows"])
+    shown = cast(int, grouped["shown"])
+    total = cast(int, grouped["total"])
+    header = f"Grouped by rule (showing {shown} of {total}):"
+    if not rows:
+        return [header, "  none"]
+    rule_id_width = max(len(row["ruleId"]) for row in rows)
+    formatted = [header]
+    for row in rows:
+        line = (
+            f"  {row['count']:>4}  "
+            f"{row['ruleId']:<{rule_id_width}}  "
+            f"{row['severity']:<8}  "
+            f"{row['confidence']}"
+        )
+        formatted.append(line.rstrip())
+    return formatted
 
 
 def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
@@ -839,6 +919,139 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "description": definition.get_description(),
         "documentation": documentation.to_payload(),
     }
+
+
+def _rule_detail_payload(
+    definition: RuleDefinition,
+    docs: RuleDocs,
+    related: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "id": definition.id,
+        "name": definition.name,
+        "pillar": definition.pillar.value,
+        "tier": definition.tier.value,
+        "defaultSeverity": definition.default_severity.value,
+        "confidence": definition.confidence.value,
+        "defaultEnabled": definition.default_enabled,
+        "thresholds": dict(definition.default_thresholds),
+        "options": dict(definition.default_options),
+        "documentation": docs.to_payload(),
+        "relatedRules": list(related),
+    }
+
+
+def _format_rule_detail(
+    definition: RuleDefinition,
+    docs: RuleDocs,
+    related: tuple[str, ...],
+) -> str:
+    lines: list[str] = []
+    lines.extend(_rule_detail_header(definition))
+    if docs.rationale:
+        lines.extend(_rule_detail_prose("Rationale", docs.rationale))
+    if docs.fix_guidance:
+        lines.extend(_rule_detail_prose("Fix guidance", docs.fix_guidance))
+    if docs.bad_example:
+        lines.extend(_rule_detail_prose("Bad example", docs.bad_example))
+    if docs.good_example:
+        lines.extend(_rule_detail_prose("Good example", docs.good_example))
+    if definition.default_options:
+        lines.extend(_rule_detail_options(definition, docs))
+    if docs.config_keys:
+        lines.extend(_rule_detail_escape_hatches(definition.id, docs))
+    if docs.confidence_rationale:
+        lines.extend(_rule_detail_prose("Confidence", docs.confidence_rationale))
+    lines.extend(_rule_detail_false_positives(docs))
+    lines.extend(_rule_detail_related(related))
+    return "\n".join(lines) + "\n"
+
+
+def _rule_detail_header(definition: RuleDefinition) -> list[str]:
+    return [
+        f"Rule: {definition.id}",
+        f"  Name:      {definition.name}",
+        f"  Pillar:    {definition.pillar.value}",
+        f"  Tier:      {definition.tier.value}",
+        f"  Severity:  {definition.default_severity.value} (default)",
+        f"  Confidence: {definition.confidence.value}",
+        f"  Enabled by default: {'yes' if definition.default_enabled else 'no'}",
+    ]
+
+
+def _rule_detail_prose(header: str, body: str) -> list[str]:
+    return ["", f"{header}:", f"  {body}"]
+
+
+def _rule_detail_options(definition: RuleDefinition, docs: RuleDocs) -> list[str]:
+    rows = list(definition.default_options.items())
+    name_width = max(len(name) for name, _ in rows)
+    type_width = max(len(_option_type_label(value)) for _, value in rows)
+    lines = ["", "Default options:"]
+    for name, value in rows:
+        description = docs.option_descriptions.get(name, "")
+        line = f"  {name:<{name_width}}  {_option_type_label(value):<{type_width}}  {description}"
+        lines.append(line.rstrip())
+    return lines
+
+
+def _option_type_label(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, dict):
+        return "dict"
+    return type(value).__name__
+
+
+def _rule_detail_escape_hatches(rule_id: str, docs: RuleDocs) -> list[str]:
+    rows = [f"rules.{rule_id}.{key}" for key in docs.config_keys]
+    rows.append(f"rules.{rule_id}.enabled")
+    name_width = max(len(row) for row in rows)
+    lines = ["", "Escape hatches:"]
+    for row in rows:
+        if row.endswith(".enabled"):
+            note = "set false to disable this rule entirely"
+        elif row.endswith(".severity"):
+            note = "override severity (advisory / warning / error)"
+        elif row.endswith(".threshold"):
+            note = "override the single numeric threshold"
+        elif ".thresholds." in row:
+            note = "override one named numeric threshold"
+        elif ".options." in row:
+            note = "override one named option default"
+        else:
+            note = ""
+        lines.append(f"  {row:<{name_width}}  {note}".rstrip())
+    return lines
+
+
+def _rule_detail_false_positives(docs: RuleDocs) -> list[str]:
+    lines = ["", "Common false-positive shapes:"]
+    if not docs.false_positive_shapes:
+        lines.append("  (none documented yet)")
+        return lines
+    for fp in docs.false_positive_shapes:
+        lines.append(f"  - {fp.shape}")
+        lines.append(f"    Mitigation: {fp.mitigation}")
+    return lines
+
+
+def _rule_detail_related(related: tuple[str, ...]) -> list[str]:
+    lines = ["", "Related rules:"]
+    if not related:
+        lines.append("  (none)")
+        return lines
+    for rule_id in related:
+        lines.append(f"  {rule_id}")
+    return lines
 
 
 def _format_rule_table(definitions: list[RuleDefinition]) -> str:

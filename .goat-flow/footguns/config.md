@@ -1,7 +1,15 @@
 ---
 category: config
-last_reviewed: 2026-05-25
+last_reviewed: 2026-05-27
 ---
+
+## Footgun: `ConfigError` swallowed into `RunDiagnostic` hides config errors from `summary` / structured-output commands
+
+**Status:** resolved | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+
+Catching `ConfigError` inside the analysis runner and returning a `RunDiagnostic(type="config-error", ...)` instead of propagating made every CLI command silently fall back to defaults when a user's `[tool.gruff-py]` / `.gruff-py.yaml` was malformed. The `analyse` text reporter rendered the diagnostic in a `Diagnostics` block, but `summary` (its `_summary_text` / `_summary_payload` deliberately omits diagnostics) and any JSON consumer reading only `findings`/`pillars` saw a clean grade-A run on a config the user had explicitly written wrong. ADR-019 had stated the intent ("loud failure on schema-version absence is preferred over a back-compat shim") but the runner-level swallow defeated it. Reproduced with a `pyproject.toml` containing `[tool.gruff-py]` without `schemaVersion`: `gruff-py summary .` exited 0 with no mention of the missing field. Evidence anchors: `src/gruffpy/analysis/runner.py` (search: `_load_analysis_config`), `src/gruffpy/cli.py` (search: `def _run_analysis_for_cli`), `tests/integration/test_cli_smoke.py` (search: `test_cli_summary_aborts_cleanly_when_config_missing_schema_version`).
+
+Do not reintroduce the `try: ... except ConfigError: return ..., [RunDiagnostic(...)]` pattern for config loading. `ConfigError` carries a user-actionable message (the loader already emits `... run `gruff-py init --force` to regenerate.`) and belongs on the abort path — let it propagate out of `run_analysis` and convert it to `click.ClickException(str(exc))` at the CLI boundary so it surfaces as a clean stderr line with exit 1. The same shape applies to any other "the user's config is structurally invalid" error a future loader adds.
 
 ## Footgun: ConfigLoader `.get(key, [])` collapses absent into empty, clobbering seeded AnalysisConfig defaults
 

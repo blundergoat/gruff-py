@@ -131,6 +131,84 @@ def test_cli_list_rules_accepts_text_alias():
     assert "Pillar" in result.output
 
 
+def test_cli_list_rules_default_remains_unchanged_by_explain_mode():
+    result = CliRunner().invoke(main, ["list-rules"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("Rule")
+    assert "Pillar" in result.output
+    # the explain header should NOT appear in the catalogue view
+    assert "Rationale:" not in result.output
+    assert "Escape hatches:" not in result.output
+
+
+def test_cli_list_rules_explain_text_renders_full_detail_view():
+    result = CliRunner().invoke(main, ["list-rules", "naming.short-variable"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.startswith("Rule: naming.short-variable")
+    assert "Severity:  advisory (default)" in result.output
+    assert "Rationale:" in result.output
+    assert "Default options:" in result.output
+    assert "acceptedShortNames" in result.output
+    assert "Escape hatches:" in result.output
+    assert "rules.naming.short-variable.enabled" in result.output
+    assert "Common false-positive shapes:" in result.output
+    assert "Related rules:" in result.output
+    assert "naming.abbreviation" in result.output
+
+
+def test_cli_list_rules_explain_table_format_coerces_to_text():
+    result = CliRunner().invoke(main, ["list-rules", "naming.short-variable", "--format", "table"])
+
+    assert result.exit_code == 0, result.output
+    # table format would render header rows; detail view starts with `Rule:`
+    assert result.output.startswith("Rule: naming.short-variable")
+
+
+def test_cli_list_rules_explain_json_emits_structured_payload():
+    result = CliRunner().invoke(main, ["list-rules", "naming.short-variable", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["id"] == "naming.short-variable"
+    assert payload["pillar"] == "naming"
+    assert payload["defaultSeverity"] == "advisory"
+    assert payload["relatedRules"] == ["naming.abbreviation", "naming.identifier-quality"]
+    assert "optionDescriptions" in payload["documentation"]
+    assert "acceptedShortNames" in payload["documentation"]["optionDescriptions"]
+
+
+def test_cli_list_rules_explain_unknown_id_exits_one_with_suggestion():
+    result = CliRunner().invoke(main, ["list-rules", "naming.short-variabel"])
+
+    assert result.exit_code == 1
+    assert "Unknown rule: naming.short-variabel" in result.stderr
+    assert "Did you mean: naming.short-variable" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_list_rules_explain_rule_with_no_options_omits_options_section():
+    # naming.abbreviation reads allowlists.acceptedAbbreviations (global), no per-rule options.
+    result = CliRunner().invoke(main, ["list-rules", "naming.abbreviation"])
+
+    assert result.exit_code == 0, result.output
+    assert "Default options:" not in result.output
+    # but FP shapes and Related rules ALWAYS appear
+    assert "Common false-positive shapes:" in result.output
+    assert "Related rules:" in result.output
+
+
+def test_cli_list_rules_explain_rule_with_no_related_rules_shows_none_marker():
+    # docs.todo-density is not a key in RELATED_RULES, so its "Related rules:"
+    # block should render the "(none)" marker.
+    result = CliRunner().invoke(main, ["list-rules", "docs.todo-density"])
+
+    assert result.exit_code == 0, result.output
+    related_block = result.output.split("Related rules:")[-1]
+    assert "(none)" in related_block
+
+
 def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -360,6 +438,196 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
     payload = json.loads(result.output)
     assert payload["diagnostics"][0]["type"] == "baseline-error"
     assert "mutually exclusive" in payload["diagnostics"][0]["message"]
+
+
+def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    (tmp_path / "pyproject.toml").write_text('[tool.gruff-py]\nminimumPythonVersion = "3.11"\n')
+
+    result = CliRunner().invoke(main, ["summary", "src"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "missing required 'schemaVersion'" in result.stderr
+    assert "gruff-py init --force" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.99\n")
+
+    result = CliRunner().invoke(main, ["analyse", "src"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "schemaVersion 'gruff-py.config.v0.99'" in result.stderr
+    assert "gruff-py init --force" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_summary_default_group_by_keeps_top_rules_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Top rules:" in result.output
+    assert "Grouped by rule" not in result.output
+
+
+def test_cli_summary_group_by_rule_text_replaces_top_rules_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    # Two rule violations: long function name (naming) and missing docstring (docs).
+    (src / "bad.py").write_text(
+        "def x_a_b_c_d_e_f_g_h_i_j_k_l_m_n_o_p_q_r_s_t_u_v_w_x_y_z_aa_bb_cc():\n    return 1\n"
+    )
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "--group-by", "rule", "src"])
+
+    assert result.exit_code in (0, 1), result.output
+    assert "Top rules:" not in result.output
+    assert "Grouped by rule (showing" in result.output
+
+
+def test_cli_summary_group_by_rule_json_adds_grouped_rules_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "bad.py").write_text("x = 1\n")  # triggers docs.missing-module-docstring
+
+    result = CliRunner().invoke(
+        main,
+        ["summary", "--format", "json", "--no-config", "--group-by", "rule", "src"],
+    )
+
+    assert result.exit_code in (0, 1), result.output
+    payload = json.loads(result.output)
+    assert "groupedRules" in payload
+    assert "topRules" in payload  # back-compat: preserved
+    grouped = payload["groupedRules"]
+    assert set(grouped.keys()) == {"shown", "total", "rows"}
+    if grouped["rows"]:
+        row = grouped["rows"][0]
+        assert set(row.keys()) == {"ruleId", "count", "severity", "confidence"}
+
+
+def test_cli_summary_group_by_rule_json_sorts_by_count_desc_then_rule_id_asc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    # Three module files, each triggers docs.missing-module-docstring + naming
+    # depending on contents. Use bare files to drive multiple distinct rules.
+    (src / "a.py").write_text("x = 1\n")
+    (src / "b.py").write_text("y = 2\n")
+    (src / "c.py").write_text("z = 3\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["summary", "--format", "json", "--no-config", "--group-by", "rule", "src"],
+    )
+
+    payload = json.loads(result.output)
+    rows = payload["groupedRules"]["rows"]
+    counts = [row["count"] for row in rows]
+    assert counts == sorted(counts, reverse=True)
+    # Tie-break: rule_id ASC for any two adjacent equal counts
+    for i in range(len(rows) - 1):
+        if rows[i]["count"] == rows[i + 1]["count"]:
+            assert rows[i]["ruleId"] < rows[i + 1]["ruleId"]
+
+
+def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x = 1\n")  # one module-docstring violation
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n"
+    )
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Hint:" in result.output
+    assert "summary --group-by=rule" in result.output
+
+
+def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x = 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1000\n"
+    )
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Hint:" not in result.output
+
+
+def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x = 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 0\n"
+    )
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Hint:" not in result.output
+
+
+def test_cli_analyse_json_does_not_emit_volume_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x = 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n"
+    )
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Hint:" not in result.output
+    json.loads(result.output)  # parses cleanly
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

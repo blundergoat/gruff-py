@@ -51,7 +51,21 @@ class TextReporter:
             f"warning: {counts['warning']}, error: {counts['error']})"
         )
         lines.append(f"  Exit code: {report.exit_code}")
+        _append_output_volume_hint(lines, report)
         return "\n".join(lines) + "\n"
+
+
+def _append_output_volume_hint(lines: list[str], report: AnalysisReport) -> None:
+    threshold = report.output_volume_hint_threshold
+    if threshold <= 0:
+        return
+    finding_count = len(report.findings)
+    if finding_count < threshold:
+        return
+    paths_display = " ".join(shlex.quote(path) for path in report.requested_paths)
+    lines.append("")
+    lines.append(f"Hint: {finding_count} findings is a lot to read flat. Try:")
+    lines.append(f"  uv run gruff-py summary --group-by=rule {paths_display}".rstrip())
 
 
 def _append_path_section(lines: list[str], title: str, paths: tuple[str, ...]) -> None:

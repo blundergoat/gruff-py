@@ -67,6 +67,7 @@ class AnalysisReport:
     score: ScoreReport | None = None
     extensions: ReportExtensions = field(default_factory=ReportExtensions)
     filters: Any | None = None
+    output_volume_hint_threshold: int = 50
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -78,6 +79,32 @@ class AnalysisReport:
         for finding in self.findings:
             counts[finding.severity.value] += 1
         return counts
+
+    def finding_counts_by_rule(self) -> list[dict[str, Any]]:
+        """Return one row per rule that emitted at least one finding.
+
+        Each row carries ``ruleId``, ``count``, the finding ``severity`` and
+        ``confidence`` taken from the first finding for that rule (every
+        finding from the same rule shares both). Rows are sorted by
+        ``count`` descending then ``ruleId`` ascending so identical inputs
+        produce identical output across runs.
+
+        Returns:
+            Deterministically ordered list of per-rule rows.
+        """
+        per_rule: dict[str, dict[str, Any]] = {}
+        for finding in self.findings:
+            row = per_rule.get(finding.rule_id)
+            if row is None:
+                per_rule[finding.rule_id] = {
+                    "ruleId": finding.rule_id,
+                    "count": 1,
+                    "severity": finding.severity.value,
+                    "confidence": finding.confidence.value,
+                }
+            else:
+                row["count"] += 1
+        return sorted(per_rule.values(), key=lambda row: (-row["count"], row["ruleId"]))
 
     def parse_error_count(self) -> int:
         """Return the number of parser diagnostics in the report.
