@@ -1,6 +1,7 @@
 ---
 category: configuration
 last_reviewed: 2026-05-26
+updated: 2026-05-26
 ---
 
 ## Pattern: Adding a top-level cross-impl config key
@@ -63,6 +64,19 @@ after step 6 to prove the round-trip preservation; `uv run pytest` plus
 `uv run gruff-py analyse src/` after step 7 to prove the dogfood grade is
 unchanged. The dogfood scan is the integration-level lockstep check —
 self-inflicted drift surfaces here before the cross-port one does.
+
+**Fixture-audit scope:** when step 4 introduces a hard validation requirement
+(e.g. "every loaded config must declare `schemaVersion`"), the milestone-named
+test files almost certainly understate the audit surface. Grep
+`tests/` broadly for the construct the new validator gates on (e.g.
+`grep -rln 'ConfigLoader\|tool\.gruff' tests/`) and update every inline YAML
+or TOML fixture that does NOT explicitly assert the new rejection. 0.1.2 M02
+listed two test files but the broader grep surfaced ~9 with affected
+fixtures (`test_loader_precedence.py`, `test_init_config.py`,
+`test_accepted_abbreviations_loader.py`, `test_dead_code_allowlist_loader.py`,
+`test_docs_pillar_integration.py`, `test_cli_smoke.py`,
+`test_perf_script_smoke.py`, plus the project's own dogfood `.gruff-py.yaml`).
+The cheap upfront grep saves a debug-from-test-failure round-trip.
 
 **Cross-port discipline:** Confirm the off-switch value and the accept-set
 match every sibling port BEFORE the local change ships. Aliases are a

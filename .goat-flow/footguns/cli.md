@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-26
 ---
 
 ## Footgun: Click optional-value options + variadic positionals stay tempting
@@ -25,6 +25,41 @@ flag_value=...`), check whether the command takes a variadic positional. If it
 does, prefer splitting into a pure boolean flag plus a separately-named
 required-value option (e.g. `--foo` flag + `--foo-path PATH`) and add a
 `CliRunner` test that exercises the `--option-then-positional` shape.
+
+## Footgun: cli.py routinely sits within 20 lines of the file-length error threshold
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+`src/gruffpy/cli.py` (search: `class CliGroup`) is the project's Click entry
+point and concentrates: the root command group, every subcommand handler
+(`analyse`, `dashboard`, `init`, `list-rules`, `report`, `summary`,
+`metric-calibration`, `completion`, `help`), the analyse/dashboard request
+dataclasses, and a stack of internal helpers (`_analysis_request`,
+`_run_analysis_for_cli`, `_maybe_prompt_to_init_config`, `_render_report`,
+`_summary_payload`, `_summary_text`, etc.). Even small additive features tend
+to land 10-20 lines of code here, which keeps the file within striking
+distance of the `size.file-length` error threshold (currently 1000 — see
+`src/gruffpy/rule/size/file_length_rule.py`).
+
+Empirical evidence from 0.1.2: the M02 wave (CLI precedence helper +
+`_AnalysisCliRequest` fields + per-command precedence wiring) pushed cli.py
+to **1008 lines** and required extracting the helper into `cli_options.py`
+to land under the threshold. The M03 wave (dashboard initial-state factory
++ `_resolve_config_dashboard_fail_on`) pushed cli.py to **1046 lines** and
+required extracting both helpers and the dashboard request dataclass into a
+new `src/gruffpy/cli_dashboard.py` module. The dogfood scan caught both
+regressions before commit.
+
+Before adding any new function or dataclass to cli.py, check `wc -l
+src/gruffpy/cli.py` first. If it is within 20 lines of 1000, extract the
+new code to a sibling module before writing it (the natural seams are by
+subcommand — `cli_dashboard.py` already exists; `cli_summary.py`,
+`cli_init.py`, etc. are reasonable next splits). Adding code first and
+"figuring out the threshold later" is the trap that fires every time:
+ruff/mypy/pytest all pass while the dogfood quietly slips into
+exit-code-1 territory. The footgun resolves itself once cli.py drops well
+below 1000 lines via dedicated subcommand modules; until then, every
+contributor must spot-check before merging.
 
 ## Resolved Entries
 

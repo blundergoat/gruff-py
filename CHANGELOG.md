@@ -61,6 +61,36 @@ workstream. gruff-rs / gruff-ts / gruff-php have not yet adopted the key.
 - Pattern under `.goat-flow/patterns/rules.md` capturing the
   "frame rule messages by what the user should add, not what's
   absent" principle that drove the `docs.missing-*` reword.
+- `gruff-py init --force` preserves a user-tuned `minimumSeverity:`
+  block byte-for-byte across regeneration (mirroring the existing
+  `paths.ignore` preservation). Implemented via the new
+  `existing_minimum_severity(config_path)` helper in
+  `src/gruffpy/command/init_config.py`.
+- Dashboard initial-form `failOn` value is now seeded from
+  `config.minimum_severity["dashboard"]` when present and the user did
+  not pass `--fail-on` explicitly. Lives in a new
+  `src/gruffpy/cli_dashboard.py` module (`build_initial_dashboard_state`)
+  to keep `src/gruffpy/cli.py` under the file-length error threshold.
+- New cross-port lockstep footgun under
+  `.goat-flow/footguns/compatibility.md` documenting the six source
+  surfaces that must move together when the family-wide `--fail-on`
+  binary default changes (ADR, defaults table, Click decorator,
+  validator accept-set, init renderer, dashboard state factory).
+- Reusable 8-step pattern under `.goat-flow/patterns/configuration.md`
+  for adding a top-level cross-impl config key (ADR-first ordering,
+  schema literal, dataclass, validator, CLI wiring, init renderer,
+  docs sweep, footgun).
+- Footgun under `.goat-flow/footguns/cli.md` recording that
+  `src/gruffpy/cli.py` routinely sits within 20 lines of the
+  `size.file-length` 1000-line error threshold; small additive features
+  routinely require sub-module extraction.
+- 5 init-preservation tests in `tests/unit/command/test_init_config.py`
+  covering the `existing_minimum_severity` helper, malformed-block
+  rejection, byte-for-byte round-trip, and the canonical default render.
+- 5 dashboard-precedence tests in
+  `tests/integration/test_dashboard_server.py` covering config-applies,
+  fall-back to binary default, explicit-CLI-wins, `--no-config` bypass,
+  and config-error propagation at startup.
 
 ### Changed
 
