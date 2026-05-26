@@ -174,7 +174,6 @@ def test_existing_minimum_severity_rejects_malformed_block(tmp_path: Path) -> No
 def test_init_force_preserves_user_tuned_minimum_severity_block_round_trip(
     tmp_path: Path,
 ) -> None:
-    """User edits minimumSeverity; init --force re-renders; block survives."""
     user_edited = tmp_path / ".gruff-py.yaml"
     user_edited.write_text(
         "schemaVersion: gruff-py.config.v0.1\n"

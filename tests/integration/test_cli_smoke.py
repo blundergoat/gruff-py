@@ -668,10 +668,6 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Guard against the agent-ergonomics trap: docs.missing-* messages must say what
-    the docstring should *contain*, not just that one is absent. Agents trained on
-    'no boilerplate' instructions misread 'has no docstring' as a request for
-    restate-the-signature filler and decline to act."""
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -832,7 +828,6 @@ def test_cli_fail_on_none_exits_0_even_with_errors(
 def test_cli_minimum_severity_config_applies_when_no_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without --fail-on, the loader's minimumSeverity.analyse value gates the run."""
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -853,7 +848,6 @@ def test_cli_minimum_severity_config_applies_when_no_flag(
 def test_cli_fail_on_flag_wins_over_minimum_severity_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The CLI flag overrides the config's minimumSeverity.analyse value."""
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -876,7 +870,6 @@ def test_cli_fail_on_flag_wins_over_minimum_severity_config(
 def test_cli_minimum_severity_analyse_binary_default_is_advisory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without config and without --fail-on, the analyse binary default is advisory."""
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()

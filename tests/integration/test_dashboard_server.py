@@ -83,7 +83,6 @@ def _dashboard_request(
 def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
     tmp_path: Path,
 ) -> None:
-    """Config's minimumSeverity.dashboard seeds the initial DashboardState.fail_on."""
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
     )
@@ -97,7 +96,6 @@ def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
 def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_key(
     tmp_path: Path,
 ) -> None:
-    """When config has no minimumSeverity.dashboard, the binary default 'none' applies."""
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
     )
@@ -111,7 +109,6 @@ def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_
 def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
     tmp_path: Path,
 ) -> None:
-    """An explicit --fail-on flag wins over config.minimumSeverity.dashboard."""
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
     )
@@ -129,7 +126,6 @@ def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
 def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
     tmp_path: Path,
 ) -> None:
-    """--no-config bypasses config lookup; the Click default flows through."""
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
     )
@@ -143,7 +139,6 @@ def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
 def test_dashboard_initial_state_surfaces_config_errors_at_startup(
     tmp_path: Path,
 ) -> None:
-    """A malformed config (e.g. missing schemaVersion) surfaces at dashboard startup."""
     (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
