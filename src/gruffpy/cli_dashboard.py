@@ -58,7 +58,16 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
 
 
 def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -> str | None:
-    """Return ``config.minimum_severity['dashboard'].value`` or ``None`` if absent."""
+    """Return ``config.minimum_severity['dashboard'].value`` or ``None`` if absent.
+
+    Mirrors ``dashboard_server._config_path`` by resolving a relative *config_path*
+    against the dashboard *project* root, so the initial form seed reads the same
+    file that ``/scan`` will read at run time. Without this normalisation a
+    relative ``--config`` resolves against the launch CWD and diverges from the
+    scan path when ``--project <dir>`` is invoked from elsewhere.
+    """
+    if config_path is not None and not config_path.is_absolute():
+        config_path = project / config_path
     registry = RuleRegistry.defaults()
     defaults = AnalysisConfig.from_registry(registry)
     config, _ = ConfigLoader(project, defaults).load(config_path)

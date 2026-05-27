@@ -142,6 +142,8 @@ Config is optional. Precedence is:
 Example `.gruff-py.yaml`:
 
 ```yaml
+schemaVersion: gruff-py.config.v0.1
+
 paths:
   ignore:
     - "tests/fixtures/**"
@@ -160,7 +162,7 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.1 catalogue contains 116 rules across 11 pillars:
+The v0.1 catalogue contains 115 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
@@ -169,7 +171,7 @@ The v0.1 catalogue contains 116 rules across 11 pillars:
 | `maintainability` | 1 |
 | `dead-code` | 10 |
 | `modernisation` | 1 |
-| `naming` | 10 |
+| `naming` | 9 |
 | `documentation` | 13 |
 | `security` | 26 |
 | `sensitive-data` | 9 |

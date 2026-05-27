@@ -80,3 +80,40 @@ def test_finding_counts_by_rule_includes_severity_and_confidence_from_findings()
     assert by_id["naming.x"]["confidence"] == "medium"
     assert by_id["complexity.y"]["severity"] == "warning"
     assert by_id["complexity.y"]["confidence"] == "high"
+
+
+def test_finding_counts_by_rule_reports_worst_severity_when_rule_emits_mixed_bands():
+    """Threshold-based rules can emit warning + error in the same run; the grouped
+    row must label the bucket by the worst severity so triage isn't misled."""
+    findings = (
+        _finding(rule_id="complexity.npath", severity=Severity.WARNING, line=10),
+        _finding(rule_id="complexity.npath", severity=Severity.ERROR, line=20),
+        _finding(rule_id="complexity.npath", severity=Severity.ERROR, line=30),
+    )
+
+    rows = _report(findings).finding_counts_by_rule()
+
+    assert rows[0]["ruleId"] == "complexity.npath"
+    assert rows[0]["count"] == 3
+    assert rows[0]["severity"] == "error"
+
+
+def test_finding_counts_by_rule_worst_severity_independent_of_finding_order():
+    """The first finding's severity must not lock the row; order shouldn't matter."""
+    error_first = _report(
+        (
+            _finding(rule_id="r", severity=Severity.ERROR, line=1),
+            _finding(rule_id="r", severity=Severity.WARNING, line=2),
+            _finding(rule_id="r", severity=Severity.ADVISORY, line=3),
+        )
+    ).finding_counts_by_rule()
+    advisory_first = _report(
+        (
+            _finding(rule_id="r", severity=Severity.ADVISORY, line=1),
+            _finding(rule_id="r", severity=Severity.WARNING, line=2),
+            _finding(rule_id="r", severity=Severity.ERROR, line=3),
+        )
+    ).finding_counts_by_rule()
+
+    assert error_first[0]["severity"] == "error"
+    assert advisory_first[0]["severity"] == "error"

@@ -146,6 +146,31 @@ def test_dashboard_initial_state_surfaces_config_errors_at_startup(
         build_initial_dashboard_state(request, tmp_path)
 
 
+def test_dashboard_initial_state_resolves_relative_config_under_project_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative ``--config`` must resolve under the dashboard project root.
+
+    Regression for the divergence where the initial form seed read the file at
+    CWD/.gruff-py.yaml while ``/scan`` read project_root/.gruff-py.yaml — the
+    two paths could resolve to different files when ``--project`` is set and
+    CWD differs.
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "custom.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    request = _dashboard_request(project_root=project, config_path=Path("custom.yaml"))
+
+    state = build_initial_dashboard_state(request, project)
+
+    assert state.fail_on == "error"
+
+
 @contextmanager
 def _served_dashboard(project_root: Path, paths: tuple[str, ...]) -> Iterator[str]:
     server = create_dashboard_server(

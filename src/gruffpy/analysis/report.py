@@ -10,6 +10,12 @@ from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.version import TOOL_NAME
 
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.ADVISORY: 0,
+    Severity.WARNING: 1,
+    Severity.ERROR: 2,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class ReportExtensions:
@@ -83,16 +89,19 @@ class AnalysisReport:
     def finding_counts_by_rule(self) -> list[dict[str, Any]]:
         """Return one row per rule that emitted at least one finding.
 
-        Each row carries ``ruleId``, ``count``, the finding ``severity`` and
-        ``confidence`` taken from the first finding for that rule (every
-        finding from the same rule shares both). Rows are sorted by
-        ``count`` descending then ``ruleId`` ascending so identical inputs
-        produce identical output across runs.
+        Each row carries ``ruleId``, ``count``, the **worst** ``severity``
+        observed across the rule's findings (so threshold-based rules that
+        emit both ``warning`` and ``error`` are labelled by the highest band
+        seen), and ``confidence`` taken from the first finding (confidence is
+        rule-level today and does not vary across findings of the same rule).
+        Rows are sorted by ``count`` descending then ``ruleId`` ascending so
+        identical inputs produce identical output across runs.
 
         Returns:
             Deterministically ordered list of per-rule rows.
         """
         per_rule: dict[str, dict[str, Any]] = {}
+        per_rule_worst: dict[str, Severity] = {}
         for finding in self.findings:
             row = per_rule.get(finding.rule_id)
             if row is None:
@@ -102,8 +111,13 @@ class AnalysisReport:
                     "severity": finding.severity.value,
                     "confidence": finding.confidence.value,
                 }
+                per_rule_worst[finding.rule_id] = finding.severity
             else:
                 row["count"] += 1
+                worst = per_rule_worst[finding.rule_id]
+                if _SEVERITY_RANK[finding.severity] > _SEVERITY_RANK[worst]:
+                    per_rule_worst[finding.rule_id] = finding.severity
+                    row["severity"] = finding.severity.value
         return sorted(per_rule.values(), key=lambda row: (-row["count"], row["ruleId"]))
 
     def parse_error_count(self) -> int:
