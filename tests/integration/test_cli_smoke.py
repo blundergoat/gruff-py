@@ -480,6 +480,37 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
     assert "Traceback" not in result.stderr
 
 
+def test_cli_analyse_json_emits_structured_config_error_diagnostic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`analyse --format json` against a bad config returns a parseable
+    payload with a config-error diagnostic + exit 2, not stderr prose.
+
+    Regression for the JSON-automation case codex flagged in PR #3.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the temp project.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text("x = 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text("paths:\n  ignore: []\n")
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
+
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["findings"] == []
+    assert len(payload["diagnostics"]) == 1
+    diagnostic = payload["diagnostics"][0]
+    assert diagnostic["type"] == "config-error"
+    assert "missing required 'schemaVersion'" in diagnostic["message"]
+    assert "Traceback" not in result.stderr
+
+
 def test_cli_summary_default_group_by_keeps_top_rules_block(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -14,6 +14,7 @@ from click.shell_completion import get_completion_class
 
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
 from gruffpy.cli_list_rules import list_rules_detail
@@ -644,7 +645,34 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
             ),
         )
     except ConfigError as exc:
+        if request.output is OutputFormat.JSON:
+            return _config_error_report(request, exc)
         raise click.ClickException(str(exc)) from exc
+
+
+def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
+    """Build a synthetic ``gruff-py.analysis.v1`` report for a config-load failure.
+
+    Reserved for ``--format json`` callers: machine-readable consumers need a
+    parseable failure payload (``diagnostics: [{"type": "config-error", ...}]``,
+    ``exitCode: 2``) instead of stderr prose. Human-targeted formats keep the
+    stderr + exit 1 path via ``click.ClickException``.
+    """
+    config_path_str = str(request.config_path) if request.config_path is not None else None
+    return AnalysisReport(
+        tool_version=VERSION,
+        requested_paths=request.paths,
+        format=request.output.value,
+        fail_on=request.fail_on.value,
+        files_discovered=0,
+        files_parsed=0,
+        ignored_paths=(),
+        missing_paths=(),
+        diagnostics=(RunDiagnostic(type="config-error", message=str(exc), path=config_path_str),),
+        findings=(),
+        exit_code=2,
+        config_path=config_path_str,
+    )
 
 
 def _render_report(
