@@ -6,7 +6,7 @@
 
 | Field | Value |
 | --- | --- |
-| Release line | Published `0.1.2` package line |
+| Release line | Published `0.2.0` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |

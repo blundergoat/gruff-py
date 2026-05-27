@@ -244,22 +244,35 @@ class RuleDocs:
             "confidenceRationale": self.confidence_rationale,
             "configKeys": list(self.config_keys),
         }
-        if self.formula_provenance:
-            payload["formulaProvenance"] = self.formula_provenance
-        if self.threshold_direction:
-            payload["thresholdDirection"] = self.threshold_direction
-        if self.threshold_metadata_keys:
-            payload["thresholdMetadataKeys"] = list(self.threshold_metadata_keys)
-        if self.security_metadata:
-            payload["security"] = dict(self.security_metadata)
-        if self.option_descriptions:
-            payload["optionDescriptions"] = dict(self.option_descriptions)
-        if self.false_positive_shapes:
-            payload["falsePositiveShapes"] = [
-                {"shape": fp.shape, "mitigation": fp.mitigation}
-                for fp in self.false_positive_shapes
-            ]
+        payload.update(self._optional_payload_fields())
         return payload
+
+    def _optional_payload_fields(self) -> dict[str, Any]:
+        """Collect the non-empty optional payload fields in JSON-key order.
+
+        Driven from a table so adding a new optional field is one row and the
+        NPATH cost stays linear instead of multiplicative.
+        """
+        candidates: tuple[tuple[str, Any, Any], ...] = (
+            ("formulaProvenance", self.formula_provenance, self.formula_provenance),
+            ("thresholdDirection", self.threshold_direction, self.threshold_direction),
+            (
+                "thresholdMetadataKeys",
+                self.threshold_metadata_keys,
+                list(self.threshold_metadata_keys),
+            ),
+            ("security", self.security_metadata, dict(self.security_metadata)),
+            ("optionDescriptions", self.option_descriptions, dict(self.option_descriptions)),
+            (
+                "falsePositiveShapes",
+                self.false_positive_shapes,
+                [
+                    {"shape": fp.shape, "mitigation": fp.mitigation}
+                    for fp in self.false_positive_shapes
+                ],
+            ),
+        )
+        return {key: value for key, present, value in candidates if present}
 
 
 @dataclass(frozen=True, slots=True)

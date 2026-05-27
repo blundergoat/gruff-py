@@ -2,7 +2,7 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Public API pre-1.0.
 
-## [0.1.2] - 2026-05-27
+## [0.2.0] - 2026-05-27
 
 Cross-port `minimumSeverity:` config dimension under the new `gruff-py.config.v0.1` schema; `analyse --fail-on` default flips `error` → `advisory`. `docs.missing-*` messages reframed ("needs a brief intent description" rather than "has no docstring"). Additive line-insensitive `stableIdentity` field on JSON findings alongside `fingerprint`. New `summary --group-by=rule`, `list-rules <rule_id>` explain mode, analyse-text volume hint. Summary payload reshaped under new `gruff.summary.v2` schema. `naming.parameter-type-name` retired; catalogue drops to 115 rules.
 

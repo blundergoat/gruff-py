@@ -1,6 +1,10 @@
+# gruff: disable-file=size.file-length -- end-to-end CLI smoke covers every subcommand.
 # gruff: disable-file=test-quality.eager-test -- smoke tests assert many invariants per call.
 # gruff: disable-file=test-quality.loop-in-test -- loops enumerate output rows, not test cases.
 # gruff: disable-file=test-quality.magic-number-assertion -- column positions are the contract.
+# gruff: disable-file=test-quality.conditional-logic -- branches mirror the --format axis.
+# gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
+# gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
 import json
 from pathlib import Path
 from typing import Any, cast

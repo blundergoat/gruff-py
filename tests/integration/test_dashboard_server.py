@@ -155,6 +155,12 @@ def test_dashboard_initial_state_resolves_relative_config_under_project_root(
     CWD/.gruff-py.yaml while ``/scan`` read project_root/.gruff-py.yaml — the
     two paths could resolve to different files when ``--project`` is set and
     CWD differs.
+
+    Args:
+        tmp_path: pytest's per-test temp directory (anchors the synthetic
+            project + sibling CWD).
+        monkeypatch: pytest's monkeypatch fixture (used to chdir into a
+            sibling of the project root so a relative ``--config`` can drift).
     """
     project = tmp_path / "project"
     project.mkdir()

@@ -1,12 +1,9 @@
 """Click-based CLI entry point for `gruff-py`."""
 
-import difflib
 import json
 import os
-import shlex
 import sys
 import time
-from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,8 +15,8 @@ from click.shell_completion import get_completion_class
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
-from gruffpy.analysis.schema import SUMMARY_SCHEMA_VERSION
 from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
+from gruffpy.cli_list_rules import list_rules_detail
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
 from gruffpy.cli_options import (
     ClickDecorator,
@@ -38,6 +35,7 @@ from gruffpy.cli_options import (
     was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
+from gruffpy.cli_summary import summary_payload, summary_text
 from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
@@ -63,7 +61,7 @@ from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.reporting.markdown_reporter import MarkdownReporter
 from gruffpy.reporting.sarif_reporter import SarifReporter
 from gruffpy.reporting.text_reporter import TextReporter
-from gruffpy.rule.catalog import RELATED_RULES, RuleDocs, documentation_for_rule
+from gruffpy.rule.catalog import documentation_for_rule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import TOOL_NAME, VERSION
@@ -330,21 +328,7 @@ def list_rules(rule_format: str, rule_id: str | None) -> None:
 
 
 def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -> None:
-    if not registry.has(rule_id):
-        all_ids = [rule.definition().id for rule in registry.all()]
-        suggestions = difflib.get_close_matches(rule_id, all_ids, n=3)
-        lines = [f"Unknown rule: {rule_id}"]
-        if suggestions:
-            lines.append(f"Did you mean: {', '.join(suggestions)}?")
-        raise click.ClickException("\n".join(lines))
-    definition = registry.get(rule_id).definition()
-    docs = documentation_for_rule(rule_id)
-    related = RELATED_RULES.get(rule_id, ())
-    if rule_format == "json":
-        _write_stdout(json.dumps(_rule_detail_payload(definition, docs, related), indent=4))
-        _write_stdout("\n")
-        return
-    _write_stdout(_format_rule_detail(definition, docs, related))
+    list_rules_detail(registry, rule_id, rule_format, _write_stdout)
 
 
 @_report_command
@@ -395,13 +379,13 @@ def summary(**kwargs: Any) -> None:
     if summary_format == "json":
         _write_stdout(
             json.dumps(
-                _summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
+                summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
                 indent=4,
             )
         )
         _write_stdout("\n")
     else:
-        _write_stdout(_summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
+        _write_stdout(summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
     sys.exit(analysis_report.exit_code)
 
 
@@ -688,202 +672,6 @@ def _render_report(
             return TextReporter().render(report)
 
 
-def _summary_payload(
-    report: AnalysisReport,
-    top: int,
-    elapsed_seconds: float,
-    *,
-    group_by: str = "none",
-) -> dict[str, Any]:
-    rule_counts = Counter(finding.rule_id for finding in report.findings)
-    file_counts = Counter(finding.file_path for finding in report.findings)
-    payload: dict[str, Any] = {
-        "schemaVersion": SUMMARY_SCHEMA_VERSION,
-        "summary": {
-            "paths": list(report.requested_paths),
-            "filesDiscovered": report.files_discovered,
-            "filesParsed": report.files_parsed,
-            "ignored": len(report.ignored_paths),
-            "missing": len(report.missing_paths),
-            "parseErrors": report.parse_error_count(),
-            "findings": len(report.findings),
-            "exitCode": report.exit_code,
-            "elapsedSeconds": round(elapsed_seconds, 3),
-        },
-        "pillars": _summary_pillar_rows(report),
-        "topRules": _counter_rows(rule_counts, top),
-        "topFiles": _counter_rows(file_counts, top),
-    }
-    if group_by == "rule":
-        rule_rows = report.finding_counts_by_rule()
-        payload["groupedRules"] = {
-            "shown": min(top, len(rule_rows)),
-            "total": len(rule_rows),
-            "rows": rule_rows[:top],
-        }
-    return payload
-
-
-def _summary_text(
-    report: AnalysisReport,
-    top: int,
-    elapsed_seconds: float,
-    *,
-    group_by: str = "none",
-) -> str:
-    payload = _summary_payload(report, top, elapsed_seconds, group_by=group_by)
-    summary = payload["summary"]
-    paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
-    lines = [
-        f"gruff {report.tool_version} summary",
-        f"Path: {paths_display}",
-        (
-            f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
-            f"{summary['ignored']} ignored, {summary['missing']} missing, "
-            f"{summary['parseErrors']} parse errors"
-        ),
-        f"Findings: {summary['findings']}",
-        f"Elapsed: {summary['elapsedSeconds']:.3f}s",
-        "",
-        "Pillars",
-    ]
-    lines.extend(_format_pillar_text_rows(cast(list[dict[str, Any]], payload["pillars"])))
-    if group_by == "rule":
-        lines.append("")
-        lines.extend(_format_grouped_rule_rows(cast(dict[str, Any], payload["groupedRules"])))
-    else:
-        lines.extend(["", "Top rules:"])
-        lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
-    lines.extend(["", "Top files:"])
-    lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
-    _append_summary_hints(lines, summary)
-    return "\n".join(lines) + "\n"
-
-
-def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
-    rows = cast(list[dict[str, Any]], grouped["rows"])
-    shown = cast(int, grouped["shown"])
-    total = cast(int, grouped["total"])
-    header = f"Grouped by rule (showing {shown} of {total}):"
-    if not rows:
-        return [header, "  none"]
-    rule_id_width = max(len(row["ruleId"]) for row in rows)
-    formatted = [header]
-    for row in rows:
-        line = (
-            f"  {row['count']:>4}  "
-            f"{row['ruleId']:<{rule_id_width}}  "
-            f"{row['severity']:<8}  "
-            f"{row['confidence']}"
-        )
-        formatted.append(line.rstrip())
-    return formatted
-
-
-def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
-    """Build the canonical per-pillar summary rows sorted by findings DESC, pillar ASC.
-
-    Sources grade/score/per-severity data from the ``ScoreReport`` attached to
-    *report* when available; falls back to per-finding counts otherwise.
-    Only applicable pillars appear in the returned list.
-
-    Args:
-        report: Analysis report to summarise.
-
-    Returns:
-        List of pillar dicts shaped per ``gruff.summary.v2``.
-    """
-    rows: list[dict[str, Any]] = []
-    if report.score is None:
-        pillar_counts = Counter(finding.pillar.value for finding in report.findings)
-        severity_counts: dict[str, Counter[str]] = {name: Counter() for name in pillar_counts}
-        for finding in report.findings:
-            severity_counts[finding.pillar.value][finding.severity.value] += 1
-        rows.extend(
-            {
-                "pillar": name,
-                "grade": None,
-                "score": None,
-                "applicable": True,
-                "findings": count,
-                "advisory": severity_counts[name].get("advisory", 0),
-                "warning": severity_counts[name].get("warning", 0),
-                "error": severity_counts[name].get("error", 0),
-                "penalty": 0.0,
-            }
-            for name, count in pillar_counts.items()
-        )
-    else:
-        rows.extend(
-            {
-                "pillar": pillar.pillar,
-                "grade": pillar.grade.letter if pillar.grade is not None else None,
-                "score": pillar.grade.score if pillar.grade is not None else None,
-                "applicable": pillar.applicable,
-                "findings": pillar.findings,
-                "advisory": pillar.advisories,
-                "warning": pillar.warnings,
-                "error": pillar.errors,
-                "penalty": pillar.penalty,
-            }
-            for pillar in report.score.pillars
-            if pillar.applicable
-        )
-    rows.sort(key=lambda row: (-cast(int, row["findings"]), cast(str, row["pillar"])))
-    return rows
-
-
-def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
-    if not rows:
-        return ["  none"]
-    pillar_width = max(15, max(len(cast(str, row["pillar"])) for row in rows))
-    lines: list[str] = []
-    for row in rows:
-        grade = cast(str | None, row["grade"])
-        score = cast(float | None, row["score"])
-        grade_text = grade if grade is not None else "-"
-        score_text = f"{score:6.2f}" if score is not None else "  n/a "
-        lines.append(
-            "  "
-            + cast(str, row["pillar"]).ljust(pillar_width)
-            + " "
-            + grade_text
-            + " "
-            + score_text
-            + " "
-            + f"findings={row['findings']}".ljust(15)
-            + f"advisory={row['advisory']}".ljust(15)
-            + f"warning={row['warning']}".ljust(14)
-            + f"error={row['error']}"
-        )
-    return lines
-
-
-def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
-    hints: list[str] = []
-    if summary["ignored"]:
-        hints.append(
-            "Ignored paths: add --include-ignored to include built-in and .gitignore "
-            "exclusions; configured paths.ignore still applies."
-        )
-    if summary["findings"]:
-        hints.append(
-            "Baseline: after review, run "
-            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
-            "to accept current findings as known debt."
-        )
-    if not hints:
-        return
-    lines.extend(["", "Next steps:"])
-    lines.extend(f"  {hint}" for hint in hints)
-
-
-def _generate_baseline_command(paths: list[str]) -> str:
-    command_paths = paths or ["."]
-    joined_paths = " ".join(shlex.quote(path) for path in command_paths)
-    return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
-
-
 def _init_success_message(config_path: Path) -> str:
     return (
         f"Wrote {config_path}\n\n"
@@ -892,16 +680,6 @@ def _init_success_message(config_path: Path) -> str:
         "Future analyse/report runs auto-apply gruff-baseline.json; "
         f"use `{TOOL_NAME} analyse . --no-baseline` to audit without it.\n"
     )
-
-
-def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:
-    return [{"name": name, "count": count} for name, count in counter.most_common(top)]
-
-
-def _format_count_rows(rows: list[dict[str, Any]]) -> list[str]:
-    if not rows:
-        return ["  none"]
-    return [f"  {row['name']}: {row['count']}" for row in rows]
 
 
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
@@ -919,139 +697,6 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "description": definition.get_description(),
         "documentation": documentation.to_payload(),
     }
-
-
-def _rule_detail_payload(
-    definition: RuleDefinition,
-    docs: RuleDocs,
-    related: tuple[str, ...],
-) -> dict[str, Any]:
-    return {
-        "id": definition.id,
-        "name": definition.name,
-        "pillar": definition.pillar.value,
-        "tier": definition.tier.value,
-        "defaultSeverity": definition.default_severity.value,
-        "confidence": definition.confidence.value,
-        "defaultEnabled": definition.default_enabled,
-        "thresholds": dict(definition.default_thresholds),
-        "options": dict(definition.default_options),
-        "documentation": docs.to_payload(),
-        "relatedRules": list(related),
-    }
-
-
-def _format_rule_detail(
-    definition: RuleDefinition,
-    docs: RuleDocs,
-    related: tuple[str, ...],
-) -> str:
-    lines: list[str] = []
-    lines.extend(_rule_detail_header(definition))
-    if docs.rationale:
-        lines.extend(_rule_detail_prose("Rationale", docs.rationale))
-    if docs.fix_guidance:
-        lines.extend(_rule_detail_prose("Fix guidance", docs.fix_guidance))
-    if docs.bad_example:
-        lines.extend(_rule_detail_prose("Bad example", docs.bad_example))
-    if docs.good_example:
-        lines.extend(_rule_detail_prose("Good example", docs.good_example))
-    if definition.default_options:
-        lines.extend(_rule_detail_options(definition, docs))
-    if docs.config_keys:
-        lines.extend(_rule_detail_escape_hatches(definition.id, docs))
-    if docs.confidence_rationale:
-        lines.extend(_rule_detail_prose("Confidence", docs.confidence_rationale))
-    lines.extend(_rule_detail_false_positives(docs))
-    lines.extend(_rule_detail_related(related))
-    return "\n".join(lines) + "\n"
-
-
-def _rule_detail_header(definition: RuleDefinition) -> list[str]:
-    return [
-        f"Rule: {definition.id}",
-        f"  Name:      {definition.name}",
-        f"  Pillar:    {definition.pillar.value}",
-        f"  Tier:      {definition.tier.value}",
-        f"  Severity:  {definition.default_severity.value} (default)",
-        f"  Confidence: {definition.confidence.value}",
-        f"  Enabled by default: {'yes' if definition.default_enabled else 'no'}",
-    ]
-
-
-def _rule_detail_prose(header: str, body: str) -> list[str]:
-    return ["", f"{header}:", f"  {body}"]
-
-
-def _rule_detail_options(definition: RuleDefinition, docs: RuleDocs) -> list[str]:
-    rows = list(definition.default_options.items())
-    name_width = max(len(name) for name, _ in rows)
-    type_width = max(len(_option_type_label(value)) for _, value in rows)
-    lines = ["", "Default options:"]
-    for name, value in rows:
-        description = docs.option_descriptions.get(name, "")
-        line = f"  {name:<{name_width}}  {_option_type_label(value):<{type_width}}  {description}"
-        lines.append(line.rstrip())
-    return lines
-
-
-def _option_type_label(value: Any) -> str:
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int):
-        return "int"
-    if isinstance(value, float):
-        return "float"
-    if isinstance(value, str):
-        return "str"
-    if isinstance(value, list):
-        return "list"
-    if isinstance(value, dict):
-        return "dict"
-    return type(value).__name__
-
-
-def _rule_detail_escape_hatches(rule_id: str, docs: RuleDocs) -> list[str]:
-    rows = [f"rules.{rule_id}.{key}" for key in docs.config_keys]
-    rows.append(f"rules.{rule_id}.enabled")
-    name_width = max(len(row) for row in rows)
-    lines = ["", "Escape hatches:"]
-    for row in rows:
-        if row.endswith(".enabled"):
-            note = "set false to disable this rule entirely"
-        elif row.endswith(".severity"):
-            note = "override severity (advisory / warning / error)"
-        elif row.endswith(".threshold"):
-            note = "override the single numeric threshold"
-        elif ".thresholds." in row:
-            note = "override one named numeric threshold"
-        elif ".options." in row:
-            note = "override one named option default"
-        else:
-            note = ""
-        lines.append(f"  {row:<{name_width}}  {note}".rstrip())
-    return lines
-
-
-def _rule_detail_false_positives(docs: RuleDocs) -> list[str]:
-    lines = ["", "Common false-positive shapes:"]
-    if not docs.false_positive_shapes:
-        lines.append("  (none documented yet)")
-        return lines
-    for fp in docs.false_positive_shapes:
-        lines.append(f"  - {fp.shape}")
-        lines.append(f"    Mitigation: {fp.mitigation}")
-    return lines
-
-
-def _rule_detail_related(related: tuple[str, ...]) -> list[str]:
-    lines = ["", "Related rules:"]
-    if not related:
-        lines.append("  (none)")
-        return lines
-    for rule_id in related:
-        lines.append(f"  {rule_id}")
-    return lines
 
 
 def _format_rule_table(definitions: list[RuleDefinition]) -> str:

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gruff-py"
-version = "0.1.2"
+version = "0.2.0"
 description = "Python project quality analyser."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -124,6 +124,7 @@ show_error_codes = true
 # gruff-py's own configuration (dogfooding).
 # All values are optional; defaults live in the rule registry.
 [tool.gruff-py]
+schemaVersion = "gruff-py.config.v0.1"
 
 [tool.gruff-py.paths]
 ignore = []

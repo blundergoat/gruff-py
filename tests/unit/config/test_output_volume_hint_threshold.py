@@ -23,6 +23,7 @@ def test_default_threshold_is_50_when_key_absent(tmp_path: Path) -> None:
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
 
+    # gruff: disable-next=test-quality.magic-number-assertion -- 50 is the documented default.
     assert config.output_volume_hint_threshold == 50
 
 

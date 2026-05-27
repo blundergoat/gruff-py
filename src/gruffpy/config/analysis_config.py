@@ -228,6 +228,15 @@ class AnalysisConfig:
         return replace(self, allowed_secret_previews=previews)
 
     def with_output_volume_hint_threshold(self, threshold: int) -> "AnalysisConfig":
+        """Return a new config whose ``analyse --format text`` hint threshold is *threshold*.
+
+        Args:
+            threshold: Finding count at which ``analyse --format text`` appends
+                the ``summary --group-by=rule`` hint; set to ``0`` to disable.
+
+        Returns:
+            New ``AnalysisConfig`` with the threshold updated.
+        """
         return replace(self, output_volume_hint_threshold=threshold)
 
     def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":

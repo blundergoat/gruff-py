@@ -11,7 +11,7 @@ gruff-py summary --group-by=rule src/
 Output shape:
 
 ```
-gruff 0.1.2 summary
+gruff 0.2.0 summary
 Path: src
 Files: 213 discovered, 213 parsed, 22 ignored, 0 missing, 0 parse errors
 Findings: 102

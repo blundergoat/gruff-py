@@ -1,5 +1,7 @@
 """Unit coverage for the M04 explain-mode metadata: related rules and option_descriptions."""
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from gruffpy.rule.catalog import RELATED_RULES, FalsePositiveShape, documentation_for_rule
@@ -59,8 +61,8 @@ def test_related_rules_caps_siblings_at_four() -> None:
 
 def test_false_positive_shape_is_a_frozen_dataclass() -> None:
     shape = FalsePositiveShape(shape="x", mitigation="y")
-    with pytest.raises(Exception):  # noqa: B017,PT011 - frozen dataclass raises FrozenInstanceError
-        shape.shape = "z"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        shape.shape = "z"  # type: ignore[misc] -- mutating frozen dataclass is the assertion under test
 
 
 def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> None:

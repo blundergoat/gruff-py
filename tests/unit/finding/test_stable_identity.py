@@ -56,7 +56,9 @@ def test_stable_identity_is_16_lowercase_hex_chars() -> None:
 
 
 def test_stable_identity_is_deterministic() -> None:
-    assert _finding().stable_identity() == _finding().stable_identity()
+    first = _finding().stable_identity()
+    second = _finding().stable_identity()
+    assert first == second
 
 
 def test_stable_identity_ignores_line_shifts_when_symbol_is_set() -> None:
@@ -73,22 +75,23 @@ def test_stable_identity_ignores_end_line_and_column_when_symbol_is_set() -> Non
     assert base.fingerprint() != wider.fingerprint()
 
 
-def test_stable_identity_distinguishes_by_rule_id() -> None:
-    a = _finding(rule_id="naming.identifier-quality")
-    b = _finding(rule_id="naming.short-variable")
-    assert a.stable_identity() != b.stable_identity()
+@pytest.mark.parametrize(
+    ("kwargs_a", "kwargs_b"),
+    [
+        ({"rule_id": "naming.identifier-quality"}, {"rule_id": "naming.short-variable"}),
+        ({"file_path": "src/a.py"}, {"file_path": "src/b.py"}),
+        ({"symbol": "module.foo"}, {"symbol": "module.bar"}),
+    ],
+    ids=["rule_id", "file_path", "symbol"],
+)
+def test_stable_identity_distinguishes_by_identifying_field(kwargs_a: dict, kwargs_b: dict) -> None:
+    """The identity must differ when any of [ruleId, file, symbol] differs.
 
-
-def test_stable_identity_distinguishes_by_file() -> None:
-    a = _finding(file_path="src/a.py")
-    b = _finding(file_path="src/b.py")
-    assert a.stable_identity() != b.stable_identity()
-
-
-def test_stable_identity_distinguishes_by_symbol() -> None:
-    a = _finding(symbol="module.foo")
-    b = _finding(symbol="module.bar")
-    assert a.stable_identity() != b.stable_identity()
+    Args:
+        kwargs_a: Override kwargs for the left finding.
+        kwargs_b: Override kwargs for the right finding.
+    """
+    assert _finding(**kwargs_a).stable_identity() != _finding(**kwargs_b).stable_identity()
 
 
 def test_stable_identity_message_independent_when_symbol_is_set() -> None:
@@ -131,9 +134,17 @@ def test_stable_identity_helper_matches_method() -> None:
     ids=["symbol-present", "symbol-absent"],
 )
 def test_stable_identity_helper_is_pure_function(kwargs: dict) -> None:
-    """The module-level helper is independent of any Finding instance state."""
+    """The module-level helper is independent of any Finding instance state.
+
+    Args:
+        kwargs: ``symbol`` + ``message`` overrides exercising the two input-set
+            branches (symbol-present uses ``symbol``; symbol-absent falls back
+            to ``message``).
+    """
     args = {"rule_id": "r", "file_path": "f", **kwargs}
-    assert stable_identity_for(**args) == stable_identity_for(**args)
+    first = stable_identity_for(**args)
+    second = stable_identity_for(**args)
+    assert first == second
 
 
 def test_stable_identity_handles_php_compatible_slash_escaping() -> None:
