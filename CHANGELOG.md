@@ -2,288 +2,32 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Public API pre-1.0.
 
-## [Unreleased]
+## [0.1.2] - 2026-05-27
 
-Adds the cross-port `minimumSeverity:` config dimension (analyse / report /
-dashboard keys; `advisory | warning | error | none` values) and the first
-`gruff-py.config.v0.1` schema literal. `analyse --fail-on` flips its binary
-default from `error` to `advisory` to match the "show everything and fail
-if anything is wrong" philosophy. `docs.missing-*` rule messages are
-reworded to describe what the docstring should contain rather than its
-absence — the previous "has no docstring" phrasing was rejected on principle
-by engineering agents trained on no-boilerplate instructions.
-
-**Cross-port status:** Aligns gruff-py with the family-wide
-`minimumSeverity:` dimension. The off-switch value is `none`, not `never`.
-gruff-go's current 0.1.2 draft uses `never`; the family-wide decision is
-`none` and gruff-go is expected to flip in a separate sibling-port
-workstream. gruff-rs / gruff-ts / gruff-php have not yet adopted the key.
+Cross-port `minimumSeverity:` config dimension under the new `gruff-py.config.v0.1` schema; `analyse --fail-on` default flips `error` → `advisory`. `docs.missing-*` messages reframed ("needs a brief intent description" rather than "has no docstring"). Additive line-insensitive `stableIdentity` field on JSON findings alongside `fingerprint`. New `summary --group-by=rule`, `list-rules <rule_id>` explain mode, analyse-text volume hint. Summary payload reshaped under new `gruff.summary.v2` schema. `naming.parameter-type-name` retired; catalogue drops to 115 rules.
 
 ### Added
-
-- `minimumSeverity:` top-level config block in `.gruff-py.yaml` and
-  `[tool.gruff-py.minimumSeverity]` in `pyproject.toml`. Keys are the
-  gateable subcommand names (`analyse`, `report`, `dashboard`); the
-  validator rejects every other key (including non-gating subcommands
-  like `summary`) and rejects every value outside
-  `{advisory, warning, error, none}` — no aliases for `never`, `off`,
-  `medium`, `info`, etc. Precedence: CLI `--fail-on` flag > config key
-  > binary default per subcommand. See ADR-019.
-- `schemaVersion: gruff-py.config.v0.1` literal at the top of every
-  `.gruff-py.yaml` / `[tool.gruff-py]` block, declared via the new
-  `CONFIG_SCHEMA_VERSION` constant in `src/gruffpy/analysis/schema.py`
-  and re-exported from `gruffpy.analysis`. Pre-existing config files
-  without `schemaVersion:` are rejected on load with guidance to run
-  `gruff-py init --force` to regenerate. No back-compat shim.
-- `AnalysisConfig.minimum_severity: dict[str, FailThreshold]` field
-  alongside a `with_minimum_severity` helper, plus the
-  `MINIMUM_SEVERITY_BINARY_DEFAULTS` constant naming the three binary
-  defaults (`analyse: advisory`, `report: none`, `dashboard: none`).
-- `was_fail_on_set_on_cli()` helper in `src/gruffpy/cli_options.py`
-  that uses `click.get_parameter_source` to distinguish a user-passed
-  `--fail-on` flag from Click's default-value fill-in. The analyse and
-  report CLI consumers consult it before reading the config map.
-- `ADR-019-per-command-minimum-severity.md` documenting the precedence
-  rule, the accept-sets for keys and values, the rejected alternatives
-  (`defaults.failOn`, `severityThreshold`, `exitOn`, flat per-command
-  keys, silent-accept of non-gating keys), the analyse default flip,
-  and the new schema-version literal.
-- 10 precedence tests in
-  `tests/unit/config/test_minimum_severity_precedence.py` covering
-  YAML and TOML parsing, the rejection cases for non-gating keys
-  (including `summary`), unknown values (`medium`), rejected sibling-
-  port aliases (`never`), missing `schemaVersion:`, and wrong
-  `schemaVersion:`.
-- 3 CLI integration tests in `tests/integration/test_cli_smoke.py`
-  exercising the full precedence chain end-to-end (config applies
-  when no flag, CLI flag wins over config, binary default applies
-  with neither).
-- Pattern under `.goat-flow/patterns/rules.md` capturing the
-  "frame rule messages by what the user should add, not what's
-  absent" principle that drove the `docs.missing-*` reword.
-- `gruff-py init --force` preserves a user-tuned `minimumSeverity:`
-  block byte-for-byte across regeneration (mirroring the existing
-  `paths.ignore` preservation). Implemented via the new
-  `existing_minimum_severity(config_path)` helper in
-  `src/gruffpy/command/init_config.py`.
-- Dashboard initial-form `failOn` value is now seeded from
-  `config.minimum_severity["dashboard"]` when present and the user did
-  not pass `--fail-on` explicitly. Lives in a new
-  `src/gruffpy/cli_dashboard.py` module (`build_initial_dashboard_state`)
-  to keep `src/gruffpy/cli.py` under the file-length error threshold.
-- New cross-port lockstep footgun under
-  `.goat-flow/footguns/compatibility.md` documenting the six source
-  surfaces that must move together when the family-wide `--fail-on`
-  binary default changes (ADR, defaults table, Click decorator,
-  validator accept-set, init renderer, dashboard state factory).
-- Reusable 8-step pattern under `.goat-flow/patterns/configuration.md`
-  for adding a top-level cross-impl config key (ADR-first ordering,
-  schema literal, dataclass, validator, CLI wiring, init renderer,
-  docs sweep, footgun).
-- Footgun under `.goat-flow/footguns/cli.md` recording that
-  `src/gruffpy/cli.py` routinely sits within 20 lines of the
-  `size.file-length` 1000-line error threshold; small additive features
-  routinely require sub-module extraction.
-- 5 init-preservation tests in `tests/unit/command/test_init_config.py`
-  covering the `existing_minimum_severity` helper, malformed-block
-  rejection, byte-for-byte round-trip, and the canonical default render.
-- 5 dashboard-precedence tests in
-  `tests/integration/test_dashboard_server.py` covering config-applies,
-  fall-back to binary default, explicit-CLI-wins, `--no-config` bypass,
-  and config-error propagation at startup.
-- `gruff-py summary --group-by=rule` replaces the default `Top rules:`
-  block with a count / rule-id / severity / confidence table sourced
-  from a new `AnalysisReport.finding_counts_by_rule()` accessor. Rows
-  sort by count descending, rule-id ascending; `--top N` caps the row
-  count (default 10). JSON output additively gains a `groupedRules`
-  field with `{shown, total, rows}`; the existing `topRules` field is
-  unchanged for back-compat.
-- `gruff-py analyse --format text` appends a one-line hint pointing at
-  `summary --group-by=rule` when the run produces at least
-  `outputVolumeHintThreshold` findings (default 50; set to 0 to disable).
-  The hint is text-format-only; JSON, HTML, Markdown, GitHub
-  annotations, hotspot, and SARIF outputs are never altered.
-- New top-level `outputVolumeHintThreshold:` config key (non-negative
-  integer) in `.gruff-py.yaml` and `[tool.gruff-py]`, surfaced through
-  `AnalysisConfig.output_volume_hint_threshold` and threaded into
-  `AnalysisReport` so `TextReporter` can read it without dragging the
-  full config across the reporter boundary.
-- New `docs/triage.md` documenting the rule-grouped triage workflow.
-- `gruff-py list-rules <rule_id>` explain mode: a deep view of one
-  rule's header, rationale, fix guidance, examples, default options
-  (with one-line descriptions), every escape-hatch config key path,
-  confidence rationale, documented false-positive shapes, and related
-  rules. `--format table` coerces to text for the single-rule view;
-  `--format json` emits the structured payload. Unknown ids exit 1
-  with `difflib.get_close_matches` suggestions. The default no-positional
-  `list-rules` behaviour is unchanged.
-- Two new `RuleDocs` fields in `src/gruffpy/rule/catalog.py`:
-  `option_descriptions: dict[str, str]` (one-liner per public option key)
-  and `false_positive_shapes: tuple[FalsePositiveShape, ...]` (shape +
-  mitigation). The 12 rules with non-empty `default_options` ship with
-  populated option descriptions; false-positive shapes start empty and
-  grow over time as users hit them. JSON output adds `optionDescriptions`
-  and `falsePositiveShapes` keys only when non-empty (back-compat).
-- New module-level `RELATED_RULES: dict[str, tuple[str, ...]]` map in
-  `src/gruffpy/rule/catalog.py` covering 41 rules across the naming,
-  docs.missing-*, complexity/size, waste, and dead-code families. Each
-  entry lists up to 4 siblings; symmetric where appropriate.
-- New `docs/explain.md` documenting the explain-mode contract.
-- `ConfigError` raised by the loader now propagates out of
-  `run_analysis` and converts to `click.ClickException` at the CLI
-  boundary (clean stderr line + exit 1, no traceback, no silent
-  fallback to defaults). Previously the runner caught the exception
-  and converted it to a `RunDiagnostic` that the `summary` reporter
-  did not render, so a `pyproject.toml` with `[tool.gruff-py]` but no
-  `schemaVersion` would silently run with default config. Pattern at
-  `.goat-flow/patterns/error-handling.md`; footgun at
-  `.goat-flow/footguns/config.md`.
-- Additive `stableIdentity` field on every JSON finding, adjacent to
-  the existing `fingerprint`. `fingerprint` stays the line-precise
-  identity used by baselines and SARIF; `stableIdentity` is
-  line-insensitive (hashed from `[ruleId, file, symbol]`, falling
-  back to `[ruleId, file, message]` when `symbol` is `None`) so
-  external diff tooling can match "the same logical finding across
-  line shifts" without each consumer reinventing the identity. Same
-  16-char SHA-256 prefix and same PHP-compatible canonical-JSON
-  encoding as `fingerprint`, so cross-port consumers see identical
-  digests once gruff-php M05 lands. `gruff-py.analysis.v1` consumers
-  ignoring unknown keys are unaffected; no schema bump. SARIF
-  `partialFingerprints` and `BaselineFilter` are unchanged. New
-  `Finding.stable_identity()` method and module-level
-  `stable_identity_for(rule_id, file_path, symbol, message)` helper
-  in `src/gruffpy/finding/fingerprint.py`. See ADR-020.
+- `minimumSeverity:` block + required `schemaVersion: gruff-py.config.v0.1` (ADR-019). Pre-existing configs without `schemaVersion:` rejected on load; `gruff-py init --force` regenerates.
+- `stableIdentity` on every JSON finding (ADR-020): line-insensitive companion to `fingerprint`. No schema bump; SARIF + baselines unchanged.
+- `gruff.summary.v2` schema with canonical pillar rows (grade/score/applicable/findings/advisory/warning/error/penalty) across text/JSON/Markdown/HTML.
+- `summary --group-by=rule` via `AnalysisReport.finding_counts_by_rule()`; `analyse --format text` footer hint at `outputVolumeHintThreshold` findings (default 50).
+- `list-rules <rule_id>` explain mode (text + JSON) with `RuleDocs.option_descriptions`, `false_positive_shapes`, and `RELATED_RULES` cross-references.
+- `gruff-py init` writes per-rule description comments and preserves the `minimumSeverity:` block byte-for-byte across `--force`.
+- ADRs 018 (retire parameter-type-name), 019 (minimumSeverity), 020 (stableIdentity).
 
 ### Changed
-
-- **Behaviour:** `analyse --fail-on` binary default flips from `error`
-  to `advisory`. Users relying on the previous default should set
-  `minimumSeverity.analyse: error` in their config or pass
-  `--fail-on error` explicitly. CI configurations that omitted
-  `--fail-on` will now exit 1 on any advisory finding where they
-  previously only exited 1 on error-tier findings.
-- `docs.missing-*` rule wording: function, class, module, param (both
-  consolidated and per-parameter), return-doc, and raises-doc rules
-  now phrase their `message=` as `<thing> needs <what's required>`
-  rather than `<thing> has no <X>`. Engineering agents trained on
-  "no boilerplate" instructions previously misread the absence-framed
-  message as a request for restate-the-signature filler. The trigger
-  conditions are unchanged; rule fingerprints are byte-for-byte
-  unchanged (rule id and rule structure didn't move).
-- `gruff-py init` now writes `schemaVersion:` at the top of the
-  rendered YAML followed by a canonical `minimumSeverity:` block
-  with the three binary defaults. The existing `paths.ignore`
-  preservation behaviour is unchanged.
-
-### Fixed
-
-- `tests/integration/test_gitignore_e2e.py` invocations gain explicit
-  `--fail-on none` so the path-discovery assertions no longer trip
-  on the analyse default flip.
-
-Catalogue drops to 115 rules across 11 pillars after retiring
-`naming.parameter-type-name`. Summary output gains a canonical pillar-row shape
-(grade, score, applicable, findings, advisory, warning, error, penalty) across
-text, JSON, Markdown, and HTML, declared under the new cross-implementation
-`gruff.summary.v2` schema. `gruff-py init` now emits a `rules:` section with one
-description comment per rule, and `accepted_abbreviations` ships seeded with the
-gruff-rs/gruff-ts default set.
-
-### Added
-
-- `gruff.summary.v2` schema declared on the JSON summary payload via the new
-  `SUMMARY_SCHEMA_VERSION` constant in `src/gruffpy/analysis/schema.py`
-  (previously the payload carried no `schemaVersion` field). The namespace
-  intentionally omits the `-py` suffix so the schema can be shared with
-  sibling gruff implementations.
-- Canonical pillar rows in text, JSON, Markdown, and HTML summaries: each row
-  exposes `pillar`, `grade`, `score`, `applicable`, `findings`, `advisory`,
-  `warning`, `error`, and `penalty`, sorted findings DESC then pillar ASC, and
-  sourced from `report.score.pillars` when present (falling back to per-finding
-  counts otherwise).
-- Per-rule description comments above each entry in the `rules:` section of
-  the `.gruff-py.yaml` written by `gruff-py init`. The renderer splits into a
-  scaffold step (`yaml.safe_dump` on static fields) and a rules step
-  (per-entry `yaml.safe_dump` plus a leading `# <description>` line) so YAML
-  formatting stays consistent while comments survive round-trips.
-- Default `accepted_abbreviations` seed on `AnalysisConfig`: `age, app, db,
-  fs, id, io, key, log, max, min, now, raw, rx, tx, ui, url`. Matches the
-  gruff-rs/gruff-ts runtime defaults; project-specific vocabulary should
-  still be appended via user config rather than added here.
-- `ADR-018-retire-naming-parameter-type-name.md` documenting the retirement
-  rationale (false-positive rate against PEP 8's silence on parameter naming,
-  maintenance burden) and guidance for any future re-implementation.
-- Footgun doc covering stale `__pycache__/*.pyc` after deleting a rule
-  module: the deleted rule keeps registering until caches are cleared.
-  Concrete recovery steps under `.goat-flow/footguns/setup.md`.
-- Pattern doc covering the split YAML rendering approach under
-  `.goat-flow/patterns/configuration.md`.
-- `tests/unit/reporting/test_reporters.py` coverage for the canonical
-  seven-column markdown and HTML pillar tables.
-
-### Changed
-
-- **Breaking JSON shape:** `pillars` in the summary payload is now a list of
-  pillar-row dicts (was `{pillar: count}`). Consumers iterating `pillars.items()`
-  must switch to iterating the list and reading `row["pillar"]` / `row["findings"]`.
-- Text summary's `Per pillar:` block is renamed to `Pillars` and rows use
-  fixed-width columns with grade and score; the previous `name: count` form
-  is gone.
-- HTML reporter replaces the `pillar-card` grid with a `<table class="pillar-list">`
-  carrying the seven canonical columns; section heading changes from
-  `pillar grades` to `pillars`.
-- `_summary_payload` and `_summary_text` in `src/gruffpy/cli.py` delegate row
-  assembly to new helpers `_summary_pillar_rows` and `_format_pillar_text_rows`.
-- `naming.short-variable` docstring no longer references the retired
-  `naming.parameter-type-name` rule.
-- `AnalysisConfig.with_accepted_abbreviations` docstring updated to mention
-  only `naming.abbreviation`.
-- `tests/integration/test_cli_smoke.py::test_cli_summary_json_is_compact_digest`
-  and `::test_cli_summary_text_includes_path_and_elapsed` carry Google-style
-  docstrings describing the invariant under test and the `tmp_path` /
-  `monkeypatch` fixtures.
-- `tests/unit/reporting/test_reporters.py::test_markdown_reporter_pillars_table_uses_pillar_score_counts`
-  carries a one-line rationale docstring.
-- Pillar-column position assertions in
-  `test_cli_summary_text_includes_path_and_elapsed` now include the offending
-  line as the assertion message, and a redundant `findings=` membership check
-  (already enforced by the filtering comprehension) was removed.
+- **Behaviour:** `analyse --fail-on` default `error` → `advisory`. Set `minimumSeverity.analyse: error` or pass `--fail-on error` to restore.
+- **Breaking JSON:** summary `pillars` is now a list of pillar-row dicts (was `{pillar: count}`).
+- `docs.missing-*` messages reframed; trigger conditions and fingerprints unchanged.
+- `ConfigError` from the loader propagates as clean CLI stderr + exit 1 instead of silently falling back to defaults.
 
 ### Removed
-
-- **Breaking:** `naming.parameter-type-name` rule. Projects pinning this rule
-  in `.gruff-py.yaml` or `[tool.gruff-py]` will fail to load with
-  `ConfigError: Unknown rule id "naming.parameter-type-name"`. Remove the
-  entry from your config to upgrade. See ADR-018 for the full rationale.
-- Rule catalogue drops to 115 (`naming` pillar to 9). `docs/rules.md` is
-  regenerated; the rule's detailed entry is gone and the `.gruff-py.yaml`
-  template no longer lists it under `selection.rules` or the per-rule
-  options block.
-- Old HTML grid-style pillar layout and the `_pillar_card` helper, superseded
-  by the canonical table.
+- **Breaking:** `naming.parameter-type-name` rule. Pinned configs fail with `Unknown rule id`; remove the entry to upgrade (ADR-018).
 
 ### Fixed
-
-- `ConfigLoader._apply_allowlists` no longer clobbers seeded
-  `accepted_abbreviations` / `allowed_secret_previews` defaults when the
-  user's `allowlists:` table omits those keys. Previously the loader called
-  `with_accepted_abbreviations(())` / `with_allowed_secret_previews(())`
-  unconditionally, so any config that defined `allowlists:` for an unrelated
-  purpose (e.g. only `secretPreviews` or only `deadCode`) silently cleared
-  the new abbreviation seed, making `naming.abbreviation` stricter than
-  `AnalysisConfig.from_registry()` and `gruff-py init` output. The loader
-  now only applies an allowlist when its key is present in the user's
-  section. New coverage in
-  `tests/unit/config/test_accepted_abbreviations_loader.py`.
-- `_apply_allowlists` was split into `_validate_string_list_allowlists` and
-  `_apply_present_allowlists` to keep NPATH complexity below the project's
-  500-path error threshold after the conditional-application change.
-- Self-dogfood gate (`gruff-py analyse src tests --fail-on advisory`):
-  cleared the ten remaining test-quality advisories in `test_cli_smoke.py`
-  (`eager-test`, `loop-in-test`, `magic-number-assertion`) and
-  `test_reporters.py` (`magic-number-assertion`, `multiple-aaa-cycles`)
-  with explicit `# gruff: disable-file` / `disable-next` directives carrying
-  per-rule rationale at each suppression site.
+- `ConfigLoader._apply_allowlists` no longer clears seeded `accepted_abbreviations` / `allowed_secret_previews` when `allowlists:` is partial.
+- Dashboard initial form seed reads the same config file `/scan` reads when `--config` is relative and `--project` differs from CWD.
+- `finding_counts_by_rule` reports the worst severity per rule (was first-finding), so `summary --group-by=rule` doesn't understate threshold-based rules.
 
 ## [0.1.1] - 2026-05-24
 
