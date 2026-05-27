@@ -26,7 +26,7 @@ There is no authentication layer, service account, or outbound network request. 
 
 Durable project configuration lives in `pyproject.toml`; package resolution is locked by `uv.lock`. Runtime analysis state is in memory: discovered `SourceFile` objects become `AnalysisUnit` objects, rules produce `Finding` objects, and `AnalysisReport.to_dict()` provides the JSON schema payload.
 
-The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing.
+The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing. `Finding.to_dict()` emits both `fingerprint` (line-precise identity used by baselines and SARIF) and `stableIdentity` (line-insensitive identity hashed from `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when `symbol` is `None`) — external diff tooling that wants "the same logical finding across line shifts" reads `stableIdentity`; baseline matching reads `fingerprint`. See ADR-020 for the input set and cross-port pairing.
 
 ## Rules And Scoring
 

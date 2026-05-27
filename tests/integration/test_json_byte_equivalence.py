@@ -28,6 +28,16 @@ def test_json_reporter_matches_php_json_encoding_flags():
     assert php_json == python_json
 
 
+def test_json_reporter_emits_stable_identity_adjacent_to_fingerprint():
+    """ADR-020: stableIdentity is additive next to fingerprint, with the same 16-char shape."""
+    report = _fixture_report()
+    python_json = JsonReporter().render(report)
+    finding_payload = report.findings[0].to_dict()
+    assert finding_payload["stableIdentity"] == report.findings[0].stable_identity()
+    assert f'"stableIdentity": "{finding_payload["stableIdentity"]}"' in python_json
+    assert len(finding_payload["stableIdentity"]) == 16
+
+
 def _fixture_report() -> AnalysisReport:
     finding = Finding(
         rule_id="security.dangerous-function-call",
