@@ -138,6 +138,21 @@ workstream. gruff-rs / gruff-ts / gruff-php have not yet adopted the key.
   `schemaVersion` would silently run with default config. Pattern at
   `.goat-flow/patterns/error-handling.md`; footgun at
   `.goat-flow/footguns/config.md`.
+- Additive `stableIdentity` field on every JSON finding, adjacent to
+  the existing `fingerprint`. `fingerprint` stays the line-precise
+  identity used by baselines and SARIF; `stableIdentity` is
+  line-insensitive (hashed from `[ruleId, file, symbol]`, falling
+  back to `[ruleId, file, message]` when `symbol` is `None`) so
+  external diff tooling can match "the same logical finding across
+  line shifts" without each consumer reinventing the identity. Same
+  16-char SHA-256 prefix and same PHP-compatible canonical-JSON
+  encoding as `fingerprint`, so cross-port consumers see identical
+  digests once gruff-php M05 lands. `gruff-py.analysis.v1` consumers
+  ignoring unknown keys are unaffected; no schema bump. SARIF
+  `partialFingerprints` and `BaselineFilter` are unchanged. New
+  `Finding.stable_identity()` method and module-level
+  `stable_identity_for(rule_id, file_path, symbol, message)` helper
+  in `src/gruffpy/finding/fingerprint.py`. See ADR-020.
 
 ### Changed
 

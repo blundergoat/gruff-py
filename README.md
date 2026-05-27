@@ -18,7 +18,7 @@
 | Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `minimumSeverity:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
-Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. The Python schemas remain language-prefixed.
+Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. The Python schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/reporting.md`](docs/reporting.md#json) for the input set.
 
 ## Requirements
 
