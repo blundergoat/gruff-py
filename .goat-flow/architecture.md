@@ -26,7 +26,7 @@ There is no authentication layer, service account, or outbound network request. 
 
 Durable project configuration lives in `pyproject.toml`; package resolution is locked by `uv.lock`. Runtime analysis state is in memory: discovered `SourceFile` objects become `AnalysisUnit` objects, rules produce `Finding` objects, and `AnalysisReport.to_dict()` provides the JSON schema payload.
 
-The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing.
+The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing. `Finding.to_dict()` emits both `fingerprint` (line-precise identity used by baselines and SARIF) and `stableIdentity` (line-insensitive identity hashed from `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when `symbol` is `None`) — external diff tooling that wants "the same logical finding across line shifts" reads `stableIdentity`; baseline matching reads `fingerprint`. See ADR-020 for the input set and cross-port pairing.
 
 ## Rules And Scoring
 
@@ -41,6 +41,10 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 `JsonReporter` serializes `AnalysisReport.to_dict()` with four-space indentation, slashes not escaped, and non-ASCII escaped, matching the PHP reference's `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` behaviour for shared keys. `TextReporter`, `HtmlReporter`, `MarkdownReporter`, `GithubAnnotationsReporter`, `HotspotReporter`, and `SarifReporter` render the same `AnalysisReport` for human, CI, and code-scanning consumers.
 
 `FindingDisplayFilter` applies display-only filters after scoring and exit-code selection, recording the active filter set under `run.filters`. The `gruff-py.hotspot.v1` schema is declared in `src/gruffpy/analysis/schema.py` and emitted by `HotspotReporter`.
+
+`summary --group-by=rule` replaces the default `Top rules:` block with a count / rule-id / severity / confidence table sourced from `AnalysisReport.finding_counts_by_rule()`; the JSON output additively gains a `groupedRules` field while `topRules` stays unchanged for back-compat. When `analyse --format text` produces at least `outputVolumeHintThreshold` findings (default 50; set to 0 to disable), `TextReporter` appends a footer hint pointing at the grouped summary mode. The threshold lives on `AnalysisConfig.output_volume_hint_threshold` and is configurable via the top-level `outputVolumeHintThreshold:` key.
+
+`list-rules` accepts an optional positional `<rule_id>`. Without it, the command renders today's catalogue (table or JSON). With a known id, it renders an explain-mode detail view of one rule's header, rationale, fix guidance, examples, default options (with one-line `RuleDocs.option_descriptions` text), escape hatches, false-positive shapes (`RuleDocs.false_positive_shapes`), and related rules (`RELATED_RULES` map in `src/gruffpy/rule/catalog.py`). `--format table` coerces to text for the single-rule view since one record has no table. Unknown ids exit 1 with `difflib.get_close_matches` suggestions.
 
 ## Deployment / Operations
 

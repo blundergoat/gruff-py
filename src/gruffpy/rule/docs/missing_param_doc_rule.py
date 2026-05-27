@@ -145,7 +145,7 @@ def _missing_all_params_finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"Function {candidate.symbol!r} has no docstring entries for "
+            f"Function {candidate.symbol!r} needs docstring entries describing its "
             f"{len(candidate.missing)} parameter(s)."
         ),
         file_path=unit.file.display_path,
@@ -157,8 +157,9 @@ def _missing_all_params_finding(
         end_line=candidate.node.end_lineno,
         symbol=candidate.symbol,
         remediation=(
-            "Document the function parameters "
-            "(Google ``Args:``, NumPy ``Parameters``, or Sphinx ``:param:``)."
+            "Document each parameter's purpose "
+            "(Google ``Args:``, NumPy ``Parameters``, or Sphinx ``:param:``). "
+            "Name what the parameter is for, not just its type."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"parameters": candidate.missing, "style": candidate.style.value},
@@ -173,7 +174,9 @@ def _missing_one_param_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(f"Function {candidate.symbol!r} has no docstring entry for parameter {param!r}."),
+        message=(
+            f"Function {candidate.symbol!r} needs a docstring entry describing parameter {param!r}."
+        ),
         file_path=unit.file.display_path,
         line=candidate.node.lineno,
         severity=definition.default_severity,
@@ -183,8 +186,9 @@ def _missing_one_param_finding(
         end_line=candidate.node.end_lineno,
         symbol=candidate.symbol,
         remediation=(
-            f"Document {param!r} in the function's docstring "
-            f"(Google ``Args:``, NumPy ``Parameters``, or Sphinx ``:param:``)."
+            f"Document {param!r}'s purpose in the function's docstring "
+            f"(Google ``Args:``, NumPy ``Parameters``, or Sphinx ``:param:``). "
+            f"Name what it is for, not just its type."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"parameter": param, "style": candidate.style.value},

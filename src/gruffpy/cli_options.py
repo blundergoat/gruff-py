@@ -19,6 +19,24 @@ ClickDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]
 _command_root: click.Group | None = None
 
 
+def was_fail_on_set_on_cli() -> bool:
+    """Return True when the user explicitly passed ``--fail-on`` on the command line.
+
+    Distinguishes the user's deliberate choice from Click's default-value fill-in,
+    so the precedence rule (CLI flag > ``minimumSeverity.<cmd>`` > binary default)
+    only consults the configured override when no CLI value was supplied.
+
+    Returns:
+        True if the active Click context recorded the flag's value source as
+        ``COMMANDLINE``; False when the default was applied or no context exists.
+    """
+    ctx = click.get_current_context(silent=True)
+    if ctx is None:
+        return False
+    source = ctx.get_parameter_source("fail_on")
+    return source == click.core.ParameterSource.COMMANDLINE
+
+
 def bind_root_group(root: click.Group) -> None:
     """Register *root* as the parent Click group that ``@<command>_command`` decorators attach to.
 
@@ -484,9 +502,13 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--fail-on",
         "fail_on",
         type=click.Choice([f.value for f in FailThreshold]),
-        default="error",
+        default="advisory",
         show_default=True,
-        help="Finding severity that fails the run: advisory, warning, error, or none.",
+        help=(
+            "Finding severity that fails the run: advisory, warning, error, or none. "
+            "Overridden by minimumSeverity.analyse in .gruff-py.yaml when --fail-on "
+            "is not passed explicitly."
+        ),
     ),
     _option(
         "--format",
@@ -604,6 +626,7 @@ _LIST_RULES_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help="Output format: text, table, or json.",
     ),
+    _argument("rule_id", nargs=1, required=False, type=str),
     _command("list-rules"),
 )
 
@@ -708,6 +731,18 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=10,
         show_default=True,
         help="How many top rules and file offenders to list.",
+    ),
+    _option(
+        "--group-by",
+        "group_by",
+        type=click.Choice(["none", "rule"]),
+        default="none",
+        show_default=True,
+        help=(
+            "Group findings by an axis instead of the default digest. "
+            "'rule' replaces the top-rules block with a count / rule-id / "
+            "severity / confidence table."
+        ),
     ),
     _option(
         "--format",

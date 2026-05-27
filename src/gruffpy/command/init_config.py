@@ -1,13 +1,17 @@
 """Render the default ``.gruff-py.yaml`` from the built-in rule registry."""
 
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
+from gruffpy.config.analysis_config import (
+    MINIMUM_SEVERITY_BINARY_DEFAULTS,
+    AnalysisConfig,
+)
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
@@ -32,23 +36,31 @@ DEFAULT_INIT_IGNORED_PATH_PATTERNS = (
 )
 
 
-def render_default_config_yaml(existing_ignored_path_patterns: Iterable[str] = ()) -> str:
+def render_default_config_yaml(
+    existing_ignored_path_patterns: Iterable[str] = (),
+    existing_minimum_severity: Mapping[str, str] | None = None,
+) -> str:
     """Return the default config serialised as YAML text.
 
     Args:
         existing_ignored_path_patterns: Existing ``paths.ignore`` entries to preserve
             ahead of the starter init ignores.
+        existing_minimum_severity: Existing ``minimumSeverity:`` block to preserve
+            byte-for-byte (modulo YAML canonicalisation). When empty or omitted,
+            the renderer writes the canonical three-key binary-default block.
 
     Returns:
         YAML string equivalent to ``AnalysisConfig.from_registry(RuleRegistry.defaults())``,
         with starter ``paths.ignore`` entries, in the shape ``ConfigLoader`` accepts.
     """
-    config = AnalysisConfig.from_registry(RuleRegistry.defaults()).with_ignored_path_patterns(
+    registry = RuleRegistry.defaults()
+    config = AnalysisConfig.from_registry(registry).with_ignored_path_patterns(
         _merged_init_ignored_path_patterns(existing_ignored_path_patterns)
     )
-    document = _document_for(config)
-    body = yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
-    return _HEADER + body
+    scaffold = _scaffold_document(config, existing_minimum_severity or {})
+    scaffold_yaml = yaml.safe_dump(scaffold, sort_keys=False, default_flow_style=False)
+    rules_yaml = _render_rules_section(config, registry)
+    return _HEADER + scaffold_yaml + rules_yaml
 
 
 def existing_ignored_path_patterns(config_path: Path) -> tuple[str, ...]:
@@ -75,6 +87,42 @@ def existing_ignored_path_patterns(config_path: Path) -> tuple[str, ...]:
     return tuple(ignore)
 
 
+def existing_minimum_severity(config_path: Path) -> dict[str, str]:
+    """Return existing ``minimumSeverity:`` entries from a YAML config file.
+
+    Reads the block verbatim so ``gruff-py init --force`` preserves a
+    user-tuned override across regeneration. Key/value validation is
+    intentionally delegated to ``ConfigLoader``; this helper only
+    enforces the structural shape (mapping of string to string).
+
+    Args:
+        config_path: Existing ``.gruff-py.yaml`` path.
+
+    Returns:
+        Dict of existing per-command severities (e.g. ``{"analyse": "error"}``),
+        or an empty dict when the block is absent.
+
+    Raises:
+        ConfigError: When the file cannot be parsed or the block is not a
+            string-to-string mapping.
+    """
+    section = load_gruff_py_yaml(config_path)
+    block = section.get("minimumSeverity")
+    if block is None:
+        return {}
+    if not isinstance(block, dict):
+        raise ConfigError(
+            f"{config_path}: minimumSeverity must be a mapping to preserve a user-tuned block."
+        )
+    for key, value in block.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ConfigError(
+                f"{config_path}: minimumSeverity entries must be string-to-string "
+                f"(got {type(key).__name__}: {type(value).__name__})."
+            )
+    return dict(block)
+
+
 def _merged_init_ignored_path_patterns(
     existing_ignored_path_patterns: Iterable[str],
 ) -> tuple[str, ...]:
@@ -88,9 +136,14 @@ def _merged_init_ignored_path_patterns(
     return tuple(merged)
 
 
-def _document_for(config: AnalysisConfig) -> dict[str, Any]:
+def _scaffold_document(
+    config: AnalysisConfig,
+    existing_minimum_severity: Mapping[str, str],
+) -> dict[str, Any]:
     major, minor = config.minimum_python_version
     return {
+        "schemaVersion": CONFIG_SCHEMA_VERSION,
+        "minimumSeverity": _render_minimum_severity_block(existing_minimum_severity),
         "minimumPythonVersion": f"{major}.{minor}",
         "paths": {"ignore": list(config.ignored_path_patterns)},
         "allowlists": {
@@ -109,8 +162,47 @@ def _document_for(config: AnalysisConfig) -> dict[str, Any]:
             "excludePillars": list(config.rule_selection.exclude_pillars),
             "excludeRules": list(config.rule_selection.exclude_rules),
         },
-        "rules": {rule_id: _rule_entry(config.rules[rule_id]) for rule_id in sorted(config.rules)},
     }
+
+
+def _render_minimum_severity_block(
+    existing_minimum_severity: Mapping[str, str],
+) -> dict[str, str]:
+    """Return the ``minimumSeverity:`` mapping to emit in the rendered YAML.
+
+    Preserves a user-tuned block byte-for-byte (preserving key insertion order
+    where present); otherwise emits the canonical three-key binary-default
+    block in the documented order (analyse, report, dashboard).
+    """
+    if existing_minimum_severity:
+        return dict(existing_minimum_severity)
+    return {
+        command: MINIMUM_SEVERITY_BINARY_DEFAULTS[command].value
+        for command in ("analyse", "report", "dashboard")
+    }
+
+
+def _render_rules_section(config: AnalysisConfig, registry: RuleRegistry) -> str:
+    """Render the ``rules:`` section with one description comment per rule.
+
+    Each entry is built by ``yaml.safe_dump`` so the value formatting stays
+    in lockstep with the rest of the document; the comment line above the
+    rule key comes from the rule's registry description (falling back to its
+    display name when none is set).
+    """
+    descriptions = {
+        rule.definition().id: rule.definition().get_description() for rule in registry.all()
+    }
+    lines = ["rules:"]
+    for rule_id in sorted(config.rules):
+        lines.append(f"  # {descriptions.get(rule_id, rule_id)}")
+        entry = _rule_entry(config.rules[rule_id])
+        entry_yaml = yaml.safe_dump(
+            {rule_id: entry}, sort_keys=False, default_flow_style=False, indent=2
+        )
+        for line in entry_yaml.rstrip("\n").split("\n"):
+            lines.append("  " + line)
+    return "\n".join(lines) + "\n"
 
 
 def existing_config_source(project_root: Path) -> Path | None:

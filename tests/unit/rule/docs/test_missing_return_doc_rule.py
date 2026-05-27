@@ -19,6 +19,8 @@ def test_non_none_return_without_section_emits():
     findings = MissingReturnDocRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "f"
+    assert "needs a Returns section" in findings[0].message
+    assert "but no Returns section" not in findings[0].message
 
 
 def test_none_return_skipped():

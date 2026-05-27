@@ -32,6 +32,19 @@ uv run gruff-py analyse src tests --fail-on warning
 
 Use `--fail-on none` when the job should only publish reports.
 
+Per-project defaults can be set in `.gruff-py.yaml` or `pyproject.toml` so
+every CI job inherits the same gate without repeating the flag:
+
+```yaml
+schemaVersion: gruff-py.config.v0.1
+minimumSeverity:
+  analyse: warning
+  report: none
+```
+
+The CLI flag still wins when both are set — useful for one-off overrides
+without editing the committed config. See [Configuration → Severity Gate](configuration.md#severity-gate).
+
 ## Baselines
 
 Generate an adoption baseline after reviewing current findings:

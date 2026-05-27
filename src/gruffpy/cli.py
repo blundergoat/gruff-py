@@ -2,10 +2,8 @@
 
 import json
 import os
-import shlex
 import sys
 import time
-from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +14,10 @@ from click.shell_completion import get_completion_class
 
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
+from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
+from gruffpy.cli_list_rules import list_rules_detail
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
 from gruffpy.cli_options import (
     ClickDecorator,
@@ -32,12 +33,15 @@ from gruffpy.cli_options import (
     metric_calibration_command as _metric_calibration_command,
     report_command as _report_command,
     summary_command as _summary_command,
+    was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
-from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.cli_summary import summary_payload, summary_text
+from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
     existing_ignored_path_patterns,
+    existing_minimum_severity,
     render_default_config_yaml,
 )
 from gruffpy.command.metric_calibration import (
@@ -88,6 +92,8 @@ class _AnalysisCliRequest:
     should_skip_config: bool
     output: OutputFormat
     fail_on: FailThreshold
+    was_fail_on_set_on_cli: bool
+    command_name: str
     report_editor_link: str
     should_render_interactive: bool
     should_include_ignored: bool
@@ -99,21 +105,6 @@ class _AnalysisCliRequest:
     baseline_path: Path | None
     generate_baseline_path: Path | None
     should_skip_baseline: bool
-
-
-@dataclass(frozen=True, slots=True)
-class _DashboardCliRequest:
-    """Bundle of validated ``dashboard`` CLI flags before the server is started."""
-
-    paths: tuple[str, ...]
-    project_root: Path | None
-    host: str
-    port: int
-    fail_on: str
-    config_path: Path | None
-    should_skip_config: bool
-    should_include_ignored: bool
-    should_render_interactive: bool
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -211,7 +202,7 @@ def analyse(**kwargs: Any) -> None:
     Args:
         kwargs: Click-supplied arguments and options.
     """
-    request = _analysis_request(kwargs, output_key="output_format")
+    request = _analysis_request(kwargs, output_key="output_format", command_name="analyse")
     _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     report = _run_analysis_for_cli(request)
     _write_stdout(
@@ -265,15 +256,7 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
     if request.port < 0 or request.port > 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
 
-    initial_state = DashboardState(
-        project=str(project),
-        paths=" ".join(shlex.quote(path) for path in (request.paths or (".",))),
-        fail_on=request.fail_on,
-        config=str(request.config_path) if request.config_path is not None else "",
-        no_config=request.should_skip_config,
-        include_ignored=request.should_include_ignored,
-        report_interactive=request.should_render_interactive,
-    )
+    initial_state = build_initial_dashboard_state(request, project)
     return create_dashboard_server(
         host=request.host,
         port=request.port,
@@ -310,26 +293,43 @@ def init(force: bool) -> None:
         )
     try:
         ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
+        preserved_minimum_severity = existing_minimum_severity(target) if target.exists() else {}
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    _write_config_file(target, render_default_config_yaml(ignored_path_patterns))
+    _write_config_file(
+        target,
+        render_default_config_yaml(
+            ignored_path_patterns,
+            existing_minimum_severity=preserved_minimum_severity,
+        ),
+    )
     _write_stdout(_init_success_message(target))
 
 
 @_list_rules_command
-def list_rules(rule_format: str) -> None:
-    """List gruff rule metadata.
+def list_rules(rule_format: str, rule_id: str | None) -> None:
+    """List gruff rule metadata, or explain one rule when ``rule_id`` is given.
 
     Args:
         rule_format: Output format - ``json`` for structured output, or ``table``
-            / ``text`` for the human-readable table.
+            / ``text`` for the human-readable table. Ignored for single-rule mode
+            where ``table`` coerces to ``text`` since one record has no table.
+        rule_id: Optional rule id to render the detail/explain view for.
     """
-    definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
+    registry = RuleRegistry.defaults()
+    if rule_id is not None:
+        _list_rules_detail(registry, rule_id, rule_format)
+        return
+    definitions = [rule.definition() for rule in registry.all()]
     if rule_format == "json":
         _write_stdout(json.dumps({"rules": [_rule_payload(d) for d in definitions]}, indent=4))
         _write_stdout("\n")
         return
     _write_stdout(_format_rule_table(definitions))
+
+
+def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -> None:
+    list_rules_detail(registry, rule_id, rule_format, _write_stdout)
 
 
 @_report_command
@@ -339,7 +339,7 @@ def report(**kwargs: Any) -> None:
     Args:
         kwargs: Click-supplied arguments and options.
     """
-    request = _analysis_request(kwargs, output_key="report_format")
+    request = _analysis_request(kwargs, output_key="report_format", command_name="report")
     output_path = cast(Path | None, kwargs["output_path"])
     _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     analysis_report = _run_analysis_for_cli(request)
@@ -369,6 +369,7 @@ def summary(**kwargs: Any) -> None:
     """
     top = cast(int, kwargs["top"])
     summary_format = cast(str, kwargs["summary_format"])
+    group_by = cast(str, kwargs["group_by"])
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
     request = _summary_analysis_request(kwargs, summary_format=summary_format)
@@ -377,10 +378,15 @@ def summary(**kwargs: Any) -> None:
     analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
-        _write_stdout(json.dumps(_summary_payload(analysis_report, top, elapsed_seconds), indent=4))
+        _write_stdout(
+            json.dumps(
+                summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
+                indent=4,
+            )
+        )
         _write_stdout("\n")
     else:
-        _write_stdout(_summary_text(analysis_report, top, elapsed_seconds))
+        _write_stdout(summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
     sys.exit(analysis_report.exit_code)
 
 
@@ -482,13 +488,20 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
         _write_stdout("\n")
 
 
-def _analysis_request(kwargs: Mapping[str, Any], *, output_key: str) -> _AnalysisCliRequest:
+def _analysis_request(
+    kwargs: Mapping[str, Any],
+    *,
+    output_key: str,
+    command_name: str,
+) -> _AnalysisCliRequest:
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         config_path=cast(Path | None, kwargs["config_path"]),
         should_skip_config=cast(bool, kwargs["no_config"]),
         output=OutputFormat(cast(str, kwargs[output_key])),
         fail_on=FailThreshold(cast(str, kwargs["fail_on"])),
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli(),
+        command_name=command_name,
         report_editor_link=cast(str, kwargs["report_editor_link"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -523,6 +536,8 @@ def _summary_analysis_request(
         should_skip_config=cast(bool, kwargs["no_config"]),
         output=OutputFormat.JSON if summary_format == "json" else OutputFormat.TEXT,
         fail_on=FailThreshold.NONE,
+        was_fail_on_set_on_cli=True,
+        command_name="summary",
         report_editor_link="none",
         should_render_interactive=False,
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -544,6 +559,7 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
         host=cast(str, kwargs["host"]),
         port=cast(int, kwargs["port"]),
         fail_on=cast(str, kwargs["fail_on"]),
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli(),
         config_path=cast(Path | None, kwargs["config_path"]),
         should_skip_config=cast(bool, kwargs["no_config"]),
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
@@ -609,20 +625,53 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_rules=_split_repeated_csv(request.include_rule),
         exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
-    return run_analysis(
-        paths=request.paths,
-        config_path=request.config_path,
-        no_config=request.should_skip_config,
-        output=request.output,
-        fail_threshold=request.fail_on,
-        include_ignored=request.should_include_ignored,
-        project_root=Path.cwd(),
-        display_filter=display_filter,
-        baseline=BaselineOptions(
-            apply_path=request.baseline_path,
-            generate_path=request.generate_baseline_path,
-            disabled=request.should_skip_baseline,
-        ),
+    try:
+        return run_analysis(
+            paths=request.paths,
+            config_path=request.config_path,
+            no_config=request.should_skip_config,
+            output=request.output,
+            fail_threshold=request.fail_on,
+            config_severity_command=(
+                "" if request.was_fail_on_set_on_cli else request.command_name
+            ),
+            include_ignored=request.should_include_ignored,
+            project_root=Path.cwd(),
+            display_filter=display_filter,
+            baseline=BaselineOptions(
+                apply_path=request.baseline_path,
+                generate_path=request.generate_baseline_path,
+                disabled=request.should_skip_baseline,
+            ),
+        )
+    except ConfigError as exc:
+        if request.output is OutputFormat.JSON:
+            return _config_error_report(request, exc)
+        raise click.ClickException(str(exc)) from exc
+
+
+def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
+    """Build a synthetic ``gruff-py.analysis.v1`` report for a config-load failure.
+
+    Reserved for ``--format json`` callers: machine-readable consumers need a
+    parseable failure payload (``diagnostics: [{"type": "config-error", ...}]``,
+    ``exitCode: 2``) instead of stderr prose. Human-targeted formats keep the
+    stderr + exit 1 path via ``click.ClickException``.
+    """
+    config_path_str = str(request.config_path) if request.config_path is not None else None
+    return AnalysisReport(
+        tool_version=VERSION,
+        requested_paths=request.paths,
+        format=request.output.value,
+        fail_on=request.fail_on.value,
+        files_discovered=0,
+        files_parsed=0,
+        ignored_paths=(),
+        missing_paths=(),
+        diagnostics=(RunDiagnostic(type="config-error", message=str(exc), path=config_path_str),),
+        findings=(),
+        exit_code=2,
+        config_path=config_path_str,
     )
 
 
@@ -651,83 +700,6 @@ def _render_report(
             return TextReporter().render(report)
 
 
-def _summary_payload(report: AnalysisReport, top: int, elapsed_seconds: float) -> dict[str, Any]:
-    pillar_counts = Counter(finding.pillar.value for finding in report.findings)
-    rule_counts = Counter(finding.rule_id for finding in report.findings)
-    file_counts = Counter(finding.file_path for finding in report.findings)
-    return {
-        "summary": {
-            "paths": list(report.requested_paths),
-            "filesDiscovered": report.files_discovered,
-            "filesParsed": report.files_parsed,
-            "ignored": len(report.ignored_paths),
-            "missing": len(report.missing_paths),
-            "parseErrors": report.parse_error_count(),
-            "findings": len(report.findings),
-            "exitCode": report.exit_code,
-            "elapsedSeconds": round(elapsed_seconds, 3),
-        },
-        "pillars": dict(sorted(pillar_counts.items())),
-        "topRules": _counter_rows(rule_counts, top),
-        "topFiles": _counter_rows(file_counts, top),
-    }
-
-
-def _summary_text(report: AnalysisReport, top: int, elapsed_seconds: float) -> str:
-    payload = _summary_payload(report, top, elapsed_seconds)
-    summary = payload["summary"]
-    paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
-    lines = [
-        f"gruff {report.tool_version} summary",
-        f"Path: {paths_display}",
-        (
-            f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
-            f"{summary['ignored']} ignored, {summary['missing']} missing, "
-            f"{summary['parseErrors']} parse errors"
-        ),
-        f"Findings: {summary['findings']}",
-        f"Elapsed: {summary['elapsedSeconds']:.3f}s",
-        "",
-        "Per pillar:",
-    ]
-    pillars = cast(dict[str, int], payload["pillars"])
-    if pillars:
-        lines.extend(f"  {name}: {count}" for name, count in pillars.items())
-    else:
-        lines.append("  none")
-    lines.extend(["", "Top rules:"])
-    lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
-    lines.extend(["", "Top files:"])
-    lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
-    _append_summary_hints(lines, summary)
-    return "\n".join(lines) + "\n"
-
-
-def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
-    hints: list[str] = []
-    if summary["ignored"]:
-        hints.append(
-            "Ignored paths: add --include-ignored to include built-in and .gitignore "
-            "exclusions; configured paths.ignore still applies."
-        )
-    if summary["findings"]:
-        hints.append(
-            "Baseline: after review, run "
-            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
-            "to accept current findings as known debt."
-        )
-    if not hints:
-        return
-    lines.extend(["", "Next steps:"])
-    lines.extend(f"  {hint}" for hint in hints)
-
-
-def _generate_baseline_command(paths: list[str]) -> str:
-    command_paths = paths or ["."]
-    joined_paths = " ".join(shlex.quote(path) for path in command_paths)
-    return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
-
-
 def _init_success_message(config_path: Path) -> str:
     return (
         f"Wrote {config_path}\n\n"
@@ -736,16 +708,6 @@ def _init_success_message(config_path: Path) -> str:
         "Future analyse/report runs auto-apply gruff-baseline.json; "
         f"use `{TOOL_NAME} analyse . --no-baseline` to audit without it.\n"
     )
-
-
-def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:
-    return [{"name": name, "count": count} for name, count in counter.most_common(top)]
-
-
-def _format_count_rows(rows: list[dict[str, Any]]) -> list[str]:
-    if not rows:
-        return ["  none"]
-    return [f"  {row['name']}: {row['count']}" for row in rows]
 
 
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:

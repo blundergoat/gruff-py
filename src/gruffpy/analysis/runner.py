@@ -13,7 +13,6 @@ from gruffpy.analysis.baseline import (
 from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
@@ -44,25 +43,26 @@ def run_analysis(
     project_root: Path,
     display_filter: FindingDisplayFilter,
     baseline: BaselineOptions | None = None,
+    config_severity_command: str = "",
 ) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
-
-    Pipeline order: load config, discover and parse sources, parse inline
-    suppressions, run every enabled rule, synthesise composite findings,
-    apply suppressions again (in case composites are suppressed), filter
-    sensitive-data allowed previews, compute scores, derive the exit code,
-    and apply the display filter.
 
     Args:
         paths: CLI-supplied paths; empty tuple is reported as ``(".",)``.
         config_path: Explicit YAML/TOML config path, or ``None`` to use auto-discovery.
         no_config: When true, skip auto-loading the default config file.
         output: Requested output format (recorded on the report).
-        fail_threshold: Severity that determines the non-zero exit code.
+        fail_threshold: Severity that determines the non-zero exit code; used as
+            the fallback when ``config_severity_command`` is empty or the loaded
+            config has no per-command override for it.
         include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
         project_root: Resolved project root used for path display and discovery.
         display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
         baseline: Baseline apply/generate/disable selection.
+        config_severity_command: When non-empty, look up
+            ``config.minimum_severity[<this>]`` after loading the config and use
+            that value instead of *fail_threshold*. Callers set this only when
+            the CLI flag was not passed explicitly.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
@@ -75,6 +75,10 @@ def run_analysis(
         no_config=no_config,
         registry=registry,
     )
+    if config_severity_command:
+        configured = config.minimum_severity.get(config_severity_command)
+        if configured is not None:
+            fail_threshold = configured
 
     discovery_result, units, files_parsed, parse_diagnostics = _discover_and_parse_sources(
         project_root=project_root,
@@ -123,6 +127,7 @@ def run_analysis(
         score=score,
         filters=display_filter,
         extensions=ReportExtensions(baseline=baseline_report),
+        output_volume_hint_threshold=config.output_volume_hint_threshold,
     )
 
 
@@ -292,10 +297,7 @@ def _load_analysis_config(
         return config, None, []
 
     loader = ConfigLoader(project_root, config)
-    try:
-        loaded_config, source = loader.load(config_path)
-    except ConfigError as exc:
-        return config, None, [RunDiagnostic(type="config-error", message=str(exc))]
+    loaded_config, source = loader.load(config_path)
 
     return loaded_config, str(source) if source is not None else None, []
 

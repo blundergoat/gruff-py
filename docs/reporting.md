@@ -42,6 +42,13 @@ gruff-py summary src/ --format json --top 5
 The digest includes file counts, per-pillar counts, top rules, and top file
 offenders.
 
+## Severity Gate
+
+`analyse` and `report` consult the `minimumSeverity:` config block for the
+`--fail-on` default when the CLI flag is not passed explicitly. See
+[Configuration → Severity Gate](configuration.md#severity-gate) for the
+precedence rule and accepted values.
+
 ## JSON
 
 JSON reports use schema string `gruff-py.analysis.v1`.
@@ -61,6 +68,19 @@ The top-level shape includes:
 The output is stable enough for automation, but the project is still pre-1.0.
 The strongest compatibility promises are schema strings and finding
 fingerprints.
+
+Every finding payload exposes two identity fields:
+
+- `fingerprint` — line-precise 16-char SHA-256 prefix derived from
+  `[ruleId, file, line, endLine, column, symbol]`. Use this for baseline
+  matching (`BaselineFilter` and `gruff-baseline.json` consume it) and for
+  SARIF `partialFingerprints.gruffFingerprint`.
+- `stableIdentity` — line-insensitive 16-char SHA-256 prefix derived from
+  `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when
+  `symbol` is `null`. Use this for external diff tooling that wants to match
+  "the same logical finding across line shifts" without re-baselining a moved
+  violation. Both digests use the same PHP-compatible canonical-JSON encoding
+  so cross-port consumers see identical values for identical inputs.
 
 ## HTML
 

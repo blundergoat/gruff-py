@@ -16,7 +16,7 @@ def _defaults() -> AnalysisConfig:
 
 def _yaml(tmp_path: Path, body: str) -> Path:
     path = tmp_path / ".gruff-py.yaml"
-    path.write_text(body)
+    path.write_text("schemaVersion: gruff-py.config.v0.1\n" + body)
     return path
 
 

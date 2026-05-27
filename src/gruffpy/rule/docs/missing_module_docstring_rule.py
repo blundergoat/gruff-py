@@ -64,7 +64,7 @@ class MissingModuleDocstringRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message="Module has no top-of-file docstring.",
+                message="Module needs a top-of-file docstring describing its purpose.",
                 file_path=unit.file.display_path,
                 line=1,
                 severity=definition.default_severity,
@@ -72,7 +72,8 @@ class MissingModuleDocstringRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 remediation=(
-                    "Add a one-paragraph docstring at the top of the module describing its purpose."
+                    "Name what this module owns and what callers can rely on, "
+                    "in one short paragraph at the top of the file."
                 ),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={},

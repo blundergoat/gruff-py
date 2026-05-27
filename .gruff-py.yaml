@@ -8,6 +8,7 @@
 # selection.rules plus rules.* name every built-in rule. Rule entries repeat
 # built-in defaults so adding/removing a built-in rule is visible in this file.
 
+schemaVersion: gruff-py.config.v0.1
 minimumPythonVersion: '3.11'
 paths:
   ignore:
@@ -95,7 +96,6 @@ selection:
   - naming.hungarian-notation
   - naming.identifier-quality
   - naming.module-name-mismatch
-  - naming.parameter-type-name
   - naming.short-variable
   - naming.test-naming-consistency
   - security.cors-wildcard-with-credentials
@@ -328,29 +328,6 @@ rules:
       - _halstead
       - _secret_scanner_helper
       - _comment_scanner
-  naming.parameter-type-name:
-    enabled: true
-    options:
-      ignoredParameterNames:
-      - id
-      - ctx
-      - url
-      - ip
-      - io
-      - ui
-      - fn
-      - uri
-      - db
-      - ok
-      - api
-      - css
-      - html
-      - json
-      - yaml
-      - xml
-      - sql
-      - pk
-      - fk
   naming.short-variable:
     enabled: true
     options:

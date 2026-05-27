@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gruffpy.finding.confidence import Confidence
-from gruffpy.finding.fingerprint import fingerprint_for
+from gruffpy.finding.fingerprint import fingerprint_for, stable_identity_for
 from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
@@ -69,6 +69,25 @@ class Finding:
             symbol=self.symbol,
         )
 
+    def stable_identity(self) -> str:
+        """Compute the line-insensitive 16-char identity for external diff tooling.
+
+        Pairs with :meth:`fingerprint` per ADR-020: ``fingerprint`` stays the
+        line-precise identity used by baselines and SARIF; ``stable_identity``
+        is line-insensitive so consumers can match "the same logical finding"
+        across unrelated line shifts. Uses ``[ruleId, file, symbol]`` when
+        ``symbol`` is set, ``[ruleId, file, message]`` otherwise.
+
+        Returns:
+            str: Lowercase hex string, 16 characters of a SHA-256 prefix.
+        """
+        return stable_identity_for(
+            rule_id=self.rule_id,
+            file_path=self.file_path,
+            symbol=self.symbol,
+            message=self.message,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Serialise the finding to its ``gruff-py.analysis.v1`` JSON shape.
 
@@ -94,5 +113,6 @@ class Finding:
             "confidence": self.confidence.value,
             "remediation": self.remediation,
             "fingerprint": self.fingerprint(),
+            "stableIdentity": self.stable_identity(),
             "metadata": dict(self.metadata),
         }

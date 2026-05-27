@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 116 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 115 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -14,7 +14,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
-| `naming` | 10 | Intent-layer names; PEP 8 case style stays with ruff |
+| `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 26 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
@@ -68,7 +68,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `naming.hungarian-notation`
 - `naming.identifier-quality`
 - `naming.module-name-mismatch`
-- `naming.parameter-type-name`
 - `naming.short-variable`
 - `naming.test-naming-consistency`
 
@@ -625,21 +624,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Options: `conventionalModuleNames` = `['constants', 'exceptions', 'helpers', 'protocols', 'types']`
 - Bad example: Code that triggers `naming.module-name-mismatch` leaves module name mismatch unaddressed.
 - Good example: Code that satisfies `naming.module-name-mismatch` makes module name mismatch explicit or simpler.
-
-### `naming.parameter-type-name`
-
-- Name: Parameter type name
-- Pillar: `naming`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `naming.parameter-type-name` protects the naming pillar by flagging parameter type name before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported parameter type name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `ignoredParameterNames` = `['id', 'ctx', 'url', 'ip', 'io', 'ui', 'fn', 'uri', 'db', 'ok', 'api', 'css', 'html', 'json', 'yaml', 'xml', 'sql', 'pk', 'fk']`
-- Bad example: Code that triggers `naming.parameter-type-name` leaves parameter type name unaddressed.
-- Good example: Code that satisfies `naming.parameter-type-name` makes parameter type name explicit or simpler.
 
 ### `naming.short-variable`
 

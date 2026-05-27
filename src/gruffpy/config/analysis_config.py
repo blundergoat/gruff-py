@@ -6,9 +6,21 @@ from typing import TYPE_CHECKING
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.fail_threshold import FailThreshold
 
 if TYPE_CHECKING:
     from gruffpy.rule.registry import RuleRegistry
+
+MINIMUM_SEVERITY_BINARY_DEFAULTS: dict[str, FailThreshold] = {
+    "analyse": FailThreshold.ADVISORY,
+    "report": FailThreshold.NONE,
+    "dashboard": FailThreshold.NONE,
+}
+"""Binary defaults for the per-command ``--fail-on`` threshold (ADR-019).
+
+These are the values ``gruff-py init`` writes into the ``minimumSeverity:`` block
+and the values the CLI consumers fall back to when neither a ``--fail-on`` flag
+nor a configured override is set."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,20 +34,49 @@ class AnalysisConfig:
     Attributes:
         rules: Per-rule settings keyed by rule id.
         minimum_python_version: Minimum Python version assumed by modernisation rules.
+        minimum_severity: Per-command ``--fail-on`` defaults sourced from the
+            ``minimumSeverity:`` config block. Keys are gateable subcommand names
+            (``analyse``, ``report``, ``dashboard``); the validator rejects any
+            other key.
         rule_selection: Include and exclude selectors applied before analysis.
         ignored_path_patterns: Configured path globs excluded during discovery.
         accepted_abbreviations: Project-approved abbreviations for naming rules.
         allowed_secret_previews: Redacted secret previews allowed by config.
         dead_code_allowlist: Symbols, decorators, and paths allowed for dead-code rules.
+        output_volume_hint_threshold: Finding count at which ``analyse --format text``
+            appends a hint pointing at ``summary --group-by=rule``. ``0`` disables the
+            hint entirely.
     """
 
     rules: dict[str, RuleSettings] = field(default_factory=dict)
     minimum_python_version: tuple[int, int] = (3, 11)
+    minimum_severity: dict[str, FailThreshold] = field(default_factory=dict)
     rule_selection: RuleSelection = field(default_factory=RuleSelection)
     ignored_path_patterns: tuple[str, ...] = ()
-    accepted_abbreviations: tuple[str, ...] = ()
+    # Seed value matches the gruff-rs/gruff-ts runtime defaults and the
+    # gruff-py init template; project-specific vocabulary should be appended
+    # in the user's config rather than added here.
+    accepted_abbreviations: tuple[str, ...] = (
+        "age",
+        "app",
+        "db",
+        "fs",
+        "id",
+        "io",
+        "key",
+        "log",
+        "max",
+        "min",
+        "now",
+        "raw",
+        "rx",
+        "tx",
+        "ui",
+        "url",
+    )
     allowed_secret_previews: tuple[str, ...] = ()
     dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
+    output_volume_hint_threshold: int = 50
 
     def __post_init__(self) -> None:
         if self.minimum_python_version < (3, 11):
@@ -119,6 +160,23 @@ class AnalysisConfig:
         """
         return replace(self, minimum_python_version=version)
 
+    def with_minimum_severity(self, minimum_severity: dict[str, FailThreshold]) -> "AnalysisConfig":
+        """Return a new config whose per-command ``--fail-on`` defaults are *minimum_severity*.
+
+        Consumed by the analyse / report / dashboard CLI consumers as the
+        middle tier of the precedence rule (CLI flag wins, then this map,
+        then the binary default).
+
+        Args:
+            minimum_severity: Mapping from gateable subcommand name to
+                ``FailThreshold``. Empty mapping means "no per-command
+                override; fall through to the binary default."
+
+        Returns:
+            New ``AnalysisConfig`` with the per-command defaults updated.
+        """
+        return replace(self, minimum_severity=dict(minimum_severity))
+
     def with_rule_selection(self, selection: RuleSelection) -> "AnalysisConfig":
         """Return a new config with the rule include/exclude selection swapped.
 
@@ -144,8 +202,8 @@ class AnalysisConfig:
     def with_accepted_abbreviations(self, abbrevs: tuple[str, ...]) -> "AnalysisConfig":
         """Return a new config whose naming-rule allowlist is *abbrevs*.
 
-        Consumed by ``naming.abbreviation`` and ``naming.parameter-type-name``
-        to exempt project-standard short forms (``ctx``, ``msg``, ``cfg``).
+        Consumed by ``naming.abbreviation`` to exempt project-standard short
+        forms (``ctx``, ``msg``, ``cfg``).
 
         Args:
             abbrevs: Allowed-abbreviation tokens, lowercase.
@@ -168,6 +226,18 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the allowlist updated.
         """
         return replace(self, allowed_secret_previews=previews)
+
+    def with_output_volume_hint_threshold(self, threshold: int) -> "AnalysisConfig":
+        """Return a new config whose ``analyse --format text`` hint threshold is *threshold*.
+
+        Args:
+            threshold: Finding count at which ``analyse --format text`` appends
+                the ``summary --group-by=rule`` hint; set to ``0`` to disable.
+
+        Returns:
+            New ``AnalysisConfig`` with the threshold updated.
+        """
+        return replace(self, output_volume_hint_threshold=threshold)
 
     def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":
         """Return a new config whose dead-code allowlist is *allowlist*.

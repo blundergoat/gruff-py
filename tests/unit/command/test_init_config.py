@@ -9,9 +9,13 @@ from gruffpy.command.init_config import (
     DEFAULT_INIT_IGNORED_PATH_PATTERNS,
     existing_config_source,
     existing_ignored_path_patterns,
+    existing_minimum_severity,
     render_default_config_yaml,
 )
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.analysis_config import (
+    MINIMUM_SEVERITY_BINARY_DEFAULTS,
+    AnalysisConfig,
+)
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.rule.registry import RuleRegistry
@@ -26,8 +30,10 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
     target = tmp_path / ".gruff-py.yaml"
     target.write_text(render_default_config_yaml())
 
-    defaults = AnalysisConfig.from_registry(RuleRegistry.defaults()).with_ignored_path_patterns(
-        DEFAULT_INIT_IGNORED_PATH_PATTERNS
+    defaults = (
+        AnalysisConfig.from_registry(RuleRegistry.defaults())
+        .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
+        .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
     )
     loader = ConfigLoader(tmp_path, defaults)
     loaded, source = loader.load()
@@ -138,3 +144,60 @@ def test_existing_ignored_path_patterns_rejects_malformed_ignore_list(tmp_path: 
 
     with pytest.raises(ConfigError, match="paths.ignore must be a list of strings"):
         existing_ignored_path_patterns(target)
+
+
+def test_existing_minimum_severity_returns_empty_when_block_absent(tmp_path: Path) -> None:
+    target = tmp_path / ".gruff-py.yaml"
+    target.write_text("schemaVersion: gruff-py.config.v0.1\nminimumPythonVersion: '3.11'\n")
+    assert existing_minimum_severity(target) == {}
+
+
+def test_existing_minimum_severity_returns_user_tuned_block(tmp_path: Path) -> None:
+    target = tmp_path / ".gruff-py.yaml"
+    target.write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "minimumSeverity:\n"
+        "  analyse: error\n"
+        "  report: warning\n"
+    )
+    assert existing_minimum_severity(target) == {"analyse": "error", "report": "warning"}
+
+
+def test_existing_minimum_severity_rejects_malformed_block(tmp_path: Path) -> None:
+    target = tmp_path / ".gruff-py.yaml"
+    target.write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity: 'not-a-mapping'\n")
+
+    with pytest.raises(ConfigError, match="minimumSeverity must be a mapping"):
+        existing_minimum_severity(target)
+
+
+def test_init_force_preserves_user_tuned_minimum_severity_block_round_trip(
+    tmp_path: Path,
+) -> None:
+    user_edited = tmp_path / ".gruff-py.yaml"
+    user_edited.write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "minimumSeverity:\n  analyse: error\n"
+        "minimumPythonVersion: '3.11'\n"
+    )
+
+    preserved = existing_minimum_severity(user_edited)
+    regenerated = render_default_config_yaml(
+        existing_ignored_path_patterns=(),
+        existing_minimum_severity=preserved,
+    )
+
+    document = yaml.safe_load(regenerated)
+    # User's analyse value survives; report and dashboard are NOT auto-filled
+    # (byte-for-byte preservation per ADR-019, not merged with binary defaults).
+    assert document["minimumSeverity"] == {"analyse": "error"}
+
+
+def test_init_default_render_emits_canonical_three_key_block_when_no_user_input() -> None:
+    """Without a prior config, the renderer writes all three binary defaults."""
+    document = yaml.safe_load(render_default_config_yaml())
+    assert document["minimumSeverity"] == {
+        "analyse": "advisory",
+        "report": "none",
+        "dashboard": "none",
+    }

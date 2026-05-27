@@ -5,7 +5,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
 
+import pytest
+
+from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
 from gruffpy.command.dashboard_server import DashboardState, create_dashboard_server
+from gruffpy.config.exceptions import ConfigError
 
 _EXPECTED_SHELL_SUBSTRINGS = (
     "gruff-py dashboard",
@@ -52,6 +56,125 @@ def test_dashboard_scan_returns_error_html_for_invalid_project(tmp_path: Path):
 
     assert "Project root is not an existing directory." in body
     assert "/no/such/project" in body
+
+
+def _dashboard_request(
+    *,
+    project_root: Path,
+    fail_on: str = "none",
+    was_fail_on_set_on_cli: bool = False,
+    config_path: Path | None = None,
+    should_skip_config: bool = False,
+) -> _DashboardCliRequest:
+    return _DashboardCliRequest(
+        paths=(".",),
+        project_root=project_root,
+        host="127.0.0.1",
+        port=0,
+        fail_on=fail_on,
+        was_fail_on_set_on_cli=was_fail_on_set_on_cli,
+        config_path=config_path,
+        should_skip_config=should_skip_config,
+        should_include_ignored=False,
+        should_render_interactive=False,
+    )
+
+
+def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "error"
+
+
+def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_key(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "none"
+
+
+def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(
+        project_root=tmp_path,
+        fail_on="warning",
+        was_fail_on_set_on_cli=True,
+    )
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "warning"
+
+
+def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    request = _dashboard_request(project_root=tmp_path, should_skip_config=True)
+
+    state = build_initial_dashboard_state(request, tmp_path)
+
+    assert state.fail_on == "none"
+
+
+def test_dashboard_initial_state_surfaces_config_errors_at_startup(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  dashboard: error\n")
+    request = _dashboard_request(project_root=tmp_path)
+
+    with pytest.raises(ConfigError, match="schemaVersion"):
+        build_initial_dashboard_state(request, tmp_path)
+
+
+def test_dashboard_initial_state_resolves_relative_config_under_project_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A relative ``--config`` must resolve under the dashboard project root.
+
+    Regression for the divergence where the initial form seed read the file at
+    CWD/.gruff-py.yaml while ``/scan`` read project_root/.gruff-py.yaml — the
+    two paths could resolve to different files when ``--project`` is set and
+    CWD differs.
+
+    Args:
+        tmp_path: pytest's per-test temp directory (anchors the synthetic
+            project + sibling CWD).
+        monkeypatch: pytest's monkeypatch fixture (used to chdir into a
+            sibling of the project root so a relative ``--config`` can drift).
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "custom.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    request = _dashboard_request(project_root=project, config_path=Path("custom.yaml"))
+
+    state = build_initial_dashboard_state(request, project)
+
+    assert state.fail_on == "error"
 
 
 @contextmanager

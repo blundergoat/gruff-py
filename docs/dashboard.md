@@ -46,6 +46,21 @@ gruff-py dashboard [PATHS]...
 | `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--report-interactive` | Enable HTML finding filters |
 
+## Default Severity Gate
+
+The form's initial **fail threshold** dropdown can be seeded from the loaded
+config so every dashboard launch starts at the project's preferred default:
+
+```yaml
+schemaVersion: gruff-py.config.v0.1
+minimumSeverity:
+  dashboard: warning
+```
+
+The CLI `--fail-on` flag overrides the config value when set; the user can
+still change the threshold per-scan in the dropdown. See
+[Configuration → Severity Gate](configuration.md#severity-gate).
+
 ## HTTP Routes
 
 | Route | Meaning |

@@ -103,6 +103,69 @@ def test_markdown_reporter_groups_findings_and_escapes_table_pipes():
     assert "Do not render \\| as a table break" in markdown
 
 
+def test_markdown_reporter_pillars_table_is_canonical_with_seven_columns():
+    findings = (
+        _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
+        _finding(
+            rule_id="docs.missing-readme",
+            severity=Severity.ADVISORY,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+        _finding(
+            rule_id="docs.missing-docstring",
+            severity=Severity.WARNING,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+    )
+
+    markdown = MarkdownReporter().render(_report(findings))
+
+    assert "## Pillars" in markdown
+    assert "| Pillar | Grade | Score | Findings | Advisory | Warning | Error |" in markdown
+    assert "| --- | --- | ---: | ---: | ---: | ---: | ---: |" in markdown
+    # Sort: findings DESC then pillar ASC, so documentation (2 findings) precedes
+    # security (1 finding).
+    documentation_index = markdown.index("| documentation |")
+    security_index = markdown.index("| security |")
+    assert documentation_index < security_index
+    # Score is rendered to two decimals.
+    assert "| 100.00 |" in markdown
+
+
+def test_markdown_reporter_pillars_table_uses_pillar_score_counts():
+    """Markdown pillar rows expose the seven canonical columns with correct severity counts."""
+    findings = (
+        _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
+        _finding(
+            rule_id="docs.missing-readme",
+            severity=Severity.ADVISORY,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+        _finding(
+            rule_id="docs.missing-docstring",
+            severity=Severity.WARNING,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+    )
+
+    markdown = MarkdownReporter().render(_report(findings))
+
+    pillar_lines = [
+        line
+        for line in markdown.splitlines()
+        if line.startswith("| documentation |") or line.startswith("| security |")
+    ]
+    # 7 columns => 8 pipes per row.
+    # gruff: disable-next=test-quality.magic-number-assertion -- 8 pipes is the contract under test.
+    assert all(line.count("|") == 8 for line in pillar_lines)
+    documentation_row = next(line for line in pillar_lines if line.startswith("| documentation |"))
+    security_row = next(line for line in pillar_lines if line.startswith("| security |"))
+    # documentation: 1 advisory + 1 warning + 0 error => findings=2, advisory=1, warning=1, error=0
+    assert documentation_row.endswith("| 2 | 1 | 1 | 0 |")
+    # security: 1 error => findings=1, advisory=0, warning=0, error=1
+    assert security_row.endswith("| 1 | 0 | 0 | 1 |")
+
+
 def test_github_annotations_escape_properties_and_data():
     finding = _finding(
         message="bad % value\nnext",
@@ -399,6 +462,45 @@ def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
     assert "src/&quot;evil&quot;.py" in html
     assert 'class="finding-filters"' in html
     assert "data-findings-list" in html
+
+
+# gruff: disable-next=test-quality.multiple-aaa-cycles -- cohesive single-render check.
+def test_html_reporter_pillars_table_is_canonical_with_seven_columns():
+    findings = (
+        _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
+        _finding(
+            rule_id="docs.missing-readme",
+            severity=Severity.ADVISORY,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+        _finding(
+            rule_id="docs.missing-docstring",
+            severity=Severity.WARNING,
+            pillar=Pillar.DOCUMENTATION,
+        ),
+    )
+
+    html = HtmlReporter().render(_report(findings))
+
+    assert '<table class="pillar-list">' in html
+    headers = (
+        '<th scope="col">pillar</th>',
+        '<th scope="col" class="num">grade</th>',
+        '<th scope="col" class="num">score</th>',
+        '<th scope="col" class="num">findings</th>',
+        '<th scope="col" class="num">advisory</th>',
+        '<th scope="col" class="num">warning</th>',
+        '<th scope="col" class="num">error</th>',
+    )
+    header_block = "".join(headers)
+    assert header_block in html
+    # Sort: findings DESC then pillar ASC, so documentation (2 findings) precedes
+    # security (1 finding).
+    documentation_index = html.index('"file-path">documentation<')
+    security_index = html.index('"file-path">security<')
+    assert documentation_index < security_index
+    # Score is rendered to two decimals.
+    assert ">100.00<" in html
 
 
 def test_display_filter_applies_minimum_severity_and_rule_filters():

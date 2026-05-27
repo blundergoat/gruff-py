@@ -1,7 +1,65 @@
 ---
 category: workflow
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-27
 ---
+
+## Lesson: Always run `git status` before suggesting a commit message
+
+**Created:** 2026-05-27
+**Incident:** After shipping the M03+M04 work in a long session, the user asked
+"give me one line commit message for uncommitted code". The agent generated a
+message summarising every feature touched in the session (summary --group-by,
+list-rules explain mode, output-volume hint, graceful ConfigError surfacing,
+learning-loop updates) - drawn from session memory of what had been worked on,
+not from `git status`. The user pointed out the mistake, asked for a one-line
+message again, and the agent regenerated the same kind of summary message.
+The user then asked verbatim "wtf, did u even run git status?". They had
+committed the prior work between turns; only two staged files remained (the
+learning-loop entries from the previous step). The suggested commit message
+described work that was not in the staged diff.
+
+Before suggesting any commit message, run `git status` (and `git diff --cached`
+when something is staged, or `git diff` when nothing is staged) to see what is
+actually about to be committed. Generating from session memory is a
+hallucination risk: the user may have already committed some or all of the
+work, may have unstaged or reverted edits, or may be on a different branch
+than the agent thinks. The cost of one tool call is trivial; the cost of a
+wrong message is the user having to call it out and ask again. This is CLAUDE.md
+hallucination red-flag #2 ("do not claim completion without listing the
+specific files changed in this turn") applied to commit-message synthesis:
+the diff is the source of truth for the commit message, not the conversation
+transcript.
+
+## Lesson: Read `RuleDocs` (and the rule catalogue) before scoping any new rule-metadata feature
+
+**Created:** 2026-05-27
+**Incident:** M04 (list-rules explain mode) was originally scoped to add two
+new fields to `RuleDefinition`, build per-rule prose for ~10 rules, derive an
+escape-hatch introspection helper, and define cross-references. After reading
+`src/gruffpy/rule/catalog.py` (search: `class RuleDocs`), 4 of those
+deliverables were already in the codebase: `rationale`, `fix_guidance`,
+`bad_example`, `good_example`, `confidence_rationale`, and `config_keys` were
+all carried by `RuleDocs`, auto-generated for ~109 rules and custom-curated
+for 6. The escape-hatch helper existed as `_config_keys_for` (search:
+`def _config_keys_for`). The genuinely-new work shrank to: two new fields on
+`RuleDocs` (not `RuleDefinition` - see `.goat-flow/footguns/rules.md`,
+search: `RuleDefinition.description.*short label`), a `RELATED_RULES` map,
+the CLI surface, and option-description authoring for 12 rules. The milestone's
+"~full day" estimate became "~half day" once the read was done.
+
+Before scoping any feature framed as "extend the rule system with X", do a
+focused read of `src/gruffpy/rule/catalog.py` (the `RuleDocs` dataclass and
+the `_docs_for_definition` / `_custom_docs_for` factories) and
+`src/gruffpy/rule/definition.py`. Confirm what data is already carried and
+where. The split between hot-path data on `RuleDefinition` (travels with
+every `Finding`) and durable docs metadata on `RuleDocs` is load-bearing -
+adding to the wrong side either bloats every finding payload or hides docs
+data from JSON consumers. The milestone scope is a starting point, not a
+ceiling-and-floor; reading the codebase first saves both directions
+(removes deliverables that already exist, and reveals the right container
+for the genuinely-new ones).
+
+
 
 ## Lesson: Never offer to commit - "offering" still violates the Never tier
 

@@ -42,7 +42,7 @@ def project_with_gitignored_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_gitignored_file_does_not_appear_in_findings() -> None:
     result = CliRunner().invoke(
         main,
-        ["analyse", "--format", "json", "--no-config", "."],
+        ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "."],
     )
 
     assert result.exit_code == 0, result.output
@@ -54,7 +54,16 @@ def test_gitignored_file_does_not_appear_in_findings() -> None:
 def test_include_ignored_surfaces_gitignored_findings() -> None:
     result = CliRunner().invoke(
         main,
-        ["analyse", "--format", "json", "--no-config", "--include-ignored", "."],
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--include-ignored",
+            ".",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -70,7 +79,7 @@ def test_project_without_gitignore_behaves_normally(
 
     result = CliRunner().invoke(
         main,
-        ["analyse", "--format", "json", "--no-config", "."],
+        ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "."],
     )
 
     assert result.exit_code == 0, result.output

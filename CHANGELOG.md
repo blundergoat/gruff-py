@@ -1,114 +1,46 @@
 # Changelog
 
-All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Public API pre-1.0.
+All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
-## [0.1.1] - 2026-05-24
+## v0.2.0 - 2026-05-28
 
-Catalogue still 116 rules across 11 pillars: `modernisation.f-string-candidate`
-added, `test-quality.testdox-readability` removed. Baseline support promoted from
-reserved schema to a wired feature, plus `gruff-py init`, a manual PyPI publish
-script, and the post-review CLI cleanups described below.
+Cross-port `minimumSeverity:` config dimension under the new `gruff-py.config.v0.1` schema, line-insensitive `stableIdentity` field on JSON findings, triage tooling (`summary --group-by=rule`, `list-rules <rule_id>` explain mode, analyse-text volume hint), `docs.missing-*` message reword, and `naming.parameter-type-name` retirement. Summary payload reshaped under the new `gruff.summary.v2` schema. Catalogue drops to 115 rules across 11 pillars. Four breaking changes drive the minor bump.
 
-### Added
+- **BREAKING: `analyse --fail-on` default flips from `error` to `advisory`** - CI configurations that omit `--fail-on` now exit 1 on advisory findings where they previously only exited 1 on error-tier findings. The project's stated philosophy is "show everything and fail if anything is wrong"; the old default contradicted that and forced every adopter to set `--fail-on advisory` explicitly. Migration: set `minimumSeverity.analyse: error` in `.gruff-py.yaml` (or pass `--fail-on error` on the CLI) to preserve 0.1.x behaviour. See [ADR-019](.goat-flow/decisions/ADR-019-per-command-minimum-severity.md).
+- **BREAKING: summary `pillars` JSON shape** - The `pillars` field in the `gruff-py summary --format json` payload is now a list of pillar-row dicts (was `{pillar: count}`), declared under the new `gruff.summary.v2` schema. Migration: replace `for pillar, count in payload["pillars"].items():` with `for row in payload["pillars"]: pillar, count = row["pillar"], row["findings"]`. The richer per-row payload (`grade`, `score`, `applicable`, per-severity counts, `penalty`) lands at the same time so a single read replaces several accessors. Text-summary `Per pillar:` block renamed to `Pillars`; HTML reporter uses `<table class="pillar-list">` instead of the old `pillar-card` grid.
+- **BREAKING: `schemaVersion: gruff-py.config.v0.1` required at the top of every config** - Pre-0.2.0 configs fail to load with `is missing required 'schemaVersion'. Expected 'gruff-py.config.v0.1'; run gruff-py init --force to regenerate.` Applies to both `.gruff-py.yaml` and `[tool.gruff-py]` blocks in `pyproject.toml`. No back-compat shim. Migration: run `gruff-py init --force` for YAML configs (preserves `paths.ignore`, `minimumSeverity:`, and `allowlists` blocks byte-for-byte), or hand-edit one line — `schemaVersion = "gruff-py.config.v0.1"` directly under `[tool.gruff-py]` for TOML. New `CONFIG_SCHEMA_VERSION` constant in `src/gruffpy/analysis/schema.py`, re-exported from `gruffpy.analysis`.
+- **BREAKING: `naming.parameter-type-name` rule retired** - Projects pinning the rule fail to load with `ConfigError: Unknown rule id "naming.parameter-type-name"`. Rationale: false-positive rate against PEP 8's silence on parameter naming, plus the maintenance cost of carrying a low-precision rule. Migration: delete the entry from `selection.rules`, `rules.naming.parameter-type-name`, and `[tool.gruff-py.rules.naming.parameter-type-name]` wherever it appears. Catalogue drops to 115 rules across 11 pillars (`naming` pillar from 10 to 9). See [ADR-018](.goat-flow/decisions/ADR-018-retire-naming-parameter-type-name.md).
+- **Per-project severity gate** - New top-level `minimumSeverity:` block in `.gruff-py.yaml` and `[tool.gruff-py]` accepting `analyse`, `report`, `dashboard` keys with values `advisory | warning | error | none`. Precedence: CLI `--fail-on` flag > config key > binary default. Validator rejects non-gating subcommand keys (`summary`, `list-rules`, `init`, …) and accidental aliases (`never`, `off`, `disabled`) at load time so CI footguns surface early. Dashboard initial form `failOn` is seeded from `config.minimum_severity["dashboard"]` when present. See [ADR-019](.goat-flow/decisions/ADR-019-per-command-minimum-severity.md).
+- **Line-insensitive finding identity** - New `stableIdentity` field on every JSON finding alongside `fingerprint` — 16-char SHA-256 prefix hashed from `[ruleId, file, symbol]` (falling back to `[ruleId, file, message]` when the rule doesn't emit a symbol). Use for diff tooling that needs to match "the same logical finding across edits that shifted line numbers". Same PHP-compatible JSON-canonical encoding as `fingerprint` so cross-port consumers see identical digests for the same logical finding. SARIF `partialFingerprints` and `BaselineFilter` unchanged — purely additive with no schema bump. See [ADR-020](.goat-flow/decisions/ADR-020-stable-identity-field.md).
+- **Triage tooling for noisy runs** - `gruff-py summary --group-by=rule` renders a count / rule-id / severity / confidence table sourced from new `AnalysisReport.finding_counts_by_rule()`; JSON output additively gains a `groupedRules` field while `topRules` stays unchanged. `gruff-py list-rules <rule_id>` explain mode renders one rule's header, rationale, fix guidance, examples, default options with one-line descriptions, every escape-hatch config-key path, false-positive shapes, and related-rule cross-references (text or `--format json`); unknown ids exit 1 with `difflib.get_close_matches` suggestions. `analyse --format text` appends a one-line pointer to `summary --group-by=rule` when the run produces at least `outputVolumeHintThreshold` findings (default 50; set `0` to disable). All three surfaces stay text-only — JSON, HTML, Markdown, GitHub, hotspot, SARIF outputs unchanged.
+- **`docs.missing-*` messages reframed** - Function, class, module, parameter, return-doc, and raises-doc rules now phrase the finding as `<thing> needs <X>` rather than `<thing> has no <X>`. Engineering agents trained on "no boilerplate" instructions previously misread the absence-framed message as a request for restate-the-signature filler and declined on principle. Trigger conditions and rule fingerprints are byte-for-byte unchanged — only the rendered message text moved.
+- **Loader errors fail visibly, format-aware** - `ConfigError` raised by the loader now surfaces according to the requested output format. Text / Markdown / GitHub / hotspot / SARIF consumers get a clean CLI stderr line + exit 1 (no traceback, no silent default-config fallback). `analyse --format json` and `report --format json` consumers get a `gruff-py.analysis.v1` payload with a `diagnostics: [{"type": "config-error", "message": ..., "path": ...}]` entry, zero findings, and exit code 2 — so automation reading JSON can parse the failure instead of regex-scanning stderr. A `pyproject.toml` with `[tool.gruff-py]` but no `schemaVersion` (or any other unknown-key violation) now fails visibly in either rendering.
+- **`gruff-py init` scaffold improvements** - Per-rule description comments above each `rules:` entry so the rendered scaffold doubles as a quick-reference for the catalogue. `minimumSeverity:` block preserved byte-for-byte across `--force` (mirroring existing `paths.ignore` preservation). Default `accepted_abbreviations` seeded with the gruff-rs/gruff-ts canonical set (`age, app, db, fs, id, io, key, log, max, min, now, raw, rx, tx, ui, url`) so `naming.abbreviation` agrees across ports out of the box.
+- **Worst-severity per-rule grouping** - `AnalysisReport.finding_counts_by_rule()` reports the worst severity per rule rather than locking it to the first finding. Threshold-based rules that emit both `warning` and `error` bands in one run are now labelled by the highest band — `summary --group-by=rule` no longer understates them.
+- **Dashboard config path correctness** - Initial form `failOn` seed reads the same config file `/scan` reads when `--config` is relative and `--project` differs from CWD. Previously the form seed resolved the relative path against CWD while scan-time resolved it against `project_root`, so the initial threshold could come from a different file than the scan actually consumed.
+- **Allowlist preservation** - `ConfigLoader._apply_allowlists` no longer clears seeded `accepted_abbreviations` / `allowed_secret_previews` defaults when the user's `allowlists:` table only defines unrelated keys. Previously a config with `allowlists: { secretPreviews: [...] }` silently dropped the abbreviation seed, making `naming.abbreviation` stricter than `AnalysisConfig.from_registry()` or `gruff-py init` output.
 
-- `gruff-py init` command writes a default `.gruff-py.yaml` mirroring
-  `RuleRegistry.defaults()`, with `--force` regeneration that preserves an
-  existing `paths.ignore` list and refuses to shadow an alternate config source
-  (`.gruff.yaml` or `[tool.gruff-py]` in `pyproject.toml`) unless `--force`.
-- Interactive `analyse`/`report`/`summary`/`dashboard` runs offer to generate
-  `.gruff-py.yaml` when none is discoverable; the prompt skips on
-  `--no-config`/`--no-interaction`/`--quiet`/`--silent`/non-TTY stdin and
-  routes both prompt and success message to stderr so structured stdout stays
-  clean.
-- Baseline read/apply/generate with a dedicated `BaselineOptions` request type,
-  atomic file writes, and a `BaselineReport` extension on every analysis report.
-  Default baseline `gruff-baseline.json` auto-applies for `analyse`/`report` when
-  present; `dashboard` always disables baseline application. Legacy
-  `gruff.baseline.v1` JSON is accepted alongside `gruff-py.baseline.v1`.
-- `analyse` baseline flags: `--baseline-path PATH`, `--generate-baseline` (writes
-  to `gruff-baseline.json`), `--generate-baseline-path PATH`, `--no-baseline`.
-  `report` exposes `--baseline-path` and `--no-baseline`.
-- `modernisation.f-string-candidate` rule.
-- `scripts/publish-pypi.sh` for manual, validated PyPI/TestPyPI publishing with
-  preflight, version-agreement, clean-tree, build, verify, and confirmation
-  steps. Replaces the previous tag-triggered GitHub Actions workflow.
-- `docs/ci-integration.md` and `docs/output-formats.md`; `docs/README.md` index.
-- Footgun docs covering baseline auto-application, the prior CLI optional-value
-  trap, the rule-removal compatibility break, partial-scope baseline scans,
-  and shell `find <dir>` first-run failures, under `.goat-flow/footguns/`.
+## v0.1.1 - 2026-05-24
 
-### Changed
+Baselines promoted from reserved schema to wired feature. `gruff-py init` for default config scaffolding. Validated manual PyPI publish script. Catalogue still 116 rules across 11 pillars: `modernisation.f-string-candidate` added, `test-quality.testdox-readability` removed. Post-review CLI cleanups. Two breaking changes.
 
-- `test-quality.multiple-aaa-cycles` distinguishes function-call statements
-  (which advance the Act/Assert state) from data-unpacking statements
-  (`finding = findings[0]`, `payload = json.loads(...)`, dict-comp restructuring,
-  `isinstance` narrowing) so it no longer over-fires inside one Assert phase.
-- `apply_baseline` accepts a `scan_scope` argument and skips stale-entry
-  reporting on `partial-scope` runs, so regenerating from a narrowed scan can
-  no longer mislead users into dropping suppressions for unscanned files.
-- `BaselineStore.read` lists both accepted schema versions in error output,
-  catches `UnicodeDecodeError` as a structured `BaselineError`, and the entry
-  payload error mentions both `findings` and legacy `entries` keys.
-- `_baseline_source` compares paths by basename so `./gruff-baseline.json` is
-  correctly labelled `default` instead of `explicit`.
-- `existing_config_source` returns the `pyproject.toml` path when the file
-  exists but cannot be parsed, so the init prompt does not silently shadow a
-  broken pyproject with a new `.gruff-py.yaml`.
-- Both init write paths funnel through a shared helper that converts `OSError`
-  to `ClickException`, replacing raw tracebacks.
-- `list_rules` docstring documents the `text` alias alongside `table` and
-  `json`.
-- Documentation filenames standardised to lowercase
-  (`docs/configuration.md`, `docs/rules.md`, `docs/releasing.md`,
-  `docs/reporting.md`, `docs/dashboard.md`).
-- Stale-baseline tip in the text reporter uses `--generate-baseline-path`
-  with `shlex.quote`, so the command suggestion is correct for custom paths
-  and shell-safe to paste.
-- README rule-count table corrected to 116 rules / `test-quality` 33; mixed
-  British/American "analyser/analyzer" spelling unified.
+- **BREAKING: `test-quality.testdox-readability` rule removed** - Projects pinning this rule in `.gruff-py.yaml` or `[tool.gruff-py]` fail to load with `ConfigError: Unknown rule id "test-quality.testdox-readability"`. Migration: delete the entry from your config.
+- **BREAKING: `--baseline` and `--generate-baseline` no longer accept positional values** - The optional-value form silently scanned `.` when a path was supplied after the option (e.g. `gruff-py analyse --baseline src` scanned `.`, not `src/`). Migration: use `--baseline-path <path>` for explicit baseline application and `--generate-baseline-path <path>` for an explicit write destination. The bare `--generate-baseline` flag still writes to `gruff-baseline.json`. Dashboard's compatibility `--baseline` / `--no-baseline` placeholder flags also removed; the dashboard now always disables baseline application, so the flags can no longer mislead users into thinking they wire through.
+- **`gruff-py init` command** - Writes a default `.gruff-py.yaml` mirroring `RuleRegistry.defaults()`. `--force` regenerates while preserving an existing `paths.ignore` list and refuses to shadow an alternate config source (`.gruff.yaml` or `[tool.gruff-py]` in `pyproject.toml`) unless `--force`. Interactive `analyse`/`report`/`summary`/`dashboard` runs offer to generate the file when none is discoverable; the prompt skips on `--no-config` / `--no-interaction` / `--quiet` / `--silent` / non-TTY stdin and routes prompt and success message to stderr so structured stdout stays clean.
+- **Baseline read/apply/generate** - Dedicated `BaselineOptions` request type, atomic file writes, and a `BaselineReport` extension on every analysis report. Default baseline `gruff-baseline.json` auto-applies for `analyse`/`report` when present; `dashboard` always disables baseline application. Legacy `gruff.baseline.v1` JSON is accepted alongside `gruff-py.baseline.v1`. New flags: `analyse` accepts `--baseline-path PATH`, `--generate-baseline` (writes to `gruff-baseline.json`), `--generate-baseline-path PATH`, `--no-baseline`; `report` exposes `--baseline-path` and `--no-baseline`. `apply_baseline` accepts a `scan_scope` argument and skips stale-entry reporting on `partial-scope` runs, so regenerating from a narrowed scan can no longer mislead users into dropping suppressions for unscanned files.
+- **`modernisation.f-string-candidate` rule** - Flags literal `"...".format(...)` calls that can convert to f-strings.
+- **`test-quality.multiple-aaa-cycles` over-fires less** - Distinguishes function-call statements (which advance the Act/Assert state) from data-unpacking statements (`finding = findings[0]`, `payload = json.loads(...)`, dict-comp restructuring, `isinstance` narrowing) so it no longer over-fires inside one Assert phase.
+- **Validated PyPI publish script** - `scripts/publish-pypi.sh` replaces the previous tag-triggered GitHub Actions workflow. Runs preflight, version-agreement check, clean-tree check, build, verify, and confirmation before pushing to PyPI or TestPyPI. The token comes from the environment. The old `.github/workflows/publish.yml` tag-triggered workflow was removed.
+- **Docs and footguns** - New `docs/ci-integration.md` and `docs/output-formats.md`; `docs/README.md` index. Documentation filenames standardised to lowercase (`docs/configuration.md`, `docs/rules.md`, `docs/releasing.md`, `docs/reporting.md`, `docs/dashboard.md`). README rule-count table corrected to 116 rules / `test-quality` 33; mixed British/American "analyser/analyzer" spelling unified. New footgun entries under `.goat-flow/footguns/` covering baseline auto-application, the prior CLI optional-value trap, the rule-removal compatibility break, partial-scope baseline scans, and shell `find <dir>` first-run failures. Stale-baseline tip in the text reporter uses `--generate-baseline-path` with `shlex.quote`, so the suggested command is correct for custom paths and shell-safe to paste. `list_rules` docstring documents the `text` alias alongside `table` and `json`.
+- **Baseline I/O hardening** - `BaselineStore.read` lists both accepted schema versions in error output, catches `UnicodeDecodeError` as a structured `BaselineError`, and the entry-payload error mentions both `findings` and legacy `entries` keys. `_baseline_source` compares paths by basename so `./gruff-baseline.json` is correctly labelled `default` instead of `explicit`. `existing_config_source` returns the `pyproject.toml` path when the file exists but cannot be parsed, so the init prompt does not silently shadow a broken pyproject with a new `.gruff-py.yaml`. Both init write paths funnel through a shared helper that converts `OSError` to `ClickException`, replacing raw tracebacks.
+- **Release-gating fixes** - `scripts/publish-pypi.sh` `clean_dist` now `mkdir -p`s `dist/` before invoking `find ... -delete`, so the first publish on a fresh clone no longer fails with `find: No such file or directory`. `scripts/preflight-checks.sh` self-check passes `--no-baseline` to `gruff-py analyse`, so release gating depends on current code state instead of whichever `gruff-baseline.json` happens to be present in the repo. `command/dashboard_server.py` passes `baseline=BaselineOptions(disabled=True)` to `run_analysis(...)`, so dashboard scans no longer silently suppress matching findings via a default `gruff-baseline.json`. `analyse`/`report`/`summary` no longer corrupt structured stdout when the user accepts the interactive init prompt: the prompt and success message are routed to stderr. Init prompt for `gruff-py dashboard --project <other>` writes to the resolved project root instead of the launch directory.
 
-### Removed
+## v0.1.0 - 2026-05-23
 
-- **Breaking:** `test-quality.testdox-readability` rule. Projects with this
-  rule pinned in `.gruff-py.yaml` or `[tool.gruff-py]` will fail to load with
-  `ConfigError: Unknown rule id "test-quality.testdox-readability"`. Remove
-  the entry from your config to upgrade.
-- **Breaking:** the optional-value `--baseline` and `--generate-baseline`
-  options on `analyse`/`report`. Use `--baseline-path <path>` for explicit
-  baseline application and `--generate-baseline-path <path>` for an explicit
-  write destination; the bare `--generate-baseline` flag still writes to
-  `gruff-baseline.json`. The previous shape silently scanned `.` when a path
-  was supplied after the option (e.g. `gruff-py analyse --baseline src`).
-- Dashboard's compatibility `--baseline` / `--no-baseline` placeholder flags;
-  the dashboard now always disables baseline application, so the flags can no
-  longer mislead users into thinking they wire through.
-- Old `.github/workflows/publish.yml` tag-triggered PyPI workflow.
+First public release. Python static analyser modelled on the gruff family, with cross-implementation fingerprint compatibility from day one.
 
-### Fixed
-
-- `scripts/publish-pypi.sh` `clean_dist` `mkdir -p`s `dist/` before invoking
-  `find ... -delete`, so the first publish on a fresh clone no longer fails
-  with `find: No such file or directory; exit code 1`.
-- `scripts/preflight-checks.sh` self-check passes `--no-baseline` to
-  `gruff-py analyse`, so release gating depends on current code state instead
-  of whichever `gruff-baseline.json` happens to be present in the repo.
-- `command/dashboard_server.py` passes `baseline=BaselineOptions(disabled=True)`
-  to `run_analysis(...)`, so dashboard scans no longer silently suppress
-  matching findings via a default `gruff-baseline.json`.
-- `analyse`/`report`/`summary` no longer corrupt structured stdout when the
-  user accepts the interactive init prompt: the prompt and success message
-  are routed to stderr.
-- Init prompt for `gruff-py dashboard --project <other>` writes to the resolved
-  project root instead of the launch directory.
-
-## [0.1.0] - 2026-05-23
-
-First public release.
-
-- 116-rule initial catalogue covering size, complexity, maintainability,
-  dead-code, naming, documentation, security, sensitive-data, test-quality,
-  and design signals.
-- Outputs: text, JSON, HTML, Markdown, GitHub annotations, hotspot, SARIF 2.1.0.
-- Local dashboard; `.gruff-py.yaml` / `[tool.gruff-py]` config; PHP-compatible 16-char fingerprints.
-- Schemas pinned: `gruff-py.analysis.v1`, `gruff-py.hotspot.v1`, `gruff-py.baseline.v1` (reserved).
-- Pre-release false-positive sweep across 9 rules: 425 → 335 findings (-21%) on a 53-file dogfood project.
+- **116-rule initial catalogue** - Covers size, complexity, maintainability, dead-code, naming, documentation, security, sensitive-data, test-quality, and design signals.
+- **Output formats** - Text, JSON, HTML, Markdown, GitHub annotations, hotspot, SARIF 2.1.0.
+- **Configuration and dashboard** - Local dashboard; `.gruff-py.yaml` / `[tool.gruff-py]` config; PHP-compatible 16-char fingerprints so baselines cross-apply between implementations.
+- **Pinned schemas** - `gruff-py.analysis.v1`, `gruff-py.hotspot.v1`, `gruff-py.baseline.v1` (reserved).
+- **Pre-release false-positive sweep** - 9 rules tightened against a 53-file dogfood project: 425 → 335 findings (-21%).

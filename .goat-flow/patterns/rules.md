@@ -1,7 +1,15 @@
 ---
 category: rules
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-26
 ---
+
+## Pattern: Frame rule messages by what the user should add, not what's absent
+
+**Context:** Engineering agents trained on "no boilerplate" instructions read messages like `"Function 'foo' has no docstring."` as a request for restate-the-signature filler and decline to act on principle. The rule's *logic* is correct; the user-facing *wording* is what fails. Observed first against the gruff-php docs pillar at the healthkit consumer; applied to gruff-py's equivalents in 0.1.2.
+
+**Approach:** Phrase `message=` as `"<thing> needs <what's required>"` (or `"<thing> ... and needs <X>"`), not `"<thing> has no <X>"` or `"<thing> ... but no <X>"`. The pattern applies to any rule whose finding describes something the user should *add*: `docs.missing-*`, missing test coverage, missing config keys, missing fixtures, etc. The `remediation=` string can elaborate on *what content is required* — but keep it terse, avoid editorialising about project policies (e.g. "if your team has a no-comments rule…"), and describe behaviour, not signatures. Guard against regression with two assertions per rule test: a positive substring check on a stable phrase from the new wording, and a negative substring check that the old absence-framed phrase is gone. See `src/gruffpy/rule/docs/missing_function_docstring_rule.py` for canonical wording and `tests/unit/rule/docs/test_missing_*_rule.py` for the regression-guard pattern.
+
+**Created:** 2026-05-26
 
 ## Pattern: Add rules end to end
 

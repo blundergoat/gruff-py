@@ -100,7 +100,7 @@ def _missing_class_docstring_finding(
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
-        message=f"Class {symbol!r} has no docstring.",
+        message=f"Class {symbol!r} needs a brief intent description in its docstring.",
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,
@@ -109,7 +109,10 @@ def _missing_class_docstring_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=("Add a docstring describing the class's role and any non-obvious invariants."),
+        remediation=(
+            "Describe the class's role and any non-obvious invariants. "
+            "Describe behaviour, not the field types."
+        ),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

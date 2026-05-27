@@ -32,6 +32,13 @@ Use `--no-config` to skip all config files.
 ## YAML Example
 
 ```yaml
+schemaVersion: gruff-py.config.v0.1
+
+minimumSeverity:
+  analyse: advisory
+  report: none
+  dashboard: none
+
 minimumPythonVersion: "3.11"
 
 paths:
@@ -70,7 +77,13 @@ rules:
 
 ```toml
 [tool.gruff-py]
+schemaVersion = "gruff-py.config.v0.1"
 minimumPythonVersion = "3.11"
+
+[tool.gruff-py.minimumSeverity]
+analyse = "advisory"
+report = "none"
+dashboard = "none"
 
 [tool.gruff-py.paths]
 ignore = [
@@ -105,11 +118,23 @@ Top-level keys:
 
 | Key | Type | Meaning |
 |---|---|---|
+| `schemaVersion` | string | Config schema literal; must equal `gruff-py.config.v0.1` |
+| `minimumSeverity` | table | Per-command `--fail-on` defaults (see [Severity Gate](#severity-gate)) |
 | `minimumPythonVersion` | string | Minimum Python version, currently at least `3.11` |
 | `paths` | table | Path ignore configuration |
 | `allowlists` | table | Naming and secret-preview allowlists |
 | `selection` | table | Rule and pillar selection |
 | `rules` | table | Per-rule settings |
+
+`minimumSeverity`:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `analyse` | string | Default `--fail-on` for `gruff-py analyse` (one of `advisory`, `warning`, `error`, `none`) |
+| `report` | string | Default `--fail-on` for `gruff-py report` |
+| `dashboard` | string | Default `--fail-on` seeded into the dashboard form |
+
+Keys for non-gating subcommands (`summary`, `list-rules`, `metric-calibration`, `init`, `list`, `help`, `completion`) are rejected by the loader.
 
 `paths`:
 
@@ -149,6 +174,40 @@ defaults. Keep `thresholds` for named tuning values. Do not combine
 `threshold` and `thresholds` in the same rule entry.
 
 Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
+
+## Severity Gate
+
+`minimumSeverity` sets per-command defaults for the `--fail-on` flag. The
+resolved threshold is the first match of:
+
+1. `--fail-on <value>` passed on the command line.
+2. `minimumSeverity.<command>` from the loaded config.
+3. The built-in default for that subcommand (`analyse: advisory`; `report` and
+   `dashboard`: `none`).
+
+The accepted values are `advisory`, `warning`, `error`, and `none` — no
+aliases. The off-switch value is `none`. Use `none` to publish reports
+without failing the run.
+
+Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
+Adding `summary: advisory` or any other key is a hard error; silent acceptance
+would be a CI footgun.
+
+See [ADR-019](../.goat-flow/decisions/ADR-019-per-command-minimum-severity.md)
+for the rationale, the rejected alternatives, and the cross-port invariant.
+
+## Schema Version
+
+`schemaVersion: gruff-py.config.v0.1` is required at the top of every
+`.gruff-py.yaml` and `[tool.gruff-py]` block. Configs without it (including
+pre-0.1.2 files) are rejected on load. Regenerate with:
+
+```bash
+gruff-py init --force
+```
+
+`init --force` preserves a user-tuned `paths.ignore` list and a user-tuned
+`minimumSeverity:` block; both survive byte-for-byte across regeneration.
 
 ## Ignored Paths
 

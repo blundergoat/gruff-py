@@ -22,6 +22,8 @@ def test_raises_without_section_emits():
     src = 'def f(x):\n    """Do."""\n    if x < 0:\n        raise ValueError\n    return x\n'
     findings = MissingRaisesDocRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
+    assert "needs a Raises section" in findings[0].message
+    assert "raises but has no" not in findings[0].message
 
 
 def test_no_raise_in_body_skipped():

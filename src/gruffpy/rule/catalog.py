@@ -1,7 +1,7 @@
 """First-party catalog for built-in rules and their documentation metadata."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from gruffpy.finding.confidence import Confidence
@@ -37,7 +37,6 @@ from gruffpy.rule.naming.generic_function_rule import GenericFunctionRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.naming.module_name_mismatch_rule import ModuleNameMismatchRule
-from gruffpy.rule.naming.parameter_type_name_rule import ParameterTypeNameRule
 from gruffpy.rule.naming.short_variable_rule import ShortVariableRule
 from gruffpy.rule.naming.test_naming_consistency_rule import TestNamingConsistencyRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
@@ -185,6 +184,20 @@ _FORMULA_PROVENANCE = {
 
 
 @dataclass(frozen=True, slots=True)
+class FalsePositiveShape:
+    """One documented false-positive shape and its mitigation.
+
+    Attributes:
+        shape: Concise description of the false-positive pattern the rule
+            catches in practice.
+        mitigation: What the user can do to suppress or work around it.
+    """
+
+    shape: str
+    mitigation: str
+
+
+@dataclass(frozen=True, slots=True)
 class RuleDocs:
     """Durable documentation metadata for a built-in rule.
 
@@ -199,6 +212,9 @@ class RuleDocs:
         threshold_direction: Whether larger or smaller values are worse.
         threshold_metadata_keys: Metadata keys used by threshold findings.
         security_metadata: SARIF security metadata for security rules.
+        option_descriptions: One-line description per public option key.
+        false_positive_shapes: Documented false-positive shapes and their
+            mitigations; consulted by ``list-rules <rule_id>`` explain mode.
     """
 
     rationale: str
@@ -211,6 +227,8 @@ class RuleDocs:
     threshold_direction: str = ""
     threshold_metadata_keys: tuple[str, ...] = ()
     security_metadata: dict[str, Any] = field(default_factory=dict)
+    option_descriptions: dict[str, str] = field(default_factory=dict)
+    false_positive_shapes: tuple[FalsePositiveShape, ...] = ()
 
     def to_payload(self) -> dict[str, Any]:
         """Return JSON-ready docs metadata.
@@ -226,15 +244,35 @@ class RuleDocs:
             "confidenceRationale": self.confidence_rationale,
             "configKeys": list(self.config_keys),
         }
-        if self.formula_provenance:
-            payload["formulaProvenance"] = self.formula_provenance
-        if self.threshold_direction:
-            payload["thresholdDirection"] = self.threshold_direction
-        if self.threshold_metadata_keys:
-            payload["thresholdMetadataKeys"] = list(self.threshold_metadata_keys)
-        if self.security_metadata:
-            payload["security"] = dict(self.security_metadata)
+        payload.update(self._optional_payload_fields())
         return payload
+
+    def _optional_payload_fields(self) -> dict[str, Any]:
+        """Collect the non-empty optional payload fields in JSON-key order.
+
+        Driven from a table so adding a new optional field is one row and the
+        NPATH cost stays linear instead of multiplicative.
+        """
+        candidates: tuple[tuple[str, Any, Any], ...] = (
+            ("formulaProvenance", self.formula_provenance, self.formula_provenance),
+            ("thresholdDirection", self.threshold_direction, self.threshold_direction),
+            (
+                "thresholdMetadataKeys",
+                self.threshold_metadata_keys,
+                list(self.threshold_metadata_keys),
+            ),
+            ("security", self.security_metadata, dict(self.security_metadata)),
+            ("optionDescriptions", self.option_descriptions, dict(self.option_descriptions)),
+            (
+                "falsePositiveShapes",
+                self.false_positive_shapes,
+                [
+                    {"shape": fp.shape, "mitigation": fp.mitigation}
+                    for fp in self.false_positive_shapes
+                ],
+            ),
+        )
+        return {key: value for key, present, value in candidates if present}
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,20 +311,25 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
     subject = definition.name.lower()
     config_keys = _config_keys_for(definition)
     custom_docs = _custom_docs_for(definition, config_keys=config_keys)
-    if custom_docs is not None:
-        return custom_docs
-    return RuleDocs(
-        rationale=_rationale_for(definition),
-        fix_guidance=_fix_guidance_for(definition),
-        bad_example=f"Code that triggers `{definition.id}` leaves {subject} unaddressed.",
-        good_example=f"Code that satisfies `{definition.id}` makes {subject} explicit or simpler.",
-        confidence_rationale=_confidence_rationale(definition.confidence),
-        config_keys=config_keys,
-        formula_provenance=_FORMULA_PROVENANCE.get(definition.id, ""),
-        threshold_direction=_threshold_direction(definition),
-        threshold_metadata_keys=_threshold_metadata_keys(definition),
-        security_metadata=rule_security_metadata(definition.id),
-    )
+    if custom_docs is None:
+        bad = f"Code that triggers `{definition.id}` leaves {subject} unaddressed."
+        good = f"Code that satisfies `{definition.id}` makes {subject} explicit or simpler."
+        custom_docs = RuleDocs(
+            rationale=_rationale_for(definition),
+            fix_guidance=_fix_guidance_for(definition),
+            bad_example=bad,
+            good_example=good,
+            confidence_rationale=_confidence_rationale(definition.confidence),
+            config_keys=config_keys,
+            formula_provenance=_FORMULA_PROVENANCE.get(definition.id, ""),
+            threshold_direction=_threshold_direction(definition),
+            threshold_metadata_keys=_threshold_metadata_keys(definition),
+            security_metadata=rule_security_metadata(definition.id),
+        )
+    option_descriptions = _OPTION_DESCRIPTIONS.get(definition.id)
+    if option_descriptions is not None:
+        custom_docs = replace(custom_docs, option_descriptions=option_descriptions)
+    return custom_docs
 
 
 def _custom_docs_for(
@@ -414,6 +457,206 @@ def _has_severity_thresholds(thresholds: dict[str, int | float]) -> bool:
     return set(thresholds) == {"warning", "error"}
 
 
+_OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    "design.single-implementor-protocol": {
+        "externalProtocolBases": (
+            "Protocol-shaped base classes whose subclasses are exempt from the "
+            "single-implementor check (typing.Sized, typing.Iterable, etc.)."
+        ),
+        "additionalExcludedPaths": (
+            "Project-relative glob patterns for files exempt from the rule."
+        ),
+    },
+    "docs.complex-branch-rationale": {
+        "cyclomatic_warning": (
+            "Public-function cyclomatic threshold above which rationale is required."
+        ),
+        "cognitive_warning": (
+            "Public-function cognitive complexity threshold above which rationale is required."
+        ),
+        "private_cyclomatic_warning": (
+            "Private-function cyclomatic threshold; private functions get more headroom."
+        ),
+        "private_cognitive_warning": "Private-function cognitive complexity threshold.",
+    },
+    "docs.dataclass-attributes": {
+        "min_fields": ("Minimum dataclass field count before an Attributes docstring is required."),
+        "require_all_fields": (
+            "When true, every dataclass field must appear in the Attributes block."
+        ),
+        "allow_bullets": "When true, accept Markdown bullet lists as well as Sphinx :ivar: blocks.",
+    },
+    "docs.missing-class-docstring": {
+        "class_dataclass_exempt": (
+            "When true, @dataclass-decorated classes are exempt (rely on "
+            "docs.dataclass-attributes for their docs requirement instead)."
+        ),
+    },
+    "docs.useless-docstring": {
+        "min_summary_words": (
+            "Per-kind minimum word count for a non-useless summary line "
+            "(keys: module, class, function)."
+        ),
+    },
+    "naming.confusing-name": {
+        "confusingNames": (
+            "Identifier suffixes flagged as low-content (Handler, Manager, Util, ...)."
+        ),
+    },
+    "naming.generic-function": {
+        "genericFunctions": (
+            "Function names flagged as too generic to convey intent (process, handle, run, ...)."
+        ),
+    },
+    "naming.module-name-mismatch": {
+        "conventionalModuleNames": (
+            "Module names exempt from the convention check "
+            "(constants, exceptions, helpers, protocols, types)."
+        ),
+    },
+    "naming.short-variable": {
+        "acceptedShortNames": (
+            "Single-character identifiers accepted as conventional "
+            "(loop counters, math axes, exception variables)."
+        ),
+    },
+    "test-quality.magic-number-assertion": {
+        "allowed_numbers": (
+            "Integer literals accepted in test assertions without extraction "
+            "(small ints and HTTP status codes by default)."
+        ),
+    },
+    "test-quality.mocking-domain-object": {
+        "domain_namespaces": (
+            "Dotted module prefixes considered domain code; mocking imports "
+            "from these paths trips the rule. Empty by default; populate to enable."
+        ),
+    },
+    "test-quality.test-longer-than-sut": {
+        "ratio": (
+            "Allowed test-to-SUT length ratio above which the test is flagged (default 2.0)."
+        ),
+    },
+}
+
+
+RELATED_RULES: dict[str, tuple[str, ...]] = {
+    # Naming hygiene cluster.
+    "naming.abbreviation": ("naming.identifier-quality", "naming.short-variable"),
+    "naming.identifier-quality": (
+        "naming.abbreviation",
+        "naming.short-variable",
+        "naming.confusing-name",
+    ),
+    "naming.short-variable": ("naming.abbreviation", "naming.identifier-quality"),
+    "naming.confusing-name": ("naming.identifier-quality", "naming.generic-function"),
+    "naming.generic-function": ("naming.confusing-name", "naming.identifier-quality"),
+    "naming.boolean-prefix": ("naming.hungarian-notation",),
+    "naming.hungarian-notation": ("naming.boolean-prefix",),
+    "naming.test-naming-consistency": ("test-quality.naming-consistency",),
+    # docs.missing-* family.
+    "docs.missing-class-docstring": (
+        "docs.missing-function-docstring",
+        "docs.missing-module-docstring",
+        "docs.dataclass-attributes",
+    ),
+    "docs.missing-function-docstring": (
+        "docs.missing-class-docstring",
+        "docs.missing-module-docstring",
+        "docs.missing-param-doc",
+        "docs.missing-return-doc",
+    ),
+    "docs.missing-module-docstring": (
+        "docs.missing-class-docstring",
+        "docs.missing-function-docstring",
+        "docs.missing-readme",
+    ),
+    "docs.missing-param-doc": (
+        "docs.missing-function-docstring",
+        "docs.missing-return-doc",
+        "docs.missing-raises-doc",
+        "docs.stale-param-doc",
+    ),
+    "docs.missing-return-doc": (
+        "docs.missing-function-docstring",
+        "docs.missing-param-doc",
+        "docs.missing-raises-doc",
+    ),
+    "docs.missing-raises-doc": (
+        "docs.missing-function-docstring",
+        "docs.missing-param-doc",
+        "docs.missing-return-doc",
+    ),
+    "docs.missing-readme": ("docs.missing-module-docstring",),
+    "docs.stale-param-doc": ("docs.missing-param-doc",),
+    # Complexity / size siblings (function-level).
+    "complexity.cyclomatic": (
+        "complexity.cognitive",
+        "complexity.npath",
+        "size.function-length",
+    ),
+    "complexity.cognitive": (
+        "complexity.cyclomatic",
+        "complexity.npath",
+        "size.function-length",
+    ),
+    "complexity.npath": (
+        "complexity.cyclomatic",
+        "complexity.cognitive",
+        "size.function-length",
+    ),
+    "complexity.nesting-depth": ("complexity.cyclomatic", "complexity.cognitive"),
+    "complexity.maintainability-index": (
+        "complexity.cyclomatic",
+        "complexity.cognitive",
+        "complexity.halstead-volume",
+    ),
+    "complexity.halstead-volume": ("complexity.maintainability-index",),
+    "size.function-length": (
+        "complexity.cyclomatic",
+        "complexity.cognitive",
+        "complexity.npath",
+        "size.average-function-length",
+    ),
+    "size.average-function-length": ("size.function-length",),
+    "size.parameter-count": ("size.function-length", "complexity.cyclomatic"),
+    # Class-level size siblings.
+    "size.class-length": ("size.public-method-count", "size.attribute-count"),
+    "size.public-method-count": ("size.class-length", "size.attribute-count"),
+    "size.attribute-count": ("size.class-length", "size.public-method-count"),
+    "size.file-length": ("size.class-length", "size.function-length"),
+    # Waste / dead-code overlap.
+    "waste.empty-class": ("waste.empty-function",),
+    "waste.empty-function": ("waste.empty-class", "waste.one-line-function"),
+    "waste.one-line-function": ("waste.empty-function", "waste.redundant-variable"),
+    "waste.redundant-variable": (
+        "waste.unused-import",
+        "waste.unused-parameter",
+        "waste.one-line-function",
+    ),
+    "waste.unused-import": (
+        "waste.unused-parameter",
+        "waste.redundant-variable",
+        "dead-code.unused-private-function",
+    ),
+    "waste.unused-parameter": ("waste.unused-import", "waste.redundant-variable"),
+    "waste.commented-out-code": ("docs.todo-density",),
+    "waste.unreachable-code": (
+        "dead-code.unused-private-function",
+        "dead-code.unused-private-attribute",
+    ),
+    "dead-code.unused-private-function": (
+        "dead-code.unused-private-attribute",
+        "waste.unused-import",
+        "waste.unreachable-code",
+    ),
+    "dead-code.unused-private-attribute": (
+        "dead-code.unused-private-function",
+        "waste.unused-import",
+    ),
+}
+
+
 BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(CognitiveComplexityRule),
     _entry(CyclomaticComplexityRule),
@@ -445,7 +688,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HungarianNotationRule),
     _entry(IdentifierQualityRule),
     _entry(ModuleNameMismatchRule),
-    _entry(ParameterTypeNameRule),
     _entry(ShortVariableRule),
     _entry(TestNamingConsistencyRule),
     _entry(CorsWildcardWithCredentialsRule),

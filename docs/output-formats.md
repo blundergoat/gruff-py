@@ -58,4 +58,7 @@ uv run gruff-py summary src tests --format json --top 5
 ## Exit Codes
 
 `analyse` exits `1` when at least one finding meets `--fail-on`. Use
-`--fail-on none` for report-only jobs.
+`--fail-on none` for report-only jobs. The default is `advisory` for
+`analyse` and `none` for `report` and `dashboard`; override via the CLI
+flag or via `minimumSeverity:` in `.gruff-py.yaml` (see
+[Configuration → Severity Gate](configuration.md#severity-gate)).
