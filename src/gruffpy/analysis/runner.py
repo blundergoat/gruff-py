@@ -1,5 +1,6 @@
 """End-to-end pipeline (`run_analysis`) shared by `gruff-py analyse` and dashboard scans."""
 
+from dataclasses import replace
 from pathlib import Path
 
 from gruffpy.analysis.baseline import (
@@ -9,6 +10,14 @@ from gruffpy.analysis.baseline import (
     apply_baseline,
     default_baseline_path,
     generate_baseline,
+)
+from gruffpy.analysis.changed_region import (
+    ChangedRegionSet,
+    changed_regions_from_git,
+    filter_findings_for_changed_regions,
+    filter_sources_for_changed_regions,
+    parse_explicit_ranges,
+    parse_unified_diff,
 )
 from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
@@ -44,6 +53,11 @@ def run_analysis(
     display_filter: FindingDisplayFilter,
     baseline: BaselineOptions | None = None,
     config_severity_command: str = "",
+    changed_ranges: str = "",
+    since: str = "",
+    diff_mode: str = "",
+    diff_patch: str = "",
+    changed_scope: str = "symbol",
 ) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
@@ -63,6 +77,11 @@ def run_analysis(
             ``config.minimum_severity[<this>]`` after loading the config and use
             that value instead of *fail_threshold*. Callers set this only when
             the CLI flag was not passed explicitly.
+        changed_ranges: Explicit line ranges such as ``3-3,8-10``.
+        since: Git base ref for changed-region filtering.
+        diff_mode: ``working-tree``, ``staged``, ``unstaged``, a base ref, or ``-``.
+        diff_patch: Unified diff text read from stdin for ``--diff -``.
+        changed_scope: ``symbol`` (default) or ``hunk`` filtering.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
@@ -80,11 +99,22 @@ def run_analysis(
         if configured is not None:
             fail_threshold = configured
 
-    discovery_result, units, files_parsed, parse_diagnostics = _discover_and_parse_sources(
+    (
+        discovery_result,
+        units,
+        files_parsed,
+        parse_diagnostics,
+        changed,
+    ) = _discover_and_parse_sources(
         project_root=project_root,
         paths=paths,
         include_ignored=include_ignored,
         config=config,
+        changed_ranges=changed_ranges,
+        since=since,
+        diff_mode=diff_mode,
+        diff_patch=diff_patch,
+        diagnostics=diagnostics,
     )
     diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
     diagnostics.extend(parse_diagnostics)
@@ -106,7 +136,14 @@ def run_analysis(
         options=baseline_options,
         scan_scope=_scan_scope(paths),
     )
-    score = ScoreCalculator().calculate(findings)
+    changed_filter_result = filter_findings_for_changed_regions(
+        findings,
+        units,
+        changed,
+        changed_scope,
+    )
+    findings = changed_filter_result.findings
+    score = ScoreCalculator().calculate(findings, diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
     display_findings = display_filter.filter_findings(findings)
@@ -126,8 +163,12 @@ def run_analysis(
         config_path=config_loaded_from,
         score=score,
         filters=display_filter,
-        extensions=ReportExtensions(baseline=baseline_report),
+        extensions=ReportExtensions(
+            baseline=baseline_report,
+            diff=_changed_region_payload(changed, changed_filter_result.suppressed_count),
+        ),
         output_volume_hint_threshold=config.output_volume_hint_threshold,
+        suppressed_count=changed_filter_result.suppressed_count if changed.active else None,
     )
 
 
@@ -137,15 +178,84 @@ def _discover_and_parse_sources(
     paths: tuple[str, ...],
     include_ignored: bool,
     config: AnalysisConfig,
-) -> tuple[SourceDiscoveryResult, list[AnalysisUnit], int, list[RunDiagnostic]]:
+    changed_ranges: str,
+    since: str,
+    diff_mode: str,
+    diff_patch: str,
+    diagnostics: list[RunDiagnostic],
+) -> tuple[
+    SourceDiscoveryResult,
+    list[AnalysisUnit],
+    int,
+    list[RunDiagnostic],
+    ChangedRegionSet,
+]:
     discovery = SourceDiscovery(project_root)
     discovery_result = discovery.discover(
         list(paths),
         include_ignored=include_ignored,
         configured_ignore_patterns=config.ignored_path_patterns,
     )
+    changed = _resolve_changed_regions(
+        project_root=project_root,
+        paths=paths,
+        source_paths=tuple(file.display_path for file in discovery_result.files),
+        changed_ranges=changed_ranges,
+        since=since,
+        diff_mode=diff_mode,
+        diff_patch=diff_patch,
+        diagnostics=diagnostics,
+    )
+    if changed.active and not changed_ranges:
+        discovery_result = replace(
+            discovery_result,
+            files=filter_sources_for_changed_regions(discovery_result.files, changed),
+        )
     units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
-    return discovery_result, units, files_parsed, parse_diagnostics
+    return discovery_result, units, files_parsed, parse_diagnostics, changed
+
+
+def _resolve_changed_regions(
+    *,
+    project_root: Path,
+    paths: tuple[str, ...],
+    source_paths: tuple[str, ...],
+    changed_ranges: str,
+    since: str,
+    diff_mode: str,
+    diff_patch: str,
+    diagnostics: list[RunDiagnostic],
+) -> ChangedRegionSet:
+    try:
+        if changed_ranges:
+            return parse_explicit_ranges(source_paths, changed_ranges)
+        if diff_mode == "-":
+            return parse_unified_diff("stdin", diff_patch)
+        if diff_patch:
+            return parse_unified_diff("stdin", diff_patch)
+        if since:
+            return changed_regions_from_git(project_root, since, paths)
+        if diff_mode:
+            return changed_regions_from_git(project_root, diff_mode, paths)
+    except ValueError as exc:
+        diagnostics.append(RunDiagnostic(type="diff-error", message=str(exc)))
+        return ChangedRegionSet(source="")
+    return ChangedRegionSet(source="")
+
+
+def _changed_region_payload(
+    changed: ChangedRegionSet,
+    suppressed_count: int,
+) -> dict[str, object] | None:
+    if not changed.active:
+        return None
+    return {
+        "enabled": True,
+        "source": changed.source,
+        "changedFiles": list(changed.changed_files),
+        "suppressedCount": suppressed_count,
+        "caveat": "diff mode is changed-region scoped and project-wide rules may need full context",
+    }
 
 
 def _collect_findings(

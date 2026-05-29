@@ -383,9 +383,27 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Path to a baseline Infection JSON report for MSI diff mode.",
     ),
     _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
-    _ignored_string_option(
+    _option(
         "--diff",
-        "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
+        "diff_mode",
+        default="",
+        help=(
+            "Filter findings to changed regions. Use working-tree, staged, unstaged, "
+            "a base ref, or - for unified diff on stdin."
+        ),
+    ),
+    _option("--since", default="", help="Git base ref for changed-region filtering."),
+    _option(
+        "--changed-ranges",
+        default="",
+        help='Explicit changed line ranges such as "3-3,8-10".',
+    ),
+    _option(
+        "--changed-scope",
+        type=click.Choice(["symbol", "hunk"]),
+        default="symbol",
+        show_default=True,
+        help="Changed-region scope: symbol or hunk.",
     ),
     _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
     _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),

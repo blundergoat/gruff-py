@@ -2,6 +2,10 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+## Unreleased
+
+- **Changed-region analysis** - `analyse` now supports `--changed-ranges`, `--since`, `--diff`/`--diff -`, and `--changed-scope=symbol|hunk`. JSON output additively includes `suppressedCount` when changed-region filtering is active.
+
 ## v0.2.0 - 2026-05-28
 
 Cross-port `minimumSeverity:` config dimension under the new `gruff-py.config.v0.1` schema, line-insensitive `stableIdentity` field on JSON findings, triage tooling (`summary --group-by=rule`, `list-rules <rule_id>` explain mode, analyse-text volume hint), `docs.missing-*` message reword, and `naming.parameter-type-name` retirement. Summary payload reshaped under the new `gruff.summary.v2` schema. Catalogue drops to 115 rules across 11 pillars. Four breaking changes drive the minor bump.

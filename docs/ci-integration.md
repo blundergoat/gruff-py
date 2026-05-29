@@ -58,13 +58,13 @@ Future scans auto-apply `gruff-baseline.json` when present. Use
 
 ## Diff Flags
 
-Python accepts PHP-compatible diff flags on the CLI. Treat any accepted-but-not
-implemented diff mode as compatibility surface until the project documents
-otherwise:
+Changed-region scans keep findings whose location or enclosing declaration
+overlaps the changed hunk and add `suppressedCount` to JSON output:
 
 ```sh
-uv run gruff-py analyse src --diff staged --format github --fail-on warning
-uv run gruff-py analyse src --diff-vs origin/main --changed-only --fail-on none
+uv run gruff-py analyse --format json --changed-ranges "3-3,8-10" src/foo.py
+uv run gruff-py analyse --format json --since HEAD src/foo.py
+git diff | uv run gruff-py analyse --format json --diff - src/foo.py
 ```
 
 ## Docs Check

@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -73,6 +73,23 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 class CliGroup(click.Group):
     """Root command group with the custom Symfony-style help screen."""
 
+    def main(
+        self,
+        args: Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        **extra: Any,
+    ) -> Any:
+        """Run Click after normalising optional-value ``--diff`` usage."""
+        return super().main(
+            args=_normalise_optional_diff_args(args),
+            prog_name=prog_name,
+            complete_var=complete_var,
+            standalone_mode=standalone_mode,
+            **extra,
+        )
+
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         """Write the root help menu.
 
@@ -81,6 +98,35 @@ class CliGroup(click.Group):
             formatter: Click formatter receiving the rendered help.
         """
         formatter.write(_root_menu(ctx))
+
+
+def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str] | None:
+    """Let ``--diff`` behave like an optional-value flag for analyse/report."""
+    if args is None:
+        return None
+    command_index = next(
+        (index for index, value in enumerate(args) if value in {"analyse", "report"}),
+        None,
+    )
+    if command_index is None:
+        return list(args)
+    normalised = list(args[: command_index + 1])
+    tail = list(args[command_index + 1 :])
+    index = 0
+    while index < len(tail):
+        value = tail[index]
+        if value == "--diff":
+            next_value = tail[index + 1] if index + 1 < len(tail) else None
+            if next_value is None or (next_value.startswith("-") and next_value != "-"):
+                normalised.append("--diff=working-tree")
+            else:
+                normalised.append(value)
+                normalised.append(next_value)
+                index += 1
+        else:
+            normalised.append(value)
+        index += 1
+    return normalised
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +151,11 @@ class _AnalysisCliRequest:
     baseline_path: Path | None
     generate_baseline_path: Path | None
     should_skip_baseline: bool
+    diff_mode: str
+    diff_patch: str
+    since: str
+    changed_ranges: str
+    changed_scope: str
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -513,6 +564,11 @@ def _analysis_request(
         baseline_path=cast(Path | None, kwargs.get("baseline_path")),
         generate_baseline_path=_resolve_generate_baseline_path(kwargs),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
+        diff_mode=cast(str, kwargs.get("diff_mode", "")),
+        diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
+        since=cast(str, kwargs.get("since", "")),
+        changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
+        changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
     )
 
 
@@ -549,6 +605,11 @@ def _summary_analysis_request(
         baseline_path=None,
         generate_baseline_path=None,
         should_skip_baseline=True,
+        diff_mode="",
+        diff_patch="",
+        since="",
+        changed_ranges="",
+        changed_scope="symbol",
     )
 
 
@@ -643,6 +704,11 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 generate_path=request.generate_baseline_path,
                 disabled=request.should_skip_baseline,
             ),
+            diff_mode=request.diff_mode,
+            diff_patch=request.diff_patch,
+            since=request.since,
+            changed_ranges=request.changed_ranges,
+            changed_scope=request.changed_scope,
         )
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
@@ -673,6 +739,12 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
         exit_code=2,
         config_path=config_path_str,
     )
+
+
+def _read_diff_patch(diff_mode: str) -> str:
+    if diff_mode != "-":
+        return ""
+    return sys.stdin.read()
 
 
 def _render_report(

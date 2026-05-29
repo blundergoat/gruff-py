@@ -56,6 +56,7 @@ class AnalysisReport:
         score: Optional score payload.
         extensions: Optional report extension sections.
         filters: Optional finding-display filter metadata.
+        suppressed_count: Optional count of changed-region out-of-scope findings.
     """
 
     tool_version: str
@@ -74,6 +75,7 @@ class AnalysisReport:
     extensions: ReportExtensions = field(default_factory=ReportExtensions)
     filters: Any | None = None
     output_volume_hint_threshold: int = 50
+    suppressed_count: int | None = None
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -155,6 +157,8 @@ class AnalysisReport:
             "diagnostics": [d.to_dict() for d in self.diagnostics],
             "findings": [f.to_dict() for f in self.findings],
         }
+        if self.suppressed_count is not None:
+            report["suppressedCount"] = self.suppressed_count
         report.update(_optional_payloads(self))
         return report
 
