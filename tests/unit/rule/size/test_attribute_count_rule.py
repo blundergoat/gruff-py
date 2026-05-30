@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 15, error: int = 25) -> RuleContext:
+def _ctx(threshold: int = 15) -> RuleContext:
     rule = AttributeCountRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -77,13 +77,13 @@ def test_class_above_error_threshold_emits_error():
 def test_class_attribute_plain_assignment_counted():
     source = "class C:\n    a = 1\n    b = 2\n    c = 3\n"
     # 3 attributes; threshold 2 -> warning
-    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(warning=2, error=10))
+    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(threshold=2))
     assert findings[0].metadata["attributes"] == 3
 
 
 def test_tuple_self_assignment_collects_all_names():
     source = "class C:\n    def __init__(self):\n        self.a, self.b, self.c = 1, 2, 3\n"
-    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(warning=2, error=10))
+    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(threshold=2))
     assert findings[0].metadata["attributes"] == 3
 
 

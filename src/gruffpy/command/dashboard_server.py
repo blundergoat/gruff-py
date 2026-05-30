@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.command.dashboard_page_renderer import DashboardPageRenderer
@@ -194,15 +195,17 @@ def _scan_html(
     command = _display_command_for(state, paths)
     try:
         report = run_analysis(
-            paths=tuple(paths),
-            config_path=config_path,
-            no_config=state.no_config,
-            output=OutputFormat.HTML,
-            fail_threshold=FailThreshold(state.fail_on),
-            include_ignored=state.include_ignored,
-            project_root=scan_root,
-            display_filter=FindingDisplayFilter(),
-            baseline=BaselineOptions(disabled=True),
+            AnalysisRunRequest(
+                paths=tuple(paths),
+                config_path=config_path,
+                no_config=state.no_config,
+                output=OutputFormat.HTML,
+                fail_threshold=FailThreshold(state.fail_on),
+                include_ignored=state.include_ignored,
+                project_root=scan_root,
+                display_filter=FindingDisplayFilter(),
+                baseline=BaselineOptions(disabled=True),
+            )
         )
         html_text = HtmlReporter(
             str(scan_root),

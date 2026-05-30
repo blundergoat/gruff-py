@@ -27,13 +27,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 180, error: int = 400) -> RuleContext:
+def _ctx(threshold: int = 180) -> RuleContext:
     rule = HalsteadVolumeRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )

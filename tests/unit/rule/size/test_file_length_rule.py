@@ -20,13 +20,13 @@ def _make_unit(line_count: int) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 400, error: int = 800) -> RuleContext:
+def _ctx(threshold: int = 400) -> RuleContext:
     rule = FileLengthRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -34,7 +34,7 @@ def _ctx(warning: int = 400, error: int = 800) -> RuleContext:
 
 
 def test_under_warning_threshold_emits_no_finding():
-    findings = FileLengthRule().analyse(_make_unit(50), _ctx(warning=100, error=200))
+    findings = FileLengthRule().analyse(_make_unit(50), _ctx(threshold=100))
     assert findings == []
 
 
@@ -45,7 +45,7 @@ _FILE_LINES_OVER_WARNING = 150
 def test_above_threshold_emits_error():
     findings = FileLengthRule().analyse(
         _make_unit(_FILE_LINES_OVER_WARNING),
-        _ctx(warning=_WARNING_BOUNDARY, error=200),
+        _ctx(threshold=_WARNING_BOUNDARY),
     )
     assert len(findings) == 1
     finding = findings[0]
@@ -59,7 +59,7 @@ def test_above_threshold_emits_error():
 
 
 def test_far_above_threshold_emits_error():
-    findings = FileLengthRule().analyse(_make_unit(300), _ctx(warning=200, error=200))
+    findings = FileLengthRule().analyse(_make_unit(300), _ctx(threshold=200))
     assert len(findings) == 1
     finding = findings[0]
     assert finding.severity == Severity.ERROR
@@ -69,7 +69,7 @@ def test_far_above_threshold_emits_error():
 
 
 def test_finding_carries_fingerprint_and_remediation():
-    findings = FileLengthRule().analyse(_make_unit(150), _ctx(warning=100, error=200))
+    findings = FileLengthRule().analyse(_make_unit(150), _ctx(threshold=100))
     finding = findings[0]
     assert len(finding.fingerprint()) == 16
     assert finding.remediation is not None

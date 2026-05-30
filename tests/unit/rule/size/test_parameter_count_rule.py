@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 5, error: int = 8) -> RuleContext:
+def _ctx(threshold: int = 5) -> RuleContext:
     rule = ParameterCountRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )

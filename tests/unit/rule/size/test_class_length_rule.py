@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 300, error: int = 500) -> RuleContext:
+def _ctx(threshold: int = 300) -> RuleContext:
     rule = ClassLengthRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -33,13 +33,13 @@ def _ctx(warning: int = 300, error: int = 500) -> RuleContext:
 
 def test_short_class_emits_no_finding():
     source = "class C:\n    x = 1\n"
-    assert ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=10)) == []
+    assert ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5)) == []
 
 
 def test_long_class_emits_error():
     body = "\n".join(["    x = 1"] * 10)
     source = f"class C:\n{body}\n"
-    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.ERROR
@@ -50,7 +50,7 @@ def test_long_class_emits_error():
 def test_long_class_emits_error_above_error_threshold():
     body = "\n".join(["    x = 1"] * 30)
     source = f"class C:\n{body}\n"
-    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
 
@@ -58,7 +58,7 @@ def test_long_class_emits_error_above_error_threshold():
 def test_nested_class_emits_qualified_symbol():
     inner = "\n".join(["        x = 1"] * 10)
     source = f"class Outer:\n    class Inner:\n{inner}\n"
-    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     symbols = {f.symbol for f in findings}
     assert "Outer" in symbols
     assert "Outer.Inner" in symbols
@@ -67,7 +67,7 @@ def test_nested_class_emits_qualified_symbol():
 def test_decorator_counted_in_class_span():
     body = "\n".join(["    x = 1"] * 5)
     source = f"@dataclass\nclass C:\n{body}\n"
-    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     f = findings[0]
     # decorator (1) + class (2) + 5 body lines = 7

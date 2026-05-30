@@ -12,6 +12,7 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
+from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
@@ -38,7 +39,7 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.cli_summary import summary_payload, summary_text
-from gruffpy.command.check_ignore import (
+from gruffpy.command.check_ignore_verdict import (
     check_ignore_exit_code,
     classify_paths,
     render_check_ignore_json,
@@ -84,11 +85,22 @@ class CliGroup(click.Group):
         self,
         args: Sequence[str] | None = None,
         prog_name: str | None = None,
-        complete_var: str | None = None,
+        complete_var: str | None = None,  # gruff: disable=naming.abbreviation -- Click API name.
         standalone_mode: bool = True,
         **extra: Any,
     ) -> Any:
-        """Run Click after normalising optional-value ``--diff`` usage."""
+        """Run Click after normalising optional-value ``--diff`` usage.
+
+        Args:
+            args: Command-line arguments to pass through Click.
+            prog_name: Program name Click should show in help and errors.
+            complete_var: Shell-completion environment variable name from Click's API.
+            standalone_mode: Whether Click should handle exceptions and process exit.
+            extra: Additional Click keyword arguments.
+
+        Returns:
+            Result returned by Click's root command invocation.
+        """
         return super().main(
             args=_normalise_optional_diff_args(args),
             prog_name=prog_name,
@@ -729,27 +741,29 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     )
     try:
         return run_analysis(
-            paths=request.paths,
-            config_path=request.config_path,
-            no_config=request.should_skip_config,
-            output=request.output,
-            fail_threshold=request.fail_on,
-            config_severity_command=(
-                "" if request.was_fail_on_set_on_cli else request.command_name
-            ),
-            include_ignored=request.should_include_ignored,
-            project_root=Path.cwd(),
-            display_filter=display_filter,
-            baseline=BaselineOptions(
-                apply_path=request.baseline_path,
-                generate_path=request.generate_baseline_path,
-                disabled=request.should_skip_baseline,
-            ),
-            diff_mode=request.diff_mode,
-            diff_patch=request.diff_patch,
-            since=request.since,
-            changed_ranges=request.changed_ranges,
-            changed_scope=request.changed_scope,
+            AnalysisRunRequest(
+                paths=request.paths,
+                config_path=request.config_path,
+                no_config=request.should_skip_config,
+                output=request.output,
+                fail_threshold=request.fail_on,
+                config_severity_command=(
+                    "" if request.was_fail_on_set_on_cli else request.command_name
+                ),
+                include_ignored=request.should_include_ignored,
+                project_root=Path.cwd(),
+                display_filter=display_filter,
+                baseline=BaselineOptions(
+                    apply_path=request.baseline_path,
+                    generate_path=request.generate_baseline_path,
+                    disabled=request.should_skip_baseline,
+                ),
+                diff_mode=request.diff_mode,
+                diff_patch=request.diff_patch,
+                since=request.since,
+                changed_ranges=request.changed_ranges,
+                changed_scope=request.changed_scope,
+            )
         )
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:

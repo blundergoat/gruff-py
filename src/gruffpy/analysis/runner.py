@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import (
     BaselineError,
     BaselineOptions,
@@ -25,11 +26,9 @@ from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
-from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
-from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
@@ -41,61 +40,26 @@ from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.version import VERSION
 
 
-def run_analysis(
-    *,
-    paths: tuple[str, ...],
-    config_path: Path | None,
-    no_config: bool,
-    output: OutputFormat,
-    fail_threshold: FailThreshold,
-    include_ignored: bool,
-    project_root: Path,
-    display_filter: FindingDisplayFilter,
-    baseline: BaselineOptions | None = None,
-    config_severity_command: str = "",
-    changed_ranges: str = "",
-    since: str = "",
-    diff_mode: str = "",
-    diff_patch: str = "",
-    changed_scope: str = "symbol",
-) -> AnalysisReport:
+def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
     Args:
-        paths: CLI-supplied paths; empty tuple is reported as ``(".",)``.
-        config_path: Explicit YAML/TOML config path, or ``None`` to use auto-discovery.
-        no_config: When true, skip auto-loading the default config file.
-        output: Requested output format (recorded on the report).
-        fail_threshold: Severity that determines the non-zero exit code; used as
-            the fallback when ``config_severity_command`` is empty or the loaded
-            config has no per-command override for it.
-        include_ignored: When true, scan paths normally excluded by .gitignore and defaults.
-        project_root: Resolved project root used for path display and discovery.
-        display_filter: Reporter-side filter for ``--min-severity`` / pillar / rule.
-        baseline: Baseline apply/generate/disable selection.
-        config_severity_command: When non-empty, look up
-            ``config.minimum_severity[<this>]`` after loading the config and use
-            that value instead of *fail_threshold*. Callers set this only when
-            the CLI flag was not passed explicitly.
-        changed_ranges: Explicit line ranges such as ``3-3,8-10``.
-        since: Git base ref for changed-region filtering.
-        diff_mode: ``working-tree``, ``staged``, ``unstaged``, a base ref, or ``-``.
-        diff_patch: Unified diff text read from stdin for ``--diff -``.
-        changed_scope: ``symbol`` (default) or ``hunk`` filtering.
+        request: Validated analysis options from the CLI, dashboard, or another caller.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
     """
-    baseline_options = baseline if baseline is not None else BaselineOptions()
+    baseline_options = request.baseline if request.baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics = _load_analysis_config(
-        project_root=project_root,
-        config_path=config_path,
-        no_config=no_config,
+        project_root=request.project_root,
+        config_path=request.config_path,
+        no_config=request.no_config,
         registry=registry,
     )
-    if config_severity_command:
-        configured = config.minimum_severity.get(config_severity_command)
+    fail_threshold = request.fail_threshold
+    if request.config_severity_command:
+        configured = config.minimum_severity.get(request.config_severity_command)
         if configured is not None:
             fail_threshold = configured
 
@@ -106,20 +70,20 @@ def run_analysis(
         parse_diagnostics,
         changed,
     ) = _discover_and_parse_sources(
-        project_root=project_root,
-        paths=paths,
-        include_ignored=include_ignored,
+        project_root=request.project_root,
+        paths=request.paths,
+        include_ignored=request.include_ignored,
         config=config,
-        changed_ranges=changed_ranges,
-        since=since,
-        diff_mode=diff_mode,
-        diff_patch=diff_patch,
+        changed_ranges=request.changed_ranges,
+        since=request.since,
+        diff_mode=request.diff_mode,
+        diff_patch=request.diff_patch,
         diagnostics=diagnostics,
     )
     diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
     diagnostics.extend(parse_diagnostics)
 
-    context = RuleContext(project_root=str(project_root), config=config)
+    context = RuleContext(project_root=str(request.project_root), config=config)
     suppressions_by_file = _parse_suppressions(units, registry)
     diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
     findings = _collect_findings(
@@ -130,28 +94,28 @@ def run_analysis(
         suppressions_by_file=suppressions_by_file,
     )
     baseline_report = _handle_baseline(
-        project_root=project_root,
+        project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
         options=baseline_options,
-        scan_scope=_scan_scope(paths),
+        scan_scope=_scan_scope(request.paths),
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
         units,
         changed,
-        changed_scope,
+        request.changed_scope,
     )
     findings = changed_filter_result.findings
     score = ScoreCalculator().calculate(findings, diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
-    display_findings = display_filter.filter_findings(findings)
+    display_findings = request.display_filter.filter_findings(findings)
 
     return AnalysisReport(
         tool_version=VERSION,
-        requested_paths=tuple(paths) if paths else (".",),
-        format=output.value,
+        requested_paths=tuple(request.paths) if request.paths else (".",),
+        format=request.output.value,
         fail_on=fail_threshold.value,
         files_discovered=len(discovery_result.files),
         files_parsed=files_parsed,
@@ -163,7 +127,7 @@ def run_analysis(
         exit_code=exit_code,
         config_path=config_loaded_from,
         score=score,
-        filters=display_filter,
+        filters=request.display_filter,
         extensions=ReportExtensions(
             baseline=baseline_report,
             diff=_changed_region_payload(changed, changed_filter_result.suppressed_count),
