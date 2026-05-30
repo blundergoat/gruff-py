@@ -27,21 +27,19 @@ class TestFunctionTooLongRule(Rule):
 
         High confidence because line count is a deterministic structural
         metric; long tests reliably hide multiple behaviours and resist
-        future maintenance. Single-threshold per project convention -
-        projects can split into separate warning/error tiers by setting
-        distinct values for the ``warning`` and ``error`` keys in config.
+        future maintenance. One value plus one severity per rubric (ADR-014).
 
         Returns:
-            Definition with ``warning``/``error`` threshold keys both at 100.
+            Definition with a single ``threshold`` of 100 at error severity.
         """
         return RuleDefinition(
             id=self.ID,
             name="Test function too long",
             pillar=Pillar.TEST_QUALITY,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
-            default_thresholds={"warning": 100, "error": 100},
+            default_threshold=100,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

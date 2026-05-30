@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -24,7 +24,7 @@ def _ctx(warning: int = 15, error: int = 25) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -36,13 +36,13 @@ def test_class_with_few_public_methods_emits_no_finding():
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_class_with_many_public_methods_emits_warning():
+def test_class_with_many_public_methods_emits_error():
     methods = "\n".join([f"    def m{i}(self):\n        return {i}" for i in range(20)])
     source = f"class C:\n{methods}\n"
     findings = PublicMethodCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.metadata["publicMethods"] == 20
 
 

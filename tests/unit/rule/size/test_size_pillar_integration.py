@@ -8,7 +8,7 @@ dataclasses, abstract methods, @override) are covered in a single fixture.
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
@@ -197,17 +197,30 @@ def _default_ctx() -> RuleContext:
     return _ctx_with_threshold_overrides(size_test_thresholds)
 
 
+def _settings_for(rule, override: dict[str, int] | None, *, enabled: bool = True) -> RuleSettings:
+    # Single-threshold rubrics (ADR-014) carry their value on severity_threshold;
+    # a legacy {"warning": X, "error": Y} override maps to the lower bound as the
+    # single gating value. Named-knob rules keep their `thresholds` mapping.
+    definition = rule.definition()
+    if definition.default_threshold is not None:
+        if override and "warning" in override:
+            value: int | float = override["warning"]
+        else:
+            value = definition.default_threshold
+        return RuleSettings(
+            enabled=enabled,
+            severity_threshold=SeverityThreshold(value, definition.default_severity),
+        )
+    thresholds = dict(override) if override is not None else dict(definition.default_thresholds)
+    return RuleSettings(enabled=enabled, thresholds=thresholds)
+
+
 def _ctx_with_threshold_overrides(
     overrides: dict[str, dict[str, int]],
 ) -> RuleContext:
     registry = RuleRegistry.defaults()
     rules = {
-        rule.definition().id: RuleSettings(
-            enabled=True,
-            thresholds=overrides.get(
-                rule.definition().id, dict(rule.definition().default_thresholds)
-            ),
-        )
+        rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id))
         for rule in registry.all()
     }
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
@@ -216,9 +229,10 @@ def _ctx_with_threshold_overrides(
 def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContext:
     registry = RuleRegistry.defaults()
     rules = {
-        rule.definition().id: RuleSettings(
+        rule.definition().id: _settings_for(
+            rule,
+            thresholds if rule.definition().id in rule_ids else None,
             enabled=rule.definition().id in rule_ids,
-            thresholds=thresholds if rule.definition().id in rule_ids else {},
         )
         for rule in registry.all()
     }
@@ -228,9 +242,8 @@ def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContex
 def _ctx_with_disabled(disabled_id: str) -> RuleContext:
     registry = RuleRegistry.defaults()
     rules = {
-        rule.definition().id: RuleSettings(
-            enabled=(rule.definition().id != disabled_id),
-            thresholds=dict(rule.definition().default_thresholds),
+        rule.definition().id: _settings_for(
+            rule, None, enabled=(rule.definition().id != disabled_id)
         )
         for rule in registry.all()
     }
@@ -300,7 +313,7 @@ def test_size_threshold_findings_carry_standard_threshold_metadata():
     assert all(isinstance(f.metadata["measuredValue"], int | float) for f in size_findings)
     assert all(f.metadata["threshold"] == 0 for f in size_findings)
     assert all(f.metadata["thresholdDirection"] == "above" for f in size_findings)
-    assert all(f.metadata["thresholdType"] == "warning" for f in size_findings)
+    assert all(f.metadata["thresholdType"] == "error" for f in size_findings)
 
 
 def test_nested_inner_function_emits_independent_finding():

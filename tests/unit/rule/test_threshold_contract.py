@@ -4,8 +4,9 @@ from typing import Any
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.finding import Finding
+from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
@@ -66,12 +67,15 @@ def _unit(source: str) -> AnalysisUnit:
     )
 
 
-def _thresholds_for(rule_id: str) -> dict[str, int]:
+def _severity_threshold_for(rule_id: str) -> SeverityThreshold | None:
+    # maintainability-index is below-is-worse: a threshold of 101 always fires
+    # against the clamped 0-100 metric. Above-is-worse rubrics fire on any value
+    # above 0.
     if rule_id == "complexity.maintainability-index":
-        return {"warning": 101, "error": 0}
+        return SeverityThreshold(101, Severity.ERROR)
     if rule_id in _THRESHOLD_RULE_IDS:
-        return {"warning": 0, "error": 9999}
-    return {}
+        return SeverityThreshold(0, Severity.ERROR)
+    return None
 
 
 def _threshold_ctx() -> RuleContext:
@@ -79,7 +83,7 @@ def _threshold_ctx() -> RuleContext:
     rules = {
         rule.definition().id: RuleSettings(
             enabled=rule.definition().id in _THRESHOLD_RULE_IDS,
-            thresholds=_thresholds_for(rule.definition().id),
+            severity_threshold=_severity_threshold_for(rule.definition().id),
         )
         for rule in registry.all()
     }

@@ -156,6 +156,7 @@ def run_analysis(
         files_discovered=len(discovery_result.files),
         files_parsed=files_parsed,
         ignored_paths=discovery_result.ignored_paths,
+        ignored_path_details=discovery_result.ignored_path_reasons,
         missing_paths=discovery_result.missing_paths,
         diagnostics=tuple(diagnostics),
         findings=tuple(display_findings),

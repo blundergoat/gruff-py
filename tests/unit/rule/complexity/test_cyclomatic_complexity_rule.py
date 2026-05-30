@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity.cyclomatic_complexity_rule import (
@@ -43,7 +43,7 @@ def _ctx(warning: int = 10, error: int = 20) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -91,14 +91,14 @@ def test_simple_function_returns_1():
     assert findings == []
 
 
-def test_high_complexity_emits_warning():
-    # Build a function with 11 if-statements -> cc = 12 (> default warning 10)
+def test_high_complexity_emits_error():
+    # Build a function with 11 if-statements -> cc = 12 (> default threshold 10)
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(11)])
     src = f"def f(x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.metadata["complexity"] == 12
     assert f.symbol == "f"
 

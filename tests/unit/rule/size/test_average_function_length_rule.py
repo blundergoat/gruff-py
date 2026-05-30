@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -24,7 +24,7 @@ def _ctx(warning: int = 30, error: int = 60) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -36,7 +36,7 @@ def test_class_with_short_methods_emits_no_finding():
     assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_class_with_long_methods_emits_warning():
+def test_class_with_long_methods_emits_error():
     body = "\n".join(["        x = 1"] * 8)
     source = (
         f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n    def c(self):\n{body}\n"
@@ -44,7 +44,7 @@ def test_class_with_long_methods_emits_warning():
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.metadata["methodCount"] == 3
     assert f.metadata["averageLines"] == 9.0  # each method is 9 lines (def + 8 body)
 

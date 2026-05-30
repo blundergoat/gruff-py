@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -24,7 +24,7 @@ def _ctx(warning: int = 300, error: int = 500) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -36,13 +36,13 @@ def test_short_class_emits_no_finding():
     assert ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=10)) == []
 
 
-def test_long_class_emits_warning():
+def test_long_class_emits_error():
     body = "\n".join(["    x = 1"] * 10)
     source = f"class C:\n{body}\n"
     findings = ClassLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.symbol == "C"
     assert f.metadata["lines"] == 11
 

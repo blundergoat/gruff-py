@@ -425,7 +425,7 @@ def _confidence_rationale(confidence: Confidence) -> str:
 
 def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
     keys: list[str] = []
-    if _has_severity_thresholds(definition.default_thresholds):
+    if definition.default_threshold is not None:
         keys.extend(("threshold", "severity"))
     else:
         keys.extend(f"thresholds.{name}" for name in definition.default_thresholds)
@@ -434,25 +434,21 @@ def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
 
 
 def _threshold_direction(definition: RuleDefinition) -> str:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ""
     return _THRESHOLD_DIRECTIONS.get(definition.id, "above")
 
 
 def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ()
-    if _has_severity_thresholds(definition.default_thresholds) or definition.pillar in {
+    if definition.default_threshold is not None or definition.pillar in {
         Pillar.SIZE,
         Pillar.COMPLEXITY,
         Pillar.MAINTAINABILITY,
     }:
         return _STANDARD_THRESHOLD_METADATA_KEYS
     return ()
-
-
-def _has_severity_thresholds(thresholds: dict[str, int | float]) -> bool:
-    return set(thresholds) == {"warning", "error"}
 
 
 _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {

@@ -24,6 +24,7 @@ from gruffpy.cli_options import (
     analyse_command as _analyse_command,
     apply_decorators,
     bind_root_group,
+    check_ignore_command as _check_ignore_command,
     completion_command as _completion_command,
     dashboard_command as _dashboard_command,
     help_command_decorator as _help_command_decorator,
@@ -37,6 +38,12 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.cli_summary import summary_payload, summary_text
+from gruffpy.command.check_ignore import (
+    check_ignore_exit_code,
+    classify_paths,
+    render_check_ignore_json,
+    render_check_ignore_text,
+)
 from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
@@ -539,6 +546,40 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
         _write_stdout("\n")
 
 
+@_check_ignore_command
+def check_ignore(**kwargs: Any) -> None:
+    """Report whether gruff would ignore each path, and why.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+    """
+    paths = cast(tuple[str, ...], kwargs["paths"])
+    config_path = cast(Path | None, kwargs["config_path"])
+    no_config = cast(bool, kwargs["no_config"])
+    output_format = cast(str, kwargs["check_ignore_format"])
+    if not paths:
+        click.echo("check-ignore requires at least one path.", err=True)
+        sys.exit(2)
+    if no_config and config_path is not None:
+        click.echo("--no-config cannot be combined with an explicit --config path.", err=True)
+        sys.exit(2)
+    try:
+        verdicts = classify_paths(
+            project_root=Path.cwd(),
+            paths=paths,
+            config_path=config_path,
+            no_config=no_config,
+        )
+    except ConfigError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(2)
+    if output_format == "json":
+        _write_stdout(render_check_ignore_json(verdicts))
+    else:
+        _write_stdout(render_check_ignore_text(verdicts))
+    sys.exit(check_ignore_exit_code(verdicts))
+
+
 def _analysis_request(
     kwargs: Mapping[str, Any],
     *,
@@ -792,7 +833,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "defaultSeverity": definition.default_severity.value,
         "confidence": definition.confidence.value,
         "defaultEnabled": definition.default_enabled,
-        "thresholds": dict(definition.default_thresholds),
+        **definition.threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
         "documentation": documentation.to_payload(),

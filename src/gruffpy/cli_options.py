@@ -302,6 +302,21 @@ def init_command(function: _F) -> _F:
     return apply_decorators(function, _INIT_COMMAND_DECORATORS)
 
 
+def check_ignore_command(function: _F) -> _F:
+    """Wire *function* up as the ``check-ignore`` subcommand.
+
+    Reports whether gruff would ignore each path (and why) using the same config
+    resolution and ignore engine as ``analyse``, performing no analysis.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff check-ignore``.
+    """
+    return apply_decorators(function, _CHECK_IGNORE_COMMAND_DECORATORS)
+
+
 def completion_command(function: _F) -> _F:
     """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
 
@@ -868,4 +883,31 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help="Regenerate an existing .gruff-py.yaml file, preserving paths.ignore.",
     ),
     _command(),
+)
+
+_CHECK_IGNORE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--format",
+        "check_ignore_format",
+        type=click.Choice(["text", "json"]),
+        default="text",
+        show_default=True,
+        help="Output format: text or json.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff-py.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML or TOML config file (.yaml, .yml, or .toml).",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command("check-ignore"),
 )

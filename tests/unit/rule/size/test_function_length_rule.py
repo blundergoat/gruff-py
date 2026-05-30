@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -25,7 +25,7 @@ def _ctx(warning: int = 30, error: int = 60) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -44,7 +44,7 @@ _BODY_STATEMENT_COUNT = 10
 _EXPECTED_REPORTED_LINES = _BODY_STATEMENT_COUNT + 1
 
 
-def test_above_warning_below_error_emits_warning():
+def test_above_threshold_emits_error():
     body = "\n".join(["    x = 1"] * _BODY_STATEMENT_COUNT)
     source = f"def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(
@@ -52,19 +52,19 @@ def test_above_warning_below_error_emits_warning():
     )
     assert len(findings) == 1
     f = findings[0]
-    assert (f.severity, f.symbol) == (Severity.WARNING, "f")
+    assert (f.severity, f.symbol) == (Severity.ERROR, "f")
     relevant_metadata = {k: f.metadata[k] for k in ("lines", "threshold", "thresholdType")}
     assert relevant_metadata == {
         "lines": _EXPECTED_REPORTED_LINES,
         "threshold": _WARNING_BOUNDARY,
-        "thresholdType": "warning",
+        "thresholdType": "error",
     }
 
 
-def test_above_error_emits_error():
+def test_far_above_threshold_emits_error():
     body = "\n".join(["    x = 1"] * 25)
     source = f"def f():\n{body}\n"
-    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(warning=20, error=20))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.ERROR

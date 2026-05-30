@@ -176,7 +176,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cognitive complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cognitive` protects the complexity pillar by flagging cognitive complexity before it becomes costly to review, maintain, or trust.
@@ -193,7 +193,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cyclomatic complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
@@ -211,7 +211,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Halstead volume
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.halstead-volume` protects the complexity pillar by flagging halstead volume before it becomes costly to review, maintain, or trust.
@@ -229,7 +229,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Maintainability index
 - Pillar: `maintainability`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.maintainability-index` protects the maintainability pillar by flagging maintainability index before it becomes costly to review, maintain, or trust.
@@ -247,7 +247,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Nesting depth
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.nesting-depth` protects the complexity pillar by flagging nesting depth before it becomes costly to review, maintain, or trust.
@@ -464,7 +464,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: TODO density
 - Pillar: `documentation`
 - Tier: `v0.1`
-- Default severity: `advisory`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `docs.todo-density` protects the documentation pillar by flagging todo density before it becomes costly to review, maintain, or trust.
@@ -1147,7 +1147,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Attribute count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.attribute-count` protects the size pillar by flagging attribute count before it becomes costly to review, maintain, or trust.
@@ -1164,7 +1164,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Average function length per class
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.average-function-length` protects the size pillar by flagging average function length per class before it becomes costly to review, maintain, or trust.
@@ -1181,7 +1181,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Class length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.class-length` protects the size pillar by flagging class length before it becomes costly to review, maintain, or trust.
@@ -1198,7 +1198,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: File length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.file-length` protects the size pillar by flagging file length before it becomes costly to review, maintain, or trust.
@@ -1215,7 +1215,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Function length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.function-length` protects the size pillar by flagging function length before it becomes costly to review, maintain, or trust.
@@ -1232,7 +1232,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Parameter count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.parameter-count` protects the size pillar by flagging parameter count before it becomes costly to review, maintain, or trust.
@@ -1249,7 +1249,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Public method count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.public-method-count` protects the size pillar by flagging public method count before it becomes costly to review, maintain, or trust.
@@ -1666,7 +1666,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Test function too long
 - Pillar: `test-quality`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.

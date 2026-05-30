@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -24,7 +24,7 @@ def _ctx(warning: int = 15, error: int = 25) -> RuleContext:
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(warning, Severity.ERROR),
             ),
         }
     )
@@ -42,7 +42,7 @@ def test_annotated_class_attributes_counted():
     findings = AttributeCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["attributes"] == 20
-    assert findings[0].severity == Severity.WARNING
+    assert findings[0].severity == Severity.ERROR
 
 
 def test_init_self_assignments_counted():

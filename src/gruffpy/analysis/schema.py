@@ -1,4 +1,16 @@
-"""Schema version strings emitted by gruff-py reports and accepted by its config loader."""
+"""Schema version strings emitted by gruff-py reports and accepted by its config loader.
+
+Schema history (additive changes keep the version string; only a breaking change
+bumps it, per the cross-impl CONTRACT.md compatibility policy):
+
+- ``gruff-py.analysis.v1`` gained an additive ``ignoredPathDetails`` array
+  (objects with ``path``/``source``/``pattern``) alongside the existing
+  string ``ignoredPaths``. ``source`` is one of ``config``/``gitignore``/
+  ``default``/``generated``; ``pattern`` is the matched glob for ``config``,
+  the matched directory for ``default``, the lockfile name for ``generated``,
+  and ``null`` for ``gitignore``. Existing consumers reading ``ignoredPaths``
+  as a list of strings are unaffected.
+"""
 
 ANALYSIS_SCHEMA_VERSION = "gruff-py.analysis.v1"
 BASELINE_SCHEMA_VERSION = "gruff-py.baseline.v1"

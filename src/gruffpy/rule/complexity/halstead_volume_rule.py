@@ -34,9 +34,9 @@ class HalsteadVolumeRule(Rule):
             name="Halstead volume",
             pillar=Pillar.COMPLEXITY,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 180, "error": 400},
+            default_threshold=400,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

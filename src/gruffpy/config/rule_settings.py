@@ -79,22 +79,12 @@ class RuleSettings:
             Matching ``ThresholdMatch`` when *value* is over a threshold,
             else ``None``.
         """
-        if self.severity_threshold is not None:
-            if value <= self.severity_threshold.threshold:
-                return None
-            return ThresholdMatch(
-                self.severity_threshold.threshold,
-                self.severity_threshold.severity,
-            )
-
-        warning_threshold = self.numeric_threshold("warning")
-        if value <= warning_threshold:
+        if self.severity_threshold is None or value <= self.severity_threshold.threshold:
             return None
-
-        error_threshold = self.numeric_threshold("error")
-        severity = Severity.ERROR if value > error_threshold else Severity.WARNING
-        threshold = error_threshold if severity is Severity.ERROR else warning_threshold
-        return ThresholdMatch(threshold, severity)
+        return ThresholdMatch(
+            self.severity_threshold.threshold,
+            self.severity_threshold.severity,
+        )
 
     def low_value_threshold_match(self, value: int | float) -> ThresholdMatch | None:
         """Match *value* against low-side thresholds (fires when value falls below them).
@@ -109,22 +99,12 @@ class RuleSettings:
             Matching ``ThresholdMatch`` when *value* is under a threshold,
             else ``None``.
         """
-        if self.severity_threshold is not None:
-            if value >= self.severity_threshold.threshold:
-                return None
-            return ThresholdMatch(
-                self.severity_threshold.threshold,
-                self.severity_threshold.severity,
-            )
-
-        warning_threshold = self.numeric_threshold("warning")
-        if value >= warning_threshold:
+        if self.severity_threshold is None or value >= self.severity_threshold.threshold:
             return None
-
-        error_threshold = self.numeric_threshold("error")
-        severity = Severity.ERROR if value < error_threshold else Severity.WARNING
-        threshold = error_threshold if severity is Severity.ERROR else warning_threshold
-        return ThresholdMatch(threshold, severity)
+        return ThresholdMatch(
+            self.severity_threshold.threshold,
+            self.severity_threshold.severity,
+        )
 
     def has_option(self, name: str) -> bool:
         """Return whether the option *name* was set (distinct from defaulting).

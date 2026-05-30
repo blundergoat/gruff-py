@@ -69,6 +69,52 @@ DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
     "venv",
 )
 
+# Ignore-decision source labels recorded on every skipped path. Shared by the
+# report's ``ignoredPathDetails`` field and the ``check-ignore`` command so a
+# coding agent can see *why* a file was skipped, not only that it was.
+IGNORE_SOURCE_CONFIG = "config"
+IGNORE_SOURCE_GITIGNORE = "gitignore"
+IGNORE_SOURCE_DEFAULT = "default"
+IGNORE_SOURCE_GENERATED = "generated"
+
+
+@dataclass(frozen=True, slots=True)
+class IgnoreReason:
+    """Why a path was excluded, with the matched glob when the source is config.
+
+    Attributes:
+        source: One of ``config``, ``gitignore``, ``default``, or ``generated``.
+        pattern: The exact matched glob for ``config``, the matched directory for
+            ``default``, the lockfile name for ``generated``, or ``None`` for
+            ``gitignore`` (the matcher does not surface the matching line).
+    """
+
+    source: str
+    pattern: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class IgnoredPath:
+    """A skipped path paired with the reason discovery excluded it.
+
+    Attributes:
+        path: Project-relative display path that was skipped.
+        source: The ignore source (see :class:`IgnoreReason`).
+        pattern: The matched glob/directory/filename, or ``None``.
+    """
+
+    path: str
+    source: str
+    pattern: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Return the JSON-serialisable mapping used by ``ignoredPathDetails``.
+
+        Returns:
+            Mapping with ``path``, ``source``, and ``pattern`` keys.
+        """
+        return {"path": self.path, "source": self.source, "pattern": self.pattern}
+
 
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryResult:
@@ -78,11 +124,14 @@ class SourceDiscoveryResult:
         files: Discovered source files that should be analysed.
         missing_paths: Requested input paths that were not found.
         ignored_paths: Requested input paths skipped by ignore handling.
+        ignored_path_reasons: The same skipped paths carrying their ignore
+            source and matched pattern, one entry per ``ignored_paths`` entry.
     """
 
     files: tuple[SourceFile, ...]
     missing_paths: tuple[str, ...]
     ignored_paths: tuple[str, ...]
+    ignored_path_reasons: tuple[IgnoredPath, ...] = ()
 
     def has_input_errors(self) -> bool:
         """Return whether any requested path was missing.
@@ -95,10 +144,11 @@ class SourceDiscoveryResult:
 
 @dataclass(frozen=True, slots=True)
 class _IgnoreDecision:
-    """Whether a path should be skipped, plus the optional summary path."""
+    """Whether a path should be skipped, the optional summary path, and the reason."""
 
     is_ignored: bool
     display_path: str | None = None
+    reason: IgnoreReason | None = None
 
 
 class SourceDiscovery:
@@ -132,7 +182,7 @@ class SourceDiscovery:
         requested = paths or ["."]
         files: dict[str, SourceFile] = {}
         missing: list[str] = []
-        ignored: list[str] = []
+        ignored: list[IgnoredPath] = []
 
         for raw_path in requested:
             found_paths, missing_path = self._discover_requested_paths(
@@ -147,11 +197,53 @@ class SourceDiscovery:
                 self._add_file(found_path, files)
 
         sorted_files = tuple(files[k] for k in sorted(files))
+        deduped: dict[str, IgnoredPath] = {}
+        for entry in ignored:
+            deduped.setdefault(entry.path, entry)
+        reasons = tuple(deduped[path] for path in sorted(deduped))
         return SourceDiscoveryResult(
             files=sorted_files,
             missing_paths=tuple(sorted(missing)),
-            ignored_paths=tuple(sorted(set(ignored))),
+            ignored_paths=tuple(reason.path for reason in reasons),
+            ignored_path_reasons=reasons,
         )
+
+    def classify(
+        self,
+        raw_path: str,
+        *,
+        include_ignored: bool = False,
+        configured_ignore_patterns: Iterable[str] = (),
+    ) -> IgnoredPath | None:
+        """Return why gruff would ignore ``raw_path``, or ``None`` if it would not.
+
+        Shares ``discover``'s ignore decision so ``check-ignore`` and ``analyse``
+        cannot diverge, then adds the generated-lockfile check that discovery
+        otherwise applies through source-type filtering. Works on hypothetical
+        paths that do not exist on disk, mirroring ``git check-ignore``.
+
+        Args:
+            raw_path: File or directory path relative to the project root.
+            include_ignored: Whether default and gitignored paths are in scope.
+            configured_ignore_patterns: Project-config ``paths.ignore`` globs.
+
+        Returns:
+            The matching ``IgnoredPath`` (path, source, pattern), or ``None``.
+        """
+        patterns = list(configured_ignore_patterns)
+        absolute = self._absolute_path(raw_path)
+        decision = self._ignore_decision(
+            absolute,
+            include_ignored=include_ignored,
+            patterns=patterns,
+            record_file=True,
+        )
+        if decision.is_ignored and decision.reason is not None:
+            display = decision.display_path or self._display_path(absolute)
+            return IgnoredPath(display, decision.reason.source, decision.reason.pattern)
+        if absolute.name in IGNORED_FILENAMES:
+            return IgnoredPath(self._display_path(absolute), IGNORE_SOURCE_GENERATED, absolute.name)
+        return None
 
     def _discover_requested_paths(
         self,
@@ -159,7 +251,7 @@ class SourceDiscovery:
         *,
         include_ignored: bool,
         patterns: list[str],
-        ignored: list[str],
+        ignored: list[IgnoredPath],
     ) -> tuple[Iterable[Path], str | None]:
         absolute = self._absolute_path(raw_path)
         if not absolute.exists():
@@ -172,8 +264,7 @@ class SourceDiscovery:
             record_file=True,
         )
         if decision.is_ignored:
-            if decision.display_path is not None:
-                ignored.append(decision.display_path)
+            self._record_ignored(decision, ignored)
             return (), None
 
         if absolute.is_file():
@@ -187,7 +278,7 @@ class SourceDiscovery:
         directory: Path,
         include_ignored: bool,
         patterns: list[str],
-        ignored_paths: list[str],
+        ignored_paths: list[IgnoredPath],
     ) -> Iterator[Path]:
         stack: list[Path] = [directory]
         while stack:
@@ -216,7 +307,7 @@ class SourceDiscovery:
         include_ignored: bool,
         patterns: list[str],
         is_dir: bool,
-        ignored_paths: list[str],
+        ignored_paths: list[IgnoredPath],
     ) -> bool:
         decision = self._ignore_decision(
             path,
@@ -227,9 +318,16 @@ class SourceDiscovery:
         )
         if not decision.is_ignored:
             return False
-        if decision.display_path is not None:
-            ignored_paths.append(decision.display_path)
+        self._record_ignored(decision, ignored_paths)
         return True
+
+    @staticmethod
+    def _record_ignored(decision: _IgnoreDecision, ignored_paths: list[IgnoredPath]) -> None:
+        if decision.display_path is None or decision.reason is None:
+            return
+        ignored_paths.append(
+            IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern)
+        )
 
     def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
         canonical = self._canonical(path)
@@ -281,24 +379,27 @@ class SourceDiscovery:
         name = path.name
         return name == ".env" or name.startswith(".env.")
 
-    def _is_default_ignored(self, path: Path) -> bool:
+    def _default_ignored_match(self, path: Path) -> str | None:
         display = self._display_path(path).replace("\\", "/")
         if display == ".":
-            return False
+            return None
         segments = display.strip("/").split("/")
         for ignored in DEFAULT_IGNORED_DIRECTORIES:
             ig_segments = ignored.split("/")
             ig_count = len(ig_segments)
             for i in range(0, len(segments) - ig_count + 1):
                 if segments[i : i + ig_count] == ig_segments:
-                    return True
-        return False
+                    return ignored
+        return None
 
-    def _is_configured_ignored(self, path: Path, patterns: list[str]) -> bool:
+    def _configured_pattern(self, path: Path, patterns: list[str]) -> str | None:
         if not patterns:
-            return False
+            return None
         display = self._display_path(path).replace("\\", "/")
-        return any(_is_pattern_match(display, p) for p in patterns)
+        for pattern in patterns:
+            if _is_pattern_match(display, pattern):
+                return pattern
+        return None
 
     def _ignore_decision(
         self,
@@ -310,15 +411,25 @@ class SourceDiscovery:
         record_file: bool,
     ) -> _IgnoreDecision:
         display_path = self._display_path(path)
-        if self._is_configured_ignored(path, patterns):
-            return _IgnoreDecision(True, display_path)
+        configured = self._configured_pattern(path, patterns)
+        if configured is not None:
+            return _IgnoreDecision(
+                True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured)
+            )
         if include_ignored:
             return _IgnoreDecision(False)
         if is_dir is None:
             is_dir = path.is_dir()
-        if not self._is_default_ignored(path) and not self._is_gitignored(path, is_dir=is_dir):
-            return _IgnoreDecision(False)
-        return _IgnoreDecision(True, display_path if record_file or is_dir else None)
+        default_match = self._default_ignored_match(path)
+        if default_match is not None:
+            recorded = display_path if record_file or is_dir else None
+            return _IgnoreDecision(
+                True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match)
+            )
+        if self._is_gitignored(path, is_dir=is_dir):
+            recorded = display_path if record_file or is_dir else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_GITIGNORE, None))
+        return _IgnoreDecision(False)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
         if is_dir is None:

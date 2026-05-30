@@ -57,8 +57,8 @@ def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: P
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
     metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
     hv = metrics["halsteadVolume"]
-    assert hv["threshold"] == 180
-    assert hv["thresholdSeverity"] == "warning"
+    assert hv["threshold"] == 400
+    assert hv["thresholdSeverity"] == "error"
     assert "warningThreshold" not in hv
     assert "errorThreshold" not in hv
 

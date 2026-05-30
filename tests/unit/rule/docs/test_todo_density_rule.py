@@ -68,4 +68,4 @@ def test_same_filename_outside_rule_package_still_emits():
 
 def test_default_threshold():
     rule = TodoDensityRule()
-    assert rule.definition().default_thresholds == {"warning": 10, "error": 10}
+    assert rule.definition().default_threshold == 10

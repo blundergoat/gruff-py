@@ -18,6 +18,7 @@ from gruffpy.version import VERSION
 
 _EXPECTED_ROOT_COMMANDS = (
     "analyse",
+    "check-ignore",
     "completion",
     "dashboard",
     "help",
@@ -186,7 +187,6 @@ _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
         "defaultSeverity",
         "confidence",
         "defaultEnabled",
-        "thresholds",
         "options",
         "description",
         "documentation",
