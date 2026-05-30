@@ -17,7 +17,6 @@ _THRESHOLD_RULE_IDS = {
     "complexity.halstead-volume",
     "complexity.maintainability-index",
     "complexity.nesting-depth",
-    "complexity.npath",
     "size.attribute-count",
     "size.average-function-length",
     "size.class-length",

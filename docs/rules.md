@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 115 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 114 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -10,7 +10,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | Pillar | Rule count | Notes |
 |---|---:|---|
 | `size` | 7 | File, class, function, parameter, method, and attribute size |
-| `complexity` | 5 | Cyclomatic, cognitive, Halstead, nesting, and NPATH |
+| `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
@@ -40,7 +40,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `complexity.halstead-volume`
 - `complexity.maintainability-index`
 - `complexity.nesting-depth`
-- `complexity.npath`
 
 ### Dead Code And Waste
 
@@ -259,24 +258,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Threshold direction: `above`
 - Bad example: Code that triggers `complexity.nesting-depth` leaves nesting depth unaddressed.
 - Good example: Code that satisfies `complexity.nesting-depth` makes nesting depth explicit or simpler.
-
-### `complexity.npath`
-
-- Name: NPATH complexity
-- Pillar: `complexity`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `complexity.npath` protects the complexity pillar by flagging npath complexity before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported npath complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Config threshold: `threshold` = `500`, `severity` = `error`
-- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
-- Threshold direction: `above`
-- Formula provenance: gruff-specific AST path-counting heuristic.
-- Bad example: Code that triggers `complexity.npath` leaves npath complexity unaddressed.
-- Good example: Code that satisfies `complexity.npath` makes npath complexity explicit or simpler.
 
 ### `dead-code.unused-private-attribute`
 

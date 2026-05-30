@@ -16,7 +16,6 @@ COMPLEXITY_RULE_IDS = {
     "complexity.halstead-volume",
     "complexity.maintainability-index",
     "complexity.nesting-depth",
-    "complexity.npath",
 }
 
 COMPLEXITY_FIXTURE = '''
@@ -171,7 +170,7 @@ def _ctx_for_complexity_metadata() -> RuleContext:
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
-def test_registry_defaults_includes_all_six_complexity_rules():
+def test_registry_defaults_includes_all_complexity_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     assert COMPLEXITY_RULE_IDS.issubset(ids)
@@ -181,8 +180,8 @@ def test_complexity_rules_emit_findings_on_fixture():
     unit = _make_unit(COMPLEXITY_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    # too_complex should fire at minimum cyclomatic, cognitive, nesting-depth,
-    # and npath.
+    # too_complex should fire at minimum cyclomatic, cognitive, and
+    # nesting-depth.
     assert "complexity.cyclomatic" in rule_ids
     assert "complexity.cognitive" in rule_ids
     assert "complexity.nesting-depth" in rule_ids
@@ -254,7 +253,6 @@ _COMPLEXITY_RULES_FOR_SHALLOW = (
     "complexity.cognitive",
     "complexity.cyclomatic",
     "complexity.nesting-depth",
-    "complexity.npath",
 )
 
 

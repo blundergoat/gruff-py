@@ -71,7 +71,6 @@ selection:
   - complexity.halstead-volume
   - complexity.maintainability-index
   - complexity.nesting-depth
-  - complexity.npath
   - dead-code.unused-private-attribute
   - dead-code.unused-private-function
   - design.single-implementor-protocol
@@ -203,10 +202,6 @@ rules:
   complexity.nesting-depth:
     enabled: true
     threshold: 6
-    severity: error
-  complexity.npath:
-    enabled: true
-    threshold: 500
     severity: error
   dead-code.unused-private-attribute:
     enabled: true

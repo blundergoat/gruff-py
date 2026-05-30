@@ -11,7 +11,6 @@ from gruffpy.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplex
 from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
 from gruffpy.rule.complexity.maintainability_index_rule import MaintainabilityIndexRule
 from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule
-from gruffpy.rule.complexity.npath_complexity_rule import NPathComplexityRule
 from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAttributeRule
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
@@ -179,7 +178,6 @@ _FORMULA_PROVENANCE = {
         "A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: "
         "https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command."
     ),
-    "complexity.npath": "gruff-specific AST path-counting heuristic.",
 }
 
 
@@ -251,7 +249,7 @@ class RuleDocs:
         """Collect the non-empty optional payload fields in JSON-key order.
 
         Driven from a table so adding a new optional field is one row and the
-        NPATH cost stays linear instead of multiplicative.
+        cost stays linear instead of multiplicative.
         """
         candidates: tuple[tuple[str, Any, Any], ...] = (
             ("formulaProvenance", self.formula_provenance, self.formula_provenance),
@@ -592,17 +590,10 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     # Complexity / size siblings (function-level).
     "complexity.cyclomatic": (
         "complexity.cognitive",
-        "complexity.npath",
         "size.function-length",
     ),
     "complexity.cognitive": (
         "complexity.cyclomatic",
-        "complexity.npath",
-        "size.function-length",
-    ),
-    "complexity.npath": (
-        "complexity.cyclomatic",
-        "complexity.cognitive",
         "size.function-length",
     ),
     "complexity.nesting-depth": ("complexity.cyclomatic", "complexity.cognitive"),
@@ -615,7 +606,6 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     "size.function-length": (
         "complexity.cyclomatic",
         "complexity.cognitive",
-        "complexity.npath",
         "size.average-function-length",
     ),
     "size.average-function-length": ("size.function-length",),
@@ -663,7 +653,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HalsteadVolumeRule),
     _entry(MaintainabilityIndexRule),
     _entry(NestingDepthRule),
-    _entry(NPathComplexityRule),
     _entry(UnusedPrivateAttributeRule),
     _entry(UnusedPrivateFunctionRule),
     _entry(SingleImplementorProtocolRule),

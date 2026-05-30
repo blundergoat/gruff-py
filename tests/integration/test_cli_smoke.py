@@ -888,7 +888,6 @@ def test_cli_metric_calibration_json_is_developer_dump(
     assert payload["run"]["functions"] == 1
     assert {metric["name"] for metric in payload["metrics"]} == {
         "cyclomatic",
-        "npath",
         "halsteadVolume",
         "maintainabilityIndex",
     }

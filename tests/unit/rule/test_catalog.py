@@ -37,7 +37,6 @@ _FORMULA_RULES = {
     "complexity.cyclomatic",
     "complexity.halstead-volume",
     "complexity.maintainability-index",
-    "complexity.npath",
 }
 
 _ALL_DEFINITIONS = catalog_definitions()

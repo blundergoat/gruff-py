@@ -53,12 +53,6 @@ def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> N
     )
 
 
-def test_metric_calibration_payload_npath_count(tmp_path: Path) -> None:
-    payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
-    assert metrics["npath"]["count"] == 2
-
-
 def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: Path) -> None:
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
     metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON

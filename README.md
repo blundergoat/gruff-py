@@ -25,7 +25,7 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 116 rules across 11 pillars |
+| Rule catalogue | 114 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff-py.analysis.v1` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -176,12 +176,12 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.1 catalogue contains 115 rules across 11 pillars:
+The v0.1 catalogue contains 114 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
 | `size` | 7 |
-| `complexity` | 5 |
+| `complexity` | 4 |
 | `maintainability` | 1 |
 | `dead-code` | 10 |
 | `modernisation` | 1 |

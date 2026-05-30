@@ -24,23 +24,17 @@ from gruffpy.rule.complexity.maintainability_index_rule import (
     MaintainabilityIndexRule,
     maintainability_index_for,
 )
-from gruffpy.rule.complexity.npath_complexity_rule import (
-    _NPATH_CAP,
-    NPathComplexityRule,
-    npath_for,
-)
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.version import TOOL_NAME, VERSION
 
-MetricName = Literal["cyclomatic", "npath", "halsteadVolume", "maintainabilityIndex"]
+MetricName = Literal["cyclomatic", "halsteadVolume", "maintainabilityIndex"]
 ThresholdDirection = Literal["above", "below"]
 
 METRIC_ORDER: tuple[MetricName, ...] = (
     "cyclomatic",
-    "npath",
     "halsteadVolume",
     "maintainabilityIndex",
 )
@@ -104,8 +98,6 @@ class FunctionMetricRow:
         end_line: Optional one-based end line.
         symbol: Qualified function symbol.
         cyclomatic: Cyclomatic complexity value.
-        npath: NPath complexity value.
-        is_npath_capped: Whether NPath hit the configured cap.
         halstead_volume: Halstead volume value.
         maintainability_index: Maintainability index value.
     """
@@ -115,8 +107,6 @@ class FunctionMetricRow:
     end_line: int | None
     symbol: str
     cyclomatic: int
-    npath: int
-    is_npath_capped: bool
     halstead_volume: float
     maintainability_index: float
 
@@ -132,8 +122,6 @@ class FunctionMetricRow:
         match metric:
             case "cyclomatic":
                 return float(self.cyclomatic)
-            case "npath":
-                return float(self.npath)
             case "halsteadVolume":
                 return self.halstead_volume
             case "maintainabilityIndex":
@@ -156,8 +144,6 @@ class FunctionMetricRow:
             "value": _rounded(self.value_for(metric)),
             "metrics": {
                 "cyclomatic": self.cyclomatic,
-                "npath": self.npath,
-                "npathCapped": self.is_npath_capped,
                 "halsteadVolume": _rounded(self.halstead_volume),
                 "maintainabilityIndex": _rounded(self.maintainability_index),
             },
@@ -567,16 +553,12 @@ def _top_row_line(row: FunctionMetricRow, metric: MetricName) -> str:
 
 def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
     halstead = halstead_for(fn)
-    npath_raw = npath_for(fn)
-    npath_capped = min(npath_raw, _NPATH_CAP)
     return FunctionMetricRow(
         file_path=file_path,
         line=fn.lineno,
         end_line=fn.end_lineno,
         symbol=qualified_symbol(fn, parent_chain(fn)),
         cyclomatic=cyclomatic_for(fn),
-        npath=npath_capped,
-        is_npath_capped=npath_raw >= _NPATH_CAP,
         halstead_volume=halstead.volume,
         maintainability_index=maintainability_index_for(fn),
     )
@@ -585,7 +567,6 @@ def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
 def _metric_thresholds(config: AnalysisConfig) -> dict[MetricName, MetricThreshold]:
     return {
         "cyclomatic": _threshold(config, CyclomaticComplexityRule.ID, Severity.WARNING, "above"),
-        "npath": _threshold(config, NPathComplexityRule.ID, Severity.WARNING, "above"),
         "halsteadVolume": _threshold(config, HalsteadVolumeRule.ID, Severity.WARNING, "above"),
         "maintainabilityIndex": _threshold(
             config, MaintainabilityIndexRule.ID, Severity.WARNING, "below"

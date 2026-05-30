@@ -26,7 +26,7 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
 
 _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
-    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, nesting, and NPATH",
+    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
     Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",

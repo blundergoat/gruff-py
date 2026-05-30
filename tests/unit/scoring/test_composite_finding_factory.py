@@ -84,7 +84,7 @@ def test_composite_severity_is_worst_of_contributors():
 
 def test_composite_component_rules_sorted_and_distinct():
     findings = [
-        _f("complexity.npath", pillar=Pillar.COMPLEXITY),
+        _f("complexity.nesting-depth", pillar=Pillar.COMPLEXITY),
         _f("size.function-length", pillar=Pillar.SIZE),
         _f("complexity.cyclomatic", pillar=Pillar.COMPLEXITY),
         _f("size.parameter-count", pillar=Pillar.SIZE),
@@ -94,7 +94,7 @@ def test_composite_component_rules_sorted_and_distinct():
     composite = next(f for f in out if f.rule_id == "design.god-method")
     assert composite.metadata["componentRules"] == [
         "complexity.cyclomatic",
-        "complexity.npath",
+        "complexity.nesting-depth",
         "size.function-length",
         "size.parameter-count",
     ]
@@ -138,7 +138,7 @@ def test_two_god_methods_on_different_symbols():
         _f("size.function-length", pillar=Pillar.SIZE, symbol="foo"),
         _f("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="foo"),
         _f("size.parameter-count", pillar=Pillar.SIZE, symbol="bar"),
-        _f("complexity.npath", pillar=Pillar.COMPLEXITY, symbol="bar"),
+        _f("complexity.nesting-depth", pillar=Pillar.COMPLEXITY, symbol="bar"),
     ]
     out = CompositeFindingFactory().synthesise(findings)
     composites = [f for f in out if f.rule_id == "design.god-method"]

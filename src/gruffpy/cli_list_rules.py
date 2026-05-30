@@ -2,7 +2,7 @@
 
 Carved out of ``src/gruffpy/cli.py`` to keep that file under the
 ``size.file-length`` 1000-line error threshold and to keep ``_format_rule_detail``
-and ``_option_type_label`` below the ``complexity.npath`` 500 ceiling.
+and ``_option_type_label`` within the complexity-pillar thresholds.
 """
 
 from __future__ import annotations

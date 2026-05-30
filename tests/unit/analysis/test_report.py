@@ -86,14 +86,14 @@ def test_finding_counts_by_rule_reports_worst_severity_when_rule_emits_mixed_ban
     """Threshold-based rules can emit warning + error in the same run; the grouped
     row must label the bucket by the worst severity so triage isn't misled."""
     findings = (
-        _finding(rule_id="complexity.npath", severity=Severity.WARNING, line=10),
-        _finding(rule_id="complexity.npath", severity=Severity.ERROR, line=20),
-        _finding(rule_id="complexity.npath", severity=Severity.ERROR, line=30),
+        _finding(rule_id="complexity.cyclomatic", severity=Severity.WARNING, line=10),
+        _finding(rule_id="complexity.cyclomatic", severity=Severity.ERROR, line=20),
+        _finding(rule_id="complexity.cyclomatic", severity=Severity.ERROR, line=30),
     )
 
     rows = _report(findings).finding_counts_by_rule()
 
-    assert rows[0]["ruleId"] == "complexity.npath"
+    assert rows[0]["ruleId"] == "complexity.cyclomatic"
     assert rows[0]["count"] == 3
     assert rows[0]["severity"] == "error"
 

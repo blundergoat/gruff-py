@@ -4,6 +4,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## Unreleased
 
+- **BREAKING: `complexity.npath` rule removed** - The NPATH complexity rubric is deleted; projects pinning it fail to load with `ConfigError: Unknown rule id "complexity.npath"`. Rationale: NPATH is multiplicative, so it false-positives on flat early-return guard-clause code — the legible style gruff's own `cyclomatic`/`nesting-depth` remediation recommends — which under an agent hook forces the agent to make code *less* verifiable; the surviving complexity rubrics (`cognitive`, `cyclomatic`, `nesting-depth`) carry the signal. Clean break, no deprecation shim. Migration: delete the entry from `selection.rules`, `rules.complexity.npath`, and `[tool.gruff-py.rules."complexity.npath"]` wherever it appears. Catalogue drops to 114 rules across 11 pillars (`complexity` pillar from 5 to 4). See [ADR-021](.goat-flow/decisions/ADR-021-reviewability-profile.md) and [ADR-022](.goat-flow/decisions/ADR-022-reviewer-verification-mission.md).
 - **Changed-region analysis** - `analyse` now supports `--changed-ranges`, `--since`, `--diff`/`--diff -`, and `--changed-scope=symbol|hunk`. JSON output additively includes `suppressedCount` when changed-region filtering is active.
 
 ## v0.2.0 - 2026-05-28

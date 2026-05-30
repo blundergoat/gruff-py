@@ -26,7 +26,6 @@ _COMPLEXITY_CONTRIBUTORS = frozenset(
         "complexity.cognitive",
         "complexity.cyclomatic",
         "complexity.nesting-depth",
-        "complexity.npath",
     }
 )
 _SIZE_CONTRIBUTORS = frozenset(
