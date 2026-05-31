@@ -33,6 +33,11 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A05:2021-Security Misconfiguration"],
         "securitySeverity": "high",
     },
+    "security.github-actions-unpinned-action": {
+        "cwe": ["CWE-1357", "CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "medium",
+    },
     "security.xxe": {
         "cwe": ["CWE-611", "CWE-776"],
         "owasp": ["A05:2021-Security Misconfiguration"],

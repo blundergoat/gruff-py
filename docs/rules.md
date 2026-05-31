@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 114 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 115 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -16,7 +16,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 26 | Heuristic AST-level dangerous patterns |
+| `security` | 27 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -96,6 +96,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
+- `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
 - `security.header-injection`
@@ -752,6 +753,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-489', 'CWE-215']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
 - Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
+
+### `security.github-actions-unpinned-action`
+
+- Name: Unpinned GitHub Actions reference
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-unpinned-action` protects the security pillar by flagging unpinned github actions reference before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported unpinned github actions reference directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-1357', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-unpinned-action` leaves unpinned github actions reference unaddressed.
+- Good example: Code that satisfies `security.github-actions-unpinned-action` makes unpinned github actions reference explicit or simpler.
 
 ### `security.hardcoded-bind-all-interfaces`
 

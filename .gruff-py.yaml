@@ -105,6 +105,7 @@ selection:
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
+  - security.github-actions-unpinned-action
   - security.hardcoded-bind-all-interfaces
   - security.hardcoded-framework-secret-key
   - security.header-injection
@@ -369,6 +370,8 @@ rules:
   security.extract-compact-user-input:
     enabled: true
   security.flask-debug-enabled:
+    enabled: true
+  security.github-actions-unpinned-action:
     enabled: true
   security.hardcoded-bind-all-interfaces:
     enabled: true

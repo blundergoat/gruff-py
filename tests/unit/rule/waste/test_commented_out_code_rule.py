@@ -89,3 +89,23 @@ def test_coding_declaration_does_not_fire():
     src = "# -*- coding: utf-8 -*-\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+def test_dash_separator_does_not_fire():
+    src = "# ------------------------------\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_equals_separator_does_not_fire():
+    src = "# ==============================\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_prose_starting_with_keyword_does_not_fire():
+    # Trips the code-like pre-filter (`return`) but fails `ast.parse`, so the
+    # second stage is what keeps prose from firing - not the pre-filter alone.
+    src = "# return the widget to the pool when the caller is done\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
