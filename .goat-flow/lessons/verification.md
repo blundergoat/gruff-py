@@ -162,10 +162,10 @@ membership checks - but the self-check `uv run gruff-py analyse src tests
 `complexity.npath` reporting NPATH 972 (>500 error threshold) on
 `ConfigLoader._apply_allowlists`. Evidence anchors: `src/gruffpy/config/loader.py`
 (search: `_validate_string_list_allowlists`) shows the helper split that brought
-NPATH back below 500, and `src/gruffpy/rule/complexity/npath_complexity_rule.py` (search:
-`class NPathComplexityRule`) defines the gate. The fix was to extract two helpers
-(`_validate_string_list_allowlists` and `_apply_present_allowlists`) so each
-function's branch count stayed local.
+NPATH back below 500. The `complexity.npath` rule was later removed in the
+0.3.0 plan, but the verification lesson still applies: the fix was to extract
+two helpers (`_validate_string_list_allowlists` and `_apply_present_allowlists`)
+so each function's branch count stayed local.
 
 When extending any function that already had multiple `if` guards or `or`/`and`
 short-circuits, run `uv run gruff-py analyse <changed-file> --fail-on advisory`
@@ -220,3 +220,49 @@ When a regression spans multiple outputs, keep one test per reviewer surface
 even if the setup is shared. This preserves the signal of
 `test-quality.eager-test` and keeps dogfood aligned with the
 reviewer-verification mission.
+
+## Lesson: Tick task checkboxes when the proof passes, not during later cleanup
+
+**Created:** 2026-05-31
+**Incident:** After rerunning `scripts/preflight-checks.sh`, the agent reported
+the worktree was clean but left the completed task
+`.goat-flow/tasks/0.3.0/config-ignore-authority-and-check-ignore-v0.3.0.md`
+with unchecked verification-gate boxes. The checks had passed in-session, but
+the durable task state still said they were incomplete, forcing a later audit
+and correction.
+
+When a task file contains a checkbox for a command, evidence item, or exit
+criterion, update that checkbox immediately after the proof passes. Before
+final response, scan completed task files in the active task directory for
+remaining `- [ ]` entries and either tick them with current evidence or explain
+why the task is not actually complete.
+
+## Lesson: When tool output lags or duplicates, re-establish ground truth before editing — never edit against a stale read, never confabulate the contents of output you do not have
+
+**Created:** 2026-05-31
+**Incident:** During an M07 session the harness began returning tool results
+**delayed and duplicated** — later batches contained file-read content that did
+not match the file on disk. The agent issued an `Edit` to
+`src/gruffpy/rule/test_quality/magic_number_assertion_rule.py` based on a
+*hallucinated* failing test (no such test existed; dogfood showed `0` findings
+and `git grep '\.count\s*=='` over `tests`/`src` returned nothing), and five
+further test-file edits failed `String to replace not found` because they
+targeted stale read content. Worse, the agent then told the user the file had
+"ballooned to 3000+ lines" — a detail it had **no tool output for** and
+fabricated. Ground truth recovered only via cache-independent checks:
+`md5sum <file>` vs `git show HEAD:<file> | md5sum` matched, `git status --short`
+showed only the pre-existing dirty files, and `wc -l` matched HEAD. Net on-disk
+change was zero; the "corruption" was lag, not damage.
+
+When tool results arrive late, out of order, or duplicated, stop issuing
+mutations and re-establish ground truth with checks that do not depend on a
+possibly-stale read: `git status --short`, `md5sum` against
+`git show HEAD:<path>`, `wc -l`, and a fresh `git diff --stat`. Two hard rules
+follow. (1) Never run an `Edit` whose `old_string` came from a read you cannot
+currently trust — re-Read or restore from HEAD first. (2) Never describe the
+contents, size, or shape of tool output you did not actually receive; if a
+result did not arrive, say "no output received", do not invent one. Fabricating
+output detail is CLAUDE.md hallucination red-flag #4 ("looks like", "probably")
+in its most dangerous form — a confident claim with zero evidence. Prefer
+full-file `Write` over surgical `Edit` for recovery work, since a replayed
+`Write` is idempotent while a replayed insert is not.

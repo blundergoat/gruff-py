@@ -40,7 +40,17 @@ The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and
 
 ## Rules And Scoring
 
-`RuleRegistry.defaults()` instantiates the full rule catalogue: 114 rules across 10 active pillars (`size`, `complexity` + `maintainability`, `dead-code` + `waste`, `naming`, `documentation`, `security`, `sensitive-data`, `test-quality`, `design`). Each pillar lives under `src/gruffpy/rule/<pillar>/`. `ProjectRuleProtocol` handles cross-file rules such as `design.single-implementor-protocol`, while `CompositeFindingFactory` synthesises `design.god-method` findings post-pass when size + complexity overlap on a symbol. `modernisation` is declared in the score model but its rule catalogue is still being built. `AnalysisConfig.from_registry()` snapshots each rule's default settings; selection and per-rule overrides are applied by `ConfigLoader`.
+`RuleRegistry.defaults()` instantiates the full rule catalogue: 114 rules across
+11 active pillars (`size`, `complexity`, `maintainability`, `dead-code`,
+`naming`, `documentation`, `security`, `sensitive-data`, `test-quality`,
+`design`, and `modernisation`). Each pillar lives under
+`src/gruffpy/rule/<pillar>/`, with legacy `waste.*` rule IDs emitting under the
+`dead-code` pillar. `ProjectRuleProtocol` handles cross-file rules such as
+`design.single-implementor-protocol`, while `CompositeFindingFactory`
+synthesises `design.god-method` findings post-pass when size + complexity
+overlap on a symbol. `AnalysisConfig.from_registry()` snapshots each rule's
+default settings; selection and per-rule overrides are applied by
+`ConfigLoader`.
 
 Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.json`/`.ini`/`.conf` text files - the secret/PHI scanners under `sensitive-data.*` use this seam. Several test-quality rules read `pyproject.toml` once per run via `_pytest_config`; scope detection for test-quality rules is memoised through `_test_quality_node_helper` so the catalogue computes per-unit scope exactly once.
 

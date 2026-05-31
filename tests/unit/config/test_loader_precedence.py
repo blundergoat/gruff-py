@@ -367,6 +367,16 @@ def test_yaml_selection_rejects_unknown_values(
         loader.load()
 
 
+def test_removed_npath_rule_pin_fails_as_unknown_rule(tmp_path: Path):
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    enabled: true\n"
+    )
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    with pytest.raises(ConfigError, match='Unknown rule id "complexity.npath"'):
+        loader.load()
+
+
 def test_rule_enabled_must_be_boolean(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
         'schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    enabled: "false"\n'
