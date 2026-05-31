@@ -530,6 +530,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `naming.boolean-prefix` protects the naming pillar by flagging boolean prefix before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported boolean prefix directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
 - Bad example: Code that triggers `naming.boolean-prefix` leaves boolean prefix unaddressed.
 - Good example: Code that satisfies `naming.boolean-prefix` makes boolean prefix explicit or simpler.
 

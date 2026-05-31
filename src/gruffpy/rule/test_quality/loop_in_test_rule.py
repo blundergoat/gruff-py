@@ -16,6 +16,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+from gruffpy.rule.test_quality._control_flow_exemptions import is_fixture_loop
 from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
@@ -68,6 +69,8 @@ class LoopInTestRule(Rule):
         for fn, _scope in test_functions(unit):
             for node in walk_test_body(fn):
                 if not isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                    continue
+                if is_fixture_loop(node, fn):
                     continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)

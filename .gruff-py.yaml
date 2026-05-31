@@ -273,6 +273,20 @@ rules:
     enabled: true
   naming.boolean-prefix:
     enabled: true
+    options:
+      acceptedBooleanNames:
+      - all
+      - apply
+      - check
+      - dev
+      - enabled
+      - force
+      - fresh
+      - harness
+      - json
+      - ok
+      - verbose
+      - "yes"
   naming.confusing-name:
     enabled: true
     options:

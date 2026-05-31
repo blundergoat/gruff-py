@@ -20,11 +20,13 @@ def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     )
 
 
-def _ctx() -> RuleContext:
+def _ctx(options: dict | None = None) -> RuleContext:
     rule = BooleanPrefixRule()
     return RuleContext(
         project_root="/",
-        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True)}),
+        config=AnalysisConfig(
+            rules={rule.definition().id: RuleSettings(enabled=True, options=options or {})}
+        ),
     )
 
 
@@ -221,3 +223,18 @@ def test_classify_verb_still_fires():
     src = "def _classify_caller_phone(p: str) -> bool:\n    return True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
+
+
+def test_default_exact_boolean_names_do_not_fire():
+    src = "def ok() -> bool:\n    return True\ndef force() -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_configured_exact_boolean_name_does_not_fire():
+    src = "def locked() -> bool:\n    return True\n"
+    findings = BooleanPrefixRule().analyse(
+        _unit(src),
+        _ctx(options={"acceptedBooleanNames": ["locked"]}),
+    )
+    assert findings == []

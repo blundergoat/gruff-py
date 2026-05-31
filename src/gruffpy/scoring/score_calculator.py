@@ -35,6 +35,16 @@ CONFIDENCE_WEIGHTS: dict[Confidence, float] = {
 
 PILLAR_PENALTY_MULTIPLIER: float = 4.0
 FILE_PENALTY_MULTIPLIER: float = 5.0
+CORRELATED_COMPLEXITY_RULES: frozenset[str] = frozenset(
+    {
+        "complexity.cognitive",
+        "complexity.cyclomatic",
+        "complexity.nesting-depth",
+        "design.god-method",
+        "size.function-length",
+        "size.parameter-count",
+    }
+)
 
 
 class ScoreCalculator:
@@ -62,23 +72,30 @@ class ScoreCalculator:
         Returns:
             Score report ready for serialisation and rendering.
         """
-        pillars = self._pillar_scores(findings)
+        finding_penalties = _finding_penalties(findings)
+        pillars = self._pillar_scores(findings, finding_penalties)
         applicable_scores = [p.grade.score for p in pillars if p.applicable and p.grade is not None]
         average = sum(applicable_scores) / len(applicable_scores) if applicable_scores else 100.0
         scope = "diff" if diff_active else "full-project"
         return ScoreReport(
             composite=Grade.from_score(average),
             pillars=tuple(pillars),
-            top_offenders=tuple(self._file_scores(findings)),
+            top_offenders=tuple(self._file_scores(findings, finding_penalties)),
             complexity_distribution=self._complexity_distribution(findings),
             scope=scope,
             explanation=(
                 "Per-pillar scores start at 100 and subtract weighted finding "
-                "penalties; the composite is the average of applicable pillar scores."
+                "penalties; correlated size/complexity/design findings on the same "
+                "symbol share penalty weight; the composite is the average of "
+                "applicable pillar scores."
             ),
         )
 
-    def _pillar_scores(self, findings: list[Finding]) -> list[PillarScore]:
+    def _pillar_scores(
+        self,
+        findings: list[Finding],
+        finding_penalties: dict[int, float],
+    ) -> list[PillarScore]:
         pillar_names = list(STATIC_PILLARS)
         for finding in findings:
             if finding.pillar.value not in pillar_names:
@@ -87,7 +104,10 @@ class ScoreCalculator:
         scores: list[PillarScore] = []
         for pillar_name in pillar_names:
             pillar_findings = [f for f in findings if f.pillar.value == pillar_name]
-            penalty = self._finding_penalty(pillar_findings) * PILLAR_PENALTY_MULTIPLIER
+            penalty = (
+                self._finding_penalty(pillar_findings, finding_penalties)
+                * PILLAR_PENALTY_MULTIPLIER
+            )
             counts = self._severity_counts(pillar_findings)
             scores.append(
                 PillarScore(
@@ -103,7 +123,11 @@ class ScoreCalculator:
             )
         return scores
 
-    def _file_scores(self, findings: list[Finding]) -> list[FileScore]:
+    def _file_scores(
+        self,
+        findings: list[Finding],
+        finding_penalties: dict[int, float],
+    ) -> list[FileScore]:
         by_file: dict[str, list[Finding]] = {}
         for finding in findings:
             by_file.setdefault(finding.file_path, []).append(finding)
@@ -111,7 +135,9 @@ class ScoreCalculator:
         scores: list[FileScore] = []
         for file_path, file_findings in by_file.items():
             counts = self._severity_counts(file_findings)
-            penalty = self._finding_penalty(file_findings) * FILE_PENALTY_MULTIPLIER
+            penalty = (
+                self._finding_penalty(file_findings, finding_penalties) * FILE_PENALTY_MULTIPLIER
+            )
             max_cyclomatic = self._max_metadata_int(
                 file_findings, "complexity.cyclomatic", "complexity"
             )
@@ -158,9 +184,12 @@ class ScoreCalculator:
         return buckets
 
     @staticmethod
-    def _finding_penalty(findings: list[Finding]) -> float:
+    def _finding_penalty(
+        findings: list[Finding],
+        finding_penalties: dict[int, float],
+    ) -> float:
         return sum(
-            SEVERITY_WEIGHTS[f.severity] * CONFIDENCE_WEIGHTS[f.confidence] for f in findings
+            finding_penalties.get(id(finding), _base_penalty(finding)) for finding in findings
         )
 
     @staticmethod
@@ -194,3 +223,28 @@ class ScoreCalculator:
                 continue
             result = value if result is None else max(result, value)
         return result
+
+
+def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
+    penalties = {id(finding): _base_penalty(finding) for finding in findings}
+    groups: dict[tuple[str, str, int], list[Finding]] = {}
+    for finding in findings:
+        if (
+            finding.rule_id not in CORRELATED_COMPLEXITY_RULES
+            or finding.symbol is None
+            or finding.line is None
+        ):
+            continue
+        key = (finding.file_path, finding.symbol, finding.line)
+        groups.setdefault(key, []).append(finding)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        penalty = max(_base_penalty(finding) for finding in group) / len(group)
+        for finding in group:
+            penalties[id(finding)] = penalty
+    return penalties
+
+
+def _base_penalty(finding: Finding) -> float:
+    return SEVERITY_WEIGHTS[finding.severity] * CONFIDENCE_WEIGHTS[finding.confidence]

@@ -502,6 +502,12 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "Function names flagged as too generic to convey intent (process, handle, run, ...)."
         ),
     },
+    "naming.boolean-prefix": {
+        "acceptedBooleanNames": (
+            "Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts "
+            "(ok, force, verbose, etc.)."
+        ),
+    },
     "naming.module-name-mismatch": {
         "conventionalModuleNames": (
             "Module names exempt from the convention check "

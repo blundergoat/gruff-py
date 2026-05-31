@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-31
 ---
 
 ## Lesson: Read the rule body before calling a rule dead or leftover
@@ -192,3 +192,31 @@ rationale after `--` on the same comment, e.g. `# gruff: disable-file=test-quali
 The dogfood gate ships this rule by default, so suppressions without rationale
 look "clean" locally but fail CI's `--fail-on advisory` step. This applies
 symmetrically to `disable`, `disable-next`, and `disable-file`.
+
+## Lesson: Quote YAML boolean-like strings in dogfood option defaults
+
+**Created:** 2026-05-31
+**Incident:** While adding the `naming.boolean-prefix` `acceptedBooleanNames`
+option, `.gruff-py.yaml` initially listed `yes` unquoted. PyYAML parsed it as
+the boolean `True`, so `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`
+(search: `test_repo_yaml_options_match_definition_defaults`) failed even
+though `src/gruffpy/rule/naming/boolean_prefix_rule.py` exposed the intended
+string default. The fix was to quote the entry as `"yes"` in `.gruff-py.yaml`.
+
+When adding string-list defaults to `.gruff-py.yaml`, quote YAML 1.1
+boolean-like scalars such as `yes`, `no`, `on`, and `off`. The registry coverage
+test is the right proof because it compares parsed config values against
+`RuleDefinition.default_options`, not raw text.
+
+## Lesson: Split regression tests by review surface before dogfood
+
+**Created:** 2026-05-31
+**Incident:** While adding correlated scoring coverage, one test asserted file
+score, composite score, and pillar penalties together. The full pytest suite
+passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
+flagged `test-quality.eager-test` because the test had too many assertions.
+
+When a regression spans multiple outputs, keep one test per reviewer surface
+even if the setup is shared. This preserves the signal of
+`test-quality.eager-test` and keeps dogfood aligned with the
+reviewer-verification mission.

@@ -104,3 +104,9 @@ def test_todo_domain_name_does_not_fire():
     src = "class TodoDensityRule: pass\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+def test_domain_numbers_do_not_fire():
+    src = "adr020 = 'accepted'\nstep0 = 'bootstrap'\nV110 = 'protocol'\n"
+    findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
+    assert findings == []
