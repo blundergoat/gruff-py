@@ -15,7 +15,9 @@ from gruffpy.reporting.html_reporter import HtmlReporter
 from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.reporting.markdown_reporter import MarkdownReporter
 from gruffpy.reporting.sarif_reporter import SarifReporter
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
+from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,6 +399,59 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     assert result["properties"]["metadata"]["securitySeverity"] == "high"
     assert result["properties"]["metadata"]["sourceLabel"] == "quoted-placeholder"
     assert result["partialFingerprints"]["gruffFingerprint"] == fingerprint
+
+
+def test_dependency_security_findings_do_not_leak_raw_references_in_reporters() -> None:
+    """Dependency posture findings redact raw URL, Git, and local path references."""
+    findings = tuple(_dependency_security_findings())
+    report = _report(findings)
+    rendered_outputs = (
+        JsonReporter().render(report),
+        MarkdownReporter().render(report),
+        HtmlReporter().render(report),
+        GithubAnnotationsReporter().render(report),
+        SarifReporter().render(report),
+    )
+    leaked = [
+        raw_reference
+        for raw_reference in _RAW_DEPENDENCY_REFERENCES
+        if any(raw_reference in output for output in rendered_outputs)
+    ]
+
+    assert {finding.rule_id for finding in findings} == {
+        "security.dependency-git-reference",
+        "security.dependency-local-path",
+        "security.dependency-unpinned-version",
+        "security.dependency-url-reference",
+    }
+    assert leaked == []
+
+
+_RAW_DEPENDENCY_REFERENCES = (
+    "downloads.example.test",
+    "github.com/acme",
+    "/opt/internal/widget",
+)
+
+
+def _dependency_security_findings() -> list[Finding]:
+    """Return dependency-posture findings produced by the real rule registry."""
+    source = """[project]
+dependencies = [
+    "urlpkg @ https://downloads.example.test/urlpkg-1.0.0.tar.gz",
+    "gitpkg @ git+https://github.com/acme/gitpkg.git@main",
+    "localpkg @ file:///opt/internal/widget",
+    "rangepkg>=1.0",
+]
+"""
+    return [
+        finding
+        for finding in RuleRegistry.defaults().analyse(
+            [make_text_unit(source, "pyproject.toml")],
+            default_ctx(),
+        )
+        if finding.rule_id.startswith("security.dependency-")
+    ]
 
 
 def test_sarif_reporter_does_not_emit_stale_contract_keys():

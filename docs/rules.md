@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 119 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 123 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -16,7 +16,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 31 | Heuristic AST-level dangerous patterns |
+| `security` | 35 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -90,6 +90,10 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 - `security.cors-wildcard-with-credentials`
 - `security.dangerous-function-call`
+- `security.dependency-git-reference`
+- `security.dependency-local-path`
+- `security.dependency-unpinned-version`
+- `security.dependency-url-reference`
 - `security.disabled-ssl-verification`
 - `security.django-mark-safe`
 - `security.django-raw-sql`
@@ -669,6 +673,66 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `security.dangerous-function-call` leaves dangerous function call unaddressed.
 - Good example: Code that satisfies `security.dangerous-function-call` makes dangerous function call explicit or simpler.
+
+### `security.dependency-git-reference`
+
+- Name: Dependency installed from Git reference
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-git-reference` protects the security pillar by flagging dependency installed from git reference before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from git reference directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-829', 'CWE-1357']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-git-reference` leaves dependency installed from git reference unaddressed.
+- Good example: Code that satisfies `security.dependency-git-reference` makes dependency installed from git reference explicit or simpler.
+
+### `security.dependency-local-path`
+
+- Name: Dependency installed from local path
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-local-path` protects the security pillar by flagging dependency installed from local path before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from local path directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-local-path` leaves dependency installed from local path unaddressed.
+- Good example: Code that satisfies `security.dependency-local-path` makes dependency installed from local path explicit or simpler.
+
+### `security.dependency-unpinned-version`
+
+- Name: Dependency version is not exactly pinned
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-unpinned-version` protects the security pillar by flagging dependency version is not exactly pinned before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency version is not exactly pinned directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-1357', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-unpinned-version` leaves dependency version is not exactly pinned unaddressed.
+- Good example: Code that satisfies `security.dependency-unpinned-version` makes dependency version is not exactly pinned explicit or simpler.
+
+### `security.dependency-url-reference`
+
+- Name: Dependency installed from direct URL
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-url-reference` protects the security pillar by flagging dependency installed from direct url before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from direct url directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-494', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-url-reference` leaves dependency installed from direct url unaddressed.
+- Good example: Code that satisfies `security.dependency-url-reference` makes dependency installed from direct url explicit or simpler.
 
 ### `security.disabled-ssl-verification`
 

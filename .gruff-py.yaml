@@ -99,6 +99,10 @@ selection:
   - naming.test-naming-consistency
   - security.cors-wildcard-with-credentials
   - security.dangerous-function-call
+  - security.dependency-git-reference
+  - security.dependency-local-path
+  - security.dependency-unpinned-version
+  - security.dependency-url-reference
   - security.disabled-ssl-verification
   - security.django-mark-safe
   - security.django-raw-sql
@@ -342,6 +346,7 @@ rules:
       - _halstead
       - _secret_scanner_helper
       - _comment_scanner
+      - _dependency_posture_helper
   naming.short-variable:
     enabled: true
     options:
@@ -362,6 +367,14 @@ rules:
   security.cors-wildcard-with-credentials:
     enabled: true
   security.dangerous-function-call:
+    enabled: true
+  security.dependency-git-reference:
+    enabled: true
+  security.dependency-local-path:
+    enabled: true
+  security.dependency-unpinned-version:
+    enabled: true
+  security.dependency-url-reference:
     enabled: true
   security.disabled-ssl-verification:
     enabled: true

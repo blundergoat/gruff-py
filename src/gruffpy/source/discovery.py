@@ -23,6 +23,8 @@ TEXT_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+TEXT_FILENAMES: frozenset[str] = frozenset({"setup.cfg"})
+
 IGNORED_FILENAMES: frozenset[str] = frozenset(
     {
         # Python lockfiles / package metadata that routinely contain high-entropy
@@ -370,7 +372,11 @@ class SourceDiscovery:
         suffix = path.suffix.lower()
         if suffix in PYTHON_EXTENSIONS:
             return "python"
-        if suffix in TEXT_EXTENSIONS or self._is_env_like(path):
+        if (
+            suffix in TEXT_EXTENSIONS
+            or self._is_env_like(path)
+            or self._is_dependency_metadata_file(path)
+        ):
             return "text"
         return None
 
@@ -378,6 +384,13 @@ class SourceDiscovery:
     def _is_env_like(path: Path) -> bool:
         name = path.name
         return name == ".env" or name.startswith(".env.")
+
+    @staticmethod
+    def _is_dependency_metadata_file(path: Path) -> bool:
+        name = path.name.lower()
+        return name in TEXT_FILENAMES or (
+            name.startswith("requirements") and name.endswith((".txt", ".in"))
+        )
 
     def _default_ignored_match(self, path: Path) -> str | None:
         display = self._display_path(path).replace("\\", "/")

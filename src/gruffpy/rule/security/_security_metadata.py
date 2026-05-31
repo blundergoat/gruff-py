@@ -58,6 +58,26 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A08:2021-Software and Data Integrity Failures"],
         "securitySeverity": "medium",
     },
+    "security.dependency-git-reference": {
+        "cwe": ["CWE-829", "CWE-1357"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "medium",
+    },
+    "security.dependency-local-path": {
+        "cwe": ["CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "medium",
+    },
+    "security.dependency-unpinned-version": {
+        "cwe": ["CWE-1357", "CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "medium",
+    },
+    "security.dependency-url-reference": {
+        "cwe": ["CWE-494", "CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "medium",
+    },
     "security.xxe": {
         "cwe": ["CWE-611", "CWE-776"],
         "owasp": ["A05:2021-Security Misconfiguration"],

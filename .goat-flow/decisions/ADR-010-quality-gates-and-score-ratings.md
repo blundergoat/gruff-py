@@ -1,6 +1,8 @@
 # ADR-010: Quality gates and score ratings
 
-**Status:** Proposed
+**Status:** Proposed (2026-05-16); superseded in part by the 2026-06-01 addendum
+below — composite/pillar score gates dropped, gating folds into M04's new-findings
+gate.
 **Date:** 2026-05-16
 **Ticket/Context:** M13.1 found that SonarQube separates raw findings, scores,
 ratings, and quality gates. Gruff currently has numeric scores and `--fail-on`,
@@ -41,3 +43,29 @@ thresholds or ratings are treated as policy.
 
 Two-way door before gate config is public. Once a gate config shape is released,
 changes need an ADR update and cross-implementation compatibility review.
+
+## Addendum (2026-06-01): score gates dropped; gating folds into M04
+
+A cross-port re-scan (gruff-go/-rs/-ts/-php) for this exact feature found that
+**score-based quality gates are shipped by no implementation**:
+
+- gruff-go (ADR-013) and gruff-ts (ADR-006) reject count *and* score gating on the
+  "agents fix everything" mission gruff-py shares (ADR-022).
+- gruff-rs shipped a count gate that "never consults the score model".
+- gruff-php shipped a count gate but explicitly **deferred** `failureConditions.score`
+  and `failureConditions.pillars` "pending demand."
+- No port ships configurable rating bands; A-F at 90/80/70/60 is a stable cross-port
+  surface.
+
+The capability the family validated is the **new-findings gate** (gruff-rs
+`scope: new`, gruff-php `newFindings`, both via `--fail-on-new`; gruff-go plans it) —
+gruff-py's M04.
+
+**Decision (revises the 2026-05-16 proposal):** gruff-py will NOT add composite or
+pillar score-condition gates. The post-analysis gate need is met by M04's new-findings
+gate (fail on findings classified *new*), composed with the existing
+`--fail-on <severity>`. A-F score ratings stay as-is; no configurable bands. The
+"post-analysis gate evaluator" row above is withdrawn for score conditions. If
+human-CI "tolerate up to N" count gates are ever wanted, that is a separate decision
+that must converge on an existing sibling shape (gruff-rs `gate:` or gruff-php
+`failureConditions:`), not a third gruff-py spelling.

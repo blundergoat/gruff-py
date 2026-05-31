@@ -45,6 +45,10 @@ from gruffpy.rule.security.cors_wildcard_with_credentials_rule import (
     CorsWildcardWithCredentialsRule,
 )
 from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
+from gruffpy.rule.security.dependency_git_reference_rule import DependencyGitReferenceRule
+from gruffpy.rule.security.dependency_local_path_rule import DependencyLocalPathRule
+from gruffpy.rule.security.dependency_unpinned_version_rule import DependencyUnpinnedVersionRule
+from gruffpy.rule.security.dependency_url_reference_rule import DependencyUrlReferenceRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from gruffpy.rule.security.django_mark_safe_rule import DjangoMarkSafeRule
 from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
@@ -698,6 +702,10 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(TestNamingConsistencyRule),
     _entry(CorsWildcardWithCredentialsRule),
     _entry(DangerousFunctionCallRule),
+    _entry(DependencyGitReferenceRule),
+    _entry(DependencyLocalPathRule),
+    _entry(DependencyUnpinnedVersionRule),
+    _entry(DependencyUrlReferenceRule),
     _entry(DisabledSslVerificationRule),
     _entry(DjangoMarkSafeRule),
     _entry(DjangoRawSqlRule),

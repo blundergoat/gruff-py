@@ -110,5 +110,6 @@ def test_module_name_mismatch_extends_conventional_module_names() -> None:
         "_halstead",
         "_secret_scanner_helper",
         "_comment_scanner",
+        "_dependency_posture_helper",
     }
     assert project_overrides.issubset(configured_names)
