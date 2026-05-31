@@ -33,6 +33,26 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A05:2021-Security Misconfiguration"],
         "securitySeverity": "high",
     },
+    "security.github-actions-broad-permissions": {
+        "cwe": ["CWE-272", "CWE-732"],
+        "owasp": ["A01:2021-Broken Access Control"],
+        "securitySeverity": "medium",
+    },
+    "security.github-actions-pull-request-target": {
+        "cwe": ["CWE-94", "CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "high",
+    },
+    "security.github-actions-remote-shell": {
+        "cwe": ["CWE-494", "CWE-829"],
+        "owasp": ["A08:2021-Software and Data Integrity Failures"],
+        "securitySeverity": "high",
+    },
+    "security.github-actions-secrets-in-pr": {
+        "cwe": ["CWE-200", "CWE-522"],
+        "owasp": ["A05:2021-Security Misconfiguration"],
+        "securitySeverity": "medium",
+    },
     "security.github-actions-unpinned-action": {
         "cwe": ["CWE-1357", "CWE-829"],
         "owasp": ["A08:2021-Software and Data Integrity Failures"],

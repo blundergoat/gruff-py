@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 115 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 119 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -16,7 +16,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 27 | Heuristic AST-level dangerous patterns |
+| `security` | 31 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -96,6 +96,10 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
+- `security.github-actions-broad-permissions`
+- `security.github-actions-pull-request-target`
+- `security.github-actions-remote-shell`
+- `security.github-actions-secrets-in-pr`
 - `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
@@ -753,6 +757,66 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-489', 'CWE-215']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
 - Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
+
+### `security.github-actions-broad-permissions`
+
+- Name: Broad GitHub Actions token permissions
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-broad-permissions` protects the security pillar by flagging broad github actions token permissions before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported broad github actions token permissions directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-272', 'CWE-732']`, `owasp` = `['A01:2021-Broken Access Control']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-broad-permissions` leaves broad github actions token permissions unaddressed.
+- Good example: Code that satisfies `security.github-actions-broad-permissions` makes broad github actions token permissions explicit or simpler.
+
+### `security.github-actions-pull-request-target`
+
+- Name: Risky pull_request_target workflow
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-pull-request-target` protects the security pillar by flagging risky pull_request_target workflow before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported risky pull_request_target workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-94', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.github-actions-pull-request-target` leaves risky pull_request_target workflow unaddressed.
+- Good example: Code that satisfies `security.github-actions-pull-request-target` makes risky pull_request_target workflow explicit or simpler.
+
+### `security.github-actions-remote-shell`
+
+- Name: Remote script piped into a shell in CI
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-remote-shell` protects the security pillar by flagging remote script piped into a shell in ci before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported remote script piped into a shell in ci directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-494', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.github-actions-remote-shell` leaves remote script piped into a shell in ci unaddressed.
+- Good example: Code that satisfies `security.github-actions-remote-shell` makes remote script piped into a shell in ci explicit or simpler.
+
+### `security.github-actions-secrets-in-pr`
+
+- Name: Repository secret in a PR-triggered workflow
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `security.github-actions-secrets-in-pr` protects the security pillar by flagging repository secret in a pr-triggered workflow before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported repository secret in a pr-triggered workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-200', 'CWE-522']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pr-triggered workflow unaddressed.
+- Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pr-triggered workflow explicit or simpler.
 
 ### `security.github-actions-unpinned-action`
 

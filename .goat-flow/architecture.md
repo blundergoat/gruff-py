@@ -40,7 +40,7 @@ The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and
 
 ## Rules And Scoring
 
-`RuleRegistry.defaults()` instantiates the full rule catalogue: 115 rules across
+`RuleRegistry.defaults()` instantiates the full rule catalogue: 119 rules across
 11 active pillars (`size`, `complexity`, `maintainability`, `dead-code`,
 `naming`, `documentation`, `security`, `sensitive-data`, `test-quality`,
 `design`, and `modernisation`). Each pillar lives under

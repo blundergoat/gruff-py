@@ -105,6 +105,10 @@ selection:
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
+  - security.github-actions-broad-permissions
+  - security.github-actions-pull-request-target
+  - security.github-actions-remote-shell
+  - security.github-actions-secrets-in-pr
   - security.github-actions-unpinned-action
   - security.hardcoded-bind-all-interfaces
   - security.hardcoded-framework-secret-key
@@ -370,6 +374,14 @@ rules:
   security.extract-compact-user-input:
     enabled: true
   security.flask-debug-enabled:
+    enabled: true
+  security.github-actions-broad-permissions:
+    enabled: true
+  security.github-actions-pull-request-target:
+    enabled: true
+  security.github-actions-remote-shell:
+    enabled: true
+  security.github-actions-secrets-in-pr:
     enabled: true
   security.github-actions-unpinned-action:
     enabled: true

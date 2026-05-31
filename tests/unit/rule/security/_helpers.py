@@ -31,6 +31,23 @@ def make_unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
+def make_text_unit(source: str, display_path: str) -> AnalysisUnit:
+    """Build a text-typed ``AnalysisUnit`` (``tree=None``) for ``SourceTextRule`` tests.
+
+    GitHub Actions and dependency-posture rules scan raw file text rather than a
+    Python AST, so their tests need a unit with ``type="text"`` and no tree.
+
+    Args:
+        source: Raw file text to scan.
+        display_path: Path stored on the unit (text rules gate on it).
+
+    Returns:
+        A text-typed unit pointing at an in-memory ``SourceFile``.
+    """
+    file = SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="text")
+    return AnalysisUnit(file=file, source=source, tree=None)
+
+
 def default_ctx() -> RuleContext:
     """Build a ``RuleContext`` seeded with every built-in rule at its default settings.
 

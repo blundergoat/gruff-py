@@ -51,6 +51,18 @@ from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
 from gruffpy.rule.security.flask_debug_enabled_rule import FlaskDebugEnabledRule
+from gruffpy.rule.security.github_actions_broad_permissions_rule import (
+    GithubActionsBroadPermissionsRule,
+)
+from gruffpy.rule.security.github_actions_pull_request_target_rule import (
+    GithubActionsPullRequestTargetRule,
+)
+from gruffpy.rule.security.github_actions_remote_shell_rule import (
+    GithubActionsRemoteShellRule,
+)
+from gruffpy.rule.security.github_actions_secrets_in_pr_rule import (
+    GithubActionsSecretsInPrRule,
+)
 from gruffpy.rule.security.github_actions_unpinned_action_rule import (
     GithubActionsUnpinnedActionRule,
 )
@@ -692,6 +704,10 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
     _entry(FlaskDebugEnabledRule),
+    _entry(GithubActionsBroadPermissionsRule),
+    _entry(GithubActionsPullRequestTargetRule),
+    _entry(GithubActionsRemoteShellRule),
+    _entry(GithubActionsSecretsInPrRule),
     _entry(GithubActionsUnpinnedActionRule),
     _entry(HardcodedBindAllInterfacesRule),
     _entry(HardcodedFrameworkSecretKeyRule),

@@ -20,6 +20,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
+from gruffpy.rule.security._github_actions_helper import is_workflow_file, source_line
 from gruffpy.rule.security._security_metadata import finding_security_metadata
 
 _USES_RE = re.compile(r"^\s*-?\s*uses:\s*[\"']?(?P<spec>[^\"'\s#]+)[\"']?", re.MULTILINE)
@@ -67,7 +68,7 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
         Returns:
             One finding per unpinned third-party ``uses:`` reference.
         """
-        if not _is_workflow_file(unit.file.display_path):
+        if not is_workflow_file(unit.file.display_path):
             return []
         definition = self.definition()
         findings: list[Finding] = []
@@ -76,7 +77,7 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
             if action is None:
                 continue
             path, ref = action
-            line = unit.source.count("\n", 0, match.start("spec")) + 1
+            line = source_line(unit.source, match.start("spec"))
             findings.append(
                 Finding(
                     rule_id=definition.id,
@@ -109,11 +110,6 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
                 ),
             )
         return findings
-
-
-def _is_workflow_file(display_path: str) -> bool:
-    normalised = display_path.replace("\\", "/")
-    return ".github/workflows/" in normalised and normalised.endswith((".yml", ".yaml"))
 
 
 def _unpinned_action(spec: str) -> tuple[str, str] | None:
