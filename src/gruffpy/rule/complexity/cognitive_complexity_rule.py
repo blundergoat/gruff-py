@@ -44,9 +44,9 @@ class CognitiveComplexityRule(Rule):
             name="Cognitive complexity",
             pillar=Pillar.COMPLEXITY,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
-            default_thresholds={"warning": 15, "error": 30},
+            default_threshold=30,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

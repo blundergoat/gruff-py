@@ -48,11 +48,9 @@ def test_repo_yaml_rules_section_keys_match_registry_ids() -> None:
     assert set(data["rules"]) == {d.id for d in _DEFINITIONS}
 
 
-_WARNING_ERROR_DEFINITIONS = [
-    d for d in _DEFINITIONS if set(d.default_thresholds) == {"warning", "error"}
-]
-_OTHER_THRESHOLD_DEFINITIONS = [
-    d for d in _DEFINITIONS if set(d.default_thresholds) != {"warning", "error"}
+_SEVERITY_THRESHOLD_DEFINITIONS = [d for d in _DEFINITIONS if d.default_threshold is not None]
+_KNOB_THRESHOLD_DEFINITIONS = [
+    d for d in _DEFINITIONS if d.default_threshold is None and d.default_thresholds
 ]
 
 
@@ -62,18 +60,16 @@ def test_repo_yaml_rule_enabled_matches_definition(definition: RuleDefinition) -
     assert section["enabled"] is definition.default_enabled
 
 
-@pytest.mark.parametrize("definition", _WARNING_ERROR_DEFINITIONS, ids=lambda d: d.id)
-def test_warning_error_rule_collapses_to_single_threshold(definition: RuleDefinition) -> None:
+@pytest.mark.parametrize("definition", _SEVERITY_THRESHOLD_DEFINITIONS, ids=lambda d: d.id)
+def test_severity_threshold_rule_uses_single_threshold(definition: RuleDefinition) -> None:
     section = _repo_yaml_data()["rules"][definition.id]
     assert "thresholds" not in section
-    assert section["threshold"] == definition.default_thresholds["error"]
-    assert section["severity"] == "error"
+    assert section["threshold"] == definition.default_threshold
+    assert section["severity"] == definition.default_severity.value
 
 
-@pytest.mark.parametrize("definition", _OTHER_THRESHOLD_DEFINITIONS, ids=lambda d: d.id)
-def test_non_warning_error_rule_keeps_full_thresholds_block(
-    definition: RuleDefinition,
-) -> None:
+@pytest.mark.parametrize("definition", _KNOB_THRESHOLD_DEFINITIONS, ids=lambda d: d.id)
+def test_knob_rule_keeps_thresholds_block(definition: RuleDefinition) -> None:
     section = _repo_yaml_data()["rules"][definition.id]
     assert section.get("thresholds", {}) == _plain(definition.default_thresholds)
     assert "threshold" not in section

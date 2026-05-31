@@ -1,6 +1,20 @@
 # gruff-py
 
-`gruff-py` is the Python implementation of **gruff**, an opinionated project-quality analyser. It walks Python projects, scores findings across quality pillars, and emits reports for terminals, CI annotations, SARIF consumers, static HTML, and a local dashboard. It is heuristic static analysis; run it beside `ruff`, `mypy`, `pytest`, security scanners, and code review, not instead of them.
+`gruff-py` is the Python implementation of **gruff**, an opinionated quality analyser built to **govern AI-generated code so a human can review and trust it**. It walks Python projects, scores findings across quality pillars, and emits reports for terminals, CI annotations, SARIF consumers, static HTML, and a local dashboard.
+
+## Mission
+
+gruff-py exists to govern **AI-generated code so a human reviewer can sign off on it**. The premise: a coding agent wrote the change, and a person who did *not* write it has to read, review, and trust it. Every rule, severity, and score is tuned for that reviewer's confidence rather than for abstract style. Wired in as a coding-agent hook, gruff-py **guides** the agent through advisory findings and **forces** it through `--fail-on`-gated warning and error findings toward code that is:
+
+- **Legible enough to verify** — a reviewer can follow the control flow and confirm it does what was asked, without holding the whole function in their head.
+- **Secure where the eye fails** — it flags the dangerous patterns and leaked secrets human review is worst at catching, because those are the failures the eye skips.
+- **Tested for real, not padded** — it rewards tests that exercise behaviour and flags low-signal ceremony (assertion-free tests, tautologies, mock-only theatre) that inflates coverage without earning trust.
+
+**Why doc comments are mandatory, even on a private one-liner:** coding agents routinely produce code that superficially works while misunderstanding the requirement. Forcing the agent to state intent, usage, contract, and failure behaviour in prose gives the reviewer something to check the implementation against — and a mismatch between the doc comment and the code is itself a signal that the change needs a deeper look.
+
+gruff-py is heuristic static analysis: it complements `ruff`, `mypy`, `pytest`, security scanners, and human review — it does not replace them.
+
+See [docs/mission.md](docs/mission.md) for the full statement.
 
 ## Status At A Glance
 
@@ -11,7 +25,7 @@
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 116 rules across 11 pillars |
+| Rule catalogue | 115 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff-py.analysis.v1` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -167,13 +181,13 @@ The v0.1 catalogue contains 115 rules across 11 pillars:
 | Pillar | Rules |
 | --- | ---: |
 | `size` | 7 |
-| `complexity` | 5 |
+| `complexity` | 4 |
 | `maintainability` | 1 |
 | `dead-code` | 10 |
 | `modernisation` | 1 |
 | `naming` | 9 |
 | `documentation` | 13 |
-| `security` | 26 |
+| `security` | 27 |
 | `sensitive-data` | 9 |
 | `test-quality` | 33 |
 | `design` | 1 |
@@ -190,11 +204,14 @@ uv run gruff-py analyse src/ --baseline-path gruff-baseline.json --fail-on warni
 uv run gruff-py analyse src/ --no-baseline --fail-on none
 ```
 
-Changed-code scans can filter to changed lines or compare against a base ref:
+Changed-code scans are changed-region aware: a finding is kept when its location
+or enclosing function/class overlaps the changed hunk. JSON output includes
+`suppressedCount` for findings excluded as out of scope.
 
 ```bash
-uv run gruff-py analyse src/ --diff staged --format github --fail-on warning
-uv run gruff-py analyse src/ --diff-vs origin/main --changed-only --fail-on none
+uv run gruff-py analyse --format json --changed-ranges "3-3,8-10" src/foo.py
+uv run gruff-py analyse --format json --since HEAD src/foo.py
+git diff | uv run gruff-py analyse --format json --diff - src/foo.py
 ```
 
 Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered output without changing which rules execute.
@@ -242,6 +259,7 @@ make check
 
 ## Documentation
 
+- [Mission](docs/mission.md)
 - [Changelog](CHANGELOG.md)
 - [Configuration](docs/configuration.md)
 - [Rules](docs/rules.md)

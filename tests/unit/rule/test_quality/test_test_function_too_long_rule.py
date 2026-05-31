@@ -1,18 +1,18 @@
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
-def _ctx(warning: int = 100, error: int = 100) -> RuleContext:
+def _ctx(threshold: int = 100) -> RuleContext:
     rule = TestFunctionTooLongRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -42,11 +42,11 @@ def test_above_default_threshold_fires_at_error_severity():
     assert finding.metadata["thresholdType"] == "error"
 
 
-def test_split_thresholds_emit_warning_between_tiers():
+def test_custom_threshold_above_emits_error():
     body = "\n".join(f"    x{i} = {i}" for i in range(75))
     src = f"def test_foo():\n{body}\n    assert True\n"
-    findings = TestFunctionTooLongRule().analyse(make_unit(src), _ctx(warning=50, error=100))
+    findings = TestFunctionTooLongRule().analyse(make_unit(src), _ctx(threshold=50))
     assert len(findings) == 1
     finding = findings[0]
-    assert finding.severity == Severity.WARNING
-    assert finding.metadata["thresholdType"] == "warning"
+    assert finding.severity == Severity.ERROR
+    assert finding.metadata["thresholdType"] == "error"

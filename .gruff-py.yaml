@@ -71,7 +71,6 @@ selection:
   - complexity.halstead-volume
   - complexity.maintainability-index
   - complexity.nesting-depth
-  - complexity.npath
   - dead-code.unused-private-attribute
   - dead-code.unused-private-function
   - design.single-implementor-protocol
@@ -106,6 +105,7 @@ selection:
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
+  - security.github-actions-unpinned-action
   - security.hardcoded-bind-all-interfaces
   - security.hardcoded-framework-secret-key
   - security.header-injection
@@ -204,10 +204,6 @@ rules:
     enabled: true
     threshold: 6
     severity: error
-  complexity.npath:
-    enabled: true
-    threshold: 500
-    severity: error
   dead-code.unused-private-attribute:
     enabled: true
   dead-code.unused-private-function:
@@ -278,6 +274,20 @@ rules:
     enabled: true
   naming.boolean-prefix:
     enabled: true
+    options:
+      acceptedBooleanNames:
+      - all
+      - apply
+      - check
+      - dev
+      - enabled
+      - force
+      - fresh
+      - harness
+      - json
+      - ok
+      - verbose
+      - "yes"
   naming.confusing-name:
     enabled: true
     options:
@@ -360,6 +370,8 @@ rules:
   security.extract-compact-user-input:
     enabled: true
   security.flask-debug-enabled:
+    enabled: true
+  security.github-actions-unpinned-action:
     enabled: true
   security.hardcoded-bind-all-interfaces:
     enabled: true

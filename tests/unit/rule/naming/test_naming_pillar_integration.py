@@ -7,7 +7,7 @@ expected positives + negatives on a single fixture.
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
@@ -89,6 +89,11 @@ def _default_ctx() -> RuleContext:
             enabled=True,
             thresholds=dict(d.default_thresholds),
             options=dict(d.default_options),
+            severity_threshold=(
+                SeverityThreshold(d.default_threshold, d.default_severity)
+                if d.default_threshold is not None
+                else None
+            ),
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 

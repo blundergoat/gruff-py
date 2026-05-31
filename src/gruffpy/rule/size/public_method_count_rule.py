@@ -36,9 +36,9 @@ class PublicMethodCountRule(Rule):
             name="Public method count",
             pillar=Pillar.SIZE,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
-            default_thresholds={"warning": 10, "error": 10},
+            default_threshold=10,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

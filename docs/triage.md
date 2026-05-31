@@ -14,16 +14,15 @@ Output shape:
 gruff 0.2.0 summary
 Path: src
 Files: 213 discovered, 213 parsed, 22 ignored, 0 missing, 0 parse errors
-Findings: 102
+Findings: 70
 Elapsed: 3.074s
 
 Pillars
-  complexity      F   0.00 findings=64    advisory=0     warning=64    error=0
+  complexity      F   0.00 findings=32    advisory=0     warning=32    error=0
   naming          F   0.00 findings=34    advisory=34    warning=0     error=0
   ...
 
-Grouped by rule (showing 9 of 9):
-    32  complexity.npath                  warning   medium
+Grouped by rule (showing 8 of 8):
     28  naming.abbreviation               advisory  medium
     17  complexity.cyclomatic             warning   high
      8  complexity.cognitive              warning   high

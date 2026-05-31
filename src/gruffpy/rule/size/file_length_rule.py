@@ -20,17 +20,17 @@ class FileLengthRule(Rule):
         """Describe the file-length rule with a configurable line threshold (default 1000).
 
         Returns:
-            Definition under the size pillar; thresholds are configurable via
-            the ``warning``/``error`` keys.
+            Definition under the size pillar; the threshold is configurable via
+            a single ``threshold`` plus ``severity``.
         """
         return RuleDefinition(
             id=self.ID,
             name="File length",
             pillar=Pillar.SIZE,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
-            default_thresholds={"warning": 1000, "error": 1000},
+            default_threshold=1000,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

@@ -73,10 +73,12 @@ def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> 
     assert bare_rule == {"enabled": True}
 
 
-def test_render_default_config_yaml_keeps_warning_error_thresholds() -> None:
+def test_render_default_config_yaml_uses_single_threshold_and_severity() -> None:
     document = yaml.safe_load(render_default_config_yaml())
     cyclomatic = document["rules"]["complexity.cyclomatic"]
-    assert cyclomatic["thresholds"] == {"warning": 10, "error": 20}
+    assert cyclomatic["threshold"] == 20
+    assert cyclomatic["severity"] == "error"
+    assert "thresholds" not in cyclomatic
 
 
 def test_existing_config_source_returns_none_for_empty_directory(tmp_path: Path) -> None:

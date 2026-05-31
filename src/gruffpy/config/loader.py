@@ -323,14 +323,17 @@ class ConfigLoader:
         for rule_id, rule_section in rules.items():
             _validate_rule_section(config, rule_id, rule_section)
             rule_settings = config.rules[rule_id]
-            severity_threshold = _severity_threshold(rule_id, rule_settings, rule_section)
+            override = _severity_threshold(rule_id, rule_settings, rule_section)
+            severity_threshold = (
+                override if override is not None else rule_settings.severity_threshold
+            )
             config = config.with_rule_settings(
                 rule_id,
                 RuleSettings(
                     enabled=_is_rule_enabled(rule_settings, rule_section),
                     thresholds=(
                         dict(rule_settings.thresholds)
-                        if severity_threshold is not None
+                        if override is not None
                         else _merged_thresholds(rule_id, rule_settings, rule_section)
                     ),
                     options=_merged_options(rule_id, rule_settings, rule_section),
@@ -420,10 +423,10 @@ def _severity_threshold(
         raise ConfigError(
             f'Config key "rules.{rule_id}" cannot combine "threshold" and "thresholds".'
         )
-    if set(rule_settings.thresholds) != {"warning", "error"}:
+    if rule_settings.severity_threshold is None:
         raise ConfigError(
-            f'Config key "rules.{rule_id}.threshold" is only supported for rules '
-            "with warning/error thresholds."
+            f'Config key "rules.{rule_id}.threshold" is only supported for '
+            "severity-threshold rubrics."
         )
 
     threshold = rule_section["threshold"]

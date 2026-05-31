@@ -72,6 +72,7 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
     return [
         _section("Available commands:", ctx),
         _command_line("analyse", "Run gruff-py analysis.", ctx),
+        _command_line("check-ignore", "Report whether gruff would ignore each path, and why.", ctx),
         _command_line("completion", "Dump the shell completion script", ctx),
         _command_line("dashboard", "Serve the local gruff-py dashboard.", ctx),
         _command_line("help", "Display help for a command", ctx),

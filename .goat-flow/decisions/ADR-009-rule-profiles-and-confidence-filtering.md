@@ -2,6 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2026-05-16
+**Related:** ADR-021 supplies the first concrete profile (`reviewability`) and the agent-hook severity policy that motivates this preset layer.
 **Ticket/Context:** M13 found useful profile/strictness models in Prospector and
 Pyright, and confidence filtering models in Pylint and Vulture. Gruff already
 stores finding confidence, but does not expose confidence filtering or named

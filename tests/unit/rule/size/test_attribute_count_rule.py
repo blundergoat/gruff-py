@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 15, error: int = 25) -> RuleContext:
+def _ctx(threshold: int = 15) -> RuleContext:
     rule = AttributeCountRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -42,7 +42,7 @@ def test_annotated_class_attributes_counted():
     findings = AttributeCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["attributes"] == 20
-    assert findings[0].severity == Severity.WARNING
+    assert findings[0].severity == Severity.ERROR
 
 
 def test_init_self_assignments_counted():
@@ -77,13 +77,13 @@ def test_class_above_error_threshold_emits_error():
 def test_class_attribute_plain_assignment_counted():
     source = "class C:\n    a = 1\n    b = 2\n    c = 3\n"
     # 3 attributes; threshold 2 -> warning
-    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(warning=2, error=10))
+    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(threshold=2))
     assert findings[0].metadata["attributes"] == 3
 
 
 def test_tuple_self_assignment_collects_all_names():
     source = "class C:\n    def __init__(self):\n        self.a, self.b, self.c = 1, 2, 3\n"
-    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(warning=2, error=10))
+    findings = AttributeCountRule().analyse(_make_unit(source), _ctx(threshold=2))
     assert findings[0].metadata["attributes"] == 3
 
 

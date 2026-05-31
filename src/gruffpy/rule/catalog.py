@@ -11,7 +11,6 @@ from gruffpy.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplex
 from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
 from gruffpy.rule.complexity.maintainability_index_rule import MaintainabilityIndexRule
 from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule
-from gruffpy.rule.complexity.npath_complexity_rule import NPathComplexityRule
 from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAttributeRule
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
@@ -52,6 +51,9 @@ from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
 from gruffpy.rule.security.flask_debug_enabled_rule import FlaskDebugEnabledRule
+from gruffpy.rule.security.github_actions_unpinned_action_rule import (
+    GithubActionsUnpinnedActionRule,
+)
 from gruffpy.rule.security.hardcoded_bind_all_interfaces_rule import (
     HardcodedBindAllInterfacesRule,
 )
@@ -179,7 +181,6 @@ _FORMULA_PROVENANCE = {
         "A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: "
         "https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command."
     ),
-    "complexity.npath": "gruff-specific AST path-counting heuristic.",
 }
 
 
@@ -251,7 +252,7 @@ class RuleDocs:
         """Collect the non-empty optional payload fields in JSON-key order.
 
         Driven from a table so adding a new optional field is one row and the
-        NPATH cost stays linear instead of multiplicative.
+        cost stays linear instead of multiplicative.
         """
         candidates: tuple[tuple[str, Any, Any], ...] = (
             ("formulaProvenance", self.formula_provenance, self.formula_provenance),
@@ -427,7 +428,7 @@ def _confidence_rationale(confidence: Confidence) -> str:
 
 def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
     keys: list[str] = []
-    if _has_severity_thresholds(definition.default_thresholds):
+    if definition.default_threshold is not None:
         keys.extend(("threshold", "severity"))
     else:
         keys.extend(f"thresholds.{name}" for name in definition.default_thresholds)
@@ -436,25 +437,21 @@ def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
 
 
 def _threshold_direction(definition: RuleDefinition) -> str:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ""
     return _THRESHOLD_DIRECTIONS.get(definition.id, "above")
 
 
 def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ()
-    if _has_severity_thresholds(definition.default_thresholds) or definition.pillar in {
+    if definition.default_threshold is not None or definition.pillar in {
         Pillar.SIZE,
         Pillar.COMPLEXITY,
         Pillar.MAINTAINABILITY,
     }:
         return _STANDARD_THRESHOLD_METADATA_KEYS
     return ()
-
-
-def _has_severity_thresholds(thresholds: dict[str, int | float]) -> bool:
-    return set(thresholds) == {"warning", "error"}
 
 
 _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -506,6 +503,12 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "naming.generic-function": {
         "genericFunctions": (
             "Function names flagged as too generic to convey intent (process, handle, run, ...)."
+        ),
+    },
+    "naming.boolean-prefix": {
+        "acceptedBooleanNames": (
+            "Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts "
+            "(ok, force, verbose, etc.)."
         ),
     },
     "naming.module-name-mismatch": {
@@ -592,17 +595,10 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     # Complexity / size siblings (function-level).
     "complexity.cyclomatic": (
         "complexity.cognitive",
-        "complexity.npath",
         "size.function-length",
     ),
     "complexity.cognitive": (
         "complexity.cyclomatic",
-        "complexity.npath",
-        "size.function-length",
-    ),
-    "complexity.npath": (
-        "complexity.cyclomatic",
-        "complexity.cognitive",
         "size.function-length",
     ),
     "complexity.nesting-depth": ("complexity.cyclomatic", "complexity.cognitive"),
@@ -615,7 +611,6 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     "size.function-length": (
         "complexity.cyclomatic",
         "complexity.cognitive",
-        "complexity.npath",
         "size.average-function-length",
     ),
     "size.average-function-length": ("size.function-length",),
@@ -663,7 +658,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HalsteadVolumeRule),
     _entry(MaintainabilityIndexRule),
     _entry(NestingDepthRule),
-    _entry(NPathComplexityRule),
     _entry(UnusedPrivateAttributeRule),
     _entry(UnusedPrivateFunctionRule),
     _entry(SingleImplementorProtocolRule),
@@ -698,6 +692,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
     _entry(FlaskDebugEnabledRule),
+    _entry(GithubActionsUnpinnedActionRule),
     _entry(HardcodedBindAllInterfacesRule),
     _entry(HardcodedFrameworkSecretKeyRule),
     _entry(HeaderInjectionRule),

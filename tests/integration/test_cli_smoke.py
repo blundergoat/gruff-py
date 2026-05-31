@@ -18,6 +18,7 @@ from gruffpy.version import VERSION
 
 _EXPECTED_ROOT_COMMANDS = (
     "analyse",
+    "check-ignore",
     "completion",
     "dashboard",
     "help",
@@ -74,6 +75,9 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
 _EXPECTED_ANALYSE_LOCAL_OPTIONS = (
     "--diff",
     "--diff-vs",
+    "--since",
+    "--changed-ranges",
+    "--changed-scope",
     "--baseline-path",
     "--generate-baseline",
     "--generate-baseline-path",
@@ -99,6 +103,81 @@ def test_cli_command_help_lists_symfony_style_global_options():
     }
 
 
+def test_analyse_changed_ranges_returns_only_changed_method_findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text(
+        "def old_bad():\n    eval('old')\n\n\ndef new_bad():\n    eval('new')\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--include-rule",
+            "docs.missing-function-docstring",
+            "--changed-ranges",
+            "6-6",
+            "src/sample.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [finding["symbol"] for finding in payload["findings"]] == ["new_bad"]
+    assert payload["suppressedCount"] >= 1
+
+
+def test_analyse_diff_stdin_filters_to_changed_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "old.py").write_text("def old_bad():\n    eval('old')\n")
+    (src / "new.py").write_text("def new_bad():\n    eval('new')\n")
+    patch = (
+        "diff --git a/src/new.py b/src/new.py\n"
+        "--- a/src/new.py\n"
+        "+++ b/src/new.py\n"
+        "@@ -2,0 +2,1 @@\n"
+        "+    eval('new')\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--include-rule",
+            "docs.missing-function-docstring",
+            "--diff",
+            "-",
+            "src",
+        ],
+        input=patch,
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert {finding["file"] for finding in payload["findings"]} == {"src/new.py"}
+    assert payload["diff"]["source"] == "stdin"
+
+
 _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
     {
         "id",
@@ -108,7 +187,6 @@ _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
         "defaultSeverity",
         "confidence",
         "defaultEnabled",
-        "thresholds",
         "options",
         "description",
         "documentation",
@@ -810,7 +888,6 @@ def test_cli_metric_calibration_json_is_developer_dump(
     assert payload["run"]["functions"] == 1
     assert {metric["name"] for metric in payload["metrics"]} == {
         "cyclomatic",
-        "npath",
         "halsteadVolume",
         "maintainabilityIndex",
     }

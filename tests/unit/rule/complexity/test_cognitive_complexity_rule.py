@@ -7,7 +7,7 @@ Numbers in comments show the contributing increments.
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity.cognitive_complexity_rule import (
@@ -35,13 +35,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 15, error: int = 30) -> RuleContext:
+def _ctx(threshold: int = 15) -> RuleContext:
     rule = CognitiveComplexityRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -175,12 +175,12 @@ def test_nested_function_does_not_inflate_outer():
     assert cognitive_for(outer) == 0
 
 
-def test_high_score_emits_warning_finding():
-    # 6 pairs of nested if -> 6 * 3 = 18 cognitive points (> 15 warning)
+def test_high_score_emits_error_finding():
+    # 6 pairs of nested if -> 6 * 3 = 18 cognitive points (> 15 threshold)
     body = "\n".join(f"    if x{i}:\n        if y{i}:\n            return {i}" for i in range(6))
     args = ", ".join(sum([[f"x{i}", f"y{i}"] for i in range(6)], []))
     src = f"def f({args}):\n{body}\n"
     findings = CognitiveComplexityRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity == Severity.WARNING
+    assert findings[0].severity == Severity.ERROR
     assert findings[0].metadata["cognitive"] == 18

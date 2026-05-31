@@ -309,10 +309,8 @@ def test_sarif_reporter_projects_registry_thresholds_and_options():
         if isinstance(rule, dict)
     }
 
-    assert rules["size.file-length"]["properties"]["thresholds"] == {
-        "warning": 1000,
-        "error": 1000,
-    }
+    assert rules["size.file-length"]["properties"]["threshold"] == 1000
+    assert "thresholds" not in rules["size.file-length"]["properties"]
     assert rules["test-quality.test-longer-than-sut"]["properties"]["options"] == {
         "ratio": 2.0,
     }

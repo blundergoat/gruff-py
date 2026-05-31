@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.rule_selection import RuleSelection
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.fail_threshold import FailThreshold
 
 if TYPE_CHECKING:
@@ -104,6 +104,11 @@ class AnalysisConfig:
                 enabled=definition.default_enabled,
                 thresholds=dict(definition.default_thresholds),
                 options=dict(definition.default_options),
+                severity_threshold=(
+                    SeverityThreshold(definition.default_threshold, definition.default_severity)
+                    if definition.default_threshold is not None
+                    else None
+                ),
             )
         return cls(rules=rules)
 

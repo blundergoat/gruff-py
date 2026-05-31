@@ -82,11 +82,7 @@ def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
                 if definition.secondary_pillars
                 else {}
             ),
-            **(
-                {"thresholds": dict(definition.default_thresholds)}
-                if definition.default_thresholds
-                else {}
-            ),
+            **definition.threshold_payload(),
             **({"options": dict(definition.default_options)} if definition.default_options else {}),
         },
     }

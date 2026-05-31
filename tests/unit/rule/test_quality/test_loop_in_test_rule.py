@@ -23,3 +23,35 @@ def test_list_comprehension_not_flagged():
     """Comprehensions aren't statement-level loops - they're expressions."""
     src = "def test_foo():\n    xs = [i for i in range(3)]\n    assert len(xs) == 3\n"
     assert LoopInTestRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_fixture_loop_with_assertion_context_is_not_flagged():
+    src = (
+        "FIXTURE_FILES = ['a.json', 'b.json']\n"
+        "def test_fixtures_exist(tmp_path):\n"
+        "    for name in FIXTURE_FILES:\n"
+        "        path = tmp_path / name\n"
+        "        assert path.name.endswith('.json'), name\n"
+    )
+    assert LoopInTestRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_inline_case_loop_with_assertion_context_is_not_flagged():
+    src = (
+        "def test_cases():\n"
+        "    for case in [('json', '{}'), ('text', 'ok')]:\n"
+        "        assert case[1], case\n"
+    )
+    assert LoopInTestRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_fixture_loop_with_branch_still_fires():
+    src = (
+        "FIXTURE_FILES = ['a.json', 'b.json']\n"
+        "def test_fixtures_exist(tmp_path):\n"
+        "    for name in FIXTURE_FILES:\n"
+        "        if name.endswith('.json'):\n"
+        "            assert True, name\n"
+    )
+    findings = LoopInTestRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1

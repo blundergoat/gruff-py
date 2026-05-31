@@ -302,6 +302,21 @@ def init_command(function: _F) -> _F:
     return apply_decorators(function, _INIT_COMMAND_DECORATORS)
 
 
+def check_ignore_command(function: _F) -> _F:
+    """Wire *function* up as the ``check-ignore`` subcommand.
+
+    Reports whether gruff would ignore each path (and why) using the same config
+    resolution and ignore engine as ``analyse``, performing no analysis.
+
+    Args:
+        function: The command implementation.
+
+    Returns:
+        The decorated function registered as ``gruff check-ignore``.
+    """
+    return apply_decorators(function, _CHECK_IGNORE_COMMAND_DECORATORS)
+
+
 def completion_command(function: _F) -> _F:
     """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
 
@@ -383,9 +398,27 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Path to a baseline Infection JSON report for MSI diff mode.",
     ),
     _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
-    _ignored_string_option(
+    _option(
         "--diff",
-        "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
+        "diff_mode",
+        default="",
+        help=(
+            "Filter findings to changed regions. Use working-tree, staged, unstaged, "
+            "a base ref, or - for unified diff on stdin."
+        ),
+    ),
+    _option("--since", default="", help="Git base ref for changed-region filtering."),
+    _option(
+        "--changed-ranges",
+        default="",
+        help='Explicit changed line ranges such as "3-3,8-10".',
+    ),
+    _option(
+        "--changed-scope",
+        type=click.Choice(["symbol", "hunk"]),
+        default="symbol",
+        show_default=True,
+        help="Changed-region scope: symbol or hunk.",
     ),
     _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
     _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
@@ -850,4 +883,31 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help="Regenerate an existing .gruff-py.yaml file, preserving paths.ignore.",
     ),
     _command(),
+)
+
+_CHECK_IGNORE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
+    *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--format",
+        "check_ignore_format",
+        type=click.Choice(["text", "json"]),
+        default="text",
+        show_default=True,
+        help="Output format: text or json.",
+    ),
+    _option(
+        "--no-config",
+        is_flag=True,
+        default=False,
+        help="Skip auto-applying the default .gruff-py.yaml file for this run.",
+    ),
+    _option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML or TOML config file (.yaml, .yml, or .toml).",
+    ),
+    _argument("paths", nargs=-1, type=click.Path()),
+    _command("check-ignore"),
 )

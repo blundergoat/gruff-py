@@ -45,9 +45,9 @@ class MaintainabilityIndexRule(Rule):
             name="Maintainability index",
             pillar=Pillar.MAINTAINABILITY,
             tier=RuleTier.V01,
-            default_severity=Severity.WARNING,
+            default_severity=Severity.ERROR,
             confidence=Confidence.MEDIUM,
-            default_thresholds={"warning": 80, "error": 70},
+            default_threshold=70,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

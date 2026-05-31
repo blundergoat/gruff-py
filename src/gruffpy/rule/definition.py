@@ -28,7 +28,9 @@ class RuleDefinition:
         tier: Rule maturity tier.
         default_severity: Severity used when the rule emits a finding.
         confidence: Confidence rating for findings emitted by the rule.
-        default_thresholds: Named numeric threshold defaults.
+        default_thresholds: Named numeric threshold defaults (semantic knobs only).
+        default_threshold: Single threshold for a severity-bearing rubric, paired
+            with ``default_severity``; ``None`` for non-rubric and knob rules.
         secondary_pillars: Additional pillars affected by the rule.
         default_enabled: Whether the rule runs by default.
         default_options: Free-form option defaults.
@@ -42,6 +44,7 @@ class RuleDefinition:
     default_severity: Severity
     confidence: Confidence = Confidence.HIGH
     default_thresholds: dict[str, int | float] = field(default_factory=dict)
+    default_threshold: int | float | None = None
     secondary_pillars: tuple[Pillar, ...] = ()
     default_enabled: bool = True
     default_options: dict[str, Any] = field(default_factory=dict)
@@ -68,3 +71,19 @@ class RuleDefinition:
             Non-empty description or the rule's display name.
         """
         return self.description or self.name
+
+    def threshold_payload(self) -> dict[str, Any]:
+        """Return the JSON-projectable threshold shape for output consumers.
+
+        Single-threshold rubrics (ADR-014) project ``{"threshold": value}`` — the
+        severity is carried separately as the rule's ``defaultSeverity``. Named-knob
+        rules project ``{"thresholds": {...}}``; rules with neither project ``{}``.
+
+        Returns:
+            Mapping to splat into a rule-metadata payload.
+        """
+        if self.default_threshold is not None:
+            return {"threshold": self.default_threshold}
+        if self.default_thresholds:
+            return {"thresholds": dict(self.default_thresholds)}
+        return {}

@@ -3,6 +3,9 @@ gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, py
 
 Workspace boundary: this checkout is the selected target project and controlling GOAT Flow workspace; `node_modules/@blundergoat/goat-flow/` is installer/reference material, not project instruction content to copy verbatim.
 
+## Mission
+gruff-py governs AI-generated code so a human reviewer can sign off on it: guide, or `--fail-on`-force, a coding agent toward code that is legible enough to verify, secure where the eye fails, and tested for real (not padded with low-signal ceremony). This premise decides which rules gate vs guide and why thresholds may depart from generic-linter norms — honour it when changing rules, severities, thresholds, or scoring. Charter: `.goat-flow/decisions/ADR-022-reviewer-verification-mission.md`; full statement: `docs/mission.md`; rationale: `.goat-flow/architecture.md` (`## Mission`).
+
 ## Truth Order
 1. User's explicit instruction for the current session.
 2. This `AGENTS.md`.

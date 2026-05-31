@@ -10,13 +10,13 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | Pillar | Rule count | Notes |
 |---|---:|---|
 | `size` | 7 | File, class, function, parameter, method, and attribute size |
-| `complexity` | 5 | Cyclomatic, cognitive, Halstead, nesting, and NPATH |
+| `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 26 | Heuristic AST-level dangerous patterns |
+| `security` | 27 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
@@ -40,7 +40,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `complexity.halstead-volume`
 - `complexity.maintainability-index`
 - `complexity.nesting-depth`
-- `complexity.npath`
 
 ### Dead Code And Waste
 
@@ -97,6 +96,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
+- `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
 - `security.header-injection`
@@ -177,7 +177,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cognitive complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cognitive` protects the complexity pillar by flagging cognitive complexity before it becomes costly to review, maintain, or trust.
@@ -194,7 +194,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cyclomatic complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
@@ -212,7 +212,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Halstead volume
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.halstead-volume` protects the complexity pillar by flagging halstead volume before it becomes costly to review, maintain, or trust.
@@ -230,7 +230,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Maintainability index
 - Pillar: `maintainability`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.maintainability-index` protects the maintainability pillar by flagging maintainability index before it becomes costly to review, maintain, or trust.
@@ -248,7 +248,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Nesting depth
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.nesting-depth` protects the complexity pillar by flagging nesting depth before it becomes costly to review, maintain, or trust.
@@ -259,24 +259,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Threshold direction: `above`
 - Bad example: Code that triggers `complexity.nesting-depth` leaves nesting depth unaddressed.
 - Good example: Code that satisfies `complexity.nesting-depth` makes nesting depth explicit or simpler.
-
-### `complexity.npath`
-
-- Name: NPATH complexity
-- Pillar: `complexity`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `complexity.npath` protects the complexity pillar by flagging npath complexity before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported npath complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Config threshold: `threshold` = `500`, `severity` = `error`
-- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
-- Threshold direction: `above`
-- Formula provenance: gruff-specific AST path-counting heuristic.
-- Bad example: Code that triggers `complexity.npath` leaves npath complexity unaddressed.
-- Good example: Code that satisfies `complexity.npath` makes npath complexity explicit or simpler.
 
 ### `dead-code.unused-private-attribute`
 
@@ -483,7 +465,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: TODO density
 - Pillar: `documentation`
 - Tier: `v0.1`
-- Default severity: `advisory`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `docs.todo-density` protects the documentation pillar by flagging todo density before it becomes costly to review, maintain, or trust.
@@ -549,6 +531,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `naming.boolean-prefix` protects the naming pillar by flagging boolean prefix before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported boolean prefix directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
 - Bad example: Code that triggers `naming.boolean-prefix` leaves boolean prefix unaddressed.
 - Good example: Code that satisfies `naming.boolean-prefix` makes boolean prefix explicit or simpler.
 
@@ -770,6 +753,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-489', 'CWE-215']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
 - Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
+
+### `security.github-actions-unpinned-action`
+
+- Name: Unpinned GitHub Actions reference
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-unpinned-action` protects the security pillar by flagging unpinned github actions reference before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported unpinned github actions reference directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-1357', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-unpinned-action` leaves unpinned github actions reference unaddressed.
+- Good example: Code that satisfies `security.github-actions-unpinned-action` makes unpinned github actions reference explicit or simpler.
 
 ### `security.hardcoded-bind-all-interfaces`
 
@@ -1166,7 +1164,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Attribute count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.attribute-count` protects the size pillar by flagging attribute count before it becomes costly to review, maintain, or trust.
@@ -1183,7 +1181,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Average function length per class
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.average-function-length` protects the size pillar by flagging average function length per class before it becomes costly to review, maintain, or trust.
@@ -1200,7 +1198,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Class length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.class-length` protects the size pillar by flagging class length before it becomes costly to review, maintain, or trust.
@@ -1217,7 +1215,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: File length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.file-length` protects the size pillar by flagging file length before it becomes costly to review, maintain, or trust.
@@ -1234,7 +1232,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Function length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.function-length` protects the size pillar by flagging function length before it becomes costly to review, maintain, or trust.
@@ -1251,7 +1249,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Parameter count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.parameter-count` protects the size pillar by flagging parameter count before it becomes costly to review, maintain, or trust.
@@ -1268,7 +1266,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Public method count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.public-method-count` protects the size pillar by flagging public method count before it becomes costly to review, maintain, or trust.
@@ -1685,7 +1683,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Test function too long
 - Pillar: `test-quality`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.

@@ -58,14 +58,54 @@ Future scans auto-apply `gruff-baseline.json` when present. Use
 
 ## Diff Flags
 
-Python accepts PHP-compatible diff flags on the CLI. Treat any accepted-but-not
-implemented diff mode as compatibility surface until the project documents
-otherwise:
+Changed-region scans keep findings whose location or enclosing declaration
+overlaps the changed hunk and add `suppressedCount` to JSON output:
 
 ```sh
-uv run gruff-py analyse src --diff staged --format github --fail-on warning
-uv run gruff-py analyse src --diff-vs origin/main --changed-only --fail-on none
+uv run gruff-py analyse --format json --changed-ranges "3-3,8-10" src/foo.py
+uv run gruff-py analyse --format json --since HEAD src/foo.py
+git diff | uv run gruff-py analyse --format json --diff - src/foo.py
 ```
+
+## Ignored Paths and `check-ignore`
+
+`paths.ignore` in `.gruff-py.yaml` is **authoritative in every invocation shape**
+— directory walks, explicit file arguments, and all diff/changed-region modes
+(`--diff`, `--diff -`, `--changed-ranges`, `--since`). A path matching
+`paths.ignore` produces no findings however it is supplied, so a coding-agent
+hook that passes the agent's changed files never surfaces findings for paths the
+project has deliberately excluded. `--include-ignored` opts back into
+default-ignored and `.gitignore`d paths only; it never overrides `paths.ignore`.
+
+Skipped paths are reported with a reason. Alongside the back-compatible string
+`ignoredPaths`, JSON output carries an additive `ignoredPathDetails` array — one
+object per skipped path with its `source` (`config` | `gitignore` | `default` |
+`generated`) and the matched `pattern` (for `config` matches):
+
+```jsonc
+"ignoredPathDetails": [
+  { "path": "generated/out.py", "source": "config", "pattern": "generated/**" }
+]
+```
+
+To ask whether gruff would ignore specific paths *without* running analysis — for
+example from an agent hook deciding whether an edited file is even in scope — use
+`check-ignore`:
+
+```sh
+uv run gruff-py check-ignore --format json src/app.py generated/out.py
+```
+
+```jsonc
+[
+  { "path": "src/app.py", "ignored": false, "source": null, "pattern": null },
+  { "path": "generated/out.py", "ignored": true, "source": "config", "pattern": "generated/**" }
+]
+```
+
+Exit codes mirror `git check-ignore`: `0` when at least one path is ignored, `1`
+when none are, and `2` on error. `check-ignore` shares `analyse`'s config
+resolution and ignore engine, so its verdict always matches what a scan skips.
 
 ## Docs Check
 

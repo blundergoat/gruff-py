@@ -1,8 +1,10 @@
 # ADR-016: Composite finding fingerprint inputs
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-024](ADR-024-retire-god-method-composite.md)
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M03-complexity-pillar-v0.1.md` (`design.god-method`); cross-impl parity with gruff-php's `Scoring/CompositeFindingFactory`; `.goat-flow/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
+**Ticket/Context:** cross-impl parity with gruff-php's `Scoring/CompositeFindingFactory`; `.goat-flow/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
+
+> **Superseded (2026-05-31):** the `design.god-method` composite this ADR fingerprinted has been retired (ADR-024). `CompositeFindingFactory` and its synthesis path are deleted; P5 root-cause clustering now rests entirely on `ScoreCalculator`'s `CORRELATED_COMPLEXITY_RULES`. The `fingerprint_for(...)` algorithm and its gruff-php byte-compatibility are unchanged and still govern every remaining finding — only this composite's input mapping no longer applies. The record below is retained as history.
 
 ## Decision
 
