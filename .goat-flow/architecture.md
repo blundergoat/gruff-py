@@ -14,7 +14,7 @@ This is the reason the `documentation` pillar requires doc comments even on priv
 
 gruff-py is a Click-based Python CLI that analyses project files and emits text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF quality reports. It also ships a dependency-free local dashboard server that embeds the HTML report in a full-window browser shell. `src/gruffpy/cli.py` orchestrates config loading, source discovery, parsing, rule execution, scoring, reporting, display filtering, dashboard startup, and exit-code selection; domain objects live in focused packages under `src/gruffpy/`.
 
-The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `ProjectRuleProtocol`, `CompositeFindingFactory`, `ScoreCalculator`, `FindingDisplayFilter`, `DashboardPageRenderer`, the local dashboard server under `src/gruffpy/command/`, and the reporter classes under `src/gruffpy/reporting/`. Rules are isolated behind per-unit and project-level interfaces so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
+The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `ProjectRuleProtocol`, `ScoreCalculator`, `FindingDisplayFilter`, `DashboardPageRenderer`, the local dashboard server under `src/gruffpy/command/`, and the reporter classes under `src/gruffpy/reporting/`. Rules are isolated behind per-unit and project-level interfaces so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
 
 ## Request Flow
 
@@ -46,11 +46,12 @@ The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and
 `design`, and `modernisation`). Each pillar lives under
 `src/gruffpy/rule/<pillar>/`, with legacy `waste.*` rule IDs emitting under the
 `dead-code` pillar. `ProjectRuleProtocol` handles cross-file rules such as
-`design.single-implementor-protocol`, while `CompositeFindingFactory`
-synthesises `design.god-method` findings post-pass when size + complexity
-overlap on a symbol. `AnalysisConfig.from_registry()` snapshots each rule's
-default settings; selection and per-rule overrides are applied by
-`ConfigLoader`.
+`design.single-implementor-protocol`. Overlapping `size.*` and `complexity.*`
+findings on one symbol are billed once by `ScoreCalculator`'s correlated-rule
+clustering (`CORRELATED_COMPLEXITY_RULES`); the `design.god-method` composite
+that previously named that overlap was retired (ADR-024).
+`AnalysisConfig.from_registry()` snapshots each rule's default settings;
+selection and per-rule overrides are applied by `ConfigLoader`.
 
 Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.json`/`.ini`/`.conf` text files - the secret/PHI scanners under `sensitive-data.*` use this seam. Several test-quality rules read `pyproject.toml` once per run via `_pytest_config`; scope detection for test-quality rules is memoised through `_test_quality_node_helper` so the catalogue computes per-unit scope exactly once.
 

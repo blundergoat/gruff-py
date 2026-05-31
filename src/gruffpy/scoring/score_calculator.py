@@ -40,7 +40,6 @@ CORRELATED_COMPLEXITY_RULES: frozenset[str] = frozenset(
         "complexity.cognitive",
         "complexity.cyclomatic",
         "complexity.nesting-depth",
-        "design.god-method",
         "size.function-length",
         "size.parameter-count",
     }
@@ -85,7 +84,7 @@ class ScoreCalculator:
             scope=scope,
             explanation=(
                 "Per-pillar scores start at 100 and subtract weighted finding "
-                "penalties; correlated size/complexity/design findings on the same "
+                "penalties; correlated size/complexity findings on the same "
                 "symbol share penalty weight; the composite is the average of "
                 "applicable pillar scores."
             ),

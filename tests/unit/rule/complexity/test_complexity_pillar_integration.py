@@ -8,7 +8,6 @@ from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
-from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 from gruffpy.source.source_file import SourceFile
 
 COMPLEXITY_RULE_IDS = {
@@ -78,7 +77,7 @@ def too_long():
 
 
 def god_method(a, b, c, d, e, f, g, h):
-    """Long + parameter-heavy + complex; should produce a composite."""
+    """Long + parameter-heavy + complex - overlapping size and complexity findings on one symbol."""
     if a:
         if b:
             if c:
@@ -112,9 +111,9 @@ def _make_unit(source: str) -> AnalysisUnit:
 
 def _default_ctx() -> RuleContext:
     # Single-threshold defaults are too generous for the compact fixture.
-    # Override the size + complexity rubrics low enough that the fixture
-    # produces overlapping size + complexity findings for the
-    # design.god-method composite, but high enough that ``shallow`` stays clean.
+    # Override the size + complexity rubrics low enough that the fixture's
+    # complex functions fire overlapping size + complexity findings, but high
+    # enough that ``shallow`` stays clean.
     overrides = {
         "size.function-length": 15,
         "size.parameter-count": 5,
@@ -226,17 +225,6 @@ def test_maintainability_index_finding_carries_below_direction():
     ]
     assert all(f.metadata["threshold"] == 101 for f in mi_findings)
     assert all(f.metadata["thresholdDirection"] == "below" for f in mi_findings)
-
-
-def test_design_god_method_synthesises_on_overlap():
-    unit = _make_unit(COMPLEXITY_FIXTURE)
-    findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
-    composites = CompositeFindingFactory().synthesise(findings)
-    god_methods = [f for f in composites if f.rule_id == "design.god-method"]
-    assert god_methods, "expected at least one design.god-method composite"
-    # god_method symbol should be among the composites
-    symbols = {f.symbol for f in god_methods}
-    assert "god_method" in symbols
 
 
 _COMPLEXITY_RULES_FOR_SHALLOW = (

@@ -13,7 +13,7 @@ def apply_suppressions(
     """Return findings not suppressed by source comments.
 
     Args:
-        findings: Findings emitted by rules and composite synthesis.
+        findings: Findings emitted by rules.
         suppressions_by_file: Parsed suppressions keyed by display path.
 
     Returns:

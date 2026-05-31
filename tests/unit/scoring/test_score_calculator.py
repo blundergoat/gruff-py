@@ -9,11 +9,14 @@ CORRELATED_STACK_FINDINGS = 4
 
 
 def _correlated_stack() -> list[Finding]:
+    """A god-function's real metric findings - long, cyclomatically and
+    cognitively complex, deeply nested - all on one symbol and line, so the
+    correlated-rule clustering bills them as one penalty."""
     return [
         _finding("size.function-length", pillar=Pillar.SIZE),
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY),
         _finding("complexity.cognitive", pillar=Pillar.COMPLEXITY),
-        _finding("design.god-method", pillar=Pillar.DESIGN),
+        _finding("complexity.nesting-depth", pillar=Pillar.COMPLEXITY),
     ]
 
 
@@ -62,7 +65,7 @@ def test_file_score_max_lines_uses_function_length_findings():
     assert report.top_offenders[0].max_lines == expected_max_lines
 
 
-def test_correlated_size_complexity_design_stack_is_downweighted_for_file_score():
+def test_correlated_size_complexity_stack_is_downweighted_for_file_score():
     report = ScoreCalculator().calculate(_correlated_stack())
 
     offender = report.top_offenders[0]
@@ -71,14 +74,17 @@ def test_correlated_size_complexity_design_stack_is_downweighted_for_file_score(
     assert offender.grade.score == 80.0
 
 
-def test_correlated_size_complexity_design_stack_is_downweighted_for_composite_score():
+def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
     report = ScoreCalculator().calculate(_correlated_stack())
 
+    # With the god-method composite retired, no synthetic design finding is
+    # injected: the design pillar takes zero penalty and the real size/complexity
+    # findings absorb the whole clustered weight, leaving the composite unchanged.
     assert report.composite.score == 98.4
     pillar_penalties = {pillar.pillar: pillar.penalty for pillar in report.pillars}
     assert pillar_penalties["size"] == 4.0
-    assert pillar_penalties["complexity"] == 8.0
-    assert pillar_penalties["design"] == 4.0
+    assert pillar_penalties["complexity"] == 12.0
+    assert pillar_penalties["design"] == 0.0
 
 
 def test_correlated_downweighting_requires_same_symbol_and_line():

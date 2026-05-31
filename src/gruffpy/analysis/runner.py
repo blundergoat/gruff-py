@@ -31,7 +31,6 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
-from gruffpy.scoring.composite_finding_factory import CompositeFindingFactory
 from gruffpy.scoring.score_calculator import ScoreCalculator
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
@@ -233,8 +232,6 @@ def _collect_findings(
 ) -> list[Finding]:
     findings = registry.analyse(units, context)
     findings = apply_suppressions(findings, suppressions_by_file)
-    findings = CompositeFindingFactory().synthesise(findings)
-    findings = apply_suppressions(findings, suppressions_by_file)
     findings = _filter_allowed_secret_previews(findings, config)
     findings.sort(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
@@ -415,12 +412,11 @@ def _parse_suppressions(
     units: list[AnalysisUnit],
     registry: RuleRegistry,
 ) -> dict[str, ParsedSuppressions]:
-    known_rule_ids = {rule.definition().id for rule in registry.all()}
-    known_rule_ids.add(CompositeFindingFactory.GOD_METHOD_RULE_ID)
+    known_rule_ids = frozenset(rule.definition().id for rule in registry.all())
     return {
         unit.file.display_path: parse_suppressions(
             unit.source,
-            known_rule_ids=frozenset(known_rule_ids),
+            known_rule_ids=known_rule_ids,
         )
         for unit in units
         if unit.source
