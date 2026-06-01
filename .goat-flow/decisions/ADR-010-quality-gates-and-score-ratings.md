@@ -1,8 +1,8 @@
 # ADR-010: Quality gates and score ratings
 
 **Status:** Proposed (2026-05-16); superseded in part by the 2026-06-01 addendum
-below — composite/pillar score gates dropped, gating folds into M04's new-findings
-gate.
+below and clarified on 2026-06-02 — composite/pillar score gates dropped,
+v0.3.0 agent gating folds into M04's changed-code gate.
 **Date:** 2026-05-16
 **Ticket/Context:** M13.1 found that SonarQube separates raw findings, scores,
 ratings, and quality gates. Gruff currently has numeric scores and `--fail-on`,
@@ -57,15 +57,23 @@ A cross-port re-scan (gruff-go/-rs/-ts/-php) for this exact feature found that
 - No port ships configurable rating bands; A-F at 90/80/70/60 is a stable cross-port
   surface.
 
-The capability the family validated is the **new-findings gate** (gruff-rs
-`scope: new`, gruff-php `newFindings`, both via `--fail-on-new`; gruff-go plans it) —
-gruff-py's M04.
+The capability the family validated is the **new-finding / new-code gate**
+family: gruff-rs `scope: new`, gruff-php `newFindings`, and gruff-ts
+changed-region gating all keep historical debt from blocking the current
+change. The concrete v0.3.0 gruff-py path is M04's changed-code gate, not
+gruff-php's baseline/branch `--fail-on-new` spelling.
 
 **Decision (revises the 2026-05-16 proposal):** gruff-py will NOT add composite or
-pillar score-condition gates. The post-analysis gate need is met by M04's new-findings
-gate (fail on findings classified *new*), composed with the existing
-`--fail-on <severity>`. A-F score ratings stay as-is; no configurable bands. The
+pillar score-condition gates. The v0.3.0 post-analysis gate need is met by
+M04's changed-region output composed with the existing `--fail-on <severity>`:
+filter to the changed hunk or enclosing symbol first, then fail when a retained
+finding meets the threshold. This requires no baseline file and does not add
+`--fail-on-new`.
+
+A future gruff-py `--fail-on-new` must use gruff-php-compatible reference-point
+semantics (baseline, `--diff-vs`, or both), not an alias for changed-region
+`--fail-on`. A-F score ratings stay as-is; no configurable bands. The
 "post-analysis gate evaluator" row above is withdrawn for score conditions. If
-human-CI "tolerate up to N" count gates are ever wanted, that is a separate decision
-that must converge on an existing sibling shape (gruff-rs `gate:` or gruff-php
-`failureConditions:`), not a third gruff-py spelling.
+human-CI "tolerate up to N" count gates are ever wanted, that is a separate
+decision that must converge on an existing sibling shape (gruff-rs `gate:` or
+gruff-php `failureConditions:`), not a third gruff-py spelling.

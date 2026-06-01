@@ -66,11 +66,11 @@ moves, six source surfaces must move together: the deciding ADR
 `Per-Command`); the canonical defaults table in
 `src/gruffpy/config/analysis_config.py` (search:
 `MINIMUM_SEVERITY_BINARY_DEFAULTS`); the Click decorator default in
-`src/gruffpy/cli_options.py` (search: `analyse --fail-on`); the validator
+`src/gruffpy/cli_options.py` (search: `minimumSeverity.analyse in .gruff-py.yaml`); the validator
 accept-set in `src/gruffpy/config/loader.py` (search:
 `VALID_MINIMUM_SEVERITY_VALUES`); the init renderer in
 `src/gruffpy/command/init_config.py` (search: `_render_minimum_severity_block`);
-and the dashboard state factory in `src/gruffpy/cli.py` (search:
+and the dashboard state factory in `src/gruffpy/cli_dashboard.py` (search:
 `_resolve_config_dashboard_fail_on`). Two doc surfaces move alongside:
 `docs/configuration.md` (search: `Severity Gate`) and `CHANGELOG.md`
 (search: `minimumSeverity`).

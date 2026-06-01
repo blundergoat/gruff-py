@@ -8,10 +8,12 @@ last_reviewed: 2026-05-24
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
 **Tags:** hallucination-risk: high
 
-`run_analysis` defaults `baseline` to `None`, which `_handle_baseline`
-substitutes with `BaselineOptions()` (apply_path=None, generate_path=None,
-disabled=False). Evidence anchors: `src/gruffpy/analysis/runner.py`
+`run_analysis` defaults `baseline` to `None`, which the runner substitutes with
+`BaselineOptions()` (apply_path=None, generate_path=None, disabled=False).
+Evidence anchors: `src/gruffpy/analysis/analysis_run_request.py`
 (search: `baseline: BaselineOptions | None = None`),
+`src/gruffpy/analysis/runner.py`
+(search: `baseline_options = request.baseline if request.baseline is not None else BaselineOptions()`),
 `src/gruffpy/analysis/runner.py` (search: `def _apply_baseline_if_present`), and
 `src/gruffpy/analysis/runner.py` (search: `def _resolve_baseline_selection`).
 

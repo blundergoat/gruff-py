@@ -12,6 +12,7 @@ gruff-py governs AI-generated code so a human reviewer can verify, trust, and si
 - [Configuration](configuration.md) - config discovery, schema, allowlists, and rule overrides.
 - [Rules](rules.md) - generated rule IDs, severities, thresholds, and remediation guidance.
 - [Output Formats](output-formats.md) - text, JSON, HTML, Markdown, GitHub annotations, hotspot, and SARIF.
+- [Coding-Agent Hook](agent-hook.md) - changed-region commands for local agent governance.
 - [CI Integration](ci-integration.md) - GitHub Actions, SARIF upload, baselines, and diff flags.
 - [Dashboard](dashboard.md) - local dashboard flags, controls, and safety notes.
 - [Releasing](releasing.md) - release checks and packaging notes.

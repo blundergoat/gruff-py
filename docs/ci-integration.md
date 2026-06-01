@@ -62,10 +62,15 @@ Changed-region scans keep findings whose location or enclosing declaration
 overlaps the changed hunk and add `suppressedCount` to JSON output:
 
 ```sh
-uv run gruff-py analyse --format json --changed-ranges "3-3,8-10" src/foo.py
-uv run gruff-py analyse --format json --since HEAD src/foo.py
-git diff | uv run gruff-py analyse --format json --diff - src/foo.py
+uv run gruff-py analyse src/foo.py --format json --changed-ranges "3-3,8-10" --no-baseline
+uv run gruff-py analyse src/foo.py --format json --since HEAD --no-baseline
+git diff | uv run gruff-py analyse src/foo.py --format json --diff - --no-baseline
 ```
+
+For coding-agent hooks, use the same changed-region flags with ordinary
+`--fail-on` and keep `--no-baseline` enabled so the agent fixes findings in its
+own diff instead of inheriting or hiding adoption debt. See
+[Coding-Agent Hook](agent-hook.md).
 
 ## Ignored Paths and `check-ignore`
 

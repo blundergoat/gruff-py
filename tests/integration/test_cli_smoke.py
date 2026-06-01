@@ -6,6 +6,9 @@
 # gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
 # gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
@@ -37,6 +40,7 @@ _EXPECTED_GLOBAL_OPTIONS = (
     "--no-interaction",
     "--verbose",
 )
+_GIT = shutil.which("git")
 
 
 def test_cli_help_lists_analyse_command():
@@ -137,6 +141,189 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     assert payload["suppressedCount"] >= 1
 
 
+def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('"""Module."""\n\n\ndef changed():\n    return 1\n')
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "warning",
+            "--no-config",
+            "--no-baseline",
+            "--changed-ranges",
+            "5-5",
+            "src/sample.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 1, result.output
+    assert [finding["symbol"] for finding in payload["findings"]] == ["changed"]
+    assert payload["summary"]["exitCode"] == 1
+    assert payload["diff"]["changedFiles"] == ["src/sample.py"]
+
+    full_scan = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "warning",
+            "--no-config",
+            "--no-baseline",
+            "src/sample.py",
+        ],
+    )
+
+    full_payload = json.loads(full_scan.output)
+    assert full_scan.exit_code == 1, full_scan.output
+    assert "diff" not in full_payload
+    assert "changed" in {finding["symbol"] for finding in full_payload["findings"]}
+
+
+def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text(
+        '"""Module."""\n\n\n'
+        "def changed():\n"
+        '    """Return the changed-path value without touching legacy debt."""\n'
+        "    return 1\n\n\n"
+        "def old_bad():\n"
+        "    return 2\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "warning",
+            "--no-config",
+            "--no-baseline",
+            "--changed-ranges",
+            "6-6",
+            "src/sample.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0, result.output
+    assert payload["findings"] == []
+    assert payload["suppressedCount"] >= 1
+    assert payload["diff"]["suppressedCount"] == payload["suppressedCount"]
+
+
+def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text(
+        '"""Module."""\n'
+        "import subprocess\n\n\n"
+        "def changed():\n"
+        '    """Run legacy diagnostics through the shell for compatibility."""\n'
+        '    command = "ls"\n'
+        "    subprocess.run(command, shell=True)\n"
+        "    return 1\n"
+    )
+
+    common_args = [
+        "analyse",
+        "--format",
+        "json",
+        "--fail-on",
+        "warning",
+        "--no-config",
+        "--no-baseline",
+        "--changed-ranges",
+        "9-9",
+        "src/sample.py",
+    ]
+
+    symbol = CliRunner().invoke(main, [*common_args, "--changed-scope", "symbol"])
+    hunk = CliRunner().invoke(main, [*common_args, "--changed-scope", "hunk"])
+
+    symbol_payload = json.loads(symbol.output)
+    hunk_payload = json.loads(hunk.output)
+    assert symbol.exit_code == 1, symbol.output
+    assert [finding["ruleId"] for finding in symbol_payload["findings"]] == [
+        "security.shell-injection"
+    ]
+    assert hunk.exit_code == 0, hunk.output
+    assert hunk_payload["findings"] == []
+    assert hunk_payload["suppressedCount"] >= 1
+
+
+def test_analyse_agent_command_ignores_default_baseline_when_disabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('"""Module."""\n\n\ndef changed():\n    return 1\n')
+    generated = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--generate-baseline",
+            "src/sample.py",
+        ],
+    )
+    assert generated.exit_code == 0, generated.output
+    assert (tmp_path / "gruff-baseline.json").exists()
+
+    common_args = [
+        "analyse",
+        "--format",
+        "json",
+        "--fail-on",
+        "warning",
+        "--no-config",
+        "--changed-ranges",
+        "5-5",
+        "src/sample.py",
+    ]
+    auto_baselined = CliRunner().invoke(main, common_args)
+    agent_scoped = CliRunner().invoke(main, [*common_args, "--no-baseline"])
+
+    auto_payload = json.loads(auto_baselined.output)
+    agent_payload = json.loads(agent_scoped.output)
+    assert auto_baselined.exit_code == 0, auto_baselined.output
+    assert auto_payload["findings"] == []
+    assert auto_payload["baseline"]["source"] == "default"
+    assert auto_payload["baseline"]["suppressedFindings"] >= 1
+    assert agent_scoped.exit_code == 1, agent_scoped.output
+    assert [finding["symbol"] for finding in agent_payload["findings"]] == ["changed"]
+    assert "baseline" not in agent_payload
+
+
 def test_analyse_diff_stdin_filters_to_changed_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -176,6 +363,89 @@ def test_analyse_diff_stdin_filters_to_changed_file(
     payload = json.loads(result.output)
     assert {finding["file"] for finding in payload["findings"]} == {"src/new.py"}
     assert payload["diff"]["source"] == "stdin"
+
+
+@pytest.mark.skipif(_GIT is None, reason="git is unavailable")
+@pytest.mark.parametrize(
+    ("diff_args", "should_stage", "expected_source"),
+    [
+        (("--diff=working-tree",), False, "working-tree"),
+        (("--diff=staged",), True, "staged"),
+        (("--since", "HEAD"), False, "HEAD"),
+    ],
+    ids=("working-tree", "staged", "since-head"),
+)
+def test_analyse_git_changed_region_modes_gate_retained_findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    diff_args: tuple[str, ...],
+    should_stage: bool,
+    expected_source: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    target = src / "sample.py"
+    target.write_text('"""Module."""\n\n\ndef changed():\n    """Return one."""\n    return 1\n')
+    _init_git_history(tmp_path, "src/sample.py")
+    target.write_text('"""Module."""\n\n\ndef changed():\n    return 2\n')
+    if should_stage:
+        _run_git(tmp_path, "add", "src/sample.py")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "warning",
+            "--no-config",
+            "--no-baseline",
+            *diff_args,
+            "src/sample.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 1, result.output
+    assert [finding["symbol"] for finding in payload["findings"]] == ["changed"]
+    assert payload["diff"]["source"] == expected_source
+    assert payload["diff"]["changedFiles"] == ["src/sample.py"]
+
+
+def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    assert _GIT is not None
+    return subprocess.run(
+        [_GIT, *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _init_git_history(cwd: Path, *paths: str) -> None:
+    _run_git(cwd, "init", "-q")
+    _run_git(cwd, "add", *paths)
+    tree = _run_git(cwd, "write-tree").stdout.strip()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "gruff-py tests",
+        "GIT_AUTHOR_EMAIL": "gruff-py-tests",
+        "GIT_COMMITTER_NAME": "gruff-py tests",
+        "GIT_COMMITTER_EMAIL": "gruff-py-tests",
+    }
+    assert _GIT is not None
+    commit = subprocess.run(
+        [_GIT, "commit-tree", tree, "-m", "initial"],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    ).stdout.strip()
+    _run_git(cwd, "update-ref", "HEAD", commit)
 
 
 _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
