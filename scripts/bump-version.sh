@@ -42,7 +42,7 @@ Bump gruff-py's public version in pyproject.toml and src/gruffpy/version.py.
 Both files must agree; this script keeps them in lockstep.
 
 Arguments:
-  <new-version>   Target version, PEP 440 / semver style (e.g. 0.2.0, 1.0.0rc1).
+  <new-version>   Target version, PEP 440 / semver style (e.g. 0.3.0, 1.0.0rc1).
 
 Options:
   --check         Verify pyproject.toml and src/gruffpy/version.py agree.
@@ -55,7 +55,7 @@ This script does NOT:
   - run release verification (see docs/releasing.md)
 
 Examples:
-  scripts/bump-version.sh 0.2.0
+  scripts/bump-version.sh 0.3.0
   scripts/bump-version.sh --check
 
 Release verification after bumping:

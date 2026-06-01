@@ -47,7 +47,6 @@ from gruffpy.rule.security.cors_wildcard_with_credentials_rule import (
 from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
 from gruffpy.rule.security.dependency_git_reference_rule import DependencyGitReferenceRule
 from gruffpy.rule.security.dependency_local_path_rule import DependencyLocalPathRule
-from gruffpy.rule.security.dependency_unpinned_version_rule import DependencyUnpinnedVersionRule
 from gruffpy.rule.security.dependency_url_reference_rule import DependencyUrlReferenceRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from gruffpy.rule.security.django_mark_safe_rule import DjangoMarkSafeRule
@@ -97,12 +96,14 @@ from gruffpy.rule.security.xxe_rule import XxeRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
+from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
 from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
 from gruffpy.rule.sensitive_data.high_entropy_string_rule import HighEntropyStringRule
 from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
 from gruffpy.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
+from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from gruffpy.rule.size.attribute_count_rule import AttributeCountRule
 from gruffpy.rule.size.average_function_length_rule import AverageFunctionLengthRule
 from gruffpy.rule.size.class_length_rule import ClassLengthRule
@@ -355,6 +356,12 @@ def _custom_docs_for(
     config_keys: tuple[str, ...],
 ) -> RuleDocs | None:
     match definition.id:
+        case ApiKeyPatternRule.ID:
+            return _api_key_pattern_docs(config_keys)
+        case GcpServiceAccountKeyRule.ID:
+            return _gcp_service_account_key_docs(config_keys)
+        case UrlCredentialsRule.ID:
+            return _url_credentials_docs(config_keys)
         case IgnoreDirectiveReasonRule.ID:
             return RuleDocs(
                 rationale=(
@@ -416,6 +423,73 @@ def _custom_docs_for(
                 config_keys=config_keys,
             )
     return None
+
+
+def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for the grouped provider-token rule."""
+    return RuleDocs(
+        rationale=(
+            "Provider-prefixed API keys are high-signal credential leaks; "
+            "keeping them under one rule avoids provider-specific config churn "
+            "while the `vendor` metadata tells reviewers which console to rotate in."
+        ),
+        fix_guidance=(
+            "Rotate the key with the provider, remove it from source, and load it "
+            "from a secret manager or environment-specific runtime configuration."
+        ),
+        bad_example=(
+            '`GOOGLE_API_KEY = "AIza..."` or '
+            '`SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`'
+        ),
+        good_example='`GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]`',
+        confidence_rationale=(
+            "High confidence: each match requires a provider-specific prefix and "
+            "minimum token length, with dummy/example placeholders skipped."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for committed GCP service-account JSON keys."""
+    return RuleDocs(
+        rationale=(
+            "Google service-account JSON files combine an account identity with "
+            "private-key material; committed copies usually grant fleet access."
+        ),
+        fix_guidance=(
+            "Remove the JSON key from source history, rotate it in Google Cloud IAM, "
+            "and prefer Workload Identity or a runtime secret manager."
+        ),
+        bad_example='`{"type": "service_account", "private_key": "<redacted PEM key>"}`',
+        good_example="Load Google credentials from the runtime environment or Workload Identity.",
+        confidence_rationale=(
+            "High confidence: the rule requires the `service_account` type marker "
+            "and private-key material in the same file, while short placeholders pass."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for HTTP(S) userinfo credentials."""
+    return RuleDocs(
+        rationale=(
+            "Inline HTTP(S) userinfo credentials are easy to miss in review and "
+            "often end up copied into logs, package config, or deployment scripts."
+        ),
+        fix_guidance=(
+            "Remove `user:password@` from the URL and pass authentication via "
+            "headers, environment variables, or a secret store."
+        ),
+        bad_example='`REMOTE = "https://deploy:<password>@api.example.test"`',
+        good_example='`REMOTE = "https://api.example.test"` plus a runtime Authorization header.',
+        confidence_rationale=(
+            "High confidence: the rule scopes to explicit `http(s)://user:password@` "
+            "userinfo and skips common placeholder passwords."
+        ),
+        config_keys=config_keys,
+    )
 
 
 def _rationale_for(definition: RuleDefinition) -> str:
@@ -704,7 +778,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(DangerousFunctionCallRule),
     _entry(DependencyGitReferenceRule),
     _entry(DependencyLocalPathRule),
-    _entry(DependencyUnpinnedVersionRule),
     _entry(DependencyUrlReferenceRule),
     _entry(DisabledSslVerificationRule),
     _entry(DjangoMarkSafeRule),
@@ -738,12 +811,14 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(ApiKeyPatternRule),
     _entry(AwsAccessKeyRule),
     _entry(DatabaseUrlPasswordRule),
+    _entry(GcpServiceAccountKeyRule),
     _entry(HardcodedEnvValueRule),
     _entry(HighEntropyStringRule),
     _entry(JwtTokenRule),
     _entry(PhiPatternRule),
     _entry(PiiTestFixtureRule),
     _entry(PrivateKeyRule),
+    _entry(UrlCredentialsRule),
     _entry(ConditionalLogicRule),
     _entry(EagerTestRule),
     _entry(EmptyParametrizeRule),

@@ -68,11 +68,6 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A08:2021-Software and Data Integrity Failures"],
         "securitySeverity": "medium",
     },
-    "security.dependency-unpinned-version": {
-        "cwe": ["CWE-1357", "CWE-829"],
-        "owasp": ["A08:2021-Software and Data Integrity Failures"],
-        "securitySeverity": "medium",
-    },
     "security.dependency-url-reference": {
         "cwe": ["CWE-494", "CWE-829"],
         "owasp": ["A08:2021-Software and Data Integrity Failures"],

@@ -101,7 +101,6 @@ selection:
   - security.dangerous-function-call
   - security.dependency-git-reference
   - security.dependency-local-path
-  - security.dependency-unpinned-version
   - security.dependency-url-reference
   - security.disabled-ssl-verification
   - security.django-mark-safe
@@ -135,12 +134,14 @@ selection:
   - sensitive-data.api-key-pattern
   - sensitive-data.aws-access-key
   - sensitive-data.database-url-password
+  - sensitive-data.gcp-service-account-key
   - sensitive-data.hardcoded-env-value
   - sensitive-data.high-entropy-string
   - sensitive-data.jwt-token
   - sensitive-data.phi-pattern
   - sensitive-data.pii-test-fixture
   - sensitive-data.private-key
+  - sensitive-data.url-credentials
   - size.attribute-count
   - size.average-function-length
   - size.class-length
@@ -372,8 +373,6 @@ rules:
     enabled: true
   security.dependency-local-path:
     enabled: true
-  security.dependency-unpinned-version:
-    enabled: true
   security.dependency-url-reference:
     enabled: true
   security.disabled-ssl-verification:
@@ -440,6 +439,8 @@ rules:
     enabled: true
   sensitive-data.database-url-password:
     enabled: true
+  sensitive-data.gcp-service-account-key:
+    enabled: true
   sensitive-data.hardcoded-env-value:
     enabled: true
   sensitive-data.high-entropy-string:
@@ -451,6 +452,8 @@ rules:
   sensitive-data.pii-test-fixture:
     enabled: true
   sensitive-data.private-key:
+    enabled: true
+  sensitive-data.url-credentials:
     enabled: true
   size.attribute-count:
     enabled: true

@@ -22,17 +22,31 @@ _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
 _JWT_SIGNATURE = "abcdef123456" + "abcdef"
 _ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
 _DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
+_URL_CREDENTIAL = "https://deploy:" + "rem0teSecret!42" + "@api.example.test/v1"
 _SSN = "412" + "-78-" + "3491"
 _PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
+_GCP_PRIVATE_KEY_VALUE = (
+    "-----BEGIN "
+    + "PRIVATE KEY-----\\n"
+    + "MIIEv"
+    + ("A" * 120)
+    + "\\n-----END "
+    + "PRIVATE KEY-----\\n"
+)
 
 _DANGEROUS_FIXTURE = (
     f"AWS_KEY = '{_AWS_KEY}'\n"
     f"STRIPE = '{_STRIPE_KEY}'\n"
     f"JWT = '{_JWT_HEADER}.{_JWT_PAYLOAD}.{_JWT_SIGNATURE}'\n"
     f"DB = '{_DB_URL}'\n"
+    f"REMOTE = '{_URL_CREDENTIAL}'\n"
     f"SSN = '{_SSN}'\n"
     f"ENTROPY = '{_ENTROPY_VALUE}'\n"
     f"PRIVATE = '{_PRIVATE_KEY_HEADER}'\n"
+    "{\n"
+    '  "type": "service_account",\n'
+    f'  "private_key": "{_GCP_PRIVATE_KEY_VALUE}"\n'
+    "}\n"
 )
 
 _EXPECTED_RULE_IDS = {
@@ -40,9 +54,11 @@ _EXPECTED_RULE_IDS = {
     "sensitive-data.api-key-pattern",
     "sensitive-data.jwt-token",
     "sensitive-data.database-url-password",
+    "sensitive-data.gcp-service-account-key",
     "sensitive-data.phi-pattern",
     "sensitive-data.high-entropy-string",
     "sensitive-data.private-key",
+    "sensitive-data.url-credentials",
 }
 
 

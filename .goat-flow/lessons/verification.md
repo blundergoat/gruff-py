@@ -66,6 +66,14 @@ still passed, but `uv run gruff-py analyse src/ --format json --fail-on none`
 and `uv run gruff-py analyse . --format json --fail-on none` still reported
 `docs.todo-density`.
 
+**Updated:** 2026-06-02. During the sensitive-data rule expansion, focused rule
+and reporter tests passed, but `uv run gruff-py analyse src tests --format json
+--fail-on none --no-baseline` reported new sensitive-data findings from raw
+Google API-key suffixes, service-account examples, URL credentials, and email-
+shaped placeholders embedded in test/doc fixtures. The correction was to split
+synthetic fixture strings at source level and tighten the GCP detector so its
+own docstring did not satisfy the marker co-occurrence rule.
+
 When a rule scans raw source text and tests need runtime strings containing
 trigger tokens, use a construction that the formatter will not fold back into
 the raw token, such as `"".join(("TO", "DO"))`, and re-run the analyzer after
@@ -284,3 +292,21 @@ output detail is CLAUDE.md hallucination red-flag #4 ("looks like", "probably")
 in its most dangerous form — a confident claim with zero evidence. Prefer
 full-file `Write` over surgical `Edit` for recovery work, since a replayed
 `Write` is idempotent while a replayed insert is not.
+
+## Lesson: Posture map tests must move with rule catalogue additions
+
+**Created:** 2026-06-02
+**Incident:** While removing `security.dependency-unpinned-version`, focused
+security verification failed in
+`tests/unit/rule/test_reviewer_verification_posture.py` (search:
+`_SENSITIVE_DATA_POSTURE`) because the M06 sensitive-data rules had been added
+to `RuleRegistry.defaults()` but not to the reviewer-posture expectation map.
+The security deletion itself was correct; the stale posture map blocked the
+proof until `sensitive-data.gcp-service-account-key` and
+`sensitive-data.url-credentials` were added to the expected posture.
+
+When adding or deleting a default-enabled rule, update both catalogue/count
+surfaces and any posture map that asserts whole rule families. Run
+`uv run pytest tests/unit/rule/test_reviewer_verification_posture.py` with the
+rule-family tests, not only the new rule's focused test, before considering the
+catalogue stable.

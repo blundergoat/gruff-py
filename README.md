@@ -20,12 +20,12 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 
 | Field | Value |
 | --- | --- |
-| Release line | Published `0.2.0` package line |
+| Release line | Published `0.3.0` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 123 rules across 11 pillars |
+| Rule catalogue | 124 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff-py.analysis.v1` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -176,7 +176,7 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.1 catalogue contains 123 rules across 11 pillars:
+The v0.3.0 catalogue contains 124 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
@@ -187,12 +187,12 @@ The v0.1 catalogue contains 123 rules across 11 pillars:
 | `modernisation` | 1 |
 | `naming` | 9 |
 | `documentation` | 13 |
-| `security` | 35 |
-| `sensitive-data` | 9 |
+| `security` | 34 |
+| `sensitive-data` | 11 |
 | `test-quality` | 33 |
 | `design` | 1 |
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.3.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 

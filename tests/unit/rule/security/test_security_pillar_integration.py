@@ -143,12 +143,11 @@ def test_security_registry_has_expected_rule_count():
         for rule in RuleRegistry.defaults().all()
         if rule.definition().id.startswith("security.")
     }
-    assert len(ids) == 35
+    assert len(ids) == 34
     assert _EXPECTED_RULE_IDS.issubset(ids)
     assert {
         "security.dependency-git-reference",
         "security.dependency-local-path",
-        "security.dependency-unpinned-version",
         "security.dependency-url-reference",
     }.issubset(ids)
     # `security.variable-import` is intentionally absent from the dangerous

@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 123 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 124 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -16,8 +16,8 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 35 | Heuristic AST-level dangerous patterns |
-| `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
+| `security` | 34 | Heuristic AST-level dangerous patterns |
+| `sensitive-data` | 11 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
 
@@ -92,7 +92,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.dangerous-function-call`
 - `security.dependency-git-reference`
 - `security.dependency-local-path`
-- `security.dependency-unpinned-version`
 - `security.dependency-url-reference`
 - `security.disabled-ssl-verification`
 - `security.django-mark-safe`
@@ -129,12 +128,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `sensitive-data.api-key-pattern`
 - `sensitive-data.aws-access-key`
 - `sensitive-data.database-url-password`
+- `sensitive-data.gcp-service-account-key`
 - `sensitive-data.hardcoded-env-value`
 - `sensitive-data.high-entropy-string`
 - `sensitive-data.jwt-token`
 - `sensitive-data.phi-pattern`
 - `sensitive-data.pii-test-fixture`
 - `sensitive-data.private-key`
+- `sensitive-data.url-credentials`
 
 ### Test Quality
 
@@ -704,21 +705,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `security.dependency-local-path` leaves dependency installed from local path unaddressed.
 - Good example: Code that satisfies `security.dependency-local-path` makes dependency installed from local path explicit or simpler.
 
-### `security.dependency-unpinned-version`
-
-- Name: Dependency version is not exactly pinned
-- Pillar: `security`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `security.dependency-unpinned-version` protects the security pillar by flagging dependency version is not exactly pinned before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported dependency version is not exactly pinned directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Security metadata: `cwe` = `['CWE-1357', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
-- Bad example: Code that triggers `security.dependency-unpinned-version` leaves dependency version is not exactly pinned unaddressed.
-- Good example: Code that satisfies `security.dependency-unpinned-version` makes dependency version is not exactly pinned explicit or simpler.
-
 ### `security.dependency-url-reference`
 
 - Name: Dependency installed from direct URL
@@ -1169,11 +1155,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `sensitive-data.api-key-pattern` protects the sensitive-data pillar by flagging api key pattern before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported api key pattern directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `sensitive-data.api-key-pattern` leaves api key pattern unaddressed.
-- Good example: Code that satisfies `sensitive-data.api-key-pattern` makes api key pattern explicit or simpler.
+- Rationale: Provider-prefixed API keys are high-signal credential leaks; keeping them under one rule avoids provider-specific config churn while the `vendor` metadata tells reviewers which console to rotate in.
+- Fix guidance: Rotate the key with the provider, remove it from source, and load it from a secret manager or environment-specific runtime configuration.
+- Confidence rationale: High confidence: each match requires a provider-specific prefix and minimum token length, with dummy/example placeholders skipped.
+- Bad example: `GOOGLE_API_KEY = "AIza..."` or `SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`
+- Good example: `GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]`
 
 ### `sensitive-data.aws-access-key`
 
@@ -1202,6 +1188,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `sensitive-data.database-url-password` leaves database url with password unaddressed.
 - Good example: Code that satisfies `sensitive-data.database-url-password` makes database url with password explicit or simpler.
+
+### `sensitive-data.gcp-service-account-key`
+
+- Name: GCP service-account key
+- Pillar: `sensitive-data`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: Google service-account JSON files combine an account identity with private-key material; committed copies usually grant fleet access.
+- Fix guidance: Remove the JSON key from source history, rotate it in Google Cloud IAM, and prefer Workload Identity or a runtime secret manager.
+- Confidence rationale: High confidence: the rule requires the `service_account` type marker and private-key material in the same file, while short placeholders pass.
+- Bad example: `{"type": "service_account", "private_key": "<redacted PEM key>"}`
+- Good example: Load Google credentials from the runtime environment or Workload Identity.
 
 ### `sensitive-data.hardcoded-env-value`
 
@@ -1286,6 +1286,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `sensitive-data.private-key` leaves private key unaddressed.
 - Good example: Code that satisfies `sensitive-data.private-key` makes private key explicit or simpler.
+
+### `sensitive-data.url-credentials`
+
+- Name: URL embedded credentials
+- Pillar: `sensitive-data`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
+- Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
+- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords.
+- Bad example: `REMOTE = "https://deploy:<password>@api.example.test"`
+- Good example: `REMOTE = "https://api.example.test"` plus a runtime Authorization header.
 
 ### `size.attribute-count`
 

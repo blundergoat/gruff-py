@@ -23,7 +23,6 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.dangerous-function-call": (True, "error", "high"),
     "security.dependency-git-reference": (True, "warning", "high"),
     "security.dependency-local-path": (True, "warning", "high"),
-    "security.dependency-unpinned-version": (True, "warning", "high"),
     "security.dependency-url-reference": (True, "warning", "high"),
     "security.disabled-ssl-verification": (True, "error", "high"),
     "security.django-mark-safe": (True, "warning", "medium"),
@@ -60,12 +59,14 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.api-key-pattern": (True, "warning", "high"),
     "sensitive-data.aws-access-key": (True, "error", "high"),
     "sensitive-data.database-url-password": (True, "error", "high"),
+    "sensitive-data.gcp-service-account-key": (True, "error", "high"),
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
     "sensitive-data.high-entropy-string": (True, "warning", "low"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
     "sensitive-data.phi-pattern": (True, "error", "medium"),
     "sensitive-data.pii-test-fixture": (True, "warning", "medium"),
     "sensitive-data.private-key": (True, "error", "high"),
+    "sensitive-data.url-credentials": (True, "error", "high"),
 }
 
 

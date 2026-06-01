@@ -30,17 +30,20 @@
 #   Otherwise parse `git diff --unified=0 -- <file>` for tracked files.
 #   New/untracked files are treated as fully changed. If no range can be
 #   derived, the hook exits quietly apart from a short stderr diagnostic.
+#   Analyzers with native changed-region support can own the filtering; gruff-py
+#   is invoked with `--changed-ranges`, `--changed-scope symbol`, and
+#   `--no-baseline` so agent feedback is not hidden by adoption baselines.
 #
 # Output:
-#   Prints `[severity] path:line rule - message` for findings whose
-#   primary reported line intersects the changed ranges, then one compact
-#   suppressed-count line for same-file findings outside those ranges.
-#   The playbook footer is printed only when at least one changed-line
-#   finding is shown. If the analyzer reports the edited file as ignored by
-#   its `paths.ignore` config, the hook instead prints a single
-#   `skipped <path> - out of scope` line and surfaces no findings, so the
-#   agent does not try to fix a file the project deliberately excludes. Exit
-#   status stays 0 for analyzer findings and fail-soft diagnostics.
+#   Prints `[severity] path:line rule - message` for native changed-region
+#   findings, or for fallback findings whose primary reported line intersects
+#   the changed ranges. Then it prints one compact suppressed-count line for
+#   findings outside that scope. The playbook footer is printed only when at
+#   least one changed finding is shown. If the analyzer reports the edited file
+#   as ignored by its `paths.ignore` config, the hook instead prints a single
+#   `skipped <path> - out of scope` line and surfaces no findings, so the agent
+#   does not try to fix a file the project deliberately excludes. Exit status
+#   stays 0 for analyzer findings and fail-soft diagnostics.
 
 set -euo pipefail
 
@@ -348,16 +351,30 @@ supports_json_format() {
   [[ "$help" == *"--format"* || "$help" == *"-format"* ]]
 }
 
+supports_native_changed_regions() {
+  local binary="$1"
+  local help="$2"
+  [[ "$binary" == "gruff-py" ]] || return 1
+  [[ "$help" == *"--changed-ranges"* ]] || return 1
+  [[ "$help" == *"--changed-scope"* ]] || return 1
+  [[ "$help" == *"--no-baseline"* ]] || return 1
+}
+
 run_gruff_json() {
   local binary_path="$1"
   local help="$2"
   local file_path="$3"
+  local binary="$4"
+  local ranges="$5"
   local args
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
     args+=(--format json)
     if [[ "$help" == *"--fail-on"* ]]; then
       args+=(--fail-on none)
+    fi
+    if supports_native_changed_regions "$binary" "$help"; then
+      args+=(--no-baseline --changed-ranges "$ranges" --changed-scope symbol)
     fi
   elif [[ "$help" == *"-format"* ]]; then
     args+=(-format json)
@@ -423,6 +440,41 @@ filter_findings() {
   ' 2>/dev/null || true
 }
 
+format_findings() {
+  local output="$1"
+  local rel_path="$2"
+  local abs_path="$3"
+  printf '%s' "$output" | jq -r --arg rel "$rel_path" --arg abs "$abs_path" '
+    def normalize_path:
+      tostring | gsub("\\\\"; "/") | sub("^\\./"; "");
+    def finding_path:
+      .filePath? // .file? // .path? // "";
+    def line_number:
+      (.line? // .location.line? // .location.startLine?) as $line
+      | if ($line | type) == "number" then
+          $line
+        elif ($line | type) == "string" then
+          ($line | tonumber?)
+        else
+          empty
+        end;
+    def line_or_null:
+      [line_number] | first // null;
+    def same_file:
+      (finding_path | normalize_path) as $path
+      | ($path == ($rel | normalize_path)
+        or $path == ($abs | normalize_path)
+        or $path == ("./" + ($rel | normalize_path))
+        or ($path | endswith("/" + ($rel | normalize_path))));
+
+    (.findings // [])
+    | map(. as $finding | ($finding | line_or_null) as $line | select(($finding | same_file) and $line != null))
+    | .[]
+    | line_or_null as $line
+    | "[\(.severity // "unknown")] \(finding_path):\($line) \(.ruleId // "unknown-rule") - \(.message // "")"
+  ' 2>/dev/null || true
+}
+
 suppressed_count() {
   local output="$1"
   local rel_path="$2"
@@ -469,6 +521,13 @@ suppressed_count() {
   ' 2>/dev/null || printf '0'
 }
 
+native_suppressed_count() {
+  local output="$1"
+  printf '%s' "$output" | jq -r '
+    (.suppressedCount? // .diff.suppressedCount? // 0)
+  ' 2>/dev/null || printf '0'
+}
+
 # When the analyzer reports the edited file as ignored by its config
 # (`paths.ignore`), return a short human descriptor (for example
 # "ignored by gruff config (matched *.css)") so the hook can tell the agent the
@@ -512,7 +571,7 @@ process_file() {
   local root="$2"
   local file_path="$3"
   local rel_path abs_path binary binary_path config_file
-  local ranges help output status changed_output suppressed ignored_desc
+  local ranges help output status changed_output suppressed ignored_desc uses_native_regions
 
   [[ -n "$file_path" ]] || return 0
   [[ "$file_path" =~ $SKIP_DIR_PATTERN ]] && return 0
@@ -549,7 +608,7 @@ process_file() {
   fi
 
   set +e
-  output="$(run_gruff_json "$binary_path" "$help" "$rel_path")"
+  output="$(run_gruff_json "$binary_path" "$help" "$rel_path" "$binary" "$ranges")"
   status=$?
   set -e
 
@@ -588,11 +647,19 @@ process_file() {
     return 0
   fi
 
-  # MVP range model: enforce findings whose primary line intersects edited lines.
-  # Wider function-block expansion is deferred unless an analyzer reports new
-  # method findings only on unchanged declaration lines.
-  changed_output="$(filter_findings "$output" "$rel_path" "$abs_path" "$ranges")"
-  suppressed="$(suppressed_count "$output" "$rel_path" "$abs_path" "$ranges")"
+  uses_native_regions=0
+  if supports_native_changed_regions "$binary" "$help"; then
+    uses_native_regions=1
+  fi
+  if [[ "$uses_native_regions" -eq 1 ]]; then
+    changed_output="$(format_findings "$output" "$rel_path" "$abs_path")"
+    suppressed="$(native_suppressed_count "$output")"
+  else
+    # Portable fallback: enforce findings whose primary line intersects edited
+    # lines. Native analyzers such as gruff-py can provide symbol-aware scope.
+    changed_output="$(filter_findings "$output" "$rel_path" "$abs_path" "$ranges")"
+    suppressed="$(suppressed_count "$output" "$rel_path" "$abs_path" "$ranges")"
+  fi
   if [[ -n "$changed_output" ]]; then
     printf '%s\n' "$changed_output"
   fi

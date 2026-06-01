@@ -33,8 +33,6 @@ _NAME_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?"
 _DIRECT_NAME_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?\s*@\s*(?P<ref>\S+)"
 )
-_VERSION_OPERATOR_RE = re.compile(r"(===|==|~=|!=|<=|>=|<|>)")
-_RANGE_OPERATOR_RE = re.compile(r"(~=|!=|<=|>=|<|>)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,35 +148,6 @@ def is_url_reference(declaration: DependencyDeclaration) -> bool:
     reference = direct.group("ref") if direct is not None else spec
     lowered = reference.lower()
     return lowered.startswith(("http://", "https://"))
-
-
-def unpinned_constraint_kind(declaration: DependencyDeclaration) -> str | None:
-    """Return the unpinned constraint kind, or ``None`` for exact pins/references.
-
-    Args:
-        declaration: Dependency declaration to inspect.
-
-    Returns:
-        ``missing``, ``wildcard``, or ``range-or-compatible`` when the version is
-        not pinned to an exact non-wildcard value; otherwise ``None``.
-    """
-    if (
-        is_git_reference(declaration)
-        or is_url_reference(declaration)
-        or is_local_path_reference(declaration)
-    ):
-        return None
-    spec = declaration.raw.split(";", maxsplit=1)[0].strip()
-    if not spec or not _looks_like_named_requirement(spec):
-        return None
-    operators = _VERSION_OPERATOR_RE.findall(spec)
-    if not operators:
-        return "missing"
-    if _RANGE_OPERATOR_RE.search(spec):
-        return "range-or-compatible"
-    if "*" in spec:
-        return "wildcard"
-    return None
 
 
 def dependency_label(declaration: DependencyDeclaration) -> str:
