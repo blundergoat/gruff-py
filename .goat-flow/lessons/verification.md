@@ -74,6 +74,13 @@ shaped placeholders embedded in test/doc fixtures. The correction was to split
 synthetic fixture strings at source level and tighten the GCP detector so its
 own docstring did not satisfy the marker co-occurrence rule.
 
+**Updated:** 2026-06-02. Dogfood later flagged the scp-style Git fixture string
+`git@github.com:org/repo.git` as `sensitive-data.pii-test-fixture` because the
+user/host segment is email-shaped. The correct fix was not to suppress the
+finding or weaken real-email detection; it was to teach the PII rule that
+`git@host:path` is a VCS reference while keeping realistic emails with ordinary
+punctuation reportable.
+
 When a rule scans raw source text and tests need runtime strings containing
 trigger tokens, use a construction that the formatter will not fold back into
 the raw token, such as `"".join(("TO", "DO"))`, and re-run the analyzer after
