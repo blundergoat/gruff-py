@@ -118,6 +118,11 @@ def is_local_path_reference(declaration: DependencyDeclaration) -> bool:
     Returns:
         True for editable/local paths and PEP 508 ``file:`` references.
     """
+    # Git refs (including scp-style ``git@host:org/repo``) contain a ``/`` and no
+    # ``://``, so the slash-based fallback below would double-flag them; defer to
+    # security.dependency-git-reference, matching how is_url_reference excludes them.
+    if is_git_reference(declaration):
+        return False
     spec = declaration.raw.strip()
     lowered = spec.lower()
     direct = _DIRECT_NAME_RE.match(spec)

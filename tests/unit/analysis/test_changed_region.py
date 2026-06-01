@@ -73,6 +73,40 @@ def test_new_file_diff_marks_whole_file_in_scope() -> None:
     assert result.suppressed_count == 0
 
 
+def test_symbol_scope_keeps_findings_for_deletion_only_hunk() -> None:
+    unit = _unit("def changed():\n    return eval('x')\n")
+    finding = _finding("sample.py", line=1, symbol="changed")
+    changed = parse_unified_diff(
+        "stdin",
+        "diff --git a/sample.py b/sample.py\n"
+        "--- a/sample.py\n"
+        "+++ b/sample.py\n"
+        "@@ -2 +1,0 @@\n"
+        "-    x = 1\n",
+    )
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+def test_quoted_diff_path_is_decoded_without_the_b_prefix() -> None:
+    # Git C-quotes non-ASCII paths and octal-escapes the bytes; the parsed key must
+    # decode to the UTF-8 display path with no leading b/, or the file is dropped.
+    changed = parse_unified_diff(
+        "stdin",
+        'diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n'
+        '--- "a/caf\\303\\251.py"\n'
+        '+++ "b/caf\\303\\251.py"\n'
+        "@@ -1 +1 @@\n"
+        "-x = 1\n"
+        "+x = 2\n",
+    )
+
+    assert changed.changed_files == ("café.py",)
+
+
 def _unit(source: str) -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):

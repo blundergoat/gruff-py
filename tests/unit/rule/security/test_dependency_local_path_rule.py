@@ -1,5 +1,6 @@
 """Rule tests for local path dependency supply-chain posture findings."""
 
+from gruffpy.rule.security.dependency_git_reference_rule import DependencyGitReferenceRule
 from gruffpy.rule.security.dependency_local_path_rule import DependencyLocalPathRule
 from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
@@ -25,6 +26,21 @@ widget @ file:///opt/internal/widget
     assert "../shared-widget" not in rendered
     assert "./vendor/widget" not in rendered
     assert "/opt/internal/widget" not in rendered
+
+
+def test_ssh_git_reference_is_not_flagged_as_local_path() -> None:
+    """An scp-style SSH Git dependency is a VCS ref; only the git-reference rule fires."""
+    src = "git@github.com:org/repo.git#egg=widget\n"
+
+    local_findings = DependencyLocalPathRule().analyse(
+        make_text_unit(src, "requirements.txt"), default_ctx()
+    )
+    git_findings = DependencyGitReferenceRule().analyse(
+        make_text_unit(src, "requirements.txt"), default_ctx()
+    )
+
+    assert local_findings == []
+    assert len(git_findings) == 1
 
 
 def test_pinned_named_requirement_skipped() -> None:

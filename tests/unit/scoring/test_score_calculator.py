@@ -87,7 +87,7 @@ def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
     assert pillar_penalties["design"] == 0.0
 
 
-def test_correlated_downweighting_requires_same_symbol_and_line():
+def test_correlated_downweighting_requires_same_symbol():
     findings = [
         _finding("size.function-length", pillar=Pillar.SIZE, symbol="left", line=1),
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="right", line=1),
@@ -98,3 +98,19 @@ def test_correlated_downweighting_requires_same_symbol_and_line():
     offender = report.top_offenders[0]
     assert offender.penalty == 40.0
     assert offender.grade.score == 60.0
+
+
+def test_correlated_downweighting_groups_decorated_function_across_lines():
+    # size.function-length reports the decorator line and complexity rules the def
+    # line, so the same decorated symbol lands on different lines; it must still
+    # cluster into a single penalty rather than billing each finding in full.
+    findings = [
+        _finding("size.function-length", pillar=Pillar.SIZE, symbol="run", line=1),
+        _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="run", line=2),
+    ]
+
+    report = ScoreCalculator().calculate(findings)
+
+    offender = report.top_offenders[0]
+    assert offender.penalty == 20.0
+    assert offender.grade.score == 80.0

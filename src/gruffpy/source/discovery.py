@@ -196,7 +196,7 @@ class SourceDiscovery:
             if missing_path is not None:
                 missing.append(missing_path)
             for found_path in found_paths:
-                self._add_file(found_path, files)
+                self._add_file(found_path, files, ignored)
 
         sorted_files = tuple(files[k] for k in sorted(files))
         deduped: dict[str, IgnoredPath] = {}
@@ -293,8 +293,11 @@ class SourceDiscovery:
                     continue
                 if is_dir:
                     stack.append(entry)
-                elif entry.is_file() and self._source_type(entry) is not None:
-                    yield entry
+                elif entry.is_file():
+                    if self._source_type(entry) is not None:
+                        yield entry
+                    else:
+                        self._record_generated_lockfile(entry, ignored_paths)
 
     @staticmethod
     def _directory_entries(directory: Path) -> list[Path]:
@@ -331,16 +334,29 @@ class SourceDiscovery:
             IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern)
         )
 
-    def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
+    def _add_file(
+        self, path: Path, target: dict[str, SourceFile], ignored: list[IgnoredPath]
+    ) -> None:
         canonical = self._canonical(path)
         source_type = self._source_type(canonical)
         if source_type is None:
+            # An explicitly requested generated lockfile reaches here (the walk filters
+            # them earlier); record it so analyse's ignoredPathDetails matches what
+            # check-ignore reports instead of dropping it with no reason.
+            self._record_generated_lockfile(canonical, ignored)
             return
         target[str(canonical)] = SourceFile(
             absolute_path=str(canonical),
             display_path=self._display_path(canonical),
             type=source_type,
         )
+
+    def _record_generated_lockfile(self, path: Path, ignored: list[IgnoredPath]) -> None:
+        canonical = self._canonical(path)
+        if canonical.name in IGNORED_FILENAMES:
+            ignored.append(
+                IgnoredPath(self._display_path(canonical), IGNORE_SOURCE_GENERATED, canonical.name)
+            )
 
     def _absolute_path(self, raw: str) -> Path:
         if raw == "":

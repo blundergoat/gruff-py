@@ -119,10 +119,15 @@ class CliGroup(click.Group):
         formatter.write(_root_menu(ctx))
 
 
-def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str] | None:
-    """Let ``--diff`` behave like an optional-value flag for analyse/report."""
+def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str]:
+    """Let ``--diff`` behave like an optional-value flag for analyse/report.
+
+    Click resolves ``args=None`` to ``sys.argv[1:]`` inside ``Command.main`` after this
+    hook would run, so console-script / ``python -m`` calls arrive as ``None`` and bare
+    ``--diff`` is never rewritten (CliRunner hid this); resolve ``sys.argv`` here too.
+    """
     if args is None:
-        return None
+        args = sys.argv[1:]
     command_index = next(
         (index for index, value in enumerate(args) if value in {"analyse", "report"}),
         None,

@@ -179,3 +179,21 @@ def test_production_test_double_name_still_fires():
         _ctx_for("waste.empty-function"),
     )
     assert len(findings) == 1
+
+
+def test_nested_inner_test_double_class_exempts_its_method():
+    src = "class Suite:\n    class FakeClient:\n        def close(self):\n            pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "tests/unit/test_terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
+    assert findings == []
+
+
+def test_nested_plain_class_in_test_double_outer_still_fires():
+    src = "class FakeSuite:\n    class Helper:\n        def close(self):\n            pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "tests/unit/test_terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
+    assert len(findings) == 1

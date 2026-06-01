@@ -243,8 +243,16 @@ def _consume_hunk_header(
     changed_files.add(path)
     start = int(match.group(1))
     count = int(match.group(2) or "1")
-    if count > 0 and path not in whole_files:
+    if path in whole_files:
+        return
+    if count > 0:
         ranges_by_file.setdefault(path, []).append(LineRange(start, start + count - 1))
+    else:
+        # Deletion-only hunks (``@@ -2 +1,0 @@``) carry no new-side lines; anchor a
+        # zero-width range at the new-side position so symbol scope still surfaces
+        # findings for the edited declaration instead of suppressing all of them.
+        anchor = max(start, 1)
+        ranges_by_file.setdefault(path, []).append(LineRange(anchor, anchor))
 
 
 def changed_regions_from_git(
@@ -554,9 +562,52 @@ def _diff_header_path(raw: str) -> str | None:
 
 
 def _strip_diff_prefix(path: str) -> str:
-    if path.startswith("a/") or path.startswith("b/"):
-        path = path[2:]
-    return _normalise_path(path.strip('"'))
+    # Decode Git's C-style quoting (``"b/caf\303\251.py"``) before testing the a/ b/
+    # prefix. The quotes start the token, so a naive prefix check misses them and the
+    # decoded display path keeps ``b/``, silently dropping the file in diff mode.
+    decoded = _unquote_diff_path(path)
+    if decoded.startswith("a/") or decoded.startswith("b/"):
+        decoded = decoded[2:]
+    return _normalise_path(decoded)
+
+
+def _unquote_diff_path(value: str) -> str:
+    """Decode a Git C-quoted path token, or return *value* unchanged when unquoted.
+
+    Git wraps paths with non-ASCII bytes or control characters in double quotes and
+    octal-escapes the offending bytes (``"b/caf\\303\\251.py"``). Plain paths - even
+    those containing spaces - are emitted unquoted, so only quoted tokens are decoded.
+
+    Args:
+        value: Raw path token taken from a ``diff --git`` or ``+++``/``---`` header.
+
+    Returns:
+        The decoded UTF-8 path, matching the project-relative discovery display path.
+    """
+    if len(value) < 2 or value[0] != '"' or value[-1] != '"':
+        return value
+    inner = value[1:-1]
+    escapes = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+    decoded = bytearray()
+    index = 0
+    while index < len(inner):
+        char = inner[index]
+        if char != "\\" or index + 1 >= len(inner):
+            decoded.extend(char.encode("utf-8"))
+            index += 1
+            continue
+        nxt = inner[index + 1]
+        octal = inner[index + 1 : index + 4]
+        if nxt in "0123" and len(octal) == 3 and all(digit in "01234567" for digit in octal):
+            decoded.append(int(octal, 8))
+            index += 4
+        elif nxt in escapes:
+            decoded.append(escapes[nxt])
+            index += 2
+        else:
+            decoded.extend(nxt.encode("utf-8"))
+            index += 2
+    return decoded.decode("utf-8", errors="replace")
 
 
 def _normalise_path(path: str) -> str:

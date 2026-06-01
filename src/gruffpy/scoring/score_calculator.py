@@ -226,7 +226,7 @@ class ScoreCalculator:
 
 def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
     penalties = {id(finding): _base_penalty(finding) for finding in findings}
-    groups: dict[tuple[str, str, int], list[Finding]] = {}
+    groups: dict[tuple[str, str], list[Finding]] = {}
     for finding in findings:
         if (
             finding.rule_id not in CORRELATED_COMPLEXITY_RULES
@@ -234,7 +234,10 @@ def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
             or finding.line is None
         ):
             continue
-        key = (finding.file_path, finding.symbol, finding.line)
+        # Key on the qualified symbol only, not the line: size.function-length reports
+        # the decorator line while complexity rules report the def line, so a line in
+        # the key splits a decorated function's findings and skips down-weighting.
+        key = (finding.file_path, finding.symbol)
         groups.setdefault(key, []).append(finding)
     for group in groups.values():
         if len(group) < 2:

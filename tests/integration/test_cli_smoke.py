@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,7 +17,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from gruffpy.cli import main
+from gruffpy.cli import _normalise_optional_diff_args, main
 from gruffpy.version import VERSION
 
 _EXPECTED_ROOT_COMMANDS = (
@@ -74,6 +75,27 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
     assert result.exit_code == 0
     assert "\x1b[33mUsage:\x1b" in result.output
     assert "\x1b[32manalyse\x1b" in result.output
+
+
+def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
+    result = CliRunner().invoke(main, ["--no-ansi"])
+
+    assert result.exit_code == 0
+    assert "check-ignoreReport" not in result.output
+    assert "check-ignore  Report whether gruff would ignore" in result.output
+
+
+def test_optional_diff_args_resolves_sys_argv_for_real_entrypoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Console-script / python -m calls reach CliGroup.main with args=None; Click would
+    # then read sys.argv itself, skipping normalisation. The helper must resolve
+    # sys.argv so a bare --diff still becomes --diff=working-tree outside CliRunner.
+    monkeypatch.setattr(sys, "argv", ["gruff-py", "analyse", "--diff"])
+    assert _normalise_optional_diff_args(None) == ["analyse", "--diff=working-tree"]
+
+    monkeypatch.setattr(sys, "argv", ["gruff-py", "analyse", "--diff", "main"])
+    assert _normalise_optional_diff_args(None) == ["analyse", "--diff", "main"]
 
 
 _EXPECTED_ANALYSE_LOCAL_OPTIONS = (

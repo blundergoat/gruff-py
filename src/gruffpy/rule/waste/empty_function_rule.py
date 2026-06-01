@@ -108,7 +108,12 @@ def _should_report_empty_function(
 def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
     if not _is_test_path(display_path):
         return False
-    parent_class = next((parent for parent in parents if isinstance(parent, ast.ClassDef)), None)
+    # parents runs outermost -> immediate, so reverse to take the innermost enclosing
+    # class: a nested stub (``class Outer: class _FakeClient: ...``) is named by the
+    # inner class, not the outer suite, so the outermost match misses the exemption.
+    parent_class = next(
+        (parent for parent in reversed(parents) if isinstance(parent, ast.ClassDef)), None
+    )
     if parent_class is None:
         return False
     return any(token in _TEST_DOUBLE_TOKENS for token in lower_tokens(parent_class.name))

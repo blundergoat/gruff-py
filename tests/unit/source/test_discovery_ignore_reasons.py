@@ -83,6 +83,30 @@ def test_discover_records_ignore_reason_for_explicit_config_match(tmp_path: Path
     )
 
 
+def test_discover_records_generated_lockfile_for_explicit_request(tmp_path: Path) -> None:
+    _write(tmp_path / "uv.lock", "# lock\n")
+
+    result = SourceDiscovery(tmp_path).discover(["uv.lock"])
+
+    assert result.files == ()
+    assert result.ignored_path_reasons == (
+        IgnoredPath(path="uv.lock", source="generated", pattern="uv.lock"),
+    )
+
+
+def test_discover_records_generated_lockfile_found_during_walk(tmp_path: Path) -> None:
+    _write(tmp_path / "uv.lock", "# lock\n")
+    _write(tmp_path / "app.py", "x = 1\n")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert [source.display_path for source in result.files] == ["app.py"]
+    assert (
+        IgnoredPath(path="uv.lock", source="generated", pattern="uv.lock")
+        in result.ignored_path_reasons
+    )
+
+
 def test_discover_ignored_paths_remains_plain_strings(tmp_path: Path) -> None:
     _write(tmp_path / "gen" / "out.py")
     _write(tmp_path / "src" / "app.py")
