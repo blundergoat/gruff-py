@@ -1,7 +1,25 @@
 ---
 category: verification
-last_reviewed: 2026-05-24
+last_reviewed: 2026-06-02
 ---
+
+## Lesson: Verify changed-region hunk tests against real finding spans
+
+**Created:** 2026-06-02
+**Incident:** During M04 hook-native changed-code gate testing, the agent first
+expected `--changed-scope hunk` to exclude a missing-function-docstring finding
+when only the function body changed. The focused test failed because
+`src/gruffpy/rule/docs/missing_function_docstring_rule.py`
+(search: `end_line=node.end_lineno`) reports the finding across the whole
+function span, and `src/gruffpy/analysis/changed_region.py`
+(search: `def _is_finding_location_changed`) correctly treats any overlap
+between `line`-`end_line` and the changed hunk as in-scope. The fix was to use
+a single-line security call finding outside the edited hunk but inside the
+changed function for the symbol-vs-hunk regression.
+
+When testing changed-region hunk behaviour, read the rule's `Finding` location
+shape first. Do not assume hunk filtering uses only the primary line; it uses
+the full reported location span when `end_line` is present.
 
 ## Lesson: Read the rule body before calling a rule dead or leftover
 
@@ -47,6 +65,21 @@ literal splits were formatted back into raw marker tokens. The focused tests
 still passed, but `uv run gruff-py analyse src/ --format json --fail-on none`
 and `uv run gruff-py analyse . --format json --fail-on none` still reported
 `docs.todo-density`.
+
+**Updated:** 2026-06-02. During the sensitive-data rule expansion, focused rule
+and reporter tests passed, but `uv run gruff-py analyse src tests --format json
+--fail-on none --no-baseline` reported new sensitive-data findings from raw
+Google API-key suffixes, service-account examples, URL credentials, and email-
+shaped placeholders embedded in test/doc fixtures. The correction was to split
+synthetic fixture strings at source level and tighten the GCP detector so its
+own docstring did not satisfy the marker co-occurrence rule.
+
+**Updated:** 2026-06-02. Dogfood later flagged the scp-style Git fixture string
+`git@github.com:org/repo.git` as `sensitive-data.pii-test-fixture` because the
+user/host segment is email-shaped. The correct fix was not to suppress the
+finding or weaken real-email detection; it was to teach the PII rule that
+`git@host:path` is a VCS reference while keeping realistic emails with ordinary
+punctuation reportable.
 
 When a rule scans raw source text and tests need runtime strings containing
 trigger tokens, use a construction that the formatter will not fold back into
@@ -162,10 +195,10 @@ membership checks - but the self-check `uv run gruff-py analyse src tests
 `complexity.npath` reporting NPATH 972 (>500 error threshold) on
 `ConfigLoader._apply_allowlists`. Evidence anchors: `src/gruffpy/config/loader.py`
 (search: `_validate_string_list_allowlists`) shows the helper split that brought
-NPATH back below 500, and `src/gruffpy/rule/complexity/npath_complexity_rule.py` (search:
-`class NPathComplexityRule`) defines the gate. The fix was to extract two helpers
-(`_validate_string_list_allowlists` and `_apply_present_allowlists`) so each
-function's branch count stayed local.
+NPATH back below 500. The `complexity.npath` rule was later removed in the
+0.3.0 plan, but the verification lesson still applies: the fix was to extract
+two helpers (`_validate_string_list_allowlists` and `_apply_present_allowlists`)
+so each function's branch count stayed local.
 
 When extending any function that already had multiple `if` guards or `or`/`and`
 short-circuits, run `uv run gruff-py analyse <changed-file> --fail-on advisory`
@@ -192,3 +225,95 @@ rationale after `--` on the same comment, e.g. `# gruff: disable-file=test-quali
 The dogfood gate ships this rule by default, so suppressions without rationale
 look "clean" locally but fail CI's `--fail-on advisory` step. This applies
 symmetrically to `disable`, `disable-next`, and `disable-file`.
+
+## Lesson: Quote YAML boolean-like strings in dogfood option defaults
+
+**Created:** 2026-05-31
+**Incident:** While adding the `naming.boolean-prefix` `acceptedBooleanNames`
+option, `.gruff-py.yaml` initially listed `yes` unquoted. PyYAML parsed it as
+the boolean `True`, so `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`
+(search: `test_repo_yaml_options_match_definition_defaults`) failed even
+though `src/gruffpy/rule/naming/boolean_prefix_rule.py` exposed the intended
+string default. The fix was to quote the entry as `"yes"` in `.gruff-py.yaml`.
+
+When adding string-list defaults to `.gruff-py.yaml`, quote YAML 1.1
+boolean-like scalars such as `yes`, `no`, `on`, and `off`. The registry coverage
+test is the right proof because it compares parsed config values against
+`RuleDefinition.default_options`, not raw text.
+
+## Lesson: Split regression tests by review surface before dogfood
+
+**Created:** 2026-05-31
+**Incident:** While adding correlated scoring coverage, one test asserted file
+score, composite score, and pillar penalties together. The full pytest suite
+passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
+flagged `test-quality.eager-test` because the test had too many assertions.
+
+When a regression spans multiple outputs, keep one test per reviewer surface
+even if the setup is shared. This preserves the signal of
+`test-quality.eager-test` and keeps dogfood aligned with the
+reviewer-verification mission.
+
+## Lesson: Tick task checkboxes when the proof passes, not during later cleanup
+
+**Created:** 2026-05-31
+**Incident:** After rerunning `scripts/preflight-checks.sh`, the agent reported
+the worktree was clean but left the completed task
+`.goat-flow/tasks/0.3.0/config-ignore-authority-and-check-ignore-v0.3.0.md`
+with unchecked verification-gate boxes. The checks had passed in-session, but
+the durable task state still said they were incomplete, forcing a later audit
+and correction.
+
+When a task file contains a checkbox for a command, evidence item, or exit
+criterion, update that checkbox immediately after the proof passes. Before
+final response, scan completed task files in the active task directory for
+remaining `- [ ]` entries and either tick them with current evidence or explain
+why the task is not actually complete.
+
+## Lesson: When tool output lags or duplicates, re-establish ground truth before editing — never edit against a stale read, never confabulate the contents of output you do not have
+
+**Created:** 2026-05-31
+**Incident:** During an M07 session the harness began returning tool results
+**delayed and duplicated** — later batches contained file-read content that did
+not match the file on disk. The agent issued an `Edit` to
+`src/gruffpy/rule/test_quality/magic_number_assertion_rule.py` based on a
+*hallucinated* failing test (no such test existed; dogfood showed `0` findings
+and `git grep '\.count\s*=='` over `tests`/`src` returned nothing), and five
+further test-file edits failed `String to replace not found` because they
+targeted stale read content. Worse, the agent then told the user the file had
+"ballooned to 3000+ lines" — a detail it had **no tool output for** and
+fabricated. Ground truth recovered only via cache-independent checks:
+`md5sum <file>` vs `git show HEAD:<file> | md5sum` matched, `git status --short`
+showed only the pre-existing dirty files, and `wc -l` matched HEAD. Net on-disk
+change was zero; the "corruption" was lag, not damage.
+
+When tool results arrive late, out of order, or duplicated, stop issuing
+mutations and re-establish ground truth with checks that do not depend on a
+possibly-stale read: `git status --short`, `md5sum` against
+`git show HEAD:<path>`, `wc -l`, and a fresh `git diff --stat`. Two hard rules
+follow. (1) Never run an `Edit` whose `old_string` came from a read you cannot
+currently trust — re-Read or restore from HEAD first. (2) Never describe the
+contents, size, or shape of tool output you did not actually receive; if a
+result did not arrive, say "no output received", do not invent one. Fabricating
+output detail is CLAUDE.md hallucination red-flag #4 ("looks like", "probably")
+in its most dangerous form — a confident claim with zero evidence. Prefer
+full-file `Write` over surgical `Edit` for recovery work, since a replayed
+`Write` is idempotent while a replayed insert is not.
+
+## Lesson: Posture map tests must move with rule catalogue additions
+
+**Created:** 2026-06-02
+**Incident:** While removing `security.dependency-unpinned-version`, focused
+security verification failed in
+`tests/unit/rule/test_reviewer_verification_posture.py` (search:
+`_SENSITIVE_DATA_POSTURE`) because the M06 sensitive-data rules had been added
+to `RuleRegistry.defaults()` but not to the reviewer-posture expectation map.
+The security deletion itself was correct; the stale posture map blocked the
+proof until `sensitive-data.gcp-service-account-key` and
+`sensitive-data.url-credentials` were added to the expected posture.
+
+When adding or deleting a default-enabled rule, update both catalogue/count
+surfaces and any posture map that asserts whole rule families. Run
+`uv run pytest tests/unit/rule/test_reviewer_verification_posture.py` with the
+rule-family tests, not only the new rule's focused test, before considering the
+catalogue stable.

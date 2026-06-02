@@ -26,7 +26,7 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
 
 _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
-    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, nesting, and NPATH",
+    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
     Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
@@ -208,8 +208,8 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     if _has_severity_thresholds(definition):
         lines.append(
             "- Config threshold: "
-            f"`threshold` = `{definition.default_thresholds['error']!r}`, "
-            "`severity` = `error`"
+            f"`threshold` = `{definition.default_threshold!r}`, "
+            f"`severity` = `{definition.default_severity.value}`"
         )
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
@@ -238,7 +238,7 @@ def _inline_mapping(mapping: dict[str, Any]) -> str:
 
 
 def _has_severity_thresholds(definition: RuleDefinition) -> bool:
-    return set(definition.default_thresholds) == {"warning", "error"}
+    return definition.default_threshold is not None
 
 
 def _inline_list(values: tuple[str, ...]) -> str:

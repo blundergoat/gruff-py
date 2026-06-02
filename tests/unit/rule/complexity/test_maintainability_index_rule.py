@@ -2,7 +2,7 @@ import ast
 import math
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -31,13 +31,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 80, error: int = 70) -> RuleContext:
+def _ctx(threshold: int = 80) -> RuleContext:
     rule = MaintainabilityIndexRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -117,9 +117,9 @@ def test_error_finding_emitted_for_very_low_mi():
 def test_lower_threshold_means_worse_mi_is_threshold():
     # Threshold semantics: lower MI = worse.
     src = "def f(x):\n    return x + 1\n"  # MI = 100 (clamped)
-    # warning threshold = 100 -> 100 is NOT below 100, no finding
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(warning=100, error=80))
+    # threshold = 100 -> 100 is NOT below 100, no finding
+    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=100))
     assert findings == []
-    # warning threshold = 110 -> 100 is below 110, finding emitted
-    findings2 = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(warning=110, error=80))
+    # threshold = 110 -> 100 is below 110, finding emitted
+    findings2 = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=110))
     assert len(findings2) == 1

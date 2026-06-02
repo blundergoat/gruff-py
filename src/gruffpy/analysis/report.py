@@ -8,6 +8,7 @@ from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
+from gruffpy.source.discovery import IgnoredPath
 from gruffpy.version import TOOL_NAME
 
 _SEVERITY_RANK: dict[Severity, int] = {
@@ -48,6 +49,8 @@ class AnalysisReport:
         files_discovered: Count of discovered source files.
         files_parsed: Count of successfully parsed files.
         ignored_paths: Paths skipped by discovery.
+        ignored_path_details: The skipped paths with their ignore source and
+            matched pattern (serialized as additive ``ignoredPathDetails``).
         missing_paths: Requested paths that were not found.
         diagnostics: Non-finding run diagnostics.
         findings: Rule findings emitted for the run.
@@ -56,6 +59,7 @@ class AnalysisReport:
         score: Optional score payload.
         extensions: Optional report extension sections.
         filters: Optional finding-display filter metadata.
+        suppressed_count: Optional count of changed-region out-of-scope findings.
     """
 
     tool_version: str
@@ -74,6 +78,8 @@ class AnalysisReport:
     extensions: ReportExtensions = field(default_factory=ReportExtensions)
     filters: Any | None = None
     output_volume_hint_threshold: int = 50
+    suppressed_count: int | None = None
+    ignored_path_details: tuple[IgnoredPath, ...] = ()
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -151,10 +157,13 @@ class AnalysisReport:
             "run": _run_payload(self),
             "summary": _summary_payload(self),
             "ignoredPaths": list(self.ignored_paths),
+            "ignoredPathDetails": [detail.to_dict() for detail in self.ignored_path_details],
             "missingPaths": list(self.missing_paths),
             "diagnostics": [d.to_dict() for d in self.diagnostics],
             "findings": [f.to_dict() for f in self.findings],
         }
+        if self.suppressed_count is not None:
+            report["suppressedCount"] = self.suppressed_count
         report.update(_optional_payloads(self))
         return report
 

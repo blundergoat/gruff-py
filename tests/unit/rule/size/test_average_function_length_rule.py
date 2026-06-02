@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 30, error: int = 60) -> RuleContext:
+def _ctx(threshold: int = 30) -> RuleContext:
     rule = AverageFunctionLengthRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -36,15 +36,15 @@ def test_class_with_short_methods_emits_no_finding():
     assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_class_with_long_methods_emits_warning():
+def test_class_with_long_methods_emits_error():
     body = "\n".join(["        x = 1"] * 8)
     source = (
         f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n    def c(self):\n{body}\n"
     )
-    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.metadata["methodCount"] == 3
     assert f.metadata["averageLines"] == 9.0  # each method is 9 lines (def + 8 body)
 
@@ -54,7 +54,7 @@ def test_class_above_error_threshold_emits_error():
     source = (
         f"class C:\n    def a(self):\n{body}\n    def b(self):\n{body}\n    def c(self):\n{body}\n"
     )
-    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
 
@@ -62,16 +62,16 @@ def test_class_above_error_threshold_emits_error():
 def test_class_with_one_long_method_emits_nothing():
     body = "\n".join(["        x = 1"] * 25)
     source = f"class C:\n    def a(self):\n{body}\n"
-    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20)) == []
+    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5)) == []
 
 
 def test_class_with_no_methods_emits_nothing():
     source = "class C:\n    x = 1\n    y = 2\n"
-    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20)) == []
+    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5)) == []
 
 
 def test_nested_class_with_too_few_methods_skipped():
     body = "\n".join(["            x = 1"] * 10)
     source = f"class Outer:\n    class Inner:\n        def m(self):\n{body}\n"
-    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(warning=5, error=20))
+    findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert findings == []

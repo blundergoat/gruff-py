@@ -17,6 +17,19 @@ from dataclasses import dataclass
 # common in benign text (IDs, short tokens). Sensitive-data rules typically
 # specify their own min lengths via the regex.
 MIN_REDACTABLE_LEN = 8
+_PLACEHOLDER_MARKERS = frozenset(
+    {
+        "changeme",
+        "change_me",
+        "dummy",
+        "example",
+        "fake",
+        "placeholder",
+        "password",
+        "test_password",
+        "your_password",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +128,22 @@ def redact_preview(secret: str) -> str:
     if length < MIN_REDACTABLE_LEN:
         return f"{'*' * length} (redacted, {length} chars)"
     return f"{secret[:4]}...{secret[-4:]} (redacted, {length} chars)"
+
+
+def is_likely_placeholder_secret(secret: str) -> bool:
+    """Return whether *secret* looks like documentation or fixture text.
+
+    Args:
+        secret: Candidate secret text after provider-specific extraction.
+
+    Returns:
+        True for common dummy/example marker words, false for real-looking
+        values that should still be reported.
+    """
+    normalized = secret.strip().lower()
+    if not normalized:
+        return True
+    return any(marker in normalized for marker in _PLACEHOLDER_MARKERS)
 
 
 def _line_offsets(source: str) -> list[int]:

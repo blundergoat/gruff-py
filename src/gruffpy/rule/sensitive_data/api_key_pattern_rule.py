@@ -1,8 +1,10 @@
 """``sensitive-data.api-key-pattern`` - vendor API key shapes.
 
 Recognises Stripe (``sk_live_*``/``rk_live_*``), GitHub (``ghp_*``/``gho_*``/
-``ghu_*``/``ghs_*``/``ghr_*``), Slack (``xoxb-*``/``xoxp-*``/``xoxa-*``/
-``xoxs-*``), OpenAI (``sk-...``), Square (``EAAA*``), and Twilio (``SK*``).
+``ghu_*``/``ghs_*``/``ghr_*``/``github_pat_*``), GitLab (``glpat-*``), npm
+(``npm_*``), Slack (``xoxb-*``/``xoxp-*``/``xoxa-*``/``xoxs-*`` and Slack
+webhook URLs), OpenAI (``sk-...``/``sk-proj-*``), Anthropic (``sk-ant-*``),
+Google API keys (``AIza*``), Square (``EAAA*``), and Twilio (``SK*``).
 The vendor map is module-private and not currently configurable; the
 patterns are tuned for low false positives on real API tokens rather
 than for project-specific extension.
@@ -19,6 +21,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
+    is_likely_placeholder_secret,
     iter_matches,
     redact_preview,
 )
@@ -27,9 +30,14 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 # pass over the source captures all vendors at once.
 _VENDOR_PATTERNS: dict[str, str] = {
     "stripe": r"(?:sk|rk)_live_[A-Za-z0-9]{24,}",
-    "github": r"gh[opusr]_[A-Za-z0-9]{36}",
+    "github": r"(?:gh[opusr]_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{22,})",
+    "gitlab": r"glpat-[A-Za-z0-9_-]{20,}",
     "slack": r"xox[abporspu]-[A-Za-z0-9-]{10,}",
-    "openai": r"sk-[A-Za-z0-9]{32,}",
+    "slack_webhook": r"https://hooks\.slack\.com/services/[A-Z0-9]{8,}/[A-Z0-9]{8,}/[A-Za-z0-9]{20,}",
+    "openai": r"(?:sk-[A-Za-z0-9]{32,}|sk-proj-[A-Za-z0-9_-]{20,})",
+    "anthropic": r"sk-ant-[A-Za-z0-9_-]{20,}",
+    "npm": r"npm_[A-Za-z0-9]{20,}",
+    "google": r"AIza[A-Za-z0-9_-]{35}",
     "square": r"EAAA[A-Za-z0-9_-]{40,}",
     "twilio": r"SK[a-f0-9]{32}",
 }
@@ -38,7 +46,7 @@ _PATTERN = compile_pattern("|".join(f"(?P<{name}>{pat})" for name, pat in _VENDO
 
 
 class ApiKeyPatternRule(SourceTextRule):
-    """Detect vendor API key literals from Stripe, GitHub, Slack, OpenAI, Square, or Twilio."""
+    """Detect vendor API key literals from common hosted-service providers."""
 
     ID = "sensitive-data.api-key-pattern"
 
@@ -79,11 +87,13 @@ class ApiKeyPatternRule(SourceTextRule):
         definition = self.definition()
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):
+            if is_likely_placeholder_secret(match.raw):
+                continue
             vendor = _identify_vendor(match.raw)
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=f"{vendor.capitalize()}-shaped API key literal in source.",
+                    message=f"{_display_vendor(vendor)}-shaped API key literal in source.",
                     file_path=unit.file.display_path,
                     line=match.line,
                     severity=definition.default_severity,
@@ -104,5 +114,27 @@ class ApiKeyPatternRule(SourceTextRule):
 def _identify_vendor(token: str) -> str:
     for name, pattern in _VENDOR_PATTERNS.items():
         if compile_pattern(f"^{pattern}$").match(token):
-            return name
+            return "slack" if name == "slack_webhook" else name
     return "unknown"
+
+
+def contains_provider_api_key(text: str) -> bool:
+    """Return whether *text* contains one of the provider API-key shapes.
+
+    Args:
+        text: Candidate raw source fragment or entropy candidate to inspect.
+
+    Returns:
+        True when the fragment includes a known provider API-key pattern.
+    """
+    return _PATTERN.search(text) is not None
+
+
+def _display_vendor(vendor: str) -> str:
+    return {
+        "github": "GitHub",
+        "gitlab": "GitLab",
+        "npm": "npm",
+        "openai": "OpenAI",
+        "gcp": "GCP",
+    }.get(vendor, vendor.capitalize())

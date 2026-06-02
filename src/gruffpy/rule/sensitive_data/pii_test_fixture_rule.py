@@ -85,11 +85,12 @@ class PiiTestFixtureRule(SourceTextRule):
         definition = self.definition()
         findings: list[Finding] = []
         for match in _EMAIL_RE.finditer(unit.source):
+            value = match.group(0)
+            if _is_scp_style_git_reference(unit.source, match.end(), value):
+                continue
             if match.group("domain").lower() in _PLACEHOLDER_DOMAINS:
                 continue
-            findings.append(
-                _build_finding(definition, unit, match.start(), match.group(0), "email")
-            )
+            findings.append(_build_finding(definition, unit, match.start(), value, "email"))
         for match in _PHONE_RE.finditer(unit.source):
             if (
                 match.group("area") in _PLACEHOLDER_PHONE_SEGMENTS
@@ -104,6 +105,16 @@ class PiiTestFixtureRule(SourceTextRule):
 
 def _is_test_path(display_path: str) -> bool:
     return "test" in display_path.lower() or "fixture" in display_path.lower()
+
+
+def _is_scp_style_git_reference(source: str, match_end: int, value: str) -> bool:
+    """Return whether an email-shaped match is the user/host part of a Git ref."""
+    if not value.lower().startswith("git@"):
+        return False
+    if match_end >= len(source) or source[match_end] != ":":
+        return False
+    remote_path = re.split(r"[\s'\"\])}]+", source[match_end + 1 :], maxsplit=1)[0]
+    return "/" in remote_path
 
 
 def _build_finding(

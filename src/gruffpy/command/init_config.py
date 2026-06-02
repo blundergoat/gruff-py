@@ -245,6 +245,9 @@ def existing_config_source(project_root: Path) -> Path | None:
 
 def _rule_entry(settings: RuleSettings) -> dict[str, Any]:
     entry: dict[str, Any] = {"enabled": settings.enabled}
+    if settings.severity_threshold is not None:
+        entry["threshold"] = settings.severity_threshold.threshold
+        entry["severity"] = settings.severity_threshold.severity.value
     if settings.thresholds:
         entry["thresholds"] = dict(settings.thresholds)
     if settings.options:

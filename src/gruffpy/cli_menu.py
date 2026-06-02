@@ -72,6 +72,7 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
     return [
         _section("Available commands:", ctx),
         _command_line("analyse", "Run gruff-py analysis.", ctx),
+        _command_line("check-ignore", "Report whether gruff would ignore each path, and why.", ctx),
         _command_line("completion", "Dump the shell completion script", ctx),
         _command_line("dashboard", "Serve the local gruff-py dashboard.", ctx),
         _command_line("help", "Display help for a command", ctx),
@@ -98,7 +99,9 @@ def _option_line(label: str, description: str, ctx: click.Context) -> str:
 
 
 def _command_line(name: str, description: str, ctx: click.Context) -> str:
-    return f"  {_style(name, 'green', ctx)}{' ' * (12 - len(name))}{description}"
+    # Pad past the longest command name ("check-ignore", 12) so every description
+    # keeps a column gutter; a width equal to the name length renders them flush.
+    return f"  {_style(name, 'green', ctx)}{' ' * (14 - len(name))}{description}"
 
 
 def _style(text: str, color: str, ctx: click.Context) -> str:

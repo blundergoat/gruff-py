@@ -71,6 +71,13 @@ rules:
   test-quality.eager-test:
     thresholds:
       maxAssertions: 5
+
+  naming.boolean-prefix:
+    options:
+      acceptedBooleanNames:
+        - ok
+        - enabled
+        - verbose
 ```
 
 ## pyproject.toml Example
@@ -110,6 +117,9 @@ severity = "error"
 
 [tool.gruff-py.rules."test-quality.eager-test"]
 thresholds = { maxAssertions = 5 }
+
+[tool.gruff-py.rules."naming.boolean-prefix".options]
+acceptedBooleanNames = ["ok", "enabled", "verbose"]
 ```
 
 ## Supported Keys
@@ -174,6 +184,37 @@ defaults. Keep `thresholds` for named tuning values. Do not combine
 `threshold` and `thresholds` in the same rule entry.
 
 Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
+
+## Boolean Boundary Names
+
+`naming.boolean-prefix` normally asks boolean-returning functions, methods, and
+fields to use names such as `is_ready`, `has_token`, or `can_retry`. Exact
+external boundary names can be allowed with
+`rules.naming.boolean-prefix.options.acceptedBooleanNames` when a rename would
+break a CLI option, DTO/schema field, wire-format key, or protocol contract.
+
+Before configuring an exact boundary name, `ok` is treated like any other vague
+boolean name:
+
+```python
+def ok() -> bool:
+    return True
+```
+
+After adding an exact allowlist entry, the protocol name can remain stable
+without disabling the rule for unrelated names:
+
+```yaml
+rules:
+  naming.boolean-prefix:
+    options:
+      acceptedBooleanNames:
+        - ok
+```
+
+Prefer the narrowest exact names needed by the boundary. Do not add broad
+project vocabulary when the identifier can be renamed to a clearer boolean
+prefix.
 
 ## Severity Gate
 

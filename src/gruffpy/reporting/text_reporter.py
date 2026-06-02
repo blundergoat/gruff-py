@@ -37,7 +37,7 @@ class TextReporter:
             f"  Missing: {len(report.missing_paths)}",
             f"  Parse errors: {report.parse_error_count()}",
         ]
-        _append_path_section(lines, "Ignored paths", report.ignored_paths)
+        _append_ignored_section(lines, report)
         _append_path_section(lines, "Missing paths", report.missing_paths)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
@@ -75,6 +75,22 @@ def _append_path_section(lines: list[str], title: str, paths: tuple[str, ...]) -
     lines.append(title)
     for path in paths:
         lines.append(f"  {path}")
+
+
+def _append_ignored_section(lines: list[str], report: AnalysisReport) -> None:
+    if not report.ignored_paths:
+        return
+    details = {detail.path: detail for detail in report.ignored_path_details}
+    lines.append("")
+    lines.append("Ignored paths")
+    for path in report.ignored_paths:
+        detail = details.get(path)
+        if detail is None:
+            lines.append(f"  {path}")
+        elif detail.pattern is not None:
+            lines.append(f"  {path}  ({detail.source}: {detail.pattern})")
+        else:
+            lines.append(f"  {path}  ({detail.source})")
 
 
 def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]) -> None:

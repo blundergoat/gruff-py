@@ -9,13 +9,13 @@ from gruffpy.rule.waste.empty_function_rule import EmptyFunctionRule
 from gruffpy.source.source_file import SourceFile
 
 
-def _unit(source: str) -> AnalysisUnit:
+def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
             child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
-        file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
+        file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
         source=source,
         tree=tree,
     )
@@ -160,4 +160,40 @@ def test_function_with_docstring_and_pass_fires():
     pass
 '''
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
+    assert len(findings) == 1
+
+
+def test_test_double_empty_method_does_not_fire():
+    src = "class FakeTerminal:\n    def close(self):\n        pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "tests/unit/test_terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
+    assert findings == []
+
+
+def test_production_test_double_name_still_fires():
+    src = "class FakeTerminal:\n    def close(self):\n        pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "src/gruffpy/terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
+    assert len(findings) == 1
+
+
+def test_nested_inner_test_double_class_exempts_its_method():
+    src = "class Suite:\n    class FakeClient:\n        def close(self):\n            pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "tests/unit/test_terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
+    assert findings == []
+
+
+def test_nested_plain_class_in_test_double_outer_still_fires():
+    src = "class FakeSuite:\n    class Helper:\n        def close(self):\n            pass\n"
+    findings = EmptyFunctionRule().analyse(
+        _unit(src, "tests/unit/test_terminal.py"),
+        _ctx_for("waste.empty-function"),
+    )
     assert len(findings) == 1

@@ -18,6 +18,18 @@ def test_example_email_skipped():
     assert findings == []
 
 
+def test_scp_style_git_reference_skipped():
+    src = "dependency = 'git@github.com:org/repo.git#egg=widget'\n"
+    findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
+    assert findings == []
+
+
+def test_real_email_with_colon_still_emits():
+    src = f"user_email = {_REAL_EMAIL!r}  # owner:\n"
+    findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
+    assert len(findings) == 1
+
+
 def test_escaped_decorator_source_string_skipped():
     src = 'code = "import pytest\\n@pytest.fixture\\ndef thing(): pass\\n"\n'
     findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())

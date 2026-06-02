@@ -103,6 +103,22 @@ _BOOLEAN_SUFFIX_PATTERNS: tuple[str, ...] = (
     "_optional",
     "_required",
 )
+_DEFAULT_ACCEPTED_BOOLEAN_NAMES: frozenset[str] = frozenset(
+    {
+        "all",
+        "apply",
+        "check",
+        "dev",
+        "enabled",
+        "force",
+        "fresh",
+        "harness",
+        "json",
+        "ok",
+        "verbose",
+        "yes",
+    }
+)
 
 
 class BooleanPrefixRule(Rule):
@@ -127,6 +143,7 @@ class BooleanPrefixRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_options={"acceptedBooleanNames": sorted(_DEFAULT_ACCEPTED_BOOLEAN_NAMES)},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -152,10 +169,11 @@ class BooleanPrefixRule(Rule):
         if _is_test_file(unit.file.display_path):
             return []
         definition = self.definition()
+        accepted_boolean_names = _accepted_boolean_names(context, definition)
         findings: list[Finding] = []
 
         for node in ast.walk(unit.tree):
-            finding = self._finding_for_node(unit, definition, node)
+            finding = self._finding_for_node(unit, definition, node, accepted_boolean_names)
             if finding is not None:
                 findings.append(finding)
         return findings
@@ -165,11 +183,12 @@ class BooleanPrefixRule(Rule):
         unit: AnalysisUnit,
         definition: RuleDefinition,
         node: ast.AST,
+        accepted_boolean_names: frozenset[str],
     ) -> Finding | None:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            return self._function_finding(unit, definition, node)
+            return self._function_finding(unit, definition, node, accepted_boolean_names)
         if isinstance(node, ast.AnnAssign):
-            return self._attribute_finding(unit, definition, node)
+            return self._attribute_finding(unit, definition, node, accepted_boolean_names)
         return None
 
     def _function_finding(
@@ -177,10 +196,11 @@ class BooleanPrefixRule(Rule):
         unit: AnalysisUnit,
         definition: RuleDefinition,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
+        accepted_boolean_names: frozenset[str],
     ) -> Finding | None:
         if _is_dunder(node.name) or _has_override_decorator(node):
             return None
-        if not _has_bool_return(node) or _has_boolean_prefix(node.name):
+        if not _has_bool_return(node) or _has_boolean_prefix(node.name, accepted_boolean_names):
             return None
         return self._finding(unit, definition, node.name, node.lineno, kind="function")
 
@@ -189,11 +209,12 @@ class BooleanPrefixRule(Rule):
         unit: AnalysisUnit,
         definition: RuleDefinition,
         node: ast.AnnAssign,
+        accepted_boolean_names: frozenset[str],
     ) -> Finding | None:
         if not isinstance(node.target, ast.Name):
             return None
         name = node.target.id
-        if _is_dunder(name) or _has_boolean_prefix(name):
+        if _is_dunder(name) or _has_boolean_prefix(name, accepted_boolean_names):
             return None
         if not _is_bool_annotation(node.annotation):
             return None
@@ -241,7 +262,19 @@ def _has_override_decorator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return any(_decorator_name(d).split(".")[-1] == "override" for d in fn.decorator_list)
 
 
-def _has_boolean_prefix(name: str) -> bool:
+def _accepted_boolean_names(
+    context: RuleContext,
+    definition: RuleDefinition,
+) -> frozenset[str]:
+    settings = context.settings_for(definition)
+    if settings.has_option("acceptedBooleanNames"):
+        names = settings.string_list_option("acceptedBooleanNames")
+    else:
+        names = list(definition.default_options["acceptedBooleanNames"])
+    return frozenset(name.lower() for name in names)
+
+
+def _has_boolean_prefix(name: str, accepted_boolean_names: frozenset[str]) -> bool:
     stripped = name.lstrip("_")
     if not stripped:
         return False
@@ -250,7 +283,8 @@ def _has_boolean_prefix(name: str) -> bool:
     if not tokens:
         return False
     return (
-        lowered in _BOOLEAN_PREFIXES
+        lowered in accepted_boolean_names
+        or lowered in _BOOLEAN_PREFIXES
         or lowered in _BOOLEAN_ADJECTIVES
         or tokens[0] in _BOOLEAN_PREFIXES
         or tokens[-1] in _BOOLEAN_ADJECTIVES

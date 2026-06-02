@@ -21,8 +21,11 @@ from gruffpy.rule._python_dynamism import (
 )
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
+from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+
+_TEST_DOUBLE_TOKENS: frozenset[str] = frozenset({"dummy", "fake", "mock", "spy", "stub"})
 
 
 class EmptyFunctionRule(Rule):
@@ -68,19 +71,20 @@ class EmptyFunctionRule(Rule):
         definition = self.definition()
         return [
             _empty_function_finding(unit, definition, node, parents)
-            for node, parents in _empty_functions(unit.tree)
+            for node, parents in _empty_functions(unit.tree, unit.file.display_path)
         ]
 
 
 def _empty_functions(
     tree: ast.AST,
+    display_path: str,
 ) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]]:
     candidates: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         parents = parent_chain(node)
-        if _should_report_empty_function(node, parents):
+        if _should_report_empty_function(node, parents, display_path):
             candidates.append((node, parents))
     return candidates
 
@@ -88,6 +92,7 @@ def _empty_functions(
 def _should_report_empty_function(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     parents: list[ast.AST],
+    display_path: str,
 ) -> bool:
     if not _is_empty_body(node.body):
         return False
@@ -96,6 +101,29 @@ def _should_report_empty_function(
         or is_overload_stub(node)
         or is_protocol_method_stub(node, parents)
         or has_framework_decorator(node)
+        or _is_test_double_method(parents, display_path)
+    )
+
+
+def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
+    if not _is_test_path(display_path):
+        return False
+    # parents runs outermost -> immediate, so reverse to take the innermost enclosing
+    # class: a nested stub (``class Outer: class _FakeClient: ...``) is named by the
+    # inner class, not the outer suite, so the outermost match misses the exemption.
+    parent_class = next(
+        (parent for parent in reversed(parents) if isinstance(parent, ast.ClassDef)), None
+    )
+    if parent_class is None:
+        return False
+    return any(token in _TEST_DOUBLE_TOKENS for token in lower_tokens(parent_class.name))
+
+
+def _is_test_path(display_path: str) -> bool:
+    normalised = display_path.replace("\\", "/")
+    filename = normalised.rsplit("/", 1)[-1]
+    return (
+        normalised.startswith("tests/") or "/tests/" in normalised or filename.startswith("test_")
     )
 
 

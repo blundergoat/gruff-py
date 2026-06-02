@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule, nesting_depth_for
@@ -26,13 +26,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 4, error: int = 6) -> RuleContext:
+def _ctx(threshold: int = 4) -> RuleContext:
     rule = NestingDepthRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -82,7 +82,7 @@ def test_with_block_increments_depth():
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
-def test_deeply_nested_emits_warning():
+def test_deeply_nested_emits_error():
     # 5-deep: if/if/if/if/if
     src = (
         "def f(a, b, c, d, e):\n"
@@ -95,7 +95,7 @@ def test_deeply_nested_emits_warning():
     )
     findings = NestingDepthRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity == Severity.WARNING
+    assert findings[0].severity == Severity.ERROR
     assert findings[0].metadata["depth"] == 5
 
 

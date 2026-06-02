@@ -11,7 +11,6 @@ from gruffpy.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplex
 from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
 from gruffpy.rule.complexity.maintainability_index_rule import MaintainabilityIndexRule
 from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule
-from gruffpy.rule.complexity.npath_complexity_rule import NPathComplexityRule
 from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAttributeRule
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
@@ -46,12 +45,30 @@ from gruffpy.rule.security.cors_wildcard_with_credentials_rule import (
     CorsWildcardWithCredentialsRule,
 )
 from gruffpy.rule.security.dangerous_function_call_rule import DangerousFunctionCallRule
+from gruffpy.rule.security.dependency_git_reference_rule import DependencyGitReferenceRule
+from gruffpy.rule.security.dependency_local_path_rule import DependencyLocalPathRule
+from gruffpy.rule.security.dependency_url_reference_rule import DependencyUrlReferenceRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
 from gruffpy.rule.security.django_mark_safe_rule import DjangoMarkSafeRule
 from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
 from gruffpy.rule.security.flask_debug_enabled_rule import FlaskDebugEnabledRule
+from gruffpy.rule.security.github_actions_broad_permissions_rule import (
+    GithubActionsBroadPermissionsRule,
+)
+from gruffpy.rule.security.github_actions_pull_request_target_rule import (
+    GithubActionsPullRequestTargetRule,
+)
+from gruffpy.rule.security.github_actions_remote_shell_rule import (
+    GithubActionsRemoteShellRule,
+)
+from gruffpy.rule.security.github_actions_secrets_in_pr_rule import (
+    GithubActionsSecretsInPrRule,
+)
+from gruffpy.rule.security.github_actions_unpinned_action_rule import (
+    GithubActionsUnpinnedActionRule,
+)
 from gruffpy.rule.security.hardcoded_bind_all_interfaces_rule import (
     HardcodedBindAllInterfacesRule,
 )
@@ -79,12 +96,14 @@ from gruffpy.rule.security.xxe_rule import XxeRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
+from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
 from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
 from gruffpy.rule.sensitive_data.high_entropy_string_rule import HighEntropyStringRule
 from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
 from gruffpy.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
+from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from gruffpy.rule.size.attribute_count_rule import AttributeCountRule
 from gruffpy.rule.size.average_function_length_rule import AverageFunctionLengthRule
 from gruffpy.rule.size.class_length_rule import ClassLengthRule
@@ -179,7 +198,6 @@ _FORMULA_PROVENANCE = {
         "A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: "
         "https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command."
     ),
-    "complexity.npath": "gruff-specific AST path-counting heuristic.",
 }
 
 
@@ -251,7 +269,7 @@ class RuleDocs:
         """Collect the non-empty optional payload fields in JSON-key order.
 
         Driven from a table so adding a new optional field is one row and the
-        NPATH cost stays linear instead of multiplicative.
+        cost stays linear instead of multiplicative.
         """
         candidates: tuple[tuple[str, Any, Any], ...] = (
             ("formulaProvenance", self.formula_provenance, self.formula_provenance),
@@ -338,6 +356,12 @@ def _custom_docs_for(
     config_keys: tuple[str, ...],
 ) -> RuleDocs | None:
     match definition.id:
+        case ApiKeyPatternRule.ID:
+            return _api_key_pattern_docs(config_keys)
+        case GcpServiceAccountKeyRule.ID:
+            return _gcp_service_account_key_docs(config_keys)
+        case UrlCredentialsRule.ID:
+            return _url_credentials_docs(config_keys)
         case IgnoreDirectiveReasonRule.ID:
             return RuleDocs(
                 rationale=(
@@ -401,6 +425,73 @@ def _custom_docs_for(
     return None
 
 
+def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for the grouped provider-token rule."""
+    return RuleDocs(
+        rationale=(
+            "Provider-prefixed API keys are high-signal credential leaks; "
+            "keeping them under one rule avoids provider-specific config churn "
+            "while the `vendor` metadata tells reviewers which console to rotate in."
+        ),
+        fix_guidance=(
+            "Rotate the key with the provider, remove it from source, and load it "
+            "from a secret manager or environment-specific runtime configuration."
+        ),
+        bad_example=(
+            '`GOOGLE_API_KEY = "AIza..."` or '
+            '`SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`'
+        ),
+        good_example='`GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]`',
+        confidence_rationale=(
+            "High confidence: each match requires a provider-specific prefix and "
+            "minimum token length, with dummy/example placeholders skipped."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for committed GCP service-account JSON keys."""
+    return RuleDocs(
+        rationale=(
+            "Google service-account JSON files combine an account identity with "
+            "private-key material; committed copies usually grant fleet access."
+        ),
+        fix_guidance=(
+            "Remove the JSON key from source history, rotate it in Google Cloud IAM, "
+            "and prefer Workload Identity or a runtime secret manager."
+        ),
+        bad_example='`{"type": "service_account", "private_key": "<redacted PEM key>"}`',
+        good_example="Load Google credentials from the runtime environment or Workload Identity.",
+        confidence_rationale=(
+            "High confidence: the rule requires the `service_account` type marker "
+            "and private-key material in the same file, while short placeholders pass."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for HTTP(S) userinfo credentials."""
+    return RuleDocs(
+        rationale=(
+            "Inline HTTP(S) userinfo credentials are easy to miss in review and "
+            "often end up copied into logs, package config, or deployment scripts."
+        ),
+        fix_guidance=(
+            "Remove `user:password@` from the URL and pass authentication via "
+            "headers, environment variables, or a secret store."
+        ),
+        bad_example='`REMOTE = "https://deploy:<password>@api.example.test"`',
+        good_example='`REMOTE = "https://api.example.test"` plus a runtime Authorization header.',
+        confidence_rationale=(
+            "High confidence: the rule scopes to explicit `http(s)://user:password@` "
+            "userinfo and skips common placeholder passwords."
+        ),
+        config_keys=config_keys,
+    )
+
+
 def _rationale_for(definition: RuleDefinition) -> str:
     return (
         f"`{definition.id}` protects the {definition.pillar.value} pillar by flagging "
@@ -427,7 +518,7 @@ def _confidence_rationale(confidence: Confidence) -> str:
 
 def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
     keys: list[str] = []
-    if _has_severity_thresholds(definition.default_thresholds):
+    if definition.default_threshold is not None:
         keys.extend(("threshold", "severity"))
     else:
         keys.extend(f"thresholds.{name}" for name in definition.default_thresholds)
@@ -436,25 +527,21 @@ def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
 
 
 def _threshold_direction(definition: RuleDefinition) -> str:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ""
     return _THRESHOLD_DIRECTIONS.get(definition.id, "above")
 
 
 def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
-    if not definition.default_thresholds:
+    if definition.default_threshold is None and not definition.default_thresholds:
         return ()
-    if _has_severity_thresholds(definition.default_thresholds) or definition.pillar in {
+    if definition.default_threshold is not None or definition.pillar in {
         Pillar.SIZE,
         Pillar.COMPLEXITY,
         Pillar.MAINTAINABILITY,
     }:
         return _STANDARD_THRESHOLD_METADATA_KEYS
     return ()
-
-
-def _has_severity_thresholds(thresholds: dict[str, int | float]) -> bool:
-    return set(thresholds) == {"warning", "error"}
 
 
 _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -506,6 +593,12 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "naming.generic-function": {
         "genericFunctions": (
             "Function names flagged as too generic to convey intent (process, handle, run, ...)."
+        ),
+    },
+    "naming.boolean-prefix": {
+        "acceptedBooleanNames": (
+            "Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts "
+            "(ok, force, verbose, etc.)."
         ),
     },
     "naming.module-name-mismatch": {
@@ -592,17 +685,10 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     # Complexity / size siblings (function-level).
     "complexity.cyclomatic": (
         "complexity.cognitive",
-        "complexity.npath",
         "size.function-length",
     ),
     "complexity.cognitive": (
         "complexity.cyclomatic",
-        "complexity.npath",
-        "size.function-length",
-    ),
-    "complexity.npath": (
-        "complexity.cyclomatic",
-        "complexity.cognitive",
         "size.function-length",
     ),
     "complexity.nesting-depth": ("complexity.cyclomatic", "complexity.cognitive"),
@@ -615,7 +701,6 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     "size.function-length": (
         "complexity.cyclomatic",
         "complexity.cognitive",
-        "complexity.npath",
         "size.average-function-length",
     ),
     "size.average-function-length": ("size.function-length",),
@@ -663,7 +748,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HalsteadVolumeRule),
     _entry(MaintainabilityIndexRule),
     _entry(NestingDepthRule),
-    _entry(NPathComplexityRule),
     _entry(UnusedPrivateAttributeRule),
     _entry(UnusedPrivateFunctionRule),
     _entry(SingleImplementorProtocolRule),
@@ -692,12 +776,20 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(TestNamingConsistencyRule),
     _entry(CorsWildcardWithCredentialsRule),
     _entry(DangerousFunctionCallRule),
+    _entry(DependencyGitReferenceRule),
+    _entry(DependencyLocalPathRule),
+    _entry(DependencyUrlReferenceRule),
     _entry(DisabledSslVerificationRule),
     _entry(DjangoMarkSafeRule),
     _entry(DjangoRawSqlRule),
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
     _entry(FlaskDebugEnabledRule),
+    _entry(GithubActionsBroadPermissionsRule),
+    _entry(GithubActionsPullRequestTargetRule),
+    _entry(GithubActionsRemoteShellRule),
+    _entry(GithubActionsSecretsInPrRule),
+    _entry(GithubActionsUnpinnedActionRule),
     _entry(HardcodedBindAllInterfacesRule),
     _entry(HardcodedFrameworkSecretKeyRule),
     _entry(HeaderInjectionRule),
@@ -719,12 +811,14 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(ApiKeyPatternRule),
     _entry(AwsAccessKeyRule),
     _entry(DatabaseUrlPasswordRule),
+    _entry(GcpServiceAccountKeyRule),
     _entry(HardcodedEnvValueRule),
     _entry(HighEntropyStringRule),
     _entry(JwtTokenRule),
     _entry(PhiPatternRule),
     _entry(PiiTestFixtureRule),
     _entry(PrivateKeyRule),
+    _entry(UrlCredentialsRule),
     _entry(ConditionalLogicRule),
     _entry(EagerTestRule),
     _entry(EmptyParametrizeRule),

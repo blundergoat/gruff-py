@@ -15,7 +15,10 @@ from gruffpy.reporting.html_reporter import HtmlReporter
 from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.reporting.markdown_reporter import MarkdownReporter
 from gruffpy.reporting.sarif_reporter import SarifReporter
+from gruffpy.reporting.text_reporter import TextReporter
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
+from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,10 +312,8 @@ def test_sarif_reporter_projects_registry_thresholds_and_options():
         if isinstance(rule, dict)
     }
 
-    assert rules["size.file-length"]["properties"]["thresholds"] == {
-        "warning": 1000,
-        "error": 1000,
-    }
+    assert rules["size.file-length"]["properties"]["threshold"] == 1000
+    assert "thresholds" not in rules["size.file-length"]["properties"]
     assert rules["test-quality.test-longer-than-sut"]["properties"]["options"] == {
         "ratio": 2.0,
     }
@@ -399,6 +400,122 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     assert result["properties"]["metadata"]["securitySeverity"] == "high"
     assert result["properties"]["metadata"]["sourceLabel"] == "quoted-placeholder"
     assert result["partialFingerprints"]["gruffFingerprint"] == fingerprint
+
+
+def test_dependency_security_findings_do_not_leak_raw_references_in_reporters() -> None:
+    """Dependency posture findings redact raw URL, Git, and local path references."""
+    findings = tuple(_dependency_security_findings())
+    report = _report(findings)
+    rendered_outputs = (
+        JsonReporter().render(report),
+        MarkdownReporter().render(report),
+        HtmlReporter().render(report),
+        GithubAnnotationsReporter().render(report),
+        SarifReporter().render(report),
+    )
+    leaked = [
+        raw_reference
+        for raw_reference in _RAW_DEPENDENCY_REFERENCES
+        if any(raw_reference in output for output in rendered_outputs)
+    ]
+
+    assert {finding.rule_id for finding in findings} == {
+        "security.dependency-git-reference",
+        "security.dependency-local-path",
+        "security.dependency-url-reference",
+    }
+    assert leaked == []
+
+
+def test_sensitive_data_findings_do_not_leak_raw_secrets_in_reporters() -> None:
+    """Sensitive-data reporters carry only redacted previews, never raw credential values."""
+    raw_secrets = (
+        "AIza" + "SyA1b2C3d4E5" + "f6G7h8I9j0K1" + "l2M3n4O5p6Q",
+        "rem0te" + "Secret!42",
+        "abc123" + "def456" + "abc123" + "def456",
+        "MIIEv" + ("A" * 120),
+    )
+    findings = tuple(_sensitive_data_findings())
+    report = _report(findings)
+    rendered_outputs = (
+        TextReporter().render(report),
+        JsonReporter().render(report),
+        MarkdownReporter().render(report),
+        HtmlReporter().render(report),
+        GithubAnnotationsReporter().render(report),
+        HotspotReporter().render(report),
+        SarifReporter().render(report),
+    )
+    leaked = [
+        raw_secret
+        for raw_secret in raw_secrets
+        if any(raw_secret in output for output in rendered_outputs)
+    ]
+
+    assert {
+        "sensitive-data.api-key-pattern",
+        "sensitive-data.gcp-service-account-key",
+        "sensitive-data.url-credentials",
+    } <= {finding.rule_id for finding in findings}
+    assert leaked == []
+
+
+_RAW_DEPENDENCY_REFERENCES = (
+    "downloads.example.test",
+    "github.com/acme",
+    "/opt/internal/widget",
+)
+
+
+def _dependency_security_findings() -> list[Finding]:
+    """Return dependency-posture findings produced by the real rule registry."""
+    source = """[project]
+dependencies = [
+    "urlpkg @ https://downloads.example.test/urlpkg-1.0.0.tar.gz",
+    "gitpkg @ git+https://github.com/acme/gitpkg.git@main",
+    "localpkg @ file:///opt/internal/widget",
+]
+"""
+    return [
+        finding
+        for finding in RuleRegistry.defaults().analyse(
+            [make_text_unit(source, "pyproject.toml")],
+            default_ctx(),
+        )
+        if finding.rule_id.startswith("security.dependency-")
+    ]
+
+
+def _sensitive_data_findings() -> list[Finding]:
+    """Return sensitive-data findings produced by the real rule registry."""
+    google_key = "AIza" + "SyA1b2C3d4E5" + "f6G7h8I9j0K1" + "l2M3n4O5p6Q"
+    url_password = "rem0te" + "Secret!42"
+    private_key_id = "abc123" + "def456" + "abc123" + "def456"
+    private_key_body = "MIIEv" + ("A" * 120)
+    private_key_value = (
+        "-----BEGIN "
+        + "PRIVATE KEY-----\\n"
+        + private_key_body
+        + "\\n-----END "
+        + "PRIVATE KEY-----\\n"
+    )
+    source = (
+        f"GOOGLE_API_KEY={google_key}\n"
+        f"REMOTE=https://deploy:{url_password}@api.example.test/v1\n"
+        "{\n"
+        '  "type": "service_account",\n'
+        f'  "private_key_id": "{private_key_id}",\n'
+        f'  "private_key": "{private_key_value}"\n'
+        "}\n"
+    )
+    return [
+        finding
+        for finding in RuleRegistry.defaults().analyse(
+            [make_text_unit(source, "secrets.env")],
+            default_ctx(),
+        )
+        if finding.rule_id.startswith("sensitive-data.")
+    ]
 
 
 def test_sarif_reporter_does_not_emit_stale_contract_keys():

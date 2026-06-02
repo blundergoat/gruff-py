@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 115 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 124 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -10,14 +10,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | Pillar | Rule count | Notes |
 |---|---:|---|
 | `size` | 7 | File, class, function, parameter, method, and attribute size |
-| `complexity` | 5 | Cyclomatic, cognitive, Halstead, nesting, and NPATH |
+| `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `dead-code` | 10 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 26 | Heuristic AST-level dangerous patterns |
-| `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
+| `security` | 34 | Heuristic AST-level dangerous patterns |
+| `sensitive-data` | 11 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 33 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
 
@@ -40,7 +40,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `complexity.halstead-volume`
 - `complexity.maintainability-index`
 - `complexity.nesting-depth`
-- `complexity.npath`
 
 ### Dead Code And Waste
 
@@ -91,12 +90,20 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 - `security.cors-wildcard-with-credentials`
 - `security.dangerous-function-call`
+- `security.dependency-git-reference`
+- `security.dependency-local-path`
+- `security.dependency-url-reference`
 - `security.disabled-ssl-verification`
 - `security.django-mark-safe`
 - `security.django-raw-sql`
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
+- `security.github-actions-broad-permissions`
+- `security.github-actions-pull-request-target`
+- `security.github-actions-remote-shell`
+- `security.github-actions-secrets-in-pr`
+- `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
 - `security.header-injection`
@@ -121,12 +128,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `sensitive-data.api-key-pattern`
 - `sensitive-data.aws-access-key`
 - `sensitive-data.database-url-password`
+- `sensitive-data.gcp-service-account-key`
 - `sensitive-data.hardcoded-env-value`
 - `sensitive-data.high-entropy-string`
 - `sensitive-data.jwt-token`
 - `sensitive-data.phi-pattern`
 - `sensitive-data.pii-test-fixture`
 - `sensitive-data.private-key`
+- `sensitive-data.url-credentials`
 
 ### Test Quality
 
@@ -177,7 +186,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cognitive complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cognitive` protects the complexity pillar by flagging cognitive complexity before it becomes costly to review, maintain, or trust.
@@ -194,7 +203,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Cyclomatic complexity
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
@@ -212,7 +221,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Halstead volume
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.halstead-volume` protects the complexity pillar by flagging halstead volume before it becomes costly to review, maintain, or trust.
@@ -230,7 +239,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Maintainability index
 - Pillar: `maintainability`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.maintainability-index` protects the maintainability pillar by flagging maintainability index before it becomes costly to review, maintain, or trust.
@@ -248,7 +257,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Nesting depth
 - Pillar: `complexity`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `complexity.nesting-depth` protects the complexity pillar by flagging nesting depth before it becomes costly to review, maintain, or trust.
@@ -259,24 +268,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Threshold direction: `above`
 - Bad example: Code that triggers `complexity.nesting-depth` leaves nesting depth unaddressed.
 - Good example: Code that satisfies `complexity.nesting-depth` makes nesting depth explicit or simpler.
-
-### `complexity.npath`
-
-- Name: NPATH complexity
-- Pillar: `complexity`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `complexity.npath` protects the complexity pillar by flagging npath complexity before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported npath complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Config threshold: `threshold` = `500`, `severity` = `error`
-- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
-- Threshold direction: `above`
-- Formula provenance: gruff-specific AST path-counting heuristic.
-- Bad example: Code that triggers `complexity.npath` leaves npath complexity unaddressed.
-- Good example: Code that satisfies `complexity.npath` makes npath complexity explicit or simpler.
 
 ### `dead-code.unused-private-attribute`
 
@@ -483,7 +474,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: TODO density
 - Pillar: `documentation`
 - Tier: `v0.1`
-- Default severity: `advisory`
+- Default severity: `error`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `docs.todo-density` protects the documentation pillar by flagging todo density before it becomes costly to review, maintain, or trust.
@@ -549,6 +540,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `naming.boolean-prefix` protects the naming pillar by flagging boolean prefix before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported boolean prefix directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
 - Bad example: Code that triggers `naming.boolean-prefix` leaves boolean prefix unaddressed.
 - Good example: Code that satisfies `naming.boolean-prefix` makes boolean prefix explicit or simpler.
 
@@ -683,6 +675,51 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `security.dangerous-function-call` leaves dangerous function call unaddressed.
 - Good example: Code that satisfies `security.dangerous-function-call` makes dangerous function call explicit or simpler.
 
+### `security.dependency-git-reference`
+
+- Name: Dependency installed from Git reference
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-git-reference` protects the security pillar by flagging dependency installed from git reference before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from git reference directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-829', 'CWE-1357']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-git-reference` leaves dependency installed from git reference unaddressed.
+- Good example: Code that satisfies `security.dependency-git-reference` makes dependency installed from git reference explicit or simpler.
+
+### `security.dependency-local-path`
+
+- Name: Dependency installed from local path
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-local-path` protects the security pillar by flagging dependency installed from local path before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from local path directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-local-path` leaves dependency installed from local path unaddressed.
+- Good example: Code that satisfies `security.dependency-local-path` makes dependency installed from local path explicit or simpler.
+
+### `security.dependency-url-reference`
+
+- Name: Dependency installed from direct URL
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.dependency-url-reference` protects the security pillar by flagging dependency installed from direct url before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported dependency installed from direct url directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-494', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.dependency-url-reference` leaves dependency installed from direct url unaddressed.
+- Good example: Code that satisfies `security.dependency-url-reference` makes dependency installed from direct url explicit or simpler.
+
 ### `security.disabled-ssl-verification`
 
 - Name: Disabled SSL verification
@@ -770,6 +807,81 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-489', 'CWE-215']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.flask-debug-enabled` leaves flask debug enabled unaddressed.
 - Good example: Code that satisfies `security.flask-debug-enabled` makes flask debug enabled explicit or simpler.
+
+### `security.github-actions-broad-permissions`
+
+- Name: Broad GitHub Actions token permissions
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-broad-permissions` protects the security pillar by flagging broad github actions token permissions before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported broad github actions token permissions directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-272', 'CWE-732']`, `owasp` = `['A01:2021-Broken Access Control']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-broad-permissions` leaves broad github actions token permissions unaddressed.
+- Good example: Code that satisfies `security.github-actions-broad-permissions` makes broad github actions token permissions explicit or simpler.
+
+### `security.github-actions-pull-request-target`
+
+- Name: Risky pull_request_target workflow
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-pull-request-target` protects the security pillar by flagging risky pull_request_target workflow before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported risky pull_request_target workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-94', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.github-actions-pull-request-target` leaves risky pull_request_target workflow unaddressed.
+- Good example: Code that satisfies `security.github-actions-pull-request-target` makes risky pull_request_target workflow explicit or simpler.
+
+### `security.github-actions-remote-shell`
+
+- Name: Remote script piped into a shell in CI
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-remote-shell` protects the security pillar by flagging remote script piped into a shell in ci before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported remote script piped into a shell in ci directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-494', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
+- Bad example: Code that triggers `security.github-actions-remote-shell` leaves remote script piped into a shell in ci unaddressed.
+- Good example: Code that satisfies `security.github-actions-remote-shell` makes remote script piped into a shell in ci explicit or simpler.
+
+### `security.github-actions-secrets-in-pr`
+
+- Name: Repository secret in a PR-triggered workflow
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: `security.github-actions-secrets-in-pr` protects the security pillar by flagging repository secret in a pr-triggered workflow before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported repository secret in a pr-triggered workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Security metadata: `cwe` = `['CWE-200', 'CWE-522']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pr-triggered workflow unaddressed.
+- Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pr-triggered workflow explicit or simpler.
+
+### `security.github-actions-unpinned-action`
+
+- Name: Unpinned GitHub Actions reference
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `warning`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: `security.github-actions-unpinned-action` protects the security pillar by flagging unpinned github actions reference before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported unpinned github actions reference directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Security metadata: `cwe` = `['CWE-1357', 'CWE-829']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'medium'`
+- Bad example: Code that triggers `security.github-actions-unpinned-action` leaves unpinned github actions reference unaddressed.
+- Good example: Code that satisfies `security.github-actions-unpinned-action` makes unpinned github actions reference explicit or simpler.
 
 ### `security.hardcoded-bind-all-interfaces`
 
@@ -1043,11 +1155,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `sensitive-data.api-key-pattern` protects the sensitive-data pillar by flagging api key pattern before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported api key pattern directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `sensitive-data.api-key-pattern` leaves api key pattern unaddressed.
-- Good example: Code that satisfies `sensitive-data.api-key-pattern` makes api key pattern explicit or simpler.
+- Rationale: Provider-prefixed API keys are high-signal credential leaks; keeping them under one rule avoids provider-specific config churn while the `vendor` metadata tells reviewers which console to rotate in.
+- Fix guidance: Rotate the key with the provider, remove it from source, and load it from a secret manager or environment-specific runtime configuration.
+- Confidence rationale: High confidence: each match requires a provider-specific prefix and minimum token length, with dummy/example placeholders skipped.
+- Bad example: `GOOGLE_API_KEY = "AIza..."` or `SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`
+- Good example: `GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]`
 
 ### `sensitive-data.aws-access-key`
 
@@ -1076,6 +1188,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `sensitive-data.database-url-password` leaves database url with password unaddressed.
 - Good example: Code that satisfies `sensitive-data.database-url-password` makes database url with password explicit or simpler.
+
+### `sensitive-data.gcp-service-account-key`
+
+- Name: GCP service-account key
+- Pillar: `sensitive-data`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: Google service-account JSON files combine an account identity with private-key material; committed copies usually grant fleet access.
+- Fix guidance: Remove the JSON key from source history, rotate it in Google Cloud IAM, and prefer Workload Identity or a runtime secret manager.
+- Confidence rationale: High confidence: the rule requires the `service_account` type marker and private-key material in the same file, while short placeholders pass.
+- Bad example: `{"type": "service_account", "private_key": "<redacted PEM key>"}`
+- Good example: Load Google credentials from the runtime environment or Workload Identity.
 
 ### `sensitive-data.hardcoded-env-value`
 
@@ -1161,12 +1287,26 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `sensitive-data.private-key` leaves private key unaddressed.
 - Good example: Code that satisfies `sensitive-data.private-key` makes private key explicit or simpler.
 
+### `sensitive-data.url-credentials`
+
+- Name: URL embedded credentials
+- Pillar: `sensitive-data`
+- Tier: `v0.1`
+- Default severity: `error`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
+- Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
+- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords.
+- Bad example: `REMOTE = "https://deploy:<password>@api.example.test"`
+- Good example: `REMOTE = "https://api.example.test"` plus a runtime Authorization header.
+
 ### `size.attribute-count`
 
 - Name: Attribute count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.attribute-count` protects the size pillar by flagging attribute count before it becomes costly to review, maintain, or trust.
@@ -1183,7 +1323,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Average function length per class
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.average-function-length` protects the size pillar by flagging average function length per class before it becomes costly to review, maintain, or trust.
@@ -1200,7 +1340,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Class length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.class-length` protects the size pillar by flagging class length before it becomes costly to review, maintain, or trust.
@@ -1217,7 +1357,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: File length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.file-length` protects the size pillar by flagging file length before it becomes costly to review, maintain, or trust.
@@ -1234,7 +1374,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Function length
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.function-length` protects the size pillar by flagging function length before it becomes costly to review, maintain, or trust.
@@ -1251,7 +1391,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Parameter count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.parameter-count` protects the size pillar by flagging parameter count before it becomes costly to review, maintain, or trust.
@@ -1268,7 +1408,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Public method count
 - Pillar: `size`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `size.public-method-count` protects the size pillar by flagging public method count before it becomes costly to review, maintain, or trust.
@@ -1685,7 +1825,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Name: Test function too long
 - Pillar: `test-quality`
 - Tier: `v0.1`
-- Default severity: `warning`
+- Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.

@@ -87,3 +87,22 @@ def test_threshold_helper_arguments_skipped():
 def test_source_line_assertion_skipped():
     src = "def test_foo():\n    assert [m.line for m in matches] == [2, 4]\n"
     assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_len_count_outside_allowlist_skipped():
+    src = "def test_foo():\n    assert len(items) == 5\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_reversed_len_count_outside_allowlist_skipped():
+    src = "def test_foo():\n    assert 7 == len(items)\n"
+    assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_opaque_equality_with_same_literal_still_fires():
+    # `5` is suppressed as a count above, but a bare expected value is still
+    # magic - the opaque-vs-cardinality distinction the rule must preserve.
+    src = "def test_foo():\n    assert result == 5\n"
+    findings = MagicNumberAssertionRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["numbers"] == [5]

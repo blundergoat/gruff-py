@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity._halstead import halstead_for
@@ -27,13 +27,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 180, error: int = 400) -> RuleContext:
+def _ctx(threshold: int = 180) -> RuleContext:
     rule = HalsteadVolumeRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )

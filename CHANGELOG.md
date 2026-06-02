@@ -2,6 +2,19 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+## v0.3.0 - 2026-06-02
+
+- **BREAKING: `complexity.npath` rule removed** - Deleted the noisy NPATH rubric. Migration: remove `complexity.npath` from selections and rule config; pinned configs now fail with `Unknown rule id`.
+- **BREAKING: `design.god-method` composite finding retired** - Removed the synthetic composite finding; correlated size/complexity scoring remains. Migration: delete `# gruff: disable=design.god-method` directives and regenerate baselines that pinned it.
+- **BREAKING: single-threshold rubrics (ADR-014)** - Severity rules now use one `threshold` plus one `severity`. Migration: replace `thresholds: {warning, error}` with `threshold` and `severity`, or rerun `gruff-py init --force`.
+- **Hook-native changed-region analysis** - `analyse` gained `--changed-ranges`, `--since`, `--diff`/`--diff -`, and `--changed-scope`. The Codex hook now delegates Python changed-region filtering to gruff-py with `--no-baseline`.
+- **New `check-ignore` command** - `gruff-py check-ignore` reports whether paths are ignored and why, using the same config and ignore engine as `analyse`. Exit codes mirror `git check-ignore`.
+- **`ignoredPathDetails` added to JSON output (additive)** - JSON reports now include skipped-path source and pattern details beside `ignoredPaths`; schema strings stay unchanged and old consumers can keep reading `ignoredPaths`.
+- **`paths.ignore` authoritative in every invocation mode** - Config ignores now have tested parity across directory walks, explicit files, and diff/changed-region scans. `--include-ignored` still never overrides config `paths.ignore`.
+- **Security supply-chain rules** - Added deterministic GitHub Actions and dependency-posture checks for unpinned actions, unsafe workflow permissions, risky PR workflows, direct URLs, VCS refs, and local dependencies. Catalogue reached 122 rules.
+- **Sensitive-data rule expansion** - Added GCP service-account-key and URL-credential rules, expanded grouped provider-token detection, guarded placeholders, and verified reporters never leak raw secrets. Catalogue reached 124 rules.
+- **Rubric-noise calibration** - Tightened noisy naming, test-quality, waste, magic-number, and missing-test heuristics, and down-weighted correlated size/complexity scoring without changing finding identities or schemas.
+
 ## v0.2.0 - 2026-05-28
 
 Cross-port `minimumSeverity:` config dimension under the new `gruff-py.config.v0.1` schema, line-insensitive `stableIdentity` field on JSON findings, triage tooling (`summary --group-by=rule`, `list-rules <rule_id>` explain mode, analyse-text volume hint), `docs.missing-*` message reword, and `naming.parameter-type-name` retirement. Summary payload reshaped under the new `gruff.summary.v2` schema. Catalogue drops to 115 rules across 11 pillars. Four breaking changes drive the minor bump.

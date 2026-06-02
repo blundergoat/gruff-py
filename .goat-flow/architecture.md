@@ -1,10 +1,20 @@
 # Architecture
 
+## Mission
+
+gruff-py governs **AI-generated code for human sign-off**. The operating assumption is that a coding agent produced the change and a reviewer who did not write it must read, review, and trust it, so the rule catalogue, severities, and scoring exist to raise that reviewer's confidence — not to enforce abstract style. As a coding-agent hook it **guides** through advisory findings and **forces** through `--fail-on`-gated warning and error findings toward three outcomes:
+
+- **Verifiable** — control flow a reviewer can follow and check against the stated requirement (the `size`, `complexity`, and `naming` pillars).
+- **Secure where review is weakest** — dangerous calls, misconfiguration, and leaked secrets the eye skips (the `security` and `sensitive-data` pillars).
+- **Tested for real** — behaviour-exercising tests rather than assertion-free or mock-only ceremony that inflates coverage (the `test-quality` pillar).
+
+This is the reason the `documentation` pillar requires doc comments even on private one-liners: agents routinely produce code that superficially works while misunderstanding the requirement, so forcing the agent to state intent, usage, contract, and failure behaviour gives the reviewer a prose contract to check the implementation against — a doc/code mismatch is itself a "look closer" signal. The same mission explains the severity order (`SECURITY` > `CORRECTNESS` > `INTEGRATION` > `PERFORMANCE` > `STYLE`) and why `test-quality` leans toward catching low-signal bloat. gruff-py is heuristic static analysis and complements `ruff`, `mypy`, `pytest`, dedicated scanners, and human review rather than replacing them. Recorded as a decision in ADR-022; the agent-hook tuning policy it implies is ADR-021.
+
 ## System Overview
 
 gruff-py is a Click-based Python CLI that analyses project files and emits text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF quality reports. It also ships a dependency-free local dashboard server that embeds the HTML report in a full-window browser shell. `src/gruffpy/cli.py` orchestrates config loading, source discovery, parsing, rule execution, scoring, reporting, display filtering, dashboard startup, and exit-code selection; domain objects live in focused packages under `src/gruffpy/`.
 
-The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `ProjectRuleProtocol`, `CompositeFindingFactory`, `ScoreCalculator`, `FindingDisplayFilter`, `DashboardPageRenderer`, the local dashboard server under `src/gruffpy/command/`, and the reporter classes under `src/gruffpy/reporting/`. Rules are isolated behind per-unit and project-level interfaces so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
+The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFileParser`, `RuleRegistry`, `ProjectRuleProtocol`, `ScoreCalculator`, `FindingDisplayFilter`, `DashboardPageRenderer`, the local dashboard server under `src/gruffpy/command/`, and the reporter classes under `src/gruffpy/reporting/`. Rules are isolated behind per-unit and project-level interfaces so the catalogue grows without making CLI parsing or report rendering own rule-specific behaviour.
 
 ## Request Flow
 
@@ -30,7 +40,18 @@ The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and
 
 ## Rules And Scoring
 
-`RuleRegistry.defaults()` instantiates the full rule catalogue: 103 rules across 10 active pillars (`size`, `complexity` + `maintainability`, `dead-code` + `waste`, `naming`, `documentation`, `security`, `sensitive-data`, `test-quality`, `design`). Each pillar lives under `src/gruffpy/rule/<pillar>/`. A subset of `test-quality` rules ship default-off and are opted in via `[tool.gruff-py.rules]`. `ProjectRuleProtocol` handles cross-file rules such as `design.single-implementor-protocol`, while `CompositeFindingFactory` synthesises `design.god-method` findings post-pass when size + complexity overlap on a symbol. `modernisation` is declared in the score model but its rule catalogue is still being built. `AnalysisConfig.from_registry()` snapshots each rule's default settings; selection and per-rule overrides are applied by `ConfigLoader`.
+`RuleRegistry.defaults()` instantiates the full rule catalogue: 124 rules across
+11 active pillars (`size`, `complexity`, `maintainability`, `dead-code`,
+`naming`, `documentation`, `security`, `sensitive-data`, `test-quality`,
+`design`, and `modernisation`). Each pillar lives under
+`src/gruffpy/rule/<pillar>/`, with legacy `waste.*` rule IDs emitting under the
+`dead-code` pillar. `ProjectRuleProtocol` handles cross-file rules such as
+`design.single-implementor-protocol`. Overlapping `size.*` and `complexity.*`
+findings on one symbol are billed once by `ScoreCalculator`'s correlated-rule
+clustering (`CORRELATED_COMPLEXITY_RULES`); the `design.god-method` composite
+that previously named that overlap was retired (ADR-024).
+`AnalysisConfig.from_registry()` snapshots each rule's default settings;
+selection and per-rule overrides are applied by `ConfigLoader`.
 
 Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.json`/`.ini`/`.conf` text files - the secret/PHI scanners under `sensitive-data.*` use this seam. Several test-quality rules read `pyproject.toml` once per run via `_pytest_config`; scope detection for test-quality rules is memoised through `_test_quality_node_helper` so the catalogue computes per-unit scope exactly once.
 

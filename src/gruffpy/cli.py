@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -12,6 +12,7 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
+from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
@@ -24,6 +25,7 @@ from gruffpy.cli_options import (
     analyse_command as _analyse_command,
     apply_decorators,
     bind_root_group,
+    check_ignore_command as _check_ignore_command,
     completion_command as _completion_command,
     dashboard_command as _dashboard_command,
     help_command_decorator as _help_command_decorator,
@@ -37,6 +39,12 @@ from gruffpy.cli_options import (
 )
 from gruffpy.cli_state import CliState, state as _state
 from gruffpy.cli_summary import summary_payload, summary_text
+from gruffpy.command.check_ignore_verdict import (
+    check_ignore_exit_code,
+    classify_paths,
+    render_check_ignore_json,
+    render_check_ignore_text,
+)
 from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
@@ -73,6 +81,34 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 class CliGroup(click.Group):
     """Root command group with the custom Symfony-style help screen."""
 
+    def main(
+        self,
+        args: Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,  # gruff: disable=naming.abbreviation -- Click API name.
+        standalone_mode: bool = True,
+        **extra: Any,
+    ) -> Any:
+        """Run Click after normalising optional-value ``--diff`` usage.
+
+        Args:
+            args: Command-line arguments to pass through Click.
+            prog_name: Program name Click should show in help and errors.
+            complete_var: Shell-completion environment variable name from Click's API.
+            standalone_mode: Whether Click should handle exceptions and process exit.
+            extra: Additional Click keyword arguments.
+
+        Returns:
+            Result returned by Click's root command invocation.
+        """
+        return super().main(
+            args=_normalise_optional_diff_args(args),
+            prog_name=prog_name,
+            complete_var=complete_var,
+            standalone_mode=standalone_mode,
+            **extra,
+        )
+
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         """Write the root help menu.
 
@@ -81,6 +117,40 @@ class CliGroup(click.Group):
             formatter: Click formatter receiving the rendered help.
         """
         formatter.write(_root_menu(ctx))
+
+
+def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str]:
+    """Let ``--diff`` behave like an optional-value flag for analyse/report.
+
+    Click resolves ``args=None`` to ``sys.argv[1:]`` inside ``Command.main`` after this
+    hook would run, so console-script / ``python -m`` calls arrive as ``None`` and bare
+    ``--diff`` is never rewritten (CliRunner hid this); resolve ``sys.argv`` here too.
+    """
+    if args is None:
+        args = sys.argv[1:]
+    command_index = next(
+        (index for index, value in enumerate(args) if value in {"analyse", "report"}),
+        None,
+    )
+    if command_index is None:
+        return list(args)
+    normalised = list(args[: command_index + 1])
+    tail = list(args[command_index + 1 :])
+    index = 0
+    while index < len(tail):
+        value = tail[index]
+        if value == "--diff":
+            next_value = tail[index + 1] if index + 1 < len(tail) else None
+            if next_value is None or (next_value.startswith("-") and next_value != "-"):
+                normalised.append("--diff=working-tree")
+            else:
+                normalised.append(value)
+                normalised.append(next_value)
+                index += 1
+        else:
+            normalised.append(value)
+        index += 1
+    return normalised
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +175,11 @@ class _AnalysisCliRequest:
     baseline_path: Path | None
     generate_baseline_path: Path | None
     should_skip_baseline: bool
+    diff_mode: str
+    diff_patch: str
+    since: str
+    changed_ranges: str
+    changed_scope: str
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -488,6 +563,40 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
         _write_stdout("\n")
 
 
+@_check_ignore_command
+def check_ignore(**kwargs: Any) -> None:
+    """Report whether gruff would ignore each path, and why.
+
+    Args:
+        kwargs: Click-supplied arguments and options.
+    """
+    paths = cast(tuple[str, ...], kwargs["paths"])
+    config_path = cast(Path | None, kwargs["config_path"])
+    no_config = cast(bool, kwargs["no_config"])
+    output_format = cast(str, kwargs["check_ignore_format"])
+    if not paths:
+        click.echo("check-ignore requires at least one path.", err=True)
+        sys.exit(2)
+    if no_config and config_path is not None:
+        click.echo("--no-config cannot be combined with an explicit --config path.", err=True)
+        sys.exit(2)
+    try:
+        verdicts = classify_paths(
+            project_root=Path.cwd(),
+            paths=paths,
+            config_path=config_path,
+            no_config=no_config,
+        )
+    except ConfigError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(2)
+    if output_format == "json":
+        _write_stdout(render_check_ignore_json(verdicts))
+    else:
+        _write_stdout(render_check_ignore_text(verdicts))
+    sys.exit(check_ignore_exit_code(verdicts))
+
+
 def _analysis_request(
     kwargs: Mapping[str, Any],
     *,
@@ -513,6 +622,11 @@ def _analysis_request(
         baseline_path=cast(Path | None, kwargs.get("baseline_path")),
         generate_baseline_path=_resolve_generate_baseline_path(kwargs),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
+        diff_mode=cast(str, kwargs.get("diff_mode", "")),
+        diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
+        since=cast(str, kwargs.get("since", "")),
+        changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
+        changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
     )
 
 
@@ -549,6 +663,11 @@ def _summary_analysis_request(
         baseline_path=None,
         generate_baseline_path=None,
         should_skip_baseline=True,
+        diff_mode="",
+        diff_patch="",
+        since="",
+        changed_ranges="",
+        changed_scope="symbol",
     )
 
 
@@ -627,22 +746,29 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     )
     try:
         return run_analysis(
-            paths=request.paths,
-            config_path=request.config_path,
-            no_config=request.should_skip_config,
-            output=request.output,
-            fail_threshold=request.fail_on,
-            config_severity_command=(
-                "" if request.was_fail_on_set_on_cli else request.command_name
-            ),
-            include_ignored=request.should_include_ignored,
-            project_root=Path.cwd(),
-            display_filter=display_filter,
-            baseline=BaselineOptions(
-                apply_path=request.baseline_path,
-                generate_path=request.generate_baseline_path,
-                disabled=request.should_skip_baseline,
-            ),
+            AnalysisRunRequest(
+                paths=request.paths,
+                config_path=request.config_path,
+                no_config=request.should_skip_config,
+                output=request.output,
+                fail_threshold=request.fail_on,
+                config_severity_command=(
+                    "" if request.was_fail_on_set_on_cli else request.command_name
+                ),
+                include_ignored=request.should_include_ignored,
+                project_root=Path.cwd(),
+                display_filter=display_filter,
+                baseline=BaselineOptions(
+                    apply_path=request.baseline_path,
+                    generate_path=request.generate_baseline_path,
+                    disabled=request.should_skip_baseline,
+                ),
+                diff_mode=request.diff_mode,
+                diff_patch=request.diff_patch,
+                since=request.since,
+                changed_ranges=request.changed_ranges,
+                changed_scope=request.changed_scope,
+            )
         )
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
@@ -673,6 +799,12 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
         exit_code=2,
         config_path=config_path_str,
     )
+
+
+def _read_diff_patch(diff_mode: str) -> str:
+    if diff_mode != "-":
+        return ""
+    return sys.stdin.read()
 
 
 def _render_report(
@@ -720,7 +852,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "defaultSeverity": definition.default_severity.value,
         "confidence": definition.confidence.value,
         "defaultEnabled": definition.default_enabled,
-        "thresholds": dict(definition.default_thresholds),
+        **definition.threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
         "documentation": documentation.to_payload(),

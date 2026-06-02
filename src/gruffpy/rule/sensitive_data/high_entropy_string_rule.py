@@ -21,6 +21,7 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     redact_preview,
     shannon_entropy,
 )
+from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_api_key
 
 _CANDIDATE_RE = re.compile(r"[A-Za-z0-9+/=_-]{20,}")
 _ENTROPY_THRESHOLD = 4.5
@@ -111,6 +112,8 @@ def _is_benign_literal(candidate: str) -> bool:
     if "\\" in candidate or candidate.count("/") >= 2:
         # Filesystem paths have multiple separators; one `/` is fine
         # (base64 alphabet includes `/`).
+        return True
+    if contains_provider_api_key(candidate):
         return True
     if _PASCAL_CASE_RE.match(candidate):
         return True

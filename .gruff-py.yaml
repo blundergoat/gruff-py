@@ -71,7 +71,6 @@ selection:
   - complexity.halstead-volume
   - complexity.maintainability-index
   - complexity.nesting-depth
-  - complexity.npath
   - dead-code.unused-private-attribute
   - dead-code.unused-private-function
   - design.single-implementor-protocol
@@ -100,12 +99,20 @@ selection:
   - naming.test-naming-consistency
   - security.cors-wildcard-with-credentials
   - security.dangerous-function-call
+  - security.dependency-git-reference
+  - security.dependency-local-path
+  - security.dependency-url-reference
   - security.disabled-ssl-verification
   - security.django-mark-safe
   - security.django-raw-sql
   - security.error-suppression
   - security.extract-compact-user-input
   - security.flask-debug-enabled
+  - security.github-actions-broad-permissions
+  - security.github-actions-pull-request-target
+  - security.github-actions-remote-shell
+  - security.github-actions-secrets-in-pr
+  - security.github-actions-unpinned-action
   - security.hardcoded-bind-all-interfaces
   - security.hardcoded-framework-secret-key
   - security.header-injection
@@ -127,12 +134,14 @@ selection:
   - sensitive-data.api-key-pattern
   - sensitive-data.aws-access-key
   - sensitive-data.database-url-password
+  - sensitive-data.gcp-service-account-key
   - sensitive-data.hardcoded-env-value
   - sensitive-data.high-entropy-string
   - sensitive-data.jwt-token
   - sensitive-data.phi-pattern
   - sensitive-data.pii-test-fixture
   - sensitive-data.private-key
+  - sensitive-data.url-credentials
   - size.attribute-count
   - size.average-function-length
   - size.class-length
@@ -204,10 +213,6 @@ rules:
     enabled: true
     threshold: 6
     severity: error
-  complexity.npath:
-    enabled: true
-    threshold: 500
-    severity: error
   dead-code.unused-private-attribute:
     enabled: true
   dead-code.unused-private-function:
@@ -278,6 +283,20 @@ rules:
     enabled: true
   naming.boolean-prefix:
     enabled: true
+    options:
+      acceptedBooleanNames:
+      - all
+      - apply
+      - check
+      - dev
+      - enabled
+      - force
+      - fresh
+      - harness
+      - json
+      - ok
+      - verbose
+      - "yes"
   naming.confusing-name:
     enabled: true
     options:
@@ -328,6 +347,7 @@ rules:
       - _halstead
       - _secret_scanner_helper
       - _comment_scanner
+      - _dependency_posture_helper
   naming.short-variable:
     enabled: true
     options:
@@ -349,6 +369,12 @@ rules:
     enabled: true
   security.dangerous-function-call:
     enabled: true
+  security.dependency-git-reference:
+    enabled: true
+  security.dependency-local-path:
+    enabled: true
+  security.dependency-url-reference:
+    enabled: true
   security.disabled-ssl-verification:
     enabled: true
   security.django-mark-safe:
@@ -360,6 +386,16 @@ rules:
   security.extract-compact-user-input:
     enabled: true
   security.flask-debug-enabled:
+    enabled: true
+  security.github-actions-broad-permissions:
+    enabled: true
+  security.github-actions-pull-request-target:
+    enabled: true
+  security.github-actions-remote-shell:
+    enabled: true
+  security.github-actions-secrets-in-pr:
+    enabled: true
+  security.github-actions-unpinned-action:
     enabled: true
   security.hardcoded-bind-all-interfaces:
     enabled: true
@@ -403,6 +439,8 @@ rules:
     enabled: true
   sensitive-data.database-url-password:
     enabled: true
+  sensitive-data.gcp-service-account-key:
+    enabled: true
   sensitive-data.hardcoded-env-value:
     enabled: true
   sensitive-data.high-entropy-string:
@@ -414,6 +452,8 @@ rules:
   sensitive-data.pii-test-fixture:
     enabled: true
   sensitive-data.private-key:
+    enabled: true
+  sensitive-data.url-credentials:
     enabled: true
   size.attribute-count:
     enabled: true

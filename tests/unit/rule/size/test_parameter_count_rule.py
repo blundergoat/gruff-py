@@ -1,7 +1,7 @@
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
@@ -18,13 +18,13 @@ def _make_unit(source: str) -> AnalysisUnit:
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
-def _ctx(warning: int = 5, error: int = 8) -> RuleContext:
+def _ctx(threshold: int = 5) -> RuleContext:
     rule = ParameterCountRule()
     config = AnalysisConfig(
         rules={
             rule.definition().id: RuleSettings(
                 enabled=True,
-                thresholds={"warning": warning, "error": error},
+                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
             ),
         }
     )
@@ -36,12 +36,12 @@ def test_function_within_threshold_emits_no_finding():
     assert ParameterCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_function_above_warning_emits_warning():
+def test_function_above_threshold_emits_error():
     source = "def f(a, b, c, d, e, ff):\n    return a\n"
     findings = ParameterCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.WARNING
+    assert f.severity == Severity.ERROR
     assert f.metadata["parameters"] == 6
 
 
