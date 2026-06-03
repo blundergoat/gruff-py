@@ -249,9 +249,9 @@ def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
 
 
 def _assert_sarif_shared_contract(payload: dict[str, Any]) -> None:
-    assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff.analysis.v2"
     assert payload["runs"][0]["properties"]["score"] == _report().score.composite.score
-    assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff-py.analysis.v1"
+    assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff.analysis.v2"
 
 
 def _unknown_rule_payload() -> dict[str, Any]:

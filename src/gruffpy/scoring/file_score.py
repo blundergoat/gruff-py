@@ -37,7 +37,7 @@ class FileScore:
     mutation_score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the file score to its ``gruff-py.analysis.v1`` payload shape.
+        """Serialise the file score to its ``gruff.analysis.v2`` payload shape.
 
         ``penalty`` is rounded to two decimals so JSON comparisons across
         the PHP/Python implementations stay stable.

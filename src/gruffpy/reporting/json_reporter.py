@@ -1,4 +1,4 @@
-"""Renders an AnalysisReport as ``gruff-py.analysis.v1`` JSON."""
+"""Renders an AnalysisReport as ``gruff.analysis.v2`` JSON."""
 
 import json
 import math
@@ -15,7 +15,7 @@ class JsonReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as the ``gruff-py.analysis.v1`` JSON document.
+        """Render *report* as the ``gruff.analysis.v2`` JSON document.
 
         Output is byte-compatible with gruff-php - 4-space indent,
         ASCII-escaped non-ASCII, unescaped forward slashes. Finite floats

@@ -27,12 +27,12 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 | Binary | `gruff-py` |
 | Rule catalogue | 124 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
-| Analysis schema | `gruff-py.analysis.v1` |
+| Analysis schema | `gruff.analysis.v2` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
 | Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `minimumSeverity:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
-Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. The Python schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/reporting.md`](docs/reporting.md#json) for the input set.
+Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v2` schema string; baseline, hotspot, and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/reporting.md`](docs/reporting.md#json) for the input set.
 
 ## Requirements
 
@@ -107,7 +107,7 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 | Format | Use it for |
 | --- | --- |
 | `text` | Human terminal output. |
-| `json` | Full `gruff-py.analysis.v1` report. |
+| `json` | Full `gruff.analysis.v2` report. |
 | `html` | Self-contained inspection report. |
 | `markdown` | Pull-request or issue comment summary. |
 | `github` | GitHub Actions workflow annotations. |
@@ -232,7 +232,7 @@ Default scans are local source inspections. `gruff-py` parses Python source and 
 
 ## Stability Contract
 
-The `0.1.x` line treats rule IDs, finding fingerprints, baseline identity, `gruff-py.analysis.v1`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, SARIF rendering, and CLI exit semantics as compatibility-sensitive. Breaking changes should be tagged as a future minor release and recorded in [`CHANGELOG.md`](CHANGELOG.md).
+The `0.1.x` line treats rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, SARIF rendering, and CLI exit semantics as compatibility-sensitive. Breaking changes should be tagged as a future minor release and recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## How It Compares
 

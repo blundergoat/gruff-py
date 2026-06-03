@@ -777,7 +777,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
 
 
 def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
-    """Build a synthetic ``gruff-py.analysis.v1`` report for a config-load failure.
+    """Build a synthetic ``gruff.analysis.v2`` report for a config-load failure.
 
     Reserved for ``--format json`` callers: machine-readable consumers need a
     parseable failure payload (``diagnostics: [{"type": "config-error", ...}]``,

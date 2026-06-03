@@ -55,7 +55,7 @@ Smoke-test the built wheel in a clean environment before publishing.
 
 ## Compatibility Checks
 
-- Confirm `gruff-py.analysis.v1` has not changed unexpectedly.
+- Confirm `gruff.analysis.v2` has not changed unexpectedly.
 - Confirm `gruff-py.hotspot.v1` has not changed unexpectedly.
 - Confirm `gruff-py.baseline.v1` remains reserved for cross-implementation use.
 - Confirm fingerprint golden tests pass (`tests/unit/finding/test_fingerprint.py`).

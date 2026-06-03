@@ -29,7 +29,7 @@ class ScoreReport:
     explanation: str
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the full score report to its ``gruff-py.analysis.v1`` payload shape.
+        """Serialise the full score report to its ``gruff.analysis.v2`` payload shape.
 
         Composite grade, scope, explanation string, all pillar scores, the
         top-offender table, and the cyclomatic-complexity distribution

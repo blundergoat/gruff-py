@@ -10,9 +10,12 @@ bumps it, per the cross-impl CONTRACT.md compatibility policy):
   the matched directory for ``default``, the lockfile name for ``generated``,
   and ``null`` for ``gitignore``. Existing consumers reading ``ignoredPaths``
   as a list of strings are unaffected.
+- ``gruff.analysis.v2`` replaces the language-prefixed analysis schema string
+  for cross-port JSON consumers. Baseline, hotspot, summary, and config schema
+  strings are unchanged.
 """
 
-ANALYSIS_SCHEMA_VERSION = "gruff-py.analysis.v1"
+ANALYSIS_SCHEMA_VERSION = "gruff.analysis.v2"
 BASELINE_SCHEMA_VERSION = "gruff-py.baseline.v1"
 HOTSPOT_SCHEMA_VERSION = "gruff-py.hotspot.v1"
 SUMMARY_SCHEMA_VERSION = "gruff.summary.v2"
