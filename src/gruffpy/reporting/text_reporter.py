@@ -26,7 +26,7 @@ class TextReporter:
         """
         counts = report.finding_counts()
         lines: list[str] = [
-            f"{TOOL_NAME} {report.tool_version}",
+            f"{TOOL_NAME} {report.tool_version} analyse",
             f"Format: {report.format}",
             f"Fail threshold: {report.fail_on}",
             "",
@@ -41,15 +41,11 @@ class TextReporter:
         _append_path_section(lines, "Missing paths", report.missing_paths)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
-        _append_score(lines, report)
+        _append_score(lines, report, counts)
         _append_findings(lines, report.findings)
 
         lines.append("")
         lines.append("Summary")
-        lines.append(
-            f"  Findings: {counts['total']} (advisory: {counts['advisory']}, "
-            f"warning: {counts['warning']}, error: {counts['error']})"
-        )
         lines.append(f"  Exit code: {report.exit_code}")
         _append_output_volume_hint(lines, report)
         return "\n".join(lines) + "\n"
@@ -139,13 +135,18 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
         )
 
 
-def _append_score(lines: list[str], report: AnalysisReport) -> None:
+def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, int]) -> None:
     if report.score is None:
         return
     lines.append("")
     lines.append("Score")
     lines.append(
-        f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f}/100)"
+        f"  Composite: {report.score.composite.letter} "
+        f"({report.score.composite.score:.2f} / 100)"
+    )
+    lines.append(
+        f"  Findings: {counts['total']} total · {counts['error']} error · "
+        f"{counts['warning']} warning · {counts['advisory']} advisory"
     )
     lines.append(f"  Scope: {report.score.scope}")
     lines.append("  Pillars:")

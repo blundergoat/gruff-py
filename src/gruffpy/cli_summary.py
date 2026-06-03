@@ -85,20 +85,33 @@ def summary_text(
     """
     payload = summary_payload(report, top, elapsed_seconds, group_by=group_by)
     summary = payload["summary"]
+    counts = report.finding_counts()
     paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
     lines = [
-        f"gruff {report.tool_version} summary",
+        f"{TOOL_NAME} {report.tool_version} summary",
         f"Path: {paths_display}",
         (
             f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
             f"{summary['ignored']} ignored, {summary['missing']} missing, "
             f"{summary['parseErrors']} parse errors"
         ),
-        f"Findings: {summary['findings']}",
-        f"Elapsed: {summary['elapsedSeconds']:.3f}s",
-        "",
-        "Pillars",
     ]
+    if report.score is not None:
+        lines.append(
+            f"Composite: {report.score.composite.letter} "
+            f"({report.score.composite.score:.2f} / 100)"
+        )
+    lines.append(
+        f"Findings: {counts['total']} total · {counts['error']} error · "
+        f"{counts['warning']} warning · {counts['advisory']} advisory"
+    )
+    lines.extend(
+        [
+            f"Elapsed: {summary['elapsedSeconds']:.3f}s",
+            "",
+            "Pillars",
+        ]
+    )
     lines.extend(_format_pillar_text_rows(cast(list[dict[str, Any]], payload["pillars"])))
     if group_by == "rule":
         lines.append("")
