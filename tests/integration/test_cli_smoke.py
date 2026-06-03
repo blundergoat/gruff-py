@@ -297,6 +297,61 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     assert hunk_payload["suppressedCount"] >= 1
 
 
+def test_analyse_changed_scope_symbol_accounts_for_every_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Native changed-region contract the agent hook trusts (it does not re-filter by
+    # line): with the full rule set the hook runs, every finding a full scan produces
+    # is either surfaced or counted in suppressedCount, and both counters are present
+    # and equal. No display filter here (e.g. --include-rule): a display filter narrows
+    # `findings[]` only, not `suppressedCount`, so it is not part of this invariant.
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    # Three undocumented functions -> findings across the alpha/beta/gamma symbols
+    # (plus module-docstring/readme debt), reported at the def lines (alpha:1, beta:5,
+    # gamma:9). N is read from the run, not hard-coded, so it survives catalogue growth.
+    (src / "sample.py").write_text(
+        "def alpha():\n    return 1\n\n\n"
+        "def beta():\n    return 2\n\n\n"
+        "def gamma():\n    return 3\n"
+    )
+    base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+
+    full = CliRunner().invoke(main, [*base, "src/sample.py"])
+    # Edit beta's body (line 6); symbol scope widens it to the whole beta declaration,
+    # surfacing beta's signature-line (5) finding from a change on line 6.
+    scoped = CliRunner().invoke(
+        main,
+        [*base, "--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py"],
+    )
+
+    assert full.exit_code == 0, full.output
+    assert scoped.exit_code == 0, scoped.output
+    full_payload = json.loads(full.output)
+    scoped_payload = json.loads(scoped.output)
+
+    total = len(full_payload["findings"])
+    assert {"alpha", "beta", "gamma"} <= {f["symbol"] for f in full_payload["findings"]}
+    # A full scan carries neither changed-region counter.
+    assert "suppressedCount" not in full_payload
+    assert "diff" not in full_payload
+
+    surfaced_symbols = {finding["symbol"] for finding in scoped_payload["findings"]}
+    suppressed = scoped_payload["suppressedCount"]
+    # Widening surfaces the edited symbol (its def-line finding) and nothing else.
+    assert "beta" in surfaced_symbols
+    assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
+    assert any(finding["line"] == 5 for finding in scoped_payload["findings"])
+    # No finding is dropped silently: surfaced + suppressed accounts for all of N.
+    assert len(scoped_payload["findings"]) + suppressed == total
+    assert suppressed >= 1
+    # Both counters are present and equal, so a refactor cannot drop the one the hook reads.
+    assert "suppressedCount" in scoped_payload
+    assert scoped_payload["diff"]["suppressedCount"] == suppressed
+
+
 def test_analyse_agent_command_ignores_default_baseline_when_disabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
