@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 124 rules in `RuleRegistry.defaults()`.
+gruff-py `0.1` registers 125 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -18,7 +18,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 34 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 11 | Secret, key, PII, and PHI patterns |
-| `test-quality` | 33 | Pytest-aware test smells and project config checks |
+| `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 1 | Project-level design rule |
 
 ## Rule IDs
@@ -165,6 +165,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.setup-bloat`
 - `test-quality.skipped-without-reason`
 - `test-quality.sleep-in-test`
+- `test-quality.static-analysis-redundant-test`
 - `test-quality.sut-not-called`
 - `test-quality.tautological-type-assertion`
 - `test-quality.test-function-too-long`
@@ -1791,6 +1792,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `test-quality.sleep-in-test` leaves sleep in test unaddressed.
 - Good example: Code that satisfies `test-quality.sleep-in-test` makes sleep in test explicit or simpler.
+
+### `test-quality.static-analysis-redundant-test`
+
+- Name: Static-analysis-redundant test candidate
+- Pillar: `test-quality`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: A test that asserts a class or member is declared restates a fact the parser already proves; the assertion adds no behavioural coverage beyond what static analysis gives for free.
+- Fix guidance: Remove only the redundant assertion, or replace it with behavioural evidence - call the member and assert on the result.
+- Confidence rationale: High confidence: the rule fires only on literal references to a class declared in the same parsed file and skips every dynamic, imported, instance-bound, or private shape.
+- Bad example: `def test_has_render(): assert hasattr(ShapeService, 'render')`
+- Good example: `def test_render(): assert ShapeService().render() == 'shape'`
 
 ### `test-quality.sut-not-called`
 

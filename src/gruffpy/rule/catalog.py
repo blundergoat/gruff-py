@@ -147,6 +147,9 @@ from gruffpy.rule.test_quality.repeated_structure_missing_parametrize_rule impor
 from gruffpy.rule.test_quality.setup_bloat_rule import SetupBloatRule
 from gruffpy.rule.test_quality.skipped_without_reason_rule import SkippedWithoutReasonRule
 from gruffpy.rule.test_quality.sleep_in_test_rule import SleepInTestRule
+from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
+    StaticAnalysisRedundantTestRule,
+)
 from gruffpy.rule.test_quality.sut_not_called_rule import SutNotCalledRule
 from gruffpy.rule.test_quality.tautological_type_assertion_rule import (
     TautologicalTypeAssertionRule,
@@ -422,6 +425,8 @@ def _custom_docs_for(
                 ),
                 config_keys=config_keys,
             )
+        case StaticAnalysisRedundantTestRule.ID:
+            return _static_analysis_redundant_docs(config_keys)
     return None
 
 
@@ -489,6 +494,41 @@ def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "userinfo and skips common placeholder passwords."
         ),
         config_keys=config_keys,
+    )
+
+
+def _static_analysis_redundant_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for the static-analysis-redundant-test candidate rule."""
+    return RuleDocs(
+        rationale=(
+            "A test that asserts a class or member is declared restates a fact "
+            "the parser already proves; the assertion adds no behavioural "
+            "coverage beyond what static analysis gives for free."
+        ),
+        fix_guidance=(
+            "Remove only the redundant assertion, or replace it with behavioural "
+            "evidence - call the member and assert on the result."
+        ),
+        bad_example="`def test_has_render(): assert hasattr(ShapeService, 'render')`",
+        good_example="`def test_render(): assert ShapeService().render() == 'shape'`",
+        confidence_rationale=(
+            "High confidence: the rule fires only on literal references to a "
+            "class declared in the same parsed file and skips every dynamic, "
+            "imported, instance-bound, or private shape."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "Public API or compatibility contract where runtime "
+                    "existence is the behaviour under test."
+                ),
+                mitigation=(
+                    "Keep the test when the runtime contract is intentional; "
+                    "gruff reports this as a candidate, not a deletion command."
+                ),
+            ),
+        ),
     )
 
 
@@ -845,6 +885,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(SetupBloatRule),
     _entry(SkippedWithoutReasonRule),
     _entry(SleepInTestRule),
+    _entry(StaticAnalysisRedundantTestRule),
     _entry(SutNotCalledRule),
     _entry(TautologicalTypeAssertionRule),
     _entry(TestFunctionTooLongRule),

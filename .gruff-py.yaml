@@ -175,6 +175,7 @@ selection:
   - test-quality.setup-bloat
   - test-quality.skipped-without-reason
   - test-quality.sleep-in-test
+  - test-quality.static-analysis-redundant-test
   - test-quality.sut-not-called
   - test-quality.tautological-type-assertion
   - test-quality.test-function-too-long
@@ -571,6 +572,8 @@ rules:
   test-quality.skipped-without-reason:
     enabled: true
   test-quality.sleep-in-test:
+    enabled: true
+  test-quality.static-analysis-redundant-test:
     enabled: true
   test-quality.sut-not-called:
     enabled: true
