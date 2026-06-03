@@ -1,4 +1,12 @@
-"""Report value object serialized as ``gruff.analysis.v2``."""
+"""Native analysis-run value objects projected as the ``gruff.analysis.v2`` schema.
+
+Defines :class:`AnalysisReport` - the frozen outcome of one analysis run, carrying
+requested paths, file counts, findings, score, diagnostics, ignored paths, and exit
+code - and :class:`ReportExtensions` for the optional mutation, diff, trend, baseline,
+and review sections. Every reporter (JSON, SARIF, text) consumes this object, and its
+JSON projection is the cross-implementation ``gruff.analysis.v2`` contract, so the
+field names here are a compatibility surface.
+"""
 
 from dataclasses import dataclass, field
 from typing import Any

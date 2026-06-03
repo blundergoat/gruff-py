@@ -1,4 +1,10 @@
-"""Renders an AnalysisReport as ``gruff.analysis.v2`` JSON."""
+"""Serializes an :class:`AnalysisReport` into ``gruff.analysis.v2`` JSON text.
+
+Owns the byte-for-byte JSON projection of an analysis run - 4-space indent,
+ASCII-escaped non-ASCII, and unescaped forward slashes - so this port emits
+documents identical to gruff-php and the other siblings. The rendering contract
+and its float-coercion rules live on :class:`JsonReporter` below.
+"""
 
 import json
 import math
