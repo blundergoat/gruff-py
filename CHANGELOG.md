@@ -2,6 +2,10 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+## [Unreleased]
+
+- **BREAKING: analysis JSON schema string unified** - `analyse --format json`, `report --format json`, SARIF `run.properties.gruffSchemaVersion`, and config-error JSON payloads now emit `schemaVersion: "gruff.analysis.v2"` instead of `gruff-py.analysis.v1`. Migration: consumers that key on the schema string should accept the new shared gruff-family value; baseline, hotspot, summary, and config schema strings are unchanged.
+
 ## v0.3.0 - 2026-06-02
 
 - **BREAKING: `complexity.npath` rule removed** - Deleted the noisy NPATH rubric. Migration: remove `complexity.npath` from selections and rule config; pinned configs now fail with `Unknown rule id`.

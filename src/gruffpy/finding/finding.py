@@ -89,7 +89,7 @@ class Finding:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the finding to its ``gruff-py.analysis.v1`` JSON shape.
+        """Serialise the finding to its ``gruff.analysis.v2`` JSON shape.
 
         Keys are camelCased to match the shared schema; the ``fingerprint``
         is computed on the fly to avoid serialising stale values when

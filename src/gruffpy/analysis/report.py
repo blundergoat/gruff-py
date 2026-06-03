@@ -1,4 +1,4 @@
-"""Report value object serialized as ``gruff-py.analysis.v1``."""
+"""Report value object serialized as ``gruff.analysis.v2``."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -39,7 +39,7 @@ class ReportExtensions:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisReport:
-    """Native analysis report value object for ``gruff-py.analysis.v1``.
+    """Native analysis report value object for ``gruff.analysis.v2``.
 
     Attributes:
         tool_version: gruff-py version that produced the report.
@@ -149,7 +149,7 @@ class AnalysisReport:
         """Serialize the report to the native JSON-compatible payload.
 
         Returns:
-            Dictionary shaped according to ``gruff-py.analysis.v1``.
+            Dictionary shaped according to ``gruff.analysis.v2``.
         """
         report: dict[str, Any] = {
             "schemaVersion": ANALYSIS_SCHEMA_VERSION,

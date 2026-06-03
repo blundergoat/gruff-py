@@ -872,7 +872,7 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(
 
     assert result.exit_code == 2
     payload = json.loads(result.stdout)
-    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["schemaVersion"] == "gruff.analysis.v2"
     assert payload["findings"] == []
     assert len(payload["diagnostics"]) == 1
     diagnostic = payload["diagnostics"][0]
@@ -1050,7 +1050,7 @@ def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.exit_code == 0, result.output
     assert result.output == ""
     payload = json.loads(output.read_text())
-    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["schemaVersion"] == "gruff.analysis.v2"
     assert payload["run"]["format"] == "json"
 
 
@@ -1227,7 +1227,7 @@ def test_cli_analyse_emits_schema_version_and_tool_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
-    assert payload["schemaVersion"] == "gruff-py.analysis.v1"
+    assert payload["schemaVersion"] == "gruff.analysis.v2"
     assert payload["tool"]["name"] == "gruff-py"
 
 
@@ -1299,7 +1299,7 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
     run = payload["runs"][0]
     assert payload["version"] == "2.1.0"
     assert run["tool"]["driver"]["name"] == "gruff-py"
-    assert run["properties"]["gruffSchemaVersion"] == "gruff-py.analysis.v1"
+    assert run["properties"]["gruffSchemaVersion"] == "gruff.analysis.v2"
 
 
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:

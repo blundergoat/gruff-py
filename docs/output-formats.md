@@ -13,7 +13,7 @@ uv run gruff-py analyse src tests --format text --fail-on warning
 
 ## JSON
 
-Use `json` for automation. JSON reports use `gruff-py.analysis.v1`.
+Use `json` for automation. JSON reports use `gruff.analysis.v2`.
 
 ```sh
 uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json

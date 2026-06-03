@@ -51,7 +51,7 @@ precedence rule and accepted values.
 
 ## JSON
 
-JSON reports use schema string `gruff-py.analysis.v1`.
+JSON reports use schema string `gruff.analysis.v2`.
 
 The top-level shape includes:
 
@@ -121,7 +121,7 @@ gruff-py analyse src tests --format sarif --fail-on none > gruff.sarif
 
 Then upload with GitHub's SARIF upload action in your workflow.
 
-SARIF output is a renderer over the native `gruff-py.analysis.v1` report model,
+SARIF output is a renderer over the native `gruff.analysis.v2` report model,
 not a replacement for the native JSON schema. It preserves native rule ids,
 finding fingerprints, severity, paths, locations, metadata, scoring, and
 fail-on behaviour. Result fingerprints are emitted as
