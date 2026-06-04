@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-02
+last_reviewed: 2026-06-04
 ---
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
@@ -317,3 +317,31 @@ surfaces and any posture map that asserts whole rule families. Run
 `uv run pytest tests/unit/rule/test_reviewer_verification_posture.py` with the
 rule-family tests, not only the new rule's focused test, before considering the
 catalogue stable.
+
+## Lesson: Reproduce rule false-positive claims by running `gruff-py analyse` on a crafted fixture
+
+**Created:** 2026-06-04
+**Incident:** Assessing PR #5 coding-agent review claims that the new
+`test-quality.static-analysis-redundant-test` rule emits false positives, the
+agent verified by writing a small crafted test file and running
+`uv run gruff-py analyse <dir> --format json --no-baseline`, then filtering the
+JSON for the rule id. This confirmed four real false positives plus a
+genuine-positive control - far stronger than code-reading alone - and separated a
+real-but-rare bot finding (class-body nested rebind, kept) from a real-but-exotic
+one with an over-broad proposed fix (metaclass hiding a method, fix rejected). The
+first run returned `0` findings and grade A because the scratch path
+`/tmp/gruff_repro` matched gruff-py's default ignore pattern `tmp`: the report
+showed `filesDiscovered: 0`, `exitCode: 0`, `Composite: A (100.00 / 100)` -
+visually identical to a clean pass. Recovered by re-running with
+`--include-ignored`, which parsed the file and flagged all four.
+
+When a review (bot or human) claims a rule fires, misses, or false-positives,
+reproduce it by running `gruff-py analyse` on a minimal crafted fixture and
+reading the findings for that rule id before agreeing or fixing - this is the
+rule-behaviour analog of the `CliRunner` lesson above for CLI claims. Two gotchas:
+(1) put the fixture on a path NOT covered by gruff-py's default ignores (anything
+containing `tmp`, plus gitignored paths) or pass `--include-ignored`, because an
+all-ignored scan reports zero findings, grade A, and exit 0 - check
+`summary.filesParsed`/`filesDiscovered` before trusting a clean result. (2)
+Include a known true-positive control in the fixture so a `0`-findings result
+proves the rule is silent, not that the harness is mis-wired.

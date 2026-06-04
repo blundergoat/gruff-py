@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-05-27
+last_reviewed: 2026-06-04
 ---
 
 ## Lesson: Always run `git status` before suggesting a commit message
@@ -112,3 +112,25 @@ on the menu offered to the user) involves a Never-class action,
 delete that option. Suggest something else, or stop suggesting and
 let the user drive. Do not present a forbidden action as one of the
 multiple-choice options.
+
+## Lesson: Do not bundle destructive cleanup with productive work in one command
+
+**Created:** 2026-06-04
+**Incident:** While reproducing the static-analysis-redundant-test false positives
+(see `.goat-flow/lessons/verification.md`, search: `crafted fixture`), the agent
+put a heredoc append (`cat >> fixture.py <<'PY' ... PY`) and `rm -rf <dir>` in a
+single Bash command. The `deny-dangerous.sh` PreToolUse guard
+(`.claude/hooks/deny-dangerous.sh`) rejected the whole command for `rm -r without
+safe scoping`, so the append never ran. The next `gruff-py analyse` showed the
+newly-added case "not firing", which contradicted the agent's own AST
+introspection and cost a debugging detour until `wc -l` showed the fixture was
+unchanged from before the blocked command.
+
+When a guard hook can reject a command, never combine a destructive op (`rm -r`,
+etc.) with productive work in the same compound command: a rejection drops the
+entire command, so the productive part silently does not run and the next step's
+result looks inexplicably wrong. Run cleanup as its own final command, and prefer
+forms the guard accepts - `rm <file>` then `rmdir <dir>` rather than
+`rm -rf <dir>`. More generally, when a result contradicts a check you already
+proved, first confirm the prior mutation actually applied (`wc -l`,
+`git status`, `md5sum`) before re-theorising.
