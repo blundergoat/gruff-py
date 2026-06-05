@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-04
+last_reviewed: 2026-06-05
 ---
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
@@ -187,6 +187,7 @@ to concrete rule implementation files, not just filename suffixes.
 ## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
 
 **Created:** 2026-05-25
+**Updated:** 2026-06-05
 **Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
 added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
 silently clobbering seeded defaults. The functional change was trivial - two
@@ -206,6 +207,17 @@ before claiming the change is low-impact - NPATH multiplies branches, so each
 new `if` can push a function past the project's own complexity gate. Prefer
 extracting a per-key helper over chaining additional conditionals at the same
 nesting level.
+
+The same trap recurred on 2026-06-05 while fixing
+`test-quality.static-analysis-redundant-test` false positives:
+`scripts/preflight-checks.sh` passed lint, mypy, docs, tests, and build, but the
+Gruff self-check failed on `src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`
+(search: `def _build_class_table`, search: `def _class_decl`) for nested,
+cognitive, and cyclomatic complexity introduced by extra AST rebinding guards.
+The correction was to extract statement-target and class-body collection helpers
+(search: `def _module_bound_names`, search: `def _collect_class_child`) so the
+runtime behaviour stayed covered by the same regression tests while the dogfood
+gate could verify the implementation.
 
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 

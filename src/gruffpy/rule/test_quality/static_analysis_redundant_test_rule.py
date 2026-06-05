@@ -17,7 +17,7 @@ no value) is not evidence, and private/dunder access stays with
 """
 
 import ast
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -56,6 +56,17 @@ class _ClassDecl:
     attributes: frozenset[str]
     nested: dict[str, "_ClassDecl"]
     ambiguous_members: frozenset[str] = frozenset()
+
+
+@dataclass(slots=True)
+class _ClassParts:
+    """Mutable accumulator used while reading one class body."""
+
+    methods: set[str] = field(default_factory=set)
+    attributes: set[str] = field(default_factory=set)
+    nested: dict[str, _ClassDecl] = field(default_factory=dict)
+    binding_kinds: dict[str, set[str]] = field(default_factory=dict)
+    attribute_rebinding_paths: list[tuple[str, ...]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,32 +162,48 @@ def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[s
     classes: dict[str, _ClassDecl] = {}
     ambiguous: set[str] = set()
     for stmt in module.body:
+        if _is_star_import(stmt):
+            return {}, set()
         if isinstance(stmt, ast.ClassDef):
             classes[stmt.name] = _class_decl(stmt)
-        elif isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-            ambiguous.add(stmt.name)
-        elif isinstance(stmt, ast.Import):
-            ambiguous.update((alias.asname or alias.name).split(".")[0] for alias in stmt.names)
-        elif isinstance(stmt, ast.ImportFrom):
-            if any(alias.name == "*" for alias in stmt.names):
-                return {}, set()
-            ambiguous.update(alias.asname or alias.name for alias in stmt.names)
-        elif isinstance(stmt, ast.Assign):
-            for target in stmt.targets:
-                ambiguous.update(_bound_names(target))
-                _mark_attribute_rebinding(classes, ambiguous, target)
-        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-            ambiguous.update(_bound_names(stmt.target))
-        elif isinstance(stmt, ast.AnnAssign):
-            _mark_attribute_rebinding(classes, ambiguous, stmt.target)
-        elif isinstance(stmt, ast.AugAssign):
-            ambiguous.update(_bound_names(stmt.target))
-            _mark_attribute_rebinding(classes, ambiguous, stmt.target)
-        elif isinstance(stmt, ast.Delete):
-            for target in stmt.targets:
-                ambiguous.update(_bound_names(target))
-                _mark_attribute_rebinding(classes, ambiguous, target)
+            continue
+        ambiguous.update(_module_bound_names(stmt))
+        for target in _statement_targets(stmt):
+            _mark_attribute_rebinding(classes, ambiguous, target)
     return classes, ambiguous
+
+
+def _is_star_import(stmt: ast.stmt) -> bool:
+    """Return whether a module statement is a star import."""
+    return isinstance(stmt, ast.ImportFrom) and any(alias.name == "*" for alias in stmt.names)
+
+
+def _module_bound_names(stmt: ast.stmt) -> set[str]:
+    """Return top-level names that make same-name class evidence ambiguous."""
+    if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+        return {stmt.name}
+    if isinstance(stmt, ast.Import | ast.ImportFrom):
+        return _import_bound_names(stmt)
+    return _targets_bound_names(_statement_targets(stmt))
+
+
+def _statement_targets(stmt: ast.stmt) -> tuple[ast.expr, ...]:
+    """Return assignment/delete targets from a statement, or empty for other statements."""
+    if isinstance(stmt, ast.Assign):
+        return tuple(stmt.targets)
+    if isinstance(stmt, ast.AnnAssign | ast.AugAssign):
+        return (stmt.target,)
+    if isinstance(stmt, ast.Delete):
+        return tuple(stmt.targets)
+    return ()
+
+
+def _targets_bound_names(targets: tuple[ast.expr, ...]) -> set[str]:
+    """Return every name bound by a sequence of assignment/delete targets."""
+    bound: set[str] = set()
+    for target in targets:
+        bound.update(_bound_names(target))
+    return bound
 
 
 def _class_decl(node: ast.ClassDef, *, prefix: str = "") -> _ClassDecl:
@@ -194,67 +221,99 @@ def _class_decl(node: ast.ClassDef, *, prefix: str = "") -> _ClassDecl:
         Declaration record for the class and any directly nested classes.
     """
     qualified = f"{prefix}{node.name}"
-    methods: set[str] = set()
-    attributes: set[str] = set()
-    nested: dict[str, _ClassDecl] = {}
-    binding_kinds: dict[str, set[str]] = {}
-    attribute_rebinding_paths: list[tuple[str, ...]] = []
+    parts = _ClassParts()
     for child in node.body:
-        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-            kind = "descriptor" if _is_descriptor_method(child) else "method"
-            _record_binding(binding_kinds, child.name, kind)
-            if not _is_descriptor_method(child):
-                methods.add(child.name)
-        elif isinstance(child, ast.ClassDef):
-            _record_binding(binding_kinds, child.name, "nested")
-            nested[child.name] = _class_decl(child, prefix=f"{qualified}.")
-        elif isinstance(child, ast.Assign):
-            for target in child.targets:
-                for name in _bound_names(target):
-                    attributes.add(name)
-                    _record_binding(binding_kinds, name, "attribute")
-                path = _attribute_path(target)
-                if path:
-                    attribute_rebinding_paths.append(path)
-        elif (
-            isinstance(child, ast.AnnAssign)
-            and child.value is not None
-            and isinstance(child.target, ast.Name)
-        ):
-            attributes.add(child.target.id)
-            _record_binding(binding_kinds, child.target.id, "attribute")
-        elif isinstance(child, ast.AnnAssign):
-            path = _attribute_path(child.target)
-            if path:
-                attribute_rebinding_paths.append(path)
-        elif isinstance(child, ast.AugAssign):
-            for name in _bound_names(child.target):
-                attributes.add(name)
-                _record_binding(binding_kinds, name, "attribute")
-            path = _attribute_path(child.target)
-            if path:
-                attribute_rebinding_paths.append(path)
-        elif isinstance(child, ast.Delete):
-            for target in child.targets:
-                for name in _bound_names(target):
-                    _record_binding(binding_kinds, name, "deleted")
-                path = _attribute_path(target)
-                if path:
-                    attribute_rebinding_paths.append(path)
-        elif isinstance(child, ast.Import | ast.ImportFrom):
-            for name in _import_bound_names(child):
-                _record_binding(binding_kinds, name, "import")
-    ambiguous_members = frozenset(name for name, kinds in binding_kinds.items() if len(kinds) > 1)
+        _collect_class_child(child, parts, qualified)
+    return _class_decl_from_parts(qualified, parts)
+
+
+def _collect_class_child(child: ast.stmt, parts: _ClassParts, qualified: str) -> None:
+    """Collect one class-body statement into *parts*."""
+    if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+        _collect_class_method(child, parts)
+        return
+    if isinstance(child, ast.ClassDef):
+        _collect_nested_class(child, parts, qualified)
+        return
+    if isinstance(child, ast.Import | ast.ImportFrom):
+        _collect_class_import(child, parts)
+        return
+    _collect_class_statement_bindings(child, parts)
+
+
+def _collect_class_method(
+    child: ast.FunctionDef | ast.AsyncFunctionDef,
+    parts: _ClassParts,
+) -> None:
+    """Collect a method declaration or descriptor accessor."""
+    is_descriptor = _is_descriptor_method(child)
+    kind = "descriptor" if is_descriptor else "method"
+    _record_binding(parts.binding_kinds, child.name, kind)
+    if not is_descriptor:
+        parts.methods.add(child.name)
+
+
+def _collect_nested_class(child: ast.ClassDef, parts: _ClassParts, qualified: str) -> None:
+    """Collect a direct nested class declaration."""
+    _record_binding(parts.binding_kinds, child.name, "nested")
+    parts.nested[child.name] = _class_decl(child, prefix=f"{qualified}.")
+
+
+def _collect_class_import(node: ast.Import | ast.ImportFrom, parts: _ClassParts) -> None:
+    """Collect names bound by a class-body import."""
+    for name in _import_bound_names(node):
+        _record_binding(parts.binding_kinds, name, "import")
+
+
+def _collect_class_statement_bindings(stmt: ast.stmt, parts: _ClassParts) -> None:
+    """Collect assignment/delete effects from a class-body statement."""
+    binding_kind = _class_name_binding_kind(stmt)
+    for target in _statement_targets(stmt):
+        if binding_kind is not None:
+            _collect_class_name_bindings(target, binding_kind, parts)
+        _collect_attribute_rebinding_path(target, parts)
+
+
+def _class_name_binding_kind(stmt: ast.stmt) -> str | None:
+    """Return the class-body binding kind for names in *stmt*."""
+    if isinstance(stmt, ast.Assign | ast.AugAssign):
+        return "attribute"
+    if isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+        return "attribute"
+    if isinstance(stmt, ast.Delete):
+        return "deleted"
+    return None
+
+
+def _collect_class_name_bindings(target: ast.expr, kind: str, parts: _ClassParts) -> None:
+    """Collect names introduced or removed by one class-body target."""
+    for name in _bound_names(target):
+        if kind == "attribute":
+            parts.attributes.add(name)
+        _record_binding(parts.binding_kinds, name, kind)
+
+
+def _collect_attribute_rebinding_path(target: ast.expr, parts: _ClassParts) -> None:
+    """Remember dotted member writes/deletes for later ambiguity marking."""
+    path = _attribute_path(target)
+    if len(path) >= 2:
+        parts.attribute_rebinding_paths.append(path)
+
+
+def _class_decl_from_parts(qualified: str, parts: _ClassParts) -> _ClassDecl:
+    """Build an immutable class declaration from collected mutable parts."""
+    ambiguous_members = frozenset(
+        name for name, kinds in parts.binding_kinds.items() if len(kinds) > 1
+    )
     decl = _ClassDecl(
         qualified,
-        frozenset(methods),
-        frozenset(attributes),
-        nested,
+        frozenset(parts.methods),
+        frozenset(parts.attributes),
+        parts.nested,
         ambiguous_members,
     )
-    for path in attribute_rebinding_paths:
-        if len(path) >= 2:
-            decl = _with_ambiguous_member(decl, path[:-1], path[-1])
+    for path in parts.attribute_rebinding_paths:
+        decl = _with_ambiguous_member(decl, path[:-1], path[-1])
     return decl
 
 
