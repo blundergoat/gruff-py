@@ -28,6 +28,8 @@
 # Changed-line model:
 #   Prefer changed ranges from the PostToolUse payload when present.
 #   Otherwise parse `git diff --unified=0 -- <file>` for tracked files.
+#   Pathless fallback files also consult staged hunks when no unstaged hunk
+#   exists, because those paths can come from `git diff --cached`.
 #   New/untracked files are treated as fully changed. If no range can be
 #   derived, the hook exits quietly apart from a short stderr diagnostic.
 #   Analyzers with native changed-region support own the filtering: gruff-py is
@@ -42,7 +44,7 @@
 #   `gruff-code-quality: <binary> <path> changed-lines=<ranges>; <n> on changed
 #   lines: <e> error, <w> warning, <a> advisory`, then one canonical finding line
 #   per surfaced finding `- [severity] file:line ruleId - message` (matching
-#   CONTRACT.md's normative per-finding line so hook and native CLI output read
+#   gruff's native CLI per-finding line so hook and analyzer output read
 #   identically). Findings on changed lines are sorted error -> warning ->
 #   advisory so the highest-value land first; they are floored at
 #   GRUFF_CODE_QUALITY_MIN_SEVERITY (default advisory) and capped at
@@ -86,7 +88,7 @@ json_field() {
     printf '%s' "$input" | jq -r "$expr // empty" 2>/dev/null || true
     return
   fi
-  return 1
+  return 0
 }
 
 json_tool_name() {
@@ -236,14 +238,23 @@ git_changed_supported_paths() {
   done | awk '!seen[$0]++'
 }
 
-file_paths_for_payload() {
+payload_file_paths() {
   local payload="$1"
-  local root="$2"
   local paths
   paths="$(json_file_paths "$payload" || true)"
   [[ -n "$paths" ]] || paths="$(fallback_file_paths "$payload")"
   if [[ -n "$paths" ]]; then
     printf '%s\n' "$paths" | awk 'length($0) && !seen[$0]++'
+  fi
+}
+
+file_paths_for_payload() {
+  local payload="$1"
+  local root="$2"
+  local paths
+  paths="$(payload_file_paths "$payload")"
+  if [[ -n "$paths" ]]; then
+    printf '%s\n' "$paths"
     return
   fi
   git_changed_supported_paths "$root"
@@ -353,12 +364,21 @@ git_diff_ranges() {
   local root="$1"
   local rel_path="$2"
   local abs_path="$3"
-  local diff_output
+  local include_cached="${4:-0}"
+  local diff_output ranges
   if ! git -C "$root" ls-files --error-unmatch -- "$rel_path" >/dev/null 2>&1; then
-    [[ -f "$abs_path" ]] && all_file_range "$abs_path"
+    if [[ -f "$abs_path" ]]; then
+      all_file_range "$abs_path"
+    fi
     return
   fi
   diff_output="$(git -C "$root" diff --unified=0 -- "$rel_path" 2>/dev/null || true)"
+  ranges="$(parse_diff_ranges "$diff_output")"
+  if [[ -n "$ranges" || "$include_cached" -eq 0 ]]; then
+    printf '%s' "$ranges"
+    return
+  fi
+  diff_output="$(git -C "$root" diff --cached --unified=0 -- "$rel_path" 2>/dev/null || true)"
   parse_diff_ranges "$diff_output"
 }
 
@@ -373,7 +393,11 @@ changed_ranges() {
     printf '%s' "$ranges"
     return
   fi
-  git_diff_ranges "$root" "$rel_path" "$abs_path"
+  if [[ -n "$(payload_file_paths "$payload")" ]]; then
+    git_diff_ranges "$root" "$rel_path" "$abs_path" 0
+  else
+    git_diff_ranges "$root" "$rel_path" "$abs_path" 1
+  fi
 }
 
 self_test() {
@@ -565,7 +589,9 @@ changed_findings_report() {
       parsed_ranges as $parsed
       | any($parsed[]; $line >= .start and $line <= .end);
     def sev_rank($s):
-      if $s == "error" then 3 elif $s == "warning" then 2 elif $s == "advisory" then 1 else 0 end;
+      # error > warning > everything else (advisory, or an unknown/missing severity)
+      # so an unrecognised severity still clears the default advisory floor and stays visible.
+      if $s == "error" then 3 elif $s == "warning" then 2 else 1 end;
 
     [ (.findings // [])[]
       | . as $finding
@@ -840,8 +866,8 @@ main() {
   fi
 
   payload="$(read_stdin)"
-  tool_name="$(json_tool_name "$payload")"
-  [[ -n "$tool_name" ]] || tool_name="$(fallback_tool_name "$payload")"
+  tool_name="$(json_tool_name "$payload" || true)"
+  [[ -n "$tool_name" ]] || tool_name="$(fallback_tool_name "$payload" || true)"
   supported_tool "$tool_name" || exit 0
 
   root="$(repo_root)"

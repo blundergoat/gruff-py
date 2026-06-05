@@ -1,6 +1,6 @@
 ---
 category: packaging
-last_reviewed: 2026-05-24
+last_reviewed: 2026-06-06
 ---
 
 ## Footgun: Hatchling sdist can include ignored local workspace artifacts
@@ -21,8 +21,8 @@ The wheel stayed clean, so checking only the wheel would miss the publish risk.
 
 Prevention: after packaging changes and before release, run `uv build` and then
 verify the sdist with a negative grep for `.agents`, `.claude`, `.codex`,
-`.goat-flow`, `AGENTS.md`, `CLAUDE.md`, `node_modules`, `package-lock.json`,
-`package.json`, and `perf-out`.
+`.github`, `.goat-flow`, `AGENTS.md`, `CLAUDE.md`, `node_modules`,
+`package-lock.json`, `package.json`, and `perf-out`.
 
 ## Footgun: Shell clean steps must tolerate missing build output directories
 

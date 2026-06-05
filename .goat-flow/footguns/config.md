@@ -1,19 +1,7 @@
 ---
 category: config
-last_reviewed: 2026-05-30
+last_reviewed: 2026-06-06
 ---
-
-## Footgun: `gruff-py init` emits tiered `thresholds` that contradict the single-threshold contract (ADR-014)
-
-**Status:** active | **Created:** 2026-05-30 | **Evidence:** ACTUAL_MEASURED
-**Tags:** hallucination-risk: high
-
-ADR-014 makes every severity-bearing rubric a single `threshold` + `severity` in public config and forbids `warning`/`error` ranges in generated config, docs, and calibration output. Two surfaces still carry the legacy tiered shape and disagree with the shipped dogfood config:
-
-- `gruff-py init` generates the tiered form. Running `gruff-py init` in an empty dir writes, for every metric rubric, a `thresholds:` block with `warning:`/`error:` pairs (e.g. the cyclomatic-complexity rubric → `warning: 10`, `error: 20`), not `threshold:`/`severity:`. Evidence anchors: `src/gruffpy/command/init_config.py` (search: `def _rule_entry`), confirmed by running the command.
-- The built-in rule defaults are tiered: rule files under `src/gruffpy/rule/` (search: `default_thresholds={"warning"`). Meanwhile the committed dogfood config uses the single form: `.gruff-py.yaml` (search: `severity: error`). So `init` output and the committed config disagree on shape.
-
-The non-obvious failure mode is that a reader (human or agent) concludes the project uses warning/error tiers and reproduces that shape in new rules or docs, or "fixes" a config to single-severity only for `init --force` to regenerate the tiered block. Treat the tiered `default_thresholds` and `init` output as drift from ADR-014, not the design. Fixing it is a lockstep move across `init_config.py` (generation), each rule's `default_thresholds`, and the `RuleSettings`/loader fallback (search: `high_value_threshold_match`) so each rubric resolves to one value + one severity. Maintainer rationale: under an agent hook the agent fixes everything down to the lowest gating point, so a second tier is dead weight and one value per rubric is simpler to read and configure. Tracked as a deliverable ("Single severity per rubric") in `.goat-flow/tasks/1.0.0/M02-*`.
 
 ## Footgun: ConfigLoader `.get(key, [])` collapses absent into empty, clobbering seeded AnalysisConfig defaults
 
@@ -24,6 +12,14 @@ Any new non-empty default added to an `AnalysisConfig` field that is also user-c
 Before adding a non-empty default to any `AnalysisConfig` field, grep `loader.py` for every callsite that reads the corresponding YAML/TOML key and confirm the loader only calls the matching `with_…()` setter when the key is actually present in the user's section. The fix shape is `if "<key>" in allowlists: config = config.with_…(tuple(allowlists["<key>"]))`. Adding tests that drive the loader with the unrelated section populated (e.g. `allowlists.secretPreviews` only) makes this regression observable in unit scope rather than via downstream rule misbehaviour.
 
 ## Resolved Entries
+
+## Footgun: `gruff-py init` emitted tiered `thresholds` that contradicted the single-threshold contract (ADR-014)
+
+**Status:** resolved | **Created:** 2026-05-30 | **Resolved:** 2026-05-31 | **Evidence:** ACTUAL_MEASURED
+
+ADR-014 makes every severity-bearing rubric a single `threshold` + `severity` and forbids `warning`/`error` ranges in generated config. When this was filed, `gruff-py init` wrote a tiered `thresholds:` block with `warning:`/`error:` pairs for every metric rubric, and the built-in rule defaults carried the same tiered shape — so `init` output disagreed with the single-form committed dogfood config. Resolved by `902ba46` ("unify threshold handling by replacing multiple thresholds with a single severity threshold across rules"), which landed the "Single severity per rubric" deliverable. Verified 2026-06-06: `gruff-py init` in an empty dir now emits `threshold:`/`severity:` for every rubric (e.g. cyclomatic → `threshold: 20`, `severity: error`), matching `.gruff-py.yaml` (search: `severity: error`); the only surviving `thresholds:` block holds maintainability-index knobs (`cyclomatic_warning` etc.), not a severity tier. The anchor `default_thresholds={"warning"` no longer exists in `src/gruffpy/rule/` (zero matches), and no rule default carries `"warning"`/`"error"` keys.
+
+Do not reintroduce a tiered `warning`/`error` rubric in `src/gruffpy/command/init_config.py` (search: `def _rule_entry`) or in rule defaults. `_rule_entry` emits `threshold` + `severity` from `settings.severity_threshold` and reserves the `thresholds:` map for non-severity semantic knobs (`settings.thresholds`). Any new severity-bearing rubric resolves to exactly one value plus one severity per ADR-014.
 
 ## Footgun: `ConfigError` swallowed into `RunDiagnostic` hides config errors from `summary` / structured-output commands
 
