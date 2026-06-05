@@ -17,7 +17,7 @@ no value) is not evidence, and private/dunder access stays with
 """
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -48,12 +48,14 @@ class _ClassDecl:
         attributes: Class-body attribute names from assignments and annotated
             assignments that carry a value (bare annotations are excluded).
         nested: Directly class-body-declared nested classes, keyed by name.
+        ambiguous_members: Class members whose runtime value was rebound or shadowed.
     """
 
     qualified_name: str
     methods: frozenset[str]
     attributes: frozenset[str]
     nested: dict[str, "_ClassDecl"]
+    ambiguous_members: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,8 +126,9 @@ class StaticAnalysisRedundantTestRule(Rule):
         definition = self.definition()
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
+            scoped_ambiguous = ambiguous | _local_rebindings(fn)
             for node in walk_test_body(fn):
-                match = _match_assertion(node, classes, ambiguous)
+                match = _match_assertion(node, classes, scoped_ambiguous)
                 if match is not None:
                     findings.append(_finding(unit, definition, fn, node, match))
         return findings
@@ -134,10 +137,10 @@ class StaticAnalysisRedundantTestRule(Rule):
 def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[str]]:
     """Index top-level class declarations and names that shadow them.
 
-    A name is ambiguous when an import or a module-level non-class assignment binds
-    it, so a same-named class can no longer be trusted as static evidence. A star
-    import poisons the whole module (anything could be shadowed), so it returns no
-    evidence at all.
+    A name is ambiguous when an import, module-level function, or module-level
+    non-class assignment binds it, so a same-named class can no longer be trusted
+    as static evidence. A star import poisons the whole module (anything could be
+    shadowed), so it returns no evidence at all.
 
     Args:
         module: Module AST to index.
@@ -150,6 +153,8 @@ def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[s
     for stmt in module.body:
         if isinstance(stmt, ast.ClassDef):
             classes[stmt.name] = _class_decl(stmt)
+        elif isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+            ambiguous.add(stmt.name)
         elif isinstance(stmt, ast.Import):
             ambiguous.update((alias.asname or alias.name).split(".")[0] for alias in stmt.names)
         elif isinstance(stmt, ast.ImportFrom):
@@ -157,9 +162,20 @@ def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[s
                 return {}, set()
             ambiguous.update(alias.asname or alias.name for alias in stmt.names)
         elif isinstance(stmt, ast.Assign):
-            ambiguous.update(t.id for t in stmt.targets if isinstance(t, ast.Name))
+            for target in stmt.targets:
+                ambiguous.update(_bound_names(target))
+                _mark_attribute_rebinding(classes, ambiguous, target)
         elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-            ambiguous.add(stmt.target.id)
+            ambiguous.update(_bound_names(stmt.target))
+        elif isinstance(stmt, ast.AnnAssign):
+            _mark_attribute_rebinding(classes, ambiguous, stmt.target)
+        elif isinstance(stmt, ast.AugAssign):
+            ambiguous.update(_bound_names(stmt.target))
+            _mark_attribute_rebinding(classes, ambiguous, stmt.target)
+        elif isinstance(stmt, ast.Delete):
+            for target in stmt.targets:
+                ambiguous.update(_bound_names(target))
+                _mark_attribute_rebinding(classes, ambiguous, target)
     return classes, ambiguous
 
 
@@ -181,21 +197,161 @@ def _class_decl(node: ast.ClassDef, *, prefix: str = "") -> _ClassDecl:
     methods: set[str] = set()
     attributes: set[str] = set()
     nested: dict[str, _ClassDecl] = {}
+    binding_kinds: dict[str, set[str]] = {}
+    attribute_rebinding_paths: list[tuple[str, ...]] = []
     for child in node.body:
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            kind = "descriptor" if _is_descriptor_method(child) else "method"
+            _record_binding(binding_kinds, child.name, kind)
             if not _is_descriptor_method(child):
                 methods.add(child.name)
         elif isinstance(child, ast.ClassDef):
+            _record_binding(binding_kinds, child.name, "nested")
             nested[child.name] = _class_decl(child, prefix=f"{qualified}.")
         elif isinstance(child, ast.Assign):
-            attributes.update(t.id for t in child.targets if isinstance(t, ast.Name))
+            for target in child.targets:
+                for name in _bound_names(target):
+                    attributes.add(name)
+                    _record_binding(binding_kinds, name, "attribute")
+                path = _attribute_path(target)
+                if path:
+                    attribute_rebinding_paths.append(path)
         elif (
             isinstance(child, ast.AnnAssign)
             and child.value is not None
             and isinstance(child.target, ast.Name)
         ):
             attributes.add(child.target.id)
-    return _ClassDecl(qualified, frozenset(methods), frozenset(attributes), nested)
+            _record_binding(binding_kinds, child.target.id, "attribute")
+        elif isinstance(child, ast.AnnAssign):
+            path = _attribute_path(child.target)
+            if path:
+                attribute_rebinding_paths.append(path)
+        elif isinstance(child, ast.AugAssign):
+            for name in _bound_names(child.target):
+                attributes.add(name)
+                _record_binding(binding_kinds, name, "attribute")
+            path = _attribute_path(child.target)
+            if path:
+                attribute_rebinding_paths.append(path)
+        elif isinstance(child, ast.Delete):
+            for target in child.targets:
+                for name in _bound_names(target):
+                    _record_binding(binding_kinds, name, "deleted")
+                path = _attribute_path(target)
+                if path:
+                    attribute_rebinding_paths.append(path)
+        elif isinstance(child, ast.Import | ast.ImportFrom):
+            for name in _import_bound_names(child):
+                _record_binding(binding_kinds, name, "import")
+    ambiguous_members = frozenset(name for name, kinds in binding_kinds.items() if len(kinds) > 1)
+    decl = _ClassDecl(
+        qualified,
+        frozenset(methods),
+        frozenset(attributes),
+        nested,
+        ambiguous_members,
+    )
+    for path in attribute_rebinding_paths:
+        if len(path) >= 2:
+            decl = _with_ambiguous_member(decl, path[:-1], path[-1])
+    return decl
+
+
+def _record_binding(bindings: dict[str, set[str]], name: str, kind: str) -> None:
+    """Record one class-body binding kind for ambiguity detection."""
+    bindings.setdefault(name, set()).add(kind)
+
+
+def _bound_names(target: ast.AST) -> set[str]:
+    """Return names rebound by an assignment/delete target."""
+    return {
+        node.id
+        for node in ast.walk(target)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del)
+    }
+
+
+def _import_bound_names(node: ast.Import | ast.ImportFrom) -> set[str]:
+    """Return local names bound by an import statement."""
+    if isinstance(node, ast.ImportFrom):
+        if any(alias.name == "*" for alias in node.names):
+            return set()
+        return {alias.asname or alias.name for alias in node.names}
+    return {(alias.asname or alias.name).split(".")[0] for alias in node.names}
+
+
+def _attribute_path(target: ast.AST) -> tuple[str, ...]:
+    """Return a dotted attribute assignment path such as ``Class.member``."""
+    if isinstance(target, ast.Name):
+        return (target.id,)
+    if isinstance(target, ast.Attribute):
+        prefix = _attribute_path(target.value)
+        return (*prefix, target.attr) if prefix else ()
+    return ()
+
+
+def _mark_attribute_rebinding(
+    classes: dict[str, _ClassDecl],
+    ambiguous: set[str],
+    target: ast.AST,
+) -> None:
+    """Mark ``Class.member`` assignment/delete targets as ambiguous evidence."""
+    path = _attribute_path(target)
+    if len(path) < 2 or path[0] in ambiguous:
+        return
+    decl = classes.get(path[0])
+    if decl is None:
+        return
+    classes[path[0]] = _with_ambiguous_member(decl, path[1:-1], path[-1])
+
+
+def _with_ambiguous_member(
+    decl: _ClassDecl,
+    owner_path: tuple[str, ...],
+    member: str,
+) -> _ClassDecl:
+    """Return *decl* with a member marked ambiguous on the requested owner path."""
+    if not owner_path:
+        if member in decl.ambiguous_members:
+            return decl
+        return replace(decl, ambiguous_members=frozenset((*decl.ambiguous_members, member)))
+    child_name = owner_path[0]
+    if child_name in decl.ambiguous_members:
+        return decl
+    child = decl.nested.get(child_name)
+    if child is None:
+        return decl
+    updated_child = _with_ambiguous_member(child, owner_path[1:], member)
+    if updated_child == child:
+        return decl
+    nested = dict(decl.nested)
+    nested[child_name] = updated_child
+    return replace(decl, nested=nested)
+
+
+def _local_rebindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Return names rebound in the test function's local scope."""
+    rebound: set[str] = set()
+    for stmt in fn.body:
+        for node in _walk_local_scope(stmt):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                rebound.add(node.id)
+            elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                rebound.add(node.name)
+            elif isinstance(node, ast.Import | ast.ImportFrom):
+                rebound.update(_import_bound_names(node))
+    return rebound
+
+
+def _walk_local_scope(node: ast.AST) -> list[ast.AST]:
+    """Walk a function body statement without entering nested scopes."""
+    nodes = [node]
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+        return nodes
+    for child in ast.iter_child_nodes(node):
+        nodes.extend(_walk_local_scope(child))
+    return nodes
 
 
 def _is_descriptor_method(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -238,7 +394,9 @@ def _resolve_class(
         return classes.get(expr.id)
     if isinstance(expr, ast.Attribute):
         outer = _resolve_class(expr.value, classes, ambiguous)
-        return outer.nested.get(expr.attr) if outer is not None else None
+        if outer is None or expr.attr in outer.ambiguous_members:
+            return None
+        return outer.nested.get(expr.attr)
     return None
 
 
@@ -400,6 +558,8 @@ def _member_kind(decl: _ClassDecl, member: str) -> str | None:
         ``"method"``, ``"classAttribute"``, or None when not a public declared member.
     """
     if member.startswith("_"):
+        return None
+    if member in decl.ambiguous_members:
         return None
     if member in decl.methods:
         return "method"

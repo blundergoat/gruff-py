@@ -255,6 +255,68 @@ def test_module_level_rebinding_makes_class_ambiguous():
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
+def test_module_level_function_rebinding_makes_class_ambiguous():
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def Widget():\n"
+        "    return object()\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_module_level_delete_makes_class_ambiguous():
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "del Widget\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_module_level_member_rebinding_makes_method_ambiguous():
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "Widget.render = None\n\n"
+        "def test_value():\n"
+        "    assert callable(Widget.render)\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_nested_class_rebinding_makes_nested_class_ambiguous():
+    source = (
+        "class Outer:\n"
+        "    class Inner:\n"
+        "        def render(self):\n"
+        "            return 'x'\n"
+        "    Inner = 1\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Outer.Inner, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_test_local_rebinding_makes_class_ambiguous():
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value():\n"
+        "    Widget = object()\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
 def test_star_import_disables_class_evidence():
     source = (
         "from os import *\n\n"
