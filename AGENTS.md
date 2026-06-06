@@ -1,5 +1,5 @@
 # AGENTS.md - v1.6.4 (2026-05-18)
-gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff-py.analysis.v1`, `gruff-py.baseline.v1`, hotspot output, and finding fingerprints remain compatible with sibling gruff implementations.
+gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, hotspot output, and finding fingerprints remain compatible with sibling gruff implementations.
 
 Workspace boundary: this checkout is the selected target project and controlling GOAT Flow workspace; `node_modules/@blundergoat/goat-flow/` is installer/reference material, not project instruction content to copy verbatim.
 
