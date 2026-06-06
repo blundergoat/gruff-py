@@ -11,7 +11,7 @@ Wired in as a coding-agent hook, gruff-py works on two settings, both driven by 
 - **Guide** — advisory findings inform the agent and the reviewer without blocking.
 - **Force** — warning and error findings gated by `--fail-on` fail the run until the agent fixes them.
 
-A finding earns the *force* setting only when acting on it reliably makes the code more verifiable; lower-signal checks stay advisory. The concrete per-rule policy lives in the `reviewability` profile — see [ADR-021](../.goat-flow/decisions/ADR-021-reviewability-profile.md).
+A finding earns the *force* setting only when acting on it reliably makes the code more verifiable; lower-signal checks stay advisory. The concrete per-rule policy is set out in the proposed `reviewability` profile — see [ADR-021](../.goat-flow/decisions/ADR-021-reviewability-profile.md).
 
 ## What it optimises for
 

@@ -90,10 +90,12 @@ Open `http://127.0.0.1:8765/` for the dashboard.
 
 | Command | Purpose |
 | --- | --- |
+| `init` | Write a default `.gruff-py.yaml` to the current directory. |
 | `analyse [paths...]` | Run the analyser and print findings. |
 | `summary [paths...]` | Print compact score, pillar, rule, and file summaries. |
 | `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
-| `list-rules` | Print rule metadata as text or JSON. |
+| `list-rules [rule-id]` | Print rule metadata as text or JSON; pass a rule id for explain mode. |
+| `check-ignore [paths...]` | Report whether each path is ignored, and why (exit codes mirror `git check-ignore`). |
 | `dashboard [paths...]` | Serve the local browser dashboard. |
 | `completion [shell]` | Print a shell completion script. |
 | `list`, `help` | Show command lists and command-specific help. |

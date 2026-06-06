@@ -40,7 +40,7 @@ When adding or changing a rule:
 
 Be careful with:
 
-- `gruff-py.analysis.v1`
+- `gruff.analysis.v2`
 - `gruff-py.hotspot.v1`
 - `gruff-py.baseline.v1`
 - finding fingerprint inputs

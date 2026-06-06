@@ -57,7 +57,7 @@ total is reported in two places that are always equal:
 
 So `len(findings) + suppressedCount` equals the full-file finding count — nothing
 is dropped silently. `suppressedCount` reflects the full rule set the run collected;
-display filters (`--include-rule`, `--exclude-rule`, `--min-confidence`) narrow
+display filters (`--include-rule`, `--exclude-rule`, `--min-severity`) narrow
 `findings[]` only, so the native trio above — with no display filter — is where that
 identity is exact. The `diff` section also carries `enabled`, `source`,
 `changedFiles`, and a `caveat` that project-wide rules may need full context. Both

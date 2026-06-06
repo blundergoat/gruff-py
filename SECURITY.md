@@ -2,16 +2,15 @@
 
 ## Supported Versions
 
-`0.1.x` is the current supported release line. Security fixes target the latest
-`0.1.x` release and the `main` branch.
+`0.3.x` is the current supported release line. Security fixes target the latest
+`0.3.x` release and the `main` branch.
 
 ## Reporting A Vulnerability
 
 Do not open a public issue for a suspected vulnerability.
 
-If this repository is published under an organisation, use the organisation's
-private security advisory flow or the maintainer contact listed on the package
-metadata.
+Report it privately through the repository's GitHub security advisory flow
+(the "Security" tab → "Report a vulnerability") rather than any public channel.
 
 Include:
 
