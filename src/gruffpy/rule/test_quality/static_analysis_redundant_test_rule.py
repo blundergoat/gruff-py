@@ -137,9 +137,10 @@ class StaticAnalysisRedundantTestRule(Rule):
         definition = self.definition()
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            scoped_ambiguous = ambiguous | _local_rebindings(fn)
+            local_shadows = _local_rebindings(fn)
+            scoped_ambiguous = ambiguous | local_shadows
             for node in walk_test_body(fn):
-                match = _match_assertion(node, classes, scoped_ambiguous)
+                match = _match_assertion(node, classes, scoped_ambiguous, local_shadows)
                 if match is not None:
                     findings.append(_finding(unit, definition, fn, node, match))
         return findings
@@ -148,10 +149,13 @@ class StaticAnalysisRedundantTestRule(Rule):
 def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[str]]:
     """Index top-level class declarations and names that shadow them.
 
-    A name is ambiguous when an import, module-level function, or module-level
-    non-class assignment binds it, so a same-named class can no longer be trusted
-    as static evidence. A star import poisons the whole module (anything could be
-    shadowed), so it returns no evidence at all.
+    A name is ambiguous when an import, function, non-class assignment, ``del``,
+    or ``Class.member`` write binds it anywhere in module-execution scope -
+    including inside ``if``/``try``/``for``/``with`` bodies, where a conditional
+    re-import or rebind still replaces the runtime object. Only classes declared
+    directly at module top level, and not built dynamically by a decorator or
+    metaclass, are trusted as static evidence. A star import anywhere in module
+    scope poisons everything, so it returns no evidence at all.
 
     Args:
         module: Module AST to index.
@@ -160,17 +164,65 @@ def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[s
         Mapping of class name to declaration, plus the set of ambiguous names.
     """
     classes: dict[str, _ClassDecl] = {}
-    ambiguous: set[str] = set()
     for stmt in module.body:
+        if isinstance(stmt, ast.ClassDef) and not _is_dynamic_class(stmt):
+            classes[stmt.name] = _class_decl(stmt)
+    ambiguous: set[str] = set()
+    for stmt in _module_scope_statements(module.body):
         if _is_star_import(stmt):
             return {}, set()
         if isinstance(stmt, ast.ClassDef):
-            classes[stmt.name] = _class_decl(stmt)
+            if _is_dynamic_class(stmt):
+                ambiguous.add(stmt.name)
             continue
         ambiguous.update(_module_bound_names(stmt))
         for target in _statement_targets(stmt):
             _mark_attribute_rebinding(classes, ambiguous, target)
     return classes, ambiguous
+
+
+def _module_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
+    """Return statements executed in module scope, descending compound bodies.
+
+    Recurses into ``if``/``for``/``while``/``with``/``try`` bodies (a binding
+    there still shadows a module-level class) but never into nested function,
+    class, or lambda scopes.
+
+    Args:
+        body: Statement list to flatten.
+
+    Returns:
+        Every module-scope statement, compound-statement bodies included.
+    """
+    stmts: list[ast.stmt] = []
+    for stmt in body:
+        stmts.append(stmt)
+        if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            continue
+        for child in ast.iter_child_nodes(stmt):
+            if isinstance(child, ast.stmt):
+                stmts.extend(_module_scope_statements([child]))
+            elif isinstance(child, ast.ExceptHandler):
+                stmts.extend(_module_scope_statements(child.body))
+    return stmts
+
+
+def _is_dynamic_class(node: ast.ClassDef) -> bool:
+    """Return whether a class is built dynamically by a decorator or metaclass.
+
+    A class decorator or metaclass can add, remove, or replace members at class
+    creation, so the parsed body is no longer proof of the runtime shape and the
+    class must not be trusted as static evidence.
+
+    Args:
+        node: Class definition to inspect.
+
+    Returns:
+        True when the class carries a decorator or a ``metaclass=`` keyword.
+    """
+    if node.decorator_list:
+        return True
+    return any(keyword.arg == "metaclass" for keyword in node.keywords)
 
 
 def _is_star_import(stmt: ast.stmt) -> bool:
@@ -254,8 +306,14 @@ def _collect_class_method(
 
 
 def _collect_nested_class(child: ast.ClassDef, parts: _ClassParts, qualified: str) -> None:
-    """Collect a direct nested class declaration."""
+    """Collect a direct nested class declaration.
+
+    A decorator or metaclass on the nested class makes its runtime shape dynamic,
+    so it is recorded as an ambiguous member rather than trusted evidence.
+    """
     _record_binding(parts.binding_kinds, child.name, "nested")
+    if _is_dynamic_class(child):
+        _record_binding(parts.binding_kinds, child.name, "dynamic")
     parts.nested[child.name] = _class_decl(child, prefix=f"{qualified}.")
 
 
@@ -390,17 +448,39 @@ def _with_ambiguous_member(
 
 
 def _local_rebindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-    """Return names rebound in the test function's local scope."""
-    rebound: set[str] = set()
+    """Return names rebound in the test function's local scope.
+
+    Covers the function's own parameters (a fixture or parametrized argument that
+    shares a class name resolves to the parameter, not the class) and the root of
+    any ``Class.member`` write or delete in the body (an in-test monkeypatch makes
+    the member a runtime mutation, not a static declaration), alongside local name
+    binds, nested defs/classes, and imports.
+    """
+    rebound: set[str] = _parameter_names(fn)
     for stmt in fn.body:
         for node in _walk_local_scope(stmt):
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
                 rebound.add(node.id)
+            elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store | ast.Del):
+                path = _attribute_path(node)
+                if path:
+                    rebound.add(path[0])
             elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 rebound.add(node.name)
             elif isinstance(node, ast.Import | ast.ImportFrom):
                 rebound.update(_import_bound_names(node))
     return rebound
+
+
+def _parameter_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Return every parameter name bound by a test function's signature."""
+    args = fn.args
+    names = {arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)}
+    if args.vararg is not None:
+        names.add(args.vararg.arg)
+    if args.kwarg is not None:
+        names.add(args.kwarg.arg)
+    return names
 
 
 def _walk_local_scope(node: ast.AST) -> list[ast.AST]:
@@ -463,6 +543,7 @@ def _match_assertion(
     node: ast.AST,
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
+    local_shadows: set[str],
 ) -> _ShapeMatch | None:
     """Match a pytest ``assert`` or a unittest ``self.assertTrue(...)`` to a shape.
 
@@ -470,19 +551,20 @@ def _match_assertion(
         node: Body node visited inside a test function.
         classes: Same-file class table.
         ambiguous: Names that cannot be trusted as class evidence.
+        local_shadows: Names rebound in the test's local scope (params + body).
 
     Returns:
         The matched redundant-assertion shape, or None.
     """
     if isinstance(node, ast.Assert):
-        return _candidate_for_shape(node.test, classes, ambiguous)
+        return _candidate_for_shape(node.test, classes, ambiguous, local_shadows)
     if (
         isinstance(node, ast.Call)
         and call_target_name(node) == "self.assertTrue"
         and node.args
         and not isinstance(node.args[0], ast.Starred)
     ):
-        return _candidate_for_shape(node.args[0], classes, ambiguous)
+        return _candidate_for_shape(node.args[0], classes, ambiguous, local_shadows)
     return None
 
 
@@ -490,11 +572,19 @@ def _candidate_for_shape(
     expr: ast.expr,
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
+    local_shadows: set[str],
 ) -> _ShapeMatch | None:
-    """Dispatch an asserted expression to the matching approved-shape recogniser."""
+    """Dispatch an asserted expression to the matching approved-shape recogniser.
+
+    Skips the assertion when the helper itself (``hasattr``/``callable``/the
+    ``inspect`` module) is rebound in the test's local scope, since the call no
+    longer resolves to the builtin or stdlib helper the rule reasons about.
+    """
     if not isinstance(expr, ast.Call):
         return None
     target = call_target_name(expr)
+    if target is None or target.split(".")[0] in local_shadows:
+        return None
     if target == "inspect.isclass":
         return _isclass_candidate(expr, classes, ambiguous)
     if target == "hasattr":

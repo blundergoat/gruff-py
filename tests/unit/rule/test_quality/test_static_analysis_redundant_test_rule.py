@@ -329,6 +329,90 @@ def test_star_import_disables_class_evidence():
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
+def test_test_parameter_shadow_is_clean():
+    # A fixture / parametrized argument shadows the same-file class name.
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value(Widget):\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_in_test_member_write_is_clean():
+    # An in-test monkeypatch makes the member a runtime mutation, not a declaration.
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value():\n"
+        "    Widget.render = lambda self: 'y'\n"
+        "    assert callable(Widget.render)\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_decorated_class_is_not_trusted_evidence():
+    # A class decorator can add, remove, or replace members at class creation.
+    source = (
+        "def strip(cls):\n"
+        "    return cls\n\n"
+        "@strip\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_metaclass_class_is_not_trusted_evidence():
+    # A metaclass can hide or synthesise members at class creation.
+    source = (
+        "class Meta(type):\n"
+        "    pass\n\n"
+        "class Widget(metaclass=Meta):\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_conditional_import_rebinding_makes_class_ambiguous():
+    # A conditional module-level re-import can replace the class at runtime.
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "try:\n"
+        "    from vendor import Widget\n"
+        "except ImportError:\n"
+        "    pass\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_locally_shadowed_assertion_helper_is_clean():
+    # The assertion helper itself is rebound in the test's local scope.
+    source = (
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "def test_value():\n"
+        "    def hasattr(obj, name):\n"
+        "        return False\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
 def test_neighbour_shapes_are_not_claimed():
     # Shapes owned by sibling test-quality rules must stay clean here.
     rule = StaticAnalysisRedundantTestRule()
