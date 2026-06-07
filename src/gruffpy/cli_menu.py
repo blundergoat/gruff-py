@@ -124,9 +124,9 @@ def should_use_color(ctx: click.Context) -> bool | None:
     Returns:
         ``True``/``False`` to force color on/off; ``None`` to defer to Click.
     """
-    params = getattr(ctx, "params", {})
-    if "ansi" in params:
-        value = params["ansi"]
+    parameters = getattr(ctx, "params", {})
+    if "ansi" in parameters:
+        value = parameters["ansi"]
         if isinstance(value, bool):
             return value
     state = _state(ctx)

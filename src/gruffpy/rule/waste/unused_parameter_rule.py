@@ -96,7 +96,7 @@ def _unused_parameters(tree: ast.AST) -> list[_UnusedParameter]:
         if _should_skip_unused_parameter_check(node, parents):
             continue
         referenced = _collect_referenced_names(node.body)
-        for arg_name, arg_lineno in _unused_params(node, referenced):
+        for arg_name, arg_lineno in _unreferenced_parameters(node, referenced):
             findings.append(
                 _UnusedParameter(
                     function=node,
@@ -163,7 +163,7 @@ def _collect_referenced_names(body: list[ast.stmt]) -> set[str]:
     return names
 
 
-def _unused_params(
+def _unreferenced_parameters(
     fn: ast.FunctionDef | ast.AsyncFunctionDef, referenced: set[str]
 ) -> list[tuple[str, int]]:
     args = fn.args

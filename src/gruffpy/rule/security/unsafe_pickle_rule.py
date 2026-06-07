@@ -122,10 +122,10 @@ def _has_safe_literal_first_arg(call: ast.Call) -> bool:
 
 def _unpickler_load_label(call: ast.Call) -> str | None:
     """Return ``pickle.Unpickler.load`` (or cPickle/dill variant) for the chained pattern."""
-    func = call.func
-    if not isinstance(func, ast.Attribute) or func.attr != "load":
+    callee = call.func
+    if not isinstance(callee, ast.Attribute) or callee.attr != "load":
         return None
-    receiver = func.value
+    receiver = callee.value
     if not isinstance(receiver, ast.Call):
         return None
     receiver_target = call_target_name(receiver)

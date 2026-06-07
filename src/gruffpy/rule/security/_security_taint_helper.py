@@ -164,10 +164,10 @@ class _ScopeWalker:
             return True
         return False
 
-    def _walk_function(self, func: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+    def _walk_function(self, function: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         scope: set[str] = set()
-        scope.update(_fastapi_param_sources(func))
-        self.walk_body(func.body, scope)
+        scope.update(_fastapi_param_sources(function))
+        self.walk_body(function.body, scope)
 
     def _walk_assign(self, stmt: ast.Assign, tainted: set[str]) -> None:
         self._visit_expr(stmt.value, tainted)
@@ -316,26 +316,26 @@ def _names_from_target(target: ast.expr) -> set[str]:
     return set()
 
 
-def _fastapi_param_sources(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+def _fastapi_param_sources(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     """Return parameter names whose annotation or default marks them as a FastAPI source.
 
     Args:
-        func: Function definition whose parameters to inspect.
+        function: Function definition whose parameters to inspect.
 
     Returns:
         Set of parameter names recognised as FastAPI request sources.
     """
     names: set[str] = set()
-    for arg in (*func.args.posonlyargs, *func.args.args, *func.args.kwonlyargs):
+    for arg in (*function.args.posonlyargs, *function.args.args, *function.args.kwonlyargs):
         if _is_fastapi_source_annotation(arg.annotation):
             names.add(arg.arg)
-    positional_args = list(func.args.posonlyargs) + list(func.args.args)
-    if func.args.defaults:
-        offset = len(positional_args) - len(func.args.defaults)
-        for arg, default in zip(positional_args[offset:], func.args.defaults, strict=True):
+    positional_args = list(function.args.posonlyargs) + list(function.args.args)
+    if function.args.defaults:
+        offset = len(positional_args) - len(function.args.defaults)
+        for arg, default in zip(positional_args[offset:], function.args.defaults, strict=True):
             if _is_fastapi_source_default(default):
                 names.add(arg.arg)
-    for kw_arg, kw_default in zip(func.args.kwonlyargs, func.args.kw_defaults, strict=True):
+    for kw_arg, kw_default in zip(function.args.kwonlyargs, function.args.kw_defaults, strict=True):
         if kw_default is None:
             continue
         if _is_fastapi_source_default(kw_default):

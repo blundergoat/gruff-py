@@ -107,13 +107,13 @@ def _finding_for_call(
         return _build_mktemp_finding(definition, unit, call)
     leaf = target.split(".")[-1] if target else None
     if leaf in _FILE_API_LEAVES or leaf in _PATH_CONSTRUCTORS:
-        prefix_match = _hardcoded_tmp_argument(call)
+        prefix_match = _hardcoded_temp_argument(call)
         if prefix_match is not None:
-            return _build_tmp_path_finding(definition, unit, call, leaf or "?", prefix_match)
+            return _build_temp_path_finding(definition, unit, call, leaf or "?", prefix_match)
     return None
 
 
-def _hardcoded_tmp_argument(call: ast.Call) -> str | None:
+def _hardcoded_temp_argument(call: ast.Call) -> str | None:
     for arg in call.args:
         if not isinstance(arg, ast.Constant) or not isinstance(arg.value, str):
             continue
@@ -152,7 +152,7 @@ def _build_mktemp_finding(
     )
 
 
-def _build_tmp_path_finding(
+def _build_temp_path_finding(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     call: ast.Call,

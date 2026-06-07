@@ -103,13 +103,13 @@ def _flask_debug_label(node: ast.AST) -> str | None:
 def _call_debug_label(call: ast.Call) -> str | None:
     if not isinstance(call.func, ast.Attribute):
         return None
-    attr = call.func.attr
-    if attr == "run":
+    attribute = call.func.attr
+    if attribute == "run":
         debug_kw = call_keyword(call, "debug")
         if debug_kw is not None and _is_true_literal(debug_kw):
             return ".run(debug=True)"
         return None
-    if attr == "update" and _receiver_attr(call.func) == "config":
+    if attribute == "update" and _receiver_attribute(call.func) == "config":
         debug_kw = call_keyword(call, "DEBUG")
         if debug_kw is not None and _is_true_literal(debug_kw):
             return ".config.update(DEBUG=True)"
@@ -134,9 +134,9 @@ def _is_config_debug_subscript(target: ast.expr) -> bool:
     return isinstance(key, ast.Constant) and key.value == "DEBUG"
 
 
-def _receiver_attr(func: ast.Attribute) -> str | None:
-    if isinstance(func.value, ast.Attribute):
-        return func.value.attr
+def _receiver_attribute(callee: ast.Attribute) -> str | None:
+    if isinstance(callee.value, ast.Attribute):
+        return callee.value.attr
     return None
 
 

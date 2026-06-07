@@ -94,7 +94,7 @@ def parse_docstring(text: str) -> ParsedDocstring | None:
         _STYLE_MAP.get(raw.style, DocstringStyle.UNKNOWN) if raw.style else DocstringStyle.UNKNOWN
     )
 
-    params = tuple(
+    parameters = tuple(
         DocstringField(name=p.arg_name, type_hint=p.type_name, description=p.description)
         for p in raw.params
     )
@@ -113,7 +113,7 @@ def parse_docstring(text: str) -> ParsedDocstring | None:
     return ParsedDocstring(
         summary=raw.short_description,
         description=raw.long_description,
-        params=params,
+        params=parameters,
         returns=returns,
         raises=raises,
         style=style,

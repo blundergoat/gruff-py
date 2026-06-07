@@ -66,8 +66,8 @@ class DashboardPageRenderer:
             '<div class="panel-actions"><button type="button" id="refresh">Refresh</button>'
             '<button type="submit" id="run-scan">Run scan</button></div></form></section>'
             f'<iframe id="report-frame" title="gruff-py report" '
-            f'data-initial-src="{_esc_attr(scan_url)}" '
-            f'srcdoc="{_esc_attr(self.loading_frame())}"></iframe>'
+            f'data-initial-src="{_escape_attribute(scan_url)}" '
+            f'srcdoc="{_escape_attribute(self.loading_frame())}"></iframe>'
             f"<script>{_DASHBOARD_JS}</script></body></html>"
         )
 
@@ -186,15 +186,15 @@ def display_command(command: list[str]) -> str:
 def _field(label: str, name: str, value: str, placeholder: str = "") -> str:
     return (
         f"<label>{_esc(label)}"
-        f'<input name="{_esc_attr(name)}" value="{_esc_attr(value)}" '
-        f'placeholder="{_esc_attr(placeholder)}"></label>'
+        f'<input name="{_escape_attribute(name)}" value="{_escape_attribute(value)}" '
+        f'placeholder="{_escape_attribute(placeholder)}"></label>'
     )
 
 
 def _option(value: str, selected: str, label: str | None = None) -> str:
     is_selected = " selected" if value == selected else ""
     return (
-        f'<option value="{_esc_attr(value)}"{is_selected}>'
+        f'<option value="{_escape_attribute(value)}"{is_selected}>'
         f"{_esc(label if label is not None else value)}</option>"
     )
 
@@ -202,7 +202,7 @@ def _option(value: str, selected: str, label: str | None = None) -> str:
 def _checkbox(name: str, label: str, value: str) -> str:
     checked = " checked" if value == "1" else ""
     return (
-        f'<label class="check"><input type="checkbox" name="{_esc_attr(name)}" '
+        f'<label class="check"><input type="checkbox" name="{_escape_attribute(name)}" '
         f'value="1"{checked}><span>{_esc(label)}</span></label>'
     )
 
@@ -216,7 +216,7 @@ def _esc(value: str) -> str:
     return html.escape(value, quote=True)
 
 
-def _esc_attr(value: str) -> str:
+def _escape_attribute(value: str) -> str:
     return html.escape(value, quote=True)
 
 

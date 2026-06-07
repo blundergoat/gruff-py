@@ -129,11 +129,11 @@ class CommentedOutCodeRule(Rule):
 def _strip_comment_prefix(line: str) -> str:
     """Return *line* with the leading ``#`` and at most one space stripped,
     preserving original indentation so ``compile`` sees consistent levels."""
-    idx = line.find("#")
-    if idx < 0:
+    index = line.find("#")
+    if index < 0:
         return line
-    indent = line[:idx]
-    body = line[idx + 1 :]
+    indent = line[:index]
+    body = line[index + 1 :]
     if body.startswith(" "):
         body = body[1:]
     return indent + body

@@ -234,11 +234,11 @@ class HtmlReporter:
         if self.interactive:
             search = f"{finding.rule_id} {finding.message}"
             attributes = (
-                f' data-severity="{_esc_attr(finding.severity.value)}"'
-                f' data-pillar="{_esc_attr(finding.pillar.value)}"'
-                f' data-file="{_esc_attr(finding.file_path)}"'
-                f' data-rule="{_esc_attr(finding.rule_id)}"'
-                f' data-search="{_esc_attr(search)}"'
+                f' data-severity="{_escape_attribute(finding.severity.value)}"'
+                f' data-pillar="{_escape_attribute(finding.pillar.value)}"'
+                f' data-file="{_escape_attribute(finding.file_path)}"'
+                f' data-rule="{_escape_attribute(finding.rule_id)}"'
+                f' data-search="{_escape_attribute(search)}"'
             )
         return (
             f'<div class="finding"{attributes}>'
@@ -255,11 +255,9 @@ class HtmlReporter:
     def _location_markup(self, file_path: str, line: int | None) -> str:
         text = file_path if line is None else f"{file_path}:{line}"
         href = self._editor_href(file_path, line)
-        location_attribute = f' data-path="{_esc_attr(text)}"'
+        location_attribute = f' data-path="{_escape_attribute(text)}"'
         if href is not None:
-            return (
-                f'<a class="loc-link" href="{_esc_attr(href)}"{location_attribute}>{_esc(text)}</a>'
-            )
+            return f'<a class="loc-link" href="{_escape_attribute(href)}"{location_attribute}>{_esc(text)}</a>'
         return f'<span class="loc-link" tabindex="0"{location_attribute}>{_esc(text)}</span>'
 
     def _editor_href(self, file_path: str, line: int | None) -> str | None:
@@ -283,7 +281,8 @@ class HtmlReporter:
     def _finding_filters(self, report: AnalysisReport) -> str:
         pillars = sorted({finding.pillar.value for finding in report.findings})
         pillar_options = "".join(
-            f'<option value="{_esc_attr(pillar)}">{_esc(pillar)}</option>' for pillar in pillars
+            f'<option value="{_escape_attribute(pillar)}">{_esc(pillar)}</option>'
+            for pillar in pillars
         )
         pillar_size = max(2, min(6, len(pillars)))
         return (
@@ -360,7 +359,7 @@ def _meta_row(label: str, value: str) -> str:
 
 def _stat(number: str, label: str, class_name: str) -> str:
     return (
-        f'<div class="stat"><div class="num {_esc_attr(class_name)}">{_esc(number)}</div>'
+        f'<div class="stat"><div class="num {_escape_attribute(class_name)}">{_esc(number)}</div>'
         f'<div class="lbl">{_esc(label)}</div></div>'
     )
 
@@ -418,7 +417,7 @@ def _esc(value: str) -> str:
     return html.escape(value, quote=True)
 
 
-def _esc_attr(value: str) -> str:
+def _escape_attribute(value: str) -> str:
     return html.escape(value, quote=True)
 
 

@@ -108,10 +108,10 @@ def _verified_mocks(fn: ast.FunctionDef | ast.AsyncFunctionDef, names: set[str])
     for node in walk_test_body(fn):
         if not isinstance(node, ast.Call):
             continue
-        func = node.func
-        if not isinstance(func, ast.Attribute) or not func.attr.startswith("assert_"):
+        callee = node.func
+        if not isinstance(callee, ast.Attribute) or not callee.attr.startswith("assert_"):
             continue
-        receiver_root = _root_name(func.value)
+        receiver_root = _root_name(callee.value)
         if receiver_root in names:
             verified.add(receiver_root)
     return verified

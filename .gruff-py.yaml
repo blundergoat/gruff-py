@@ -22,6 +22,7 @@ allowlists:
   acceptedAbbreviations:
   - age
   - app
+  - ctx
   - db
   - fs
   - id
@@ -42,9 +43,146 @@ allowlists:
     decorators: []
     paths: []
 selection:
-  tiers: []
-  pillars: []
-  rules: []
+  tiers:
+  - v0.1
+  pillars:
+  - complexity
+  - maintainability
+  - dead-code
+  - design
+  - documentation
+  - modernisation
+  - naming
+  - security
+  - sensitive-data
+  - size
+  - test-quality
+  rules:
+  - complexity.cognitive
+  - complexity.cyclomatic
+  - complexity.halstead-volume
+  - complexity.maintainability-index
+  - complexity.nesting-depth
+  - dead-code.unused-private-attribute
+  - dead-code.unused-private-function
+  - design.single-implementor-protocol
+  - docs.complex-branch-rationale
+  - docs.dataclass-attributes
+  - docs.ignore-directive-reason
+  - docs.missing-class-docstring
+  - docs.missing-function-docstring
+  - docs.missing-module-docstring
+  - docs.missing-param-doc
+  - docs.missing-raises-doc
+  - docs.missing-readme
+  - docs.missing-return-doc
+  - docs.stale-param-doc
+  - docs.todo-density
+  - docs.useless-docstring
+  - modernisation.f-string-candidate
+  - naming.abbreviation
+  - naming.boolean-prefix
+  - naming.confusing-name
+  - naming.generic-function
+  - naming.hungarian-notation
+  - naming.identifier-quality
+  - naming.module-name-mismatch
+  - naming.short-variable
+  - naming.test-naming-consistency
+  - security.cors-wildcard-with-credentials
+  - security.dangerous-function-call
+  - security.dependency-git-reference
+  - security.dependency-local-path
+  - security.dependency-url-reference
+  - security.disabled-ssl-verification
+  - security.django-mark-safe
+  - security.django-raw-sql
+  - security.error-suppression
+  - security.extract-compact-user-input
+  - security.flask-debug-enabled
+  - security.github-actions-broad-permissions
+  - security.github-actions-pull-request-target
+  - security.github-actions-remote-shell
+  - security.github-actions-secrets-in-pr
+  - security.github-actions-unpinned-action
+  - security.hardcoded-bind-all-interfaces
+  - security.hardcoded-framework-secret-key
+  - security.header-injection
+  - security.insecure-random
+  - security.insecure-temp-file
+  - security.insecure-tls-protocol
+  - security.jinja2-autoescape-off
+  - security.paramiko-no-host-key-check
+  - security.path-traversal
+  - security.shell-injection
+  - security.silent-except
+  - security.sql-concatenation
+  - security.ssrf
+  - security.unsafe-pickle
+  - security.unsafe-yaml-load
+  - security.variable-import
+  - security.weak-crypto
+  - security.xxe
+  - sensitive-data.api-key-pattern
+  - sensitive-data.aws-access-key
+  - sensitive-data.database-url-password
+  - sensitive-data.gcp-service-account-key
+  - sensitive-data.hardcoded-env-value
+  - sensitive-data.high-entropy-string
+  - sensitive-data.jwt-token
+  - sensitive-data.phi-pattern
+  - sensitive-data.pii-test-fixture
+  - sensitive-data.private-key
+  - sensitive-data.url-credentials
+  - size.attribute-count
+  - size.average-function-length
+  - size.class-length
+  - size.file-length
+  - size.function-length
+  - size.parameter-count
+  - size.public-method-count
+  - test-quality.conditional-logic
+  - test-quality.eager-test
+  - test-quality.empty-parametrize
+  - test-quality.exception-type-only
+  - test-quality.excessive-mocking
+  - test-quality.extends-production-class
+  - test-quality.global-state-mutation
+  - test-quality.loop-assertion-without-message
+  - test-quality.loop-in-test
+  - test-quality.magic-number-assertion
+  - test-quality.mock-only-test
+  - test-quality.mock-without-expectation
+  - test-quality.mocking-domain-object
+  - test-quality.multiple-aaa-cycles
+  - test-quality.mystery-guest
+  - test-quality.naming-consistency
+  - test-quality.no-assertions
+  - test-quality.parametrize-annotation
+  - test-quality.private-reflection
+  - test-quality.pytest-coverage-source-missing
+  - test-quality.pytest-deprecations-not-fatal
+  - test-quality.pytest-strict-config-missing
+  - test-quality.repeated-structure-missing-parametrize
+  - test-quality.setup-bloat
+  - test-quality.skipped-without-reason
+  - test-quality.sleep-in-test
+  - test-quality.static-analysis-redundant-test
+  - test-quality.sut-not-called
+  - test-quality.tautological-type-assertion
+  - test-quality.test-function-too-long
+  - test-quality.test-longer-than-sut
+  - test-quality.trivial-assertion
+  - test-quality.trivial-snapshot
+  - test-quality.unused-mock
+  - waste.commented-out-code
+  - waste.empty-class
+  - waste.empty-function
+  - waste.one-line-function
+  - waste.redundant-variable
+  - waste.unreachable-code
+  - waste.unused-import
+  - waste.unused-parameter
   excludePillars: []
   excludeRules: []
 rules:
@@ -225,6 +363,13 @@ rules:
       - helpers
       - protocols
       - types
+      - cli
+      - dashboard_server
+      - python_parser
+      - _halstead
+      - _secret_scanner_helper
+      - _comment_scanner
+      - _dependency_posture_helper
   # Short variable name
   naming.short-variable:
     enabled: true
