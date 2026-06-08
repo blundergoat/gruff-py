@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-05
+last_reviewed: 2026-06-08
 ---
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
@@ -20,6 +20,39 @@ changed function for the symbol-vs-hunk regression.
 When testing changed-region hunk behaviour, read the rule's `Finding` location
 shape first. Do not assume hunk filtering uses only the primary line; it uses
 the full reported location span when `end_line` is present.
+
+## Lesson: Anchor-only aggregate filtering must include decorated headers
+
+**Created:** 2026-06-08
+**Incident:** While aligning symbol-scope changed-region filtering for
+file/class aggregate findings, the first anchor-only implementation tested only
+`finding.line`. Reading `src/gruffpy/rule/size/class_length_rule.py` (search:
+`line=_start_line(node)`) and `src/gruffpy/rule/size/_lines.py` (search:
+`decorators`) showed `size.class-length` anchors decorated classes at the first
+decorator line, while `src/gruffpy/analysis/changed_region.py` declaration
+ranges start at the `class` line. That meant an edit to the class header line
+would suppress the class-length finding even though the edit touched the
+aggregate anchor surface. The correction was to include the matching declaration
+header line when anchoring symbol-scoped aggregate findings.
+
+When changing anchor-only symbol filtering, test decorated declarations as well
+as undecorated ones. The relevant anchor may be a small header range, not only a
+single reported line.
+
+## Lesson: New root commands must update the static root menu
+
+**Created:** 2026-06-08
+**Incident:** While adding the `hook` command for the agent-hook contract,
+`tests/integration/test_hook_contract.py` proved direct invocation worked, but
+the full CLI smoke suite failed because `gruff-py --help` did not list `hook`.
+Reading `src/gruffpy/cli_menu.py` showed the root help screen is rendered from
+a static `_root_menu_commands` list, separate from Click's command registry in
+`src/gruffpy/cli.py`.
+
+When adding or renaming a root command, update both the Click registration and
+`src/gruffpy/cli_menu.py`, then run the full
+`uv run pytest tests/integration/test_cli_smoke.py` rather than only invoking
+the new command directly.
 
 ## Lesson: Read the rule body before calling a rule dead or leftover
 

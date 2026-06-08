@@ -76,6 +76,7 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
         _command_line("completion", "Dump the shell completion script", ctx),
         _command_line("dashboard", "Serve the local gruff-py dashboard.", ctx),
         _command_line("help", "Display help for a command", ctx),
+        _command_line("hook", "Run gruff-py analysis for an agent hook.", ctx),
         _command_line("init", "Write a default .gruff-py.yaml to the current directory.", ctx),
         _command_line("list", "List commands", ctx),
         _command_line("list-rules", "List gruff-py rule metadata.", ctx),

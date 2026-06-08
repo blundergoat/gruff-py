@@ -124,6 +124,26 @@ class _PatchState:
 
 _HUNK_RE = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
+# These findings describe file/class-level or aggregate properties. Their
+# reported spans are useful for full scans and hunk scope, but symbol scope
+# should attribute them to the finding anchor so inherited debt does not survive
+# every body edit.
+_SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS = frozenset(
+    {
+        "docs.dataclass-attributes",
+        "docs.missing-module-docstring",
+        "docs.todo-density",
+        "naming.module-name-mismatch",
+        "naming.test-naming-consistency",
+        "size.attribute-count",
+        "size.average-function-length",
+        "size.class-length",
+        "size.file-length",
+        "size.public-method-count",
+        "test-quality.naming-consistency",
+    }
+)
+
 
 def parse_explicit_ranges(source_paths: tuple[str, ...], raw_ranges: str) -> ChangedRegionSet:
     """Build a changed-region set from ``1-3,8`` style ranges.
@@ -404,6 +424,8 @@ def _is_finding_in_symbol_scope(
     changed: ChangedRegionSet,
     declarations: tuple[_DeclarationRange, ...],
 ) -> bool:
+    if finding.rule_id in _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS:
+        return _is_finding_anchor_changed(finding, changed, declarations)
     if _is_finding_location_changed(finding, changed):
         return True
     if finding.line is None:
@@ -412,6 +434,34 @@ def _is_finding_in_symbol_scope(
     return declaration is not None and changed.has_changed_range(
         finding.file_path, declaration.start, declaration.end
     )
+
+
+def _is_finding_anchor_changed(
+    finding: Finding,
+    changed: ChangedRegionSet,
+    declarations: tuple[_DeclarationRange, ...],
+) -> bool:
+    if finding.line is None:
+        return changed.is_file_changed(finding.file_path)
+    anchor_end = _declaration_anchor_line(finding, declarations) or finding.line
+    anchor_start = min(finding.line, anchor_end)
+    anchor_end = max(finding.line, anchor_end)
+    return changed.has_changed_range(finding.file_path, anchor_start, anchor_end)
+
+
+def _declaration_anchor_line(
+    finding: Finding,
+    declarations: tuple[_DeclarationRange, ...],
+) -> int | None:
+    if finding.symbol is None or finding.end_line is None or finding.line is None:
+        return None
+    for declaration in declarations:
+        if (
+            _symbol_matches(finding.symbol, declaration.symbol)
+            and finding.line <= declaration.start <= finding.end_line
+        ):
+            return declaration.start
+    return None
 
 
 def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) -> bool:

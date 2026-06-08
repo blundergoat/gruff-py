@@ -26,6 +26,7 @@ _EXPECTED_ROOT_COMMANDS = (
     "completion",
     "dashboard",
     "help",
+    "hook",
     "init",
     "list",
     "list-rules",
@@ -251,6 +252,55 @@ def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
     assert payload["findings"] == []
     assert payload["suppressedCount"] >= 1
     assert payload["diff"]["suppressedCount"] == payload["suppressedCount"]
+
+
+def test_analyse_changed_scope_symbol_anchors_file_length_findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_text("# Test project\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text(
+        '"""Utilities for changed-region file length regression coverage."""\n' + "\n" * 1008
+    )
+    base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+
+    far = CliRunner().invoke(
+        main,
+        [*base, "--changed-ranges", "500-500", "--changed-scope", "symbol", "src/sample.py"],
+    )
+    anchor = CliRunner().invoke(
+        main,
+        [*base, "--changed-ranges", "1-1", "--changed-scope", "symbol", "src/sample.py"],
+    )
+    full = CliRunner().invoke(main, [*base, "src/sample.py"])
+
+    assert far.exit_code == 0, far.output
+    assert anchor.exit_code == 0, anchor.output
+    assert full.exit_code == 0, full.output
+    far_payload = json.loads(far.output)
+    anchor_payload = json.loads(anchor.output)
+    full_payload = json.loads(full.output)
+
+    assert [finding["ruleId"] for finding in far_payload["findings"]] == []
+    assert far_payload["suppressedCount"] >= 1
+    assert far_payload["diff"]["suppressedCount"] == far_payload["suppressedCount"]
+
+    anchor_file_length = [
+        finding for finding in anchor_payload["findings"] if finding["ruleId"] == "size.file-length"
+    ]
+    full_file_length = [
+        finding for finding in full_payload["findings"] if finding["ruleId"] == "size.file-length"
+    ]
+    assert len(anchor_file_length) == 1
+    assert len(full_file_length) == 1
+    assert anchor_file_length[0]["line"] == 1
+    assert anchor_file_length[0]["metadata"]["lines"] == 1010
+    assert anchor_file_length[0]["metadata"]["threshold"] == 1000
+    assert "suppressedCount" not in full_payload
+    assert "diff" not in full_payload
 
 
 def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(

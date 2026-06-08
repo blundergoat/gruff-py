@@ -1,6 +1,10 @@
 import ast
 
+import pytest
+
 from gruffpy.analysis.changed_region import (
+    _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS,
+    ChangedRegionSet,
     filter_findings_for_changed_regions,
     parse_explicit_ranges,
     parse_unified_diff,
@@ -13,6 +17,30 @@ from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.source.source_file import SourceFile
 
+_FILE_LEVEL_ANCHOR_ONLY_RULE_IDS = (
+    "docs.missing-module-docstring",
+    "docs.todo-density",
+    "naming.test-naming-consistency",
+    "size.file-length",
+    "test-quality.naming-consistency",
+)
+
+_CLASS_LEVEL_ANCHOR_ONLY_RULE_IDS = (
+    "docs.dataclass-attributes",
+    "naming.module-name-mismatch",
+    "size.attribute-count",
+    "size.average-function-length",
+    "size.class-length",
+    "size.public-method-count",
+)
+
+
+def test_anchor_only_fixtures_cover_every_source_rule_id() -> None:
+    # Guards against drift: adding a rule to the source set without covering it
+    # here (or vice versa) fails loudly instead of leaving the new rule untested.
+    covered = set(_FILE_LEVEL_ANCHOR_ONLY_RULE_IDS) | set(_CLASS_LEVEL_ANCHOR_ONLY_RULE_IDS)
+    assert covered == set(_SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS)
+
 
 def test_symbol_scope_keeps_signature_finding_when_body_changed() -> None:
     unit = _unit("def changed():\n    return eval('x')\n")
@@ -20,6 +48,89 @@ def test_symbol_scope_keeps_signature_finding_when_body_changed() -> None:
     changed = parse_explicit_ranges(("sample.py",), "2-2")
 
     result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+@pytest.mark.parametrize("rule_id", _FILE_LEVEL_ANCHOR_ONLY_RULE_IDS)
+def test_symbol_scope_excludes_file_level_findings_when_edit_misses_anchor(
+    rule_id: str,
+) -> None:
+    unit = _unit("def changed():\n    return 1\n")
+    finding = _finding("sample.py", rule_id=rule_id, line=1, end_line=10, symbol=None)
+    changed = parse_explicit_ranges(("sample.py",), "2-2")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == []
+    assert result.suppressed_count == 1
+
+
+@pytest.mark.parametrize("rule_id", _CLASS_LEVEL_ANCHOR_ONLY_RULE_IDS)
+def test_symbol_scope_excludes_class_level_findings_when_edit_misses_anchor(
+    rule_id: str,
+) -> None:
+    unit = _unit("class Big:\n    value = 1\n    other = 2\n")
+    finding = _finding("sample.py", rule_id=rule_id, line=1, end_line=3, symbol="Big")
+    changed = parse_explicit_ranges(("sample.py",), "2-2")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == []
+    assert result.suppressed_count == 1
+
+
+def test_symbol_scope_keeps_decorated_class_aggregate_when_class_header_changed() -> None:
+    unit = _unit("@decorator\nclass Big:\n    value = 1\n")
+    finding = _finding("sample.py", rule_id="size.class-length", line=1, end_line=3, symbol="Big")
+    changed = parse_explicit_ranges(("sample.py",), "2-2")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+def test_symbol_scope_keeps_file_level_finding_when_anchor_changed() -> None:
+    unit = _unit("x = 1\n")
+    finding = _finding("sample.py", rule_id="size.file-length", line=1, end_line=10, symbol=None)
+    changed = parse_explicit_ranges(("sample.py",), "1-1")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+def test_full_scan_keeps_file_level_finding() -> None:
+    unit = _unit("x = 1\n")
+    finding = _finding("sample.py", rule_id="size.file-length", line=1, end_line=10, symbol=None)
+    changed = ChangedRegionSet(source="")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+def test_symbol_scope_keeps_line_level_finding_on_changed_line() -> None:
+    unit = _unit("x = 1\ny = eval('x')\n")
+    finding = _finding("sample.py", rule_id="security.dangerous-function-call", line=2, symbol=None)
+    changed = parse_explicit_ranges(("sample.py",), "2-2")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
+
+    assert result.findings == [finding]
+    assert result.suppressed_count == 0
+
+
+def test_hunk_scope_still_keeps_file_level_span_when_edit_intersects_it() -> None:
+    unit = _unit("x = 1\n")
+    finding = _finding("sample.py", rule_id="size.file-length", line=1, end_line=10, symbol=None)
+    changed = parse_explicit_ranges(("sample.py",), "5-5")
+
+    result = filter_findings_for_changed_regions([finding], [unit], changed, "hunk")
 
     assert result.findings == [finding]
     assert result.suppressed_count == 0
@@ -119,9 +230,16 @@ def _unit(source: str) -> AnalysisUnit:
     )
 
 
-def _finding(file_path: str, *, line: int, symbol: str) -> Finding:
+def _finding(
+    file_path: str,
+    *,
+    line: int,
+    symbol: str | None,
+    rule_id: str = "docs.missing-function-docstring",
+    end_line: int | None = None,
+) -> Finding:
     return Finding(
-        rule_id="docs.missing-function-docstring",
+        rule_id=rule_id,
         message="Function needs a brief intent description in its docstring.",
         file_path=file_path,
         line=line,
@@ -129,5 +247,6 @@ def _finding(file_path: str, *, line: int, symbol: str) -> Finding:
         pillar=Pillar.DOCUMENTATION,
         tier=RuleTier.V01,
         confidence=Confidence.HIGH,
+        end_line=end_line,
         symbol=symbol,
     )

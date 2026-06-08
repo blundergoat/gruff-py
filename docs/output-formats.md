@@ -38,8 +38,10 @@ gruff-py analyse --format json --fail-on none --no-baseline \
   trusts it and does **not** re-filter findings by line.
 - `--changed-scope symbol` — widen each changed range to its enclosing declaration
   (function, method, or class), so editing a body still surfaces that symbol's
-  signature-line findings. `--changed-scope hunk` restricts to the literal changed
-  lines instead.
+  signature-line findings. Whole-file and class-level aggregate findings are
+  anchored under symbol scope, so inherited aggregate debt is suppressed unless
+  the edit touches the finding's anchor line or header. `--changed-scope hunk`
+  restricts to the literal changed lines instead.
 - `--no-baseline` — do not auto-apply a baseline file, so an adoption baseline can
   not hide the agent's own feedback.
 
@@ -64,6 +66,11 @@ identity is exact. The `diff` section also carries `enabled`, `source`,
 the top-level `suppressedCount` and the `diff` section appear **only** when
 changed-region scoping is active; a full scan emits neither.
 
+CI workflows that still want whole-file aggregate findings for pull-request
+diffs should run a full scan or a companion hunk-scope scan. Full scans emit all
+file-wide findings; hunk scope keeps findings whose reported span intersects the
+changed lines.
+
 Findings keep the normative flat shape (`file`, `line`, `endLine`, `column`,
 `symbol`, `severity` ∈ `advisory | warning | error`, `ruleId`, `message`,
 `fingerprint`, …). Config-ignored files are reported at the top level under
@@ -72,6 +79,32 @@ Findings keep the normative flat shape (`file`, `line`, `endLine`, `column`,
 > Cross-port note: gruff-py and gruff-php expose `ignoredPaths` at the **top
 > level**; gruff-rs, gruff-ts, and gruff-go nest it under `paths`. gruff-py is left
 > unchanged here on purpose — the workspace contract owner tracks convergence.
+
+## Hook JSON
+
+`gruff-py hook --format json` emits the agent-hook contract rather than the
+native `gruff.analysis.v2` report:
+
+```json
+{
+  "contractVersion": "gruff.hook.v1",
+  "analyzer": { "name": "gruff-py", "version": "0.3.1" },
+  "findings": [],
+  "suppressed": { "count": 0 },
+  "ignored": { "paths": [] },
+  "config": { "schemaOk": true, "error": null }
+}
+```
+
+Hook findings use the contract's normative names: `file`, `scope`, non-null
+`remediation`, `stableIdentity`, optional `fingerprint`, and threshold metadata
+with `measured`, `threshold`, `unit`, and `direction`. `hook` exits `0` after a
+successful analysis even when findings are present; operational failures such as
+invalid config exit `2` and still render a hook JSON payload when config loading
+is the failure.
+
+`gruff-py hook --capabilities --format json` advertises the same
+`gruff.hook.v1` contract, supported flags, and `flagOrder`.
 
 ## HTML
 

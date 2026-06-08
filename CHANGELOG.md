@@ -4,6 +4,25 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+- **Agent-hook contract v1** - Added `gruff-py hook --format json` and
+  `gruff-py hook --capabilities --format json`, advertising and emitting the
+  cross-analyzer `gruff.hook.v1` contract and listing the new command in root
+  help. Hook mode exits 0 after successful analysis, disables baseline
+  application by default, reports ignored paths in-band, surfaces config schema
+  errors in JSON, adds hook-only `scope` and normalized threshold metadata
+  fields, and uses a hook stable identity that is stable across line shifts and
+  measured-value changes for new-only `--baseline` / `--diff` comparisons,
+  including changed-region hook runs. Existing `analyse`, `summary`, and
+  `report` payloads are unchanged.
+- **Changed-region symbol scope suppresses inherited aggregate debt** - `analyse`
+  now attributes whole-file and class-level aggregate findings to their anchor
+  line or header under `--changed-scope symbol`, so edits elsewhere in an
+  oversized file or class suppress inherited findings such as `size.file-length`,
+  `docs.todo-density`, and class aggregate size rules while still counting them
+  in `suppressedCount`. Full scans still report every file-wide finding, and
+  hunk-scope scans still retain findings whose reported span intersects a
+  changed line for CI workflows that need pull-request aggregate signal.
+
 ## v0.3.1 - 2026-06-03
 
 - **BREAKING: analysis JSON schema string unified** - `analyse --format json`, `report --format json`, SARIF `run.properties.gruffSchemaVersion`, and config-error JSON payloads now emit `schemaVersion: "gruff.analysis.v2"` instead of `gruff-py.analysis.v1`. Migration: consumers that key on the schema string should accept the new shared gruff-family value; baseline, hotspot, summary, and config schema strings are unchanged.
