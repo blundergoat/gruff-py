@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# scripts/dependency-update.sh - update gruff-py's uv dependency lock.
+# scripts/dependency-update.sh - update gruff-py's dependency locks.
 #
 # Updates uv.lock, syncs the local environment, and runs the dependency audit.
-# With no package arguments, all dependencies are eligible for upgrade. With
-# package arguments or --package, only those packages are targeted.
+# With no package arguments, all dependencies are eligible for upgrade and the
+# npm dependencies (goat-flow agent tooling) are updated via `npm update`. With
+# package arguments or --package, only those Python packages are targeted and
+# npm is left untouched.
 
 set -uo pipefail
 
@@ -12,6 +14,7 @@ ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 RUN_SYNC=1
 RUN_AUDIT=1
+RUN_NPM=1
 DRY_RUN=0
 PYTHON_ARGS=()
 PACKAGES=()
@@ -34,8 +37,10 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/dependency-update.sh [options] [packages...] [-- uv-lock-args...]
 
-Update gruff-py's dependency lock and local environment. The sync step
+Update gruff-py's dependency locks and local environment. The sync step
 reinstalls gruff-py so console entry points stay aligned with pyproject.toml.
+With no package arguments the npm dependencies (goat-flow) are also updated via
+`npm update`; targeted package arguments are Python-scoped and skip npm.
 
 Examples:
   scripts/dependency-update.sh
@@ -43,11 +48,12 @@ Examples:
   scripts/dependency-update.sh --package pip-audit --dry-run
 
 Options:
-  -P, --package PACKAGE  Upgrade one package. May be repeated.
+  -P, --package PACKAGE  Upgrade one Python package. May be repeated.
   --python PYTHON       Resolve and sync with a specific Python interpreter.
   --dry-run             Preview lockfile changes; skip sync and audit.
-  --no-sync             Update uv.lock but do not sync the environment.
+  --no-sync             Update lockfiles but do not install into the environment.
   --no-audit            Skip the pip-audit vulnerability check.
+  --no-npm              Skip updating npm dependencies.
   -h, --help            Show this help.
 
 Any arguments after `--` are passed through to `uv lock`.
@@ -112,6 +118,32 @@ sync_dependencies() {
   uv sync "${sync_args[@]}"
 }
 
+npm_project_present() {
+  [[ -f "$ROOT_DIR/package.json" ]]
+}
+
+require_npm() {
+  if ! command -v npm >/dev/null 2>&1; then
+    err "npm is not on PATH but package.json is present (goat-flow ships as an npm package). Install Node.js: https://nodejs.org/"
+    return 127
+  fi
+}
+
+update_npm() {
+  local npm_args=(update)
+
+  if ((DRY_RUN)); then
+    npm_args+=(--dry-run)
+  elif ((RUN_SYNC == 0)); then
+    npm_args+=(--package-lock-only)
+  fi
+
+  printf 'Running: npm'
+  printf ' %q' "${npm_args[@]}"
+  printf '\n'
+  npm "${npm_args[@]}"
+}
+
 main() {
   while (($#)); do
     case "$1" in
@@ -142,6 +174,9 @@ main() {
       --no-audit)
         RUN_AUDIT=0
         ;;
+      --no-npm)
+        RUN_NPM=0
+        ;;
       -h|--help)
         usage
         return 0
@@ -166,6 +201,17 @@ main() {
   cd "$ROOT_DIR" || return 1
   require_uv || return $?
 
+  if ((RUN_NPM)) && npm_project_present; then
+    if ((${#PACKAGES[@]} > 0)); then
+      warn "Targeted package update: skipping npm (positional packages are Python-scoped). Run scripts/dependency-update.sh with no packages to update npm."
+      RUN_NPM=0
+    else
+      require_npm || return $?
+    fi
+  else
+    RUN_NPM=0
+  fi
+
   if ((DRY_RUN)); then
     RUN_SYNC=0
     RUN_AUDIT=0
@@ -176,6 +222,10 @@ main() {
 
   if ((RUN_SYNC)); then
     sync_dependencies || return 1
+  fi
+
+  if ((RUN_NPM)); then
+    update_npm || return 1
   fi
 
   if ((RUN_AUDIT)); then

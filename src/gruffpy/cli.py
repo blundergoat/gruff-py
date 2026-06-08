@@ -18,10 +18,12 @@ from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
+from gruffpy.cli_hook import hook as _hook_command
 from gruffpy.cli_list_rules import list_rules_detail
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
 from gruffpy.cli_options import (
     ClickDecorator,
+    _option,
     analyse_command as _analyse_command,
     apply_decorators,
     bind_root_group,
@@ -184,28 +186,11 @@ class _AnalysisCliRequest:
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     cast(ClickDecorator, click.pass_context),
-    cast(
-        ClickDecorator,
-        click.option(
-            "-v",
-            "--verbose",
-            count=True,
-            help="Increase message verbosity. Use -v, -vv, or -vvv.",
-        ),
+    _option(
+        "-v", "--verbose", count=True, help="Increase message verbosity. Use -v, -vv, or -vvv."
     ),
-    cast(
-        ClickDecorator,
-        click.option(
-            "-n",
-            "--no-interaction",
-            is_flag=True,
-            help="Do not ask any interactive question.",
-        ),
-    ),
-    cast(
-        ClickDecorator,
-        click.option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output."),
-    ),
+    _option("-n", "--no-interaction", is_flag=True, help="Do not ask any interactive question."),
+    _option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output."),
     cast(
         ClickDecorator,
         click.version_option(
@@ -216,16 +201,13 @@ _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
             message=f"{TOOL_NAME} %(version)s",
         ),
     ),
-    cast(
-        ClickDecorator,
-        click.option(
-            "-q",
-            "--quiet",
-            is_flag=True,
-            help="Only errors are displayed. All other output is suppressed.",
-        ),
+    _option(
+        "-q",
+        "--quiet",
+        is_flag=True,
+        help="Only errors are displayed. All other output is suppressed.",
     ),
-    cast(ClickDecorator, click.option("--silent", is_flag=True, help="Do not output any message.")),
+    _option("--silent", is_flag=True, help="Do not output any message."),
     cast(
         ClickDecorator,
         click.group(
@@ -268,6 +250,7 @@ def main(ctx: click.Context, **kwargs: Any) -> None:
 
 main = cast(click.Group, main)
 bind_root_group(main)
+main.add_command(_hook_command)
 
 
 @_analyse_command

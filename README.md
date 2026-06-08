@@ -20,12 +20,12 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 
 | Field | Value |
 | --- | --- |
-| Release line | Published `0.3.0` package line |
+| Release line | Published `0.3.1` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 124 rules across 11 pillars |
+| Rule catalogue | 125 rules across 11 pillars |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff.analysis.v2` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -90,10 +90,12 @@ Open `http://127.0.0.1:8765/` for the dashboard.
 
 | Command | Purpose |
 | --- | --- |
+| `init` | Write a default `.gruff-py.yaml` to the current directory. |
 | `analyse [paths...]` | Run the analyser and print findings. |
 | `summary [paths...]` | Print compact score, pillar, rule, and file summaries. |
 | `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
-| `list-rules` | Print rule metadata as text or JSON. |
+| `list-rules [rule-id]` | Print rule metadata as text or JSON; pass a rule id for explain mode. |
+| `check-ignore [paths...]` | Report whether each path is ignored, and why (exit codes mirror `git check-ignore`). |
 | `dashboard [paths...]` | Serve the local browser dashboard. |
 | `completion [shell]` | Print a shell completion script. |
 | `list`, `help` | Show command lists and command-specific help. |
@@ -176,7 +178,7 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.3.0 catalogue contains 124 rules across 11 pillars:
+The v0.3.1 catalogue contains 125 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
@@ -189,10 +191,10 @@ The v0.3.0 catalogue contains 124 rules across 11 pillars:
 | `documentation` | 13 |
 | `security` | 34 |
 | `sensitive-data` | 11 |
-| `test-quality` | 33 |
+| `test-quality` | 34 |
 | `design` | 1 |
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.3.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.3.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 

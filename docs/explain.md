@@ -67,7 +67,7 @@ gruff-py list-rules naming.short-variable --format json | jq '.documentation.opt
 }
 ```
 
-The single-rule JSON payload has `id`, `name`, `pillar`, `tier`, `defaultSeverity`, `confidence`, `defaultEnabled`, `thresholds`, `options`, `documentation` (full `RuleDocs`), and `relatedRules`.
+The single-rule JSON payload has `id`, `name`, `pillar`, `tier`, `defaultSeverity`, `confidence`, `defaultEnabled`, `options`, `documentation` (full `RuleDocs`), and `relatedRules`, plus an optional `threshold` (a single value, as on `complexity.cyclomatic`) or `thresholds` (a named map, as on `test-quality.eager-test`) key — present only for rules that define one, so the `naming.short-variable` example above has neither.
 
 ## Unknown rule ids
 

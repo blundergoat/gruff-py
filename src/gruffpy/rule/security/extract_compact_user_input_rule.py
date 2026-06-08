@@ -81,7 +81,7 @@ class ExtractCompactUserInputRule(Rule):
             for kw in node.keywords:
                 if kw.arg is not None:
                     continue
-                if not _is_request_attr(kw.value):
+                if not _is_request_attribute(kw.value):
                     continue
                 findings.append(
                     Finding(
@@ -109,7 +109,7 @@ class ExtractCompactUserInputRule(Rule):
         return findings
 
 
-def _is_request_attr(node: ast.expr) -> bool:
+def _is_request_attribute(node: ast.expr) -> bool:
     """True when *node* is ``<something>.request.<attr>`` or ``request.<attr>``."""
     if not isinstance(node, ast.Attribute):
         return False

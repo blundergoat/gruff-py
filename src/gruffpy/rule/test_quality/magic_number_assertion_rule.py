@@ -291,11 +291,11 @@ def _integer_constants(expr: ast.AST) -> set[ast.Constant]:
 
 
 def _call_name(call: ast.Call) -> str:
-    func = call.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
+    callee = call.func
+    if isinstance(callee, ast.Name):
+        return callee.id
+    if isinstance(callee, ast.Attribute):
+        return callee.attr
     return ""
 
 

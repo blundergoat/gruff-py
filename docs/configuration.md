@@ -50,7 +50,6 @@ paths:
     - ".github/"
     - ".goat-flow/"
     - "tests/fixtures/**"
-    - "generated/**"
 
 allowlists:
   acceptedAbbreviations:
@@ -101,7 +100,6 @@ ignore = [
     ".github/",
     ".goat-flow/",
     "tests/fixtures/**",
-    "generated/**",
 ]
 
 [tool.gruff-py.allowlists]
@@ -135,6 +133,7 @@ Top-level keys:
 | `allowlists` | table | Naming and secret-preview allowlists |
 | `selection` | table | Rule and pillar selection |
 | `rules` | table | Per-rule settings |
+| `outputVolumeHintThreshold` | integer | Finding count at which `analyse --format text` appends a pointer to `summary --group-by=rule` (default `50`; `0` disables) |
 
 `minimumSeverity`:
 
@@ -158,6 +157,7 @@ Keys for non-gating subcommands (`summary`, `list-rules`, `metric-calibration`, 
 |---|---|---|
 | `acceptedAbbreviations` | list of strings | Abbreviations accepted by naming rules |
 | `secretPreviews` | list of strings | Known safe secret previews |
+| `deadCode` | table | Dead-code allowlist with `symbols`, `decorators`, and `paths` keys (each a list of strings) that suppress dead-code findings |
 
 `selection`:
 
@@ -183,7 +183,7 @@ Use `threshold` plus `severity` for metric rules that have warning/error
 defaults. Keep `thresholds` for named tuning values. Do not combine
 `threshold` and `thresholds` in the same rule entry.
 
-Unknown keys are rejected with a `config-error` diagnostic and exit code `2`.
+Unknown keys are rejected: the default text output prints an error to stderr and exits `1`, while `--format json` emits a `config-error` diagnostic object and exits `2`.
 
 ## Boolean Boundary Names
 
@@ -234,7 +234,7 @@ Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
 Adding `summary: advisory` or any other key is a hard error; silent acceptance
 would be a CI footgun.
 
-See [ADR-019](../.goat-flow/decisions/ADR-019-per-command-minimum-severity.md)
+See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
 for the rationale, the rejected alternatives, and the cross-port invariant.
 
 ## Schema Version

@@ -212,15 +212,15 @@ def _class_token_variants(name: str) -> list[list[str]]:
 
 def _join_leading_initialisms(tokens: list[str]) -> list[str]:
     result: list[str] = []
-    idx = 0
-    while idx < len(tokens):
-        token = tokens[idx]
-        if len(token) == 1 and idx + 1 < len(tokens):
-            result.append(f"{token}{tokens[idx + 1]}")
-            idx += 2
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if len(token) == 1 and index + 1 < len(tokens):
+            result.append(f"{token}{tokens[index + 1]}")
+            index += 2
             continue
         result.append(token)
-        idx += 1
+        index += 1
     return result
 
 

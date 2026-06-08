@@ -141,8 +141,7 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
     lines.append("")
     lines.append("Score")
     lines.append(
-        f"  Composite: {report.score.composite.letter} "
-        f"({report.score.composite.score:.2f} / 100)"
+        f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
     )
     lines.append(
         f"  Findings: {counts['total']} total · {counts['error']} error · "

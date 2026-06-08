@@ -83,12 +83,12 @@ def is_assertion_call(call: ast.Call) -> bool:
     Returns:
         True for ``self.assertX(...)``, ``pytest.raises``, and related helpers.
     """
-    func = call.func
-    if isinstance(func, ast.Attribute):
-        if func.attr.startswith("assert"):
+    callee = call.func
+    if isinstance(callee, ast.Attribute):
+        if callee.attr.startswith("assert"):
             return True
-        if func.attr in {"raises", "warns", "deprecated_call", "approx"} and _is_pytest_ref(
-            func.value
+        if callee.attr in {"raises", "warns", "deprecated_call", "approx"} and _is_pytest_ref(
+            callee.value
         ):
             return True
     return False

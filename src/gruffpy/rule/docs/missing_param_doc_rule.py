@@ -102,8 +102,8 @@ def _param_doc_candidate(node: FunctionNode) -> _ParamDocCandidate | None:
         return None
 
     documented = {param.name for param in parsed.params if param.name}
-    params = [param for param in signature_param_names(node) if not param.startswith("_")]
-    missing = [param for param in params if param not in documented]
+    parameters = [param for param in signature_param_names(node) if not param.startswith("_")]
+    missing = [param for param in parameters if param not in documented]
     if not missing:
         return None
     return _ParamDocCandidate(
@@ -130,14 +130,14 @@ def _missing_param_findings(
     candidate: _ParamDocCandidate,
 ) -> list[Finding]:
     if not candidate.documented:
-        return [_missing_all_params_finding(unit, definition, candidate)]
+        return [_missing_all_parameters_finding(unit, definition, candidate)]
     return [
         _missing_one_param_finding(unit, definition, candidate, param)
         for param in candidate.missing
     ]
 
 
-def _missing_all_params_finding(
+def _missing_all_parameters_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
     candidate: _ParamDocCandidate,

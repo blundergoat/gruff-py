@@ -37,6 +37,7 @@ _EXPECTED_COUNTS = {
     "test-quality.setup-bloat": 1,
     "test-quality.skipped-without-reason": 1,
     "test-quality.sleep-in-test": 1,
+    "test-quality.static-analysis-redundant-test": 1,
     "test-quality.sut-not-called": 1,
     "test-quality.tautological-type-assertion": 1,
     "test-quality.test-function-too-long": 1,
@@ -319,4 +320,14 @@ def test_unused_mock_case_is_detected():
 
 def testCamelCaseExample():
     assert exercise() == 1
+
+
+class RedundantFact:
+    def render(self):
+        return "shape"
+
+
+def test_static_analysis_redundant_case():
+    exercise()
+    assert hasattr(RedundantFact, "render")
 """

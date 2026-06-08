@@ -69,20 +69,20 @@ class StaleParamDocRule(Rule):
         definition = self.definition()
         return [
             _stale_param_finding(unit, definition, stale_param)
-            for stale_param in _stale_params(unit.tree)
+            for stale_param in _stale_parameters(unit.tree)
         ]
 
 
-def _stale_params(tree: ast.AST) -> list[_StaleParam]:
+def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
     stale: list[_StaleParam] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        stale.extend(_stale_params_for_function(node))
+        stale.extend(_stale_parameters_for_function(node))
     return stale
 
 
-def _stale_params_for_function(node: FunctionNode) -> list[_StaleParam]:
+def _stale_parameters_for_function(node: FunctionNode) -> list[_StaleParam]:
     if is_overload_stub(node) or is_property_setter_or_deleter(node):
         return []
     text = extract_docstring(node)

@@ -148,13 +148,13 @@ def _init_self_assignments(init: ast.FunctionDef | ast.AsyncFunctionDef) -> set[
     for sub in ast.walk(init):
         if isinstance(sub, ast.Assign):
             for target in sub.targets:
-                _collect_self_attr(target, names)
+                _collect_self_attribute(target, names)
         elif isinstance(sub, ast.AnnAssign):
-            _collect_self_attr(sub.target, names)
+            _collect_self_attribute(sub.target, names)
     return names
 
 
-def _collect_self_attr(target: ast.AST, names: set[str]) -> None:
+def _collect_self_attribute(target: ast.AST, names: set[str]) -> None:
     if (
         isinstance(target, ast.Attribute)
         and isinstance(target.value, ast.Name)
@@ -163,7 +163,7 @@ def _collect_self_attr(target: ast.AST, names: set[str]) -> None:
         names.add(target.attr)
     elif isinstance(target, ast.Tuple | ast.List):
         for elt in target.elts:
-            _collect_self_attr(elt, names)
+            _collect_self_attribute(elt, names)
 
 
 def _format_number(value: int | float) -> str:

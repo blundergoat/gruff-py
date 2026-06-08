@@ -2,7 +2,8 @@
 # scripts/dependency-install.sh - sync gruff-py's local dependency environment.
 #
 # Installs the project with all optional extras and development tooling using
-# uv.lock by default. Use scripts/dependency-update.sh when you intend to
+# uv.lock, then installs the npm dependencies (goat-flow agent tooling) from
+# package-lock.json. Use scripts/dependency-update.sh when you intend to
 # refresh dependency versions.
 
 set -uo pipefail
@@ -11,6 +12,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 RUN_AUDIT=1
+RUN_NPM=1
 CHECK_ONLY=0
 LOCK_ARGS=(--locked)
 PYTHON_ARGS=()
@@ -32,14 +34,16 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/dependency-install.sh [options] [-- uv-sync-args...]
 
-Sync gruff-py's local uv environment from uv.lock:
+Sync gruff-py's local environments from their lockfiles:
   uv sync --all-extras --dev --locked --reinstall-package gruff-py
+  npm ci   (installs the goat-flow npm tooling from package-lock.json)
 
 Options:
   --python PYTHON  Sync with a specific Python interpreter or version.
-  --check          Check whether the environment is already synchronized.
-  --update-lock    Allow uv to update uv.lock during sync.
+  --check          Check whether the environments are already synchronized.
+  --update-lock    Allow uv and npm to update their lockfiles during sync.
   --no-audit       Skip the pip-audit vulnerability check after sync.
+  --no-npm         Skip installing npm dependencies.
   -h, --help       Show this help.
 
 Any arguments after `--` are passed through to `uv sync`.
@@ -86,6 +90,34 @@ sync_dependencies() {
   uv sync "${sync_args[@]}"
 }
 
+npm_project_present() {
+  [[ -f "$ROOT_DIR/package.json" ]]
+}
+
+require_npm() {
+  if ! command -v npm >/dev/null 2>&1; then
+    err "npm is not on PATH but package.json is present (goat-flow ships as an npm package). Install Node.js: https://nodejs.org/"
+    return 127
+  fi
+}
+
+sync_npm() {
+  local npm_args
+
+  if ((CHECK_ONLY)); then
+    npm_args=(ci --dry-run)
+  elif ((${#LOCK_ARGS[@]} == 0)); then
+    npm_args=(install)
+  else
+    npm_args=(ci)
+  fi
+
+  printf 'Running: npm'
+  printf ' %q' "${npm_args[@]}"
+  printf '\n'
+  npm "${npm_args[@]}"
+}
+
 main() {
   while (($#)); do
     case "$1" in
@@ -106,6 +138,9 @@ main() {
         ;;
       --no-audit)
         RUN_AUDIT=0
+        ;;
+      --no-npm)
+        RUN_NPM=0
         ;;
       -h|--help)
         usage
@@ -128,12 +163,22 @@ main() {
   cd "$ROOT_DIR" || return 1
   require_uv || return $?
 
+  if ((RUN_NPM)) && npm_project_present; then
+    require_npm || return $?
+  else
+    RUN_NPM=0
+  fi
+
   if ((CHECK_ONLY && RUN_AUDIT)); then
     warn "Skipping dependency audit in --check mode."
     RUN_AUDIT=0
   fi
 
   sync_dependencies || return 1
+
+  if ((RUN_NPM)); then
+    sync_npm || return 1
+  fi
 
   if ((RUN_AUDIT)); then
     dependency_audit || return 1

@@ -40,7 +40,7 @@ When adding or changing a rule:
 
 Be careful with:
 
-- `gruff-py.analysis.v1`
+- `gruff.analysis.v2`
 - `gruff-py.hotspot.v1`
 - `gruff-py.baseline.v1`
 - finding fingerprint inputs
@@ -49,6 +49,13 @@ Be careful with:
 - report format names
 
 Changes in those areas should be intentional and called out in the changelog.
+
+The schema-string prefixes are deliberately mixed: analysis and summary use the
+language-neutral `gruff.*` family (e.g. `gruff.analysis.v2`) so cross-port JSON
+consumers share one string, while baseline, hotspot, and config stay
+language-prefixed (`gruff-py.*`). Do not "unify" the language-prefixed strings to
+finish an apparent migration — that split is intentional, and any change must be
+coordinated across the sibling implementations.
 
 ## Commit Style
 
