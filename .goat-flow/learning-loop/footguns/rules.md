@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-05
+last_reviewed: 2026-06-09
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -58,12 +58,21 @@ When writing or porting any rule whose evidence is "symbol declared in source â‡
 member exists at runtime," build the ambiguity/shadowing set over every rebinding
 shape, not just module-level `Name` rebinds: import, module-level `def`/`async
 def`, `Assign`/`AnnAssign` with a `Name` target, `Assign`/`Delete` with an
-`Attribute` target (`Class.member`), in-body rebinds of nested names, and
-function-local bindings. Keep regression tests in
+`Attribute` target (`Class.member`), in-body rebinds of nested names,
+function-local bindings, bindings nested inside class-body or module-scope
+compound bodies (`if`/`for`/`while`/`with`/`try`/`match` - you must descend the
+bodies, not just inspect the compound node's own targets, which are empty), and
+`match` capture patterns (`case Widget:` is a capture that rebinds `Widget`, not
+a value match against the class). The 2026-06-09 pass added the last two shapes:
+class bodies now descend via `_record_conditional_class_bindings` /
+`_is_compound_statement`, and module scope via a `match_case` branch in
+`_module_scope_statements` plus `_match_capture_names` (all in
+`src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`). Keep
+regression tests in
 `tests/unit/rule/test_quality/test_static_analysis_redundant_test_rule.py`
 (search: `test_module_level_function_rebinding_makes_class_ambiguous`,
-search: `test_module_level_member_rebinding_makes_method_ambiguous`,
-search: `test_nested_class_rebinding_makes_nested_class_ambiguous`,
-search: `test_test_local_rebinding_makes_class_ambiguous`). Prove the guard with
+search: `test_class_body_conditional_rebinding_makes_member_ambiguous`,
+search: `test_match_case_body_rebinding_makes_class_ambiguous`,
+search: `test_match_capture_pattern_makes_class_ambiguous`). Prove the guard with
 a crafted fixture before trusting it - see `.goat-flow/learning-loop/lessons/verification.md`
 (search: `crafted fixture`).

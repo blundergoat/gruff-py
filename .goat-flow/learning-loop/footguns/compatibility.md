@@ -1,6 +1,6 @@
 ---
 category: compatibility
-last_reviewed: 2026-05-26
+last_reviewed: 2026-06-09
 ---
 
 ## Footgun: Finding fingerprints depend on PHP-style JSON bytes
@@ -11,6 +11,14 @@ last_reviewed: 2026-05-26
 The fingerprint algorithm in `src/gruffpy/finding/fingerprint.py` is deliberately not plain `json.dumps(...).sha256()`. Evidence anchors: `src/gruffpy/finding/fingerprint.py` (search: `encoded = encoded.replace("/", r"\/")`) and `tests/unit/finding/test_fingerprint.py` (search: `PHP_GROUND_TRUTH`).
 
 The non-obvious failure mode is that "simplifying" JSON encoding, changing slash escaping, expanding hashed fields, or reordering the payload breaks compatibility with gruff-php baselines while most local CLI output still appears normal. Any edit here must run `uv run pytest tests/unit/finding/test_fingerprint.py`.
+
+## Footgun: hook and analysis `stableIdentity` use different input sets for symbol-less file/project findings
+
+**Status:** active | **Created:** 2026-06-09 | **Evidence:** ACTUAL_MEASURED
+
+Two identity schemes share the field name `stableIdentity` but diverge. The analysis/report identity (`src/gruffpy/finding/fingerprint.py`, search: `def stable_identity_for`) hashes `[ruleId, file, message]` whenever `symbol is None` (ADR-020). The `gruff.hook.v1` identity (`src/gruffpy/hook_contract.py`, search: `def _hook_stable_identity`) instead hashes `[ruleId, file, scope]` for `file`/`project` scope and only falls back to `message` for `line` scope. So one `size.file-length` finding gets a message-keyed digest in `analyse --format json` and a scope-keyed digest in hook mode.
+
+The non-obvious failure mode: feeding an `analyse --format json` report to `gruff-py hook --baseline` should suppress that report's findings, but file/project findings (`size.file-length`, `docs.missing-module-docstring`, `docs.todo-density`, ...) re-surfaced because the analysis digest never matched the hook digest. The hook reader must rebuild the hook identity from each baseline row's fields, not trust the row's `stableIdentity` string: `src/gruffpy/hook_contract.py` (search: `def _stable_identity_from_row`, search: `def _row_scope`) reconstructs scope from the rule id and line exactly as `_scope_for_finding` does, because analysis rows carry no `scope` field. Regression: `tests/integration/test_hook_contract.py` (search: `test_hook_baseline_accepts_analysis_format_json_for_file_scope`). The hook scheme is part of the cross-analyser `gruff.hook.v1` contract, so any sibling port adopting hook mode must use the same `[ruleId, file, scope]` set and the same row-reconstruction bridge.
 
 ## Footgun: Frozen AnalysisConfig is not deeply immutable
 
