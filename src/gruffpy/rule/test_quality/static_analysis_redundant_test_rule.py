@@ -184,9 +184,9 @@ def _build_class_table(module: ast.Module) -> tuple[dict[str, _ClassDecl], set[s
 def _module_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
     """Return statements executed in module scope, descending compound bodies.
 
-    Recurses into ``if``/``for``/``while``/``with``/``try`` bodies (a binding
-    there still shadows a module-level class) but never into nested function,
-    class, or lambda scopes.
+    Recurses into ``if``/``for``/``while``/``with``/``try`` bodies and ``match``
+    case bodies (a binding there still shadows a module-level class) but never
+    into nested function, class, or lambda scopes.
 
     Args:
         body: Statement list to flatten.
@@ -202,7 +202,7 @@ def _module_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
         for child in ast.iter_child_nodes(stmt):
             if isinstance(child, ast.stmt):
                 stmts.extend(_module_scope_statements([child]))
-            elif isinstance(child, ast.ExceptHandler):
+            elif isinstance(child, ast.ExceptHandler | ast.match_case):
                 stmts.extend(_module_scope_statements(child.body))
     return stmts
 
@@ -236,7 +236,34 @@ def _module_bound_names(stmt: ast.stmt) -> set[str]:
         return {stmt.name}
     if isinstance(stmt, ast.Import | ast.ImportFrom):
         return _import_bound_names(stmt)
+    if isinstance(stmt, ast.Match):
+        return _match_capture_names(stmt)
     return _targets_bound_names(_statement_targets(stmt))
+
+
+def _match_capture_names(match: ast.Match) -> set[str]:
+    """Return names bound by capture patterns across every ``match`` case.
+
+    A bare-name pattern such as ``case Widget:`` is a capture, not a value
+    match: it rebinds ``Widget`` to the subject rather than comparing against
+    the existing class, so the same-file class can no longer be trusted.
+    """
+    names: set[str] = set()
+    for case in match.cases:
+        for node in ast.walk(case.pattern):
+            name = _capture_name(node)
+            if name is not None:
+                names.add(name)
+    return names
+
+
+def _capture_name(node: ast.AST) -> str | None:
+    """Return the name a structural-pattern node binds, or None when it binds nothing."""
+    if isinstance(node, ast.MatchAs | ast.MatchStar):
+        return node.name
+    if isinstance(node, ast.MatchMapping):
+        return node.rest
+    return None
 
 
 def _statement_targets(stmt: ast.stmt) -> tuple[ast.expr, ...]:
@@ -290,6 +317,9 @@ def _collect_class_child(child: ast.stmt, parts: _ClassParts, qualified: str) ->
     if isinstance(child, ast.Import | ast.ImportFrom):
         _collect_class_import(child, parts)
         return
+    if _is_compound_statement(child):
+        _record_conditional_class_bindings(child, parts)
+        return
     _collect_class_statement_bindings(child, parts)
 
 
@@ -330,6 +360,54 @@ def _collect_class_statement_bindings(stmt: ast.stmt, parts: _ClassParts) -> Non
         if binding_kind is not None:
             _collect_class_name_bindings(target, binding_kind, parts)
         _collect_attribute_rebinding_path(target, parts)
+
+
+def _is_compound_statement(stmt: ast.stmt) -> bool:
+    """Return whether a class-body statement has nested bodies the class scope runs."""
+    return isinstance(
+        stmt,
+        ast.If
+        | ast.For
+        | ast.AsyncFor
+        | ast.While
+        | ast.With
+        | ast.AsyncWith
+        | ast.Try
+        | ast.TryStar
+        | ast.Match,
+    )
+
+
+def _record_conditional_class_bindings(stmt: ast.stmt, parts: _ClassParts) -> None:
+    """Mark members conditionally rebound inside a class-body compound as ambiguous.
+
+    A member declared at the class top level but also assigned, deleted,
+    imported, redefined, or pattern-captured inside an ``if``/``for``/``while``/
+    ``with``/``try``/``match`` body is no longer statically known, so each such
+    binding is recorded to poison that member as evidence. The conditional
+    binding is never added to the trusted method/attribute sets, and nested
+    function and class scopes are not entered - their members are collected on
+    their own. Mirrors the module-scope descent in ``_module_scope_statements``.
+    """
+    for node in _walk_local_scope(stmt):
+        for name in _conditional_bound_names(node):
+            _record_binding(parts.binding_kinds, name, "conditional")
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store | ast.Del):
+            _collect_attribute_rebinding_path(node, parts)
+
+
+def _conditional_bound_names(node: ast.AST) -> set[str]:
+    """Return names a single node binds inside a conditional class-body subtree."""
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del):
+        return {node.id}
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return {node.name}
+    if isinstance(node, ast.Import | ast.ImportFrom):
+        return _import_bound_names(node)
+    if isinstance(node, ast.ExceptHandler) and node.name is not None:
+        return {node.name}
+    capture = _capture_name(node)
+    return {capture} if capture is not None else set()
 
 
 def _class_name_binding_kind(stmt: ast.stmt) -> str | None:

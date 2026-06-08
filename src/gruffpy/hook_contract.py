@@ -251,8 +251,13 @@ def stable_identities_from_baseline(path: Path) -> frozenset[str]:
         path: JSON file passed to `gruff-py hook --baseline`.
 
     Returns:
-        Stable identities found in the file. Rows without `stableIdentity` are
-        converted from their rule/file/scope-or-message fields when possible.
+        Stable identities found in the file. Each row contributes both its
+        verbatim `stableIdentity` (when present) and a hook identity rebuilt
+        from its fields. A hook JSON row's verbatim identity already matches
+        runtime; an analysis JSON row's verbatim identity uses the analysis
+        scheme (`ruleId/file/message`) that diverges from the hook's
+        file/project scope identity, so the rebuilt identity is what actually
+        suppresses analysis-baseline file/project findings.
 
     Raises:
         ValueError: If the file cannot be read, is not valid JSON, or does not
@@ -281,10 +286,9 @@ def stable_identities_from_baseline(path: Path) -> frozenset[str]:
         identity = row.get("stableIdentity")
         if isinstance(identity, str) and identity:
             identities.add(identity)
-            continue
-        fallback = _stable_identity_from_row(row)
-        if fallback is not None:
-            identities.add(fallback)
+        reconstructed = _stable_identity_from_row(row)
+        if reconstructed is not None:
+            identities.add(reconstructed)
     return frozenset(identities)
 
 
@@ -442,20 +446,38 @@ def _is_finding_intersecting_changed_region(finding: Finding, changed: ChangedRe
 
 
 def _stable_identity_from_row(row: dict[str, Any]) -> str | None:
+    """Rebuild a finding's hook stable identity from a baseline row.
+
+    Mirrors `_hook_stable_identity`: a symbol wins, otherwise scope decides
+    between the scope-keyed (file/project) and message-keyed (line) payloads.
+    Analysis JSON rows omit `scope`, so it is rebuilt from the same signals as
+    `_scope_for_finding`, producing the identity the hook computes at runtime.
+    """
     rule_id = row.get("ruleId")
     file_path = row.get("file", row.get("filePath"))
     if not isinstance(rule_id, str) or not isinstance(file_path, str):
         return None
     symbol = row.get("symbol")
-    scope = row.get("scope")
     if isinstance(symbol, str) and symbol:
-        payload: dict[str, Any] = {"ruleId": rule_id, "file": file_path, "symbol": symbol}
-    elif scope in {"file", "project"}:
-        payload = {"ruleId": rule_id, "file": file_path, "scope": scope}
+        return _stable_hash({"ruleId": rule_id, "file": file_path, "symbol": symbol})
+    scope = _row_scope(row, rule_id)
+    if scope in {"file", "project"}:
+        payload: dict[str, Any] = {"ruleId": rule_id, "file": file_path, "scope": scope}
     else:
-        message = row.get("message", "")
-        payload = {"ruleId": rule_id, "file": file_path, "message": message}
+        payload = {"ruleId": rule_id, "file": file_path, "message": row.get("message", "")}
     return _stable_hash(payload)
+
+
+def _row_scope(row: dict[str, Any], rule_id: str) -> str:
+    """Return a baseline row's hook scope, rebuilding it when the row omits one."""
+    scope = row.get("scope")
+    if scope in {"file", "project", "symbol", "line"}:
+        return str(scope)
+    if row.get("line") is None:
+        return "project"
+    if rule_id in _FILE_SCOPE_RULE_IDS:
+        return "file"
+    return "line"
 
 
 def _stable_hash(payload: dict[str, Any]) -> str:

@@ -399,6 +399,89 @@ def test_conditional_import_rebinding_makes_class_ambiguous():
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
+def test_class_body_conditional_rebinding_makes_member_ambiguous():
+    # A member rebound inside a class-body compound is no longer statically known.
+    source = (
+        "FEATURE = True\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n"
+        "    if FEATURE:\n"
+        "        render = None\n\n"
+        "def test_value():\n"
+        "    assert callable(Widget.render)\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_class_body_conditional_delete_makes_member_ambiguous():
+    # A del inside a class-body compound can remove the member at class creation.
+    source = (
+        "FEATURE = True\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n"
+        "    if FEATURE:\n"
+        "        del render\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_class_body_compound_leaves_untouched_member_flagged():
+    # A compound that rebinds one member must not silence an untouched sibling.
+    source = (
+        "FEATURE = True\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n"
+        "    def draw(self):\n"
+        "        return 'y'\n"
+        "    if FEATURE:\n"
+        "        draw = None\n\n"
+        "def test_value():\n"
+        "    assert callable(Widget.render)\n"
+    )
+    findings = StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["evidenceSymbol"] == "Widget.render"
+
+
+def test_match_case_body_rebinding_makes_class_ambiguous():
+    # A binding inside a module-level match case still shadows the same-file class.
+    source = (
+        "import sys\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "match sys.argv:\n"
+        "    case [_]:\n"
+        "        Widget = None\n"
+        "    case _:\n"
+        "        pass\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_match_capture_pattern_makes_class_ambiguous():
+    # `case Widget:` is a capture pattern that rebinds Widget, not a class match.
+    source = (
+        "import sys\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return 'x'\n\n"
+        "match sys.argv:\n"
+        "    case Widget:\n"
+        "        pass\n\n"
+        "def test_value():\n"
+        "    assert hasattr(Widget, 'render')\n"
+    )
+    assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
+
+
 def test_locally_shadowed_assertion_helper_is_clean():
     # The assertion helper itself is rebound in the test's local scope.
     source = (

@@ -200,6 +200,45 @@ def test_hook_baseline_with_no_findings_is_accepted(
     assert "security.dangerous-function-call" in _rule_ids(payload)
 
 
+def test_hook_baseline_accepts_analysis_format_json_for_file_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    sample = src / "sample.py"
+    _write_long_file(sample, total_lines=1010)
+
+    analysis = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-baseline",
+            "--no-config",
+            "src/sample.py",
+        ],
+    )
+    assert analysis.exit_code == 0, analysis.output
+    analysis_payload = json.loads(analysis.output)
+    file_rows = [f for f in analysis_payload["findings"] if f["ruleId"] == "size.file-length"]
+    # The analysis report carries stableIdentity but no hook scope field, so its
+    # file-scope identity (ruleId/file/message) diverges from the hook's
+    # (ruleId/file/scope) - the hook must rebuild the identity from row fields.
+    assert len(file_rows) == 1
+    assert "scope" not in file_rows[0]
+
+    baseline_path = tmp_path / "analysis-baseline.json"
+    baseline_path.write_text(analysis.output)
+
+    suppressed = _hook("--no-config", "--baseline", str(baseline_path), "src/sample.py")
+    assert "size.file-length" not in _rule_ids(suppressed)
+
+
 @pytest.mark.skipif(_GIT is None, reason="git is required for hook --diff conformance")
 def test_hook_diff_new_only_uses_stable_identity(
     tmp_path: Path,
