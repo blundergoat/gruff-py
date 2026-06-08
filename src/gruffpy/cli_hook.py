@@ -60,6 +60,7 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
     help="Scan default-ignored and .gitignore paths; config ignores still apply.",
 )
 @click.argument("paths", nargs=-1)
+# gruff: disable-next=docs.missing-param-doc -- option help= text documents each flag.
 def hook(
     hook_format: str,
     capabilities: bool,
