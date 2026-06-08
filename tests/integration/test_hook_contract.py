@@ -222,6 +222,23 @@ def test_hook_diff_new_only_uses_stable_identity(
     assert "size.file-length" not in _rule_ids(grown)
 
 
+@pytest.mark.parametrize("bad_range", ["abc", "5-2"])
+def test_hook_rejects_malformed_changed_ranges(
+    bad_range: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('value = eval("1")\n')
+
+    result = _invoke_hook("--no-config", "--changed-ranges", bad_range, "src/sample.py")
+
+    # A malformed range is a controlled exit 2, not an uncaught traceback.
+    assert result.exit_code == 2, result.output
+
+
 def test_hook_flags_parse_before_and_after_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

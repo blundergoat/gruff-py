@@ -2,33 +2,15 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
-## [Unreleased]
+## v0.3.1 - 2026-06-08
 
-- **Agent-hook contract v1** - Added `gruff-py hook --format json` and
-  `gruff-py hook --capabilities --format json`, advertising and emitting the
-  cross-analyzer `gruff.hook.v1` contract and listing the new command in root
-  help. Hook mode exits 0 after successful analysis, disables baseline
-  application by default, reports ignored paths in-band, surfaces config schema
-  errors in JSON, adds hook-only `scope` and normalized threshold metadata
-  fields, and uses a hook stable identity that is stable across line shifts and
-  measured-value changes for new-only `--baseline` / `--diff` comparisons,
-  including changed-region hook runs. Existing `analyse`, `summary`, and
-  `report` payloads are unchanged.
-- **Changed-region symbol scope suppresses inherited aggregate debt** - `analyse`
-  now attributes whole-file and class-level aggregate findings to their anchor
-  line or header under `--changed-scope symbol`, so edits elsewhere in an
-  oversized file or class suppress inherited findings such as `size.file-length`,
-  `docs.todo-density`, and class aggregate size rules while still counting them
-  in `suppressedCount`. Full scans still report every file-wide finding, and
-  hunk-scope scans still retain findings whose reported span intersects a
-  changed line for CI workflows that need pull-request aggregate signal.
-
-## v0.3.1 - 2026-06-03
-
+- **Agent-hook contract v1** - Added `gruff-py hook --format json` and `gruff-py hook --capabilities --format json`, advertising and emitting the cross-analyzer `gruff.hook.v1` contract and listing the new command in root help. Hook mode exits 0 after successful analysis, disables baseline application by default, reports ignored paths in-band, surfaces config schema errors in JSON, adds hook-only `scope` and normalized threshold metadata fields, and uses a hook stable identity that is stable across line shifts and measured-value changes for new-only `--baseline` / `--diff` comparisons, including changed-region hook runs. New-only `--baseline` accepts a clean baseline that has no findings, and `--changed-ranges` scopes at each finding's reported span (hunk granularity) rather than widening to the enclosing declaration. Existing `analyse`, `summary`, and `report` payloads are unchanged.
+- **Changed-region symbol scope suppresses inherited aggregate debt** - `analyse` now attributes whole-file and class-level aggregate findings to their anchor line or header under `--changed-scope symbol`, so edits elsewhere in an oversized file or class suppress inherited findings such as `size.file-length`, `docs.todo-density`, and class aggregate size rules while still counting them in `suppressedCount`. Full scans still report every file-wide finding, and hunk-scope scans still retain findings whose reported span intersects a changed line for CI workflows that need pull-request aggregate signal.
 - **BREAKING: analysis JSON schema string unified** - `analyse --format json`, `report --format json`, SARIF `run.properties.gruffSchemaVersion`, and config-error JSON payloads now emit `schemaVersion: "gruff.analysis.v2"` instead of `gruff-py.analysis.v1`. Migration: consumers that key on the schema string should accept the new shared gruff-family value; baseline, hotspot, summary, and config schema strings are unchanged.
 - **New `test-quality.static-analysis-redundant-test` rule** - Advisory, high-confidence candidate rule flagging test assertions that only restate a class or member declared in the same parsed file - `inspect.isclass(LocalClass)`, `hasattr(LocalClass, "member")`, `callable(getattr(LocalClass, "member"))`, and `callable(LocalClass.member)`, in both pytest `assert` and unittest `self.assertTrue(...)` form. Same-file only; dynamic, imported, instance-bound, private, bare-annotation (`x: T`), `@property`, and behavioural shapes stay clean. The message reads "redundant candidate", never "delete this test"; ports the gruff-php product semantics and metadata contract (`variant`, `assertion`, `staticFact`, `evidenceSymbol`, `candidateConfidence`). Catalogue reaches 125 rules across 11 pillars (`test-quality` 33 → 34).
 - **Text and summary output reshaped** - `gruff-py summary` and `analyse --format text` now lead the score block with a `Composite: <grade> (<score> / 100)` line and report findings as a severity breakdown - `<total> total · <error> error · <warning> warning · <advisory> advisory` - in place of a bare total. Command headers gain the subcommand name (`gruff-py <version> summary` / `gruff-py <version> analyse`), and the `summary` header now reads `gruff-py` instead of `gruff`. JSON, SARIF, HTML, Markdown, and hotspot outputs, finding identities, and schema strings are unchanged.
 - **gruff-code-quality hook: detailed findings summary and self-test** - The `.claude` / `.codex` PostToolUse hook now emits a scope/tally header plus one canonical `- [severity] file:line ruleId - message` line per changed-line finding - severity-sorted, capped at `GRUFF_CODE_QUALITY_MAX_FINDINGS` (default 20), floored at `GRUFF_CODE_QUALITY_MIN_SEVERITY` (default advisory), with a trailing count of same-file findings outside the changed range - and adds a `--self-test=smoke` mode covering path/range/variant extraction and the severity sort, volume cap, and floor. The `.claude/settings.json` launchers now resolve the repo root with `git rev-parse --show-toplevel` and fail soft (skip, exit 0) when it is unavailable instead of blocking the tool call.
+- **Maintenance** - The `hook` command implementation moved to a dedicated `gruffpy.cli_hook` module (no CLI behavior or output change), keeping `gruffpy.cli` within its own file-length rule.
 
 ## v0.3.0 - 2026-06-02
 
