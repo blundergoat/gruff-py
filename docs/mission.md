@@ -11,7 +11,7 @@ Wired in as a coding-agent hook, gruff-py works on two settings, both driven by 
 - **Guide** — advisory findings inform the agent and the reviewer without blocking.
 - **Force** — warning and error findings gated by `--fail-on` fail the run until the agent fixes them.
 
-A finding earns the *force* setting only when acting on it reliably makes the code more verifiable; lower-signal checks stay advisory. The concrete per-rule policy is set out in the proposed `reviewability` profile — see [ADR-021](../.goat-flow/decisions/ADR-021-reviewability-profile.md).
+A finding earns the *force* setting only when acting on it reliably makes the code more verifiable; lower-signal checks stay advisory. The concrete per-rule policy is set out in the proposed `reviewability` profile — see [ADR-021](../.goat-flow/learning-loop/decisions/ADR-021-reviewability-profile.md).
 
 ## What it optimises for
 
@@ -29,6 +29,6 @@ gruff-py is heuristic static analysis. It complements `ruff`, `mypy`, `pytest`, 
 
 ## Decision records
 
-- **Charter:** [ADR-022 — Mission: optimise for reviewer verification of AI-generated code](../.goat-flow/decisions/ADR-022-reviewer-verification-mission.md)
-- **Tuning policy:** [ADR-021 — Reviewability profile and agent-hook severity policy](../.goat-flow/decisions/ADR-021-reviewability-profile.md)
+- **Charter:** [ADR-022 — Mission: optimise for reviewer verification of AI-generated code](../.goat-flow/learning-loop/decisions/ADR-022-reviewer-verification-mission.md)
+- **Tuning policy:** [ADR-021 — Reviewability profile and agent-hook severity policy](../.goat-flow/learning-loop/decisions/ADR-021-reviewability-profile.md)
 - **Design rationale:** [`.goat-flow/architecture.md` (`## Mission`)](../.goat-flow/architecture.md)

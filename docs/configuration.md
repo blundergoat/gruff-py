@@ -234,7 +234,7 @@ Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
 Adding `summary: advisory` or any other key is a hard error; silent acceptance
 would be a CI footgun.
 
-See [ADR-019](../.goat-flow/decisions/ADR-019-per-command-minimum-severity.md)
+See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
 for the rationale, the rejected alternatives, and the cross-port invariant.
 
 ## Schema Version

@@ -46,7 +46,7 @@ DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
     ".git",
     ".goat-flow/logs",
     ".goat-flow/scratchpad",
-    ".goat-flow/tasks",
+    ".goat-flow/plans",
     ".hg",
     ".idea",
     ".mypy_cache",

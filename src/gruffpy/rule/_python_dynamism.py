@@ -7,7 +7,7 @@ re-exports.
 
 Each predicate is intentionally conservative - false negatives (missed
 exemptions) are user-tunable via per-rule config; false positives are not
-(they erode trust in the analyser, per `gruff-py/.goat-flow/footguns/`).
+(they erode trust in the analyser, per `gruff-py/.goat-flow/learning-loop/footguns/`).
 
 Each predicate takes the AST node plus optional context and returns True
 when the node should be treated as "active" by the calling rule.

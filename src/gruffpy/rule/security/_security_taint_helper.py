@@ -1,7 +1,7 @@
 """Intra-procedural taint-lite helper for security rules.
 
 Implements the bounded posture documented in
-`.goat-flow/decisions/ADR-017-security-taint-lite-posture.md`:
+`.goat-flow/learning-loop/decisions/ADR-017-security-taint-lite-posture.md`:
 
 - per-FunctionDef tainted-name set;
 - explicit, finite source set (web-framework request attrs + FastAPI

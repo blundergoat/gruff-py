@@ -7,7 +7,7 @@ SQLAlchemy / requests), and security-smell variable names.
 
 These are intentionally conservative: false negatives (a missed exploit pattern)
 are user-tunable via threshold/severity overrides; false positives erode trust
-in the analyser, per `gruff-py/.goat-flow/footguns/compatibility.md`.
+in the analyser, per `gruff-py/.goat-flow/learning-loop/footguns/compatibility.md`.
 """
 
 import ast

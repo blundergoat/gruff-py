@@ -58,19 +58,19 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `CLAUDE.md` = Claude Code hot-path project instructions.
 - `.claude/skills/` = installed goat-flow skills; copied verbatim by the installer.
 - `.claude/settings.json` = Claude Code permissions and deny hook registration.
-- `.claude/hooks/` = deny-dangerous hook and self-test script.
+- `.goat-flow/hooks/` = shared deny-dangerous and gruff-code-quality hook scripts, with policy patterns and self-test under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version and enabled agent list.
 - `.goat-flow/architecture.md` = cold-path system architecture.
 - `.goat-flow/code-map.md` = this repository map.
 - `.goat-flow/glossary.md` = project vocabulary.
-- `.goat-flow/footguns/` = durable codebase traps with evidence.
-- `.goat-flow/lessons/` = durable workflow mistakes when real incidents exist.
-- `.goat-flow/patterns/` = reusable project approaches.
-- `.goat-flow/decisions/` = ADRs when architectural decisions need durable context.
-- `.goat-flow/skill-reference/` = shared skill contract references.
-- `.goat-flow/skill-playbooks/` = on-demand tool availability playbooks.
+- `.goat-flow/learning-loop/footguns/` = durable codebase traps with evidence.
+- `.goat-flow/learning-loop/lessons/` = durable workflow mistakes when real incidents exist.
+- `.goat-flow/learning-loop/patterns/` = reusable project approaches.
+- `.goat-flow/learning-loop/decisions/` = ADRs when architectural decisions need durable context.
+- `.goat-flow/skill-docs/` = shared skill contract references.
+- `.goat-flow/skill-docs/playbooks/` = on-demand tool availability playbooks.
 - `.goat-flow/logs/sessions/` = local session continuity logs.
-- `.goat-flow/tasks/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
+- `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
 
 ## Generated Or Never-Edit Paths
 
