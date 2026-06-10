@@ -516,3 +516,26 @@ When fixing an exception-handling gap, grep for every other call site of the
 same API (`generate_tokens`) before declaring the fix done, and verify with an
 end-to-end repro (real CLI on a broken file), not only the unit test of the
 site you first fixed - the unit test passed while the CLI still crashed.
+
+## Lesson: Mirror Load-context guards across every reference-recording visitor path
+
+**Created:** 2026-06-11
+**Incident:** PR #6 review round 4 (Cursor Bugbot) flagged that
+`src/gruffpy/rule/design/single_implementor_protocol_rule.py` (search:
+`def visit_Attribute`) recorded every attribute node as a value reference
+while `visit_Name` required `ast.Load`. Repro: a monkeypatch-style store
+target `rendering.Renderer = FakeRenderer` cleared the single-implementor
+finding (1 finding without the file, 0 with it) even though it binds an
+attribute *named* like the abstraction without referencing it. Fixed by
+mirroring the `Load` check in `visit_Attribute`; the loaded inner chain
+(`a.Renderer` in `a.Renderer.x = 1`) still counts via `generic_visit`, and
+`del module.X` stops counting. The bot's companion claim that leaf matching
+in `_is_matching_name` is a co-culprit was declined: leaf matching is the
+deliberate no-import-resolution evidence model and errs in the
+finding-suppressing direction.
+
+When a `NodeVisitor` counts references, every recording path (`visit_Name`,
+`visit_Attribute`, any future handler) must apply the same `expr_context`
+discipline. Pair a store-target fixture with a load-usage fixture
+(`tests/unit/rule/design/test_single_implementor_protocol_rule.py`, search:
+`attribute_store_target_alone_still_flags`).

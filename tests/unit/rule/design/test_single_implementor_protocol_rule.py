@@ -148,3 +148,38 @@ def test_isinstance_tuple_reference_skips_protocol():
     )
 
     assert _analyse(source) == []
+
+
+def test_attribute_store_target_alone_still_flags():
+    contract = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n",
+        "src/rendering.py",
+    )
+    patcher = _unit(
+        "from src import rendering\n\nrendering.Renderer = FakeRenderer\n",
+        "tests/test_rendering.py",
+    )
+
+    findings = _analyse(contract, patcher)
+
+    assert len(findings) == 1
+    assert findings[0].symbol == "src.rendering.Renderer"
+
+
+def test_attribute_load_usage_skips_protocol():
+    source = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n\n"
+        "def wire() -> None:\n"
+        "    Renderer.register(int)\n",
+        "src/rendering.py",
+    )
+
+    assert _analyse(source) == []
