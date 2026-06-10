@@ -1,6 +1,6 @@
 """End-to-end pipeline (`run_analysis`) shared by `gruff-py analyse` and dashboard scans."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
@@ -30,13 +30,40 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.context import RuleContext
+from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
+from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.version import VERSION
+
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
+    "partial project scan: project-wide rules may need full-project context"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ReportAssembly:
+    """Values needed to project a completed pipeline run into an analysis report."""
+
+    request: AnalysisRunRequest
+    config: AnalysisConfig
+    config_loaded_from: str | None
+    fail_threshold: FailThreshold
+    discovery_result: SourceDiscoveryResult
+    files_parsed: int
+    diagnostics: list[RunDiagnostic]
+    display_findings: list[Finding]
+    exit_code: int
+    score: ScoreReport
+    hidden_by_display_filter: int
+    partial_context_caveat: str | None
+    baseline_report: BaselineReport | None
+    changed: ChangedRegionSet
+    changed_suppressed_count: int
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
@@ -61,6 +88,8 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         configured = config.minimum_severity.get(request.config_severity_command)
         if configured is not None:
             fail_threshold = configured
+    if request.execution_exclude_rules:
+        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
 
     (
         discovery_result,
@@ -110,30 +139,77 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
     display_findings = request.display_filter.filter_findings(findings)
+    hidden_by_display_filter = len(findings) - len(display_findings)
+    partial_context_caveat = _partial_project_context_caveat(registry, config, request.paths)
 
+    return _build_report(
+        _ReportAssembly(
+            request=request,
+            config=config,
+            config_loaded_from=config_loaded_from,
+            fail_threshold=fail_threshold,
+            discovery_result=discovery_result,
+            files_parsed=files_parsed,
+            diagnostics=diagnostics,
+            display_findings=display_findings,
+            exit_code=exit_code,
+            score=score,
+            hidden_by_display_filter=hidden_by_display_filter,
+            partial_context_caveat=partial_context_caveat,
+            baseline_report=baseline_report,
+            changed=changed,
+            changed_suppressed_count=changed_filter_result.suppressed_count,
+        )
+    )
+
+
+def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
     return AnalysisReport(
         tool_version=VERSION,
-        requested_paths=tuple(request.paths) if request.paths else (".",),
-        format=request.output.value,
-        fail_on=fail_threshold.value,
-        files_discovered=len(discovery_result.files),
-        files_parsed=files_parsed,
-        ignored_paths=discovery_result.ignored_paths,
-        ignored_path_details=discovery_result.ignored_path_reasons,
-        missing_paths=discovery_result.missing_paths,
-        diagnostics=tuple(diagnostics),
-        findings=tuple(display_findings),
-        exit_code=exit_code,
-        config_path=config_loaded_from,
-        score=score,
-        filters=request.display_filter,
+        requested_paths=tuple(assembly.request.paths) if assembly.request.paths else (".",),
+        format=assembly.request.output.value,
+        fail_on=assembly.fail_threshold.value,
+        files_discovered=len(assembly.discovery_result.files),
+        files_parsed=assembly.files_parsed,
+        ignored_paths=assembly.discovery_result.ignored_paths,
+        ignored_path_details=assembly.discovery_result.ignored_path_reasons,
+        missing_paths=assembly.discovery_result.missing_paths,
+        diagnostics=tuple(assembly.diagnostics),
+        findings=tuple(assembly.display_findings),
+        exit_code=assembly.exit_code,
+        config_path=assembly.config_loaded_from,
+        score=assembly.score,
+        filters=assembly.request.display_filter,
+        hidden_by_display_filter=assembly.hidden_by_display_filter,
+        partial_context_caveat=assembly.partial_context_caveat,
         extensions=ReportExtensions(
-            baseline=baseline_report,
-            diff=_changed_region_payload(changed, changed_filter_result.suppressed_count),
+            baseline=assembly.baseline_report,
+            diff=_changed_region_payload(assembly.changed, assembly.changed_suppressed_count),
         ),
-        output_volume_hint_threshold=config.output_volume_hint_threshold,
-        suppressed_count=changed_filter_result.suppressed_count if changed.active else None,
+        output_volume_hint_threshold=assembly.config.output_volume_hint_threshold,
+        suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
     )
+
+
+def _partial_project_context_caveat(
+    registry: RuleRegistry,
+    config: AnalysisConfig,
+    paths: tuple[str, ...],
+) -> str | None:
+    if _scan_scope(paths) == "full-project":
+        return None
+    if any(isinstance(rule, ProjectRuleProtocol) for rule in registry.enabled_rules(config)):
+        return _PARTIAL_PROJECT_CONTEXT_CAVEAT
+    return None
+
+
+def _with_execution_exclude_rules(
+    config: AnalysisConfig,
+    exclude_rules: tuple[str, ...],
+) -> AnalysisConfig:
+    selection = config.rule_selection
+    merged = tuple(dict.fromkeys((*selection.exclude_rules, *exclude_rules)))
+    return config.with_rule_selection(replace(selection, exclude_rules=merged))
 
 
 def _discover_and_parse_sources(

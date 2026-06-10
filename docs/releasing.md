@@ -35,6 +35,7 @@ uv run pytest
 Regenerate and verify the rule catalogue doc:
 
 ```bash
+uv run python -m gruffpy.command.rule_docs --write docs/rules.md
 uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 ```
 

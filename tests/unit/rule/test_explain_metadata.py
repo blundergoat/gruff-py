@@ -17,6 +17,7 @@ _OPTION_DESCRIPTION_RULES = (
     "naming.generic-function",
     "naming.module-name-mismatch",
     "naming.short-variable",
+    "test-quality.extends-production-class",
     "test-quality.magic-number-assertion",
     "test-quality.mocking-domain-object",
     "test-quality.test-longer-than-sut",

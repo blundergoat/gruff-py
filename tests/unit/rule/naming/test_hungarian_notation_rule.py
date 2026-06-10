@@ -65,6 +65,44 @@ def test_dict_users_fires():
     assert len(findings) == 1
 
 
+def test_real_type_prefixes_still_fire():
+    src = (
+        "str_message = 'hello'\n"
+        "dict_users = {}\n"
+        "lst_predictions = []\n"
+        "bool_tokens = False\n"
+        "arr_values = []\n"
+    )
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+
+    assert {finding.metadata["identifier"] for finding in findings} == {
+        "str_message",
+        "dict_users",
+        "lst_predictions",
+        "bool_tokens",
+        "arr_values",
+    }
+    assert {finding.metadata["prefix"] for finding in findings} == {
+        "str",
+        "dict",
+        "lst",
+        "bool",
+        "arr",
+    }
+
+
+def test_num_count_names_do_not_fire():
+    src = "num_masks = 1\nnum_classes = 2\nnum_vertices = 3\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_n_count_names_do_not_fire():
+    src = "n_samples = 1\nn_threads = 2\n"
+    findings = HungarianNotationRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
 def test_list_verb_name_does_not_fire():
     src = "def list_commands():\n    return []\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
@@ -125,6 +163,6 @@ def test_unrelated_underscore_does_not_fire():
 
 
 def test_ann_assign_fires():
-    src = "n_count: int = 0\n"
+    src = "str_message: str = 'x'\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1

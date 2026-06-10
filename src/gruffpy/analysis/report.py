@@ -67,6 +67,9 @@ class AnalysisReport:
         score: Optional score payload.
         extensions: Optional report extension sections.
         filters: Optional finding-display filter metadata.
+        hidden_by_display_filter: Findings hidden by display filters. Native-only;
+            omitted from ``gruff.analysis.v2`` JSON unless the schema is explicitly extended.
+        partial_context_caveat: Optional run-level caveat for partial project-rule context.
         suppressed_count: Optional count of changed-region out-of-scope findings.
     """
 
@@ -85,6 +88,8 @@ class AnalysisReport:
     score: ScoreReport | None = None
     extensions: ReportExtensions = field(default_factory=ReportExtensions)
     filters: Any | None = None
+    hidden_by_display_filter: int = 0
+    partial_context_caveat: str | None = None
     output_volume_hint_threshold: int = 50
     suppressed_count: int | None = None
     ignored_path_details: tuple[IgnoredPath, ...] = ()
@@ -177,13 +182,16 @@ class AnalysisReport:
 
 
 def _run_payload(report: AnalysisReport) -> dict[str, Any]:
-    return {
+    payload = {
         "format": report.format,
         "failOn": report.fail_on,
         "config": report.config_path,
         "paths": list(report.requested_paths),
         "filters": report.filters.to_dict() if report.filters is not None else None,
     }
+    if report.partial_context_caveat is not None:
+        payload["partialContextCaveat"] = report.partial_context_caveat
+    return payload
 
 
 def _summary_payload(report: AnalysisReport) -> dict[str, Any]:

@@ -151,7 +151,17 @@ gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
 ```
 
 They affect rendered findings and are recorded under `run.filters`. They do not
-change the exit code calculation.
+change score or exit-code calculation. Text output reports how many findings
+were hidden when filters hide findings; JSON keeps the existing shape, so
+`summary.findings` follows displayed findings while `score` and
+`summary.exitCode` reflect the full analysed set.
+
+## Project-Rule Scope Caveat
+
+Project-wide rules can only see the files discovered for the requested paths.
+When a scan is narrower than the project root and a project rule is enabled,
+text output adds a scope caveat and JSON additively records
+`run.partialContextCaveat`. Full-project scans omit the field.
 
 ## Exit Codes
 

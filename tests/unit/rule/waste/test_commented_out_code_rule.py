@@ -49,10 +49,50 @@ def test_commented_import_fires():
     assert len(findings) == 1
 
 
+def test_commented_if_fires():
+    src = "# if enabled:\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+
+
 def test_commented_return_fires():
     src = "def f():\n    # return 1\n    return 0\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
+
+
+def test_indented_real_comment_preserves_line_number():
+    src = "def f():\n    x = 1\n    # value = call()\n    return x\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].line == 3
+    assert findings[0].metadata["preview"] == "value = call()"
+
+
+def test_docstring_comment_looking_example_does_not_fire():
+    src = 'def f():\n    """Example:\n    # array([0])\n    """\n    return 1\n'
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_markdown_code_fence_inside_docstring_does_not_fire():
+    src = (
+        "def f():\n"
+        '    """Example:\n'
+        "    ```python\n"
+        "    # import os\n"
+        "    ```\n"
+        '    """\n'
+        "    return 1\n"
+    )
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
+
+
+def test_string_literal_containing_comment_code_does_not_fire():
+    src = 'example = "# import os"\n'
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []
 
 
 def test_english_comment_does_not_fire():

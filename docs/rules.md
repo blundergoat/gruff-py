@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.1` registers 125 rules in `RuleRegistry.defaults()`.
+gruff-py `0.3.1` registers 125 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -306,12 +306,12 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `design.single-implementor-protocol` protects the design pillar by flagging single-implementor protocol/abc before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported single-implementor protocol/abc directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: A Protocol or ABC with one concrete implementor adds an abstraction layer reviewers must verify without clear substitution value.
+- Fix guidance: Depend on the concrete class, add another real implementor, or keep a clear external abstraction reference through an annotation or value-position check.
+- Confidence rationale: Medium confidence: project-scoped AST evidence counts implementors plus annotation and value-position abstraction references.
 - Options: `additionalExcludedPaths` = `[]`, `externalProtocolBases` = `['Sized', 'Iterable', 'Iterator', 'Collection', 'Container', 'Sequence', 'Mapping', 'MutableMapping', 'Callable', 'ContextManager', 'AsyncContextManager']`
-- Bad example: Code that triggers `design.single-implementor-protocol` leaves single-implementor protocol/abc unaddressed.
-- Good example: Code that satisfies `design.single-implementor-protocol` makes single-implementor protocol/abc explicit or simpler.
+- Bad example: `class Renderer(Protocol): ...` with only `class HtmlRenderer(Renderer): ...` and no other `Renderer` usage.
+- Good example: `Renderer` used in a factory annotation, registry value, `isinstance`, or `issubclass` check outside the implementor.
 
 ### `docs.complex-branch-rationale`
 
@@ -326,7 +326,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments.
 - Options: `cognitive_warning` = `15`, `cyclomatic_warning` = `10`, `private_cognitive_warning` = `20`, `private_cyclomatic_warning` = `15`
 - Bad example: A public parser function with many `if` branches and no docstring.
-- Good example: A complex compatibility router with a docstring naming the legacy protocol contract.
+- Good example: A complex compatibility router with a docstring naming the legacy protocol.
 
 ### `docs.dataclass-attributes`
 
@@ -583,11 +583,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `naming.hungarian-notation` protects the naming pillar by flagging hungarian notation before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported hungarian notation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `naming.hungarian-notation` leaves hungarian notation unaddressed.
-- Good example: Code that satisfies `naming.hungarian-notation` makes hungarian notation explicit or simpler.
+- Rationale: Type prefixes duplicate information that type hints and readable names already carry.
+- Fix guidance: Drop type prefixes such as `str_`, `dict_`, or `arr_`; keep semantic count names such as `num_items` or `n_samples`.
+- Confidence rationale: High confidence: narrow type-prefix vocabulary; count abbreviations are excluded.
+- Bad example: `str_message = "hello"` or `dict_users = {}`
+- Good example: `message = "hello"` or `num_users = len(users)`
 
 ### `naming.identifier-quality`
 
@@ -1053,12 +1053,12 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `security.sql-concatenation` protects the security pillar by flagging sql concatenation before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported sql concatenation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: Dynamic SQL is hard to verify safely without focused sink gates.
+- Fix guidance: Use driver parameters; validate dynamic SQL structure separately.
+- Confidence rationale: Medium confidence: keyword, constant, and SQLAlchemy gates.
 - Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
-- Bad example: Code that triggers `security.sql-concatenation` leaves sql concatenation unaddressed.
-- Good example: Code that satisfies `security.sql-concatenation` makes sql concatenation explicit or simpler.
+- Bad example: `cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`
+- Good example: `cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`
 
 ### `security.ssrf`
 
@@ -1184,11 +1184,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `error`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `sensitive-data.database-url-password` protects the sensitive-data pillar by flagging database url with password before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported database url with password directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `sensitive-data.database-url-password` leaves database url with password unaddressed.
-- Good example: Code that satisfies `sensitive-data.database-url-password` makes database url with password explicit or simpler.
+- Rationale: Credentialed database URLs in source usually expose direct data access.
+- Fix guidance: Move real passwords to environment variables or a secret manager; use exact placeholders such as `password`, `change-me`, `dummy`, `fake`, or `redacted` only in examples.
+- Confidence rationale: High confidence: exact URL userinfo pattern with exact placeholder escapes.
+- Bad example: A database URL literal with a real password in the userinfo segment.
+- Good example: `DATABASE_URL = "postgresql://user:change-me@host/db"`
 
 ### `sensitive-data.gcp-service-account-key`
 
@@ -1268,11 +1268,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `sensitive-data.pii-test-fixture` protects the sensitive-data pillar by flagging pii in test fixture before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported pii in test fixture directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `sensitive-data.pii-test-fixture` leaves pii in test fixture unaddressed.
-- Good example: Code that satisfies `sensitive-data.pii-test-fixture` makes pii in test fixture explicit or simpler.
+- Rationale: Test fixtures should use placeholders, not realistic third-party PII.
+- Fix guidance: Use reserved domains such as `example.com`, `.test`, `.local`, `.invalid`, `.localhost`, or `.example`; use `555` phone placeholders and keep epoch or reset timestamps named with timestamp context.
+- Confidence rationale: Medium confidence: raw test text scan with explicit escapes.
+- Bad example: `email = "jane.doe@gmail.com"` or `phone = "4158675309"`
+- Good example: `email = "admin@app.test"` or `phone = "+1-415-555-0100"`
 
 ### `sensitive-data.private-key`
 
@@ -1504,6 +1504,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `test-quality.extends-production-class` protects the test-quality pillar by flagging test class extends production class before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test class extends production class directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Options: `additionalTestBases` = `[]`
 - Bad example: Code that triggers `test-quality.extends-production-class` leaves test class extends production class unaddressed.
 - Good example: Code that satisfies `test-quality.extends-production-class` makes test class extends production class explicit or simpler.
 
@@ -1658,11 +1659,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `test-quality.no-assertions` protects the test-quality pillar by flagging test without assertions before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported test without assertions directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `test-quality.no-assertions` leaves test without assertions unaddressed.
-- Good example: Code that satisfies `test-quality.no-assertions` makes test without assertions explicit or simpler.
+- Rationale: Collected tests without assertions are easy to mistake for coverage.
+- Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
+- Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
+- Bad example: `def test_saves_user(): service.save(user)`
+- Good example: `def test_saves_user(): service.save(user); assert_user_saved(user)`
 
 ### `test-quality.parametrize-annotation`
 
@@ -1917,11 +1918,11 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Default severity: `advisory`
 - Confidence: `low`
 - Default enabled: yes
-- Rationale: `waste.commented-out-code` protects the dead-code pillar by flagging commented-out code before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported commented-out code directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Bad example: Code that triggers `waste.commented-out-code` leaves commented-out code unaddressed.
-- Good example: Code that satisfies `waste.commented-out-code` makes commented-out code explicit or simpler.
+- Rationale: Tombstoned source comments make reviewers ask whether dead code still matters.
+- Fix guidance: Delete commented-out source code or turn it into prose documentation; docstring examples are ignored because only tokenizer comment tokens are scanned.
+- Confidence rationale: Low confidence: source-comment tokens pass a cheap code-like prefilter and parser confirmation, but prose can still resemble Python.
+- Bad example: `# old_value = compute()`
+- Good example: `# Recompute only after the cache expires.`
 
 ### `waste.empty-class`
 

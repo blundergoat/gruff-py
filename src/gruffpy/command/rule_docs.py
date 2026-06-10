@@ -9,6 +9,7 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.rule.catalog import documentation_for_rule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
+from gruffpy.version import VERSION
 
 _PILLAR_ORDER: tuple[Pillar, ...] = (
     Pillar.SIZE,
@@ -70,7 +71,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     lines = [
         "# Rules",
         "",
-        f"gruff-py `0.1` registers {len(definitions)} rules in `RuleRegistry.defaults()`.",
+        f"gruff-py `{VERSION}` registers {len(definitions)} rules in `RuleRegistry.defaults()`.",
         "",
         "This file is generated from the first-party built-in rule catalog.",
         "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",

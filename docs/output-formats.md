@@ -19,6 +19,12 @@ Use `json` for automation. JSON reports use `gruff.analysis.v2`.
 uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 ```
 
+When a requested path is narrower than the project root and at least one
+project-wide rule is enabled, JSON additively records
+`run.partialContextCaveat`. Text output renders the same caveat. The caveat is
+run metadata only; it does not change findings, score, fingerprints, or exit
+code.
+
 ## Changed-Region Scoping (native diff mode)
 
 `analyse` can scope a run to just-changed code so an agent hook surfaces only the
@@ -61,7 +67,9 @@ So `len(findings) + suppressedCount` equals the full-file finding count — noth
 is dropped silently. `suppressedCount` reflects the full rule set the run collected;
 display filters (`--include-rule`, `--exclude-rule`, `--min-severity`) narrow
 `findings[]` only, so the native trio above — with no display filter — is where that
-identity is exact. The `diff` section also carries `enabled`, `source`,
+identity is exact. Display filters do not change score or exit-code calculation; text output
+discloses hidden findings, while JSON `summary.findings` remains aligned with displayed findings.
+The `diff` section also carries `enabled`, `source`,
 `changedFiles`, and a `caveat` that project-wide rules may need full context. Both
 the top-level `suppressedCount` and the `diff` section appear **only** when
 changed-region scoping is active; a full scan emits neither.
@@ -105,6 +113,9 @@ is the failure.
 
 `gruff-py hook --capabilities --format json` advertises the same
 `gruff.hook.v1` contract, supported flags, and `flagOrder`.
+
+`hook --exclude-rule <rule-id>` is execution-level and removes matching rules
+from the hook payload. It accepts comma-separated and repeated values.
 
 ## HTML
 

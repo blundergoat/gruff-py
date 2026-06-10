@@ -581,6 +581,8 @@ rules:
   # Test class extends production class
   test-quality.extends-production-class:
     enabled: true
+    options:
+      additionalTestBases: []
   # Global state mutation in test
   test-quality.global-state-mutation:
     enabled: true

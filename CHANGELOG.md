@@ -2,6 +2,11 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+## Unreleased
+
+- **0.4.0 false-positive sweep retested on scan corpus** - Re-scanning `AI-Trader`, `headroom`, and `supervision` with matching file counts removed 7, 165, and 202 findings respectively. The largest verified drops came from `naming.hungarian-notation` count-name calibration (`headroom` 109 → 25, `supervision` 112 → 6), `test-quality.no-assertions` fixture/assertion-helper handling (`headroom` 182 → 125, `supervision` 72 → 0), timestamp/numeric PII fixture filtering (`headroom` 21 → 3), and token-aware commented-out-code scanning (`supervision` 38 → 14). The retest also tightened `test-quality.no-assertions` for parametrized `pytest.raises`, `pytest.fail`, and `warnings.catch_warnings`, and tightened `sensitive-data.pii-test-fixture` for `created`/`resets_at` timestamps plus decimal metric literals.
+- **Project-rule scope honesty** - `design.single-implementor-protocol` now counts abstraction references in annotations and value positions, including `isinstance` / `issubclass` checks, while keeping implementor base lists and concrete-class registry references from silencing true positives. Narrow path scans with any project-wide rule enabled now add `run.partialContextCaveat` to JSON and a matching text-output caveat without changing findings, score, fingerprints, or exit codes. See [ADR-025](.goat-flow/learning-loop/decisions/ADR-025-project-rule-scope-honesty.md).
+
 ## v0.3.1 - 2026-06-09
 
 

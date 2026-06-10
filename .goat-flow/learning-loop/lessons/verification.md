@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-08
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
@@ -133,6 +133,39 @@ directive with no reason, `-` / `--` reasons, second-`#` reasons, and bracketed
 payloads before broad dogfood. The regex should stop at the reason delimiter,
 not include the rationale in the directive payload.
 
+## Lesson: Parser-confirmed comment heuristics need compound-header fixtures
+
+**Created:** 2026-06-10
+**Incident:** While making `waste.commented-out-code` tokenize only real COMMENT
+tokens, the first implementation preserved parser confirmation but treated a
+commented compound header such as `# if enabled:` as invalid Python. The focused
+test failed (`test_commented_if_fires` expected one finding, got zero) because a
+real commented-out block often appears as only the header line. The correction
+was to probe colon-ended headers with an inserted `pass` body before rejecting
+the comment as non-code.
+
+When a source-text rule uses parser confirmation on snippets, include
+single-line compound headers (`if`, `for`, `while`, `try`, `with`, `def`,
+`class`) in counter-fixtures. A raw snippet can be incomplete yet still be a
+high-signal commented-out-code shape.
+
+## Lesson: Scan scratch repos from their own project roots
+
+**Created:** 2026-06-10
+**Incident:** While re-testing `.goat-flow/scratchpad/scan-test-repos/**`, the
+first scan from the gruff-py repo root returned zero files because the dogfood
+config ignores `.goat-flow/`. Adding `--include-ignored` fixed discovery but
+changed semantics: `docs.missing-readme` evaluated the common
+`scan-test-repos/` parent instead of each child repo. The correct reproduction
+was to run `uv --project /path/to/gruff-py run gruff-py ... .` from inside each
+target repo, preserving per-repo project-root rules and matching old file
+counts.
+
+When comparing scan-test repos under a scratch directory, validate
+`filesParsed` and project-root findings before trusting timing or counts. A
+fast zero-file scan and a parent-root README finding are setup bugs, not product
+results.
+
 ## Lesson: Rule removals must update dogfood config before full pytest
 
 **Created:** 2026-05-20
@@ -220,7 +253,7 @@ to concrete rule implementation files, not just filename suffixes.
 ## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
 
 **Created:** 2026-05-25
-**Updated:** 2026-06-05
+**Updated:** 2026-06-10
 **Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
 added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
 silently clobbering seeded defaults. The functional change was trivial - two
@@ -251,6 +284,14 @@ The correction was to extract statement-target and class-body collection helpers
 (search: `def _module_bound_names`, search: `def _collect_class_child`) so the
 runtime behaviour stayed covered by the same regression tests while the dogfood
 gate could verify the implementation.
+
+The same trap recurred on 2026-06-10 while adding custom generated-docs text
+for `sensitive-data.pii-test-fixture`: focused tests, ruff, mypy, and docs
+checks passed, but `uv run gruff-py analyse src/ tests/ --fail-on none
+--format json` reported `size.file-length` and `size.function-length` on
+`src/gruffpy/rule/catalog.py` (search: `def _custom_docs_for`). The correction
+was to compact the new `RuleDocs` text so `catalog.py` stayed under 1000 lines
+and `_custom_docs_for` stayed at the 100-line threshold.
 
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
@@ -389,3 +430,17 @@ all-ignored scan reports zero findings, grade A, and exit 0 - check
 `summary.filesParsed`/`filesDiscovered` before trusting a clean result. (2)
 Include a known true-positive control in the fixture so a `0`-findings result
 proves the rule is silent, not that the harness is mis-wired.
+
+**Updated:** 2026-06-10. While implementing
+`test-quality.extends-production-class`, the first CLI true-positive scratch
+used `.goat-flow/scratchpad/0.4.0-M01/test_production_base.py` and returned
+zero target findings even though the source shape was `class TestX(ProductionY)`.
+Reading `src/gruffpy/rule/test_quality/extends_production_class_rule.py`
+(search: `def _is_test_file`) showed the rule only runs for paths under
+`tests/` or a top-level `test_*.py`; a nested filename alone is not enough. The
+scratch repro passed only after moving it to
+`.goat-flow/scratchpad/0.4.0-M01/tests/test_production_base.py`.
+
+When crafting rule repros, mirror the rule's path gate as well as its source
+shape. A true-positive source fixture can still report zero findings when the
+file path prevents the rule from running.

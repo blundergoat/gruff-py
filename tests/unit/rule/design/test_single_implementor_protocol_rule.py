@@ -86,3 +86,65 @@ def test_external_type_hint_usage_skips_protocol():
     )
 
     assert _analyse(source) == []
+
+
+def test_base_list_reference_alone_still_flags():
+    source = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n",
+        "src/rendering.py",
+    )
+
+    findings = _analyse(source)
+
+    assert len(findings) == 1
+    assert findings[0].symbol == "src.rendering.Renderer"
+
+
+def test_implementor_registry_alone_still_flags():
+    source = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n\n"
+        'REGISTRY = {"html": HtmlRenderer}\n',
+        "src/rendering.py",
+    )
+
+    findings = _analyse(source)
+
+    assert len(findings) == 1
+    assert findings[0].symbol == "src.rendering.Renderer"
+
+
+def test_value_reference_to_abstraction_skips_protocol():
+    source = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n\n"
+        'REGISTRY = {"html": Renderer}\n',
+        "src/rendering.py",
+    )
+
+    assert _analyse(source) == []
+
+
+def test_isinstance_tuple_reference_skips_protocol():
+    source = _unit(
+        "from typing import Protocol\n\n"
+        "class Renderer(Protocol):\n"
+        "    pass\n\n"
+        "class HtmlRenderer(Renderer):\n"
+        "    pass\n\n"
+        "def accepts_renderer(value: object) -> bool:\n"
+        "    return isinstance(value, (Renderer, str))\n",
+        "src/rendering.py",
+    )
+
+    assert _analyse(source) == []

@@ -1,4 +1,4 @@
-"""Comment lines that parse as Python code.
+"""Source comment tokens that parse as Python code.
 
 Two-stage heuristic:
 
@@ -7,13 +7,18 @@ Two-stage heuristic:
 2. Remaining candidates go through ``ast.parse`` - if the parser accepts
    them, the comment is flagged.
 
+Tokenization supplies the source comments, so docstrings and ordinary string
+literals that contain ``#`` examples are not scanned as comments.
+
 Confidence: LOW. False positives are easy on prose comments that happen to
 look like valid Python (``# x is the same as y``). Use the per-rule
 suppression knob (TBD) when needed.
 """
 
 import ast
+import io
 import re
+import tokenize
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -59,7 +64,7 @@ _SKIP_PATTERNS = (
 
 
 class CommentedOutCodeRule(Rule):
-    """Detect comment lines that pass `ast.parse` after the code-like pre-filter accepts them."""
+    """Detect source comments that pass `ast.parse` after the code-like pre-filter accepts them."""
 
     ID = "waste.commented-out-code"
 
@@ -82,11 +87,12 @@ class CommentedOutCodeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan each source line for comments that parse as Python statements.
+        """Scan source comment tokens for comments that parse as Python statements.
 
         Lines matching ``TODO``/``FIXME``/``type:``/``pragma:``/``noqa``/etc.
         are skipped before the parser runs, so the regex pre-filter only
-        forwards statement-shaped candidates.
+        forwards statement-shaped candidates. Python's tokenizer excludes
+        docstring and string-literal contents from this comment stream.
 
         Args:
             unit: Parsed source file (only ``unit.source`` is used here).
@@ -99,7 +105,7 @@ class CommentedOutCodeRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for lineno, line in enumerate(unit.source.splitlines(), start=1):
+        for lineno, line in _comment_token_lines(unit.source):
             if any(p.search(line) for p in _SKIP_PATTERNS):
                 continue
             if not _CODE_LIKE.search(line):
@@ -126,6 +132,21 @@ class CommentedOutCodeRule(Rule):
         return findings
 
 
+def _comment_token_lines(source: str) -> list[tuple[int, str]]:
+    """Return physical-line-shaped strings for tokenizer COMMENT tokens."""
+    comments: list[tuple[int, str]] = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        for token in tokens:
+            if token.type != tokenize.COMMENT:
+                continue
+            row, col = token.start
+            comments.append((row, f"{' ' * col}{token.string}"))
+    except tokenize.TokenError:
+        return []
+    return comments
+
+
 def _strip_comment_prefix(line: str) -> str:
     """Return *line* with the leading ``#`` and at most one space stripped,
     preserving original indentation so ``compile`` sees consistent levels."""
@@ -146,7 +167,15 @@ def _is_valid_python(candidate: str) -> bool:
         return False
     # Try top-level first; if it fails, wrap in a function so `return`,
     # `yield`, `continue`, `break` parse too.
-    for wrap in (dedented, f"def __probe__():\n    {dedented}"):
+    probes = [dedented, f"def __probe__():\n    {dedented}"]
+    if dedented.rstrip().endswith(":"):
+        probes.extend(
+            [
+                f"{dedented}\n    pass",
+                f"def __probe__():\n    {dedented}\n        pass",
+            ]
+        )
+    for wrap in probes:
         try:
             ast.parse(wrap + "\n")
         except (SyntaxError, ValueError):

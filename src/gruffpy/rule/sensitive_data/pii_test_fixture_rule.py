@@ -1,8 +1,9 @@
 """``sensitive-data.pii-test-fixture`` - realistic PII in test fixtures.
 
-Fires on emails / phone numbers / addresses that look real (not placeholder
-domains, not ``555`` US-test prefixes). Scoped to test paths so production
-config containing the same patterns isn't surfaced.
+Fires on emails and phone numbers that look real (not placeholder or reserved
+domains, not ``555`` US-test prefixes, not timestamp-shaped fixture numbers).
+Scoped to test paths so production config containing the same patterns isn't
+surfaced.
 """
 
 import re
@@ -33,10 +34,33 @@ _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
         "domain.tld",
     }
 )
+_RESERVED_EMAIL_TLDS: frozenset[str] = frozenset(
+    {"example", "invalid", "localhost", "local", "test"}
+)
 # 555 in the exchange position (NXX-555-NNNN) is the canonical US placeholder
 # for fictitious numbers. The area-code 555 is also reserved for directory-
 # assistance use, so treat either position as a placeholder.
 _PLACEHOLDER_PHONE_SEGMENTS: frozenset[str] = frozenset({"555"})
+_TIMESTAMP_CONTEXT_TERMS: frozenset[str] = frozenset(
+    {
+        "created-at",
+        "created_at",
+        "created",
+        "epoch",
+        "expiration",
+        "expires",
+        "reset-at",
+        "reset_at",
+        "resets-at",
+        "resets_at",
+        "time",
+        "time_ms",
+        "timestamp",
+        "unix",
+        "updated-at",
+        "updated_at",
+    }
+)
 
 
 class PiiTestFixtureRule(SourceTextRule):
@@ -49,8 +73,8 @@ class PiiTestFixtureRule(SourceTextRule):
 
         Medium confidence because realistic-looking emails/phones don't
         always belong to a real person; the placeholder allowlists
-        (``example.com``, ``555`` numbers) cover the canonical fixture
-        shapes.
+        (``example.com``, reserved TLDs, ``555`` numbers, timestamp-shaped
+        fixture numbers) cover the canonical fixture shapes.
 
         Returns:
             Definition for the PII-test-fixture rule under the
@@ -69,9 +93,9 @@ class PiiTestFixtureRule(SourceTextRule):
         """Flag realistic emails and phone numbers in files under test paths.
 
         Path gate: the file path must contain ``test`` or ``fixture``.
-        Placeholder domains (``example.com``, ``test.com``, ``localhost``,
-        etc.) and US ``555`` area / exchange codes are recognised and
-        skipped.
+        Placeholder domains (``example.com``, ``test.com``, reserved final
+        labels such as ``.local`` / ``.test``), US ``555`` area / exchange
+        codes, and timestamp-context bare numbers are recognised and skipped.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -88,13 +112,14 @@ class PiiTestFixtureRule(SourceTextRule):
             value = match.group(0)
             if _is_scp_style_git_reference(unit.source, match.end(), value):
                 continue
-            if match.group("domain").lower() in _PLACEHOLDER_DOMAINS:
+            if _is_placeholder_email_domain(match.group("domain")):
                 continue
             findings.append(_build_finding(definition, unit, match.start(), value, "email"))
         for match in _PHONE_RE.finditer(unit.source):
             if (
                 match.group("area") in _PLACEHOLDER_PHONE_SEGMENTS
                 or match.group("exchange") in _PLACEHOLDER_PHONE_SEGMENTS
+                or _is_timestamp_like_phone_match(unit.source, match)
             ):
                 continue
             findings.append(
@@ -117,6 +142,51 @@ def _is_scp_style_git_reference(source: str, match_end: int, value: str) -> bool
     return "/" in remote_path
 
 
+def _is_placeholder_email_domain(domain: str) -> bool:
+    """Return whether an email domain is reserved or fixture-only."""
+    domain = domain.lower()
+    if domain in _PLACEHOLDER_DOMAINS:
+        return True
+    return domain.rsplit(".", 1)[-1] in _RESERVED_EMAIL_TLDS
+
+
+def _is_timestamp_like_phone_match(source: str, match: re.Match[str]) -> bool:
+    """Return whether a bare phone-shaped match sits in timestamp context."""
+    raw = match.group(0)
+    if not raw.isdigit():
+        return False
+    if _is_decimal_number_fragment(source, match):
+        return True
+    context = _source_context_for_match(source, match)
+    return any(term in context for term in _TIMESTAMP_CONTEXT_TERMS)
+
+
+def _is_decimal_number_fragment(source: str, match: re.Match[str]) -> bool:
+    before = source[match.start() - 1] if match.start() > 0 else ""
+    after = source[match.end()] if match.end() < len(source) else ""
+    after_next = source[match.end() + 1] if match.end() + 1 < len(source) else ""
+    return before == "." or (after == "." and after_next.isdigit())
+
+
+def _source_context_for_match(source: str, match: re.Match[str]) -> str:
+    line_start = _context_line_start(source, match.start(), previous_lines=2)
+    line_end = source.find("\n", match.end())
+    if line_end == -1:
+        line_end = len(source)
+    window_start = max(0, match.start() - 40)
+    window_end = min(len(source), match.end() + 40)
+    return f"{source[line_start:line_end]} {source[window_start:window_end]}".lower()
+
+
+def _context_line_start(source: str, offset: int, previous_lines: int) -> int:
+    start = source.rfind("\n", 0, offset)
+    for _ in range(previous_lines):
+        if start <= 0:
+            return 0
+        start = source.rfind("\n", 0, start)
+    return start + 1
+
+
 def _build_finding(
     definition: RuleDefinition,
     unit: AnalysisUnit,
@@ -135,8 +205,8 @@ def _build_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         remediation=(
-            "Replace with documented placeholders (`user@example.com`, `+1-555-...`) "
-            "so test failures don't expose third-party PII."
+            "Replace with documented placeholders (`user@example.com`, `user@app.test`, "
+            "`+1-555-...`) so test failures don't expose third-party PII."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"preview": redact_preview(value), "kind": kind},

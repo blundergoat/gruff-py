@@ -34,6 +34,7 @@ class AnalysisRunRequest:
         diff_mode: ``working-tree``, ``staged``, ``unstaged``, a base ref, or ``-``.
         diff_patch: Unified diff text read from stdin for ``--diff -``.
         changed_scope: ``symbol`` or ``hunk`` filtering.
+        execution_exclude_rules: Rule ids excluded before analysis execution.
     """
 
     paths: tuple[str, ...]
@@ -51,3 +52,4 @@ class AnalysisRunRequest:
     diff_mode: str = ""
     diff_patch: str = ""
     changed_scope: str = "symbol"
+    execution_exclude_rules: tuple[str, ...] = ()

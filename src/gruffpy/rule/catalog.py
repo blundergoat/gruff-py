@@ -6,6 +6,7 @@ from typing import Any
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.pillar import Pillar
+from gruffpy.rule.catalog_related import RELATED_RULES as RELATED_RULES
 from gruffpy.rule.complexity.cognitive_complexity_rule import CognitiveComplexityRule
 from gruffpy.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplexityRule
 from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
@@ -167,6 +168,8 @@ from gruffpy.rule.waste.redundant_variable_rule import RedundantVariableRule
 from gruffpy.rule.waste.unreachable_code_rule import UnreachableCodeRule
 from gruffpy.rule.waste.unused_import_rule import UnusedImportRule
 from gruffpy.rule.waste.unused_parameter_rule import UnusedParameterRule
+
+__all__ = ["RELATED_RULES"]
 
 RuleLike = Rule | ProjectRuleProtocol
 RuleFactory = Callable[[], RuleLike]
@@ -365,69 +368,214 @@ def _custom_docs_for(
             return _gcp_service_account_key_docs(config_keys)
         case UrlCredentialsRule.ID:
             return _url_credentials_docs(config_keys)
+        case SingleImplementorProtocolRule.ID:
+            return _single_implementor_protocol_docs(config_keys)
+        case DatabaseUrlPasswordRule.ID:
+            return _database_url_password_docs(config_keys, definition.id)
+        case HungarianNotationRule.ID:
+            return _hungarian_notation_docs(config_keys)
+        case PiiTestFixtureRule.ID:
+            return _pii_test_fixture_docs(config_keys)
+        case NoAssertionsRule.ID:
+            return _no_assertions_docs(config_keys)
+        case CommentedOutCodeRule.ID:
+            return _commented_out_code_docs(config_keys)
+        case SqlConcatenationRule.ID:
+            return _sql_concatenation_docs(config_keys, definition.id)
         case IgnoreDirectiveReasonRule.ID:
-            return RuleDocs(
-                rationale=(
-                    "Suppression comments age badly unless they explain the local "
-                    "compatibility, framework, or test boundary that made the "
-                    "suppression acceptable."
-                ),
-                fix_guidance=(
-                    "Keep the suppression precise and add a short reason after "
-                    "`-`, `--`, or a second `#` comment marker."
-                ),
-                bad_example="`import plugin  # noqa`",
-                good_example="`import plugin  # noqa: F401 - re-exported public API`",
-                confidence_rationale=(
-                    "High confidence: the rule only matches explicit suppression "
-                    "comment directives parsed from Python comment tokens."
-                ),
-                config_keys=config_keys,
-            )
+            return _ignore_directive_reason_docs(config_keys)
         case DataclassAttributesRule.ID:
-            return RuleDocs(
-                rationale=(
-                    "Public dataclasses often become reporter, config, or API "
-                    "payload contracts; field names alone rarely explain units, "
-                    "nullability, or stability guarantees."
-                ),
-                fix_guidance=(
-                    "Add an `Attributes:` section, Sphinx `:ivar:` entries, or a "
-                    "field bullet list that explains the payload fields."
-                ),
-                bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
-                good_example=("`Attributes:` section documenting `findings` and `exit_code`."),
-                confidence_rationale=(
-                    "Medium confidence: the rule is limited to public dataclasses "
-                    "above a configurable field-count threshold."
-                ),
-                config_keys=config_keys,
-            )
+            return _dataclass_attributes_docs(config_keys)
         case ComplexBranchRationaleRule.ID:
-            return RuleDocs(
-                rationale=(
-                    "Highly branched functions are expensive to review; when they "
-                    "cannot be simplified, maintainers need the protocol, bug, or "
-                    "compatibility reason for the branch structure."
-                ),
-                fix_guidance=(
-                    "Extract the branching logic, or add a substantive docstring or "
-                    "nearby rationale comment explaining why the complexity remains."
-                ),
-                bad_example="A public parser function with many `if` branches and no docstring.",
-                good_example=(
-                    "A complex compatibility router with a docstring naming the "
-                    "legacy protocol contract."
-                ),
-                confidence_rationale=(
-                    "Medium confidence: the rule reuses existing complexity helpers "
-                    "and accepts substantive docstrings or nearby rationale comments."
-                ),
-                config_keys=config_keys,
-            )
+            return _complex_branch_rationale_docs(config_keys)
         case StaticAnalysisRedundantTestRule.ID:
             return _static_analysis_redundant_docs(config_keys)
     return None
+
+
+def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "A Protocol or ABC with one concrete implementor adds an abstraction "
+            "layer reviewers must verify without clear substitution value."
+        ),
+        fix_guidance=(
+            "Depend on the concrete class, add another real implementor, or keep a "
+            "clear external abstraction reference through an annotation or "
+            "value-position check."
+        ),
+        bad_example=(
+            "`class Renderer(Protocol): ...` with only "
+            "`class HtmlRenderer(Renderer): ...` and no other `Renderer` usage."
+        ),
+        good_example=(
+            "`Renderer` used in a factory annotation, registry value, `isinstance`, "
+            "or `issubclass` check outside the implementor."
+        ),
+        confidence_rationale=(
+            "Medium confidence: project-scoped AST evidence counts implementors "
+            "plus annotation and value-position abstraction references."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    return RuleDocs(
+        rationale="Credentialed database URLs in source usually expose direct data access.",
+        fix_guidance=(
+            "Move real passwords to environment variables or a secret manager; use "
+            "exact placeholders such as `password`, `change-me`, `dummy`, `fake`, "
+            "or `redacted` only in examples."
+        ),
+        bad_example="A database URL literal with a real password in the userinfo segment.",
+        good_example='`DATABASE_URL = "postgresql://user:change-me@host/db"`',
+        confidence_rationale=(
+            "High confidence: exact URL userinfo pattern with exact placeholder escapes."
+        ),
+        config_keys=config_keys,
+        security_metadata=rule_security_metadata(rule_id),
+    )
+
+
+def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "Type prefixes duplicate information that type hints and readable names already carry."
+        ),
+        fix_guidance=(
+            "Drop type prefixes such as `str_`, `dict_`, or `arr_`; keep semantic "
+            "count names such as `num_items` or `n_samples`."
+        ),
+        bad_example='`str_message = "hello"` or `dict_users = {}`',
+        good_example='`message = "hello"` or `num_users = len(users)`',
+        confidence_rationale=(
+            "High confidence: narrow type-prefix vocabulary; count abbreviations are excluded."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _pii_test_fixture_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale="Test fixtures should use placeholders, not realistic third-party PII.",
+        fix_guidance=(
+            "Use reserved domains such as `example.com`, `.test`, `.local`, "
+            "`.invalid`, `.localhost`, or `.example`; use `555` phone placeholders "
+            "and keep epoch or reset timestamps named with timestamp context."
+        ),
+        bad_example='`email = "jane.doe@gmail.com"` or `phone = "4158675309"`',
+        good_example='`email = "admin@app.test"` or `phone = "+1-415-555-0100"`',
+        confidence_rationale="Medium confidence: raw test text scan with explicit escapes.",
+        config_keys=config_keys,
+    )
+
+
+def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale="Collected tests without assertions are easy to mistake for coverage.",
+        fix_guidance=(
+            "Assert behaviour directly, use framework assertions, or call a clear "
+            "`assert_*` helper; keep pytest fixtures and conftest support code as support."
+        ),
+        bad_example="`def test_saves_user(): service.save(user)`",
+        good_example="`def test_saves_user(): service.save(user); assert_user_saved(user)`",
+        confidence_rationale=(
+            "High confidence: collected-test scope with assertion statements, "
+            "framework assertions, raises/warns contexts, and `assert_*` helpers."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _commented_out_code_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale="Tombstoned source comments make reviewers ask whether dead code still matters.",
+        fix_guidance=(
+            "Delete commented-out source code or turn it into prose documentation; "
+            "docstring examples are ignored because only tokenizer comment tokens are scanned."
+        ),
+        bad_example="`# old_value = compute()`",
+        good_example="`# Recompute only after the cache expires.`",
+        confidence_rationale=(
+            "Low confidence: source-comment tokens pass a cheap code-like prefilter "
+            "and parser confirmation, but prose can still resemble Python."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _sql_concatenation_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    return RuleDocs(
+        rationale="Dynamic SQL is hard to verify safely without focused sink gates.",
+        fix_guidance="Use driver parameters; validate dynamic SQL structure separately.",
+        bad_example='`cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`',
+        good_example="`cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`",
+        confidence_rationale="Medium confidence: keyword, constant, and SQLAlchemy gates.",
+        config_keys=config_keys,
+        security_metadata=rule_security_metadata(rule_id),
+    )
+
+
+def _ignore_directive_reason_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "Suppression comments age badly unless they explain the local "
+            "compatibility, framework, or test boundary that made the suppression acceptable."
+        ),
+        fix_guidance=(
+            "Keep the suppression precise and add a short reason after `-`, `--`, "
+            "or a second `#` comment marker."
+        ),
+        bad_example="`import plugin  # noqa`",
+        good_example="`import plugin  # noqa: F401 - re-exported public API`",
+        confidence_rationale=(
+            "High confidence: the rule only matches explicit suppression comment "
+            "directives parsed from Python comment tokens."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "Public dataclasses often become reporter, config, or API payload contracts; "
+            "field names alone rarely explain units, nullability, or stability guarantees."
+        ),
+        fix_guidance=(
+            "Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field "
+            "bullet list that explains the payload fields."
+        ),
+        bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
+        good_example="`Attributes:` section documenting `findings` and `exit_code`.",
+        confidence_rationale=(
+            "Medium confidence: the rule is limited to public dataclasses above a "
+            "configurable field-count threshold."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "Highly branched functions are expensive to review; when they cannot be "
+            "simplified, maintainers need the protocol, bug, or compatibility reason "
+            "for the branch structure."
+        ),
+        fix_guidance=(
+            "Extract the branching logic, or add a substantive docstring or nearby "
+            "rationale comment explaining why the complexity remains."
+        ),
+        bad_example="A public parser function with many `if` branches and no docstring.",
+        good_example="A complex compatibility router with a docstring naming the legacy protocol.",
+        confidence_rationale=(
+            "Medium confidence: the rule reuses existing complexity helpers and accepts "
+            "substantive docstrings or nearby rationale comments."
+        ),
+        config_keys=config_keys,
+    )
 
 
 def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
@@ -659,6 +807,12 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "(small ints and HTTP status codes by default)."
         ),
     },
+    "test-quality.extends-production-class": {
+        "additionalTestBases": (
+            "Exact dotted or terminal base-class names treated as test bases in addition to "
+            "the built-in allowlist and *TestCase suffix convention."
+        ),
+    },
     "test-quality.mocking-domain-object": {
         "domain_namespaces": (
             "Dotted module prefixes considered domain code; mocking imports "
@@ -670,115 +824,6 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "Allowed test-to-SUT length ratio above which the test is flagged (default 2.0)."
         ),
     },
-}
-
-
-RELATED_RULES: dict[str, tuple[str, ...]] = {
-    # Naming hygiene cluster.
-    "naming.abbreviation": ("naming.identifier-quality", "naming.short-variable"),
-    "naming.identifier-quality": (
-        "naming.abbreviation",
-        "naming.short-variable",
-        "naming.confusing-name",
-    ),
-    "naming.short-variable": ("naming.abbreviation", "naming.identifier-quality"),
-    "naming.confusing-name": ("naming.identifier-quality", "naming.generic-function"),
-    "naming.generic-function": ("naming.confusing-name", "naming.identifier-quality"),
-    "naming.boolean-prefix": ("naming.hungarian-notation",),
-    "naming.hungarian-notation": ("naming.boolean-prefix",),
-    "naming.test-naming-consistency": ("test-quality.naming-consistency",),
-    # docs.missing-* family.
-    "docs.missing-class-docstring": (
-        "docs.missing-function-docstring",
-        "docs.missing-module-docstring",
-        "docs.dataclass-attributes",
-    ),
-    "docs.missing-function-docstring": (
-        "docs.missing-class-docstring",
-        "docs.missing-module-docstring",
-        "docs.missing-param-doc",
-        "docs.missing-return-doc",
-    ),
-    "docs.missing-module-docstring": (
-        "docs.missing-class-docstring",
-        "docs.missing-function-docstring",
-        "docs.missing-readme",
-    ),
-    "docs.missing-param-doc": (
-        "docs.missing-function-docstring",
-        "docs.missing-return-doc",
-        "docs.missing-raises-doc",
-        "docs.stale-param-doc",
-    ),
-    "docs.missing-return-doc": (
-        "docs.missing-function-docstring",
-        "docs.missing-param-doc",
-        "docs.missing-raises-doc",
-    ),
-    "docs.missing-raises-doc": (
-        "docs.missing-function-docstring",
-        "docs.missing-param-doc",
-        "docs.missing-return-doc",
-    ),
-    "docs.missing-readme": ("docs.missing-module-docstring",),
-    "docs.stale-param-doc": ("docs.missing-param-doc",),
-    # Complexity / size siblings (function-level).
-    "complexity.cyclomatic": (
-        "complexity.cognitive",
-        "size.function-length",
-    ),
-    "complexity.cognitive": (
-        "complexity.cyclomatic",
-        "size.function-length",
-    ),
-    "complexity.nesting-depth": ("complexity.cyclomatic", "complexity.cognitive"),
-    "complexity.maintainability-index": (
-        "complexity.cyclomatic",
-        "complexity.cognitive",
-        "complexity.halstead-volume",
-    ),
-    "complexity.halstead-volume": ("complexity.maintainability-index",),
-    "size.function-length": (
-        "complexity.cyclomatic",
-        "complexity.cognitive",
-        "size.average-function-length",
-    ),
-    "size.average-function-length": ("size.function-length",),
-    "size.parameter-count": ("size.function-length", "complexity.cyclomatic"),
-    # Class-level size siblings.
-    "size.class-length": ("size.public-method-count", "size.attribute-count"),
-    "size.public-method-count": ("size.class-length", "size.attribute-count"),
-    "size.attribute-count": ("size.class-length", "size.public-method-count"),
-    "size.file-length": ("size.class-length", "size.function-length"),
-    # Waste / dead-code overlap.
-    "waste.empty-class": ("waste.empty-function",),
-    "waste.empty-function": ("waste.empty-class", "waste.one-line-function"),
-    "waste.one-line-function": ("waste.empty-function", "waste.redundant-variable"),
-    "waste.redundant-variable": (
-        "waste.unused-import",
-        "waste.unused-parameter",
-        "waste.one-line-function",
-    ),
-    "waste.unused-import": (
-        "waste.unused-parameter",
-        "waste.redundant-variable",
-        "dead-code.unused-private-function",
-    ),
-    "waste.unused-parameter": ("waste.unused-import", "waste.redundant-variable"),
-    "waste.commented-out-code": ("docs.todo-density",),
-    "waste.unreachable-code": (
-        "dead-code.unused-private-function",
-        "dead-code.unused-private-attribute",
-    ),
-    "dead-code.unused-private-function": (
-        "dead-code.unused-private-attribute",
-        "waste.unused-import",
-        "waste.unreachable-code",
-    ),
-    "dead-code.unused-private-attribute": (
-        "dead-code.unused-private-function",
-        "waste.unused-import",
-    ),
 }
 
 

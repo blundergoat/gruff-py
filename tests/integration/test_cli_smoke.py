@@ -1442,6 +1442,64 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "Score" in result.output
 
 
+def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text('"""Module fixture for partial-context report caveat coverage."""\n')
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "text", "--fail-on", "none", "--no-config", "--no-baseline", "src"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "Caveat: partial project scan: project-wide rules may need full-project context"
+        in result.output
+    )
+
+
+def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text('"""Module fixture for partial-context report caveat coverage."""\n')
+
+    narrow = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "src/ok.py",
+        ],
+    )
+    full = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline", "."],
+    )
+
+    assert narrow.exit_code == 0, narrow.output
+    assert full.exit_code == 0, full.output
+    narrow_payload = json.loads(narrow.output)
+    full_payload = json.loads(full.output)
+    assert narrow_payload["run"]["partialContextCaveat"] == (
+        "partial project scan: project-wide rules may need full-project context"
+    )
+    assert "partialContextCaveat" not in full_payload["run"]
+
+
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1506,6 +1564,77 @@ def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.Mo
     assert payload["run"]["filters"]["active"] is True
     assert payload["run"]["filters"]["minSeverity"] == "error"
     assert {finding["severity"] for finding in payload["findings"]} == {"error"}
+
+
+def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text(
+        '"""This module provides descriptive fixture coverage for filter disclosure tests."""\n'
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "text",
+            "--fail-on",
+            "advisory",
+            "--no-config",
+            "--no-baseline",
+            "--exclude-rule",
+            "docs.missing-readme",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "Findings: 0 shown (1 hidden by display filters; score and exit code reflect all findings)"
+        in result.output
+    )
+    assert "Exit code: 1" in result.output
+
+
+def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text(
+        '"""This module provides descriptive fixture coverage for filter disclosure tests."""\n'
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "advisory",
+            "--no-config",
+            "--no-baseline",
+            "--exclude-rule",
+            "docs.missing-readme",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert "hiddenByDisplayFilter" not in payload
+    assert payload["findings"] == []
+    assert payload["summary"]["findings"]["total"] == 0
+    assert payload["summary"]["exitCode"] == 1
+    assert sum(pillar["findings"] for pillar in payload["score"]["pillars"]) == 1
 
 
 def test_cli_analyse_accepts_comma_separated_pillar_filters(

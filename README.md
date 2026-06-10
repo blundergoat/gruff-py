@@ -216,7 +216,13 @@ uv run gruff-py analyse --format json --since HEAD src/foo.py
 git diff | uv run gruff-py analyse --format json --diff - src/foo.py
 ```
 
-Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered output without changing which rules execute.
+Narrow path scans that leave project-wide rules enabled include a partial-context
+caveat in JSON run metadata and text output because conclusions can differ from
+a full-project scan.
+
+Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered
+`analyse` output without changing which rules execute, the score, or the exit code. Text output
+discloses when findings are hidden by these filters.
 
 ## Dashboard
 

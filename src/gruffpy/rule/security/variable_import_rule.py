@@ -1,6 +1,7 @@
 """``security.variable-import`` - dynamic module name passed to importlib / ``__import__``.
 
 Fires on ``importlib.import_module(<non-literal>)`` and ``__import__(<non-literal>)``.
+Same-module ALL-CAPS string constants are treated as fixed import material.
 ``exec("import " + name)`` is caught by ``security.dangerous-function-call`` so
 this rule deliberately does not duplicate that shape.
 """
@@ -18,7 +19,9 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import (
     call_target_name,
+    is_fixed_string_expression,
     is_string_literal,
+    module_string_constants,
 )
 
 _VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset(
@@ -56,7 +59,8 @@ class VariableImportRule(Rule):
 
         ``exec("import " + ...)`` lands under
         ``security.dangerous-function-call`` and is intentionally not
-        duplicated here. Literal arguments are skipped (equivalent to a
+        duplicated here. Literal arguments and expressions built only from
+        same-module ALL-CAPS string constants are skipped (equivalent to a
         normal import).
 
         Args:
@@ -69,6 +73,7 @@ class VariableImportRule(Rule):
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
+        constants = module_string_constants(unit.tree)
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.Call):
@@ -79,7 +84,7 @@ class VariableImportRule(Rule):
             if not node.args:
                 continue
             first = node.args[0]
-            if is_string_literal(first):
+            if is_string_literal(first) or is_fixed_string_expression(first, constants):
                 continue
             findings.append(
                 Finding(
