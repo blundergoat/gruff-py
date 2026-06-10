@@ -6,4 +6,4 @@ version through that script rather than editing either file by hand.
 """
 
 TOOL_NAME = "gruff-py"
-VERSION = "0.3.1"
+VERSION = "0.4.0"
