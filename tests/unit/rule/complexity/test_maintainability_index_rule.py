@@ -116,7 +116,7 @@ def test_error_finding_emitted_for_very_low_mi():
 
 def test_lower_threshold_means_worse_mi_is_threshold():
     # Threshold semantics: lower MI = worse.
-    src = "def f(x):\n    return x + 1\n"  # MI = 100 (clamped)
+    src = "def f(x):\n    return x + 1\n"
     # threshold = 100 -> 100 is NOT below 100, no finding
     findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=100))
     assert findings == []

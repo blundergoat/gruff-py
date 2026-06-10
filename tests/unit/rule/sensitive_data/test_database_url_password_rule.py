@@ -41,9 +41,20 @@ def test_url_with_password_emits(variable: str, url: str) -> None:
         "redacted",
         "REDACTED",
     ],
+    ids=[
+        "literal_password",
+        "uppercase_password",
+        "changeme",
+        "change_me",
+        "redacted_stars",
+        "dummy",
+        "fake",
+        "redacted",
+        "uppercase_redacted",
+    ],
 )
 def test_placeholder_password_skipped(password: str) -> None:
-    src = f"EXAMPLE = 'postgresql://user:{password}@host/db'\n"
+    src = "EXAMPLE = 'postgresql://user:" + password + "@host/db'\n"
     assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
 
 

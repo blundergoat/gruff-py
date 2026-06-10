@@ -355,6 +355,26 @@ final response, scan completed task files in the active task directory for
 remaining `- [ ]` entries and either tick them with current evidence or explain
 why the task is not actually complete.
 
+## Lesson: Keep self-check regression fixtures invisible to unrelated rules
+
+**Created:** 2026-06-10
+**Incident:** Running `scripts/preflight-checks.sh` after rule false-positive
+work failed only the Gruff self-check. The failures were in test fixtures, not
+runtime code: `tests/unit/rule/complexity/test_maintainability_index_rule.py`
+(search: `test_lower_threshold_means_worse_mi_is_threshold`) had an inline
+comment that looked like commented-out code,
+`tests/unit/rule/sensitive_data/test_database_url_password_rule.py` (search:
+`test_placeholder_password_skipped`) omitted parametrized ids, and the same
+test assembled a complete secret-bearing database URL literal for a negative
+case. The fix was to remove the code-shaped comment, add explicit `ids=`, and
+build the URL fixture by concatenating the credential field instead of putting
+the whole URL in one raw source string.
+
+When editing regression fixtures for one rule, run the project dogfood check
+before final preflight and inspect cross-rule fixture shapes. Negative fixtures
+should still avoid complete secret-like literals, code-shaped comments, and
+anonymous parametrized cases unless the test is explicitly exercising that rule.
+
 ## Lesson: When tool output lags or duplicates, re-establish ground truth before editing — never edit against a stale read, never confabulate the contents of output you do not have
 
 **Created:** 2026-05-31
