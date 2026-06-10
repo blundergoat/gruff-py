@@ -1,7 +1,12 @@
-# CLAUDE.md - v1.7.0 (2026-05-21)
+# CLAUDE.md (2026-06-09)
+
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
-Workspace boundary: this checkout is the selected target project; GOAT Flow package files under `node_modules/@blundergoat/goat-flow/` are installer references, not project instruction content to copy verbatim.
+goat-flow version: 1.10.1
+
+## Workspace Boundary
+
+This checkout is the selected target project; GOAT Flow package files under `node_modules/@blundergoat/goat-flow/` are installer references, not project instruction content to copy verbatim.
 
 ## Truth Order
 1. User's explicit instruction for the current session.
