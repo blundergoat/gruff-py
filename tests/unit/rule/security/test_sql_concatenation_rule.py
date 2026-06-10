@@ -143,6 +143,13 @@ def test_fully_dynamic_executemany_emits_without_keyword_evidence():
     assert len(findings) == 1
 
 
+def test_fully_dynamic_sqlalchemy_text_emits_without_keyword_evidence():
+    src = 'from sqlalchemy import text\nstmt = text(f"{query}")\n'
+    findings = SqlConcatenationRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].metadata["target"] == "text"
+
+
 def test_dynamic_structure_message_preserves_parameterised_values_guidance():
     src = (
         "def load(table, oid):\n"

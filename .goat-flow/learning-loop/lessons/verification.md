@@ -492,3 +492,27 @@ Pair the collector tests with nested-rebind fixtures
 (`tests/unit/rule/security/test_security_node_helper.py`, search:
 `conditional_module_scope_rebinds`) and keep a function-local shadow fixture
 proving scope pruning still propagates legitimate constants.
+
+## Lesson: `except tokenize.TokenError` is not enough, and one site is never all sites
+
+**Created:** 2026-06-11
+**Incident:** PR #6 review (Cursor Bugbot, rated Low) noted
+`waste.commented-out-code` returned zero comments when `tokenize` raised
+`TokenError`. Double-checking escalated it twice. First, the tokenizer raises
+`IndentationError` (a `SyntaxError`, not a `TokenError`) on bad dedents, and
+source-text scanners run on unparseable files, so a single file like
+`def f():\n    pass\n  bad = 1` crashed the entire `gruff-py analyse` run with
+an uncaught traceback - the registry has no per-rule exception isolation.
+Second, fixing the rule did not fix the crash: the new integration test
+(`tests/integration/test_cli_smoke.py`, search:
+`tokenizer_error_file_reports_parse_error`) still failed because
+`src/gruffpy/suppression/parser.py` (search: `_comment_tokens`) and
+`src/gruffpy/rule/docs/_comment_scanner.py` had copies of the same narrow
+`except tokenize.TokenError`. All three now catch
+`(tokenize.TokenError, SyntaxError)` and keep tokens collected before the
+failure.
+
+When fixing an exception-handling gap, grep for every other call site of the
+same API (`generate_tokens`) before declaring the fix done, and verify with an
+end-to-end repro (real CLI on a broken file), not only the unit test of the
+site you first fixed - the unit test passed while the CLI still crashed.

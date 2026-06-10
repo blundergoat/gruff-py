@@ -18,7 +18,9 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import (
+    installs_error_warnings_filter,
     is_assertion_call,
+    is_catch_warnings_call,
     is_pytest_fixture_decorator,
     test_functions,
     walk_test_body,
@@ -57,8 +59,9 @@ class NoAssertionsRule(Rule):
         A test counts as having an assertion if any of these appear in its
         body: a bare ``assert`` statement, a framework assertion call, an
         ``assert_*`` helper call, or a ``with`` item whose context manager is an
-        assertion call. Pytest fixtures and conftest support functions are not
-        collected tests for this rule.
+        assertion call (``warnings.catch_warnings`` only when the block
+        escalates warnings to errors). Pytest fixtures and conftest support
+        functions are not collected tests for this rule.
 
         Args:
             unit: Parsed source file to inspect.
@@ -105,19 +108,34 @@ def _has_any_assertion(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     for node in walk_test_body(fn):
         if isinstance(node, ast.Assert):
             return True
-        if isinstance(node, ast.Call) and is_assertion_call(node):
+        if isinstance(node, ast.Call) and _is_direct_assertion_call(node):
             return True
-        if isinstance(node, ast.With):
-            for item in node.items:
-                if isinstance(item.context_expr, ast.Call) and is_assertion_call(item.context_expr):
-                    return True
+        if isinstance(node, ast.With) and _has_with_item_assertion(node):
+            return True
     return _has_decorator_assertion_call(fn)
+
+
+def _is_direct_assertion_call(node: ast.Call) -> bool:
+    """``catch_warnings`` is excluded: alone it isolates warning state without verifying."""
+    return is_assertion_call(node) and not is_catch_warnings_call(node)
+
+
+def _has_with_item_assertion(node: ast.With) -> bool:
+    for item in node.items:
+        if not (isinstance(item.context_expr, ast.Call) and is_assertion_call(item.context_expr)):
+            continue
+        if is_catch_warnings_call(item.context_expr):
+            if installs_error_warnings_filter(node):
+                return True
+            continue
+        return True
+    return False
 
 
 def _has_decorator_assertion_call(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     for decorator in fn.decorator_list:
         for node in ast.walk(decorator):
-            if isinstance(node, ast.Call) and is_assertion_call(node):
+            if isinstance(node, ast.Call) and _is_direct_assertion_call(node):
                 return True
     return False
 

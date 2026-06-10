@@ -149,3 +149,20 @@ def test_prose_starting_with_keyword_does_not_fire():
     src = "# return the widget to the pool when the caller is done\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+def test_comment_before_tokenizer_error_is_still_scanned():
+    # Unbalanced paren raises TokenError at EOF; the comment tokenized before
+    # the failure must still be scanned instead of discarding the whole file.
+    src = "# total = compute_total()\nx = (\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert len(findings) == 1
+    assert findings[0].line == 1
+
+
+def test_tokenizer_indentation_error_does_not_crash():
+    # The tokenizer raises IndentationError (not TokenError) on a bad dedent;
+    # the rule runs on unparseable files, so this must not escape the rule.
+    src = "def f():\n    pass\n  bad = 1\n# z = frob()\n"
+    findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
+    assert findings == []

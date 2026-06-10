@@ -1529,6 +1529,60 @@ def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
         assert "partialContextCaveat" not in payload["run"], full_project_path
 
 
+def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text('"""Module fixture for diff-scope caveat coverage."""\n')
+    (src / "b.py").write_text('"""Module fixture for diff-scope caveat coverage."""\n\nVALUE = 1\n')
+    patch = "--- a/src/b.py\n+++ b/src/b.py\n@@ -3 +3,2 @@\n VALUE = 1\n+# touched\n"
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--diff",
+            "-",
+        ],
+        input=patch,
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["run"]["partialContextCaveat"] == (
+        "partial project scan: project-wide rules may need full-project context"
+    )
+    assert payload["diff"]["enabled"] is True
+
+
+def test_analyse_tokenizer_error_file_reports_parse_error_without_crash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "broken.py").write_text("def f():\n    pass\n  bad = 1\n# z = frob()\n")
+
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline", "src"],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["parseErrors"] >= 1
+
+
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -121,7 +121,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
-    scan_scope = _scan_scope(request.paths, request.project_root)
+    scan_scope = _resolve_scan_scope(request, changed)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
@@ -344,6 +344,19 @@ def _handle_baseline(
         explicit_path=options.apply_path,
         scan_scope=scan_scope,
     )
+
+
+def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
+    """Classify the run as full-project or partial for caveats and baseline staleness.
+
+    ``--diff`` / ``--since`` narrow discovery to changed files before rules
+    run, so those runs are partial regardless of the requested paths.
+    Explicit ``--changed-ranges`` only filters findings after analysis, so
+    the requested paths decide.
+    """
+    if changed.active and not request.changed_ranges:
+        return "partial-scope"
+    return _scan_scope(request.paths, request.project_root)
 
 
 def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:

@@ -109,6 +109,57 @@ def _is_assertion_helper_name(name: str) -> bool:
     return len(name) > len("assert") and name.startswith("assert") and name[6].isupper()
 
 
+def is_catch_warnings_call(call: ast.Call) -> bool:
+    """Return whether a call is ``warnings.catch_warnings(...)``.
+
+    ``test-quality.no-assertions`` treats this context manager as an assertion
+    only when its ``with`` body escalates warnings to errors; other rules keep
+    the broader :func:`is_assertion_call` classification.
+
+    Args:
+        call: Call expression to inspect.
+
+    Returns:
+        True for ``warnings.catch_warnings(...)`` calls.
+    """
+    callee = call.func
+    return (
+        isinstance(callee, ast.Attribute)
+        and callee.attr == "catch_warnings"
+        and _dotted_name(callee.value) == "warnings"
+    )
+
+
+def installs_error_warnings_filter(node: ast.AST) -> bool:
+    """Return whether a subtree escalates warnings to errors.
+
+    Matches ``warnings.simplefilter("error", ...)`` and
+    ``warnings.filterwarnings("error", ...)`` calls anywhere under *node* -
+    the shape that makes a ``catch_warnings`` block fail the test when a
+    warning fires.
+
+    Args:
+        node: Subtree to inspect (typically a ``with`` statement).
+
+    Returns:
+        True when an error-escalating warnings filter call is present.
+    """
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        callee = child.func
+        if not (
+            isinstance(callee, ast.Attribute)
+            and callee.attr in {"simplefilter", "filterwarnings"}
+            and _dotted_name(callee.value) == "warnings"
+        ):
+            continue
+        first_arg = child.args[0] if child.args else None
+        if isinstance(first_arg, ast.Constant) and first_arg.value == "error":
+            return True
+    return False
+
+
 def is_pytest_fixture_decorator(decorator: ast.AST) -> bool:
     """Return whether a decorator marks a pytest fixture function.
 

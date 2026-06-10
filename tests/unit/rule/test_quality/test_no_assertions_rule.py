@@ -61,6 +61,40 @@ def test_warnings_catch_warnings_counts_as_assertion():
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
+def test_warnings_filterwarnings_error_counts_as_assertion():
+    src = (
+        "import warnings\n"
+        "def test_foo():\n"
+        "    with warnings.catch_warnings():\n"
+        "        warnings.filterwarnings('error')\n"
+        "        run_without_warning()\n"
+    )
+    assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_bare_catch_warnings_without_error_filter_emits():
+    src = (
+        "import warnings\n"
+        "def test_foo():\n"
+        "    with warnings.catch_warnings():\n"
+        "        do_work()\n"
+    )
+    findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_catch_warnings_with_ignore_filter_emits():
+    src = (
+        "import warnings\n"
+        "def test_foo():\n"
+        "    with warnings.catch_warnings():\n"
+        "        warnings.simplefilter('ignore')\n"
+        "        do_work()\n"
+    )
+    findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
 def test_bare_assert_helper_counts_as_assertion():
     src = "def test_image():\n    assert_image_mostly_same(actual, expected)\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []

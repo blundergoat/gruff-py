@@ -29,11 +29,12 @@ from gruffpy.rule.security._security_node_helper import (
 )
 
 _SQL_EXECUTE_LEAVES: frozenset[str] = frozenset({"execute", "executemany", "executescript", "text"})
-# `execute` and `text` are generic method names that surface on non-SQL
-# receivers (Click commands, command runners, widgets), so they require SQL
-# keyword evidence in fixed fragments before firing. `executemany` and
-# `executescript` are DB-API/sqlite3-specific sinks and stay ungated.
-_KEYWORD_GATED_LEAVES: frozenset[str] = frozenset({"execute", "text"})
+# `execute` is a generic method name that surfaces on non-SQL receivers
+# (Click commands, command runners), so it requires SQL keyword evidence in
+# fixed fragments before firing. `executemany` / `executescript` are
+# DB-API/sqlite3-specific sinks, and `text` only reaches this gate in modules
+# that import SQLAlchemy, so all three report any dynamic SQL string.
+_KEYWORD_GATED_LEAVES: frozenset[str] = frozenset({"execute"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("execute", "executemany", "executescript", "text")
 _SQL_KEYWORD_RE = re.compile(
     r"\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|TRUNCATE|FROM|WHERE)\b",
@@ -85,9 +86,9 @@ class SqlConcatenationRule(Rule):
         """Flag ``execute``-style calls whose first arg is dynamic, plus over-quoted placeholders.
 
         Two shapes trigger findings: a dynamic SQL string (f-string,
-        ``.format()``, ``%``, ``+``) - for the generic ``execute`` / ``text``
-        names only when its fixed fragments contain SQL keywords; and a
-        quoted placeholder (``'?'`` / ``"%s"``) in a parameterised call - the
+        ``.format()``, ``%``, ``+``) - for the generic ``execute`` name only
+        when its fixed fragments contain SQL keywords; and a quoted
+        placeholder (``'?'`` / ``"%s"``) in a parameterised call - the
         quotes break parameter binding by some drivers.
 
         Args:

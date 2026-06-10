@@ -50,4 +50,8 @@ skip the stale-entry calculation entirely; the report still reports
 `stale_evaluation` so downstream tooling can distinguish a vacuously-empty
 stale list from a full-project audit. Since 2026-06-10 (PR #6 review), paths
 are resolved against the project root first, so `./` and absolute-root
-spellings count as full-project rather than skipping stale evaluation.
+spellings count as full-project rather than skipping stale evaluation. Since
+2026-06-11, `--diff` / `--since` runs classify as partial-scope (search:
+`def _resolve_scan_scope`): they narrow discovery to changed files, so stale
+evaluation previously ran against a partial finding set and mislabelled
+unchanged-file entries stale.

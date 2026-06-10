@@ -21,9 +21,10 @@ uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 
 When a requested path is narrower than the project root and at least one
 project-wide rule is enabled, JSON additively records
-`run.partialContextCaveat`. Text output renders the same caveat. The caveat is
-run metadata only; it does not change findings, score, fingerprints, or exit
-code.
+`run.partialContextCaveat`. Text output renders the same caveat. Changed-region
+scans (`--diff`, `--since`) classify as partial the same way because discovery
+narrows to changed files. The caveat is run metadata only; it does not change
+findings, score, fingerprints, or exit code.
 
 ## Changed-Region Scoping (native diff mode)
 

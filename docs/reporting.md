@@ -161,7 +161,8 @@ were hidden when filters hide findings; JSON keeps the existing shape, so
 Project-wide rules can only see the files discovered for the requested paths.
 When a scan is narrower than the project root and a project rule is enabled,
 text output adds a scope caveat and JSON additively records
-`run.partialContextCaveat`. Full-project scans omit the field.
+`run.partialContextCaveat`. Changed-region scans (`--diff`, `--since`) count
+as partial the same way. Full-project scans omit the field.
 
 ## Exit Codes
 

@@ -133,7 +133,14 @@ class CommentedOutCodeRule(Rule):
 
 
 def _comment_token_lines(source: str) -> list[tuple[int, str]]:
-    """Return physical-line-shaped strings for tokenizer COMMENT tokens."""
+    """Return physical-line-shaped strings for tokenizer COMMENT tokens.
+
+    Comments collected before a tokenizer failure are kept: the tokenizer
+    raises ``TokenError`` on EOF-in-statement shapes and ``IndentationError``
+    (a ``SyntaxError``) on bad dedents, and this rule runs on unparseable
+    files, so a broken file degrades to a partial comment scan instead of
+    crashing the analysis run.
+    """
     comments: list[tuple[int, str]] = []
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
@@ -142,8 +149,8 @@ def _comment_token_lines(source: str) -> list[tuple[int, str]]:
                 continue
             row, col = token.start
             comments.append((row, f"{' ' * col}{token.string}"))
-    except tokenize.TokenError:
-        return []
+    except (tokenize.TokenError, SyntaxError):
+        pass
     return comments
 
 
