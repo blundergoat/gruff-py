@@ -18,7 +18,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import (
-    installs_error_warnings_filter,
+    has_error_warnings_filter,
     is_assertion_call,
     is_catch_warnings_call,
     is_pytest_fixture_decorator,
@@ -125,7 +125,7 @@ def _has_with_item_assertion(node: ast.With) -> bool:
         if not (isinstance(item.context_expr, ast.Call) and is_assertion_call(item.context_expr)):
             continue
         if is_catch_warnings_call(item.context_expr):
-            if installs_error_warnings_filter(node):
+            if has_error_warnings_filter(node):
                 return True
             continue
         return True

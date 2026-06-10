@@ -74,10 +74,7 @@ def test_warnings_filterwarnings_error_counts_as_assertion():
 
 def test_bare_catch_warnings_without_error_filter_emits():
     src = (
-        "import warnings\n"
-        "def test_foo():\n"
-        "    with warnings.catch_warnings():\n"
-        "        do_work()\n"
+        "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        do_work()\n"
     )
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1

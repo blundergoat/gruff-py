@@ -130,7 +130,7 @@ def is_catch_warnings_call(call: ast.Call) -> bool:
     )
 
 
-def installs_error_warnings_filter(node: ast.AST) -> bool:
+def has_error_warnings_filter(node: ast.AST) -> bool:
     """Return whether a subtree escalates warnings to errors.
 
     Matches ``warnings.simplefilter("error", ...)`` and
