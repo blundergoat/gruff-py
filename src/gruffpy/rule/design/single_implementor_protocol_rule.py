@@ -339,12 +339,19 @@ class _ReferenceVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Record dotted value-position references.
 
+        Only ``Load`` context counts, mirroring :meth:`visit_Name`: a store
+        target such as ``module.Renderer = Fake`` (monkeypatching) binds an
+        attribute *named* like the abstraction without referencing it. The
+        loaded inner chain (``module``, or ``a.Renderer`` in
+        ``a.Renderer.x = 1``) is still visited via ``generic_visit``.
+
         Args:
             node: Attribute expression node to inspect.
         """
-        name = _name_for(node)
-        if name:
-            self._record_reference(name)
+        if isinstance(node.ctx, ast.Load):
+            name = _name_for(node)
+            if name:
+                self._record_reference(name)
         self.generic_visit(node)
 
     def _record_function_annotations(
