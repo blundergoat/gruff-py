@@ -41,6 +41,7 @@ def test_hook_capabilities_advertise_contract() -> None:
         "changedRanges": "--changed-ranges",
         "diff": "--diff",
         "baseline": "--baseline",
+        "excludeRule": "--exclude-rule",
     }
     assert payload["flagOrder"] == "any"
 
@@ -313,6 +314,54 @@ def test_hook_exits_zero_with_findings(
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert payload["findings"]
+
+
+def test_hook_exclude_rule_removes_finding_from_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('value = eval("1")\n')
+
+    full = _hook("--no-config", "src/sample.py")
+    excluded = _hook(
+        "--no-config",
+        "--exclude-rule",
+        "security.dangerous-function-call",
+        "src/sample.py",
+    )
+
+    assert "security.dangerous-function-call" in _rule_ids(full)
+    assert "security.dangerous-function-call" not in _rule_ids(excluded)
+
+
+def test_hook_exclude_rule_accepts_repeated_and_csv_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('value = eval("1")\n')
+
+    payload = _hook(
+        "--no-config",
+        "--exclude-rule",
+        "security.dangerous-function-call,docs.missing-module-docstring",
+        "--exclude-rule",
+        "docs.missing-readme",
+        "src/sample.py",
+    )
+
+    assert _rule_ids(payload).isdisjoint(
+        {
+            "security.dangerous-function-call",
+            "docs.missing-module-docstring",
+            "docs.missing-readme",
+        }
+    )
 
 
 def test_hook_reports_ignored_paths_and_config_errors(

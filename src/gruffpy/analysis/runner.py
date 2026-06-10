@@ -1,6 +1,6 @@
 """End-to-end pipeline (`run_analysis`) shared by `gruff-py analyse` and dashboard scans."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
@@ -30,13 +30,40 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.context import RuleContext
+from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
+from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.version import VERSION
+
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
+    "partial project scan: project-wide rules may need full-project context"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ReportAssembly:
+    """Values needed to project a completed pipeline run into an analysis report."""
+
+    request: AnalysisRunRequest
+    config: AnalysisConfig
+    config_loaded_from: str | None
+    fail_threshold: FailThreshold
+    discovery_result: SourceDiscoveryResult
+    files_parsed: int
+    diagnostics: list[RunDiagnostic]
+    display_findings: list[Finding]
+    exit_code: int
+    score: ScoreReport
+    hidden_by_display_filter: int
+    partial_context_caveat: str | None
+    baseline_report: BaselineReport | None
+    changed: ChangedRegionSet
+    changed_suppressed_count: int
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
@@ -61,6 +88,8 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         configured = config.minimum_severity.get(request.config_severity_command)
         if configured is not None:
             fail_threshold = configured
+    if request.execution_exclude_rules:
+        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
 
     (
         discovery_result,
@@ -92,12 +121,13 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
+    scan_scope = _resolve_scan_scope(request, changed)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
         options=baseline_options,
-        scan_scope=_scan_scope(request.paths),
+        scan_scope=scan_scope,
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
@@ -110,30 +140,77 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
     display_findings = request.display_filter.filter_findings(findings)
+    hidden_by_display_filter = len(findings) - len(display_findings)
+    partial_context_caveat = _partial_project_context_caveat(registry, config, scan_scope)
 
+    return _build_report(
+        _ReportAssembly(
+            request=request,
+            config=config,
+            config_loaded_from=config_loaded_from,
+            fail_threshold=fail_threshold,
+            discovery_result=discovery_result,
+            files_parsed=files_parsed,
+            diagnostics=diagnostics,
+            display_findings=display_findings,
+            exit_code=exit_code,
+            score=score,
+            hidden_by_display_filter=hidden_by_display_filter,
+            partial_context_caveat=partial_context_caveat,
+            baseline_report=baseline_report,
+            changed=changed,
+            changed_suppressed_count=changed_filter_result.suppressed_count,
+        )
+    )
+
+
+def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
     return AnalysisReport(
         tool_version=VERSION,
-        requested_paths=tuple(request.paths) if request.paths else (".",),
-        format=request.output.value,
-        fail_on=fail_threshold.value,
-        files_discovered=len(discovery_result.files),
-        files_parsed=files_parsed,
-        ignored_paths=discovery_result.ignored_paths,
-        ignored_path_details=discovery_result.ignored_path_reasons,
-        missing_paths=discovery_result.missing_paths,
-        diagnostics=tuple(diagnostics),
-        findings=tuple(display_findings),
-        exit_code=exit_code,
-        config_path=config_loaded_from,
-        score=score,
-        filters=request.display_filter,
+        requested_paths=tuple(assembly.request.paths) if assembly.request.paths else (".",),
+        format=assembly.request.output.value,
+        fail_on=assembly.fail_threshold.value,
+        files_discovered=len(assembly.discovery_result.files),
+        files_parsed=assembly.files_parsed,
+        ignored_paths=assembly.discovery_result.ignored_paths,
+        ignored_path_details=assembly.discovery_result.ignored_path_reasons,
+        missing_paths=assembly.discovery_result.missing_paths,
+        diagnostics=tuple(assembly.diagnostics),
+        findings=tuple(assembly.display_findings),
+        exit_code=assembly.exit_code,
+        config_path=assembly.config_loaded_from,
+        score=assembly.score,
+        filters=assembly.request.display_filter,
+        hidden_by_display_filter=assembly.hidden_by_display_filter,
+        partial_context_caveat=assembly.partial_context_caveat,
         extensions=ReportExtensions(
-            baseline=baseline_report,
-            diff=_changed_region_payload(changed, changed_filter_result.suppressed_count),
+            baseline=assembly.baseline_report,
+            diff=_changed_region_payload(assembly.changed, assembly.changed_suppressed_count),
         ),
-        output_volume_hint_threshold=config.output_volume_hint_threshold,
-        suppressed_count=changed_filter_result.suppressed_count if changed.active else None,
+        output_volume_hint_threshold=assembly.config.output_volume_hint_threshold,
+        suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
     )
+
+
+def _partial_project_context_caveat(
+    registry: RuleRegistry,
+    config: AnalysisConfig,
+    scan_scope: str,
+) -> str | None:
+    if scan_scope == "full-project":
+        return None
+    if any(isinstance(rule, ProjectRuleProtocol) for rule in registry.enabled_rules(config)):
+        return _PARTIAL_PROJECT_CONTEXT_CAVEAT
+    return None
+
+
+def _with_execution_exclude_rules(
+    config: AnalysisConfig,
+    exclude_rules: tuple[str, ...],
+) -> AnalysisConfig:
+    selection = config.rule_selection
+    merged = tuple(dict.fromkeys((*selection.exclude_rules, *exclude_rules)))
+    return config.with_rule_selection(replace(selection, exclude_rules=merged))
 
 
 def _discover_and_parse_sources(
@@ -269,8 +346,30 @@ def _handle_baseline(
     )
 
 
-def _scan_scope(paths: tuple[str, ...]) -> str:
-    if not paths or any(p == "." for p in paths):
+def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
+    """Classify the run as full-project or partial for caveats and baseline staleness.
+
+    ``--diff`` / ``--since`` narrow discovery to changed files before rules
+    run, so those runs are partial regardless of the requested paths.
+    Explicit ``--changed-ranges`` only filters findings after analysis, so
+    the requested paths decide.
+    """
+    if changed.active and not request.changed_ranges:
+        return "partial-scope"
+    return _scan_scope(request.paths, request.project_root)
+
+
+def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
+    """Classify the requested paths as a full-project or partial scan.
+
+    A path counts as full-project when it resolves to the project root, so
+    ``.``, ``./``, ``src/..``, and an absolute path to the root all classify
+    the same way discovery treats them.
+    """
+    if not paths:
+        return "full-project"
+    root = project_root.resolve()
+    if any((root / path).resolve() == root for path in paths):
         return "full-project"
     return "partial-scope"
 

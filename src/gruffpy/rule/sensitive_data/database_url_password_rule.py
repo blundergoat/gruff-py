@@ -1,9 +1,9 @@
 """``sensitive-data.database-url-password`` - credentialled DB connection URL.
 
 Pattern: ``<scheme>://<user>:<password>@<host>`` where the password is not a
-placeholder (``password``, ``changeme``, ``xxx``, ``***``, blank). Covers
-Postgres, MySQL, MariaDB, MongoDB, Redis, ClickHouse, and the most common
-SQLAlchemy-style URLs.
+placeholder (``password``, ``changeme``, ``change-me``, ``xxx``, ``***``,
+``****``, ``dummy``, ``fake``, ``redacted``, blank). Covers Postgres, MySQL,
+MariaDB, MongoDB, Redis, ClickHouse, and the most common SQLAlchemy-style URLs.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -41,15 +41,18 @@ _SCHEMES = (
 _PATTERN = compile_pattern(rf"(?:{'|'.join(_SCHEMES)})://[A-Za-z0-9_-]+:([^@\s/]+)@[A-Za-z0-9.-]+")
 _PLACEHOLDER_PASSWORDS: frozenset[str] = frozenset(
     {
+        "",
         "password",
-        "PASSWORD",
         "changeme",
-        "CHANGEME",
+        "change-me",
         "xxx",
-        "XXX",
         "***",
+        "****",
         "your_password",
         "<password>",
+        "dummy",
+        "fake",
+        "redacted",
     }
 )
 
@@ -83,9 +86,9 @@ class DatabaseUrlPasswordRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Scan raw source for ``<scheme>://user:password@host`` URLs with a real password.
 
-        Common placeholders (``password``, ``changeme``, ``xxx``, ``***``,
-        ``<password>``, etc.) are recognised and skipped so example
-        connection strings in docs and tests don't fire.
+        Common placeholders (``password``, ``changeme``, ``change-me``,
+        ``xxx``, ``****``, ``redacted``, etc.) are recognised case-insensitively
+        and skipped so example connection strings in docs and tests don't fire.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -98,7 +101,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         findings: list[Finding] = []
         for match in iter_matches(_PATTERN, unit.source):
             password = _extract_password(match.raw)
-            if password is None or password in _PLACEHOLDER_PASSWORDS:
+            if password is None or _is_placeholder_password(password):
                 continue
             findings.append(
                 Finding(
@@ -135,3 +138,8 @@ def _extract_password(url: str) -> str | None:
     if len(colon_split) != 2:
         return None
     return colon_split[1]
+
+
+def _is_placeholder_password(password: str) -> bool:
+    """Return whether *password* is an exact known fixture placeholder."""
+    return password.strip().casefold() in _PLACEHOLDER_PASSWORDS

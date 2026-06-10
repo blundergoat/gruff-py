@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-08
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
@@ -133,6 +133,39 @@ directive with no reason, `-` / `--` reasons, second-`#` reasons, and bracketed
 payloads before broad dogfood. The regex should stop at the reason delimiter,
 not include the rationale in the directive payload.
 
+## Lesson: Parser-confirmed comment heuristics need compound-header fixtures
+
+**Created:** 2026-06-10
+**Incident:** While making `waste.commented-out-code` tokenize only real COMMENT
+tokens, the first implementation preserved parser confirmation but treated a
+commented compound header such as `# if enabled:` as invalid Python. The focused
+test failed (`test_commented_if_fires` expected one finding, got zero) because a
+real commented-out block often appears as only the header line. The correction
+was to probe colon-ended headers with an inserted `pass` body before rejecting
+the comment as non-code.
+
+When a source-text rule uses parser confirmation on snippets, include
+single-line compound headers (`if`, `for`, `while`, `try`, `with`, `def`,
+`class`) in counter-fixtures. A raw snippet can be incomplete yet still be a
+high-signal commented-out-code shape.
+
+## Lesson: Scan scratch repos from their own project roots
+
+**Created:** 2026-06-10
+**Incident:** While re-testing `.goat-flow/scratchpad/scan-test-repos/**`, the
+first scan from the gruff-py repo root returned zero files because the dogfood
+config ignores `.goat-flow/`. Adding `--include-ignored` fixed discovery but
+changed semantics: `docs.missing-readme` evaluated the common
+`scan-test-repos/` parent instead of each child repo. The correct reproduction
+was to run `uv --project /path/to/gruff-py run gruff-py ... .` from inside each
+target repo, preserving per-repo project-root rules and matching old file
+counts.
+
+When comparing scan-test repos under a scratch directory, validate
+`filesParsed` and project-root findings before trusting timing or counts. A
+fast zero-file scan and a parent-root README finding are setup bugs, not product
+results.
+
 ## Lesson: Rule removals must update dogfood config before full pytest
 
 **Created:** 2026-05-20
@@ -220,7 +253,7 @@ to concrete rule implementation files, not just filename suffixes.
 ## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
 
 **Created:** 2026-05-25
-**Updated:** 2026-06-05
+**Updated:** 2026-06-10
 **Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
 added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
 silently clobbering seeded defaults. The functional change was trivial - two
@@ -251,6 +284,14 @@ The correction was to extract statement-target and class-body collection helpers
 (search: `def _module_bound_names`, search: `def _collect_class_child`) so the
 runtime behaviour stayed covered by the same regression tests while the dogfood
 gate could verify the implementation.
+
+The same trap recurred on 2026-06-10 while adding custom generated-docs text
+for `sensitive-data.pii-test-fixture`: focused tests, ruff, mypy, and docs
+checks passed, but `uv run gruff-py analyse src/ tests/ --fail-on none
+--format json` reported `size.file-length` and `size.function-length` on
+`src/gruffpy/rule/catalog.py` (search: `def _custom_docs_for`). The correction
+was to compact the new `RuleDocs` text so `catalog.py` stayed under 1000 lines
+and `_custom_docs_for` stayed at the 100-line threshold.
 
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
@@ -313,6 +354,26 @@ criterion, update that checkbox immediately after the proof passes. Before
 final response, scan completed task files in the active task directory for
 remaining `- [ ]` entries and either tick them with current evidence or explain
 why the task is not actually complete.
+
+## Lesson: Keep self-check regression fixtures invisible to unrelated rules
+
+**Created:** 2026-06-10
+**Incident:** Running `scripts/preflight-checks.sh` after rule false-positive
+work failed only the Gruff self-check. The failures were in test fixtures, not
+runtime code: `tests/unit/rule/complexity/test_maintainability_index_rule.py`
+(search: `test_lower_threshold_means_worse_mi_is_threshold`) had an inline
+comment that looked like commented-out code,
+`tests/unit/rule/sensitive_data/test_database_url_password_rule.py` (search:
+`test_placeholder_password_skipped`) omitted parametrized ids, and the same
+test assembled a complete secret-bearing database URL literal for a negative
+case. The fix was to remove the code-shaped comment, add explicit `ids=`, and
+build the URL fixture by concatenating the credential field instead of putting
+the whole URL in one raw source string.
+
+When editing regression fixtures for one rule, run the project dogfood check
+before final preflight and inspect cross-rule fixture shapes. Negative fixtures
+should still avoid complete secret-like literals, code-shaped comments, and
+anonymous parametrized cases unless the test is explicitly exercising that rule.
 
 ## Lesson: When tool output lags or duplicates, re-establish ground truth before editing — never edit against a stale read, never confabulate the contents of output you do not have
 
@@ -389,3 +450,69 @@ all-ignored scan reports zero findings, grade A, and exit 0 - check
 `summary.filesParsed`/`filesDiscovered` before trusting a clean result. (2)
 Include a known true-positive control in the fixture so a `0`-findings result
 proves the rule is silent, not that the harness is mis-wired.
+
+**Updated:** 2026-06-10. While implementing
+`test-quality.extends-production-class`, the first CLI true-positive scratch
+used `.goat-flow/scratchpad/0.4.0-M01/test_production_base.py` and returned
+zero target findings even though the source shape was `class TestX(ProductionY)`.
+Reading `src/gruffpy/rule/test_quality/extends_production_class_rule.py`
+(search: `def _is_test_file`) showed the rule only runs for paths under
+`tests/` or a top-level `test_*.py`; a nested filename alone is not enough. The
+scratch repro passed only after moving it to
+`.goat-flow/scratchpad/0.4.0-M01/tests/test_production_base.py`.
+
+When crafting rule repros, mirror the rule's path gate as well as its source
+shape. A true-positive source fixture can still report zero findings when the
+file path prevents the rule from running.
+
+## Lesson: Module-scope invalidation walks must cover nested statement blocks
+
+**Created:** 2026-06-10
+**Incident:** PR #6 review (Cursor Bugbot) flagged that
+`src/gruffpy/rule/security/_security_node_helper.py` (search:
+`def module_string_constants`) collected ALL-CAPS constant candidates from
+top-level `tree.body` statements but only invalidated on `global` and `del`,
+so a rebind nested in a module-level `if` or `try: import ... except
+ImportError` block left a stale candidate propagating. The paired repro showed
+`security.sql-concatenation` returning zero findings for `TABLE = "users"`
+plus a conditional `TABLE = load_table_name()` rebind feeding
+`cursor.execute(f"SELECT * FROM {TABLE}")`, because
+`is_fixed_string_expression` resolved the f-string through the stale constant.
+The same review round refuted a sibling bot claim (async `def _` escaping the
+dead-code prefilter) by running the regex live, so each claim was repro-tested
+before accepting or rejecting it. Fixed by walking module scope with
+function/class/lambda bodies pruned and invalidating every Store-context
+ALL-CAPS name outside its recording assignment (search:
+`_module_scope_rebound_names`).
+
+When an allowlist depends on "single assignment at module scope", iterating
+`tree.body` alone is not single-assignment proof: rebinds hide in nested
+module-level blocks, loop targets, tuple unpacking, and walrus expressions.
+Pair the collector tests with nested-rebind fixtures
+(`tests/unit/rule/security/test_security_node_helper.py`, search:
+`conditional_module_scope_rebinds`) and keep a function-local shadow fixture
+proving scope pruning still propagates legitimate constants.
+
+## Lesson: `except tokenize.TokenError` is not enough, and one site is never all sites
+
+**Created:** 2026-06-11
+**Incident:** PR #6 review (Cursor Bugbot, rated Low) noted
+`waste.commented-out-code` returned zero comments when `tokenize` raised
+`TokenError`. Double-checking escalated it twice. First, the tokenizer raises
+`IndentationError` (a `SyntaxError`, not a `TokenError`) on bad dedents, and
+source-text scanners run on unparseable files, so a single file like
+`def f():\n    pass\n  bad = 1` crashed the entire `gruff-py analyse` run with
+an uncaught traceback - the registry has no per-rule exception isolation.
+Second, fixing the rule did not fix the crash: the new integration test
+(`tests/integration/test_cli_smoke.py`, search:
+`tokenizer_error_file_reports_parse_error`) still failed because
+`src/gruffpy/suppression/parser.py` (search: `_comment_tokens`) and
+`src/gruffpy/rule/docs/_comment_scanner.py` had copies of the same narrow
+`except tokenize.TokenError`. All three now catch
+`(tokenize.TokenError, SyntaxError)` and keep tokens collected before the
+failure.
+
+When fixing an exception-handling gap, grep for every other call site of the
+same API (`generate_tokens`) before declaring the fix done, and verify with an
+end-to-end repro (real CLI on a broken file), not only the unit test of the
+site you first fixed - the unit test passed while the CLI still crashed.

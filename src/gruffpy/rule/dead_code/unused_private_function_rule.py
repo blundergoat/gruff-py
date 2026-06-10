@@ -19,6 +19,7 @@ Confidence: MEDIUM. False positives are still possible on metaprogramming
 """
 
 import ast
+import re
 from collections import Counter
 from collections.abc import Container
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+_PRIVATE_DEF_RE = re.compile(r"\bdef\s+_")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +109,7 @@ class UnusedPrivateFunctionRule(Rule):
         Returns:
             One finding per unreferenced private function or method.
         """
-        if unit.tree is None:
+        if unit.tree is None or not _PRIVATE_DEF_RE.search(unit.source):
             return []
         definition = self.definition()
         all_names = module_all_names(unit.tree)

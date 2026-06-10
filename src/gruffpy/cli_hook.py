@@ -14,6 +14,7 @@ import click
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import BaselineOptions
+from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.finding.fail_threshold import FailThreshold
@@ -59,6 +60,11 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
     default=False,
     help="Scan default-ignored and .gitignore paths; config ignores still apply.",
 )
+@click.option(
+    "--exclude-rule",
+    multiple=True,
+    help="Execution-level rule IDs to skip; accepts comma-separated or repeated values.",
+)
 @click.argument("paths", nargs=-1)
 # gruff: disable-next=docs.missing-param-doc -- option help= text documents each flag.
 def hook(
@@ -70,6 +76,7 @@ def hook(
     config_path: Path | None,
     no_config: bool,
     include_ignored: bool,
+    exclude_rule: tuple[str, ...],
     paths: tuple[str, ...],
 ) -> None:
     """Run the additive ``gruff.hook.v1`` agent-hook contract."""
@@ -93,18 +100,12 @@ def hook(
             no_config=no_config,
             include_ignored=include_ignored,
         )
-        report = run_analysis(
-            AnalysisRunRequest(
-                paths=paths,
-                config_path=config_path,
-                no_config=no_config,
-                output=OutputFormat.JSON,
-                fail_threshold=FailThreshold.NONE,
-                include_ignored=include_ignored,
-                project_root=Path.cwd(),
-                display_filter=FindingDisplayFilter(),
-                baseline=BaselineOptions(disabled=True),
-            )
+        report = _run_hook_analysis(
+            paths=paths,
+            config_path=config_path,
+            no_config=no_config,
+            include_ignored=include_ignored,
+            exclude_rule=exclude_rule,
         )
         # Build the payload inside the try: a malformed --changed-ranges value
         # raises ValueError here, which must surface as a controlled exit 2 rather
@@ -124,6 +125,40 @@ def hook(
 
     _write_stdout(render_json(payload))
     sys.exit(0)
+
+
+def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
+    items: list[str] = []
+    for value in values:
+        for item in value.split(","):
+            stripped = item.strip()
+            if stripped:
+                items.append(stripped)
+    return tuple(dict.fromkeys(items))
+
+
+def _run_hook_analysis(
+    *,
+    paths: tuple[str, ...],
+    config_path: Path | None,
+    no_config: bool,
+    include_ignored: bool,
+    exclude_rule: tuple[str, ...],
+) -> AnalysisReport:
+    return run_analysis(
+        AnalysisRunRequest(
+            paths=paths,
+            config_path=config_path,
+            no_config=no_config,
+            output=OutputFormat.JSON,
+            fail_threshold=FailThreshold.NONE,
+            include_ignored=include_ignored,
+            project_root=Path.cwd(),
+            display_filter=FindingDisplayFilter(),
+            baseline=BaselineOptions(disabled=True),
+            execution_exclude_rules=_split_repeated_csv(exclude_rule),
+        )
+    )
 
 
 def _hook_base_identities(

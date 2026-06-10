@@ -103,6 +103,7 @@ def capabilities_payload() -> dict[str, Any]:
             "changedRanges": "--changed-ranges",
             "diff": "--diff",
             "baseline": "--baseline",
+            "excludeRule": "--exclude-rule",
         },
         "flagOrder": "any",
     }

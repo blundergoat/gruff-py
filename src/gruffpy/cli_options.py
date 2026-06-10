@@ -489,7 +489,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values.",
+        help="Hide these comma-separated rule IDs or repeated values (score/exit unchanged).",
     ),
     _option(
         "--include-rule",

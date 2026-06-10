@@ -43,8 +43,15 @@ scanned subtree, re-surfacing legitimate debt on the next full scan.
 
 Resolved on 2026-05-24 by adding a `scan_scope` parameter to `apply_baseline`
 (`src/gruffpy/analysis/baseline.py`, search: `def apply_baseline`). The runner
-derives the scope via `_scan_scope(paths)` (`src/gruffpy/analysis/runner.py`,
-search: `def _scan_scope`) and passes `"partial-scope"` whenever `paths` is
-narrower than `(".",)`. Partial scans skip the stale-entry calculation
-entirely; the report still reports `stale_evaluation` so downstream tooling
-can distinguish a vacuously-empty stale list from a full-project audit.
+derives the scope via `_scan_scope(paths, project_root)`
+(`src/gruffpy/analysis/runner.py`, search: `def _scan_scope`) and passes
+`"partial-scope"` whenever `paths` is narrower than `(".",)`. Partial scans
+skip the stale-entry calculation entirely; the report still reports
+`stale_evaluation` so downstream tooling can distinguish a vacuously-empty
+stale list from a full-project audit. Since 2026-06-10 (PR #6 review), paths
+are resolved against the project root first, so `./` and absolute-root
+spellings count as full-project rather than skipping stale evaluation. Since
+2026-06-11, `--diff` / `--since` runs classify as partial-scope (search:
+`def _resolve_scan_scope`): they narrow discovery to changed files, so stale
+evaluation previously ran against a partial finding set and mislabelled
+unchanged-file entries stale.

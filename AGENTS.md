@@ -1,7 +1,12 @@
-# AGENTS.md - v1.6.4 (2026-05-18)
-gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, hotspot output, and finding fingerprints remain compatible with sibling gruff implementations.
+# AGENTS.md (2026-06-09)
 
-Workspace boundary: this checkout is the selected target project and controlling GOAT Flow workspace; `node_modules/@blundergoat/goat-flow/` is installer/reference material, not project instruction content to copy verbatim.
+gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
+
+goat-flow version: 1.10.1
+
+## Workspace Boundary
+
+This checkout is the selected target project and controlling GOAT Flow workspace; `node_modules/@blundergoat/goat-flow/` is installer/reference material, not project instruction content to copy verbatim.
 
 ## Mission
 gruff-py governs AI-generated code so a human reviewer can sign off on it: guide, or `--fail-on`-force, a coding agent toward code that is legible enough to verify, secure where the eye fails, and tested for real (not padded with low-signal ceremony). This premise decides which rules gate vs guide and why thresholds may depart from generic-linter norms — honour it when changing rules, severities, thresholds, or scoring. Charter: `.goat-flow/learning-loop/decisions/ADR-022-reviewer-verification-mission.md`; full statement: `docs/mission.md`; rationale: `.goat-flow/architecture.md` (`## Mission`).

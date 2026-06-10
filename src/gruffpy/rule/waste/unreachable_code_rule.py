@@ -14,6 +14,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 
 _TERMINATORS = (ast.Return, ast.Raise, ast.Continue, ast.Break)
+_SOURCE_NEEDLES: tuple[str, ...] = ("return", "raise", "continue", "break", "if", "while")
 _BlockHandler = Callable[[ast.AST], Iterator[list[ast.stmt]]]
 
 
@@ -57,7 +58,7 @@ class UnreachableCodeRule(Rule):
         Returns:
             One finding per unreachable statement (at most one per terminator block).
         """
-        if unit.tree is None:
+        if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
         findings: list[Finding] = []

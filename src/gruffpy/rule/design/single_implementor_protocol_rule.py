@@ -1,8 +1,9 @@
 """``design.single-implementor-protocol`` - project-wide abstraction check.
 
 Flags internal Protocol/ABC declarations that have exactly one explicit
-subclass and no external type-hint usage. The rule is conservative on purpose:
-structural Protocol implementations are not inferred in v0.1.
+subclass and no external annotation or value-position usage. The rule is
+conservative on purpose: structural Protocol implementations are not inferred
+in v0.1.
 """
 
 import ast
@@ -269,12 +270,12 @@ def _collect_type_references(units: list[AnalysisUnit]) -> list[_TypeReference]:
     references: list[_TypeReference] = []
     for unit in units:
         if isinstance(unit.tree, ast.Module):
-            _AnnotationVisitor(_module_name(unit), references).visit(unit.tree)
+            _ReferenceVisitor(_module_name(unit), references).visit(unit.tree)
     return references
 
 
-class _AnnotationVisitor(ast.NodeVisitor):
-    """Collect type annotation references while tracking the owning class."""
+class _ReferenceVisitor(ast.NodeVisitor):
+    """Collect annotation and value references while tracking the owning class."""
 
     def __init__(self, module: str, references: list[_TypeReference]) -> None:
         self.module = module
@@ -288,6 +289,8 @@ class _AnnotationVisitor(ast.NodeVisitor):
             node: Class definition node to inspect.
         """
         self.class_stack.append(node.name)
+        for decorator in node.decorator_list:
+            self.visit(decorator)
         for stmt in node.body:
             self.visit(stmt)
         self.class_stack.pop()
@@ -299,6 +302,7 @@ class _AnnotationVisitor(ast.NodeVisitor):
             node: Function definition node to inspect.
         """
         self._record_function_annotations(node)
+        self._visit_function_defaults(node)
         for stmt in node.body:
             self.visit(stmt)
 
@@ -309,6 +313,7 @@ class _AnnotationVisitor(ast.NodeVisitor):
             node: Async function definition node to inspect.
         """
         self._record_function_annotations(node)
+        self._visit_function_defaults(node)
         for stmt in node.body:
             self.visit(stmt)
 
@@ -319,6 +324,27 @@ class _AnnotationVisitor(ast.NodeVisitor):
             node: Annotated assignment node to inspect.
         """
         self._record_annotation(node.annotation)
+        if node.value is not None:
+            self.visit(node.value)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        """Record loaded names as value-position references.
+
+        Args:
+            node: Name expression node to inspect.
+        """
+        if isinstance(node.ctx, ast.Load):
+            self._record_reference(node.id)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Record dotted value-position references.
+
+        Args:
+            node: Attribute expression node to inspect.
+        """
+        name = _name_for(node)
+        if name:
+            self._record_reference(name)
         self.generic_visit(node)
 
     def _record_function_annotations(
@@ -338,10 +364,17 @@ class _AnnotationVisitor(ast.NodeVisitor):
         if node.returns is not None:
             self._record_annotation(node.returns)
 
+    def _visit_function_defaults(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        for default in (*node.args.defaults, *node.args.kw_defaults):
+            if default is not None:
+                self.visit(default)
+
     def _record_annotation(self, annotation: ast.AST) -> None:
-        owner = self._owner_fqn()
         for name in _annotation_names(annotation):
-            self.references.append(_TypeReference(name=name, owner_class_fqn=owner))
+            self._record_reference(name)
+
+    def _record_reference(self, name: str) -> None:
+        self.references.append(_TypeReference(name=name, owner_class_fqn=self._owner_fqn()))
 
     def _owner_fqn(self) -> str | None:
         if not self.class_stack:

@@ -35,6 +35,7 @@ uv run pytest
 Regenerate and verify the rule catalogue doc:
 
 ```bash
+uv run python -m gruffpy.command.rule_docs --write docs/rules.md
 uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 ```
 
@@ -64,7 +65,7 @@ Smoke-test the built wheel in a clean environment before publishing.
 
 ## Tag
 
-Tag and push the release commit before publishing (e.g. `git tag v0.3.1 && git push --tags`).
+Tag and push the release commit before publishing (e.g. `git tag v0.4.0 && git push --tags`).
 
 ## Publishing
 

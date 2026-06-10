@@ -45,6 +45,8 @@ def scan_comments(source: str) -> tuple[SourceComment, ...]:
                     body=raw.removeprefix("#").strip(),
                 )
             )
-    except tokenize.TokenError:
+    except (tokenize.TokenError, SyntaxError):
+        # The tokenizer raises IndentationError (a SyntaxError) on bad
+        # dedents; keep the comments collected before the failure.
         return tuple(comments)
     return tuple(comments)

@@ -41,6 +41,10 @@ Consumers can discover the supported flag names and ordering once:
 uv run gruff-py hook --capabilities --format json
 ```
 
+Use `hook --exclude-rule <rule-id>` when an agent harness needs execution-level
+rule exclusion in the hook payload. The flag accepts comma-separated and
+repeated values, and excluded rules do not run for that hook invocation.
+
 ## Gate The Changed Region With Analyse
 
 Use changed-region flags with ordinary `--fail-on`. gruff-py filters findings

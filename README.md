@@ -20,7 +20,7 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 
 | Field | Value |
 | --- | --- |
-| Release line | Published `0.3.1` package line |
+| Release line | Published `0.4.0` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
@@ -178,7 +178,7 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.3.1 catalogue contains 125 rules across 11 pillars:
+The v0.4.0 catalogue contains 125 rules across 11 pillars:
 
 | Pillar | Rules |
 | --- | ---: |
@@ -194,7 +194,7 @@ The v0.3.1 catalogue contains 125 rules across 11 pillars:
 | `test-quality` | 34 |
 | `design` | 1 |
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.3.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.4.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 
@@ -216,7 +216,13 @@ uv run gruff-py analyse --format json --since HEAD src/foo.py
 git diff | uv run gruff-py analyse --format json --diff - src/foo.py
 ```
 
-Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered output without changing which rules execute.
+Narrow path scans that leave project-wide rules enabled include a partial-context
+caveat in JSON run metadata and text output because conclusions can differ from
+a full-project scan.
+
+Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered
+`analyse` output without changing which rules execute, the score, or the exit code. Text output
+discloses when findings are hidden by these filters.
 
 ## Dashboard
 

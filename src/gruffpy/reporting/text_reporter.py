@@ -41,6 +41,7 @@ class TextReporter:
         _append_path_section(lines, "Missing paths", report.missing_paths)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
+        _append_partial_context_caveat(lines, report)
         _append_score(lines, report, counts)
         _append_findings(lines, report.findings)
 
@@ -135,6 +136,14 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
         )
 
 
+def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> None:
+    if report.partial_context_caveat is None:
+        return
+    lines.append("")
+    lines.append("Scope")
+    lines.append(f"  Caveat: {report.partial_context_caveat}")
+
+
 def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, int]) -> None:
     if report.score is None:
         return
@@ -143,8 +152,15 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
     lines.append(
         f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
     )
+    if report.hidden_by_display_filter > 0:
+        finding_label = (
+            f"{counts['total']} shown ({report.hidden_by_display_filter} hidden by display "
+            "filters; score and exit code reflect all findings)"
+        )
+    else:
+        finding_label = f"{counts['total']} total"
     lines.append(
-        f"  Findings: {counts['total']} total · {counts['error']} error · "
+        f"  Findings: {finding_label} · {counts['error']} error · "
         f"{counts['warning']} warning · {counts['advisory']} advisory"
     )
     lines.append(f"  Scope: {report.score.scope}")

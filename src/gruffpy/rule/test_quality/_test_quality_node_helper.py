@@ -9,9 +9,9 @@ Public surface:
   every function in the unit's tree, classified into test / non-test scope.
 - :func:`test_functions` - iterator over (function, scope) pairs where scope.kind
   is one of the test variants. Filters out non-test functions.
-- :func:`is_assertion_call` - recognise ``self.assertEqual(...)``, ``pytest.raises``,
-  ``assert <expr>`` (handled separately at the rule level since ``assert`` is a
-  statement, not a call).
+- :func:`is_assertion_call` - recognise ``self.assertEqual(...)``,
+  ``assert_helper(...)``, ``pytest.raises``, and ``assert <expr>`` (handled
+  separately at the rule level since ``assert`` is a statement, not a call).
 - :func:`compute_count` - instrumentation counter (number of times the scope map
   was computed). The memoisation gate test reads this to confirm the helper
   memoises correctly.
@@ -81,17 +81,99 @@ def is_assertion_call(call: ast.Call) -> bool:
         call: Call expression to inspect.
 
     Returns:
-        True for ``self.assertX(...)``, ``pytest.raises``, and related helpers.
+        True for ``self.assertX(...)``, ``assert_*`` helpers, ``pytest.raises``,
+        and related helpers.
     """
     callee = call.func
+    if isinstance(callee, ast.Name):
+        return callee.id.startswith("assert_")
     if isinstance(callee, ast.Attribute):
-        if callee.attr.startswith("assert"):
+        if _is_assertion_helper_name(callee.attr):
             return True
-        if callee.attr in {"raises", "warns", "deprecated_call", "approx"} and _is_pytest_ref(
-            callee.value
-        ):
+        if callee.attr in {
+            "raises",
+            "warns",
+            "deprecated_call",
+            "approx",
+            "fail",
+        } and _is_pytest_ref(callee.value):
+            return True
+        if callee.attr == "catch_warnings" and _dotted_name(callee.value) == "warnings":
             return True
     return False
+
+
+def _is_assertion_helper_name(name: str) -> bool:
+    if name.startswith("assert_"):
+        return True
+    return len(name) > len("assert") and name.startswith("assert") and name[6].isupper()
+
+
+def is_catch_warnings_call(call: ast.Call) -> bool:
+    """Return whether a call is ``warnings.catch_warnings(...)``.
+
+    ``test-quality.no-assertions`` treats this context manager as an assertion
+    only when its ``with`` body escalates warnings to errors; other rules keep
+    the broader :func:`is_assertion_call` classification.
+
+    Args:
+        call: Call expression to inspect.
+
+    Returns:
+        True for ``warnings.catch_warnings(...)`` calls.
+    """
+    callee = call.func
+    return (
+        isinstance(callee, ast.Attribute)
+        and callee.attr == "catch_warnings"
+        and _dotted_name(callee.value) == "warnings"
+    )
+
+
+def has_error_warnings_filter(node: ast.AST) -> bool:
+    """Return whether a subtree escalates warnings to errors.
+
+    Matches ``warnings.simplefilter("error", ...)`` and
+    ``warnings.filterwarnings("error", ...)`` calls anywhere under *node* -
+    the shape that makes a ``catch_warnings`` block fail the test when a
+    warning fires.
+
+    Args:
+        node: Subtree to inspect (typically a ``with`` statement).
+
+    Returns:
+        True when an error-escalating warnings filter call is present.
+    """
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        callee = child.func
+        if not (
+            isinstance(callee, ast.Attribute)
+            and callee.attr in {"simplefilter", "filterwarnings"}
+            and _dotted_name(callee.value) == "warnings"
+        ):
+            continue
+        first_arg = child.args[0] if child.args else None
+        if isinstance(first_arg, ast.Constant) and first_arg.value == "error":
+            return True
+    return False
+
+
+def is_pytest_fixture_decorator(decorator: ast.AST) -> bool:
+    """Return whether a decorator marks a pytest fixture function.
+
+    Args:
+        decorator: Decorator expression to inspect.
+
+    Returns:
+        True for ``@pytest.fixture``, ``@pytest.fixture(...)``, ``@fixture``,
+        ``@fixture(...)``, and ``@_pytest.fixtures.fixture`` variants.
+    """
+    name = _dotted_name(decorator)
+    if name is None:
+        return False
+    return name == "fixture" or name.endswith(".fixture")
 
 
 def is_skip_marker(decorator: ast.AST) -> bool:

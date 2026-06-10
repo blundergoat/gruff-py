@@ -11,6 +11,8 @@ in the analyser, per `gruff-py/.goat-flow/learning-loop/footguns/compatibility.m
 """
 
 import ast
+import re
+from collections.abc import Mapping
 
 # Identifier substrings that suggest a name carries security-sensitive data.
 _SECURITY_SMELL_TOKENS: frozenset[str] = frozenset(
@@ -49,6 +51,7 @@ _FRAMEWORK_IMPORTS: dict[str, str] = {
 _LOGGING_LEAVES: frozenset[str] = frozenset(
     {"log", "debug", "info", "warning", "error", "critical", "exception", "print"}
 )
+_MODULE_CONSTANT_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def call_target_name(call: ast.Call) -> str | None:
@@ -123,6 +126,298 @@ def is_string_literal(node: ast.expr) -> bool:
         True for plain string constants without interpolation.
     """
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def module_string_constants(tree: ast.AST) -> dict[str, str]:
+    """Return same-module ALL-CAPS string constants safe for conservative propagation.
+
+    A name qualifies only when its single module-scope binding is one
+    top-level plain assignment of a string literal. Any other module-scope
+    binding - a rebind nested in a module-level ``if``/``try``/loop block,
+    an import collision, a ``global`` rebind from a function body, or a
+    ``del`` - disqualifies the name.
+
+    Args:
+        tree: Module AST to inspect.
+
+    Returns:
+        Mapping of single-assignment ALL-CAPS module names to string values.
+    """
+    if not isinstance(tree, ast.Module):
+        return {}
+    candidates: dict[str, str] = {}
+    owner_targets: dict[str, ast.Name] = {}
+    invalid: set[str] = set()
+    for stmt in tree.body:
+        _collect_module_constant_candidate(stmt, candidates, owner_targets, invalid)
+    invalid.update(_module_scope_rebound_names(tree, owner_targets))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Global):
+            invalid.update(name for name in node.names if _is_module_constant_name(name))
+        elif isinstance(node, ast.Delete):
+            invalid.update(_deleted_constant_names(node.targets))
+    return {
+        name: value
+        for name, value in candidates.items()
+        if name not in invalid and _is_module_constant_name(name)
+    }
+
+
+def _collect_module_constant_candidate(
+    stmt: ast.stmt,
+    candidates: dict[str, str],
+    owner_targets: dict[str, ast.Name],
+    invalid: set[str],
+) -> None:
+    if isinstance(stmt, ast.Assign):
+        _collect_plain_assign_candidate(stmt, candidates, owner_targets, invalid)
+        return
+    if isinstance(stmt, ast.AnnAssign | ast.AugAssign):
+        name = _constant_target_name(stmt.target)
+        if name is not None:
+            invalid.add(name)
+        return
+    if isinstance(stmt, ast.Import):
+        invalid.update(_constant_import_names(stmt.names))
+        return
+    if isinstance(stmt, ast.ImportFrom):
+        invalid.update(_constant_import_names(stmt.names))
+        return
+    if isinstance(stmt, ast.Delete):
+        invalid.update(_deleted_constant_names(stmt.targets))
+
+
+def _collect_plain_assign_candidate(
+    stmt: ast.Assign,
+    candidates: dict[str, str],
+    owner_targets: dict[str, ast.Name],
+    invalid: set[str],
+) -> None:
+    if len(stmt.targets) != 1:
+        names = (_constant_target_name(target) for target in stmt.targets)
+        invalid.update(name for name in names if name is not None)
+        return
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Name) or not _is_module_constant_name(target.id):
+        return
+    if target.id in candidates:
+        invalid.add(target.id)
+        return
+    if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+        candidates[target.id] = stmt.value.value
+        owner_targets[target.id] = target
+        return
+    invalid.add(target.id)
+
+
+def _module_scope_rebound_names(
+    tree: ast.Module,
+    owner_targets: Mapping[str, ast.Name],
+) -> set[str]:
+    """Return ALL-CAPS names bound at module scope outside their recording assignment.
+
+    Covers rebinds nested in module-level blocks (``if``/``try``/``with``),
+    loop targets, tuple unpacking, walrus expressions, and nested imports.
+    Function and class bodies are skipped: they bind their own scopes, and
+    module rebinds from inside a function require ``global``, which the
+    caller handles separately.
+    """
+    rebound: set[str] = set()
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+            continue
+        if isinstance(node, ast.Name):
+            if (
+                isinstance(node.ctx, ast.Store)
+                and _is_module_constant_name(node.id)
+                and node is not owner_targets.get(node.id)
+            ):
+                rebound.add(node.id)
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            rebound.update(_constant_import_names(node.names))
+        stack.extend(ast.iter_child_nodes(node))
+    return rebound
+
+
+def _constant_target_name(target: ast.AST) -> str | None:
+    if isinstance(target, ast.Name) and _is_module_constant_name(target.id):
+        return target.id
+    return None
+
+
+def _constant_import_names(aliases: list[ast.alias]) -> set[str]:
+    names: set[str] = set()
+    for alias in aliases:
+        assigned = alias.asname or alias.name.split(".", 1)[0]
+        if _is_module_constant_name(assigned):
+            names.add(assigned)
+    return names
+
+
+def _deleted_constant_names(targets: list[ast.expr]) -> set[str]:
+    names: set[str] = set()
+    for target in targets:
+        name = _constant_target_name(target)
+        if name is not None:
+            names.add(name)
+    return names
+
+
+def _is_module_constant_name(name: str) -> bool:
+    return bool(_MODULE_CONSTANT_RE.fullmatch(name))
+
+
+def is_fixed_string_expression(node: ast.expr, constants: Mapping[str, str]) -> bool:
+    """Return whether *node* resolves only to same-module fixed string material.
+
+    Args:
+        node: Expression to inspect.
+        constants: Same-module string constants from :func:`module_string_constants`.
+
+    Returns:
+        True when the expression is fully fixed at import time.
+    """
+    return _fixed_string_value(node, constants) is not None
+
+
+def fixed_string_fragments(node: ast.expr, constants: Mapping[str, str]) -> tuple[str, ...]:
+    """Return fixed string fragments visible inside *node*.
+
+    Args:
+        node: Expression to inspect.
+        constants: Same-module string constants from :func:`module_string_constants`.
+
+    Returns:
+        Literal and constant string fragments found in stable traversal order.
+    """
+    fragments: list[str] = []
+    _collect_fixed_string_fragments(node, constants, fragments)
+    return tuple(fragments)
+
+
+def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return constants.get(node.id)
+    if isinstance(node, ast.JoinedStr):
+        return _fixed_joined_string_value(node, constants)
+    if isinstance(node, ast.BinOp):
+        return _fixed_binop_string_value(node, constants)
+    if _is_format_call(node):
+        return _fixed_format_call_value(node, constants)
+    return None
+
+
+def _fixed_joined_string_value(node: ast.JoinedStr, constants: Mapping[str, str]) -> str | None:
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+            continue
+        if isinstance(value, ast.FormattedValue):
+            if value.conversion != -1 or value.format_spec is not None:
+                return None
+            fixed = _fixed_string_value(value.value, constants)
+            if fixed is None:
+                return None
+            parts.append(fixed)
+            continue
+        return None
+    return "".join(parts)
+
+
+def _fixed_binop_string_value(node: ast.BinOp, constants: Mapping[str, str]) -> str | None:
+    left = _fixed_string_value(node.left, constants)
+    if left is None:
+        return None
+    if isinstance(node.op, ast.Add):
+        right = _fixed_string_value(node.right, constants)
+        return None if right is None else left + right
+    if isinstance(node.op, ast.Mod):
+        right_values = _fixed_format_values(node.right, constants)
+        return None if right_values is None else left + "".join(right_values)
+    return None
+
+
+def _fixed_format_call_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+    ):
+        return None
+    receiver = _fixed_string_value(node.func.value, constants)
+    if receiver is None:
+        return None
+    values: list[str] = []
+    for arg in node.args:
+        fixed = _fixed_string_value(arg, constants)
+        if fixed is None:
+            return None
+        values.append(fixed)
+    for keyword in node.keywords:
+        if keyword.arg is None:
+            return None
+        fixed = _fixed_string_value(keyword.value, constants)
+        if fixed is None:
+            return None
+        values.append(fixed)
+    return receiver + "".join(values)
+
+
+def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[str] | None:
+    if isinstance(node, ast.Tuple):
+        values: list[str] = []
+        for item in node.elts:
+            fixed = _fixed_string_value(item, constants)
+            if fixed is None:
+                return None
+            values.append(fixed)
+        return values
+    fixed = _fixed_string_value(node, constants)
+    return None if fixed is None else [fixed]
+
+
+def _collect_fixed_string_fragments(
+    node: ast.expr,
+    constants: Mapping[str, str],
+    fragments: list[str],
+) -> None:
+    """Collect only compile-time string fragments from dynamic string builders.
+
+    The branch structure mirrors Python's common string-building AST shapes:
+    f-strings, `+` concatenation, and `.format(...)`. Runtime holes are visited
+    only to recover nested fixed fragments; callers use the resulting keyword
+    evidence without treating dynamic values as safe.
+    """
+    fixed = _fixed_string_value(node, constants)
+    if fixed is not None:
+        fragments.append(fixed)
+        return
+    if isinstance(node, ast.JoinedStr):
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                fragments.append(value.value)
+            elif isinstance(value, ast.FormattedValue):
+                _collect_fixed_string_fragments(value.value, constants, fragments)
+        return
+    if isinstance(node, ast.BinOp):
+        _collect_fixed_string_fragments(node.left, constants, fragments)
+        _collect_fixed_string_fragments(node.right, constants, fragments)
+        return
+    if (
+        _is_format_call(node)
+        and isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+    ):
+        _collect_fixed_string_fragments(node.func.value, constants, fragments)
+        for arg in node.args:
+            _collect_fixed_string_fragments(arg, constants, fragments)
+        for keyword in node.keywords:
+            _collect_fixed_string_fragments(keyword.value, constants, fragments)
 
 
 def is_dynamic_string(node: ast.expr) -> bool:

@@ -139,7 +139,10 @@ def _comment_tokens(source: str) -> list[_CommentToken]:
         for token in tokenize.generate_tokens(stream):
             if token.type == tokenize.COMMENT:
                 tokens.append(_CommentToken(text=token.string, line=token.start[0]))
-    except tokenize.TokenError:
+    except (tokenize.TokenError, SyntaxError):
+        # The tokenizer raises IndentationError (a SyntaxError) on bad
+        # dedents; suppressions run on unparseable files, so keep what was
+        # collected instead of crashing the run.
         return tokens
     return tokens
 

@@ -1,7 +1,26 @@
 ---
 category: rules
-last_reviewed: 2026-05-26
+last_reviewed: 2026-06-10
 ---
+
+## Pattern: Prove rule-precision relaxations with paired scratch repros
+
+**Context:** Precision fixes for security rules can remove noisy findings while
+quietly changing serialized labels or dropping attack shapes. M02 for
+`security.sql-concatenation` had to silence three audit false positives
+without changing `sourceLabel="dynamic-sql"` / `sinkLabel="sql-execution"` for
+surviving findings.
+
+**Approach:** Add attack counter-fixtures before the rule change, then keep
+separate scratch files for allowed false positives and attack shapes. Run the
+rule filtered to the affected `ruleId` and record both counts. For serialized
+contract safety, compare a stable projection of a survivor finding before and
+after with sorted JSON (`ruleId`, severity/confidence, message/remediation,
+metadata) and require an empty `diff -u` before claiming labels are unchanged.
+Use this pattern whenever a rule relaxation depends on keyword gates,
+allowlists, framework/import gates, or constant propagation.
+
+**Created:** 2026-06-10
 
 ## Pattern: Frame rule messages by what the user should add, not what's absent
 

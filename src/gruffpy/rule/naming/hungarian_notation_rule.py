@@ -4,6 +4,8 @@ Detects names whose first underscore-token is a type-prefix:
 ``i_count``, ``s_name``, ``b_is_valid``, ``arr_items``, ``dict_users``,
 ``str_message``, ``int_total``, ``f_ratio``, etc. Python conventions
 explicitly reject this - PEP 8, mypy, type hints make the type self-evident.
+Count abbreviations such as ``num_items`` and ``n_samples`` are not treated as
+Hungarian notation by default.
 
 Scope: function/method names, parameter names, local variable assignments,
 class-body attribute assignments. Class names are NOT scanned (a class
@@ -33,7 +35,6 @@ _HUNGARIAN_PREFIXES: frozenset[str] = frozenset(
         "b",
         "f",
         "d",
-        "n",
         "p",
         "lp",
         "sz",
@@ -43,7 +44,6 @@ _HUNGARIAN_PREFIXES: frozenset[str] = frozenset(
         "bool",
         "flt",
         "dbl",
-        "num",
         "arr",
         "lst",
         "dict",
@@ -55,16 +55,17 @@ _HUNGARIAN_PREFIXES: frozenset[str] = frozenset(
 
 
 class HungarianNotationRule(Rule):
-    """Detect identifiers whose first token is a type-prefix like `i_count` or `arr_items`."""
+    """Detect identifiers whose first token is a type-prefix like `str_name` or `arr_items`."""
 
     ID = "naming.hungarian-notation"
 
     def definition(self) -> RuleDefinition:
         """Describe the Hungarian-notation rule as a high-confidence warning.
 
-        High confidence because the prefix set is intentionally narrow -
-        false positives on real domain names (``int_id``) erode trust faster
-        than missed detections.
+        High confidence because the prefix set is intentionally narrow and
+        excludes ordinary count abbreviations (``num_items``, ``n_samples``);
+        false positives on real domain names erode trust faster than missed
+        detections.
 
         Returns:
             Definition for the Hungarian-notation rule under the naming pillar.

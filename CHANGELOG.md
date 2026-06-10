@@ -2,6 +2,17 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+## v0.4.0 - 2026-06-11
+
+- **False-positive sweep, corpus-verified** - Re-scanning `AI-Trader`, `headroom`, and `supervision` removed 7, 165, and 202 findings. Largest drops: `naming.hungarian-notation` count names (`num_*` / `n_*`), `test-quality.no-assertions` fixture/assertion-helper handling (incl. parametrized `pytest.raises`), `sensitive-data.pii-test-fixture` timestamp/metric numbers, and token-aware `waste.commented-out-code` scanning.
+- **Security and sensitive-data precision** - `security.sql-concatenation` now needs SQL keyword evidence for the generic `execute` name, gates `text()` on a SQLAlchemy import, and separates dynamic-structure from dynamic-value messaging. Same-module ALL-CAPS string constants count as fixed (also backs `security.variable-import`); `sensitive-data.database-url-password` recognises more placeholders; `sensitive-data.pii-test-fixture` skips reserved-TLD emails.
+- **`test-quality.extends-production-class`** - `*TestCase`-suffix bases count as test scaffolding, and a new `additionalTestBases` option allowlists project-specific harness classes.
+- **Project-rule scope honesty** - `design.single-implementor-protocol` counts abstraction references in annotations and value positions (`isinstance` / `issubclass`). Narrow scans with a project-wide rule enabled add an additive `run.partialContextCaveat` plus a text caveat; paths are normalised against the project root, so `./` and absolute-root spellings stay full-project, while `--diff` / `--since` scans classify as partial for both the caveat and baseline stale evaluation. See [ADR-025](.goat-flow/learning-loop/decisions/ADR-025-project-rule-scope-honesty.md).
+- **Display-filter disclosure** - Filtered text output reports `<n> shown (<m> hidden by display filters; score and exit code reflect all findings)`.
+- **Agent hook `--exclude-rule`** - Execution-level rule exclusion (repeatable or comma-separated) merged into the run's selection without touching config; advertised in `hook --capabilities`.
+- **PR #6 review fixes** - ALL-CAPS constants rebound in nested module-level blocks no longer count as fixed strings; fully dynamic `executemany` / `executescript` / SQLAlchemy `text()` calls report again; `warnings.catch_warnings` counts as an assertion only when the block escalates warnings to errors; files the tokenizer rejects degrade to partial comment/suppression scans instead of crashing `analyse`.
+- **Maintenance** - `RELATED_RULES` moved to `catalog_related.py`, `docs/rules.md` stamps the package `VERSION`, and source prefilters speed up `dead-code.unused-private-function` and `waste.unreachable-code`.
+
 ## v0.3.1 - 2026-06-09
 
 
