@@ -1500,6 +1500,35 @@ def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
     assert "partialContextCaveat" not in full_payload["run"]
 
 
+def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text('"""Module fixture for partial-context report caveat coverage."""\n')
+
+    for full_project_path in ("./", str(tmp_path)):
+        result = CliRunner().invoke(
+            main,
+            [
+                "analyse",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+                "--no-config",
+                "--no-baseline",
+                full_project_path,
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert "partialContextCaveat" not in payload["run"], full_project_path
+
+
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -87,3 +87,15 @@ def test_lowercase_constant_boundary_still_emits():
     )
     findings = VariableImportRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
+
+
+def test_conditionally_rebound_module_constant_still_emits():
+    src = (
+        "from importlib import import_module\n"
+        'PLUGIN_PACKAGE = "plugins.core"\n'
+        "if OVERRIDE:\n"
+        "    PLUGIN_PACKAGE = load_override()\n"
+        'import_module(PLUGIN_PACKAGE + ".loader")\n'
+    )
+    findings = VariableImportRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1

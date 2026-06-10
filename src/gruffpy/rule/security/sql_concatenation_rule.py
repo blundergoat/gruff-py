@@ -29,6 +29,11 @@ from gruffpy.rule.security._security_node_helper import (
 )
 
 _SQL_EXECUTE_LEAVES: frozenset[str] = frozenset({"execute", "executemany", "executescript", "text"})
+# `execute` and `text` are generic method names that surface on non-SQL
+# receivers (Click commands, command runners, widgets), so they require SQL
+# keyword evidence in fixed fragments before firing. `executemany` and
+# `executescript` are DB-API/sqlite3-specific sinks and stay ungated.
+_KEYWORD_GATED_LEAVES: frozenset[str] = frozenset({"execute", "text"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("execute", "executemany", "executescript", "text")
 _SQL_KEYWORD_RE = re.compile(
     r"\b(?:SELECT|INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|REPLACE|TRUNCATE|FROM|WHERE)\b",
@@ -80,7 +85,8 @@ class SqlConcatenationRule(Rule):
         """Flag ``execute``-style calls whose first arg is dynamic, plus over-quoted placeholders.
 
         Two shapes trigger findings: a dynamic SQL string (f-string,
-        ``.format()``, ``%``, ``+``) whose fixed fragments contain SQL; and a
+        ``.format()``, ``%``, ``+``) - for the generic ``execute`` / ``text``
+        names only when its fixed fragments contain SQL keywords; and a
         quoted placeholder (``'?'`` / ``"%s"``) in a parameterised call - the
         quotes break parameter binding by some drivers.
 
@@ -131,7 +137,7 @@ def _unsafe_sql_call(
         return None
     first_arg = node.args[0]
     if is_dynamic_string(first_arg):
-        if not _contains_sql_keyword(first_arg, constants):
+        if leaf in _KEYWORD_GATED_LEAVES and not _contains_sql_keyword(first_arg, constants):
             return None
         if is_fixed_string_expression(first_arg, constants):
             return None

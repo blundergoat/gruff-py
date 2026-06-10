@@ -120,6 +120,29 @@ def test_module_constant_table_prefix_with_parameters_skipped():
     assert SqlConcatenationRule().analyse(make_unit(src), default_ctx()) == []
 
 
+def test_conditionally_rebound_module_constant_still_emits():
+    src = (
+        'TABLE = "users"\n'
+        "if OVERRIDE:\n"
+        "    TABLE = load_table_name()\n"
+        'cursor.execute(f"SELECT * FROM {TABLE} WHERE id = %s", (oid,))\n'
+    )
+    findings = SqlConcatenationRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_fully_dynamic_executescript_emits_without_keyword_evidence():
+    src = 'conn.executescript(f"{script}")\n'
+    findings = SqlConcatenationRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_fully_dynamic_executemany_emits_without_keyword_evidence():
+    src = 'cursor.executemany(f"{template}", rows)\n'
+    findings = SqlConcatenationRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
 def test_dynamic_structure_message_preserves_parameterised_values_guidance():
     src = (
         "def load(table, oid):\n"

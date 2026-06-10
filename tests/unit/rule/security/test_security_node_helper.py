@@ -47,6 +47,36 @@ def test_module_string_constants_rejects_global_rebinds() -> None:
     assert module_string_constants(tree) == {}
 
 
+def test_module_string_constants_rejects_conditional_module_scope_rebinds() -> None:
+    tree = ast.parse('QUERY = "SELECT * FROM users"\nif OVERRIDE:\n    QUERY = load_override()\n')
+
+    assert module_string_constants(tree) == {}
+
+
+def test_module_string_constants_rejects_try_import_fallback_rebinds() -> None:
+    tree = ast.parse(
+        'BACKEND = "json"\n'
+        "try:\n"
+        "    import yaml\n"
+        '    BACKEND = "yaml"\n'
+        "except ImportError:\n"
+        "    pass\n"
+    )
+
+    assert module_string_constants(tree) == {}
+
+
+def test_module_string_constants_keeps_constants_despite_function_local_shadows() -> None:
+    tree = ast.parse(
+        'PLUGIN_PACKAGE = "plugins.core"\n'
+        "def helper():\n"
+        '    PLUGIN_PACKAGE = "local-only"\n'
+        "    return PLUGIN_PACKAGE\n"
+    )
+
+    assert module_string_constants(tree) == {"PLUGIN_PACKAGE": "plugins.core"}
+
+
 def test_fixed_string_expression_accepts_literals_constants_concat_and_fstrings() -> None:
     constants = {"PLUGIN_PACKAGE": "plugins.core"}
 

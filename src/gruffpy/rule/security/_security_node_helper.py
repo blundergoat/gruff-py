@@ -131,6 +131,12 @@ def is_string_literal(node: ast.expr) -> bool:
 def module_string_constants(tree: ast.AST) -> dict[str, str]:
     """Return same-module ALL-CAPS string constants safe for conservative propagation.
 
+    A name qualifies only when its single module-scope binding is one
+    top-level plain assignment of a string literal. Any other module-scope
+    binding - a rebind nested in a module-level ``if``/``try``/loop block,
+    an import collision, a ``global`` rebind from a function body, or a
+    ``del`` - disqualifies the name.
+
     Args:
         tree: Module AST to inspect.
 
@@ -140,9 +146,11 @@ def module_string_constants(tree: ast.AST) -> dict[str, str]:
     if not isinstance(tree, ast.Module):
         return {}
     candidates: dict[str, str] = {}
+    owner_targets: dict[str, ast.Name] = {}
     invalid: set[str] = set()
     for stmt in tree.body:
-        _collect_module_constant_candidate(stmt, candidates, invalid)
+        _collect_module_constant_candidate(stmt, candidates, owner_targets, invalid)
+    invalid.update(_module_scope_rebound_names(tree, owner_targets))
     for node in ast.walk(tree):
         if isinstance(node, ast.Global):
             invalid.update(name for name in node.names if _is_module_constant_name(name))
@@ -158,10 +166,11 @@ def module_string_constants(tree: ast.AST) -> dict[str, str]:
 def _collect_module_constant_candidate(
     stmt: ast.stmt,
     candidates: dict[str, str],
+    owner_targets: dict[str, ast.Name],
     invalid: set[str],
 ) -> None:
     if isinstance(stmt, ast.Assign):
-        _collect_plain_assign_candidate(stmt, candidates, invalid)
+        _collect_plain_assign_candidate(stmt, candidates, owner_targets, invalid)
         return
     if isinstance(stmt, ast.AnnAssign | ast.AugAssign):
         name = _constant_target_name(stmt.target)
@@ -181,23 +190,55 @@ def _collect_module_constant_candidate(
 def _collect_plain_assign_candidate(
     stmt: ast.Assign,
     candidates: dict[str, str],
+    owner_targets: dict[str, ast.Name],
     invalid: set[str],
 ) -> None:
-    target_names = [_constant_target_name(target) for target in stmt.targets]
-    names = [name for name in target_names if name is not None]
     if len(stmt.targets) != 1:
-        invalid.update(names)
+        names = (_constant_target_name(target) for target in stmt.targets)
+        invalid.update(name for name in names if name is not None)
         return
-    name = target_names[0]
-    if name is None:
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Name) or not _is_module_constant_name(target.id):
         return
-    if name in candidates:
-        invalid.add(name)
+    if target.id in candidates:
+        invalid.add(target.id)
         return
     if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
-        candidates[name] = stmt.value.value
+        candidates[target.id] = stmt.value.value
+        owner_targets[target.id] = target
         return
-    invalid.add(name)
+    invalid.add(target.id)
+
+
+def _module_scope_rebound_names(
+    tree: ast.Module,
+    owner_targets: Mapping[str, ast.Name],
+) -> set[str]:
+    """Return ALL-CAPS names bound at module scope outside their recording assignment.
+
+    Covers rebinds nested in module-level blocks (``if``/``try``/``with``),
+    loop targets, tuple unpacking, walrus expressions, and nested imports.
+    Function and class bodies are skipped: they bind their own scopes, and
+    module rebinds from inside a function require ``global``, which the
+    caller handles separately.
+    """
+    rebound: set[str] = set()
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+            continue
+        if isinstance(node, ast.Name):
+            if (
+                isinstance(node.ctx, ast.Store)
+                and _is_module_constant_name(node.id)
+                and node is not owner_targets.get(node.id)
+            ):
+                rebound.add(node.id)
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            rebound.update(_constant_import_names(node.names))
+        stack.extend(ast.iter_child_nodes(node))
+    return rebound
 
 
 def _constant_target_name(target: ast.AST) -> str | None:

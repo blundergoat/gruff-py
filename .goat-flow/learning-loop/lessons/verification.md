@@ -464,3 +464,31 @@ scratch repro passed only after moving it to
 When crafting rule repros, mirror the rule's path gate as well as its source
 shape. A true-positive source fixture can still report zero findings when the
 file path prevents the rule from running.
+
+## Lesson: Module-scope invalidation walks must cover nested statement blocks
+
+**Created:** 2026-06-10
+**Incident:** PR #6 review (Cursor Bugbot) flagged that
+`src/gruffpy/rule/security/_security_node_helper.py` (search:
+`def module_string_constants`) collected ALL-CAPS constant candidates from
+top-level `tree.body` statements but only invalidated on `global` and `del`,
+so a rebind nested in a module-level `if` or `try: import ... except
+ImportError` block left a stale candidate propagating. The paired repro showed
+`security.sql-concatenation` returning zero findings for `TABLE = "users"`
+plus a conditional `TABLE = load_table_name()` rebind feeding
+`cursor.execute(f"SELECT * FROM {TABLE}")`, because
+`is_fixed_string_expression` resolved the f-string through the stale constant.
+The same review round refuted a sibling bot claim (async `def _` escaping the
+dead-code prefilter) by running the regex live, so each claim was repro-tested
+before accepting or rejecting it. Fixed by walking module scope with
+function/class/lambda bodies pruned and invalidating every Store-context
+ALL-CAPS name outside its recording assignment (search:
+`_module_scope_rebound_names`).
+
+When an allowlist depends on "single assignment at module scope", iterating
+`tree.body` alone is not single-assignment proof: rebinds hide in nested
+module-level blocks, loop targets, tuple unpacking, and walrus expressions.
+Pair the collector tests with nested-rebind fixtures
+(`tests/unit/rule/security/test_security_node_helper.py`, search:
+`conditional_module_scope_rebinds`) and keep a function-local shadow fixture
+proving scope pruning still propagates legitimate constants.

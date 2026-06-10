@@ -121,12 +121,13 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
+    scan_scope = _scan_scope(request.paths, request.project_root)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
         options=baseline_options,
-        scan_scope=_scan_scope(request.paths),
+        scan_scope=scan_scope,
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
@@ -140,7 +141,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
     display_findings = request.display_filter.filter_findings(findings)
     hidden_by_display_filter = len(findings) - len(display_findings)
-    partial_context_caveat = _partial_project_context_caveat(registry, config, request.paths)
+    partial_context_caveat = _partial_project_context_caveat(registry, config, scan_scope)
 
     return _build_report(
         _ReportAssembly(
@@ -194,9 +195,9 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
 def _partial_project_context_caveat(
     registry: RuleRegistry,
     config: AnalysisConfig,
-    paths: tuple[str, ...],
+    scan_scope: str,
 ) -> str | None:
-    if _scan_scope(paths) == "full-project":
+    if scan_scope == "full-project":
         return None
     if any(isinstance(rule, ProjectRuleProtocol) for rule in registry.enabled_rules(config)):
         return _PARTIAL_PROJECT_CONTEXT_CAVEAT
@@ -345,8 +346,17 @@ def _handle_baseline(
     )
 
 
-def _scan_scope(paths: tuple[str, ...]) -> str:
-    if not paths or any(p == "." for p in paths):
+def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
+    """Classify the requested paths as a full-project or partial scan.
+
+    A path counts as full-project when it resolves to the project root, so
+    ``.``, ``./``, ``src/..``, and an absolute path to the root all classify
+    the same way discovery treats them.
+    """
+    if not paths:
+        return "full-project"
+    root = project_root.resolve()
+    if any((root / path).resolve() == root for path in paths):
         return "full-project"
     return "partial-scope"
 
