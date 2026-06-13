@@ -314,9 +314,11 @@ The same trap recurred on 2026-06-10 while adding custom generated-docs text
 for `sensitive-data.pii-test-fixture`: focused tests, ruff, mypy, and docs
 checks passed, but `uv run gruff-py analyse src/ tests/ --fail-on none
 --format json` reported `size.file-length` and `size.function-length` on
-`src/gruffpy/rule/catalog.py` (search: `def _custom_docs_for`). The correction
-was to compact the new `RuleDocs` text so `catalog.py` stayed under 1000 lines
-and `_custom_docs_for` stayed at the 100-line threshold.
+`src/gruffpy/rule/catalog.py` for the then-monolithic `_custom_docs_for` factory.
+The correction was to compact the new `RuleDocs` text so `catalog.py` stayed
+under 1000 lines and that factory stayed at the 100-line threshold; the per-rule
+custom-docs factories have since been extracted to
+`src/gruffpy/rule/catalog_docs.py` (search: `def custom_docs_for`).
 
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 

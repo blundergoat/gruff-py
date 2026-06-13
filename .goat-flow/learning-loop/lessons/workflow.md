@@ -36,7 +36,8 @@ transcript.
 **Incident:** M04 (list-rules explain mode) was originally scoped to add two
 new fields to `RuleDefinition`, build per-rule prose for ~10 rules, derive an
 escape-hatch introspection helper, and define cross-references. After reading
-`src/gruffpy/rule/catalog.py` (search: `class RuleDocs`), 4 of those
+the `RuleDocs` dataclass — then in `catalog.py`, since moved to
+`src/gruffpy/rule/catalog_docs.py` (search: `class RuleDocs`) — 4 of those
 deliverables were already in the codebase: `rationale`, `fix_guidance`,
 `bad_example`, `good_example`, `confidence_rationale`, and `config_keys` were
 all carried by `RuleDocs`, auto-generated for ~109 rules and custom-curated
@@ -48,8 +49,9 @@ the CLI surface, and option-description authoring for 12 rules. The milestone's
 "~full day" estimate became "~half day" once the read was done.
 
 Before scoping any feature framed as "extend the rule system with X", do a
-focused read of `src/gruffpy/rule/catalog.py` (the `RuleDocs` dataclass and
-the `_docs_for_definition` / `_custom_docs_for` factories) and
+focused read of `src/gruffpy/rule/catalog.py` and
+`src/gruffpy/rule/catalog_docs.py` (the `RuleDocs` dataclass and
+the `_docs_for_definition` / `custom_docs_for` factories) and
 `src/gruffpy/rule/definition.py`. Confirm what data is already carried and
 where. The split between hot-path data on `RuleDefinition` (travels with
 every `Finding`) and durable docs metadata on `RuleDocs` is load-bearing -
