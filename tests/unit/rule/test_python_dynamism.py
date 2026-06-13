@@ -53,6 +53,24 @@ def test_router_get_decorator():
     assert has_framework_decorator(fn) is True
 
 
+def test_fastapi_on_event_decorator():
+    src = '@app.on_event("startup")\nasync def startup_event(): ...\n'
+    fn = next(n for n in ast.parse(src).body if isinstance(n, ast.AsyncFunctionDef))
+    assert has_framework_decorator(fn) is True
+
+
+def test_flask_before_request_decorator():
+    src = "@app.before_request\ndef load_user(): ...\n"
+    fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef))
+    assert has_framework_decorator(fn) is True
+
+
+def test_flask_errorhandler_decorator():
+    src = "@app.errorhandler(404)\ndef not_found(error): ...\n"
+    fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef))
+    assert has_framework_decorator(fn) is True
+
+
 def test_abstractmethod_decorator():
     src = "from abc import abstractmethod\n@abstractmethod\ndef m(self): ...\n"
     fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef))

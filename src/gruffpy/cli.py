@@ -21,6 +21,7 @@ from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_
 from gruffpy.cli_hook import hook as _hook_command
 from gruffpy.cli_list_rules import list_rules_detail
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
+from gruffpy.cli_migrate_config import migrate_config as _migrate_config_command
 from gruffpy.cli_options import (
     ClickDecorator,
     _option,
@@ -182,6 +183,7 @@ class _AnalysisCliRequest:
     since: str
     changed_ranges: str
     changed_scope: str
+    strict_config: bool = False
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -251,6 +253,7 @@ def main(ctx: click.Context, **kwargs: Any) -> None:
 main = cast(click.Group, main)
 bind_root_group(main)
 main.add_command(_hook_command)
+main.add_command(_migrate_config_command)
 
 
 @_analyse_command
@@ -610,6 +613,7 @@ def _analysis_request(
         since=cast(str, kwargs.get("since", "")),
         changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
         changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
+        strict_config=cast(bool, kwargs.get("strict_config", False)),
     )
 
 
@@ -651,6 +655,7 @@ def _summary_analysis_request(
         since="",
         changed_ranges="",
         changed_scope="symbol",
+        strict_config=cast(bool, kwargs.get("strict_config", False)),
     )
 
 
@@ -728,7 +733,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
     try:
-        return run_analysis(
+        report = run_analysis(
             AnalysisRunRequest(
                 paths=request.paths,
                 config_path=request.config_path,
@@ -751,12 +756,23 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 since=request.since,
                 changed_ranges=request.changed_ranges,
                 changed_scope=request.changed_scope,
+                strict_config=request.strict_config,
             )
         )
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
             return _config_error_report(request, exc)
         raise click.ClickException(str(exc)) from exc
+    _echo_config_warnings(report)
+    return report
+
+
+def _echo_config_warnings(report: AnalysisReport) -> None:
+    """Echo config warnings to stderr: visible for summary, clean for JSON stdout."""
+    if _state().should_suppress_output:
+        return
+    for warning in report.config_warnings:
+        click.echo(f"Warning: {warning}", err=True)
 
 
 def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:

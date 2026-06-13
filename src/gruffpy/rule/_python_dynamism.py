@@ -38,6 +38,15 @@ _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
         "head",
         "options",
         "websocket",
+        # Flask / FastAPI / Starlette app lifecycle hooks - registered by the
+        # decorator and invoked by the framework, never called by name.
+        "on_event",  # @app.on_event("startup"|"shutdown")
+        "before_request",
+        "after_request",
+        "teardown_request",
+        "teardown_appcontext",
+        "errorhandler",
+        "context_processor",
         # Django
         "register",
         # SQLAlchemy event listeners

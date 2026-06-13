@@ -1,7 +1,32 @@
 ---
 category: verification
-last_reviewed: 2026-06-10
+last_reviewed: 2026-06-13
 ---
+
+## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
+
+**Created:** 2026-06-13
+**Incident:** While inserting the `## v0.4.1 - Unreleased` CHANGELOG section, the
+first Edit used `old_string` ending in the existing `## v0.4.0 - 2026-06-11`
+header (captured purely as an anchor) but the `new_string` ended at the new
+v0.4.1 bullet and never re-included the `## v0.4.0` line. The header was
+silently deleted, merging all of v0.4.0's bullets into the v0.4.1 section.
+Five later CHANGELOG edits all anchored on v0.4.1 bullets, so none of them
+re-touched the boundary and the corruption survived undetected until a
+`grep -n "^## v0.4"` during the close-out status check returned only one match
+instead of two.
+
+**Fix / guard:** When an Edit's `old_string` reaches past the intended change
+to grab a trailing structural marker (a section header, a closing brace/bracket,
+a sentinel comment) only as insertion context, the `new_string` MUST reproduce
+that marker verbatim at its end. After any prepend-or-insert edit to a
+section-structured file (CHANGELOG, docs with `##` headers, ordered config
+blocks), verify the structural invariant before moving on — e.g.
+`grep -n '^## ' CHANGELOG.md` and confirm the expected number of section
+headers, or count bullets per section. This is the editing analogue of the
+existing footgun about confabulated tool output: do not assume an insert left
+neighbouring structure intact — check it. See `.goat-flow/learning-loop/footguns/`
+for the related "re-establish ground truth before editing" guidance.
 
 ## Lesson: Verify changed-region hunk tests against real finding spans
 

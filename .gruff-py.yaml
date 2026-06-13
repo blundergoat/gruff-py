@@ -40,7 +40,20 @@ allowlists:
   secretPreviews: []
   deadCode:
     symbols: []
-    decorators: []
+    # Click command functions are consumed by the decorator-registration
+    # chain in cli_options.py, not by direct calls (ADR-015's Click case).
+    decorators:
+    - _analyse_command
+    - _check_ignore_command
+    - _completion_command
+    - _dashboard_command
+    - _help_command_decorator
+    - _init_command
+    - _list_command
+    - _list_rules_command
+    - _metric_calibration_command
+    - _report_command
+    - _summary_command
     paths: []
 selection:
   tiers:
@@ -48,6 +61,7 @@ selection:
   pillars:
   - complexity
   - maintainability
+  - correctness
   - dead-code
   - design
   - documentation
@@ -63,8 +77,12 @@ selection:
   - complexity.halstead-volume
   - complexity.maintainability-index
   - complexity.nesting-depth
+  - correctness.substring-vocabulary-match
+  - correctness.unsafe-numeric-coercion
+  - dead-code.exported-but-unreferenced
   - dead-code.unused-private-attribute
   - dead-code.unused-private-function
+  - design.runtime-sys-path-mutation
   - design.single-implementor-protocol
   - docs.complex-branch-rationale
   - docs.dataclass-attributes
@@ -120,6 +138,7 @@ selection:
   - security.ssrf
   - security.unsafe-pickle
   - security.unsafe-yaml-load
+  - security.unsanitized-markdown-interpolation
   - security.variable-import
   - security.weak-crypto
   - security.xxe
@@ -211,11 +230,25 @@ rules:
     enabled: true
     threshold: 6
     severity: error
+  # Substring vocabulary match
+  correctness.substring-vocabulary-match:
+    enabled: true
+  # Unsafe numeric coercion
+  correctness.unsafe-numeric-coercion:
+    enabled: true
+  # Exported but unreferenced
+  dead-code.exported-but-unreferenced:
+    enabled: true
+    options:
+      entryPointPatterns: []
   # Unused private attribute
   dead-code.unused-private-attribute:
     enabled: true
   # Unused private function
   dead-code.unused-private-function:
+    enabled: true
+  # Runtime sys.path mutation
+  design.runtime-sys-path-mutation:
     enabled: true
   # Single-implementor Protocol/ABC
   design.single-implementor-protocol:
@@ -481,6 +514,9 @@ rules:
     enabled: true
   # Unsafe YAML load
   security.unsafe-yaml-load:
+    enabled: true
+  # Unsanitized markdown interpolation
+  security.unsanitized-markdown-interpolation:
     enabled: true
   # Variable import
   security.variable-import:

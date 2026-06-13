@@ -80,6 +80,7 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
         _command_line("init", "Write a default .gruff-py.yaml to the current directory.", ctx),
         _command_line("list", "List commands", ctx),
         _command_line("list-rules", "List gruff-py rule metadata.", ctx),
+        _command_line("migrate-config", "Rewrite legacy config keys to the current schema.", ctx),
         _command_line("report", "Render a gruff-py report to stdout or a file.", ctx),
         _command_line(
             "summary",
@@ -100,9 +101,9 @@ def _option_line(label: str, description: str, ctx: click.Context) -> str:
 
 
 def _command_line(name: str, description: str, ctx: click.Context) -> str:
-    # Pad past the longest command name ("check-ignore", 12) so every description
+    # Pad past the longest command name ("migrate-config", 14) so every description
     # keeps a column gutter; a width equal to the name length renders them flush.
-    return f"  {_style(name, 'green', ctx)}{' ' * (14 - len(name))}{description}"
+    return f"  {_style(name, 'green', ctx)}{' ' * (16 - len(name))}{description}"
 
 
 def _style(text: str, color: str, ctx: click.Context) -> str:

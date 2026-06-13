@@ -55,18 +55,6 @@ def is_test_file(display_path: str) -> bool:
     return "/" not in normalized and name.startswith("test_") and name.endswith(".py")
 
 
-def is_property_getter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function carries an ``@property`` decorator.
-
-    Args:
-        fn: Function node to inspect.
-
-    Returns:
-        True when any decorator resolves to ``property``.
-    """
-    return any(_decorator_name(d).split(".")[-1] == "property" for d in fn.decorator_list)
-
-
 def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Return whether a function is a property setter or deleter.
 

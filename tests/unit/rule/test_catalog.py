@@ -22,6 +22,7 @@ _RULE_ROOT = _PROJECT_ROOT / "src" / "gruffpy" / "rule"
 _PREFIXES_BY_PILLAR = {
     Pillar.SIZE: ("size.",),
     Pillar.COMPLEXITY: ("complexity.",),
+    Pillar.CORRECTNESS: ("correctness.",),
     Pillar.MAINTAINABILITY: ("complexity.", "maintainability."),
     Pillar.DEAD_CODE: ("dead-code.", "waste."),
     Pillar.MODERNISATION: ("modernisation.",),

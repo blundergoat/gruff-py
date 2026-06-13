@@ -243,52 +243,75 @@ def test_threshold_requires_severity(tmp_path: Path):
         loader.load()
 
 
-def test_severity_requires_threshold(tmp_path: Path):
+def test_severity_requires_threshold_warns_by_default_and_raises_under_strict(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = loader.load()
+    assert any('severity" requires "threshold"' in warning for warning in loader.warnings)
+    assert config.rules["size.file-length"] == _defaults().rules["size.file-length"]
 
     with pytest.raises(ConfigError, match='severity" requires "threshold"'):
-        loader.load()
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 
-def test_threshold_rejects_named_threshold_rule(tmp_path: Path):
+def test_threshold_on_named_threshold_rule_warns_by_default_and_raises_under_strict(
+    tmp_path: Path,
+):
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\n"
         "rules:\n  test-quality.eager-test:\n    threshold: 5\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = loader.load()
+    assert any(
+        "only supported for severity-threshold rubrics" in warning for warning in loader.warnings
+    )
+    assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
 
     with pytest.raises(ConfigError, match="only supported for severity-threshold rubrics"):
-        loader.load()
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 
-def test_threshold_and_thresholds_cannot_be_combined(tmp_path: Path):
+def test_threshold_with_legacy_tier_block_warns_and_keeps_explicit_threshold(tmp_path: Path):
+    # The half-migrated shape: an explicit single-threshold rubric next to a
+    # leftover two-tier block. The legacy tier is dropped with a warning and
+    # the explicit threshold wins; only --strict-config turns this fatal.
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\n"
         "rules:\n"
         "  size.file-length:\n"
-        "    threshold: 900\n"
+        f"    threshold: {_HIGH_THRESHOLD_BOUNDARY}\n"
         "    severity: error\n"
         "    thresholds:\n"
         "      warning: 500\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = loader.load()
+    assert any('thresholds.warning"' in warning for warning in loader.warnings)
+    rubric = config.rules["size.file-length"].severity_threshold
+    assert rubric is not None
+    assert rubric.threshold == _HIGH_THRESHOLD_BOUNDARY
 
-    with pytest.raises(ConfigError, match='cannot combine "threshold" and "thresholds"'):
-        loader.load()
+    with pytest.raises(ConfigError, match='Unknown threshold "rules.size.file-length'):
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 
-def test_unknown_named_threshold_rejected(tmp_path: Path):
+def test_unknown_named_threshold_warns_by_default_and_raises_under_strict(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\n"
         "rules:\n  test-quality.eager-test:\n    thresholds:\n      warning: 5\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = loader.load()
+    assert any(
+        'Unknown threshold "rules.test-quality.eager-test' in warning for warning in loader.warnings
+    )
+    assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
 
     with pytest.raises(ConfigError, match='Unknown threshold "rules.test-quality.eager-test'):
-        loader.load()
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 
 def test_explicit_config_path_rejects_unknown_extension(tmp_path: Path):
@@ -367,14 +390,17 @@ def test_yaml_selection_rejects_unknown_values(
         loader.load()
 
 
-def test_removed_npath_rule_pin_fails_as_unknown_rule(tmp_path: Path):
+def test_removed_npath_rule_pin_warns_by_default_and_raises_under_strict(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    enabled: true\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
+    config, _ = loader.load()
+    assert any('Unknown rule id "complexity.npath"' in warning for warning in loader.warnings)
+    assert config.rules == _defaults().rules
 
     with pytest.raises(ConfigError, match='Unknown rule id "complexity.npath"'):
-        loader.load()
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 
 def test_rule_enabled_must_be_boolean(tmp_path: Path):

@@ -176,22 +176,6 @@ def is_pytest_fixture_decorator(decorator: ast.AST) -> bool:
     return name == "fixture" or name.endswith(".fixture")
 
 
-def is_skip_marker(decorator: ast.AST) -> bool:
-    """Return whether a decorator is a recognised skip marker.
-
-    Args:
-        decorator: Decorator expression to inspect.
-
-    Returns:
-        True for ``@pytest.mark.skip(...)``, ``skipif``, or ``unittest.skip``.
-    """
-    name = _dotted_name(decorator)
-    if name is None:
-        return False
-    leaf = name.split(".")[-1]
-    return leaf in {"skip", "skipif", "skipUnless", "expectedFailure"}
-
-
 def compute_count() -> int:
     """Return the cumulative number of full scope computations performed.
 

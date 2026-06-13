@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-13
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -23,7 +23,9 @@ on this basis) and once while scoping M04's explain mode (which uses
 `RuleDocs.rationale` instead).
 
 When a feature wants per-rule sentence prose, source it from `RuleDocs`
-(`src/gruffpy/rule/catalog.py`, search: `class RuleDocs`) - specifically
+(`src/gruffpy/rule/catalog_docs.py`, search: `class RuleDocs`; moved out of
+`catalog.py` 2026-06-13 for the file-length rule, re-exported from
+`gruffpy.rule.catalog`) - specifically
 `rationale`, `fix_guidance`, `bad_example`, `good_example`, or
 `confidence_rationale`. `RuleDocs` carries the curated and auto-generated
 prose; `RuleDefinition` carries hot-path data that travels with every

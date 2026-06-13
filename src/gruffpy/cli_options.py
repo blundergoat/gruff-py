@@ -564,6 +564,16 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=None,
         help="Path to a gruff YAML or TOML config file (.yaml, .yml, or .toml).",
     ),
+    _option(
+        "--strict-config",
+        "strict_config",
+        is_flag=True,
+        default=False,
+        help=(
+            "Fail on unknown rule-level config keys instead of warning and "
+            "continuing with that rule's defaults."
+        ),
+    ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
 )
@@ -733,6 +743,16 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help="Path to a gruff YAML or TOML config file (.yaml, .yml, or .toml).",
     ),
     _option(
+        "--strict-config",
+        "strict_config",
+        is_flag=True,
+        default=False,
+        help=(
+            "Fail on unknown rule-level config keys instead of warning and "
+            "continuing with that rule's defaults."
+        ),
+    ),
+    _option(
         "--output",
         "output_path",
         type=click.Path(path_type=Path),
@@ -797,6 +817,16 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         type=click.Path(path_type=Path),
         default=None,
         help="Path to a gruff YAML or TOML config file (.yaml, .yml, or .toml).",
+    ),
+    _option(
+        "--strict-config",
+        "strict_config",
+        is_flag=True,
+        default=False,
+        help=(
+            "Fail on unknown rule-level config keys instead of warning and "
+            "continuing with that rule's defaults."
+        ),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -884,6 +914,7 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     ),
     _command(),
 )
+
 
 _CHECK_IGNORE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
