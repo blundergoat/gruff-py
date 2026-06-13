@@ -71,6 +71,29 @@ def test_other_list_named_path_is_clean():
     assert _analyse(src) == []
 
 
+def test_compound_main_guard_is_clean():
+    src = (
+        "import sys\n\n"
+        'if __name__ == "__main__" and __package__ is None:\n'
+        '    sys.path.insert(0, "/opt/lib")\n'
+    )
+    assert _analyse(src) == []
+
+
+def test_else_branch_of_main_guard_fires():
+    # The else branch runs when the module is imported, so mutation there is
+    # not exempt.
+    src = (
+        "import sys\n\n"
+        'if __name__ == "__main__":\n'
+        "    pass\n"
+        "else:\n"
+        '    sys.path.insert(0, "/opt/lib")\n'
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+
+
 def test_definition_is_advisory_high_confidence_design():
     definition = RuntimeSysPathMutationRule().definition()
     assert definition.default_severity.value == "advisory"

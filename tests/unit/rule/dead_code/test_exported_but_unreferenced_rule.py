@@ -196,6 +196,32 @@ def test_private_and_dunder_names_are_not_candidates():
     assert _analyse(units) == []
 
 
+def test_underscore_test_suffix_files_are_not_candidates():
+    # `widget_test.py` is a pytest/unittest test file even outside a tests/ dir,
+    # so its symbols are callers, not export candidates.
+    units = [_unit("def widget_case():\n    return 1\n", "pkg/widget_test.py")]
+    assert _analyse(units) == []
+
+
+def test_quoted_dotted_annotation_reference_counts_as_use():
+    # A class referenced only through a quoted *dotted* forward ref
+    # (`-> "pkg.models.Payload"`) must not be flagged - annotations count as use.
+    units = [
+        _unit("class Payload:\n    pass\n", "pkg/models.py"),
+        _unit(
+            "from typing import TYPE_CHECKING\n\n"
+            "if TYPE_CHECKING:\n"
+            "    import pkg.models\n\n"
+            'def build(raw) -> "pkg.models.Payload":\n'
+            "    return raw\n\n"
+            "value = build({})\n",
+            "pkg/api.py",
+        ),
+    ]
+    findings = _analyse(units)
+    assert [finding.symbol for finding in findings] == []
+
+
 def test_definition_is_advisory_medium_confidence_dead_code():
     definition = ExportedButUnreferencedRule().definition()
     assert definition.default_severity.value == "advisory"

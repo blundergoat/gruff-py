@@ -13,6 +13,7 @@ from gruffpy.rule.registry import RuleRegistry
 
 _LEGACY_WARNING_TIER = 15
 _LEGACY_ERROR_TIER = 30
+_EXPLICIT_THRESHOLD = 25
 
 _LEGACY_CONFIG = (
     "schemaVersion: gruff-py.config.v0.1\n"
@@ -156,6 +157,27 @@ def test_pyproject_only_project_gets_guidance_error(tmp_path: Path):
     (tmp_path / "pyproject.toml").write_text("[tool.gruff-py]\n")
     with pytest.raises(ConfigError, match="YAML configs only"):
         migrate_config_file(tmp_path, None)
+
+
+def test_threshold_without_severity_is_completed_and_loads(tmp_path: Path):
+    # A hybrid config with a bare `threshold` plus legacy tiers must gain the
+    # missing severity, so migrate-config never writes a config it cannot load.
+    target = _write_config(
+        tmp_path,
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "rules:\n"
+        "  complexity.cognitive:\n"
+        f"    threshold: {_EXPLICIT_THRESHOLD}\n"
+        "    thresholds:\n"
+        f"      error: {_LEGACY_ERROR_TIER}\n",
+    )
+    migration = migrate_config_file(tmp_path, None)
+    target.write_text(migration.migrated_text)
+    config, _ = ConfigLoader(tmp_path, _defaults()).load()
+    rubric = config.rules["complexity.cognitive"].severity_threshold
+    assert rubric is not None
+    assert rubric.threshold == _EXPLICIT_THRESHOLD
+    assert rubric.severity.value == "error"
 
 
 def test_no_config_anywhere_is_an_error(tmp_path: Path):

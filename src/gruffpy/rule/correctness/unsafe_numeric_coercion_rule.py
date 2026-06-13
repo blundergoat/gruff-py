@@ -116,7 +116,26 @@ class UnsafeNumericCoercionRule(Rule):
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 findings.extend(_unchecked_float_findings(definition, unit, node))
         findings.extend(_early_exit_guard_findings(definition, unit))
-        return findings
+        return _deduplicated(findings)
+
+
+def _deduplicated(findings: list[Finding]) -> list[Finding]:
+    """Drop repeats of the same conversion site.
+
+    The direct-guard, early-exit, and float passes overlap when a conversion
+    sits under redundant or nested guards, so the same ``int()`` call can be
+    collected more than once. Keying on line span plus message (which encodes
+    the converted name and shape) collapses those to one finding.
+    """
+    seen: set[tuple[int | None, int | None, str]] = set()
+    unique: list[Finding] = []
+    for finding in findings:
+        key = (finding.line, finding.end_line, finding.message)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(finding)
+    return unique
 
 
 def _has_module_level_int_rebind(tree: ast.Module) -> bool:
@@ -147,12 +166,13 @@ def _guarded_coercion_findings(
     guards = _guarded_names(node.test)
     if not guards:
         return []
+    ascii_guarded = _ascii_guarded_names(node.test)
     guarded_branch = node.body if isinstance(node, ast.If) else [node.body]
     findings: list[Finding] = []
     for branch_node in guarded_branch:
         for call in _coercion_calls(walk_statement_scope(branch_node)):
             name = _single_name_argument(call)
-            if name is None or name not in guards:
+            if name is None or name not in guards or name in ascii_guarded:
                 continue
             if _is_protected_by_try(call, _GUARDED_STRING_EXCEPTIONS):
                 continue
@@ -209,7 +229,12 @@ def _is_early_exit_guard(statement: ast.If) -> bool:
 def _negated_guarded_names(test: ast.expr) -> dict[str, str]:
     if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
         return {}
-    return _guarded_names(test.operand)
+    ascii_guarded = _ascii_guarded_names(test.operand)
+    return {
+        name: guard
+        for name, guard in _guarded_names(test.operand).items()
+        if name not in ascii_guarded
+    }
 
 
 def _guarded_string_finding(
@@ -248,6 +273,26 @@ def _guarded_names(test: ast.expr) -> dict[str, str]:
         ):
             guards[node.func.value.id] = node.func.attr
     return guards
+
+
+def _ascii_guarded_names(test: ast.expr) -> set[str]:
+    """Names carrying an ``.isascii()`` guard in *test*.
+
+    ``s.isdigit()``/``s.isnumeric()`` combined with ``s.isascii()`` admits only
+    ASCII digits 0-9, which ``int()`` always accepts - so such a conversion is
+    safe and must not be flagged. ``isascii()`` is the canonical fix for this
+    rule, so flagging the fixed code would be a false positive.
+    """
+    names: set[str] = set()
+    for node in ast.walk(test):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "isascii"
+            and isinstance(node.func.value, ast.Name)
+        ):
+            names.add(node.func.value.id)
+    return names
 
 
 def _coercion_calls(nodes: Iterable[ast.AST]) -> list[ast.Call]:

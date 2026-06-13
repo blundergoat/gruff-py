@@ -346,13 +346,23 @@ def _is_collection_annotated(annotation: ast.expr | None) -> bool:
 
 
 def _annotation_head_names(annotation: ast.expr | None) -> set[str]:
-    """Constructor name(s) at the head of a type annotation (``dict[..]`` -> ``dict``)."""
+    """Constructor name(s) at the head of a type annotation (``dict[..]`` -> ``dict``).
+
+    ``Optional[...]`` / ``Union[...]`` wrappers unwrap to the head(s) they wrap,
+    so ``Optional[list[str]]`` and ``Union[str, dict]`` resolve to the inner
+    collection rather than the wrapper name.
+    """
     if isinstance(annotation, ast.Name):
         return {annotation.id}
     if isinstance(annotation, ast.Attribute):
         return {annotation.attr}
+    if isinstance(annotation, ast.Tuple):
+        return set().union(*(_annotation_head_names(element) for element in annotation.elts))
     if isinstance(annotation, ast.Subscript):
-        return _annotation_head_names(annotation.value)
+        head = _annotation_head_names(annotation.value)
+        if head <= {"Optional", "Union"}:
+            return _annotation_head_names(annotation.slice)
+        return head
     if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
         return _annotation_head_names(annotation.left) | _annotation_head_names(annotation.right)
     return set()

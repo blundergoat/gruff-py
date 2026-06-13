@@ -240,6 +240,43 @@ def test_conversion_in_try_else_clause_is_not_protected():
     assert findings[0].metadata["shape"] == "unchecked-float-coercion"
 
 
+def test_isascii_guard_with_isdigit_is_clean():
+    # `isdigit() and isascii()` admits only ASCII digits, which int() accepts -
+    # isascii() is the canonical fix and must not itself be flagged.
+    src = (
+        "def parse(raw):\n"
+        "    if raw.isdigit() and raw.isascii():\n"
+        "        return int(raw)\n"
+        "    return None\n"
+    )
+    assert _analyse(src) == []
+
+
+def test_isascii_negated_early_exit_is_clean():
+    src = (
+        "def parse(raw):\n"
+        "    if not (raw.isdigit() and raw.isascii()):\n"
+        "        raise ValueError\n"
+        "    return int(raw)\n"
+    )
+    assert _analyse(src) == []
+
+
+def test_redundant_guards_flag_the_conversion_once():
+    # A conversion reachable under both a negated early-exit guard and a
+    # redundant direct guard must be reported once, not once per pass.
+    src = (
+        "def parse(raw):\n"
+        "    if not raw.isdigit():\n"
+        "        raise ValueError\n"
+        "    if raw.isdigit():\n"
+        "        value = int(raw)\n"
+        "        print(value)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+
+
 def test_definition_is_advisory_high_confidence_correctness():
     definition = UnsafeNumericCoercionRule().definition()
     assert definition.default_severity.value == "advisory"

@@ -131,7 +131,13 @@ def _export_candidates(
 def _is_test_unit(unit: AnalysisUnit) -> bool:
     display_path = unit.file.display_path.replace("\\", "/")
     parts = display_path.split("/")
-    return "tests" in parts[:-1] or parts[-1].startswith("test_") or parts[-1] == "conftest.py"
+    name = parts[-1]
+    return (
+        "tests" in parts[:-1]
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or name == "conftest.py"
+    )
 
 
 def _used_names(trees: list[ast.Module]) -> set[str]:
@@ -203,7 +209,15 @@ def _names_in_expression(text: str) -> set[str]:
         parsed = ast.parse(text, mode="eval")
     except SyntaxError:
         return set()
-    return {node.id for node in ast.walk(parsed) if isinstance(node, ast.Name)}
+    names: set[str] = set()
+    for node in ast.walk(parsed):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            # ``"models.Payload"`` references ``Payload`` via the attribute, the
+            # same way an unquoted ``models.Payload`` load would.
+            names.add(node.attr)
+    return names
 
 
 def _is_exempt(

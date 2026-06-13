@@ -198,12 +198,21 @@ def _migrate_rule_section(
             f"rules.{rule_id}: removed legacy {dropped}; the rule has no severity rubric "
             "and runs at its defaults"
         ]
-    if "threshold" in section:
-        return [
-            f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity "
-            "pair is already present"
-        ]
     tier = "error" if "error" in legacy else "warning"
+    if "threshold" in section:
+        if "severity" in section:
+            return [
+                f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity "
+                "pair is already present"
+            ]
+        # threshold without severity is fatal even in non-strict mode, so fill
+        # the missing half from the legacy tier rather than write a config that
+        # cannot load.
+        section["severity"] = tier
+        return [
+            f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and "
+            f"added the missing severity={tier}"
+        ]
     section["threshold"] = legacy[tier]
     section["severity"] = tier
     note = f"rules.{rule_id}: thresholds.{tier} -> threshold={legacy[tier]}, severity={tier}"

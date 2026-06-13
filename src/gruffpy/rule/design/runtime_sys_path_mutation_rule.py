@@ -114,15 +114,23 @@ def _sys_path_mutation_method(node: ast.Call) -> str | None:
 
 
 def _is_inside_main_block(node: ast.AST) -> bool:
+    child: ast.AST = node
     current: ast.AST | None = getattr(node, "parent", None)
     while current is not None:
-        if isinstance(current, ast.If) and _is_main_guard(current.test):
+        # Only the guard's body is the entry-point block; its ``else`` branch
+        # runs when the module is imported, so mutations there are not exempt.
+        if isinstance(current, ast.If) and _is_main_guard(current.test) and child in current.body:
             return True
+        child = current
         current = getattr(current, "parent", None)
     return False
 
 
 def _is_main_guard(test: ast.expr) -> bool:
+    # A compound entry-point guard (``__name__ == "__main__" and ...``) still
+    # only runs in the script entry point, so it is exempt too.
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        return any(_is_main_guard(value) for value in test.values)
     if not (isinstance(test, ast.Compare) and len(test.ops) == 1):
         return False
     if not isinstance(test.ops[0], ast.Eq):

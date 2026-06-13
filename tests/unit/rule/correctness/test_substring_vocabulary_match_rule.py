@@ -179,6 +179,27 @@ def test_str_annotated_parameter_still_fires():
     assert len(findings) == 1
 
 
+def test_optional_collection_parameter_is_clean():
+    # Optional[list[str]] unwraps to list, so `k in tool_input` is membership.
+    src = (
+        "from typing import Optional\n\n"
+        'KEYS = ("offset", "limit", "ranges")\n\n'
+        "def matches(tool_input: Optional[list[str]]) -> bool:\n"
+        "    return any(k in tool_input for k in KEYS)\n"
+    )
+    assert _analyse(src) == []
+
+
+def test_union_collection_parameter_is_clean():
+    src = (
+        "from typing import Union\n\n"
+        'KEYS = ("offset", "limit")\n\n'
+        "def classify(query: Union[str, dict]) -> bool:\n"
+        "    return any(k in query for k in KEYS)\n"
+    )
+    assert _analyse(src) == []
+
+
 def test_definition_is_advisory_medium_confidence_correctness():
     definition = SubstringVocabularyMatchRule().definition()
     assert definition.default_severity.value == "advisory"
