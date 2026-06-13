@@ -205,10 +205,14 @@ def _parameter_text_sources(
 
     A parameter maps to itself; a local qualifies only when assigned exactly
     once from a parameter through a pure case/whitespace method chain, so
-    call-derived strings and tokenised collections never qualify.
+    call-derived strings and tokenised collections never qualify. A name
+    reassigned from any other expression (e.g. ``text = text.split()``) is
+    dropped even when it is a parameter, because it no longer holds the
+    free-text string the scan would match against.
     """
     sources: dict[str, str] = {name: name for name in parameters}
     assigned_counts: dict[str, int] = {}
+    clobbered: set[str] = set()
     for node in ast.walk(function):
         if not isinstance(node, ast.Assign):
             continue
@@ -219,10 +223,12 @@ def _parameter_text_sources(
         root = _case_chain_root(node.value)
         if root is not None and root in parameters:
             sources[target] = root
+        else:
+            clobbered.add(target)
     return {
         name: source
         for name, source in sources.items()
-        if assigned_counts.get(name, 0) <= 1 or name in parameters
+        if (assigned_counts.get(name, 0) <= 1 or name in parameters) and name not in clobbered
     }
 
 

@@ -11,9 +11,9 @@ Two shapes:
   Roman-numeral "Ⅻ").
 - Unchecked-float coercion (confined): inside functions whose parameters are
   all untyped, ``object``, or ``Any`` (defensive-coercion signatures),
-  ``int(f)`` where ``f`` was assigned ``float(<non-literal>)`` and the
-  function never calls ``math.isfinite`` - ``int(float("nan"))`` raises
-  ``ValueError`` and ``int(float("inf"))`` raises ``OverflowError``.
+  ``int(f)`` where ``f`` was assigned ``float(<non-literal>)`` and no
+  ``math.isfinite`` check covers ``f`` or its source - ``int(float("nan"))``
+  raises ``ValueError`` and ``int(float("inf"))`` raises ``OverflowError``.
 
 Both shapes stay silent when the ``int()`` call sits inside a ``try`` whose
 handlers catch the failure (``ValueError`` / ``OverflowError`` / their bases),
@@ -287,15 +287,16 @@ def _unchecked_float_findings(
 ) -> list[Finding]:
     if not _has_defensive_signature(function):
         return []
-    if _has_isfinite_call(function):
+    float_sources = _float_assignment_sources(function)
+    if not float_sources:
         return []
-    float_locals = _float_assigned_names(function)
-    if not float_locals:
-        return []
+    finite_checked = _isfinite_argument_names(function)
     findings: list[Finding] = []
     for call in _coercion_calls(function):
         name = _single_name_argument(call)
-        if name is None or name not in float_locals:
+        if name is None or name not in float_sources:
+            continue
+        if name in finite_checked or float_sources[name] & finite_checked:
             continue
         if _is_protected_by_try(call, stop_at=function):
             continue
@@ -340,15 +341,18 @@ def _is_defensive_annotation(annotation: ast.expr | None) -> bool:
     return rightmost in _ANY_ANNOTATION_NAMES
 
 
-def _has_isfinite_call(function: ast.AST) -> bool:
-    return any(
-        isinstance(node, ast.Call) and _rightmost_name(node.func) == "isfinite"
-        for node in ast.walk(function)
-    )
-
-
-def _float_assigned_names(function: ast.AST) -> set[str]:
+def _isfinite_argument_names(function: ast.AST) -> set[str]:
+    """Names passed positionally to an ``isfinite``-style guard in *function*."""
     names: set[str] = set()
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call) and _rightmost_name(node.func) == "isfinite":
+            names.update(argument.id for argument in node.args if isinstance(argument, ast.Name))
+    return names
+
+
+def _float_assignment_sources(function: ast.AST) -> dict[str, set[str]]:
+    """Map each ``x = float(<non-literal>)`` local to the names in its source expr."""
+    sources: dict[str, set[str]] = {}
     for node in ast.walk(function):
         if (
             isinstance(node, ast.Assign)
@@ -360,8 +364,10 @@ def _float_assigned_names(function: ast.AST) -> set[str]:
             and node.value.args
             and not isinstance(node.value.args[0], ast.Constant)
         ):
-            names.add(node.targets[0].id)
-    return names
+            sources[node.targets[0].id] = {
+                inner.id for inner in ast.walk(node.value.args[0]) if isinstance(inner, ast.Name)
+            }
+    return sources
 
 
 def _build_finding(

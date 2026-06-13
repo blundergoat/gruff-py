@@ -71,7 +71,7 @@ def migrate_config(dry_run: bool, config_path: Path | None) -> None:
         click.echo(f"Dry run: {migration.path} left unchanged.")
         return
     try:
-        migration.path.write_text(migration.migrated_text)
+        migration.path.write_text(migration.migrated_text, encoding="utf-8")
     except OSError as exc:
         raise click.ClickException(f"Unable to write {migration.path.name}: {exc}") from exc
     click.echo(f"Wrote {migration.path}")

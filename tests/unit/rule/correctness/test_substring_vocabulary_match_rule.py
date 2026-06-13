@@ -76,6 +76,19 @@ def test_token_membership_after_findall_is_clean():
     assert _analyse(src) == []
 
 
+def test_same_name_token_reassignment_is_clean():
+    # Reassigning the free-text parameter to a token list under the same name
+    # makes `term in text` list membership, not substring matching - the rule
+    # must not flag the tokenise-then-membership fix it recommends.
+    src = (
+        'TERM_SET = ("fee", "form")\n\n'
+        "def classify(text):\n"
+        "    text = text.split()\n"
+        "    return any(term in text for term in TERM_SET)\n"
+    )
+    assert _analyse(src) == []
+
+
 def test_compiled_word_boundary_regex_is_clean():
     src = (
         "import re\n\n"

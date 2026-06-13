@@ -184,7 +184,7 @@ def _build_finding(
         rule_id=definition.id,
         message=(
             f"Markdown link {slot} interpolates a raw value; a {slot} containing "
-            '"]( " punctuation injects its own link and redirects the rendered '
+            "a `](` delimiter injects its own link and redirects the rendered "
             "target. The value needs an escaping call before interpolation."
         ),
         file_path=unit.file.display_path,

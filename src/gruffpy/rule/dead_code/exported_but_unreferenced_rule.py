@@ -140,24 +140,30 @@ def _used_names(trees: list[ast.Module]) -> set[str]:
     Export plumbing deliberately does not count: ``__all__`` entries are
     string constants (never ``Name`` loads), and plain import aliases are
     skipped. Everything else - loads, attribute access, ``getattr`` string
-    literals, aliased imports - marks the name as used.
+    literals, aliased imports, and names inside quoted/forward-reference
+    annotations - marks the name as used.
     """
     used: set[str] = set()
     for tree in trees:
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                used.add(node.id)
-            elif isinstance(node, ast.Attribute):
-                used.add(node.attr)
-            elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                used.update(
-                    alias.name.split(".")[-1] for alias in node.names if alias.asname is not None
-                )
-            else:
-                literal = _getattr_string_literal(node)
-                if literal is not None:
-                    used.add(literal)
+            used.update(_node_references(node))
     return used
+
+
+def _node_references(node: ast.AST) -> set[str]:
+    """References a single node contributes (loads, attrs, imports, annotations)."""
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+        return {node.id}
+    if isinstance(node, ast.Attribute):
+        return {node.attr}
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return {alias.name.split(".")[-1] for alias in node.names if alias.asname is not None}
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return _forward_reference_names(node.returns)
+    if isinstance(node, (ast.arg, ast.AnnAssign)):
+        return _forward_reference_names(node.annotation)
+    literal = _getattr_string_literal(node)
+    return {literal} if literal is not None else set()
 
 
 def _getattr_string_literal(node: ast.AST) -> str | None:
@@ -172,6 +178,32 @@ def _getattr_string_literal(node: ast.AST) -> str | None:
     if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
         return literal.value
     return None
+
+
+def _forward_reference_names(annotation: ast.expr | None) -> set[str]:
+    """Names referenced inside an annotation, including quoted forward refs.
+
+    A fully quoted annotation (``-> "Payload"``) or a quoted element inside a
+    generic (``list["Payload"]``) is an ``ast.Constant`` string that the plain
+    ``Name`` walk never sees. Each string constant in the annotation is parsed
+    as an expression and its ``Name`` loads count as references, so the rule's
+    "annotations count as use" contract holds for forward references too.
+    """
+    if annotation is None:
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(annotation):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            names.update(_names_in_expression(node.value))
+    return names
+
+
+def _names_in_expression(text: str) -> set[str]:
+    try:
+        parsed = ast.parse(text, mode="eval")
+    except SyntaxError:
+        return set()
+    return {node.id for node in ast.walk(parsed) if isinstance(node, ast.Name)}
 
 
 def _is_exempt(

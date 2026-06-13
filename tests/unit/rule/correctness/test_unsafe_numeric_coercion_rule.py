@@ -109,6 +109,37 @@ def test_isfinite_guarded_float_is_clean():
     assert _analyse(src) == []
 
 
+def test_unrelated_isfinite_call_does_not_suppress():
+    # math.isfinite on a different value must not suppress the int(float(...))
+    # finding; the finite check has to cover the converted value or its source.
+    src = (
+        "import math\n\n"
+        "def coerce(value, other):\n"
+        "    if math.isfinite(other):\n"
+        "        pass\n"
+        "    number = float(value)\n"
+        "    return int(number)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+    assert findings[0].metadata["shape"] == "unchecked-float-coercion"
+    assert findings[0].metadata["value"] == "number"
+
+
+def test_isfinite_on_float_source_is_clean():
+    # A finite check on the source value (before float()) also protects the
+    # later int(float(value)) conversion.
+    src = (
+        "import math\n\n"
+        "def coerce(value):\n"
+        "    if not math.isfinite(value):\n"
+        "        return 0\n"
+        "    number = float(value)\n"
+        "    return int(number)\n"
+    )
+    assert _analyse(src) == []
+
+
 def test_typed_parameter_function_float_is_clean():
     src = "def coerce(value: str) -> int:\n    number = float(value)\n    return int(number)\n"
     assert _analyse(src) == []

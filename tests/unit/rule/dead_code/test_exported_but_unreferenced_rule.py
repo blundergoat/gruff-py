@@ -203,3 +203,41 @@ def test_definition_is_advisory_medium_confidence_dead_code():
     assert definition.pillar.value == "dead-code"
     assert definition.default_enabled is True
     assert definition.default_options == {"entryPointPatterns": []}
+
+
+def test_quoted_annotation_reference_counts_as_use():
+    # A public class referenced only through a quoted (forward-ref) annotation
+    # under TYPE_CHECKING must not be flagged - the rule's contract says
+    # annotations count as use.
+    units = [
+        _unit("class Payload:\n    pass\n", "pkg/models.py"),
+        _unit(
+            "from typing import TYPE_CHECKING\n\n"
+            "if TYPE_CHECKING:\n"
+            "    from pkg.models import Payload\n\n"
+            'def build(raw) -> "Payload":\n'
+            "    return raw\n\n"
+            "value = build({})\n",
+            "pkg/api.py",
+        ),
+    ]
+    findings = _analyse(units)
+    assert [finding.symbol for finding in findings] == []
+
+
+def test_quoted_annotation_inside_subscript_counts_as_use():
+    # The forward reference can be nested inside an otherwise-unquoted generic.
+    units = [
+        _unit("class Record:\n    pass\n", "pkg/models.py"),
+        _unit(
+            "from typing import TYPE_CHECKING\n\n"
+            "if TYPE_CHECKING:\n"
+            "    from pkg.models import Record\n\n"
+            'def collect(raw) -> list["Record"]:\n'
+            "    return raw\n\n"
+            "rows = collect([])\n",
+            "pkg/api.py",
+        ),
+    ]
+    findings = _analyse(units)
+    assert [finding.symbol for finding in findings] == []
