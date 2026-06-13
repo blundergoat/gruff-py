@@ -1,6 +1,6 @@
 ---
 category: docs
-last_reviewed: 2026-05-31
+last_reviewed: 2026-06-14
 ---
 
 ## Footgun: `architecture.md` / `README.md` rule counts and default-off claims drift from the live catalogue
@@ -10,7 +10,7 @@ last_reviewed: 2026-05-31
 
 Hand-written rule-count summaries and capability claims in the docs go stale because the catalogue is the source of truth, not the prose. Measured 2026-05-30: `gruff-py list-rules --format json` reports **115** rules, but `.goat-flow/architecture.md` (search: `instantiates the full rule catalogue`) says "103 rules across 10 active pillars", and `README.md` says "116 rules" in one place (search: `rules across 11 pillars`) and "115" in another (search: `catalogue contains`). `.goat-flow/decisions/ADR-021-reviewability-profile.md` (search: `some `test-quality` members ship default-off`) also claims a subset of test-quality rules ship default-off — but no rule sets `default_enabled=False`: `src/gruffpy/rule/definition.py` (search: `default_enabled: bool = True`) and a grep of `src/gruffpy/rule/` for `default_enabled=False` returns nothing.
 
-The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a milestone changes the count (`.goat-flow/tasks/1.0.0/M01-*` removes npath → 114; M05/M06 add rules), reconcile all three doc surfaces in one pass.
+The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a milestone changes the count (`.goat-flow/tasks/1.0.0/M01-*` removes npath → 114; M05/M06 add rules), reconcile all three doc surfaces in one pass. Group the per-pillar table by `Pillar`, not rule-ID prefix: `complexity.maintainability-index` → `maintainability`, every `docs.*` → `documentation`, every `waste.*` → `dead-code`, so counting `docs/rules.md` headers by prefix gives wrong per-pillar numbers (e.g. complexity 5-by-prefix vs 4-by-pillar, dead-code 3 vs 11). Authoritative counts come from iterating `RuleRegistry.defaults().all()` grouped on `definition().pillar.value` (2026-06-14 0.4.1 bump: 130 rules, 12 pillars).
 
 ## Footgun: Docs parameter rules treat leading cls as an implicit receiver
 

@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-13
+last_reviewed: 2026-06-14
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -62,6 +62,51 @@ rules re-introduced it. Fixed sites:
 `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
 (search: `_coercion_calls`, `_float_assignment_sources`,
 `_isfinite_argument_names`).
+
+## Footgun: `dead-code.exported-but-unreferenced` flags `__all__` exports by design - the library noise is not a bug
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+`dead-code.exported-but-unreferenced`
+(`src/gruffpy/rule/dead_code/exported_but_unreferenced_rule.py`) deliberately
+counts `__all__` membership and bare re-export imports as NON-use: a public
+symbol re-exported through a package `__init__` and listed in `__all__` but never
+called anywhere in the project IS flagged. That is the rule's whole point -
+"export is not use," export plumbing keeps a dead symbol looking alive. On a
+full-project scan of a LIBRARY it therefore fires across the public API: a
+2026-06-14 scan of the `supervision` corpus flagged 18 intentional public
+symbols (`DetectionsSmoother`, `draw_line`, `IconAnnotator`, ...) whose only
+in-repo references were the `__init__` re-export, the `__all__` entry, and
+docstring examples.
+
+This reads like a false-positive flood, and the obvious "fix" - exempt
+`__all__`-listed symbols - is WRONG: it guts the rule and breaks its canonical
+test (`tests/unit/rule/dead_code/test_exported_but_unreferenced_rule.py`,
+search: `test_dead_export_in_all_plus_reexport_fires`), which asserts an
+`__all__` + re-export + uncalled symbol fires. The rule is app-oriented by
+design; the library escape hatch is config (`allowlists.deadCode`,
+`entryPointPatterns`), not a detection change. Before "fixing" apparent FPs in an
+advisory rule, grep its tests for one that asserts the exact behaviour.
+
+## Footgun: rules that read `x in y` as substring containment false-positive on collection-typed `y`
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+`in` is overloaded: `term in text` is substring containment for a `str`, but
+membership for a `dict` / `set` / `list` / `Mapping`. A rule that matches the
+`x in y` AST shape and assumes substring semantics fires on intentional
+key/element membership. `correctness.substring-vocabulary-match` hit this on a
+2026-06-14 corpus scan: `any(k in tool_input for k in VOCAB)` with
+`tool_input: dict[str, Any]` was flagged as substring routing only because the
+name carried the `input` free-text token - it is dict-key membership, not
+copy routing.
+
+When a rule interprets a containment or comparison operator semantically, gate
+on the operand's TYPE, not just its name. The fix
+(`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`, search:
+`_is_collection_annotated`, `_COLLECTION_ANNOTATIONS`) excludes parameters whose
+annotation head is a known non-`str` collection; `_annotation_head_names` (same
+file) unwraps `dict[..]`, `typing.Dict`, and `X | None` to the head type.
 
 ## Resolved Entries
 
