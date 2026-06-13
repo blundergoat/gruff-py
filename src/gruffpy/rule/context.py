@@ -14,10 +14,22 @@ class RuleContext:
     Carries the project root (for resolving ``pyproject.toml`` / paths)
     and the resolved ``AnalysisConfig`` so rules can look up their own
     settings via ``settings_for()``.
+
+    Attributes:
+        project_root: Absolute project root used to resolve
+            ``pyproject.toml`` and display paths.
+        config: Resolved analysis configuration for the run; rules read
+            their own settings from it via :meth:`settings_for`.
+        scan_scope: The runner's run classification
+            (``"full-project"`` / ``"partial-scope"``) so scope-sensitive
+            project rules can suppress themselves on partial context
+            (ADR-025); the default is the suppressed-safe value for any
+            constructor that does not thread it.
     """
 
     project_root: str
     config: AnalysisConfig
+    scan_scope: str = "partial-scope"
 
     def settings_for(self, definition: RuleDefinition) -> RuleSettings:
         """Return the per-rule settings for *definition*'s id.

@@ -250,6 +250,45 @@ gruff-py init --force
 `init --force` preserves a user-tuned `paths.ignore` list and a user-tuned
 `minimumSeverity:` block; both survive byte-for-byte across regeneration.
 
+## Unknown Rule Keys: Warn By Default, `--strict-config` To Fail
+
+Unknown rule-level config keys downgrade to warnings instead of aborting the
+run: an unknown rule id, an unknown key inside a rule section, an unknown
+`thresholds.<name>` knob (including the legacy two-tier `warning`/`error`
+shape), a `threshold` on a rule without a severity rubric, or a `severity`
+without a `threshold`. The offending key is ignored, that rule runs with its
+defaults, and the warning - including the accepted keys for that rule and a
+migration pointer - is echoed to stderr, rendered in the text report's
+`Config warnings` block, and serialized as the additive `run.configWarnings`
+array in JSON output. Config warnings never change the exit code.
+
+Pass `--strict-config` (on `analyse`, `report`, and `summary`) to turn those
+shapes back into hard failures, e.g. for CI jobs that must not run with a
+half-applied config. Structural errors - non-table sections, wrong value
+types, unknown top-level keys, and `schemaVersion` mismatches - always fail
+regardless of the flag.
+
+## Migrating Legacy Configs: `gruff-py migrate-config`
+
+`gruff-py migrate-config` rewrites known legacy key shapes in the discovered
+YAML config (`.gruff-py.yaml` or `.gruff.yaml`; `--config <path>` selects an
+explicit file):
+
+- `rules.<id>.thresholds: {warning, error}` becomes a single `threshold` plus
+  `severity`. When both tiers are present the error tier wins (the warning
+  tier is dropped, honouring the single-threshold contract); a warning-only
+  tier maps to `severity: warning`.
+- A missing or stale `schemaVersion` is pinned to the current value.
+- `paths.ignore`, `allowlists`, `selection`, `minimumSeverity`, per-rule
+  `enabled` and `options` (including `conventionalModuleNames`), and valid
+  `thresholds` knobs pass through unchanged.
+
+The command prints one line per change plus a unified diff; `--dry-run`
+prints without writing. YAML comments are not preserved when a rewrite
+happens - review the diff before committing. `pyproject.toml`
+`[tool.gruff-py]` blocks are not rewritten; the command prints the equivalent
+hand-edit instructions instead.
+
 ## Ignored Paths
 
 Source discovery applies three layers of exclusions, in order:

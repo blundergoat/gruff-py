@@ -71,6 +71,10 @@ class AnalysisReport:
             omitted from ``gruff.analysis.v2`` JSON unless the schema is explicitly extended.
         partial_context_caveat: Optional run-level caveat for partial project-rule context.
         suppressed_count: Optional count of changed-region out-of-scope findings.
+        config_warnings: Non-fatal config-loader warnings (unknown rule-level
+            keys downgraded by the default non-strict policy). Serialized as
+            the additive ``run.configWarnings`` array only when non-empty;
+            deliberately not diagnostics so they never flip the exit code.
     """
 
     tool_version: str
@@ -93,6 +97,7 @@ class AnalysisReport:
     output_volume_hint_threshold: int = 50
     suppressed_count: int | None = None
     ignored_path_details: tuple[IgnoredPath, ...] = ()
+    config_warnings: tuple[str, ...] = ()
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -191,6 +196,8 @@ def _run_payload(report: AnalysisReport) -> dict[str, Any]:
     }
     if report.partial_context_caveat is not None:
         payload["partialContextCaveat"] = report.partial_context_caveat
+    if report.config_warnings:
+        payload["configWarnings"] = list(report.config_warnings)
     return payload
 
 

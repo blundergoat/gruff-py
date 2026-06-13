@@ -6,6 +6,7 @@ from enum import StrEnum
 class Pillar(StrEnum):
     SIZE = "size"
     COMPLEXITY = "complexity"
+    CORRECTNESS = "correctness"
     COUPLING = "coupling"
     DEAD_CODE = "dead-code"
     NAMING = "naming"

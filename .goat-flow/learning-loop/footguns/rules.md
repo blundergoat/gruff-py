@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-14
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -23,7 +23,9 @@ on this basis) and once while scoping M04's explain mode (which uses
 `RuleDocs.rationale` instead).
 
 When a feature wants per-rule sentence prose, source it from `RuleDocs`
-(`src/gruffpy/rule/catalog.py`, search: `class RuleDocs`) - specifically
+(`src/gruffpy/rule/catalog_docs.py`, search: `class RuleDocs`; moved out of
+`catalog.py` 2026-06-13 for the file-length rule, re-exported from
+`gruffpy.rule.catalog`) - specifically
 `rationale`, `fix_guidance`, `bad_example`, `good_example`, or
 `confidence_rationale`. `RuleDocs` carries the curated and auto-generated
 prose; `RuleDefinition` carries hot-path data that travels with every
@@ -31,6 +33,124 @@ prose; `RuleDefinition` carries hot-path data that travels with every
 label on `RuleDefinition`, name the new field for the constraint rather
 than reusing `description` - the existing field's contract is "short
 display label."
+
+## Footgun: per-function rules that bare-`ast.walk` a function descend into nested scopes
+
+**Status:** active | **Created:** 2026-06-13 | **Evidence:** OBSERVED
+
+A per-function rule that calls `ast.walk(function)` to collect call sites,
+assignments, or guards visits nested `def` / `class` / `lambda` bodies too.
+Because the rule's top-level pass also analyses each nested function in its own
+right, the same conversion/scan is emitted from both the enclosing and the
+nested scope (a duplicate finding at one line), and outer-scope evidence
+(isnumeric guards, defensive signatures, float sources) wrongly applies to
+inner-scope code. PR #8 hit this in both new correctness rules: two stacked
+all-untyped functions where the inner did `number = float(y); int(number)`
+flagged the inner conversion twice, and a free-text scan inside a nested
+function was attributed to the outer scope as well.
+
+When a rule's unit of analysis is a single lexical scope, walk it with the
+scope-limited helpers, never bare `ast.walk(function)`: cross-pillar rules use
+`gruffpy.rule._ast_scope` (`walk_function_scope` for a function root,
+`walk_statement_scope` for a statement that may itself be a nested `def`);
+complexity rules already have `gruffpy.rule.complexity._walks`
+(`body_nodes`, search: `without descending into nested scopes`). The trap is
+recurring - `_walks.py` exists for exactly this reason, and the correctness
+rules re-introduced it. Fixed sites:
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`
+(search: `_scan_function`, `_parameter_text_sources`) and
+`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
+(search: `_coercion_calls`, `_float_assignment_sources`,
+`_isfinite_argument_names`).
+
+## Footgun: `dead-code.exported-but-unreferenced` flags `__all__` exports by design - the library noise is not a bug
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+`dead-code.exported-but-unreferenced`
+(`src/gruffpy/rule/dead_code/exported_but_unreferenced_rule.py`) deliberately
+counts `__all__` membership and bare re-export imports as NON-use: a public
+symbol re-exported through a package `__init__` and listed in `__all__` but never
+called anywhere in the project IS flagged. That is the rule's whole point -
+"export is not use," export plumbing keeps a dead symbol looking alive. On a
+full-project scan of a LIBRARY it therefore fires across the public API: a
+2026-06-14 scan of the `supervision` corpus flagged 18 intentional public
+symbols (`DetectionsSmoother`, `draw_line`, `IconAnnotator`, ...) whose only
+in-repo references were the `__init__` re-export, the `__all__` entry, and
+docstring examples.
+
+This reads like a false-positive flood, and the obvious "fix" - exempt
+`__all__`-listed symbols - is WRONG: it guts the rule and breaks its canonical
+test (`tests/unit/rule/dead_code/test_exported_but_unreferenced_rule.py`,
+search: `test_dead_export_in_all_plus_reexport_fires`), which asserts an
+`__all__` + re-export + uncalled symbol fires. The rule is app-oriented by
+design; the library escape hatch is config (`allowlists.deadCode`,
+`entryPointPatterns`), not a detection change. Before "fixing" apparent FPs in an
+advisory rule, grep its tests for one that asserts the exact behaviour.
+
+## Footgun: rules that read `x in y` as substring containment false-positive on collection-typed `y`
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+`in` is overloaded: `term in text` is substring containment for a `str`, but
+membership for a `dict` / `set` / `list` / `Mapping`. A rule that matches the
+`x in y` AST shape and assumes substring semantics fires on intentional
+key/element membership. `correctness.substring-vocabulary-match` hit this on a
+2026-06-14 corpus scan: `any(k in tool_input for k in VOCAB)` with
+`tool_input: dict[str, Any]` was flagged as substring routing only because the
+name carried the `input` free-text token - it is dict-key membership, not
+copy routing.
+
+When a rule interprets a containment or comparison operator semantically, gate
+on the operand's TYPE, not just its name. The fix
+(`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`, search:
+`_is_collection_annotated`, `_COLLECTION_ANNOTATIONS`) excludes parameters whose
+annotation head is a known non-`str` collection; `_annotation_head_names` (same
+file) unwraps `dict[..]`, `typing.Dict`, and `X | None` to the head type.
+
+## Footgun: parent-walk exemptions must confirm the node is in the `if`/`try` *body*, not its `else`/`finally`
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+A rule that exempts or protects a node by walking up to an enclosing guard (an
+`if __name__ == "__main__":`, or a `try` with a matching handler) must verify
+the node sits in that block's `body`, not its `else` / `finally` / `orelse`.
+Those branches run in a different context: a `try`'s handlers never see
+exceptions raised from its `else`/`finally`, and a `__main__` guard's `else`
+runs exactly when the module is *imported* - the opposite of the entry-point
+case the exemption is for. Walking to the enclosing node and returning early
+ignores which branch the node is in, so the exemption over-applies.
+
+This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
+(search: `_is_protected_by_try`) suppressed conversions in a try's
+`else`/`finally`, and `src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py`
+(search: `_is_inside_main_block`) exempted `sys.path` mutations in a main
+guard's `else`. The fix in both threads the child down the parent walk and
+requires `child in current.body` before treating the ancestor as exempting.
+
+## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+When a rule keys on a syntactic shape to *exempt* a node or treat a guard as
+"safe", it tends to match only the simplest spelling and miss equivalent ones -
+producing false positives (an unrecognized safe form fires) or false negatives.
+PR #8's new rules hit this five times: `_is_main_guard`
+(`runtime_sys_path_mutation_rule.py`) matched `__name__ == "__main__"` but not
+the compound `... and __package__ is None` (`ast.BoolOp`); `_annotation_head_names`
+(`substring_vocabulary_match_rule.py`) matched `dict[..]` and `X | None` but not
+`Optional[list]` / `Union[..., dict]`; the `isdigit()` guard
+(`unsafe_numeric_coercion_rule.py`, search: `_ascii_guarded_names`) ignored an
+`and x.isascii()` modifier that makes the conversion safe; `_is_test_unit`
+(`exported_but_unreferenced_rule.py`) matched the `test_` prefix but not the
+`*_test.py` suffix; and `_names_in_expression` (same file) collected `Name`
+nodes from a quoted annotation but not `Attribute` attrs, dropping
+`"models.Payload"`'s `Payload`.
+
+When matching a shape for an exemption or a safe-guard, enumerate the equivalent
+spellings up front: `BoolOp` conjunctions, `Optional`/`Union` wrappers, prefix
+*and* suffix filename conventions, attribute as well as bare-name references,
+and modifier predicates (`isascii`) that change safety.
 
 ## Resolved Entries
 

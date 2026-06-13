@@ -15,6 +15,7 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
     Pillar.SIZE,
     Pillar.COMPLEXITY,
     Pillar.MAINTAINABILITY,
+    Pillar.CORRECTNESS,
     Pillar.DEAD_CODE,
     Pillar.MODERNISATION,
     Pillar.NAMING,
@@ -29,6 +30,7 @@ _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
     Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
     Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
+    Pillar.CORRECTNESS: "Mechanically detectable runtime-defect shapes",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
@@ -38,12 +40,13 @@ _PILLAR_NOTES = {
     Pillar.SECURITY: "Heuristic AST-level dangerous patterns",
     Pillar.SENSITIVE_DATA: "Secret, key, PII, and PHI patterns",
     Pillar.TEST_QUALITY: "Pytest-aware test smells and project config checks",
-    Pillar.DESIGN: "Project-level design rule",
+    Pillar.DESIGN: "Project-level abstraction and runtime import-path checks",
 }
 
 _GROUP_ORDER = (
     "Size",
     "Complexity And Maintainability",
+    "Correctness",
     "Dead Code And Waste",
     "Modernisation",
     "Naming",
@@ -172,6 +175,8 @@ def _group_for(definition: RuleDefinition) -> str:
             return "Size"
         case "complexity":
             return "Complexity And Maintainability"
+        case "correctness":
+            return "Correctness"
         case "dead-code" | "waste":
             return "Dead Code And Waste"
         case "modernisation":

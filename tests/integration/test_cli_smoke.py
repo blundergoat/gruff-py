@@ -30,6 +30,7 @@ _EXPECTED_ROOT_COMMANDS = (
     "init",
     "list",
     "list-rules",
+    "migrate-config",
     "report",
     "summary",
 )
@@ -82,8 +83,9 @@ def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
     result = CliRunner().invoke(main, ["--no-ansi"])
 
     assert result.exit_code == 0
-    assert "check-ignoreReport" not in result.output
-    assert "check-ignore  Report whether gruff would ignore" in result.output
+    assert "migrate-configRewrite" not in result.output
+    assert "migrate-config  Rewrite legacy config keys" in result.output
+    assert "check-ignore    Report whether gruff would ignore" in result.output
 
 
 def test_optional_diff_args_resolves_sys_argv_for_real_entrypoint(
@@ -1869,3 +1871,125 @@ def test_cli_minimum_severity_analyse_binary_default_is_advisory(
 
     # Advisory finding present + binary default is advisory → exit 1.
     assert result.exit_code == 1, result.output
+
+
+_LEGACY_THRESHOLD_YAML = (
+    "schemaVersion: gruff-py.config.v0.1\n"
+    "rules:\n"
+    "  complexity.cognitive:\n"
+    "    thresholds:\n"
+    "      warning: 15\n"
+    "      error: 30\n"
+)
+
+
+def _write_clean_legacy_project(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# demo\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.py").write_text(
+        '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
+    )
+    (tmp_path / ".gruff-py.yaml").write_text(_LEGACY_THRESHOLD_YAML)
+
+
+def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Config warnings" in result.stdout
+    assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
+    assert "Accepted keys" in result.stderr
+    assert "gruff-py migrate-config" in result.stderr
+
+
+def test_cli_analyse_json_carries_additive_config_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    warnings = payload["run"]["configWarnings"]
+    assert len(warnings) == 2
+    assert all("thresholds" in warning for warning in warnings)
+    # Warnings are not diagnostics: the exit code stays finding-driven.
+    assert payload["diagnostics"] == []
+
+
+def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
+
+    assert result.exit_code == 1
+    assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_analyse_strict_config_json_reports_config_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "--strict-config", "--format", "json", "src"])
+
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["diagnostics"][0]["type"] == "config-error"
+
+
+def test_cli_migrate_config_dry_run_prints_diff_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+    config_file = tmp_path / ".gruff-py.yaml"
+    original = config_file.read_text()
+
+    dry = CliRunner().invoke(main, ["migrate-config", "--dry-run"])
+
+    assert dry.exit_code == 0, dry.output
+    assert "threshold=30, severity=error" in dry.stdout
+    assert config_file.read_text() == original
+
+
+def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    apply_result = CliRunner().invoke(main, ["migrate-config"])
+
+    assert apply_result.exit_code == 0, apply_result.output
+    assert "Wrote" in apply_result.stdout
+    migrated = yaml.safe_load((tmp_path / ".gruff-py.yaml").read_text())
+    assert migrated["rules"]["complexity.cognitive"]["threshold"] == 30
+    assert migrated["rules"]["complexity.cognitive"]["severity"] == "error"
+
+
+def test_cli_analyse_strict_config_passes_after_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+    migrate = CliRunner().invoke(main, ["migrate-config"])
+    assert migrate.exit_code == 0, migrate.output
+
+    rerun = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
+
+    assert rerun.exit_code == 0, rerun.output
+    assert "Warning:" not in rerun.stderr

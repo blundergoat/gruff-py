@@ -39,6 +39,7 @@ class TextReporter:
         ]
         _append_ignored_section(lines, report)
         _append_path_section(lines, "Missing paths", report.missing_paths)
+        _append_config_warnings(lines, report)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
         _append_partial_context_caveat(lines, report)
@@ -88,6 +89,15 @@ def _append_ignored_section(lines: list[str], report: AnalysisReport) -> None:
             lines.append(f"  {path}  ({detail.source}: {detail.pattern})")
         else:
             lines.append(f"  {path}  ({detail.source})")
+
+
+def _append_config_warnings(lines: list[str], report: AnalysisReport) -> None:
+    if not report.config_warnings:
+        return
+    lines.append("")
+    lines.append("Config warnings")
+    for warning in report.config_warnings:
+        lines.append(f"  {warning}")
 
 
 def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]) -> None:

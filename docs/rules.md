@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.4.0` registers 125 rules in `RuleRegistry.defaults()`.
+gruff-py `0.4.1` registers 130 rules in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -12,14 +12,15 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `size` | 7 | File, class, function, parameter, method, and attribute size |
 | `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
-| `dead-code` | 10 | Unused and waste-oriented rules |
+| `correctness` | 2 | Mechanically detectable runtime-defect shapes |
+| `dead-code` | 11 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 34 | Heuristic AST-level dangerous patterns |
+| `security` | 35 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 11 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
-| `design` | 1 | Project-level design rule |
+| `design` | 2 | Project-level abstraction and runtime import-path checks |
 
 ## Rule IDs
 
@@ -41,8 +42,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `complexity.maintainability-index`
 - `complexity.nesting-depth`
 
+### Correctness
+
+- `correctness.substring-vocabulary-match`
+- `correctness.unsafe-numeric-coercion`
+
 ### Dead Code And Waste
 
+- `dead-code.exported-but-unreferenced`
 - `dead-code.unused-private-attribute`
 - `dead-code.unused-private-function`
 - `waste.commented-out-code`
@@ -119,6 +126,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.ssrf`
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load`
+- `security.unsanitized-markdown-interpolation`
 - `security.variable-import`
 - `security.weak-crypto`
 - `security.xxe`
@@ -176,6 +184,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 ### Design
 
+- `design.runtime-sys-path-mutation`
 - `design.single-implementor-protocol`
 
 ## Rule Details
@@ -270,6 +279,53 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Bad example: Code that triggers `complexity.nesting-depth` leaves nesting depth unaddressed.
 - Good example: Code that satisfies `complexity.nesting-depth` makes nesting depth explicit or simpler.
 
+### `correctness.substring-vocabulary-match`
+
+- Name: Substring vocabulary match
+- Pillar: `correctness`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: Substring containment over free text matches inside words - a vocabulary holding "fee"/"form"/"file" routed "coffee", "information", and "profile" to wrong deterministic answers in production copy-routing.
+- Fix guidance: Tokenise the text and test set membership, or compile a word-boundary regex alternation; both keep the vocabulary but stop mid-word hits.
+- Confidence rationale: Medium confidence: the scan shape is exact, but substring intent is legitimate for marker/identifier checks, so the rule fires only on parameter-derived targets whose name carries a free-text token (message, text, query, prompt, ...) and skips phrase-only vocabularies.
+- Bad example: `any(term in message_lower for term in ROUTING_TERMS)`
+- Good example: `tokens = set(re.findall(r"\w+", message.lower())); any(term in tokens for term in ROUTING_TERMS)`
+
+### `correctness.unsafe-numeric-coercion`
+
+- Name: Unsafe numeric coercion
+- Pillar: `correctness`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: isnumeric()/isdigit() accept characters int() rejects (superscript "²", fraction "½", Roman numeral "Ⅻ"), so guard-then-convert still crashes on real Unicode input; unchecked int(float(...)) raises on NaN and infinity.
+- Fix guidance: Convert inside try/except ValueError (and OverflowError for floats), or gate float conversions with math.isfinite().
+- Confidence rationale: High confidence: exact AST shapes (guard and conversion on the same name; float() assignment feeding int()) with try/except and isfinite escapes honoured, and the float variant confined to untyped/object/Any signatures.
+- Bad example: `if x.isnumeric():
+    count = int(x)`
+- Good example: `try:
+    count = int(x)
+except ValueError:
+    count = None`
+
+### `dead-code.exported-but-unreferenced`
+
+- Name: Exported but unreferenced
+- Pillar: `dead-code`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: Export plumbing makes dead code look alive: a public function listed in __all__ and re-exported through __init__ has reference counters above zero while no call site exists anywhere. Audits that count exports as uses score such code clean.
+- Fix guidance: Delete the symbol and its re-exports, or declare the consumer: allowlists.deadCode.symbols for one-offs, entryPointPatterns for registration conventions.
+- Confidence rationale: Medium confidence: the reference model is name-based rather than import-resolved (same-name symbols collapse, erring toward false negatives), and the rule only runs on full-project scans - partial scans suppress it entirely per the ADR-025 scope-honesty contract.
+- Options: `entryPointPatterns` = `[]`
+- Bad example: `def render_legacy(...)` in __all__ and re-exported by __init__.py, with zero call sites in the project.
+- Good example: Any load of the name anywhere - call, decorator, base class, getattr string.
+
 ### `dead-code.unused-private-attribute`
 
 - Name: Unused private attribute
@@ -297,6 +353,21 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Bad example: Code that triggers `dead-code.unused-private-function` leaves unused private function unaddressed.
 - Good example: Code that satisfies `dead-code.unused-private-function` makes unused private function explicit or simpler.
+
+### `design.runtime-sys-path-mutation`
+
+- Name: Runtime sys.path mutation
+- Pillar: `design`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `high`
+- Default enabled: yes
+- Rationale: sys.path mutation at import time or inside library functions makes imports depend on execution order; insert(0, ...) shadows every later top-level import for the whole process, so one colliding filename in that directory breaks the host application.
+- Fix guidance: Package the code (editable install, src layout) or set PYTHONPATH in the runner; keep unavoidable mutations inside the script's `if __name__ == "__main__":` block.
+- Confidence rationale: High confidence: the receiver must be the literal sys.path attribute chain, and __main__ blocks, tests/ paths, and conftest.py are structurally exempt.
+- Bad example: `sys.path.insert(0, str(Path(__file__).parent))` at module level.
+- Good example: `if __name__ == "__main__":
+    sys.path.insert(0, ...)` inside the launching script only.
 
 ### `design.single-implementor-protocol`
 
@@ -1103,6 +1174,20 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Security metadata: `cwe` = `['CWE-502']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.unsafe-yaml-load` leaves unsafe yaml load unaddressed.
 - Good example: Code that satisfies `security.unsafe-yaml-load` makes unsafe yaml load explicit or simpler.
+
+### `security.unsanitized-markdown-interpolation`
+
+- Name: Unsanitized markdown interpolation
+- Pillar: `security`
+- Tier: `v0.1`
+- Default severity: `advisory`
+- Confidence: `medium`
+- Default enabled: yes
+- Rationale: A markdown link label of `evil](https://bad.example) trick` turns `[{label}]({url})` into markdown whose first parsed link is the injected pair, redirecting the rendered target; the rule exists to catch the one interpolation site that forgot the project's sanitiser.
+- Fix guidance: Escape `]`, `(`, and `)` (or percent-encode the url) in a helper and wrap every interpolated link slot in it; any wrapping call satisfies the rule.
+- Confidence rationale: Medium confidence: any wrapping call is accepted as the sanitiser proxy, so unrelated calls also satisfy the rule; the gruff-py corpus sweep found zero candidate sites, so the rule ships enabled.
+- Bad example: `f"[{title}]({url})"` with `title`/`url` from parameters.
+- Good example: `f"[{markdown_label(title)}]({markdown_url(url)})"`
 
 ### `security.variable-import`
 

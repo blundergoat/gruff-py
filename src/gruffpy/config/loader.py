@@ -34,6 +34,7 @@ NON_GATING_COMMANDS = frozenset(
         "summary",
         "list-rules",
         "metric-calibration",
+        "migrate-config",
         "init",
         "list",
         "help",
@@ -54,6 +55,10 @@ VALID_SELECTION_KEYS = frozenset(
     }
 )
 VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
+MIGRATION_HINT = (
+    'Run "gruff-py migrate-config" to rewrite legacy keys, '
+    'or "gruff-py init --force" to regenerate the config.'
+)
 TOML_TOOL_KEY = "gruff-py"
 LEGACY_TOML_TOOL_KEY = "gruff"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
@@ -63,11 +68,49 @@ LEGACY_YAML_CONFIG_NAME = ".gruff.yaml"
 
 
 class ConfigLoader:
-    """Resolves the active ``AnalysisConfig`` from YAML / `pyproject.toml` / defaults."""
+    """Resolves the active ``AnalysisConfig`` from YAML / `pyproject.toml` / defaults.
 
-    def __init__(self, project_root: str | Path, analysis_config: AnalysisConfig) -> None:
+    Unknown rule-level keys (unknown rule ids, unknown rule-section keys,
+    unknown ``thresholds.<name>`` knobs, ``threshold`` on non-rubric rules,
+    and ``severity`` without ``threshold``) downgrade to warnings by default:
+    the offending key is ignored, the rule keeps its defaults, and the warning
+    is collected on :attr:`warnings`. With ``strict=True`` the same shapes
+    raise :class:`ConfigError`. Structural errors (non-table sections, bad
+    value types, unknown top-level keys, schema-version mismatches) always
+    raise regardless of strictness.
+    """
+
+    def __init__(
+        self,
+        project_root: str | Path,
+        analysis_config: AnalysisConfig,
+        *,
+        strict: bool = False,
+    ) -> None:
         self._project_root = Path(project_root)
         self._defaults = analysis_config
+        self._strict = strict
+        self._warnings: list[str] = []
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        """Return the non-fatal config warnings collected by the last ``load()``.
+
+        Returns:
+            Warning messages in encounter order; empty when the config was
+            fully understood or ``load()`` has not run yet.
+        """
+        return tuple(self._warnings)
+
+    def _warn_or_raise(self, problem: str, lenient_consequence: str, hint: str) -> None:
+        """Raise *problem* under strict mode; otherwise record it as a warning.
+
+        The lenient consequence ("ignored; defaults apply") is only true on
+        the warning path, so it never appears in the strict-mode error.
+        """
+        if self._strict:
+            raise ConfigError(f"{problem} {hint}")
+        self._warnings.append(f"{problem} {lenient_consequence} {hint}")
 
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
         """Load config, honouring YAML / `pyproject.toml` precedence.
@@ -87,6 +130,7 @@ class ConfigLoader:
             Tuple ``(config, source_path)`` where ``source_path`` is the file
             the config was loaded from, or ``None`` if defaults were used.
         """
+        self._warnings = []
         if config_path is not None:
             return self._load_explicit(config_path)
 
@@ -316,45 +360,116 @@ class ConfigLoader:
             )
         )
 
-    @staticmethod
-    def _apply_rules(config: AnalysisConfig, rules: Any) -> AnalysisConfig:
+    def _apply_rules(self, config: AnalysisConfig, rules: Any) -> AnalysisConfig:
         if not isinstance(rules, dict):
             raise ConfigError("[tool.gruff-py.rules] must be a table.")
         for rule_id, rule_section in rules.items():
-            _validate_rule_section(config, rule_id, rule_section)
+            if not isinstance(rule_section, dict):
+                raise ConfigError(f'[tool.gruff-py.rules."{rule_id}"] must be a table.')
+            if rule_id not in config.rules:
+                self._warn_or_raise(
+                    f'Unknown rule id "{rule_id}" in rules config.',
+                    "Section ignored.",
+                    MIGRATION_HINT,
+                )
+                continue
             rule_settings = config.rules[rule_id]
-            override = _severity_threshold(rule_id, rule_settings, rule_section)
+            section = self._sanitised_rule_section(rule_id, rule_section, rule_settings)
+            override = _severity_threshold(rule_id, rule_settings, section)
             severity_threshold = (
                 override if override is not None else rule_settings.severity_threshold
             )
             config = config.with_rule_settings(
                 rule_id,
                 RuleSettings(
-                    enabled=_is_rule_enabled(rule_settings, rule_section),
+                    enabled=_is_rule_enabled(rule_settings, section),
                     thresholds=(
                         dict(rule_settings.thresholds)
                         if override is not None
-                        else _merged_thresholds(rule_id, rule_settings, rule_section)
+                        else _merged_thresholds(rule_id, rule_settings, section)
                     ),
-                    options=_merged_options(rule_id, rule_settings, rule_section),
+                    options=_merged_options(rule_id, rule_settings, section),
                     severity_threshold=severity_threshold,
                 ),
             )
         return config
 
+    def _sanitised_rule_section(
+        self,
+        rule_id: str,
+        rule_section: dict[str, Any],
+        defaults: RuleSettings,
+    ) -> dict[str, Any]:
+        """Strip legacy/unknown rule keys, warning (or raising under strict) per key.
 
-def _validate_rule_section(
-    config: AnalysisConfig,
-    rule_id: str,
-    rule_section: dict[str, Any],
-) -> None:
-    if not isinstance(rule_section, dict):
-        raise ConfigError(f'[tool.gruff-py.rules."{rule_id}"] must be a table.')
-    unknown = set(rule_section.keys()) - VALID_RULE_KEYS
-    if unknown:
-        raise ConfigError(f'Unknown keys in [tool.gruff-py.rules."{rule_id}"]: {sorted(unknown)}')
-    if rule_id not in config.rules:
-        raise ConfigError(f'Unknown rule id "{rule_id}".')
+        The returned section only contains shapes the strict merge logic
+        accepts, so every remaining raise in ``_merged_thresholds`` /
+        ``_severity_threshold`` is a structural or type error that stays fatal.
+        """
+        section: dict[str, Any] = {}
+        for key, value in rule_section.items():
+            if key not in VALID_RULE_KEYS:
+                self._warn_or_raise(
+                    f'Unknown key "rules.{rule_id}.{key}".',
+                    "Key ignored.",
+                    f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
+                )
+                continue
+            section[key] = value
+        thresholds = section.get("thresholds")
+        if isinstance(thresholds, dict):
+            kept = self._sanitised_thresholds(rule_id, thresholds, defaults)
+            if kept or not thresholds:
+                section["thresholds"] = kept
+            else:
+                # Every entry was a legacy/unknown knob: drop the emptied table
+                # so it cannot trip the threshold/thresholds combination error.
+                del section["thresholds"]
+        if "threshold" in section and defaults.severity_threshold is None:
+            self._warn_or_raise(
+                f'Config key "rules.{rule_id}.threshold" is only supported for '
+                "severity-threshold rubrics.",
+                f'Ignored; "{rule_id}" keeps its defaults.',
+                f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
+            )
+            section.pop("threshold", None)
+            section.pop("severity", None)
+        if "severity" in section and "threshold" not in section:
+            self._warn_or_raise(
+                f'Config key "rules.{rule_id}.severity" requires "threshold".',
+                "Ignored.",
+                f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
+            )
+            section.pop("severity", None)
+        return section
+
+    def _sanitised_thresholds(
+        self,
+        rule_id: str,
+        overrides: dict[str, Any],
+        defaults: RuleSettings,
+    ) -> dict[str, Any]:
+        kept: dict[str, Any] = {}
+        for key, value in overrides.items():
+            if key not in defaults.thresholds:
+                self._warn_or_raise(
+                    f'Unknown threshold "rules.{rule_id}.thresholds.{key}".',
+                    f'Ignored; "{rule_id}" keeps its default for that knob.',
+                    f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
+                )
+                continue
+            kept[key] = value
+        return kept
+
+
+def _accepted_keys_sentence(rule_id: str, defaults: RuleSettings) -> str:
+    """Render the accepted config keys for one rule, derived from its defaults."""
+    keys = ["enabled"]
+    if defaults.severity_threshold is not None:
+        keys.extend(("threshold", "severity"))
+    keys.extend(f"thresholds.{name}" for name in sorted(defaults.thresholds))
+    keys.extend(f"options.{name}" for name in sorted(defaults.options))
+    return f'Accepted keys for "rules.{rule_id}": {", ".join(keys)}.'
 
 
 def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) -> bool:

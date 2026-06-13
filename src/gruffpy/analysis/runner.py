@@ -64,6 +64,7 @@ class _ReportAssembly:
     baseline_report: BaselineReport | None
     changed: ChangedRegionSet
     changed_suppressed_count: int
+    config_warnings: tuple[str, ...]
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
@@ -77,19 +78,14 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     """
     baseline_options = request.baseline if request.baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
-    config, config_loaded_from, diagnostics = _load_analysis_config(
+    config, config_loaded_from, diagnostics, config_warnings = _load_analysis_config(
         project_root=request.project_root,
         config_path=request.config_path,
         no_config=request.no_config,
         registry=registry,
+        strict_config=request.strict_config,
     )
-    fail_threshold = request.fail_threshold
-    if request.config_severity_command:
-        configured = config.minimum_severity.get(request.config_severity_command)
-        if configured is not None:
-            fail_threshold = configured
-    if request.execution_exclude_rules:
-        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
+    config, fail_threshold = _resolve_threshold_and_exclusions(request, config)
 
     (
         discovery_result,
@@ -111,7 +107,12 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     diagnostics.extend(_missing_path_diagnostics(discovery_result.missing_paths))
     diagnostics.extend(parse_diagnostics)
 
-    context = RuleContext(project_root=str(request.project_root), config=config)
+    scan_scope = _resolve_scan_scope(request, changed)
+    context = RuleContext(
+        project_root=str(request.project_root),
+        config=config,
+        scan_scope=scan_scope,
+    )
     suppressions_by_file = _parse_suppressions(units, registry)
     diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
     findings = _collect_findings(
@@ -121,7 +122,6 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         config=config,
         suppressions_by_file=suppressions_by_file,
     )
-    scan_scope = _resolve_scan_scope(request, changed)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
@@ -160,6 +160,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             baseline_report=baseline_report,
             changed=changed,
             changed_suppressed_count=changed_filter_result.suppressed_count,
+            config_warnings=config_warnings,
         )
     )
 
@@ -189,7 +190,32 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         ),
         output_volume_hint_threshold=assembly.config.output_volume_hint_threshold,
         suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
+        config_warnings=assembly.config_warnings,
     )
+
+
+def _resolve_threshold_and_exclusions(
+    request: AnalysisRunRequest,
+    config: AnalysisConfig,
+) -> tuple[AnalysisConfig, FailThreshold]:
+    """Apply the configured per-command fail threshold and execution rule exclusions.
+
+    Args:
+        request: The active run request.
+        config: Config resolved from defaults and the user's config file.
+
+    Returns:
+        The config (with any execution-level rule exclusions merged) and the
+        effective fail threshold.
+    """
+    fail_threshold = request.fail_threshold
+    if request.config_severity_command:
+        configured = config.minimum_severity.get(request.config_severity_command)
+        if configured is not None:
+            fail_threshold = configured
+    if request.execution_exclude_rules:
+        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
+    return config, fail_threshold
 
 
 def _partial_project_context_caveat(
@@ -451,7 +477,8 @@ def _load_analysis_config(
     config_path: Path | None,
     no_config: bool,
     registry: RuleRegistry,
-) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic]]:
+    strict_config: bool = False,
+) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic], tuple[str, ...]]:
     config = AnalysisConfig.from_registry(registry)
     if no_config and config_path is not None:
         return (
@@ -463,14 +490,15 @@ def _load_analysis_config(
                     message="--no-config cannot be combined with an explicit --config path.",
                 )
             ],
+            (),
         )
     if no_config:
-        return config, None, []
+        return config, None, [], ()
 
-    loader = ConfigLoader(project_root, config)
+    loader = ConfigLoader(project_root, config, strict=strict_config)
     loaded_config, source = loader.load(config_path)
 
-    return loaded_config, str(source) if source is not None else None, []
+    return loaded_config, str(source) if source is not None else None, [], loader.warnings
 
 
 def _parse_sources(

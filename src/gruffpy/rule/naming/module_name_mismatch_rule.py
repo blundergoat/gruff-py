@@ -9,6 +9,20 @@ Examples:
 - ``class UserService:`` in ``users.py`` -> expected ``user_service.py``.
 - ``class HTTPServer:`` in ``server.py`` -> expected ``http_server.py``.
 
+The rule only fires when the class plausibly IS the module. It stays silent
+when the module's public surface says otherwise:
+
+- two or more public top-level functions exist beside the class (the class is
+  not the module's identity);
+- the class is a value envelope (``@dataclass``, ``NamedTuple``, ``TypedDict``,
+  or ``enum.Enum`` family) and at least one public function exists (the class
+  is a return/value shape, not the module);
+- the module filename is underscore-prefixed (private by convention - renaming
+  a private module for its result type is churn);
+- the module filename follows the pytest/unittest discovery convention
+  (``test_*.py`` / ``*_test.py``) - the runner mandates that name, so renaming
+  it after a single ``*Tests`` class would break collection.
+
 Skip ``__init__.py`` (intentionally re-exports many classes).
 """
 
@@ -46,6 +60,18 @@ _CONVENTIONAL_MODULE_NAMES: tuple[str, ...] = (
     "helpers",
     "protocols",
     "types",
+)
+_ENVELOPE_BASE_NAMES: frozenset[str] = frozenset(
+    {
+        "Enum",
+        "Flag",
+        "IntEnum",
+        "IntFlag",
+        "NamedTuple",
+        "ReprEnum",
+        "StrEnum",
+        "TypedDict",
+    }
 )
 
 
@@ -88,10 +114,15 @@ class ModuleNameMismatchRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag single-public-class modules whose filename doesn't match the class.
 
-        Skipped when: the file is ``__init__.py``; the import path already
+        Skipped when: the file is ``__init__.py``, underscore-prefixed
+        (private by convention), or a test module (``test_*.py`` /
+        ``*_test.py`` - the discovery convention names it); the module has two
+        or more public functions beside the class; the class is a value
+        envelope (``@dataclass``, ``NamedTuple``, ``TypedDict``, ``enum.Enum``
+        family) accompanied by any public function; the import path already
         carries the class's tokens (``config/loader.py`` containing
-        ``class ConfigLoader`` is fine - ``config`` plus ``loader`` cover
-        the class); or the file is a conventional bucket (``constants.py``,
+        ``class ConfigLoader`` is fine - ``config`` plus ``loader`` cover the
+        class); or the file is a conventional bucket (``constants.py``,
         ``exceptions.py``, etc.) sharing any token with the class.
 
         Args:
@@ -147,6 +178,12 @@ def _mismatch_candidate(unit: AnalysisUnit) -> _MismatchCandidate | None:
     if cls is None:
         return None
 
+    public_function_count = _public_function_count(unit.tree)
+    if public_function_count >= 2:
+        return None
+    if public_function_count >= 1 and _is_envelope_class(cls):
+        return None
+
     class_token_variants = _class_token_variants(cls.name)
     expected_stem = "_".join(class_token_variants[0])
     stem = filename[:-3]
@@ -162,7 +199,55 @@ def _mismatch_candidate(unit: AnalysisUnit) -> _MismatchCandidate | None:
 
 
 def _is_skipped_filename(filename: str) -> bool:
-    return filename == "__init__.py" or not filename.endswith(".py")
+    return (
+        filename.startswith("_")
+        or not filename.endswith(".py")
+        or _is_test_module_filename(filename)
+    )
+
+
+def _is_test_module_filename(filename: str) -> bool:
+    """Return whether the filename follows the pytest/unittest discovery convention.
+
+    Test modules are named ``test_*.py`` or ``*_test.py`` so the runner can
+    collect them - the filename is dictated by discovery, not chosen to match
+    a class. Renaming ``test_orders.py`` to ``order_tests.py`` to match a
+    single ``OrderTests`` class would silently drop the module from
+    collection, so the convention filename IS the module's identity here.
+    (A bare ``_test.py`` is already covered by the underscore-prefix skip.)
+    """
+    return filename.startswith("test_") or filename.endswith("_test.py")
+
+
+def _public_function_count(tree: ast.Module) -> int:
+    return sum(
+        1
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not node.name.startswith("_")
+    )
+
+
+def _is_envelope_class(cls: ast.ClassDef) -> bool:
+    """Return whether the class is a value envelope rather than a behaviour owner.
+
+    Envelopes are ``@dataclass``-decorated classes (any import spelling,
+    with or without call arguments) and classes deriving from ``NamedTuple``,
+    ``TypedDict``, or the ``enum.Enum`` family.
+    """
+    if any(_rightmost_name(decorator) == "dataclass" for decorator in cls.decorator_list):
+        return True
+    return any(_rightmost_name(base) in _ENVELOPE_BASE_NAMES for base in cls.bases)
+
+
+def _rightmost_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
 
 
 def _single_public_class(tree: ast.Module) -> ast.ClassDef | None:
