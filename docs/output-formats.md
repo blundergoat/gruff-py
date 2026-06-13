@@ -97,7 +97,7 @@ native `gruff.analysis.v2` report:
 ```json
 {
   "contractVersion": "gruff.hook.v1",
-  "analyzer": { "name": "gruff-py", "version": "0.4.0" },
+  "analyzer": { "name": "gruff-py", "version": "0.4.1" },
   "findings": [],
   "suppressed": { "count": 0 },
   "ignored": { "paths": [] },
