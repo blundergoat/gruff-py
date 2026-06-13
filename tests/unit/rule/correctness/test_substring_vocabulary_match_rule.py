@@ -140,6 +140,21 @@ def test_local_vocabulary_is_clean():
     assert _analyse(src) == []
 
 
+def test_nested_function_scan_flagged_once():
+    # The inner function owns the scan and is analysed in its own pass; walking
+    # the outer scope must not re-collect it even though both share the
+    # free-text parameter name `text`.
+    src = (
+        'TERMS = ("fee", "form")\n\n'
+        "def outer(text):\n"
+        "    def inner(text):\n"
+        "        return any(term in text for term in TERMS)\n"
+        "    return inner(text)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+
+
 def test_definition_is_advisory_medium_confidence_correctness():
     definition = SubstringVocabularyMatchRule().definition()
     assert definition.default_severity.value == "advisory"

@@ -174,6 +174,72 @@ def test_rebound_int_is_clean():
     assert _analyse(src) == []
 
 
+def test_nested_defensive_functions_flag_the_conversion_once():
+    # The inner function owns the float()/int() flow; walking the outer scope
+    # must not re-collect it, or the same conversion is flagged twice.
+    src = (
+        "def outer(x):\n"
+        "    def inner(y):\n"
+        "        number = float(y)\n"
+        "        return int(number)\n"
+        "    return inner(x)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+    assert findings[0].metadata["shape"] == "unchecked-float-coercion"
+
+
+def test_float_in_try_value_error_only_still_fires_on_overflow():
+    # except ValueError does not catch the OverflowError from int(float("inf")),
+    # so the unchecked-float finding must survive.
+    src = (
+        "def coerce(value):\n"
+        "    number = float(value)\n"
+        "    try:\n"
+        "        return int(number)\n"
+        "    except ValueError:\n"
+        "        return 0\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+    assert findings[0].metadata["shape"] == "unchecked-float-coercion"
+
+
+def test_guarded_string_in_try_overflow_only_still_fires_on_value_error():
+    # except OverflowError does not catch the ValueError from int("²"), so the
+    # guarded-string finding must survive a non-covering handler.
+    src = (
+        "def parse(raw):\n"
+        "    if raw.isnumeric():\n"
+        "        try:\n"
+        "            return int(raw)\n"
+        "        except OverflowError:\n"
+        "            return 0\n"
+        "    return None\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+    assert findings[0].metadata["shape"] == "guarded-string-coercion"
+
+
+def test_conversion_in_try_else_clause_is_not_protected():
+    # Exceptions raised in a try's else clause are not seen by its handlers, so
+    # the int() there is unprotected even though a covering handler exists.
+    src = (
+        "def coerce(value):\n"
+        "    number = float(value)\n"
+        "    try:\n"
+        "        pass\n"
+        "    except (ValueError, OverflowError):\n"
+        "        return 0\n"
+        "    else:\n"
+        "        return int(number)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+    assert findings[0].metadata["shape"] == "unchecked-float-coercion"
+
+
 def test_definition_is_advisory_high_confidence_correctness():
     definition = UnsafeNumericCoercionRule().definition()
     assert definition.default_severity.value == "advisory"

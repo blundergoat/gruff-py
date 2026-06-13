@@ -81,6 +81,18 @@ def test_format_call_with_keyword_and_call_is_clean_per_slot():
     assert _analyse(src) == []
 
 
+def test_format_positional_field_with_attribute_fires_per_slot():
+    src = 'def render(item):\n    return "[{0.name}]({0.url})".format(item)\n'
+    findings = _analyse(src)
+    assert [finding.metadata["slot"] for finding in findings] == ["label", "url"]
+
+
+def test_format_positional_field_with_index_fires_per_slot():
+    src = 'def render(item):\n    return "[{0[name]}]({0[url]})".format(item)\n'
+    findings = _analyse(src)
+    assert [finding.metadata["slot"] for finding in findings] == ["label", "url"]
+
+
 def test_definition_is_enabled_advisory_medium_security():
     definition = UnsanitizedMarkdownInterpolationRule().definition()
     assert definition.default_severity.value == "advisory"

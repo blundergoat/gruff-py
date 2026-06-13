@@ -35,6 +35,7 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule._ast_scope import walk_function_scope
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
@@ -178,7 +179,7 @@ def _scan_function(
     }
     text_sources = _parameter_text_sources(function, parameters)
     findings: list[Finding] = []
-    for node in ast.walk(function):
+    for node in walk_function_scope(function):
         site = _vocabulary_scan_site(node)
         if site is None:
             continue
@@ -213,7 +214,7 @@ def _parameter_text_sources(
     sources: dict[str, str] = {name: name for name in parameters}
     assigned_counts: dict[str, int] = {}
     clobbered: set[str] = set()
-    for node in ast.walk(function):
+    for node in walk_function_scope(function):
         if not isinstance(node, ast.Assign):
             continue
         target = _single_assign_target(node)

@@ -135,17 +135,22 @@ def _resolve_format_fields(
         resolved.append(template[last_end : match.start()])
         last_end = match.end()
         field_name = match.group(1)
-        if field_name == "":
+        # The field's root selector is everything before the first attribute
+        # (``.attr``) or index (``[k]``) access. An empty root auto-indexes; a
+        # digit root is positional (so ``{0.name}`` / ``{0[url]}`` resolve to
+        # args, not a phantom ``"0"`` keyword); anything else is a keyword.
+        root = field_name.split(".", 1)[0].split("[", 1)[0]
+        if root == "":
             argument = node.args[auto_index] if auto_index < len(node.args) else None
             auto_index += 1
-        elif field_name.isdigit():
+        elif root.isdigit():
             try:
-                index = int(field_name)
+                index = int(root)
             except ValueError:  # isdigit() accepts "²"-style digits int() rejects
                 return None, []
             argument = node.args[index] if index < len(node.args) else None
         else:
-            argument = keyword_arguments.get(field_name.split(".")[0].split("[")[0])
+            argument = keyword_arguments.get(root)
         if argument is None:
             return None, []
         resolved.append(_PLACEHOLDER)

@@ -34,6 +34,35 @@ label on `RuleDefinition`, name the new field for the constraint rather
 than reusing `description` - the existing field's contract is "short
 display label."
 
+## Footgun: per-function rules that bare-`ast.walk` a function descend into nested scopes
+
+**Status:** active | **Created:** 2026-06-13 | **Evidence:** OBSERVED
+
+A per-function rule that calls `ast.walk(function)` to collect call sites,
+assignments, or guards visits nested `def` / `class` / `lambda` bodies too.
+Because the rule's top-level pass also analyses each nested function in its own
+right, the same conversion/scan is emitted from both the enclosing and the
+nested scope (a duplicate finding at one line), and outer-scope evidence
+(isnumeric guards, defensive signatures, float sources) wrongly applies to
+inner-scope code. PR #8 hit this in both new correctness rules: two stacked
+all-untyped functions where the inner did `number = float(y); int(number)`
+flagged the inner conversion twice, and a free-text scan inside a nested
+function was attributed to the outer scope as well.
+
+When a rule's unit of analysis is a single lexical scope, walk it with the
+scope-limited helpers, never bare `ast.walk(function)`: cross-pillar rules use
+`gruffpy.rule._ast_scope` (`walk_function_scope` for a function root,
+`walk_statement_scope` for a statement that may itself be a nested `def`);
+complexity rules already have `gruffpy.rule.complexity._walks`
+(`body_nodes`, search: `without descending into nested scopes`). The trap is
+recurring - `_walks.py` exists for exactly this reason, and the correctness
+rules re-introduced it. Fixed sites:
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`
+(search: `_scan_function`, `_parameter_text_sources`) and
+`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
+(search: `_coercion_calls`, `_float_assignment_sources`,
+`_isfinite_argument_names`).
+
 ## Resolved Entries
 
 ## Footgun: static declaration evidence is not proof of runtime existence

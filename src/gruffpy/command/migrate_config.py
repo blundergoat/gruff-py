@@ -103,7 +103,10 @@ def migrate_config_file(project_root: Path, config_path: Path | None) -> ConfigM
             YAML file, or the file cannot be parsed.
     """
     target = _resolve_target(project_root, config_path)
-    original_text = target.read_text(encoding="utf-8")
+    try:
+        original_text = target.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"Failed to read config file {target}: {exc}") from exc
     document = load_gruff_py_yaml(target)
     defaults = AnalysisConfig.from_registry(RuleRegistry.defaults())
     migrated, changes, notes = _migrate_document(document, defaults)

@@ -161,3 +161,13 @@ def test_pyproject_only_project_gets_guidance_error(tmp_path: Path):
 def test_no_config_anywhere_is_an_error(tmp_path: Path):
     with pytest.raises(ConfigError, match="No gruff YAML config found"):
         migrate_config_file(tmp_path, None)
+
+
+def test_unreadable_config_surfaces_as_config_error(tmp_path: Path):
+    # A target that resolves but cannot be read (here a directory with a .yaml
+    # suffix, so read_text raises OSError) must surface as ConfigError, not an
+    # unhandled traceback - matching the already-protected write path.
+    target = tmp_path / "config.yaml"
+    target.mkdir()
+    with pytest.raises(ConfigError, match="Failed to read config file"):
+        migrate_config_file(tmp_path, target)

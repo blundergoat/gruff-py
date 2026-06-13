@@ -15,12 +15,17 @@ Two shapes:
   ``math.isfinite`` check covers ``f`` or its source - ``int(float("nan"))``
   raises ``ValueError`` and ``int(float("inf"))`` raises ``OverflowError``.
 
-Both shapes stay silent when the ``int()`` call sits inside a ``try`` whose
-handlers catch the failure (``ValueError`` / ``OverflowError`` / their bases),
-and when ``int`` is rebound at module level.
+Both shapes stay silent when the ``int()`` call sits in the body of a ``try``
+whose handlers catch *that conversion's* failures - ``ValueError`` for the
+guarded string, both ``ValueError`` and ``OverflowError`` for the unchecked
+float - and when ``int`` is rebound at module level. A handler protects only
+calls in the ``try`` body, not its ``else`` / ``finally`` clauses (whose
+exceptions the handlers never see). Nested ``def`` / ``class`` scopes are
+analysed in their own pass, so a function's guards never reach into them.
 """
 
 import ast
+from collections.abc import Iterable
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -28,14 +33,28 @@ from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.rule._ast_scope import walk_function_scope, walk_statement_scope
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 
 _GUARD_METHODS: frozenset[str] = frozenset({"isnumeric", "isdigit"})
-_PROTECTIVE_EXCEPTIONS: frozenset[str] = frozenset(
-    {"ValueError", "OverflowError", "ArithmeticError", "Exception", "BaseException"}
-)
+_VALUE_ERROR = "ValueError"
+_OVERFLOW_ERROR = "OverflowError"
+# The concrete coercion failures each except-clause name actually catches.
+# A guarded string ``int("²")`` raises only ValueError; an unchecked-float
+# ``int()`` raises ValueError on nan and OverflowError on inf - so a handler
+# protects a conversion only when it covers every failure that conversion can
+# raise. ArithmeticError is OverflowError's base but not ValueError's.
+_EXCEPTION_COVERAGE: dict[str, frozenset[str]] = {
+    "ValueError": frozenset({_VALUE_ERROR}),
+    "OverflowError": frozenset({_OVERFLOW_ERROR}),
+    "ArithmeticError": frozenset({_OVERFLOW_ERROR}),
+    "Exception": frozenset({_VALUE_ERROR, _OVERFLOW_ERROR}),
+    "BaseException": frozenset({_VALUE_ERROR, _OVERFLOW_ERROR}),
+}
+_GUARDED_STRING_EXCEPTIONS: frozenset[str] = frozenset({_VALUE_ERROR})
+_UNCHECKED_FLOAT_EXCEPTIONS: frozenset[str] = frozenset({_VALUE_ERROR, _OVERFLOW_ERROR})
 _ANY_ANNOTATION_NAMES: frozenset[str] = frozenset({"Any", "object"})
 _GUARDED_REMEDIATION = (
     "Convert with try/except ValueError instead of pre-checking: isnumeric() "
@@ -131,11 +150,11 @@ def _guarded_coercion_findings(
     guarded_branch = node.body if isinstance(node, ast.If) else [node.body]
     findings: list[Finding] = []
     for branch_node in guarded_branch:
-        for call in _coercion_calls(branch_node):
+        for call in _coercion_calls(walk_statement_scope(branch_node)):
             name = _single_name_argument(call)
             if name is None or name not in guards:
                 continue
-            if _is_protected_by_try(call):
+            if _is_protected_by_try(call, _GUARDED_STRING_EXCEPTIONS):
                 continue
             findings.append(_guarded_string_finding(definition, unit, call, name, guards[name]))
     return findings
@@ -153,11 +172,11 @@ def _early_exit_guard_findings(
             if isinstance(statement, ast.If) and _is_early_exit_guard(statement):
                 active_guards.update(_negated_guarded_names(statement.test))
                 continue
-            for call in _coercion_calls(statement):
+            for call in _coercion_calls(walk_statement_scope(statement)):
                 name = _single_name_argument(call)
                 if name is None or name not in active_guards:
                     continue
-                if _is_protected_by_try(call):
+                if _is_protected_by_try(call, _GUARDED_STRING_EXCEPTIONS):
                     continue
                 findings.append(
                     _guarded_string_finding(definition, unit, call, name, active_guards[name])
@@ -231,10 +250,10 @@ def _guarded_names(test: ast.expr) -> dict[str, str]:
     return guards
 
 
-def _coercion_calls(node: ast.AST) -> list[ast.Call]:
+def _coercion_calls(nodes: Iterable[ast.AST]) -> list[ast.Call]:
     return [
         candidate
-        for candidate in ast.walk(node)
+        for candidate in nodes
         if isinstance(candidate, ast.Call)
         and isinstance(candidate.func, ast.Name)
         and candidate.func.id == "int"
@@ -250,26 +269,39 @@ def _single_name_argument(call: ast.Call) -> str | None:
     return None
 
 
-def _is_protected_by_try(node: ast.AST, stop_at: ast.AST | None = None) -> bool:
+def _is_protected_by_try(
+    node: ast.AST,
+    required: frozenset[str],
+    stop_at: ast.AST | None = None,
+) -> bool:
+    child: ast.AST = node
     current: ast.AST | None = getattr(node, "parent", None)
     while current is not None and current is not stop_at:
-        if isinstance(current, ast.Try) and _has_protective_handler(current):
+        # Only the try body is protected: handlers do not catch exceptions
+        # raised from the same try's else/finally clauses.
+        if (
+            isinstance(current, ast.Try)
+            and child in current.body
+            and _has_protective_handler(current, required)
+        ):
             return True
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
             return False
+        child = current
         current = getattr(current, "parent", None)
     return False
 
 
-def _has_protective_handler(try_node: ast.Try) -> bool:
+def _has_protective_handler(try_node: ast.Try, required: frozenset[str]) -> bool:
+    covered: set[str] = set()
     for handler in try_node.handlers:
         if handler.type is None:
             return True
         for name_node in ast.walk(handler.type):
             rightmost = _rightmost_name(name_node)
-            if rightmost in _PROTECTIVE_EXCEPTIONS:
-                return True
-    return False
+            if rightmost is not None:
+                covered |= _EXCEPTION_COVERAGE.get(rightmost, frozenset())
+    return required <= covered
 
 
 def _rightmost_name(node: ast.AST) -> str | None:
@@ -292,13 +324,13 @@ def _unchecked_float_findings(
         return []
     finite_checked = _isfinite_argument_names(function)
     findings: list[Finding] = []
-    for call in _coercion_calls(function):
+    for call in _coercion_calls(walk_function_scope(function)):
         name = _single_name_argument(call)
         if name is None or name not in float_sources:
             continue
         if name in finite_checked or float_sources[name] & finite_checked:
             continue
-        if _is_protected_by_try(call, stop_at=function):
+        if _is_protected_by_try(call, _UNCHECKED_FLOAT_EXCEPTIONS, stop_at=function):
             continue
         findings.append(
             _build_finding(
@@ -344,7 +376,7 @@ def _is_defensive_annotation(annotation: ast.expr | None) -> bool:
 def _isfinite_argument_names(function: ast.AST) -> set[str]:
     """Names passed positionally to an ``isfinite``-style guard in *function*."""
     names: set[str] = set()
-    for node in ast.walk(function):
+    for node in walk_function_scope(function):
         if isinstance(node, ast.Call) and _rightmost_name(node.func) == "isfinite":
             names.update(argument.id for argument in node.args if isinstance(argument, ast.Name))
     return names
@@ -353,7 +385,7 @@ def _isfinite_argument_names(function: ast.AST) -> set[str]:
 def _float_assignment_sources(function: ast.AST) -> dict[str, set[str]]:
     """Map each ``x = float(<non-literal>)`` local to the names in its source expr."""
     sources: dict[str, set[str]] = {}
-    for node in ast.walk(function):
+    for node in walk_function_scope(function):
         if (
             isinstance(node, ast.Assign)
             and len(node.targets) == 1
