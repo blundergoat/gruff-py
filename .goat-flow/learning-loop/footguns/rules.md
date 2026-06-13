@@ -108,6 +108,50 @@ on the operand's TYPE, not just its name. The fix
 annotation head is a known non-`str` collection; `_annotation_head_names` (same
 file) unwraps `dict[..]`, `typing.Dict`, and `X | None` to the head type.
 
+## Footgun: parent-walk exemptions must confirm the node is in the `if`/`try` *body*, not its `else`/`finally`
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+A rule that exempts or protects a node by walking up to an enclosing guard (an
+`if __name__ == "__main__":`, or a `try` with a matching handler) must verify
+the node sits in that block's `body`, not its `else` / `finally` / `orelse`.
+Those branches run in a different context: a `try`'s handlers never see
+exceptions raised from its `else`/`finally`, and a `__main__` guard's `else`
+runs exactly when the module is *imported* - the opposite of the entry-point
+case the exemption is for. Walking to the enclosing node and returning early
+ignores which branch the node is in, so the exemption over-applies.
+
+This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
+(search: `_is_protected_by_try`) suppressed conversions in a try's
+`else`/`finally`, and `src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py`
+(search: `_is_inside_main_block`) exempted `sys.path` mutations in a main
+guard's `else`. The fix in both threads the child down the parent walk and
+requires `child in current.body` before treating the ancestor as exempting.
+
+## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
+
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+
+When a rule keys on a syntactic shape to *exempt* a node or treat a guard as
+"safe", it tends to match only the simplest spelling and miss equivalent ones -
+producing false positives (an unrecognized safe form fires) or false negatives.
+PR #8's new rules hit this five times: `_is_main_guard`
+(`runtime_sys_path_mutation_rule.py`) matched `__name__ == "__main__"` but not
+the compound `... and __package__ is None` (`ast.BoolOp`); `_annotation_head_names`
+(`substring_vocabulary_match_rule.py`) matched `dict[..]` and `X | None` but not
+`Optional[list]` / `Union[..., dict]`; the `isdigit()` guard
+(`unsafe_numeric_coercion_rule.py`, search: `_ascii_guarded_names`) ignored an
+`and x.isascii()` modifier that makes the conversion safe; `_is_test_unit`
+(`exported_but_unreferenced_rule.py`) matched the `test_` prefix but not the
+`*_test.py` suffix; and `_names_in_expression` (same file) collected `Name`
+nodes from a quoted annotation but not `Attribute` attrs, dropping
+`"models.Payload"`'s `Payload`.
+
+When matching a shape for an exemption or a safe-guard, enumerate the equivalent
+spellings up front: `BoolOp` conjunctions, `Optional`/`Union` wrappers, prefix
+*and* suffix filename conventions, attribute as well as bare-name references,
+and modifier predicates (`isascii`) that change safety.
+
 ## Resolved Entries
 
 ## Footgun: static declaration evidence is not proof of runtime existence
