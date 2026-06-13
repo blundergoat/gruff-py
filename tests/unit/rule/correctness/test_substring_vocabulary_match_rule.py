@@ -155,6 +155,30 @@ def test_nested_function_scan_flagged_once():
     assert len(findings) == 1
 
 
+def test_dict_typed_parameter_membership_is_clean():
+    # `k in mapping` over a dict-annotated parameter is key membership, not
+    # substring containment, even when the name carries a free-text token
+    # (`tool_input` -> `input`). Regression for a real corpus false positive.
+    src = (
+        "from typing import Any\n\n"
+        'RANGE_KEYS = ("offset", "limit", "ranges")\n\n'
+        "def matches(tool_input: dict[str, Any]) -> bool:\n"
+        "    return any(k in tool_input for k in RANGE_KEYS)\n"
+    )
+    assert _analyse(src) == []
+
+
+def test_str_annotated_parameter_still_fires():
+    # The collection-annotation guard must not suppress genuine str parameters.
+    src = (
+        'TERMS = ("fee", "form")\n\n'
+        "def classify(message: str) -> bool:\n"
+        "    return any(term in message for term in TERMS)\n"
+    )
+    findings = _analyse(src)
+    assert len(findings) == 1
+
+
 def test_definition_is_advisory_medium_confidence_correctness():
     definition = SubstringVocabularyMatchRule().definition()
     assert definition.default_severity.value == "advisory"

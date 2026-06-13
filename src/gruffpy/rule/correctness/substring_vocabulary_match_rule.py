@@ -18,7 +18,9 @@ False-positive guards (all must pass before a finding is emitted):
 - ``text`` is a parameter of the enclosing function, or a local assigned once
   from a parameter through a pure case/whitespace chain (``lower``,
   ``casefold``, ``strip``, ``lstrip``, ``rstrip``, ``upper``) - call-derived
-  or collection-typed targets (e.g. ``re.findall`` token lists) never match.
+  targets, collection-typed locals (e.g. ``re.findall`` token lists), and
+  parameters annotated as a ``dict``/``set``/``list``/``Mapping`` collection
+  (where ``in`` is key membership, not substring) never match.
 - the text name or its source parameter carries a free-text token
   (``message``, ``text``, ``query``, ``prompt``, ``body``, ...) - identifier
   and marker scans such as ``marker in normalized`` are intentional substring
@@ -63,6 +65,38 @@ _TEXT_CHAIN_METHODS: frozenset[str] = frozenset(
     {"lower", "casefold", "strip", "lstrip", "rstrip", "upper"}
 )
 _COLLECTION_WRAPPERS: frozenset[str] = frozenset({"frozenset", "list", "set", "tuple"})
+# Head types whose ``k in value`` is membership, not substring containment. A
+# parameter annotated as one of these never holds the free-text string the scan
+# would misroute, even when its name carries a free-text token (``input``...).
+_COLLECTION_ANNOTATIONS: frozenset[str] = frozenset(
+    {
+        "AbstractSet",
+        "ChainMap",
+        "Collection",
+        "Container",
+        "Counter",
+        "DefaultDict",
+        "Dict",
+        "FrozenSet",
+        "Iterable",
+        "Iterator",
+        "List",
+        "Mapping",
+        "MutableMapping",
+        "MutableSequence",
+        "MutableSet",
+        "OrderedDict",
+        "Sequence",
+        "Set",
+        "Tuple",
+        "defaultdict",
+        "dict",
+        "frozenset",
+        "list",
+        "set",
+        "tuple",
+    }
+)
 _REMEDIATION = (
     "Match whole words instead of substrings: tokenise the text "
     '(re.findall(r"\\w+", text.lower())) and test set membership, or compile '
@@ -176,6 +210,7 @@ def _scan_function(
             *function.args.args,
             *function.args.kwonlyargs,
         )
+        if not _is_collection_annotated(parameter.annotation)
     }
     text_sources = _parameter_text_sources(function, parameters)
     findings: list[Finding] = []
@@ -303,6 +338,24 @@ def _containment_text(expression: ast.expr, term_name: str) -> str | None:
 
 def _has_free_text_token(name: str) -> bool:
     return any(token in _FREE_TEXT_TOKENS for token in name.lower().split("_"))
+
+
+def _is_collection_annotated(annotation: ast.expr | None) -> bool:
+    """Whether *annotation*'s head type is a known non-str collection."""
+    return bool(_annotation_head_names(annotation) & _COLLECTION_ANNOTATIONS)
+
+
+def _annotation_head_names(annotation: ast.expr | None) -> set[str]:
+    """Constructor name(s) at the head of a type annotation (``dict[..]`` -> ``dict``)."""
+    if isinstance(annotation, ast.Name):
+        return {annotation.id}
+    if isinstance(annotation, ast.Attribute):
+        return {annotation.attr}
+    if isinstance(annotation, ast.Subscript):
+        return _annotation_head_names(annotation.value)
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return _annotation_head_names(annotation.left) | _annotation_head_names(annotation.right)
+    return set()
 
 
 def _build_finding(
