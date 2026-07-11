@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-13
+last_reviewed: 2026-07-11
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -566,3 +566,37 @@ When a `NodeVisitor` counts references, every recording path (`visit_Name`,
 discipline. Pair a store-target fixture with a load-usage fixture
 (`tests/unit/rule/design/test_single_implementor_protocol_rule.py`, search:
 `attribute_store_target_alone_still_flags`).
+
+## Lesson: Resolve relative Markdown links after moving or rewriting plans
+
+**Created:** 2026-07-11
+**Incident:** While rebuilding the `0.5.0` plan tree, the agent moved the
+cross-implementation baseline proposal to backlog and linked it to the related
+`0.7.0` M03 using a plausible remembered filename,
+`M03-baseline-v2-count-based-suppression.md`. The real file was
+`M03-baseline-file-count-redesign-v0.4.0.md`. The plan structure and milestone
+counts passed, but the explicit link-target verification failed and forced a
+correction.
+
+After moving, renaming, or rewriting planning/docs files, enumerate Markdown
+links and resolve each local target relative to the file that contains it. A
+milestone number or remembered title is not a path contract; list the target
+directory and verify the exact filename. Run this alongside stale-old-name
+greps so both dangling new links and forgotten old references are caught.
+
+## Lesson: A version check must identify the executable path
+
+**Created:** 2026-07-11
+**Incident:** During the same plan verification, the agent checked the
+project-local `node_modules/.bin/goat-flow` and observed `1.12.1`, then wrote a
+plan assumption that the “goat-flow binary/config” agreed. The final command
+audit ran `goat-flow --version` and exposed a different global executable on
+`PATH` reporting `1.13.0`; `command -v goat-flow` resolved it outside the
+project. The earlier version value was accurate for one binary but the generic
+claim was false.
+
+Whenever a repository can have project-local and global copies of a tool,
+capture both the executable path and version in the same check. Compare the
+concrete binary used by verification with the repository's declared/configured
+version; do not collapse `node_modules/.bin/tool`, `uv run tool`, and a PATH
+global into one unnamed “tool version”.

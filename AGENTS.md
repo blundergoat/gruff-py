@@ -1,8 +1,8 @@
-# AGENTS.md (2026-06-09)
+# AGENTS.md (2026-07-03)
 
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
-goat-flow version: 1.10.1
+goat-flow version: 1.12.1
 
 ## Workspace Boundary
 
@@ -53,6 +53,9 @@ uv run gruff-py analyse src/
 ```
 Use explicit non-mutating commands for release verification; `make lint` and `make check` may rewrite files.
 
+## Commit Messages
+Follow `docs/coding-standards/git-commit.md`; this repository uses conventional commit subjects based on recent history.
+
 ## Execution Loop: READ -> SCOPE -> ACT -> VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
@@ -102,5 +105,5 @@ Requests to add durable project knowledge route to `.goat-flow/learning-loop/foo
 | Tests | `tests/` |
 | Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json` |
-| CI and commit guidance | `.github/workflows/ci.yml`, `.github/git-commit-instructions.md` |
+| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/`, `.goat-flow/scratchpad/` |
