@@ -518,6 +518,11 @@ rules:
   # Unsanitized markdown interpolation
   security.unsanitized-markdown-interpolation:
     enabled: true
+    options:
+      labelSanitizers: []
+      urlSanitizers:
+      - urllib.parse.quote
+      - urllib.parse.quote_plus
   # Variable import
   security.variable-import:
     enabled: true

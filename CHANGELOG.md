@@ -33,6 +33,27 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   scans warn, remove only unknown names, and retain valid siblings; strict
   config stops on the exact dotted key. Registered option value handling stays
   consumer-specific, with no new type schema or renamed option surface.
+- **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** -
+  `security.unsanitized-markdown-interpolation` no longer treats every wrapping
+  call as safe. Labels trust no call by default; URLs trust exact
+  `urllib.parse.quote`/`quote_plus` calls when their `safe` arguments cannot
+  retain `]`, `(`, or `)`. New `labelSanitizers` and `urlSanitizers` options
+  accept exact dotted call targets, including same-file import aliases until
+  rebinding; an empty list trusts no call. Migration from 0.4.1: list each
+  project Markdown helper in its matching slot and review new findings from
+  `str(...)`, identity wrappers, wrong-slot calls, overwrites, and ambiguous
+  branches. `html.escape`/`markupsafe.escape` remain label opt-ins only because
+  they do not remove Markdown link delimiters. Emitted findings retain their
+  text and identities while adding provisional `expressionKind` and
+  `sanitizerResolution` metadata registered in the family vocabulary.
+- **Boolean naming now matches scalar annotation shapes exactly** -
+  `naming.boolean-prefix` recognizes direct, optional, and `Annotated` scalar
+  Boolean functions and attributes without treating containers, callables,
+  iterators, generators, mixed unions, or arbitrary generics as Boolean merely
+  because a descendant contains `bool`. Explicit quoted annotations are parsed
+  as bounded inert syntax, never evaluated. Surviving findings keep their text
+  and identities while adding the registered provisional `annotationShape`
+  metadata explanation.
 
 
 

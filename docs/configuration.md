@@ -200,6 +200,20 @@ external boundary names can be allowed with
 `rules.naming.boolean-prefix.options.acceptedBooleanNames` when a rename would
 break a CLI option, DTO/schema field, wire-format key, or protocol contract.
 
+The rule matches scalar annotation shapes only: `bool`, exact optional forms
+such as `Optional[bool]`, `bool | None`, and `Union[bool, None]`, plus
+`Annotated` wrappers around those shapes. It does not treat `list[bool]`,
+`tuple[bool, ...]`, dictionaries, iterators, generators, callables, mixed
+unions, or arbitrary generics as scalar Boolean declarations. Explicit quoted
+annotations use the same bounded syntax matcher; gruff-py never evaluates the
+text or imports user code.
+
+Emitted findings add provisional `metadata.annotationShape` with `bool`,
+`optional-bool`, or `annotated-bool` so report consumers can explain why the
+name was reviewed. This additive key is registered in workspace
+`FAMILY-CONTRACT.md` §4 pending family vocabulary ratification; it does not
+participate in fingerprints or stable identities.
+
 Before configuring an exact boundary name, `ok` is treated like any other vague
 boolean name:
 
@@ -222,6 +236,52 @@ rules:
 Prefer the narrowest exact names needed by the boundary. Do not add broad
 project vocabulary when the identifier can be renamed to a clearer boolean
 prefix.
+
+## Markdown Link Sanitizers
+
+`security.unsanitized-markdown-interpolation` checks visible labels and click
+targets separately. In 0.5.0, labels trust no call by default. URLs trust
+`urllib.parse.quote` and `urllib.parse.quote_plus` only when no `safe` argument
+is supplied, or when `safe` is a literal string containing none of `]`, `(`,
+or `)`. A dynamic `safe`, `safe='()'`, a second positional value containing
+those delimiters, or any `*args`/`**kwargs` splat remains a finding.
+
+Configure project helpers by their exact Python call targets:
+
+```yaml
+rules:
+  security.unsanitized-markdown-interpolation:
+    options:
+      labelSanitizers:
+        - markdown_label
+        - helpers.markdown_label
+      urlSanitizers:
+        - urllib.parse.quote
+        - urllib.parse.quote_plus
+        - helpers.markdown_url
+```
+
+Targets are exact dotted identifiers: no wildcards, substrings, or inferred
+`safe`/`escape` names. Same-file imports are recognized, so
+`from urllib.parse import quote as encode_url` lets `encode_url(value)` match
+the canonical URL default until that alias is reassigned or shadowed by a
+parameter. The scanner never imports user code or follows an import graph.
+
+Set either list to `[]` for strict mode in that slot. In particular,
+`urlSanitizers: []` makes even `urllib.parse.quote(...)` untrusted. An empty
+`labelSanitizers` list is already the generated default.
+
+`html.escape` and `markupsafe.escape` are not label defaults. Both leave the
+Markdown delimiters `]`, `(`, and `)` unchanged, so a label such as
+`evil](https://bad.example)` still injects a rival link. Add one to
+`labelSanitizers` only after verifying that the project's renderer makes HTML
+escaping sufficient for that specific context.
+
+Migration from 0.4.1: the old rule accepted any wrapper call. Add every real
+project sanitizer to the matching option, then review findings from `str(...)`,
+identity helpers, wrong-slot calls, shadowed targets, raw overwrites, and
+ambiguous branches. Assigned sanitizer results and one-hop value aliases remain
+accepted within the same function.
 
 ## Severity Gate
 
@@ -295,9 +355,11 @@ This is useful for CI jobs that must not run with a half-applied config.
 Structural errors - non-table sections, wrong value types, unknown top-level
 keys, and `schemaVersion` mismatches - always fail regardless of the flag.
 
-The loader validates option *names*, not a new option type schema. Once a name
-is registered, its consuming rule remains responsible for value types and any
-cross-option constraints.
+The loader has no generic option type schema. Once a name is registered, its
+consuming rule owns value and cross-option constraints. A rule may surface
+those constraints as config errors before analysis; for example, the Markdown
+sanitizer options require lists of exact Python call targets and reject empty
+strings, wildcards, and non-text entries.
 
 ## Migrating Legacy Configs: `gruff-py migrate-config`
 

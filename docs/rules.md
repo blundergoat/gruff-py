@@ -609,12 +609,12 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `naming.boolean-prefix` protects the naming pillar by flagging boolean prefix before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported boolean prefix directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: Scalar Boolean returns and attributes are easier to review when their names reveal predicate intent; container members and callable return parameters do not impose that naming contract.
+- Fix guidance: Rename a scalar Boolean declaration with an is_/has_/can_-style predicate, or list an exact external boundary name under acceptedBooleanNames.
+- Confidence rationale: Medium confidence: exact bool, optional-bool, and Annotated scalar syntax is matched structurally, including bounded quoted annotations; containers, callables, mixed unions, and arbitrary generics stay quiet.
 - Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
-- Bad example: Code that triggers `naming.boolean-prefix` leaves boolean prefix unaddressed.
-- Good example: Code that satisfies `naming.boolean-prefix` makes boolean prefix explicit or simpler.
+- Bad example: `def status() -> bool: ...` hides the Boolean result in a noun.
+- Good example: `def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` is outside this scalar rule.
 
 ### `naming.confusing-name`
 
@@ -1184,10 +1184,11 @@ except ValueError:
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: A markdown link label of `evil](https://bad.example) trick` turns `[{label}]({url})` into markdown whose first parsed link is the injected pair, redirecting the rendered target; the rule exists to catch the one interpolation site that forgot the project's sanitiser.
-- Fix guidance: Escape `]`, `(`, and `)` (or percent-encode the url) in a helper and wrap every interpolated link slot in it; any wrapping call satisfies the rule.
-- Confidence rationale: Medium confidence: any wrapping call is accepted as the sanitiser proxy, so unrelated calls also satisfy the rule; the gruff-py corpus sweep found zero candidate sites, so the rule ships enabled.
+- Fix guidance: Use an exact helper from the matching labelSanitizers or urlSanitizers list. Labels must remove `]`, `(`, and `)`; URLs may use the default urllib.parse.quote/quote_plus calls without a delimiter-preserving `safe` argument.
+- Confidence rationale: Medium confidence: exact configured call targets, same-function assignments, one-hop aliases, and conservative branch/rebinding joins replace the former any-call proxy.
+- Options: `labelSanitizers` = `[]`, `urlSanitizers` = `['urllib.parse.quote', 'urllib.parse.quote_plus']`
 - Bad example: `f"[{title}]({url})"` with `title`/`url` from parameters.
-- Good example: `f"[{markdown_label(title)}]({markdown_url(url)})"`
+- Good example: `f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with markdown_label listed under labelSanitizers.
 
 ### `security.variable-import`
 

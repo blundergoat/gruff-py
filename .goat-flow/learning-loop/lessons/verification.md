@@ -329,6 +329,16 @@ under 1000 lines and that factory stayed at the 100-line threshold; the per-rule
 custom-docs factories have since been extracted to
 `src/gruffpy/rule/catalog_docs.py` (search: `def custom_docs_for`).
 
+The trap recurred during scalar Boolean annotation work: one new
+`BooleanPrefixRule` match arm raised `custom_docs_for` from the allowed
+cyclomatic complexity of 20 to 21 even though focused tests, ruff, mypy, and
+generated-doc checks were green. The correction shares one naming-rule match
+arm and dispatches both naming documentation factories through
+`_naming_rule_docs` (same file), preserving the existing branch count without
+removing either rule card. Before extending a near-threshold dispatcher, share
+an existing family arm or extract a branch-free keyed dispatch, then rerun root
+dogfood.
+
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
 **Created:** 2026-05-25
@@ -657,21 +667,3 @@ promised matrix and make every required group share the selector anchor. For
 branch-precedence behavior, include paired control and treatment assertions on
 the same input, choose a call target the matcher can actually resolve, and make
 sure reversing or removing the precedence branch fails the test.
-
-## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
-
-**Created:** 2026-07-12
-**Incident:** During safe `init --force` verification, focused tests, ruff, and
-mypy were green, but the required dogfood scan failed on seven documentation
-findings in newly rewritten tests. Four journey docstrings described the
-behavior but omitted their `tmp_path` and `monkeypatch` parameters; a nested
-filesystem-failure helper omitted both parameters and its deliberate
-`OSError`; one schema-recovery test omitted `tmp_path`. Adding the missing
-`Args` and `Raises` contracts made the same dogfood reproduction return zero
-findings without changing test behavior.
-
-Before broad dogfood, check every new or materially rewritten test docstring
-against its full signature, including pytest fixtures. A nested helper that
-models a user-visible failure also documents the exception it deliberately
-raises. Focused pytest and static type checks do not cover these documentation
-rules because the project analyser scans `tests/` as product-quality code.

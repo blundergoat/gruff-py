@@ -61,6 +61,25 @@ def test_stable_identity_is_deterministic() -> None:
     assert first == second
 
 
+def test_additive_metadata_does_not_change_fingerprint_or_stable_identity() -> None:
+    """JSON explanation fields may grow without changing a user's baseline identity."""
+    finding = _finding(symbol=None)
+    fingerprint_before_metadata = finding.fingerprint()
+    identity_before_metadata = finding.stable_identity()
+
+    finding.metadata.update(
+        {
+            "slot": "label",
+            "expressionKind": "call",
+            "sanitizerResolution": "wrong-slot",
+            "annotationShape": "optional-bool",
+        }
+    )
+
+    assert finding.fingerprint() == fingerprint_before_metadata
+    assert finding.stable_identity() == identity_before_metadata
+
+
 def test_stable_identity_ignores_line_shifts_when_symbol_is_set() -> None:
     base = _finding(line=10, end_line=10, column=4)
     shifted = _finding(line=42, end_line=42, column=4)

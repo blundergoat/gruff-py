@@ -19,6 +19,7 @@ from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplement
 from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
+from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
@@ -169,8 +170,8 @@ def custom_docs_for(
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case HungarianNotationRule.ID:
-            return _hungarian_notation_docs(config_keys)
+        case BooleanPrefixRule.ID | HungarianNotationRule.ID:
+            return _naming_rule_docs(definition.id, config_keys)
         case PiiTestFixtureRule.ID:
             return _pii_test_fixture_docs(config_keys)
         case NoAssertionsRule.ID:
@@ -358,6 +359,15 @@ def _unsanitized_markdown_interpolation_docs(
     config_keys: tuple[str, ...],
     rule_id: str,
 ) -> RuleDocs:
+    """Explain slot-specific sanitizer trust in CLI cards and generated rule docs.
+
+    Args:
+        config_keys: Public option paths; empty would leave users no tuning route.
+        rule_id: Registered rule id used to attach standard security metadata.
+
+    Returns:
+        User guidance including the deliberate HTML-escaper retained positive.
+    """
     return RuleDocs(
         rationale=(
             "A markdown link label of `evil](https://bad.example) trick` turns "
@@ -367,17 +377,20 @@ def _unsanitized_markdown_interpolation_docs(
             "sanitiser."
         ),
         fix_guidance=(
-            "Escape `]`, `(`, and `)` (or percent-encode the url) in a helper "
-            "and wrap every interpolated link slot in it; any wrapping call "
-            "satisfies the rule."
+            "Use an exact helper from the matching labelSanitizers or urlSanitizers "
+            "list. Labels must remove `]`, `(`, and `)`; URLs may use the default "
+            "urllib.parse.quote/quote_plus calls without a delimiter-preserving "
+            "`safe` argument."
         ),
         bad_example='`f"[{title}]({url})"` with `title`/`url` from parameters.',
-        good_example='`f"[{markdown_label(title)}]({markdown_url(url)})"`',
+        good_example=(
+            '`f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with '
+            "markdown_label listed under labelSanitizers."
+        ),
         confidence_rationale=(
-            "Medium confidence: any wrapping call is accepted as the "
-            "sanitiser proxy, so unrelated calls also satisfy the rule; the "
-            "gruff-py corpus sweep found zero candidate sites, so the rule "
-            "ships enabled."
+            "Medium confidence: exact configured call targets, same-function "
+            "assignments, one-hop aliases, and conservative branch/rebinding "
+            "joins replace the former any-call proxy."
         ),
         config_keys=config_keys,
         security_metadata=rule_security_metadata(rule_id),
@@ -393,6 +406,19 @@ def _unsanitized_markdown_interpolation_docs(
                     "and self-documenting), or suppress with "
                     "`# gruff: disable=security.unsanitized-markdown-interpolation` "
                     "plus the constraint."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A label wrapped in html.escape(...) or markupsafe.escape(...) "
+                    "still reports under the strict default. This is deliberate: "
+                    "HTML escaping leaves `]`, `(`, and `)` unchanged, so "
+                    "`evil](https://bad.example)` still injects a Markdown link."
+                ),
+                mitigation=(
+                    "After verifying that the project's renderer makes HTML escaping "
+                    "sufficient, add the exact helper to labelSanitizers; otherwise use "
+                    "a Markdown-aware label sanitizer."
                 ),
             ),
         ),
@@ -441,6 +467,58 @@ def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> R
         ),
         config_keys=config_keys,
         security_metadata=rule_security_metadata(rule_id),
+    )
+
+
+def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch one curated naming-rule card without growing catalog branching.
+
+    Args:
+        rule_id: Matched naming rule id; empty or unknown ids are never routed here.
+        config_keys: Public tuning paths; empty means the rule has no user knobs.
+
+    Returns:
+        Curated documentation for the matched naming rule.
+    """
+    documentation_factory = {
+        BooleanPrefixRule.ID: _boolean_prefix_docs,
+        HungarianNotationRule.ID: _hungarian_notation_docs,
+    }[rule_id]
+    return documentation_factory(config_keys)
+
+
+def _boolean_prefix_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain exact scalar Boolean annotation matching to scan users.
+
+    Args:
+        config_keys: Public tuning paths; empty means users cannot preserve an
+            external boundary name through configuration.
+
+    Returns:
+        Rule guidance covering supported shapes and deliberate collisions.
+    """
+    return RuleDocs(
+        rationale=(
+            "Scalar Boolean returns and attributes are easier to review when "
+            "their names reveal predicate intent; container members and callable "
+            "return parameters do not impose that naming contract."
+        ),
+        fix_guidance=(
+            "Rename a scalar Boolean declaration with an is_/has_/can_-style "
+            "predicate, or list an exact external boundary name under "
+            "acceptedBooleanNames."
+        ),
+        bad_example="`def status() -> bool: ...` hides the Boolean result in a noun.",
+        good_example=(
+            "`def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` "
+            "is outside this scalar rule."
+        ),
+        confidence_rationale=(
+            "Medium confidence: exact bool, optional-bool, and Annotated scalar "
+            "syntax is matched structurally, including bounded quoted annotations; "
+            "containers, callables, mixed unions, and arbitrary generics stay quiet."
+        ),
+        config_keys=config_keys,
     )
 
 

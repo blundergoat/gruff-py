@@ -1,4 +1,8 @@
-"""Unit coverage for the M04 explain-mode metadata: related rules and option_descriptions."""
+"""Keep rule explanations aligned with the options users can configure.
+
+The catalog feeds CLI detail cards and generated rule docs. These tests ensure
+every public option has guidance and unrelated empty metadata stays omitted.
+"""
 
 from dataclasses import FrozenInstanceError
 
@@ -17,6 +21,7 @@ _OPTION_DESCRIPTION_RULES = (
     "naming.generic-function",
     "naming.module-name-mismatch",
     "naming.short-variable",
+    "security.unsanitized-markdown-interpolation",
     "test-quality.extends-production-class",
     "test-quality.magic-number-assertion",
     "test-quality.mocking-domain-object",
@@ -89,3 +94,21 @@ def test_rule_docs_to_payload_omits_false_positive_shapes_when_empty() -> None:
     payload = docs.to_payload()
 
     assert "falsePositiveShapes" not in payload
+
+
+def test_markdown_rule_explains_slot_specific_sanitizer_options() -> None:
+    """Give users separate label and URL guidance in explain-mode payloads."""
+    docs = documentation_for_rule("security.unsanitized-markdown-interpolation")
+
+    assert "labelSanitizers" in docs.option_descriptions
+    assert "urlSanitizers" in docs.option_descriptions
+    assert any("html.escape" in shape.shape for shape in docs.false_positive_shapes)
+
+
+def test_boolean_prefix_docs_explain_scalar_annotation_boundary() -> None:
+    """Tell users why containers and callables receive no predicate-name finding."""
+    docs = documentation_for_rule("naming.boolean-prefix")
+
+    assert "Scalar Boolean" in docs.rationale
+    assert "containers" in docs.confidence_rationale
+    assert "acceptedBooleanNames" in docs.fix_guidance

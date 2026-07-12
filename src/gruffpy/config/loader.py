@@ -13,6 +13,11 @@ from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.config.markdown_sanitizer_options import (
+    MARKDOWN_SANITIZER_OPTION_NAMES,
+    MARKDOWN_SANITIZER_RULE_ID,
+    validate_markdown_sanitizer_targets,
+)
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
@@ -512,6 +517,9 @@ class ConfigLoader:
                     f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
                 )
                 continue
+            # Markdown users need malformed trust targets rejected before findings are hidden.
+            if rule_id == MARKDOWN_SANITIZER_RULE_ID and key in MARKDOWN_SANITIZER_OPTION_NAMES:
+                value = validate_markdown_sanitizer_targets(key, value)
             kept[key] = value
         return kept
 

@@ -45,7 +45,7 @@ convention) returns **28 files**: 18 under `.goat-flow/decisions/`, 5 under
 `reconcile all three doc surfaces`), 2 under `.goat-flow/lessons/`,
 `.goat-flow/patterns/configuration.md`, and the test docstrings in
 `tests/unit/finding/test_stable_identity.py` (search: `M05 lands`) and
-`tests/unit/rule/test_explain_metadata.py` (search: `explain-mode metadata`).
+`tests/unit/rule/test_explain_metadata.py` (search: `Keep rule explanations aligned`).
 
 The non-obvious failure mode is twofold. For a cloner, the reference is a dead
 pointer — they get the doc but not the `M22` file, so the rationale citation

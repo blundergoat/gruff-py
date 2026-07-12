@@ -1,21 +1,21 @@
-"""``security.unsanitized-markdown-interpolation`` - raw values inside markdown link shapes.
+"""Detect raw values placed inside rendered Markdown link labels and URLs.
 
-Detects f-strings and ``str.format`` calls that build the markdown link shape
-``[label](url)`` with a dynamic label or url that is not wrapped in any call.
-A label value of ``evil](https://bad.example) trick`` turns
-``[{label}]({real_url})`` into markdown whose *first* parsed link is the
-injected pair, redirecting the rendered link target. The analyzer cannot know
-which function sanitises, so the presence of some transformation - any call
-wrapping the interpolated expression - is the proxy for "this site remembered
-the sanitiser"; bare names, attributes, and subscripts fire.
-
-Concatenation chains (``"[" + a + "](" + b + ")"``) are a documented gap in
-this version.
+The rule recognizes f-strings and literal ``str.format`` link shapes, then asks
+the local provenance index whether each dynamic slot came from a configured
+sanitizer. CLI users reach this path when their source builds ``[label](url)``;
+unknown wrappers and uncertain assignments remain visible as advisory findings.
 """
 
 import ast
 import re
 
+from gruffpy.config.markdown_sanitizer_options import (
+    DEFAULT_LABEL_SANITIZERS,
+    DEFAULT_URL_SANITIZERS,
+    LABEL_SANITIZERS_OPTION,
+    URL_SANITIZERS_OPTION,
+    validate_markdown_sanitizer_targets,
+)
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -25,10 +25,17 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.security._markdown_sanitizer_model import (
+    MarkdownSlot,
+    SanitizerResolution,
+    expression_kind,
+)
+from gruffpy.rule.security._markdown_sanitizer_provenance import MarkdownSanitizerProvenance
 
 _PLACEHOLDER = "\x00"
 _LINK_PATTERN = re.compile(r"\[([^\[\]]*)\]\(([^()]*)\)")
 _FORMAT_FIELD_PATTERN = re.compile(r"\{([^{}:!]*)(?:[:!][^{}]*)?\}")
+_LINK_SLOT_GROUPS: tuple[tuple[MarkdownSlot, int], ...] = (("label", 1), ("url", 2))
 _REMEDIATION = (
     "Escape the interpolated value before it enters the link shape: strip or "
     "percent-encode `]`, `(`, and `)` in labels and urls (a markdown_label()/"
@@ -37,21 +44,19 @@ _REMEDIATION = (
 
 
 class UnsanitizedMarkdownInterpolationRule(Rule):
-    """Detect markdown [label](url) shapes interpolating unwrapped dynamic values."""
+    """Find Markdown links whose visible text or click target remains unproved.
+
+    Users configure exact helpers per slot. The rule keeps literal and bounded
+    assigned results quiet while explaining why raw or wrongly wrapped values fire.
+    """
 
     ID = "security.unsanitized-markdown-interpolation"
 
     def definition(self) -> RuleDefinition:
-        """Describe the unsanitized-markdown-interpolation rule as a medium-confidence advisory.
-
-        Medium confidence: any wrapping call is accepted as the sanitiser
-        proxy, so the rule cannot distinguish escaping calls from unrelated
-        ones; the corpus sweep on gruff-py's own source produced zero
-        candidate sites, so the rule ships enabled.
+        """Describe the advisory plus its generated slot-specific sanitizer defaults.
 
         Returns:
-            Definition for the unsanitized-markdown-interpolation rule under
-            the security pillar.
+            Public rule definition used by config generation and rule documentation.
         """
         return RuleDefinition(
             id=self.ID,
@@ -60,27 +65,55 @@ class UnsanitizedMarkdownInterpolationRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_options={
+                LABEL_SANITIZERS_OPTION: list(DEFAULT_LABEL_SANITIZERS),
+                URL_SANITIZERS_OPTION: list(DEFAULT_URL_SANITIZERS),
+            },
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag unwrapped dynamic label/url slots in markdown link shapes.
+        """Return one advisory for each Markdown slot the user's code cannot prove safe.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context (unused - no thresholds).
+            unit: Parsed source file; a missing tree or no link marker means no findings.
+            context: Resolved user config carrying exact sanitizer lists for both slots.
 
         Returns:
-            One finding per unwrapped link slot.
+            Findings in source traversal order; empty means no unproved link slot was found.
         """
-        if unit.tree is None or "](" not in unit.source:
+        # A parse failure or file without a Markdown link boundary has nothing to inspect here.
+        if not isinstance(unit.tree, ast.Module) or "](" not in unit.source:
             return []
         definition = self.definition()
+        settings = context.settings_for(definition)
+        label_targets = validate_markdown_sanitizer_targets(
+            LABEL_SANITIZERS_OPTION,
+            settings.options.get(
+                LABEL_SANITIZERS_OPTION,
+                definition.default_options[LABEL_SANITIZERS_OPTION],
+            ),
+        )
+        url_targets = validate_markdown_sanitizer_targets(
+            URL_SANITIZERS_OPTION,
+            settings.options.get(
+                URL_SANITIZERS_OPTION,
+                definition.default_options[URL_SANITIZERS_OPTION],
+            ),
+        )
+        provenance = MarkdownSanitizerProvenance.build(
+            unit.tree,
+            label_targets=set(label_targets),
+            url_targets=set(url_targets),
+        )
         findings: list[Finding] = []
+        # Each link-building expression is evaluated against its statement-ordered proof state.
         for node in ast.walk(unit.tree):
+            # F-strings expose their dynamic values directly to the link template parser.
             if isinstance(node, ast.JoinedStr):
-                findings.extend(_joined_str_findings(definition, unit, node))
+                findings.extend(_joined_str_findings(definition, unit, node, provenance))
+            # Literal `.format()` calls require field-to-argument resolution first.
             elif isinstance(node, ast.Call):
-                findings.extend(_format_call_findings(definition, unit, node))
+                findings.extend(_format_call_findings(definition, unit, node, provenance))
         return findings
 
 
@@ -88,69 +121,125 @@ def _joined_str_findings(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     node: ast.JoinedStr,
+    provenance: MarkdownSanitizerProvenance,
 ) -> list[Finding]:
+    """Map an f-string to link slots and return findings for its unproved values.
+
+    Args:
+        definition: Public rule metadata used to build findings.
+        unit: User source file supplying path and location context.
+        node: F-string expression detected in the parsed file.
+        provenance: Per-expression safety index; empty state treats names as raw.
+
+    Returns:
+        Slot findings for this f-string; empty means it is not a link or every slot is safe.
+    """
     template_parts: list[str] = []
     dynamic_values: list[ast.expr] = []
+    # Every f-string component becomes static text or one ordered placeholder.
     for value in node.values:
+        # Literal text preserves the Markdown delimiters users wrote.
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             template_parts.append(value.value)
+        # A formatted value is checked against the proof state at its source position.
         elif isinstance(value, ast.FormattedValue):
             template_parts.append(_PLACEHOLDER)
             dynamic_values.append(value.value)
         else:
             return []
-    return _link_slot_findings(definition, unit, node, "".join(template_parts), dynamic_values)
+    return _link_slot_findings(
+        definition,
+        unit,
+        node,
+        "".join(template_parts),
+        dynamic_values,
+        provenance,
+    )
 
 
 def _format_call_findings(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     node: ast.Call,
+    provenance: MarkdownSanitizerProvenance,
 ) -> list[Finding]:
+    """Resolve a literal ``.format()`` link and report its unproved arguments.
+
+    Args:
+        definition: Public rule metadata used to build findings.
+        unit: User source file supplying path and location context.
+        node: Candidate call expression from the parsed file.
+        provenance: Per-expression safety index for assigned and direct values.
+
+    Returns:
+        Slot findings for a supported literal template; empty for other calls or safe links.
+    """
     callee = node.func
+    # Calls other than literal-string `.format()` are sanitizer candidates, not link sinks.
     if not (isinstance(callee, ast.Attribute) and callee.attr == "format"):
         return []
     template_owner = callee.value
+    # A dynamic format template does not give the scanner a stable Markdown link shape.
     if not (isinstance(template_owner, ast.Constant) and isinstance(template_owner.value, str)):
         return []
     template, dynamic_values = _resolve_format_fields(template_owner.value, node)
+    # Missing field arguments make the runtime template unresolved and unsuitable for a finding.
     if template is None:
         return []
-    return _link_slot_findings(definition, unit, node, template, dynamic_values)
+    return _link_slot_findings(
+        definition,
+        unit,
+        node,
+        template,
+        dynamic_values,
+        provenance,
+    )
 
 
 def _resolve_format_fields(
     template: str,
     node: ast.Call,
 ) -> tuple[str | None, list[ast.expr]]:
-    """Replace ``{...}`` fields with placeholders mapped to their argument exprs."""
+    """Replace format fields with placeholders paired to the user's argument expressions.
+
+    Args:
+        template: Literal format text; empty text contains no link fields.
+        node: `.format()` call whose missing arguments make resolution return ``None``.
+
+    Returns:
+        Placeholder template and ordered values, or ``(None, [])`` when a field is unresolved.
+    """
     keyword_arguments = {
-        keyword.arg: keyword.value for keyword in node.keywords if keyword.arg is not None
+        keyword_argument.arg: keyword_argument.value
+        for keyword_argument in node.keywords
+        if keyword_argument.arg is not None
     }
     dynamic_values: list[ast.expr] = []
     auto_index = 0
     resolved: list[str] = []
     last_end = 0
+    # Each field keeps its source order so label and URL values align with placeholders.
     for match in _FORMAT_FIELD_PATTERN.finditer(template):
         resolved.append(template[last_end : match.start()])
         last_end = match.end()
         field_name = match.group(1)
-        # The field's root selector is everything before the first attribute
-        # (``.attr``) or index (``[k]``) access. An empty root auto-indexes; a
-        # digit root is positional (so ``{0.name}`` / ``{0[url]}`` resolve to
-        # args, not a phantom ``"0"`` keyword); anything else is a keyword.
+        # Attributes and indexes still resolve through their root format argument.
         root = field_name.split(".", 1)[0].split("[", 1)[0]
+        # Empty fields consume the next positional argument the user supplied.
         if root == "":
             argument = node.args[auto_index] if auto_index < len(node.args) else None
             auto_index += 1
+        # Numeric roots such as `{0.name}` select an explicit positional argument.
         elif root.isdigit():
             try:
                 index = int(root)
-            except ValueError:  # isdigit() accepts "²"-style digits int() rejects
+            # A user can write a Unicode digit such as `²` that `isdigit()` accepts but int rejects.
+            except ValueError:
                 return None, []
             argument = node.args[index] if index < len(node.args) else None
         else:
             argument = keyword_arguments.get(root)
+        # A missing positional/keyword value would make this user template fail at runtime.
         if argument is None:
             return None, []
         resolved.append(_PLACEHOLDER)
@@ -165,17 +254,45 @@ def _link_slot_findings(
     node: ast.AST,
     template: str,
     dynamic_values: list[ast.expr],
+    provenance: MarkdownSanitizerProvenance,
 ) -> list[Finding]:
+    """Return findings for dynamic label/URL placeholders without a safety proof.
+
+    Args:
+        definition: Public rule metadata used for every emitted finding.
+        unit: User file supplying stable path and source location.
+        node: Whole link expression used for the existing finding location.
+        template: Link text with placeholders; empty means no detected link shape.
+        dynamic_values: Expressions aligned to placeholders; empty means a literal link.
+        provenance: Statement-ordered safety index for each expression and slot.
+
+    Returns:
+        One finding per unproved slot value; empty means no matching dynamic link remains.
+    """
     findings: list[Finding] = []
+    # A source expression may contain more than one Markdown link shape.
     for match in _LINK_PATTERN.finditer(template):
-        for slot, group_index in (("label", 1), ("url", 2)):
+        # Labels and URLs receive separate configured sanitizer proofs.
+        for markdown_slot, group_index in _LINK_SLOT_GROUPS:
             slot_text = match.group(group_index)
             first_value_index = template.count(_PLACEHOLDER, 0, match.start(group_index))
+            # Every placeholder in this rendered slot needs its own proof.
             for offset in range(slot_text.count(_PLACEHOLDER)):
                 expression = dynamic_values[first_value_index + offset]
-                if isinstance(expression, ast.Call):
+                safety = provenance.proof_for(expression, markdown_slot)
+                # A proved sanitizer/literal path produces no warning for the user.
+                if safety.is_safe:
                     continue
-                findings.append(_build_finding(definition, unit, node, slot))
+                findings.append(
+                    _build_finding(
+                        definition,
+                        unit,
+                        node,
+                        markdown_slot,
+                        expression,
+                        safety.sanitizer_resolution,
+                    )
+                )
     return findings
 
 
@@ -183,8 +300,23 @@ def _build_finding(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     node: ast.AST,
-    slot: str,
+    slot: MarkdownSlot,
+    expression: ast.expr,
+    sanitizer_resolution: SanitizerResolution,
 ) -> Finding:
+    """Build the frozen finding text plus additive sanitizer explanation metadata.
+
+    Args:
+        definition: Public severity, confidence, pillar, and rule id.
+        unit: User source file supplying the displayed path.
+        node: Whole link expression preserving the existing location contract.
+        slot: Visible label or clickable URL that remained unsafe.
+        expression: Unproved AST value used only for its bounded metadata kind.
+        sanitizer_resolution: Stable reason the configured sanitizer proof failed.
+
+    Returns:
+        Advisory finding whose message and location remain identity-compatible.
+    """
     return Finding(
         rule_id=definition.id,
         message=(
@@ -201,5 +333,9 @@ def _build_finding(
         end_line=getattr(node, "end_lineno", None),
         remediation=_REMEDIATION,
         secondary_pillars=definition.secondary_pillars,
-        metadata={"slot": slot},
+        metadata={
+            "slot": slot,
+            "expressionKind": expression_kind(expression),
+            "sanitizerResolution": sanitizer_resolution,
+        },
     )

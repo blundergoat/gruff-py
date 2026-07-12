@@ -151,6 +151,17 @@ def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> 
     assert bare_rule == {"enabled": True}
 
 
+def test_render_default_config_yaml_shows_markdown_sanitizer_defaults() -> None:
+    """Show strict labels and vetted URL encoders in a user's generated config."""
+    document = yaml.safe_load(render_default_config_yaml())
+    markdown_rule = document["rules"]["security.unsanitized-markdown-interpolation"]
+
+    assert markdown_rule["options"] == {
+        "labelSanitizers": [],
+        "urlSanitizers": ["urllib.parse.quote", "urllib.parse.quote_plus"],
+    }
+
+
 def test_render_default_config_yaml_uses_single_threshold_and_severity() -> None:
     document = yaml.safe_load(render_default_config_yaml())
     cyclomatic = document["rules"]["complexity.cyclomatic"]
