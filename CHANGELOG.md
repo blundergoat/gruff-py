@@ -80,6 +80,16 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   coverage when that caveat is absent. Native JSON keeps
   `run.partialContextCaveat` and `score.scope`, hotspot keeps `scope`, and no
   score, finding, fingerprint, filter, or exit-code value changes.
+- **Cross-module private-function loads now prove liveness** -
+  `dead-code.unused-private-function` keeps a module-private function when
+  another scanned file performs a real load through an unambiguously resolved
+  absolute or relative import. Import-only and rebound aliases still report.
+  Partial scans suppress module-level deletion advice while preserving
+  private-method checks and the run-level scan-context caveat. Full-project
+  findings retain their identities and add provisionally registered
+  `scanScope`/`externalReferenceCoverage` metadata; duplicate module layouts
+  remain visible at LOW confidence, and dynamic framework/plugin loads keep
+  using `allowlists.deadCode`.
 
 
 

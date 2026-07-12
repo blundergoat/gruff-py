@@ -1,31 +1,88 @@
+"""Protect private-function findings across local and project scan journeys.
+
+The fixtures model files a user scans together, including imports, registry
+loads, rebinding, partial scope, and ambiguous source layouts. Local controls
+keep existing private-method and dynamic exemptions visible during migration.
+"""
+
 import ast
+from collections import Counter
+from collections.abc import Iterator
+
+import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
+from gruffpy.finding.confidence import Confidence
+from gruffpy.finding.finding import Finding
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
+from gruffpy.rule.project_rule import ProjectRuleProtocol
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.source.source_file import SourceFile
 
+_MAX_MODULE_WALKS_ACROSS_TWO_ANALYSES = 6
 
-def _unit(source: str) -> AnalysisUnit:
+
+def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
+    """Build one parsed user file with parent links for dead-code analysis.
+
+    Args:
+        source: Non-empty Python source the user asked gruff to scan.
+        display_path: Project-relative file path; the default models one flat file.
+
+    Returns:
+        Parsed analysis unit ready for local or project rule dispatch; never None.
+    """
     tree = ast.parse(source)
+    # Parent links let the rule distinguish the user's module and class scopes.
     for parent in ast.walk(tree):
+        # Every parsed child needs its lexical owner for qualified finding symbols.
         for child in ast.iter_child_nodes(parent):
             child.parent = parent  # type: ignore[attr-defined]  # AST parent links
     return AnalysisUnit(
-        file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
+        file=SourceFile(
+            absolute_path=f"/project/{display_path}",
+            display_path=display_path,
+            type="python",
+        ),
         source=source,
         tree=tree,
     )
 
 
-def _ctx() -> RuleContext:
+def _ctx(scan_scope: str = "full-project") -> RuleContext:
+    """Build the rule context for a full or partial user scan.
+
+    Args:
+        scan_scope: Full-project enables module conclusions; partial suppresses them.
+
+    Returns:
+        Enabled rule context with an empty dynamic allowlist; never None.
+    """
     rule = UnusedPrivateFunctionRule()
     return RuleContext(
-        project_root="/",
+        project_root="/project",
         config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True)}),
+        scan_scope=scan_scope,
     )
+
+
+def _project_findings(
+    units: list[AnalysisUnit],
+    scan_scope: str = "full-project",
+) -> list[Finding]:
+    """Run the registry path users reach when analysing one or more files.
+
+    Args:
+        units: Parsed files selected for the user's scan; empty means no findings.
+        scan_scope: Full-project or partial evidence classification for the run.
+
+    Returns:
+        Deterministically ordered findings from this rule alone; empty when none apply.
+    """
+    return RuleRegistry([UnusedPrivateFunctionRule()]).analyse(units, _ctx(scan_scope))
 
 
 def test_unused_private_module_function_fires():
@@ -113,3 +170,192 @@ def test_pytest_fixture_skipped():
     src = "import pytest\n@pytest.fixture\ndef _setup(): return 1\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    "producer_path",
+    ("src/mail/formatters.py", "mail/formatters.py"),
+    ids=("src-layout", "flat-layout"),
+)
+def test_project_imported_and_registered_private_function_is_live(
+    producer_path: str,
+) -> None:
+    """Keep a private function when another scanned file loads it into a registry.
+
+    Args:
+        producer_path: Src-layout or flat-layout path selected by the user.
+    """
+    producer = _unit(
+        "def _format_failed_emails():\n    return []\n",
+        producer_path,
+    )
+    consumer = _unit(
+        "from mail.formatters import _format_failed_emails\n"
+        "FAILED_EMAIL_FORMATTERS = {'default': _format_failed_emails}\n",
+        "src/mail/registry.py" if producer_path.startswith("src/") else "mail/registry.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_imported_but_unused_private_function_still_fires() -> None:
+    """Report dead code when a consumer imports it but never performs a load."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    import_only = _unit(
+        "from pkg.helpers import _helper\n",
+        "src/pkg/import_only.py",
+    )
+
+    findings = _project_findings([producer, import_only])
+
+    assert [finding.symbol for finding in findings] == ["_helper"]
+    assert findings[0].confidence is Confidence.MEDIUM
+    assert findings[0].metadata == {
+        "name": "_helper",
+        "scanScope": "full-project",
+        "externalReferenceCoverage": "complete",
+    }
+
+
+def test_project_module_alias_attribute_load_proves_liveness() -> None:
+    """Recognize a user loading the function through an imported module alias."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "import pkg.helpers as helpers\nREGISTRY = {'helper': helpers._helper}\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_relative_import_load_proves_liveness() -> None:
+    """Resolve a sibling relative import without assuming the user's source root."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from .helpers import _helper\nREGISTRY = {'helper': _helper}\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_rebound_import_does_not_prove_original_liveness() -> None:
+    """Keep the finding when user code replaces an import before loading it."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n_helper = lambda: 2\nREGISTRY = {'helper': _helper}\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert [finding.symbol for finding in _project_findings([producer, consumer])] == ["_helper"]
+
+
+def test_project_ambiguous_module_paths_never_suppress_findings() -> None:
+    """Retain LOW-confidence findings when one import maps to duplicate modules."""
+    src_producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    vendor_producer = _unit("def _helper():\n    return 2\n", "vendor/pkg/helpers.py")
+    consumer = _unit(
+        "import pkg.helpers as helpers\nREGISTRY = {'helper': helpers._helper}\n",
+        "src/pkg/consumer.py",
+    )
+
+    findings = _project_findings([src_producer, vendor_producer, consumer])
+
+    assert [finding.file_path for finding in findings] == [
+        "src/pkg/helpers.py",
+        "vendor/pkg/helpers.py",
+    ]
+    assert {finding.confidence for finding in findings} == {Confidence.LOW}
+    assert {finding.metadata["externalReferenceCoverage"] for finding in findings} == {"ambiguous"}
+
+
+def test_project_partial_scan_suppresses_module_finding_but_keeps_private_method() -> None:
+    """Avoid deletion advice on a narrow file while retaining class-local evidence."""
+    unit = _unit(
+        "def _module_helper():\n"
+        "    return 1\n\n"
+        "class Service:\n"
+        "    def _method_helper(self):\n"
+        "        return 2\n"
+        "    def run(self):\n"
+        "        return 3\n",
+        "src/pkg/service.py",
+    )
+
+    findings = _project_findings([unit], scan_scope="partial-scope")
+
+    assert [finding.symbol for finding in findings] == ["Service._method_helper"]
+    assert findings[0].metadata == {"name": "_method_helper"}
+
+
+def test_project_full_scan_preserves_unreferenced_finding_identity() -> None:
+    """Add coverage metadata without changing the user's baseline identities."""
+    findings = _project_findings([_unit("def _helper():\n    return 1\n")])
+
+    assert len(findings) == 1
+    assert findings[0].fingerprint() == "b21129ce5e96631b"
+    assert findings[0].stable_identity() == "03f9a5e4a00227ca"
+    assert findings[0].metadata == {
+        "name": "_helper",
+        "scanScope": "full-project",
+        "externalReferenceCoverage": "complete",
+    }
+
+
+def test_project_producer_all_export_remains_exempt() -> None:
+    """Preserve the user's explicit private export exemption after migration."""
+    producer = _unit(
+        "__all__ = ['_helper']\ndef _helper():\n    return 1\n",
+        "src/pkg/helpers.py",
+    )
+
+    assert _project_findings([producer]) == []
+
+
+def test_project_index_walks_each_generated_module_a_bounded_number_of_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep project indexing linear as users add more scanned modules.
+
+    Args:
+        monkeypatch: Fixture that counts whole-module AST walks during the scan.
+    """
+    rule = UnusedPrivateFunctionRule()
+    assert isinstance(rule, ProjectRuleProtocol)
+    # Each generated module represents one additional file in the user's project.
+    units = [
+        _unit(
+            f"def _helper_{module_index}():\n    return {module_index}\n",
+            f"src/pkg/module_{module_index}.py",
+        )
+        for module_index in range(40)
+    ]
+    unit_tree_ids = {id(unit.tree) for unit in units}
+    module_walk_counts: Counter[int] = Counter()
+    original_walk = ast.walk
+
+    def counted_walk(root: ast.AST) -> Iterator[ast.AST]:
+        """Count whole user-module walks while preserving normal AST iteration.
+
+        Args:
+            root: AST root requested by the rule; never None.
+
+        Returns:
+            Original iterator over the root and descendants.
+        """
+        # Only whole-module passes measure index growth; candidate subtrees are local work.
+        if id(root) in unit_tree_ids:
+            module_walk_counts[id(root)] += 1
+        return original_walk(root)
+
+    monkeypatch.setattr(ast, "walk", counted_walk)
+
+    first_findings = RuleRegistry([rule]).analyse(units, _ctx())
+    second_findings = RuleRegistry([rule]).analyse(units, _ctx())
+
+    assert len(first_findings) == len(units)
+    assert [finding.to_dict() for finding in first_findings] == [
+        finding.to_dict() for finding in second_findings
+    ]
+    assert set(module_walk_counts) == unit_tree_ids
+    assert max(module_walk_counts.values()) <= _MAX_MODULE_WALKS_ACROSS_TWO_ANALYSES

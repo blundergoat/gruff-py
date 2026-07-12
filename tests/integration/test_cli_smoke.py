@@ -1737,6 +1737,112 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "Score" in result.output
 
 
+def test_analyse_full_project_unused_private_function_keeps_registered_load_live(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Omit deletion advice when another scanned module registers the function.
+
+    Args:
+        tmp_path: Temporary full project containing producer and consumer modules.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+
+    Returns:
+        None; CLI assertions prove the registered function stays out of the report.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_text("# Registry fixture\n")
+    package = tmp_path / "src" / "mail"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('"""Mail package for registry coverage."""\n')
+    (package / "formatters.py").write_text(
+        '"""Format failed-email batches for the delivery UI."""\n\n'
+        "def _format_failed_emails():\n"
+        "    return []\n\n"
+        "def _unused_control():\n"
+        "    return None\n"
+    )
+    (package / "registry.py").write_text(
+        '"""Register formatters selected by the delivery UI."""\n\n'
+        "from mail.formatters import _format_failed_emails\n\n"
+        "FAILED_EMAIL_FORMATTERS = {'default': _format_failed_emails}\n"
+    )
+
+    analysis_command = [
+        "analyse",
+        "--format",
+        "json",
+        "--fail-on",
+        "none",
+        "--no-config",
+        "--no-baseline",
+        "--include-rule",
+        "dead-code.unused-private-function",
+        ".",
+    ]
+    result = CliRunner().invoke(main, analysis_command)
+    repeated_result = CliRunner().invoke(main, analysis_command)
+
+    assert result.exit_code == 0, result.output
+    assert repeated_result.exit_code == 0, repeated_result.output
+    assert repeated_result.output == result.output
+    findings = json.loads(result.output)["findings"]
+    assert [finding["symbol"] for finding in findings] == ["_unused_control"]
+    assert findings[0]["metadata"]["externalReferenceCoverage"] == "complete"
+
+
+def test_analyse_partial_unused_private_function_suppresses_module_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep class-local advice but omit module deletion advice on a narrow scan.
+
+    Args:
+        tmp_path: Temporary project containing module and class-private helpers.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+
+    Returns:
+        None; CLI assertions prove narrow-scan suppression and caveat rendering.
+    """
+    monkeypatch.chdir(tmp_path)
+    source_root = tmp_path / "src"
+    source_root.mkdir()
+    target = source_root / "service.py"
+    target.write_text(
+        '"""Serve user requests through local helper functions."""\n\n'
+        "def _module_helper():\n"
+        "    return 1\n\n"
+        "class Service:\n"
+        "    def _method_helper(self):\n"
+        "        return 2\n\n"
+        "    def run(self):\n"
+        "        return 3\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--include-rule",
+            "dead-code.unused-private-function",
+            "src/service.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0, result.output
+    assert [finding["symbol"] for finding in payload["findings"]] == ["Service._method_helper"]
+    assert payload["run"]["partialContextCaveat"] == (
+        "partial project scan: project-wide rules may need full-project context"
+    )
+
+
 def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

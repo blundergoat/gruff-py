@@ -50,9 +50,10 @@ class TextReporter:
         _append_config_warnings(lines, report)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
-        _append_partial_context_caveat(lines, report)
         _append_score(lines, report, counts)
         _append_findings(lines, report.findings)
+        _append_scoring_mode(lines, report)
+        _append_partial_context_caveat(lines, report)
 
         lines.append("")
         lines.append("Summary")
@@ -172,8 +173,25 @@ def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> 
     lines.append(f"  Caveat: {report.partial_context_caveat}")
 
 
+def _append_scoring_mode(lines: list[str], report: AnalysisReport) -> None:
+    """Show how the displayed score was calculated after frozen finding output.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey.
+        report: Run result; a missing score means no scoring mode can be shown.
+
+    Returns:
+        None; the supplied output list receives a mode only when a score exists.
+    """
+    # A diagnostic-only run has no score, so users have no scoring mode to review.
+    if report.score is None:
+        return
+    lines.append("")
+    lines.append(f"  Scoring mode: {report.score.scope}")
+
+
 def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, int]) -> None:
-    """Append the stable score block and name its full-project/diff scoring mode.
+    """Append the stable score block for the user's quality review.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey.
@@ -203,7 +221,6 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
         f"  Findings: {finding_label} · {counts['error']} error · "
         f"{counts['warning']} warning · {counts['advisory']} advisory"
     )
-    lines.append(f"  Scoring mode: {report.score.scope}")
     lines.append("  Pillars:")
     # Each pillar row lets the user trace the composite back to one quality area.
     for pillar in report.score.pillars:

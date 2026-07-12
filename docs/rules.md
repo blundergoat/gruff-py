@@ -348,11 +348,11 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `dead-code.unused-private-function` protects the dead-code pillar by flagging unused private function before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported unused private function directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `dead-code.unused-private-function` leaves unused private function unaddressed.
-- Good example: Code that satisfies `dead-code.unused-private-function` makes unused private function explicit or simpler.
+- Rationale: A private function with no local caller may still be live through another module's callback registry. Full-project scans therefore require a real load after an unambiguously resolved import; narrow scans omit module-level deletion advice because external callers are outside the evidence boundary.
+- Fix guidance: Delete a genuinely unused function or add the real caller. For framework, plugin, or string-based loading that static imports cannot prove, use allowlists.deadCode.symbols, decorators, or paths with the project's documented reason.
+- Confidence rationale: Medium confidence when full-project import coverage is complete; LOW when a real load maps to duplicate scanned module paths. Private methods retain class-local evidence in every scan scope.
+- Bad example: `def _legacy_handler(): ...` with no local call and no loaded import anywhere in a full-project scan.
+- Good example: `from handlers import _format_failed; REGISTRY['failed'] = _format_failed` in another scanned module.
 
 ### `design.runtime-sys-path-mutation`
 

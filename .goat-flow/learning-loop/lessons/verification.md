@@ -120,6 +120,11 @@ focused behavior was green. Touched-file checks caught both before the final
 broad ladder, and replaying focused/static gates cleared the failures without
 touching unrelated source.
 
+The cross-module private-function liveness batch repeated the same trap: three
+approved source and test files needed formatting after the focused behavior
+passed. Formatting only those paths, then replaying the focused and
+repository-wide checks, kept unrelated reporting worktree files untouched.
+
 After any test/source edit batch, run a touched-file formatter check or pass
 before the repo-wide non-mutating gate, even when the repository was clean at
 the start. Then rerun the touched focused tests. This separates agent-owned
@@ -345,6 +350,15 @@ removing either rule card. Before extending a near-threshold dispatcher, share
 an existing family arm or extract a branch-free keyed dispatch, then rerun root
 dogfood.
 
+The same two shapes recurred during cross-module private-function liveness
+work. A separate dead-code catalog arm again raised `custom_docs_for` to 21,
+while one 118-line import/load collector crossed cyclomatic, cognitive,
+maintainability, and function-length thresholds. Sharing the dead-code arm via
+branch-free keyed dispatch and splitting binding collection from attribute/name
+load handling removed all five errors without changing focused outcomes. Treat
+one materialized AST walk as a data boundary, not a reason to keep both
+in-memory processing stages in one function.
+
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
 **Created:** 2026-05-25
@@ -503,6 +517,14 @@ scratch repro passed only after moving it to
 When crafting rule repros, mirror the rule's path gate as well as its source
 shape. A true-positive source fixture can still report zero findings when the
 file path prevents the rule from running.
+
+**Updated:** 2026-07-12. The first ambiguous-module CLI proof used `app` and
+`vendor` as duplicate package source roots, but discovery default-ignored the
+latter; only one producer reached the resolver and the expected two LOW
+findings did not appear. Replacing the second temporary root with `lib` made
+the duplicate visible and the full matrix passed. For multi-file ambiguity
+fixtures, verify every intended path appears in discovery (or deliberately use
+`--include-ignored`) before interpreting resolver counts.
 
 ## Lesson: Module-scope invalidation walks must cover nested statement blocks
 

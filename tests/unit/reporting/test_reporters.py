@@ -207,9 +207,13 @@ def test_text_reporter_distinguishes_scan_context_from_scoring_mode(
         scoring_mode: Existing score mode shown as full-project or diff.
     """
     rendered_text = TextReporter().render(_report_with_partial_context(scoring_mode))
+    detailed_finding_position = rendered_text.index("    Dangerous call to eval().")
+    scoring_mode_position = rendered_text.index(f"  Scoring mode: {scoring_mode}")
+    scan_context_position = rendered_text.index("Scan context")
 
     assert f"Scan context\n  Caveat: {_PARTIAL_PROJECT_CONTEXT_CAVEAT}" in rendered_text
     assert f"  Scoring mode: {scoring_mode}" in rendered_text
+    assert detailed_finding_position < scoring_mode_position < scan_context_position
     assert "  Scope:" not in rendered_text
 
 
