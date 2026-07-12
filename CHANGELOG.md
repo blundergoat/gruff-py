@@ -54,6 +54,13 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   as bounded inert syntax, never evaluated. Surviving findings keep their text
   and identities while adding the registered provisional `annotationShape`
   metadata explanation.
+- **Boolean predicate vocabulary now follows exact identifier tokens** -
+  Scalar Boolean names ending in `alive` or `contains`, plus names with a
+  distinct `has` token in any position, now communicate predicate intent.
+  Vague `status`/`result`/`value` names, `hash`/`hasher` substrings,
+  non-final `alive`/`contains` tokens, and action-result names still receive
+  guidance; exact external exceptions remain available through
+  `acceptedBooleanNames`.
 
 
 

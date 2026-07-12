@@ -52,3 +52,22 @@ module-internal or cross-file API. Give cross-file helpers public names even
 when their module is private, add full return/field documentation during the
 move, and run root dogfood immediately after the split rather than relying on
 import-aware lint or type checks.
+
+## Lesson: Parametrize case ids must use the checked decorator surface
+
+**Created:** 2026-07-12
+**What happened:** A three-case Boolean naming test used
+`pytest.param(..., id=...)` for every row, so pytest displayed readable case
+names and focused/static gates passed. Root dogfood still reported
+`test-quality.parametrize-annotation` because the project contract checks for
+the decorator-level `ids=` keyword. Moving the same labels to `ids=[...]`
+cleared the finding without changing cases or assertions.
+**Evidence:**
+`src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search:
+`def _parametrize_candidate`) checks `call_keyword(decorator, "ids")`, while
+`tests/unit/rule/naming/test_boolean_prefix_rule.py` (search:
+`def test_vague_boolean_names_still_fire`) now supplies that exact surface.
+**Prevention:** For any literal parametrization above the configured case
+threshold, put human-readable labels in the decorator's `ids=` argument even
+when individual `pytest.param` rows could carry their own ids. Run root
+dogfood because pytest, ruff, and mypy do not enforce this repository contract.

@@ -518,3 +518,148 @@ def test_configured_exact_boolean_name_does_not_fire():
         _ctx(options={"acceptedBooleanNames": ["locked"]}),
     )
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    "declaration_name",
+    [
+        pytest.param("_query_guard_alive", id="query-guard"),
+        pytest.param("_source_groups_alive", id="source-groups"),
+    ],
+)
+def test_final_alive_predicates_do_not_fire(declaration_name: str) -> None:
+    """Keep final ``alive`` predicates out of the user's naming report.
+
+    Args:
+        declaration_name: Liveness check the user chose for a scalar Boolean.
+    """
+    # A user may expose an internal health check without an ``is_`` prefix.
+    user_source = f"def {declaration_name}() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert user_findings == []
+
+
+def test_alive_before_result_still_fires() -> None:
+    """Keep an action-result name visible in the user's naming report."""
+    # A user may return whether a liveness operation succeeded, not live state.
+    user_source = "def alive_result() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert len(user_findings) == 1
+    assert user_findings[0].metadata["identifier"] == "alive_result"
+
+
+@pytest.mark.parametrize(
+    "declaration_name",
+    [
+        pytest.param("_source_text_contains", id="source-text"),
+        pytest.param("_query_contains", id="query"),
+    ],
+)
+def test_final_contains_predicates_do_not_fire(declaration_name: str) -> None:
+    """Keep final ``contains`` predicates out of the user's naming report.
+
+    Args:
+        declaration_name: Containment check the user chose for a scalar Boolean.
+    """
+    # A user may name a search helper after the relationship it answers.
+    user_source = f"def {declaration_name}() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert user_findings == []
+
+
+def test_contains_before_cache_still_fires() -> None:
+    """Keep an internal noun token from becoming a global predicate escape."""
+    # A user may describe a cached query whose name does not end in a predicate.
+    user_source = "def query_contains_cache() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert len(user_findings) == 1
+    assert user_findings[0].metadata["identifier"] == "query_contains_cache"
+
+
+def test_internal_has_token_predicate_does_not_fire() -> None:
+    """Keep a distinct internal ``has`` predicate out of the naming report."""
+    # A user may retain a domain subject before the predicate and its object.
+    user_source = "def _query_has_terms() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert user_findings == []
+
+
+@pytest.mark.parametrize(
+    "declaration_name",
+    [
+        pytest.param("hash_value", id="hash"),
+        pytest.param("hasher_state", id="hasher"),
+    ],
+)
+def test_internal_has_token_substrings_still_fire(declaration_name: str) -> None:
+    """Keep words containing ``has`` visible in the user's naming report.
+
+    Args:
+        declaration_name: Non-predicate collision the user placed on a Boolean.
+    """
+    # A user may describe hashing state without asking a ``has`` question.
+    user_source = f"def {declaration_name}() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert len(user_findings) == 1
+    assert user_findings[0].metadata["identifier"] == declaration_name
+
+
+@pytest.mark.parametrize(
+    "declaration_name",
+    ["status", "result", "value"],
+    ids=["status", "result", "value"],
+)
+def test_vague_boolean_names_still_fire(declaration_name: str) -> None:
+    """Keep vague scalar names visible in the user's naming report.
+
+    Args:
+        declaration_name: Vague result label the user placed on a Boolean.
+    """
+    # A user may expose a Boolean result without saying which question it answers.
+    user_source = f"def {declaration_name}() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert len(user_findings) == 1
+    assert user_findings[0].metadata["identifier"] == declaration_name
+
+
+def test_unconfigured_accepted_boolean_name_still_fires() -> None:
+    """Guide users until they explicitly preserve an external boundary name."""
+    # A user may have a protocol name but has not yet declared that exception.
+    user_source = "def publish_index() -> bool:\n    return True\n"
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
+
+    assert len(user_findings) == 1
+    assert user_findings[0].metadata["identifier"] == "publish_index"
+
+
+def test_accepted_boolean_name_keeps_exact_publish_index_boundary() -> None:
+    """Preserve only the exact external name selected in user configuration."""
+    # A user may keep one protocol method while still reviewing nearby result names.
+    user_source = (
+        "def publish_index() -> bool:\n"
+        "    return True\n"
+        "def deploy_result() -> bool:\n"
+        "    return True\n"
+    )
+    configured_context = _ctx(options={"acceptedBooleanNames": ["publish_index"]})
+
+    user_findings = BooleanPrefixRule().analyse(_unit(user_source), configured_context)
+    # Each remaining result is a nearby name the user still needs to review.
+    user_finding_identifiers = [finding.metadata["identifier"] for finding in user_findings]
+
+    assert user_finding_identifiers == ["deploy_result"]
