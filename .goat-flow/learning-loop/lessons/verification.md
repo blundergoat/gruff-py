@@ -114,11 +114,11 @@ test files and a later assertion split left one of them unformatted again. In
 each case, focused behavior was already green and the broad failure added only
 a formatter round trip.
 
-The recurrence appeared again while calibrating Boolean predicate tokens. The
-focused suite and repository lint were green, but the broad format check still
-reported the edited rule file. Formatting only that owned file and replaying
-the focused and static gates cleared the failure without touching unrelated
-source.
+The recurrence appeared again across naming-rule calibration: one edited rule
+and a later identifier-quality test each needed a formatter round trip after
+focused behavior was green. Touched-file checks caught both before the final
+broad ladder, and replaying focused/static gates cleared the failures without
+touching unrelated source.
 
 After any test/source edit batch, run a touched-file formatter check or pass
 before the repo-wide non-mutating gate, even when the repository was clean at

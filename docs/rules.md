@@ -668,11 +668,11 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `naming.identifier-quality` protects the naming pillar by flagging identifier quality before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported identifier quality directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `naming.identifier-quality` leaves identifier quality unaddressed.
-- Good example: Code that satisfies `naming.identifier-quality` makes identifier quality explicit or simpler.
+- Rationale: Draft names such as temp, foo, and result1 hide the value or role a reviewer must verify; legitimate domain words such as todo do not prove unfinished work from the identifier alone.
+- Fix guidance: Rename first-token or numbered placeholders for their concrete role; keep legitimate queue/domain names when they already describe the value.
+- Confidence rationale: High confidence: only reviewed first-token placeholder families and numbered base-plus-digit shapes match; exact domain words are not inferred.
+- Bad example: `temp = load_tasks()` or `result1 = publish()` hides the value's role.
+- Good example: `pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary.
 
 ### `naming.module-name-mismatch`
 

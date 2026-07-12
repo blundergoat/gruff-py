@@ -61,6 +61,12 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   non-final `alive`/`contains` tokens, and action-result names still receive
   guidance; exact external exceptions remain available through
   `acceptedBooleanNames`.
+- **`todo` is no longer a universal placeholder identifier** -
+  `naming.identifier-quality` now leaves legitimate `todo` queue and domain
+  names alone regardless of initializer shape. First-token placeholders such
+  as `temp`/`foo` and numbered forms such as `result1` remain high-confidence
+  warnings; TODO/FIXME comment debt stays under the unchanged
+  `docs.todo-density` rule.
 
 
 

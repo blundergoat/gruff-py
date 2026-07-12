@@ -21,6 +21,7 @@ from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
+from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
@@ -170,7 +171,7 @@ def custom_docs_for(
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case BooleanPrefixRule.ID | HungarianNotationRule.ID:
+        case BooleanPrefixRule.ID | HungarianNotationRule.ID | IdentifierQualityRule.ID:
             return _naming_rule_docs(definition.id, config_keys)
         case PiiTestFixtureRule.ID:
             return _pii_test_fixture_docs(config_keys)
@@ -483,6 +484,7 @@ def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
     documentation_factory = {
         BooleanPrefixRule.ID: _boolean_prefix_docs,
         HungarianNotationRule.ID: _hungarian_notation_docs,
+        IdentifierQualityRule.ID: _identifier_quality_docs,
     }[rule_id]
     return documentation_factory(config_keys)
 
@@ -535,6 +537,38 @@ def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         good_example='`message = "hello"` or `num_users = len(users)`',
         confidence_rationale=(
             "High confidence: narrow type-prefix vocabulary; count abbreviations are excluded."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain the narrow placeholder vocabulary shown to scan users.
+
+    Args:
+        config_keys: Public tuning paths; empty means no user options exist.
+
+    Returns:
+        Rule guidance separating draft names from legitimate domain words.
+    """
+    return RuleDocs(
+        rationale=(
+            "Draft names such as temp, foo, and result1 hide the value or role a "
+            "reviewer must verify; legitimate domain words such as todo do not "
+            "prove unfinished work from the identifier alone."
+        ),
+        fix_guidance=(
+            "Rename first-token or numbered placeholders for their concrete role; "
+            "keep legitimate queue/domain names when they already describe the value."
+        ),
+        bad_example="`temp = load_tasks()` or `result1 = publish()` hides the value's role.",
+        good_example=(
+            "`pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be "
+            "legitimate work-queue vocabulary."
+        ),
+        confidence_rationale=(
+            "High confidence: only reviewed first-token placeholder families and "
+            "numbered base-plus-digit shapes match; exact domain words are not inferred."
         ),
         config_keys=config_keys,
     )

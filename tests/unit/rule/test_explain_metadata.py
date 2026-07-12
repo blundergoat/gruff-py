@@ -112,3 +112,12 @@ def test_boolean_prefix_docs_explain_scalar_annotation_boundary() -> None:
     assert "Scalar Boolean" in docs.rationale
     assert "containers" in docs.confidence_rationale
     assert "acceptedBooleanNames" in docs.fix_guidance
+
+
+def test_identifier_quality_docs_separate_domain_names_from_placeholders() -> None:
+    """Tell users why `todo` stays valid while draft-name families still warn."""
+    docs = documentation_for_rule("naming.identifier-quality")
+
+    assert "todo" in docs.rationale
+    assert "result1" in docs.rationale
+    assert "work-queue vocabulary" in docs.good_example
