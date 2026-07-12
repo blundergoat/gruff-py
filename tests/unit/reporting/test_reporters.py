@@ -1,6 +1,14 @@
+"""Protect every report format from user-visible and serialized contract drift.
+
+The suite feeds one native analysis report through terminal, automation, and
+browser renderers so reviewers see consistent findings without schema churn.
+"""
+
 import json
 from dataclasses import dataclass, replace
 from typing import Any
+
+import pytest
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.finding.confidence import Confidence
@@ -23,7 +31,11 @@ from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
 @dataclass(frozen=True, slots=True)
 class _FindingSpec:
-    """Finding factory inputs for reporter tests."""
+    """Describe one representative finding shown across reporter journeys.
+
+    Tests override only the user-visible classification or location they need,
+    keeping every other finding field stable across format comparisons.
+    """
 
     rule_id: str = "security.dangerous-function-call"
     message: str = "Dangerous call to eval()."
@@ -40,6 +52,14 @@ class _FindingSpec:
 
 
 def _finding(**overrides: Any) -> Finding:
+    """Build one reporter finding with concise defaults and selected overrides.
+
+    Args:
+        overrides: Optional field replacements; empty input keeps the default finding.
+
+    Returns:
+        Complete finding for reporter input; never None.
+    """
     spec = replace(_FindingSpec(), **overrides)
     return Finding(
         rule_id=spec.rule_id,
@@ -63,6 +83,15 @@ def _report(
     findings: tuple[Finding, ...] | None = None,
     filters: FindingDisplayFilter | None = None,
 ) -> AnalysisReport:
+    """Build the native report a user would send to each output renderer.
+
+    Args:
+        findings: Findings to render; None or empty uses one representative default.
+        filters: Optional display filter; None means the user requested no filtering.
+
+    Returns:
+        Scored analysis report ready for rendering; never None.
+    """
     selected = findings or (_finding(),)
     return AnalysisReport(
         tool_version="0.1.0-test",
@@ -94,6 +123,155 @@ def test_json_reporter_records_display_filters():
     assert payload["run"]["filters"]["active"] is True
     assert payload["run"]["filters"]["minSeverity"] == "warning"
     assert payload["run"]["filters"]["includeRules"] == ["security.dangerous-function-call"]
+
+
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
+    "partial project scan: project-wide rules may need full-project context"
+)
+
+
+def _report_with_partial_context(
+    scoring_mode: str = "full-project",
+    caveat: str = _PARTIAL_PROJECT_CONTEXT_CAVEAT,
+) -> AnalysisReport:
+    """Build a report carrying the scan caveat and selected scoring mode.
+
+    Args:
+        scoring_mode: Existing full-project/diff value shown by score consumers.
+        caveat: Non-empty run context shown only by human-readable reporters.
+
+    Returns:
+        Native report with unchanged findings, score values, and exit code.
+    """
+    base_report = _report()
+    return replace(
+        base_report,
+        score=replace(base_report.score, scope=scoring_mode),
+        partial_context_caveat=caveat,
+    )
+
+
+def test_native_json_keeps_existing_scope_shape_for_partial_context() -> None:
+    """Keep native automation fields frozen while human labels become clearer."""
+    native_payload = json.loads(JsonReporter().render(_report_with_partial_context()))
+
+    assert native_payload["run"] == {
+        "format": "json",
+        "failOn": "none",
+        "config": None,
+        "paths": ["src"],
+        "filters": None,
+        "partialContextCaveat": _PARTIAL_PROJECT_CONTEXT_CAVEAT,
+    }
+    assert native_payload["score"]["scope"] == "full-project"
+    assert "scanScope" not in json.dumps(native_payload)
+
+
+def test_hotspot_keeps_existing_scope_shape_for_partial_context() -> None:
+    """Keep hotspot scoring-mode keys frozen while human labels become clearer."""
+    hotspot_payload = json.loads(HotspotReporter().render(_report_with_partial_context()))
+
+    assert set(hotspot_payload) == {
+        "schemaVersion",
+        "type",
+        "limitations",
+        "scope",
+        "hotspots",
+    }
+    assert hotspot_payload["scope"] == "full-project"
+    assert "scanScope" not in hotspot_payload
+
+
+def test_text_reporter_keeps_family_contract_block_byte_for_value() -> None:
+    """Keep the ratified masthead, score summary, and finding block unchanged."""
+    rendered_text = TextReporter().render(_report())
+
+    assert rendered_text.startswith("gruff-py 0.1.0-test analyse\n")
+    assert (
+        "  Composite: A (95.20 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n"
+    ) in rendered_text
+    assert (
+        "  [error] security.dangerous-function-call\n"
+        "    src/app.py:12\n"
+        "    Dangerous call to eval().\n"
+    ) in rendered_text
+
+
+@pytest.mark.parametrize("scoring_mode", ("full-project", "diff"), ids=("full", "diff"))
+def test_text_reporter_distinguishes_scan_context_from_scoring_mode(
+    scoring_mode: str,
+) -> None:
+    """Give terminal users separate scan-context and scoring-mode labels.
+
+    Args:
+        scoring_mode: Existing score mode shown as full-project or diff.
+    """
+    rendered_text = TextReporter().render(_report_with_partial_context(scoring_mode))
+
+    assert f"Scan context\n  Caveat: {_PARTIAL_PROJECT_CONTEXT_CAVEAT}" in rendered_text
+    assert f"  Scoring mode: {scoring_mode}" in rendered_text
+    assert "  Scope:" not in rendered_text
+
+
+@pytest.mark.parametrize("scoring_mode", ("full-project", "diff"), ids=("full", "diff"))
+def test_markdown_reporter_distinguishes_scan_context_from_scoring_mode(
+    scoring_mode: str,
+) -> None:
+    """Give pull-request users separate scan-context and scoring-mode labels.
+
+    Args:
+        scoring_mode: Existing score mode shown as full-project or diff.
+    """
+    rendered_markdown = MarkdownReporter().render(_report_with_partial_context(scoring_mode))
+
+    assert f"**Scan context:** {_PARTIAL_PROJECT_CONTEXT_CAVEAT}" in rendered_markdown
+    assert f"**Scoring mode:** {scoring_mode}" in rendered_markdown
+    assert "**Scope:**" not in rendered_markdown
+
+
+@pytest.mark.parametrize("scoring_mode", ("full-project", "diff"), ids=("full", "diff"))
+def test_html_reporter_distinguishes_scan_context_from_scoring_mode(
+    scoring_mode: str,
+) -> None:
+    """Give browser users separate escaped scan-context and score-mode labels.
+
+    Args:
+        scoring_mode: Existing score mode shown as full-project or diff.
+    """
+    rendered_html = HtmlReporter().render(_report_with_partial_context(scoring_mode))
+
+    assert '<section class="chart-section scan-context">' in rendered_html
+    assert "scan context" in rendered_html
+    assert '<span class="label">scoring mode</span>' in rendered_html
+    assert f'<span class="val">{scoring_mode}</span>' in rendered_html
+    assert _PARTIAL_PROJECT_CONTEXT_CAVEAT in rendered_html
+
+
+def test_human_reporters_do_not_invent_full_scan_context_without_caveat() -> None:
+    """Omit scan-context claims when the runner supplied no project-rule caveat."""
+    full_report = _report()
+
+    rendered_text = TextReporter().render(full_report)
+    rendered_markdown = MarkdownReporter().render(full_report)
+    rendered_html = HtmlReporter().render(full_report)
+
+    assert "Scan context" not in rendered_text
+    assert "**Scan context:**" not in rendered_markdown
+    assert 'class="chart-section scan-context"' not in rendered_html
+
+
+def test_markdown_and_html_escape_partial_context_with_normal_reporter_rules() -> None:
+    """Escape untrusted caveat characters before PR or browser presentation."""
+    report_with_delimiters = _report_with_partial_context(
+        caveat="partial | context <outside>",
+    )
+
+    rendered_markdown = MarkdownReporter().render(report_with_delimiters)
+    rendered_html = HtmlReporter().render(report_with_delimiters)
+
+    assert "**Scan context:** partial \\| context <outside>" in rendered_markdown
+    assert "partial | context &lt;outside&gt;" in rendered_html
+    assert "partial | context <outside>" not in rendered_html
 
 
 def test_markdown_reporter_groups_findings_and_escapes_table_pipes():

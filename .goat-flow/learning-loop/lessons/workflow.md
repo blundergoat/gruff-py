@@ -173,3 +173,32 @@ When extending an internal request dataclass, grep every constructor before the
 first green claim. If omission has a safe meaning, encode that meaning as a
 fail-closed default; otherwise update every caller explicitly and run both the
 entry-point tests and the direct-consumer suite.
+
+## Lesson: Split regression tests by review surface before dogfood
+
+**Created:** 2026-05-31
+**Updated:** 2026-07-12
+**Incident:** While adding correlated scoring coverage, one test asserted file
+score, composite score, and pillar penalties together. The full pytest suite
+passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
+flagged `test-quality.eager-test` because the test had too many assertions.
+
+The pattern repeated during per-rule option validation: functional, static,
+and manual gates were green, but dogfood found warning wording, accepted-name
+alternatives, and applied-setting semantics packed into two eager tests. It
+also found raw numeric values repeated in assertions. Splitting those three
+review surfaces and naming the configured value made the original dogfood
+reproduction return zero findings without deleting any assertion.
+
+M09 repeated the same trap across reporters: one test combined native JSON and
+hotspot shape assertions, while another combined text, Markdown, and HTML
+terminology. Root dogfood found two eager tests even though all focused gates
+passed. Splitting by automation, terminal, pull-request, and browser review
+surface preserved every assertion and made the exact dogfood reproduction
+return zero findings.
+
+When a regression spans multiple outputs, keep one test per reviewer surface
+even if the setup is shared. This preserves the signal of
+`test-quality.eager-test` and keeps dogfood aligned with the
+reviewer-verification mission. Name configured boundary values before asserting
+them so the test explains the user's choice instead of embedding a magic number.

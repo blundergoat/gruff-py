@@ -1,4 +1,8 @@
-"""Renders an AnalysisReport as a human-readable Markdown summary."""
+"""Render one analysis journey as Markdown for collaborative review.
+
+The reporter groups findings for pull requests while naming scoring mode and
+partial scan context separately so reviewers do not confuse the two.
+"""
 
 import json
 from collections import defaultdict
@@ -9,7 +13,11 @@ from gruffpy.scoring.pillar_score import PillarScore
 
 
 class MarkdownReporter:
-    """Render an analysis report as Markdown with collapsible per-severity sections for PRs."""
+    """Present an analysis report as a review-friendly Markdown document.
+
+    Use this reporter for pull-request comments and release notes where users
+    need foldable findings plus concise score and scan-context summaries.
+    """
 
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as Markdown with collapsible severity sections (GitHub-compatible).
@@ -26,6 +34,8 @@ class MarkdownReporter:
         """
         score = report.score
         counts = report.finding_counts()
+        # A diagnostic-only report has no score, so preserve the existing fallback mode.
+        scoring_mode = score.scope if score is not None else "full-project"
         lines = [
             "# gruff-py report",
             "",
@@ -33,13 +43,18 @@ class MarkdownReporter:
                 f"**Grade:** {score.composite.letter if score is not None else 'n/a'} "
                 f"({_score_value(score)})"
             ),
-            f"**Scope:** {score.scope if score is not None else 'full-project'}",
-            (
-                f"**Findings:** {counts['total']} total, {counts['error']} error, "
-                f"{counts['warning']} warning, {counts['advisory']} advisory"
-            ),
+            f"**Scoring mode:** {scoring_mode}",
         ]
 
+        # No runner caveat means Markdown must not invent a full scan-context claim.
+        if report.partial_context_caveat is not None:
+            lines.append(f"**Scan context:** {_md(report.partial_context_caveat)}")
+        lines.append(
+            f"**Findings:** {counts['total']} total, {counts['error']} error, "
+            f"{counts['warning']} warning, {counts['advisory']} advisory"
+        )
+
+        # Active filters remain visible so users know why some findings are hidden.
         if report.filters is not None and report.filters.is_active():
             lines.append(
                 f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`"

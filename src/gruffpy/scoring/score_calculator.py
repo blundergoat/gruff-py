@@ -1,4 +1,8 @@
-"""Converts findings into the per-pillar / per-file / composite scores in a ``ScoreReport``."""
+"""Convert findings into the scores users compare across analysis runs.
+
+The calculator produces pillar, file, and composite grades and records whether
+the score came from normal or diff-filtered findings, not discovery coverage.
+"""
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -47,7 +51,11 @@ CORRELATED_COMPLEXITY_RULES: frozenset[str] = frozenset(
 
 
 class ScoreCalculator:
-    """Computes pillar grades, the composite score, and top-offender file scores from findings."""
+    """Calculate grades and top offenders from the findings a user requested.
+
+    Use this service after filtering/suppression so every reporter receives one
+    consistent score plus its full-project or diff scoring mode.
+    """
 
     def calculate(
         self,
@@ -64,9 +72,8 @@ class ScoreCalculator:
 
         Args:
             findings: Findings produced by the rule pass.
-            diff_active: When true, the report's ``scope`` is ``"diff"``
-                instead of ``"full-project"`` (callers set this when a
-                diff filter is active so reporters can hint at the scope).
+            diff_active: When true, serialized score mode is ``"diff"`` instead
+                of ``"full-project"``; it does not describe discovery coverage.
 
         Returns:
             Score report ready for serialisation and rendering.
@@ -75,13 +82,13 @@ class ScoreCalculator:
         pillars = self._pillar_scores(findings, finding_penalties)
         applicable_scores = [p.grade.score for p in pillars if p.applicable and p.grade is not None]
         average = sum(applicable_scores) / len(applicable_scores) if applicable_scores else 100.0
-        scope = "diff" if diff_active else "full-project"
+        scoring_mode = "diff" if diff_active else "full-project"
         return ScoreReport(
             composite=Grade.from_score(average),
             pillars=tuple(pillars),
             top_offenders=tuple(self._file_scores(findings, finding_penalties)),
             complexity_distribution=self._complexity_distribution(findings),
-            scope=scope,
+            scope=scoring_mode,
             explanation=(
                 "Per-pillar scores start at 100 and subtract weighted finding "
                 "penalties; correlated size/complexity findings on the same "

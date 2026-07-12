@@ -1753,9 +1753,12 @@ def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
 
     assert result.exit_code == 0, result.output
     assert (
-        "Caveat: partial project scan: project-wide rules may need full-project context"
+        "Scan context\n"
+        "  Caveat: partial project scan: project-wide rules may need full-project context"
         in result.output
     )
+    assert "  Scoring mode: full-project" in result.output
+    assert "  Scope: full-project" not in result.output
 
 
 def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(

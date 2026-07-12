@@ -1,4 +1,8 @@
-"""Composite ``ScoreReport`` carrying the grade, pillars, top offenders, and metrics."""
+"""Carry the grade and scoring-mode result shared by every report format.
+
+The score object explains how findings were scored; it does not claim which
+project files discovery inspected, which remains separate run context.
+"""
 
 from dataclasses import dataclass
 from typing import Any
@@ -10,14 +14,18 @@ from gruffpy.scoring.pillar_score import PillarScore
 
 @dataclass(frozen=True, slots=True)
 class ScoreReport:
-    """Composite scoring output.
+    """Describe the calculated grade and the mode used to score findings.
+
+    Reporters consume this value for score presentation while run metadata
+    separately tells users when project-rule context may be incomplete.
 
     Attributes:
         composite: Overall grade for the run.
         pillars: Per-pillar score breakdown.
         top_offenders: Highest-penalty files in the run.
         complexity_distribution: Cyclomatic complexity bucket counts.
-        scope: Human-readable scope covered by the score.
+        scope: Existing serialized scoring mode, ``full-project`` or ``diff``;
+            not a statement about discovery coverage.
         explanation: Human-readable scoring explanation.
     """
 

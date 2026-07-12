@@ -74,6 +74,12 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   acknowledged bind warns that the unauthenticated dashboard lets remote users
   scan any directory readable by the server process. Default `127.0.0.1`,
   `localhost`, and `::1` launches remain unchanged.
+- **Human reports separate scan context from scoring mode** - Text, Markdown,
+  and HTML now label `full-project`/`diff` as the scoring mode and show the
+  existing partial-project caveat as scan context. Reports do not infer scan
+  coverage when that caveat is absent. Native JSON keeps
+  `run.partialContextCaveat` and `score.scope`, hotspot keeps `scope`, and no
+  score, finding, fingerprint, filter, or exit-code value changes.
 
 
 

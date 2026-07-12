@@ -1,4 +1,8 @@
-"""Self-contained gruff HTML report renderer."""
+"""Render one analysis journey as a self-contained browser report.
+
+The document keeps all styles and behavior inline while showing scoring mode
+and partial scan context as separate concepts for human inspection.
+"""
 
 # The inline CSS/JS intentionally mirrors gruff-php's dependency-free reporter
 # style, so long asset strings are kept in this file instead of split across
@@ -19,7 +23,11 @@ from gruffpy.version import TOOL_NAME
 
 
 class HtmlReporter:
-    """Render an analysis report as a single-file HTML document with optional interactive filters."""
+    """Present an analysis report as a portable single-file browser document.
+
+    Use this reporter for archived inspection or interactive finding filters
+    without requiring external assets or a running application server.
+    """
 
     def __init__(
         self,
@@ -67,6 +75,7 @@ class HtmlReporter:
             "<body>\n"
             '<div class="paper"><span class="corner-tr"></span><span class="corner-bl"></span>'
             f"{self._masthead(report)}"
+            f"{self._scan_context(report)}"
             f"{self._diagnostics(report)}"
             f"{self._verdict(grade, numeric_score, counts, report)}"
             f"{self._pillars(report)}"
@@ -81,18 +90,49 @@ class HtmlReporter:
         )
 
     def _masthead(self, report: AnalysisReport) -> str:
+        """Render the user's requested paths and the report's scoring mode.
+
+        Args:
+            report: Analysis result whose paths and optional score seed the header.
+
+        Returns:
+            Escaped HTML masthead; a missing score keeps the legacy fallback mode.
+        """
+        # Empty requested paths mean the user selected the current project root.
         paths = report.requested_paths or (".",)
+        # A diagnostic-only report has no score, so preserve the existing fallback mode.
+        scoring_mode = report.score.scope if report.score is not None else "full-project"
         return (
             '<header class="masthead">'
             '<div class="brand"><div class="wordmark">gruff</div>'
             '<div class="tagline">python code quality - inspection report</div></div>'
             '<div class="meta">'
             f"{_meta_row('paths', ', '.join(paths))}"
-            f"{_meta_row('scope', report.score.scope if report.score is not None else 'full-project')}"
+            f"{_meta_row('scoring mode', scoring_mode)}"
             f"{_meta_row('format', report.format)}"
             f"{_meta_row('fail', report.fail_on)}"
             f'<div class="inspection-id">{_esc(TOOL_NAME + " " + report.tool_version)}</div>'
             "</div></header>"
+        )
+
+    def _scan_context(self, report: AnalysisReport) -> str:
+        """Render the existing partial-project caveat for browser users.
+
+        Args:
+            report: Analysis result; a missing caveat means context is not asserted.
+
+        Returns:
+            Escaped scan-context section, or an empty string when no caveat exists.
+        """
+        # No runner caveat means HTML must not invent a full scan-context claim.
+        if report.partial_context_caveat is None:
+            return ""
+        return (
+            '<section class="chart-section scan-context">'
+            '<h2 class="section-head">scan context '
+            '<span class="aside">project-rule evidence</span></h2>'
+            f'<p class="chart-summary">{_esc(report.partial_context_caveat)}</p>'
+            "</section>"
         )
 
     def _diagnostics(self, report: AnalysisReport) -> str:

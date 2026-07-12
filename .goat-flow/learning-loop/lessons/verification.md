@@ -379,28 +379,6 @@ boolean-like scalars such as `yes`, `no`, `on`, and `off`. The registry coverage
 test is the right proof because it compares parsed config values against
 `RuleDefinition.default_options`, not raw text.
 
-## Lesson: Split regression tests by review surface before dogfood
-
-**Created:** 2026-05-31
-**Updated:** 2026-07-12
-**Incident:** While adding correlated scoring coverage, one test asserted file
-score, composite score, and pillar penalties together. The full pytest suite
-passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
-flagged `test-quality.eager-test` because the test had too many assertions.
-
-The pattern repeated during per-rule option validation: functional, static,
-and manual gates were green, but dogfood found warning wording, accepted-name
-alternatives, and applied-setting semantics packed into two eager tests. It
-also found raw numeric values repeated in assertions. Splitting those three
-review surfaces and naming the configured value made the original dogfood
-reproduction return zero findings without deleting any assertion.
-
-When a regression spans multiple outputs, keep one test per reviewer surface
-even if the setup is shared. This preserves the signal of
-`test-quality.eager-test` and keeps dogfood aligned with the
-reviewer-verification mission. Name configured boundary values before asserting
-them so the test explains the user's choice instead of embedding a magic number.
-
 ## Lesson: Tick task checkboxes when the proof passes, not during later cleanup
 
 **Created:** 2026-05-31

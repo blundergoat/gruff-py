@@ -65,6 +65,11 @@ The top-level shape includes:
 - `findings`
 - `score`
 
+Within that stable shape, `run.partialContextCaveat` records incomplete
+project-rule context when applicable, while `score.scope` records the existing
+scoring mode (`full-project` or `diff`). Neither field is renamed and no
+`scanScope` field is added.
+
 The output is stable enough for automation, but the project is still pre-1.0.
 The strongest compatibility promises are schema strings and finding
 fingerprints.
@@ -160,9 +165,17 @@ were hidden when filters hide findings; JSON keeps the existing shape, so
 
 Project-wide rules can only see the files discovered for the requested paths.
 When a scan is narrower than the project root and a project rule is enabled,
-text output adds a scope caveat and JSON additively records
-`run.partialContextCaveat`. Changed-region scans (`--diff`, `--since`) count
-as partial the same way. Full-project scans omit the field.
+JSON additively records `run.partialContextCaveat`. Text, Markdown, and HTML
+present that existing value as **Scan context**. Changed-region scans
+(`--diff`, `--since`) count as partial the same way.
+
+Human reports separately label `score.scope` as **Scoring mode**. Its
+`full-project` or `diff` value describes how findings were scored, not which
+project files discovery inspected; hotspot `scope` has the same meaning. When
+the caveat is absent, human reports omit scan context instead of claiming the
+scan covered the full project, because no enabled project rule may have needed
+that context. These presentation labels do not change JSON, hotspot, scoring,
+findings, fingerprints, filters, or exit codes.
 
 ## Exit Codes
 

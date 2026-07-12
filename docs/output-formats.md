@@ -21,10 +21,17 @@ uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 
 When a requested path is narrower than the project root and at least one
 project-wide rule is enabled, JSON additively records
-`run.partialContextCaveat`. Text output renders the same caveat. Changed-region
-scans (`--diff`, `--since`) classify as partial the same way because discovery
-narrows to changed files. The caveat is run metadata only; it does not change
-findings, score, fingerprints, or exit code.
+`run.partialContextCaveat`. Text, Markdown, and HTML present the same caveat as
+**scan context**. Changed-region scans (`--diff`, `--since`) classify as partial
+the same way because discovery narrows to changed files. When the caveat is
+absent, human reports do not infer or display a full scan-context claim because
+no project-wide rule may have required one.
+
+Native `score.scope` and hotspot `scope` remain the existing **scoring mode**:
+`full-project` for normal scoring or `diff` when changed-region filtering shapes
+the score. They do not describe discovery coverage. The caveat and labels do
+not change findings, scores, fingerprints, filters, or exit codes, and no
+`scanScope` field is emitted.
 
 ## Changed-Region Scoping (native diff mode)
 
@@ -126,9 +133,16 @@ Use `html` for archived human review or dashboard scan output:
 uv run gruff-py report src tests --format html --output gruff-py.html
 ```
 
+HTML metadata labels `full-project`/`diff` as **scoring mode** and adds a
+separate escaped **scan context** section only when the run carries
+`run.partialContextCaveat`.
+
 ## Markdown
 
 Use `markdown` for pull request comments and release notes.
+
+Markdown uses the same **Scoring mode** and optional **Scan context** labels as
+the terminal and HTML reports.
 
 ## GitHub
 
@@ -137,6 +151,8 @@ Use `github` inside GitHub Actions to emit workflow annotations.
 ## Hotspot
 
 Use `hotspot` for compact score and offender analysis.
+
+The existing hotspot `scope` key is scoring mode, not scan coverage.
 
 ## SARIF
 
