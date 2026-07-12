@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-12
 ---
 
 ## Lesson: Always run `git status` before suggesting a commit message
@@ -154,3 +154,22 @@ named checks whose output states exactly what passed (`STRUCTURE`, `RISK ORDER`,
 construct the delimiter inside the script (for example `chr(96)`) instead of
 placing literal backticks in the shell command text. Treat any PreToolUse block
 as “not run,” never as evidence about the artifact.
+
+## Lesson: New request fields need a fail-closed compatibility default
+
+**Created:** 2026-07-12
+**Incident:** While adding the dashboard public-bind acknowledgment, the agent
+made `has_acknowledged_public_bind` a required `_DashboardCliRequest` field.
+Focused CLI tests passed because Click supplied the new value, but the existing
+dashboard-server suite had six direct request constructors and failed before
+testing form-state behavior.
+**Evidence:** `src/gruffpy/cli_dashboard.py` (search:
+`has_acknowledged_public_bind`) - the Boolean request field now defaults to
+false; `tests/integration/test_dashboard_server.py` (search:
+`def _dashboard_request`) - direct internal construction intentionally omits
+the CLI-only acknowledgment and therefore remains fail-closed.
+
+When extending an internal request dataclass, grep every constructor before the
+first green claim. If omission has a safe meaning, encode that meaning as a
+fail-closed default; otherwise update every caller explicitly and run both the
+entry-point tests and the direct-consumer suite.

@@ -67,6 +67,13 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   as `temp`/`foo` and numbered forms such as `result1` remain high-confidence
   warnings; TODO/FIXME comment debt stays under the unchanged
   `docs.todo-density` rule.
+- **Dashboard compatibility help is honest and remote binds are deliberate** -
+  Dashboard `--diff` and `--scan-timeout` remain accepted for family CLI
+  compatibility but now state that gruff-py does not implement their behavior.
+  Non-loopback hosts are refused unless the user passes `--allow-public`; an
+  acknowledged bind warns that the unauthenticated dashboard lets remote users
+  scan any directory readable by the server process. Default `127.0.0.1`,
+  `localhost`, and `::1` launches remain unchanged.
 
 
 

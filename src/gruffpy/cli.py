@@ -1,4 +1,8 @@
-"""Click-based CLI entry point for `gruff-py`."""
+"""Serve every gruff-py terminal journey through one Click command tree.
+
+The entry point turns user options into analysis, report, configuration, and
+dashboard requests while keeping their visible diagnostics consistent.
+"""
 
 import json
 import os
@@ -12,12 +16,12 @@ from typing import Any, TypeVar, cast
 import click
 from click.shell_completion import get_completion_class
 
+import gruffpy.cli_dashboard as dashboard_cli
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
-from gruffpy.cli_dashboard import _DashboardCliRequest, build_initial_dashboard_state
 from gruffpy.cli_hook import hook as _hook_command
 from gruffpy.cli_list_rules import list_rules_detail
 from gruffpy.cli_menu import root_menu as _root_menu, should_use_color as _should_use_color
@@ -279,36 +283,46 @@ def analyse(**kwargs: Any) -> None:
 
 @_dashboard_command
 def dashboard(**kwargs: Any) -> None:
-    """Serve the local gruff-py dashboard.
+    """Validate launch choices and serve the browser dashboard until stopped.
+
+    Use this command for repeated scans controlled from a local browser.
 
     Args:
         kwargs: Click-supplied arguments and options.
 
     Raises:
-        click.ClickException: If the project root or port is invalid.
+        click.ClickException: The project, port, or remote-bind choice is invalid.
     """
     request = _dashboard_request(kwargs)
     dashboard_project_root = (request.project_root or Path.cwd()).resolve()
+    # A missing project cannot seed the user's opening dashboard scan.
     if not dashboard_project_root.is_dir():
         raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
+    public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(
+        request.host, request.has_acknowledged_public_bind
+    )
     _maybe_prompt_to_init_config(
         request.config_path,
         request.should_skip_config,
         project_root=dashboard_project_root,
     )
+    # An acknowledged remote launch still needs a visible exposure warning.
+    if public_bind_warning is not None:
+        click.echo(public_bind_warning, err=True)
     server = _dashboard_server(request)
     bound_host, actual_port = server.server_address[:2]
     actual_host = bound_host.decode("utf-8") if isinstance(bound_host, bytes) else bound_host
     _write_stdout(f"{TOOL_NAME} dashboard serving at http://{actual_host}:{actual_port}/\n")
     try:
         server.serve_forever()
+    # For example, a user pressing Ctrl+C ends the local browser session cleanly.
     except KeyboardInterrupt:
         _write_stdout(f"{TOOL_NAME} dashboard stopped\n")
     finally:
         server.server_close()
 
 
-def _dashboard_server(request: _DashboardCliRequest) -> Any:
+def _dashboard_server(request: dashboard_cli._DashboardCliRequest) -> Any:
     launch_root = Path.cwd()
     project = (request.project_root or launch_root).resolve()
     if not project.is_dir():
@@ -316,7 +330,7 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
     if request.port < 0 or request.port > 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
 
-    initial_state = build_initial_dashboard_state(request, project)
+    initial_state = dashboard_cli.build_initial_dashboard_state(request, project)
     return create_dashboard_server(
         host=request.host,
         port=request.port,
@@ -637,8 +651,16 @@ def _summary_analysis_request(
     )
 
 
-def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
-    return _DashboardCliRequest(
+def _dashboard_request(kwargs: Mapping[str, Any]) -> dashboard_cli._DashboardCliRequest:
+    """Turn parsed Click values into the user's dashboard launch request.
+
+    Args:
+        kwargs: Options from Click; project/config may be None for auto-discovery.
+
+    Returns:
+        Startup request; empty paths mean scan the selected project root.
+    """
+    return dashboard_cli._DashboardCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         project_root=cast(Path | None, kwargs["project_root"]),
         host=cast(str, kwargs["host"]),
@@ -649,6 +671,7 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> _DashboardCliRequest:
         should_skip_config=cast(bool, kwargs["no_config"]),
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
+        has_acknowledged_public_bind=cast(bool, kwargs["allow_public"]),
     )
 
 

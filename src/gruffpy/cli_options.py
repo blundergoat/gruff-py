@@ -1,4 +1,8 @@
-"""Reusable Click option and command decorators shared by the CLI command tree."""
+"""Define the options users see across the gruff-py command tree.
+
+Command decorators keep shared Click parsing and help text consistent while
+each command implementation stays focused on the user's requested journey.
+"""
 
 import inspect
 from collections.abc import Callable, Iterable
@@ -198,8 +202,8 @@ def analyse_command(function: _F) -> _F:
 def dashboard_command(function: _F) -> _F:
     """Wire *function* up as the ``dashboard`` subcommand serving the live HTTP UI.
 
-    Adds ``--host``/``--port``/``--scan-timeout`` and baseline/diff aliases
-    on top of the global flags.
+    Adds the dashboard launch options on top of the global flags. Diff and
+    timeout stay accepted family options but do not alter gruff-py scans.
 
     Args:
         function: The command implementation.
@@ -604,7 +608,12 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         is_flag=True,
         default=False,
         expose_value=False,
-        help="Start the dashboard in diff-only scan mode.",
+        # Keep the ratified phrase searchable on one help line for terminal users.
+        help=(
+            "\b\n"
+            "Diff-only dashboard scans: accepted for cross-port compatibility; "
+            "not implemented in gruff-py."
+        ),
     ),
     _option(
         "--no-config",
@@ -633,7 +642,12 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=120,
         show_default=True,
         expose_value=False,
-        help="Seconds to allow each refresh scan. Use 0 to disable.",
+        # Keep the ratified phrase searchable on one help line for terminal users.
+        help=(
+            "\b\n"
+            "Dashboard scan timeouts: accepted for cross-port compatibility; "
+            "not implemented in gruff-py."
+        ),
     ),
     _option(
         "--port",
@@ -641,6 +655,14 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=8765,
         show_default=True,
         help="Port for the dashboard server.",
+    ),
+    _option(
+        "--allow-public",
+        is_flag=True,
+        default=False,
+        help=(
+            "Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."
+        ),
     ),
     _option(
         "--host",

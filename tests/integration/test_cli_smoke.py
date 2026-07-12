@@ -5,6 +5,13 @@
 # gruff: disable-file=test-quality.conditional-logic -- branches mirror the --format axis.
 # gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
 # gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
+"""Exercise complete CLI journeys from user-entered options to visible output.
+
+The smoke suite protects every command's parsing, diagnostics, and report shape.
+Dashboard launch tests replace the blocking HTTP server while preserving the
+startup messages and validation a terminal user sees.
+"""
+
 import json
 import os
 import shutil
@@ -13,11 +20,13 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 import yaml
 from click.testing import CliRunner
 
+import gruffpy.cli as cli_module
 from gruffpy.cli import _normalise_optional_diff_args, main
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.loader import ConfigLoader
@@ -48,6 +57,7 @@ _EXPECTED_GLOBAL_OPTIONS = (
     "--verbose",
 )
 _GIT = shutil.which("git")
+_DASHBOARD_COMPAT_HELP_PHRASE = "accepted for cross-port compatibility; not implemented in gruff-py"
 
 
 def test_cli_help_lists_analyse_command():
@@ -134,6 +144,20 @@ def test_cli_command_help_lists_symfony_style_global_options():
         "missing_sarif": False,
         "leaked_docstring_sections": [],
     }
+
+
+def test_cli_dashboard_help_labels_accepted_compatibility_options_honestly() -> None:
+    """Tell dashboard users that accepted family flags have no Python behavior."""
+    result = CliRunner().invoke(main, ["dashboard", "--help"])
+    searchable_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert f"--diff Diff-only dashboard scans: {_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
+    assert (
+        "--scan-timeout INTEGER Dashboard scan timeouts: "
+        f"{_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
+    )
+    assert result.output.count(_DASHBOARD_COMPAT_HELP_PHRASE) == 2
 
 
 def test_analyse_changed_ranges_returns_only_changed_method_findings(
@@ -764,6 +788,139 @@ def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
     assert result.exit_code == 0, result.output
     assert "Generate a default config" not in result.output
     assert not (tmp_path / ".gruff-py.yaml").exists()
+
+
+def _stub_dashboard_server(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_host: str,
+) -> Mock:
+    """Replace the blocking HTTP server while preserving the user's launch flow.
+
+    Args:
+        monkeypatch: Fixture that redirects dashboard startup to the test double.
+        dashboard_host: Non-empty host shown back to the user in the startup URL.
+
+    Returns:
+        Server-factory mock used to prove whether startup was attempted; never None.
+    """
+    dashboard_server = Mock()
+    dashboard_server.server_address = (dashboard_host, 8765)
+    dashboard_server_factory = Mock(return_value=dashboard_server)
+    monkeypatch.setattr(cli_module, "_dashboard_server", dashboard_server_factory)
+    return dashboard_server_factory
+
+
+@pytest.mark.parametrize(
+    "compatibility_arguments",
+    (("--diff",), ("--scan-timeout", "5")),
+    ids=("diff", "scan-timeout"),
+)
+def test_cli_dashboard_compatibility_options_still_reach_server_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    compatibility_arguments: tuple[str, ...],
+) -> None:
+    """Keep family-compatible flags parseable without claiming they affect scans.
+
+    Args:
+        monkeypatch: Fixture that prevents a real dashboard server from blocking.
+        compatibility_arguments: Non-empty dashboard flag invocation under test.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, "127.0.0.1")
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", *compatibility_arguments],
+    )
+
+    assert result.exit_code == 0, result.output
+    dashboard_server_factory.assert_called_once()
+
+
+@pytest.mark.parametrize("remote_dashboard_host", ("0.0.0.0", "192.0.2.1"))
+def test_cli_dashboard_refuses_remote_host_without_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    remote_dashboard_host: str,
+) -> None:
+    """Stop users from exposing an unauthenticated dashboard accidentally.
+
+    Args:
+        monkeypatch: Fixture that proves refusal happens before server startup.
+        remote_dashboard_host: Non-loopback host the user attempted to expose.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, remote_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", "--host", remote_dashboard_host],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "Refusing to bind the unauthenticated dashboard to non-loopback host "
+        f'"{remote_dashboard_host}". Pass --allow-public to acknowledge that remote '
+        "users can scan any directory readable by this process."
+    ) in result.output
+    dashboard_server_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("remote_dashboard_host", ("0.0.0.0", "192.0.2.1"))
+def test_cli_dashboard_warns_after_remote_host_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    remote_dashboard_host: str,
+) -> None:
+    """Warn users who intentionally acknowledge remote dashboard exposure.
+
+    Args:
+        monkeypatch: Fixture that lets the acknowledged launch finish immediately.
+        remote_dashboard_host: Non-loopback host accepted after acknowledgment.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, remote_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dashboard",
+            "--no-config",
+            "--host",
+            remote_dashboard_host,
+            "--allow-public",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        f"WARNING: binding dashboard to non-loopback host {remote_dashboard_host}; remote "
+        "users can access the unauthenticated dashboard and scan any directory readable "
+        "by this process."
+    ) in result.output
+    dashboard_server_factory.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "loopback_dashboard_host",
+    ("127.0.0.1", "localhost", "::1"),
+    ids=("ipv4", "hostname", "ipv6"),
+)
+def test_cli_dashboard_keeps_loopback_hosts_available_without_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    loopback_dashboard_host: str,
+) -> None:
+    """Keep local dashboard launches unchanged and free of exposure warnings.
+
+    Args:
+        monkeypatch: Fixture that lets each local launch finish immediately.
+        loopback_dashboard_host: Local-only host that needs no acknowledgment.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, loopback_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", "--host", loopback_dashboard_host],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING: binding dashboard to non-loopback host" not in result.output
+    dashboard_server_factory.assert_called_once()
 
 
 def test_cli_dashboard_rejects_invalid_project_root_before_prompting(

@@ -231,7 +231,11 @@ discloses when findings are hidden by these filters.
 uv run gruff-py dashboard src/ --host 127.0.0.1 --port 8765 --report-interactive
 ```
 
-The dashboard serves a local browser UI for repeated scans. It has no authentication and is intended for local development; keep it on loopback unless the network is trusted. See [Dashboard](docs/dashboard.md) for supported controls and safety notes.
+The dashboard serves a local browser UI for repeated scans. It has no
+authentication and is intended for local development. Non-loopback hosts are
+refused unless you pass `--allow-public`; that acknowledgment warns that remote
+users can scan any directory readable by the server process. See
+[Dashboard](docs/dashboard.md) for supported controls and safety notes.
 
 In polyglot repositories, remember that `gruff-go`, `gruff-php`, and `gruff-py` all default to port `8765`; use `--port` when running multiple dashboards at the same time.
 
