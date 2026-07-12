@@ -6,7 +6,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 1. `src/gruffpy/cli.py` - entrypoint, flag wiring, exit-code selection.
 2. `src/gruffpy/rule/registry.py` - what rules exist, how per-unit and project-level rules run, how findings deduplicate.
-3. `src/gruffpy/analysis/schema.py` - the `gruff-py.analysis.v1` / `gruff-py.baseline.v1` / `gruff-py.hotspot.v1` schema strings and `AnalysisReport.to_dict()` shape.
+3. `src/gruffpy/analysis/schema.py` - the `gruff.analysis.v2` / `gruff-py.baseline.v1` / `gruff-py.hotspot.v1` schema strings used by report models.
 4. `src/gruffpy/finding/fingerprint.py` - the PHP-compatible fingerprint algorithm.
 
 ## Source Tree
@@ -15,15 +15,17 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/cli.py` = Click entrypoint, orchestration, report rendering choice, dashboard command wiring, and process exit-code logic.
 - `src/gruffpy/__main__.py` = `python -m gruffpy` entrypoint.
 - `src/gruffpy/version.py` = runtime version string shown by the CLI.
-- `src/gruffpy/analysis/` = report model, diagnostic model, and schema version constants (`gruff-py.analysis.v1`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`).
-- `src/gruffpy/command/` = local dashboard HTTP server and self-contained dashboard page renderer.
-- `src/gruffpy/config/` = project config loading for `--config <path>`, `.gruff.yaml`, and `[tool.gruff-py]` in `pyproject.toml`; rule selection and immutable-style config update helpers.
+- `src/gruffpy/analysis/` = report, request, runner, diagnostic, baseline, changed-region, and schema models; native analysis is `gruff.analysis.v2`, baseline is `gruff-py.baseline.v1`, and hotspot is `gruff-py.hotspot.v1`.
+- `src/gruffpy/command/` = focused command helpers for init/migration, generated rule docs, ignore verdicts, calibration, and the local dashboard server/page.
+- `src/gruffpy/config/` = project config loading in this order: explicit `--config`, modern `.gruff-py.yaml`, legacy `.gruff.yaml`, modern `[tool.gruff-py]`, legacy `[tool.gruff]`, then defaults; rule selection and immutable-style config update helpers live here too.
 - `src/gruffpy/source/` = source file discovery, default ignored directories, lockfile filename filter, configured ignore matching, and `SourceFile` records.
 - `src/gruffpy/parser/` = source parsing into `AnalysisUnit`; Python files receive ASTs and parent links.
 - `src/gruffpy/rule/` = `Rule` ABC, `ProjectRuleProtocol`, definitions, context, registry, enabled-rule execution, deduplication, and stable ordering.
 - `src/gruffpy/rule/size/` = file/class/function length and parameter/attribute count rules.
-- `src/gruffpy/rule/complexity/` = cyclomatic, cognitive, Halstead volume, maintainability index, nesting depth, and NPATH rules.
+- `src/gruffpy/rule/complexity/` = cyclomatic, cognitive, Halstead volume, nesting depth, and the maintainability-index implementation; NPATH is retired, and maintainability index emits under the separate `maintainability` pillar.
+- `src/gruffpy/rule/correctness/` = unsafe numeric-coercion and substring-vocabulary checks for runtime failure or routing mistakes.
 - `src/gruffpy/rule/dead_code/` and `src/gruffpy/rule/waste/` = unused private symbols, empty bodies, unreachable code, redundant variables, and unused imports/parameters.
+- `src/gruffpy/rule/modernisation/` = the registered f-string conversion candidate rule.
 - `src/gruffpy/rule/naming/` = intent-layer naming rules (PEP 8 case style is delegated to ruff's `N` rules - see ADR-004).
 - `src/gruffpy/rule/docs/` = docstring presence, parameter/return/raises consistency parsed via `docstring-parser` (ADR-005), TODO density, and missing-README checks.
 - `src/gruffpy/rule/security/` = heuristic AST-level dangerous patterns (eval/exec, unsafe pickle, SQL concat, weak crypto, shell injection, disabled SSL verify, and more).
@@ -41,12 +43,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `tests/unit/finding/test_fingerprint.py` = gruff-php fingerprint ground truth and fingerprint stability tests.
 - `tests/unit/rule/<pillar>/` = focused per-rule logic tests, one file per rule plus pillar-integration fixtures.
 - `tests/unit/rule/test_quality/test_memoisation_gate.py` = invariant test that test-quality rules share a single scope-detection pass per analyse run.
-- `tests/unit/config/` = config loading and precedence tests for `.gruff.yaml` and `[tool.gruff-py]`.
+- `tests/unit/config/` = config loading and precedence tests for modern/legacy YAML and modern/legacy `pyproject.toml` tool tables.
 
 ## Project Config
 
 - `pyproject.toml` = package metadata, Hatchling build config, pytest options, ruff config, mypy strict config, and dogfooded `[tool.gruff-py]` config.
-- `.gruff.yaml` = optional project-level overrides; takes precedence over `[tool.gruff-py]`.
+- `.gruff-py.yaml` = the repository's modern YAML config; legacy `.gruff.yaml` remains readable, and either YAML source takes precedence over `pyproject.toml` discovery.
 - `uv.lock` = locked Python dependency graph.
 - `Makefile` = `uv`-backed development tasks.
 - `.pre-commit-config.yaml` = pre-commit hooks for YAML/TOML, whitespace, ruff, ruff-format, and mypy.
@@ -55,9 +57,11 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `CLAUDE.md` = Claude Code hot-path project instructions.
-- `.claude/skills/` = installed goat-flow skills; copied verbatim by the installer.
-- `.claude/settings.json` = Claude Code permissions and deny hook registration.
+- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.12.1` declaration.
+- `.agents/skills/` and `.agents/hooks.json` = Codex-visible shared skills and hook registration.
+- `.codex/` = Codex-specific configuration and hook policy.
+- `CLAUDE.md` = separate Claude peer instructions, retaining their `1.11.0` declaration.
+- `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
 - `.goat-flow/hooks/` = shared deny-dangerous and gruff-code-quality hook scripts, with policy patterns and self-test under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version and enabled agent list.
 - `.goat-flow/architecture.md` = cold-path system architecture.
@@ -71,6 +75,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/skill-docs/playbooks/` = on-demand tool availability playbooks.
 - `.goat-flow/logs/sessions/` = local session continuity logs.
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
+
+The workspace config, Codex instructions, shared references, hooks, and local
+CLI currently agree on GOAT Flow `1.12.1`; only the separate Claude peer
+instruction metadata still declares `1.11.0`. Convention/version selection is
+deferred setup work, so this map records the split without rewriting either
+agent's instruction file.
 
 ## Generated Or Never-Edit Paths
 

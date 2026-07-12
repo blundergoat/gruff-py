@@ -45,3 +45,17 @@ This is the family-wide direction: gruff-rs has already removed its composite, a
 ## Reversibility
 
 Reversible in code (re-add the factory and the rule id to `CORRELATED_COMPLEXITY_RULES`), but the cross-port direction is to standardise on clustering, so reversal is not expected. No one-way-door compatibility constraint applies: the fingerprint algorithm and all schemas are untouched, so the only revisit triggers are a family-level decision to restore a named god-method signal, or a contributor-rule set change that the clustering set must track.
+
+## Addendum (2026-07-12): current catalog and stale-suppression behavior
+
+The 114-rule, 11-pillar figure above is the catalog snapshot at decision time,
+not a current total. Current totals are generated from `RuleRegistry.defaults()`
+in [`docs/rules.md`](../../../docs/rules.md) and can be checked without rewriting
+that file with
+`uv run python -m gruffpy.command.rule_docs --check docs/rules.md`.
+
+The stale-suppression exit statement above no longer describes runtime behavior.
+A source directive naming the retired `design.god-method` rule emits a
+`suppression-unknown-rule` diagnostic and the CLI exits `2`. Users encounter
+this when an old suppression survives an upgrade; removing that obsolete
+directive restores the normal scan because the retired finding cannot recur.

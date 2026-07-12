@@ -90,6 +90,12 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   `scanScope`/`externalReferenceCoverage` metadata; duplicate module layouts
   remain visible at LOW confidence, and dynamic framework/plugin loads keep
   using `allowlists.deadCode`.
+- **Generated rule-catalog facts no longer drift across current docs** - Rule
+  documentation now derives both its rule and pillar totals from registered
+  definitions. README and current project memory link to that generated source
+  instead of copying numeric totals, and a multiline-aware invariant rejects
+  future duplicates. Current schema, config-precedence, retired-rule, and agent
+  path descriptions were reconciled while historical records remain preserved.
 
 
 

@@ -25,7 +25,7 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 130 rules across 12 pillars |
+| Rule catalogue | Generated from `RuleRegistry.defaults()`; see [Rules](docs/rules.md) |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff.analysis.v2` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
@@ -178,22 +178,15 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.4.1 catalogue contains 130 rules across 12 pillars:
+[`docs/rules.md`](docs/rules.md) is the generated source for current rule IDs,
+declared pillars, defaults, and catalog totals. Its header and pillar table come
+from `RuleRegistry.defaults()` rather than hand-maintained README values.
 
-| Pillar | Rules |
-| --- | ---: |
-| `size` | 7 |
-| `complexity` | 4 |
-| `maintainability` | 1 |
-| `correctness` | 2 |
-| `dead-code` | 11 |
-| `modernisation` | 1 |
-| `naming` | 9 |
-| `documentation` | 13 |
-| `security` | 35 |
-| `sensitive-data` | 11 |
-| `test-quality` | 34 |
-| `design` | 2 |
+Verify the committed catalog without rewriting it:
+
+```bash
+uv run python -m gruffpy.command.rule_docs --check docs/rules.md
+```
 
 `coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.4.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 

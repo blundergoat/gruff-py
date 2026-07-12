@@ -31,6 +31,28 @@ models a user-visible failure also documents the exception it deliberately
 raises. Focused pytest and static type checks do not cover these documentation
 rules because the project analyser scans `tests/` as product-quality code.
 
+## Lesson: Keep invariant assertions at the collected test boundary
+
+**Created:** 2026-07-12
+**Incident:** A parametrized current-document invariant delegated its only
+`assert` statement to a custom helper. Pytest, ruff, format, mypy, and the
+focused negative fixture all passed, but root dogfood reported
+`test-quality.no-assertions` because the collected test body only called the
+helper. Recasting the helper as a detector that returns matched evidence let
+the collected test assert the user-visible invariant directly.
+
+**Evidence:** `tests/unit/command/test_rule_docs.py` (search:
+`def test_live_catalog_totals_are_generated_only`) now asserts the result of
+`_live_catalog_total_in` in the collected test. The rule intentionally inspects
+the collected function body for assertion statements and recognized assertion
+calls in `src/gruffpy/rule/test_quality/no_assertions_rule.py` (search:
+`def _has_any_assertion`); it does not follow arbitrary helper bodies.
+
+**Prevention:** Let invariant helpers collect or normalize evidence, then place
+the decisive assertion in each collected test. After adding parametrized
+repository invariants, run root dogfood even when focused pytest and static
+gates are green.
+
 ## Lesson: File-size splits must expose cross-file helper ownership
 
 **Created:** 2026-07-12

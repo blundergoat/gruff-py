@@ -1,6 +1,6 @@
 # Glossary - gruff-py
 
-Last reviewed 2026-05-24.
+Last reviewed 2026-07-12.
 
 This glossary defines terms used by `gruff-py`, its public reports, and local project memory. Keep shared gruff-family terms aligned with the sibling implementations; keep Python-specific differences explicit rather than making them look identical.
 
@@ -12,7 +12,7 @@ This glossary defines terms used by `gruff-py`, its public reports, and local pr
 
 ### Analysis Report
 
-The complete result of one scan: schema version, tool metadata, run metadata, paths, summary counts, score data, diagnostics, findings, baseline state, and optional diff/mutation state. Native JSON uses `gruff-py.analysis.v1`.
+The complete result of one scan: schema version, tool metadata, run metadata, paths, summary counts, score data, diagnostics, findings, baseline state, and optional diff/mutation state. Native JSON uses `gruff.analysis.v2`.
 
 ### Baseline
 
@@ -20,7 +20,7 @@ A reviewed-finding suppression file. `gruff-py` writes `gruff-py.baseline.v1` an
 
 ### Changed-Code Scan
 
-A scan filtered to changed lines or files. `--diff` filters current findings through local Git diff output; `--diff-vs=<base>` compares current findings against a base ref.
+A scan filtered to changed lines or files. `--diff` accepts working-tree, staged, unstaged, base-ref, or stdin patch input; `--since <base>` filters from a Git base ref. Compatibility-only flags accepted with `expose_value=False` do not add a second changed-code implementation.
 
 ### Confidence
 
@@ -28,7 +28,7 @@ The certainty tier attached to a finding: `low`, `medium`, or `high`. It helps s
 
 ### Dashboard
 
-The local browser UI served by `gruff-py dashboard`. It binds to 127.0.0.1:8765 by default and has no authentication; use `--port` when another gruff dashboard is already using the port.
+The local browser UI served by `gruff-py dashboard`. It binds to 127.0.0.1:8765 by default and has no authentication; non-loopback hosts require `--allow-public`, and `--port` avoids conflicts with another gruff dashboard.
 
 ### Diagnostic
 
@@ -110,7 +110,7 @@ An analysis unit for one discovered file. Python units can carry an AST; text un
 
 ### Pyproject Config
 
-Config discovery prefers explicit `--config`, then `.gruff-py.yaml`, then legacy `.gruff.yaml`, then `[tool.gruff-py]` or legacy `[tool.gruff]` in `pyproject.toml`.
+Config discovery prefers explicit `--config`, modern `.gruff-py.yaml`, legacy `.gruff.yaml`, modern `[tool.gruff-py]`, legacy `[tool.gruff]`, and finally built-in defaults, in that order.
 
 ### Source Text Rule
 
@@ -118,7 +118,7 @@ A rule that can run on non-Python text/config files as well as Python files. Sen
 
 ### Reserved Pillar
 
-A schema or future-catalogue pillar with no shipping rules in the current release, such as `modernisation`, `coupling`, `architecture`, or `mutation`.
+A schema or future-catalogue pillar with no shipping rules in the current release, such as `coupling`, `architecture`, or `mutation`. `modernisation` is active and therefore is not reserved-only.
 
 ### Mutation Compatibility
 
@@ -132,11 +132,11 @@ The Python fingerprint algorithm is constrained by the PHP implementation for sh
 
 ### GOAT Flow
 
-Local agent workflow framework installed from `@blundergoat/goat-flow`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
+Local agent workflow framework installed from `@blundergoat/goat-flow`. The workspace config, Codex instructions, shared references, hooks, and project-local CLI declare `1.12.1`; the separate Claude peer instruction still declares `1.11.0`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
 
 ### Agent-Owned Surface
 
-Files one agent setup owns without widening scope. Claude owns `CLAUDE.md` and `.claude/**`; Codex owns `AGENTS.md` and `.codex/**`; shared agent skills live under `.agents/skills/**`.
+Files one agent setup owns without widening scope. Claude owns `CLAUDE.md` and `.claude/**`; Codex owns `AGENTS.md`, `.agents/**`, and `.codex/**`. The documented version split does not authorize one agent to rewrite the other's instruction surface.
 
 ### Learning Loop
 

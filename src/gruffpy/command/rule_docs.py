@@ -1,4 +1,9 @@
-"""Generate and check the committed built-in rule documentation."""
+"""Build and verify the rule catalog shown to CLI users and reviewers.
+
+The generator turns runtime definitions into the committed Markdown reference.
+Contributors use write mode after catalog changes and check mode before release.
+Readers then see rule, pillar, option, and remediation facts from one source.
+"""
 
 import argparse
 from collections import Counter
@@ -62,19 +67,25 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     """Render deterministic Markdown documentation for the built-in rule catalog.
 
     Args:
-        definitions: Optional precomputed definitions. Defaults to the runtime
-            default registry.
+        definitions: Optional precomputed definitions. ``None`` uses the rules
+            shipped to CLI users; an empty list renders an empty catalog shell.
 
     Returns:
-        Complete Markdown document content.
+        Complete Markdown document content; it is never empty.
     """
+    # A contributor normally omits definitions to document the rules users receive.
     if definitions is None:
         definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     definitions = sorted(definitions, key=lambda definition: definition.id)
+    # Declared pillars keep the displayed total aligned with user-visible findings.
+    rule_counts_by_pillar = Counter(definition.pillar for definition in definitions)
     lines = [
         "# Rules",
         "",
-        f"gruff-py `{VERSION}` registers {len(definitions)} rules in `RuleRegistry.defaults()`.",
+        (
+            f"gruff-py `{VERSION}` registers {len(definitions)} rules across "
+            f"{len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."
+        ),
         "",
         "This file is generated from the first-party built-in rule catalog.",
         "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
@@ -84,18 +95,24 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         "| Pillar | Rule count | Notes |",
         "|---|---:|---|",
     ]
-    counts = Counter(definition.pillar for definition in definitions)
+    # Readers see active pillars in a stable order across generated releases.
     for pillar in _PILLAR_ORDER:
-        count = counts.get(pillar, 0)
-        if count:
-            lines.append(f"| `{pillar.value}` | {count} | {_PILLAR_NOTES[pillar]} |")
+        registered_rule_count = rule_counts_by_pillar.get(pillar, 0)
+        # An empty pillar is reserved and gives users no rule row to configure.
+        if registered_rule_count:
+            lines.append(
+                f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |"
+            )
     lines.extend(["", "## Rule IDs", ""])
     by_group = _definitions_by_group(definitions)
+    # Readers browse familiar feature sections before opening individual rule details.
     for group in _GROUP_ORDER:
         items = by_group.get(group, [])
+        # A section with no shipped rules would only add an empty heading for users.
         if not items:
             continue
         lines.extend([f"### {group}", ""])
+        # Each catalog item links the user's rule id to its default-enabled posture.
         for definition in items:
             suffix = " (default off)" if not definition.default_enabled else ""
             lines.append(f"- `{definition.id}`{suffix}")
@@ -109,6 +126,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
             "",
         ]
     )
+    # The detail section gives users the settings and remediation for every listed id.
     for definition in definitions:
         lines.extend(_rule_detail_lines(definition))
     lines.extend(_suppression_lines())
@@ -133,6 +151,9 @@ def write_rules_markdown(path: Path) -> None:
 
     Args:
         path: Destination markdown file; overwritten unconditionally.
+
+    Returns:
+        None; an empty or stale destination becomes the complete current catalog.
     """
     path.write_text(render_rules_markdown())
 
@@ -153,22 +174,43 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--write", action="store_true", help="Rewrite the docs file.")
     args = parser.parse_args(argv)
     path = Path(args.path)
+    # A contributor chooses write mode after changing the rules shipped to users.
     if args.write:
         write_rules_markdown(path)
         return 0
+    # Release checks compare bytes so stale user documentation fails without a rewrite.
     if args.check or not args.write:
         return 0 if check_rules_markdown(path) else 1
     return 0
 
 
 def _definitions_by_group(definitions: list[RuleDefinition]) -> dict[str, list[RuleDefinition]]:
+    """Group runtime rules into the sections users browse in generated docs.
+
+    Args:
+        definitions: Runtime definitions to display; an empty list leaves every
+            user-facing section empty.
+
+    Returns:
+        Every ordered section mapped to its rules, including empty sections.
+    """
+    # Keeping empty buckets preserves stable section order while rules move over time.
     groups: dict[str, list[RuleDefinition]] = {group: [] for group in _GROUP_ORDER}
+    # Each shipped rule appears in exactly one section a reader can scan.
     for definition in definitions:
         groups[_group_for(definition)].append(definition)
     return groups
 
 
 def _group_for(definition: RuleDefinition) -> str:
+    """Choose the generated-doc section where a user finds one rule.
+
+    Args:
+        definition: One non-empty runtime rule definition.
+
+    Returns:
+        Stable user-facing section heading for the rule.
+    """
     rule_prefix = definition.id.split(".", maxsplit=1)[0]
     match rule_prefix:
         case "size":
@@ -197,6 +239,14 @@ def _group_for(definition: RuleDefinition) -> str:
 
 
 def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
+    """Render the settings and guidance a user needs to act on one rule.
+
+    Args:
+        definition: One non-empty runtime rule definition to explain.
+
+    Returns:
+        Non-empty Markdown lines for the rule's catalog detail section.
+    """
     docs = documentation_for_rule(definition.id)
     lines = [
         f"### `{definition.id}`",
@@ -211,21 +261,27 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
+    # Metric rules show the threshold a user can tune for finding severity.
     if _has_severity_thresholds(definition):
         lines.append(
             "- Config threshold: "
             f"`threshold` = `{definition.default_threshold!r}`, "
             f"`severity` = `{definition.default_severity.value}`"
         )
+    # Named thresholds expose several user-tunable limits instead of one metric cutoff.
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
+    # Options explain non-threshold behavior users can configure for this rule.
     if definition.default_options:
         lines.append(f"- Options: {_inline_mapping(definition.default_options)}")
+    # Metadata keys help report consumers interpret a threshold-based finding.
     if docs.threshold_metadata_keys:
         lines.append(f"- Threshold metadata: {_inline_list(docs.threshold_metadata_keys)}")
         lines.append(f"- Threshold direction: `{docs.threshold_direction}`")
+    # Formula provenance lets reviewers trace how a measured value was calculated.
     if docs.formula_provenance:
         lines.append(f"- Formula provenance: {docs.formula_provenance}")
+    # Security metadata gives users the sink/source context attached to a finding.
     if docs.security_metadata:
         lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
     lines.extend(
@@ -239,19 +295,51 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
 
 
 def _inline_mapping(mapping: dict[str, Any]) -> str:
+    """Format option values for a compact user-facing catalog line.
+
+    Args:
+        mapping: Option names and values; an empty mapping means no settings.
+
+    Returns:
+        Sorted inline settings, or ``none`` when users have nothing to configure.
+    """
+    # Sorted settings keep generated diffs predictable for reviewers.
     pairs = ", ".join(f"`{key}` = `{value!r}`" for key, value in sorted(mapping.items()))
+    # An empty mapping is rendered explicitly instead of leaving a blank catalog value.
     return pairs or "none"
 
 
 def _has_severity_thresholds(definition: RuleDefinition) -> bool:
+    """Report whether a user can tune one severity threshold for this rule.
+
+    Args:
+        definition: Runtime rule definition whose threshold contract is displayed.
+
+    Returns:
+        ``False`` when no single threshold is available to the user.
+    """
     return definition.default_threshold is not None
 
 
 def _inline_list(values: tuple[str, ...]) -> str:
+    """Format metadata names for one readable generated-doc line.
+
+    Args:
+        values: Metadata names to show; an empty tuple produces empty text.
+
+    Returns:
+        Comma-separated inline-code names, or empty text for no names.
+    """
+    # Each metadata name is styled as code so report consumers can copy it exactly.
     return ", ".join(f"`{value}`" for value in values)
 
 
 def _suppression_lines() -> list[str]:
+    """Render examples users follow when suppressing reviewed findings.
+
+    Returns:
+        Non-empty Markdown lines covering same-line, next-line, and file scope.
+    """
     return [
         "## Suppressing Findings",
         "",
@@ -283,6 +371,11 @@ def _suppression_lines() -> list[str]:
 
 
 def _choosing_rules_lines() -> list[str]:
+    """Render examples users follow when selecting or configuring rules.
+
+    Returns:
+        Non-empty Markdown lines for default scans, disabling, and thresholds.
+    """
     return [
         "## Choosing Rules",
         "",
@@ -321,5 +414,6 @@ def _choosing_rules_lines() -> list[str]:
     ]
 
 
+# Direct module use lets a contributor write or check the catalog from the terminal.
 if __name__ == "__main__":
     raise SystemExit(main())
