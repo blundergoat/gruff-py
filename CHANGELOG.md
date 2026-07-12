@@ -4,7 +4,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 
 
-## v0.5.0 - 2026-07-12
+## v0.5.0 - 2026-07-13
 
 - **Source-text checks survive Python parse failures** - Syntactically invalid
   Python still runs raw-source rules such as sensitive-data detection while

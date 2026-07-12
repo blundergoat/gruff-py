@@ -57,13 +57,13 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.12.1` declaration.
-- `.agents/skills/` and `.agents/hooks.json` = Codex-visible shared skills and hook registration.
-- `.codex/` = Codex-specific configuration and hook policy.
+- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.13.1` declaration.
+- `.agents/skills/` = installed Codex goat-flow skills; `.agents/hooks.json` is a separate shared-agent hook surface.
+- `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
 - `CLAUDE.md` = separate Claude peer instructions, retaining their `1.11.0` declaration.
 - `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
 - `.goat-flow/hooks/` = shared deny-dangerous and gruff-code-quality hook scripts, with policy patterns and self-test under `deny-dangerous/`.
-- `.goat-flow/config.yaml` = GOAT Flow version and enabled agent list.
+- `.goat-flow/config.yaml` = GOAT Flow version, skill-install mode, and hook enablement state.
 - `.goat-flow/architecture.md` = cold-path system architecture.
 - `.goat-flow/code-map.md` = this repository map.
 - `.goat-flow/glossary.md` = project vocabulary.
@@ -77,10 +77,9 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
 
 The workspace config, Codex instructions, shared references, hooks, and local
-CLI currently agree on GOAT Flow `1.12.1`; only the separate Claude peer
-instruction metadata still declares `1.11.0`. Convention/version selection is
-deferred setup work, so this map records the split without rewriting either
-agent's instruction file.
+CLI currently agree on GOAT Flow `1.13.1`; only the separate Claude peer
+instruction metadata still declares `1.11.0`. This map records that peer-owned
+metadata without rewriting the peer instruction file.
 
 ## Generated Or Never-Edit Paths
 

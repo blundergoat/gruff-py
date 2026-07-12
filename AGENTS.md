@@ -1,8 +1,8 @@
-# AGENTS.md (2026-07-03)
+# AGENTS.md (2026-07-13)
 
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
-goat-flow version: 1.12.1
+goat-flow version: 1.13.1
 
 ## Workspace Boundary
 
@@ -21,9 +21,9 @@ gruff-py governs AI-generated code so a human reviewer can sign off on it: guide
 
 ## Autonomy Tiers
 **Always:** read relevant `src/gruffpy/`, `tests/`, `docs/`, `pyproject.toml`, and `.goat-flow/` files before changes; declare scope before writes; verify changed surfaces with focused commands.
-**Ask First:** before touching risky boundaries, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
+**Ask First:** before touching risky boundaries, ask and wait for approval; state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprint.py`, `src/gruffpy/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit codes in `src/gruffpy/cli.py`, `src/gruffpy/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency, packaging, or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, `Makefile`, and `docs/releasing.md`; CI/hooks/agent config in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.codex/`, `.agents/skills/`, and peer agent files; public rule IDs, config keys, schemas, or output formats across `src/gruffpy/rule/`, `src/gruffpy/config/`, `src/gruffpy/finding/`, and `src/gruffpy/scoring/`.
-**Never:** edit secrets or `.env*` files; commit, push, publish, delete user work, or modify `CLAUDE.md` unless explicitly asked; use `make lint` or `make check` as non-mutating verification because ruff runs with `--fix`; invent compatibility claims without tests or code evidence.
+**Never:** if interrupted or told no changes, freeze writes first; do not edit secrets or `.env*` files; do not commit, push, publish, delete user work, or modify `CLAUDE.md` unless explicitly asked; never use `make lint` or `make check` as non-mutating verification because ruff runs with `--fix`; never invent compatibility claims without tests or code evidence.
 
 ## Hard Rules
 - If a file exists, modify it in place; never create `_modified`, `_new`, `_backup`, or `_v2` variants.
@@ -31,6 +31,8 @@ Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprin
 - Keep cross-file contracts consistent: rule definitions, config defaults, docs, reporters, schemas, and tests must move together.
 - Preserve evidence with semantic anchors, not stale line numbers.
 - Use real incidents and observed project files; do not add hypothetical footguns, lessons, patterns, or examples.
+- Use sub-agents only when explicitly requested; give each one objective, a structured return, and a 5-call budget.
+- Do not add features, abstractions, or error handling beyond the requested scope.
 - New rules must be registered in `RuleRegistry.defaults()` and covered by focused rule tests.
 - Fingerprint or schema compatibility edits require `uv run pytest tests/unit/finding/test_fingerprint.py` plus relevant integration tests.
 - Ambiguous requirements: present interpretations and stop before risky writes.
@@ -39,7 +41,7 @@ Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprin
 - Learning loop, grep before every change: `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.
 - Architecture and orientation: `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`.
 - Skill reference (meta): `.goat-flow/skill-docs/`; read before changing skill contracts.
-- Tool playbooks: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`, `.goat-flow/skill-docs/skill-quality-testing/`; read before declaring a tool unavailable.
+- Tool playbooks: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `browser-use.md`, `page-capture.md`, `skill-quality-testing/`); read before declaring a tool unavailable.
 
 ## Essential Commands
 ```bash
@@ -94,10 +96,10 @@ Requests to add durable project knowledge route to `.goat-flow/learning-loop/foo
 | Resource | Path |
 |----------|------|
 | Project instructions | `AGENTS.md` |
-| Peer instructions | `CLAUDE.md` |
+| Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` |
 | Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
 | Skill reference (meta) | `.goat-flow/skill-docs/` - read before changing skill contracts |
-| Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
 | Architecture | `.goat-flow/architecture.md` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Codex skills/config/hooks | `.agents/skills/`, `.codex/config.toml`, `.codex/hooks.json`, `.goat-flow/hooks/` |

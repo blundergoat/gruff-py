@@ -73,7 +73,7 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `ruff check`, `ruff format --check`, `mypy`, and `pytest`.
 
-The active Codex/workspace tooling story is GOAT Flow `1.12.1`: `AGENTS.md`, `.goat-flow/config.yaml`, shared skill references, hooks, and the project-local `goat-flow` executable agree on that version. `CLAUDE.md` remains a separate peer instruction surface declaring `1.11.0`; its `.claude/` files coexist with `.agents/` and `.codex/`. This documents the current split without selecting a new convention or rewriting peer instructions.
+The active Codex/workspace tooling story is GOAT Flow `1.13.1`: `AGENTS.md`, `.goat-flow/config.yaml`, shared skill references, hooks, and the project-local `goat-flow` executable agree on that version. `CLAUDE.md` remains a separate peer instruction surface declaring `1.11.0`; its `.claude/` files coexist with `.agents/` and `.codex/`. The peer metadata is documented without widening Codex setup into peer-owned instructions.
 
 Packaging uses Hatchling from `pyproject.toml`; `uv build` emits artifacts under `dist/`. Pre-commit config mirrors the same checks, but its ruff hook auto-fixes, so non-mutating verification should use the explicit CI commands.
 
