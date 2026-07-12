@@ -22,6 +22,17 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   SHA1 findings are suppressed only for the boolean literal
   `usedforsecurity=False`; absent, true, numeric, null, and dynamic values still
   warn, and fast SHA-256/SHA-512 password-hash findings remain unchanged.
+- **BREAKING: `init --force` now preserves or refuses existing config** - A
+  valid `.gruff-py.yaml` is canonically regenerated with every supported loaded
+  setting preserved, though comments and formatting may change. Malformed
+  targets, legacy YAML, and modern or legacy `pyproject.toml` sources now fail
+  closed without changing files; use `migrate-config` for YAML or edit TOML by
+  hand instead of relying on force as a conversion or recovery command.
+- **Unknown per-rule options no longer reach rule execution** - YAML and TOML
+  option names are checked against each rule's registered defaults. Normal
+  scans warn, remove only unknown names, and retain valid siblings; strict
+  config stops on the exact dotted key. Registered option value handling stays
+  consumer-specific, with no new type schema or renamed option surface.
 
 
 

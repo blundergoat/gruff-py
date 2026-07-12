@@ -390,7 +390,8 @@ def test_hook_reports_ignored_paths_and_config_errors(
     assert result.exit_code == 2, result.output
     assert payload["config"]["schemaOk"] is False
     assert "schemaVersion" in payload["config"]["error"]
-    assert "gruff-py init --force" in payload["config"]["error"]
+    assert "gruff-py migrate-config" in payload["config"]["error"]
+    assert "init --force" not in payload["config"]["error"]
 
 
 def _hook(*args: str) -> dict[str, Any]:

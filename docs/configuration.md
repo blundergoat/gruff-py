@@ -10,8 +10,15 @@ Run `gruff-py init` to write a default `.gruff-py.yaml` in the current
 directory. The generated file mirrors `RuleRegistry.defaults()`: every
 built-in rule with its default `enabled`, `thresholds`, and `options`,
 plus starter `paths.ignore` entries for local agent/tooling directories and
-test fixtures. Allowlists and selection lists are empty. Re-run with `--force`
-to regenerate an existing file while preserving its `paths.ignore` entries.
+test fixtures. It also includes the family abbreviation seed; other allowlists
+and selection lists are empty.
+
+Re-run with `--force` only to canonically regenerate a valid existing
+`.gruff-py.yaml`. Every supported loaded setting is preserved, but comments,
+key order, and formatting may change. The command fails closed and leaves files
+unchanged when the target is malformed or when discovery finds `.gruff.yaml`
+or a `pyproject.toml` table instead. Convert legacy YAML with
+`gruff-py migrate-config`; edit `[tool.gruff-py]` TOML by hand.
 
 The generated file also notes that built-in ignored paths and `.gitignore`
 already apply before `paths.ignore`. After reviewing a first scan, run
@@ -155,7 +162,7 @@ Keys for non-gating subcommands (`summary`, `list-rules`, `metric-calibration`, 
 
 | Key | Type | Meaning |
 |---|---|---|
-| `acceptedAbbreviations` | list of strings | Abbreviations accepted by naming rules |
+| `acceptedAbbreviations` | list of strings | Complete abbreviation list accepted by naming rules; a configured list replaces, rather than extends, the family seed |
 | `secretPreviews` | list of strings | Known safe secret previews |
 | `deadCode` | table | Dead-code allowlist with `symbols`, `decorators`, and `paths` keys (each a list of strings) that suppress dead-code findings |
 
@@ -241,32 +248,56 @@ for the rationale, the rejected alternatives, and the cross-port invariant.
 
 `schemaVersion: gruff-py.config.v0.1` is required at the top of every
 `.gruff-py.yaml` and `[tool.gruff-py]` block. Configs without it (including
-pre-0.1.2 files) are rejected on load. Regenerate with:
+pre-0.1.2 files) are rejected on load. For legacy YAML, preview and apply the
+supported migration with:
 
 ```bash
-gruff-py init --force
+gruff-py migrate-config --dry-run
+gruff-py migrate-config
 ```
 
-`init --force` preserves a user-tuned `paths.ignore` list and a user-tuned
-`minimumSeverity:` block; both survive byte-for-byte across regeneration.
+For `[tool.gruff-py]` in `pyproject.toml`, update `schemaVersion` by hand;
+`migrate-config` does not rewrite TOML. `init --force` is not a schema-recovery
+or source-conversion command: it accepts only a valid `.gruff-py.yaml` target.
 
-## Unknown Rule Keys: Warn By Default, `--strict-config` To Fail
+## Unknown Rule And Option Keys: Warn By Default, `--strict-config` To Fail
 
 Unknown rule-level config keys downgrade to warnings instead of aborting the
 run: an unknown rule id, an unknown key inside a rule section, an unknown
 `thresholds.<name>` knob (including the legacy two-tier `warning`/`error`
 shape), a `threshold` on a rule without a severity rubric, or a `severity`
-without a `threshold`. The offending key is ignored, that rule runs with its
-defaults, and the warning - including the accepted keys for that rule and a
-migration pointer - is echoed to stderr, rendered in the text report's
-`Config warnings` block, and serialized as the additive `run.configWarnings`
-array in JSON output. Config warnings never change the exit code.
+without a `threshold`. An unknown `options.<name>` key follows the same path.
+The accepted option names come only from that rule's registered defaults; a
+rule with no default options accepts no configured option names.
+
+For example, this misspells `allow_bullets` while also setting the valid
+`min_fields` sibling:
+
+```yaml
+rules:
+  docs.dataclass-attributes:
+    options:
+      min_fields: 6
+      allowBullet: false
+```
+
+A normal scan warns with the exact dotted key
+`rules.docs.dataclass-attributes.options.allowBullet`, removes only that key,
+applies `min_fields`, and keeps the registered `allow_bullets` default. The
+warning is echoed to stderr, rendered in the text report's `Config warnings`
+block, and serialized in the additive `run.configWarnings` JSON array. Config
+warnings never change the finding-driven exit code.
 
 Pass `--strict-config` (on `analyse`, `report`, and `summary`) to turn those
-shapes back into hard failures, e.g. for CI jobs that must not run with a
-half-applied config. Structural errors - non-table sections, wrong value
-types, unknown top-level keys, and `schemaVersion` mismatches - always fail
-regardless of the flag.
+shapes into hard failures. The same example then stops at the full dotted key
+and lists the registered alternatives without claiming the typo was ignored.
+This is useful for CI jobs that must not run with a half-applied config.
+Structural errors - non-table sections, wrong value types, unknown top-level
+keys, and `schemaVersion` mismatches - always fail regardless of the flag.
+
+The loader validates option *names*, not a new option type schema. Once a name
+is registered, its consuming rule remains responsible for value types and any
+cross-option constraints.
 
 ## Migrating Legacy Configs: `gruff-py migrate-config`
 

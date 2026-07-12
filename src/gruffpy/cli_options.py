@@ -910,7 +910,10 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--force",
         is_flag=True,
         default=False,
-        help="Regenerate an existing .gruff-py.yaml file, preserving paths.ignore.",
+        help=(
+            "Regenerate a valid .gruff-py.yaml while preserving all supported settings; "
+            "comments and formatting may change."
+        ),
     ),
     _command(),
 )

@@ -1,8 +1,17 @@
+"""Registry-to-config coverage for the checked-in user settings.
+
+The project config mirrors every registered rule so dogfood exercises the
+same defaults users receive. These tests ensure option names come only from
+registry metadata and that the complete generated-style config loads strictly.
+"""
+
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.loader import ConfigLoader
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.registry import RuleRegistry
@@ -92,6 +101,29 @@ _DEFINITIONS_USING_DEFAULT_OPTIONS = [
 def test_repo_yaml_options_match_definition_defaults(definition: RuleDefinition) -> None:
     section = _repo_yaml_data()["rules"][definition.id]
     assert section.get("options", {}) == _plain(definition.default_options)
+
+
+@pytest.mark.parametrize("definition", _DEFINITIONS, ids=lambda definition: definition.id)
+def test_repo_yaml_option_keys_are_registered_defaults(definition: RuleDefinition) -> None:
+    """Keep every configured option inside its rule's sole public allowlist.
+
+    Args:
+        definition: Registered rule whose empty or populated option table is checked.
+    """
+    configured_options = set(_repo_yaml_data()["rules"][definition.id].get("options", {}))
+    assert configured_options <= set(definition.default_options)
+
+
+def test_repo_yaml_loads_without_warnings_under_strict_mode() -> None:
+    """Load the complete project config with every warning promoted to failure."""
+    defaults = AnalysisConfig.from_registry(RuleRegistry.defaults())
+    loader = ConfigLoader(_PROJECT_ROOT, defaults, strict=True)
+
+    loaded, source = loader.load(_PROJECT_ROOT / ".gruff-py.yaml")
+
+    assert source == _PROJECT_ROOT / ".gruff-py.yaml"
+    assert loader.warnings == ()
+    assert set(loaded.rules) == set(defaults.rules)
 
 
 def test_module_name_mismatch_extends_conventional_module_names() -> None:

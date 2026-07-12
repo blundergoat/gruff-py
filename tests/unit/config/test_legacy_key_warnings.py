@@ -1,4 +1,9 @@
-"""Warn-by-default vs strict handling of unknown rule-level config keys."""
+"""User-facing warning and strict-error contracts for rule configuration.
+
+Normal scans continue with unsupported rule keys removed and explain what was
+ignored. Strict scans stop on the same exact key without claiming it was
+ignored, so CI users never mistake a rejected config for an applied one.
+"""
 
 from pathlib import Path
 
@@ -17,6 +22,16 @@ _LEGACY_COGNITIVE_YAML = (
     "    thresholds:\n"
     "      warning: 15\n"
     "      error: 30\n"
+)
+
+_CUSTOM_MIN_FIELDS = 6
+_UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML = (
+    "schemaVersion: gruff-py.config.v0.1\n"
+    "rules:\n"
+    "  docs.dataclass-attributes:\n"
+    "    options:\n"
+    f"      min_fields: {_CUSTOM_MIN_FIELDS}\n"
+    "      allowBullet: false\n"
 )
 
 
@@ -45,7 +60,8 @@ def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_pat
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in first
     assert 'Accepted keys for "rules.complexity.cognitive": enabled, threshold, severity' in first
     assert "gruff-py migrate-config" in first
-    assert "gruff-py init --force" in first
+    assert "TOML" in first
+    assert "init --force" not in first
 
 
 def test_legacy_tiered_thresholds_raise_under_strict(tmp_path: Path):
@@ -58,6 +74,112 @@ def test_legacy_tiered_thresholds_raise_under_strict(tmp_path: Path):
     assert "Accepted keys" in message
     # The lenient consequence must not leak into the abort-path error text.
     assert "ignored" not in message.lower()
+
+
+def _unknown_option_warning(project_root: Path) -> str:
+    """Load one option typo and return its sole user-facing warning.
+
+    Args:
+        project_root: Project containing one valid option and one misspelled option.
+
+    Returns:
+        Non-empty warning text; an absent warning fails the one-item unpack.
+    """
+    _write_yaml(project_root, _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML)
+    loader = ConfigLoader(project_root, _defaults())
+    loader.load()
+    (warning,) = loader.warnings
+    return warning
+
+
+def _strict_unknown_option_error(project_root: Path) -> str:
+    """Load one option typo in strict mode and return the blocking message.
+
+    Args:
+        project_root: Project containing one valid option and one misspelled option.
+
+    Returns:
+        Non-empty error text explaining why the user's config was rejected.
+    """
+    _write_yaml(project_root, _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML)
+
+    with pytest.raises(ConfigError) as error:
+        ConfigLoader(project_root, _defaults(), strict=True).load()
+
+    return str(error.value)
+
+
+def test_unknown_option_warning_names_key_and_lenient_consequence(tmp_path: Path) -> None:
+    """Show the exact ignored key and what a normal scan still applies.
+
+    Args:
+        tmp_path: Project containing one valid option and one misspelled option.
+    """
+    warning = _unknown_option_warning(tmp_path)
+
+    assert 'Unknown option "rules.docs.dataclass-attributes.options.allowBullet".' in warning
+    assert "Option ignored; registered defaults and valid sibling options still apply." in warning
+
+
+def test_unknown_option_warning_lists_registered_alternatives(tmp_path: Path) -> None:
+    """List every registered option name that can replace the user's typo.
+
+    Args:
+        tmp_path: Project containing one valid option and one misspelled option.
+    """
+    warning = _unknown_option_warning(tmp_path)
+
+    assert "options.allow_bullets" in warning
+    assert "options.min_fields" in warning
+    assert "options.require_all_fields" in warning
+
+
+def test_unknown_option_keeps_valid_sibling_and_registered_default(tmp_path: Path) -> None:
+    """Apply a valid sibling while the misspelling leaves its default intact.
+
+    Args:
+        tmp_path: Project containing one valid option and one misspelled option.
+    """
+    _write_yaml(tmp_path, _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML)
+    defaults = _defaults()
+    loader = ConfigLoader(tmp_path, defaults)
+
+    config, _ = loader.load()
+    options = config.rules["docs.dataclass-attributes"].options
+
+    assert options["min_fields"] == _CUSTOM_MIN_FIELDS
+    assert (
+        options["allow_bullets"]
+        is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
+    )
+    assert "allowBullet" not in options
+
+
+def test_unknown_option_strict_error_names_key_without_lenient_consequence(
+    tmp_path: Path,
+) -> None:
+    """Stop strict users on the typo without saying an ignored key was applied.
+
+    Args:
+        tmp_path: Project containing one valid option and one misspelled option.
+    """
+    message = _strict_unknown_option_error(tmp_path)
+
+    assert 'Unknown option "rules.docs.dataclass-attributes.options.allowBullet".' in message
+    assert "ignored" not in message.lower()
+
+
+def test_unknown_option_strict_error_lists_registered_alternatives(tmp_path: Path) -> None:
+    """Give strict users every registered option name that can replace the typo.
+
+    Args:
+        tmp_path: Project containing one valid option and one misspelled option.
+    """
+    message = _strict_unknown_option_error(tmp_path)
+
+    assert "options.allow_bullets" in message
+    assert "options.min_fields" in message
+    assert "options.require_all_fields" in message
 
 
 def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):

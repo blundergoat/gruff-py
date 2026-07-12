@@ -1,6 +1,6 @@
 ---
 category: configuration
-last_reviewed: 2026-05-26
+last_reviewed: 2026-07-12
 updated: 2026-05-26
 ---
 
@@ -27,8 +27,9 @@ verification gate fires before the next step depends on it.
 2. **Add the schema-version literal** in `src/gruffpy/analysis/schema.py`
    (search: `CONFIG_SCHEMA_VERSION`) and re-export from
    `src/gruffpy/analysis/__init__.py`. Pre-existing config files without
-   the literal must be rejected on load — no back-compat shim, point users
-   at `gruff-py init --force`.
+   the literal must be rejected on load — no back-compat shim. Point YAML
+   users at `gruff-py migrate-config` and TOML users at a hand edit;
+   `init --force` is canonical regeneration for an already-valid target.
 3. **Extend `AnalysisConfig`** with the new field, a `with_<key>` helper
    (`src/gruffpy/config/analysis_config.py` search: `with_minimum_severity`),
    and a `BINARY_DEFAULTS` constant (search:
@@ -45,9 +46,10 @@ verification gate fires before the next step depends on it.
    distinguish a user-passed flag from Click's default-value fill-in, so
    the config value only overrides when the CLI is silent.
 6. **Update the init renderer** in `src/gruffpy/command/init_config.py`
-   (search: `_render_minimum_severity_block`) and the corresponding
-   preservation helper (search: `existing_minimum_severity`) so
-   `gruff-py init --force` preserves a user-tuned block byte-for-byte.
+   (search: `_scaffold_document`) and the starter defaults builder (search:
+   `_default_init_analysis_config`). `initialise_project_config` proves forced
+   regeneration preserves the fully loaded user config by strict reload and
+   semantic equality; canonical YAML need not preserve bytes or formatting.
 7. **Sweep the docs and CHANGELOG** in the same change:
    `docs/configuration.md` (search: `Severity Gate`),
    `docs/ci-integration.md`, `docs/dashboard.md`, `docs/reporting.md`,

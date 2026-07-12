@@ -53,9 +53,8 @@ class AnalysisConfig:
     minimum_severity: dict[str, FailThreshold] = field(default_factory=dict)
     rule_selection: RuleSelection = field(default_factory=RuleSelection)
     ignored_path_patterns: tuple[str, ...] = ()
-    # Seed value matches the gruff-rs/gruff-ts runtime defaults and the
-    # gruff-py init template; project-specific vocabulary should be appended
-    # in the user's config rather than added here.
+    # This exact family seed keeps fresh configs consistent across implementations.
+    # A project list replaces the seed, so users include every accepted abbreviation.
     accepted_abbreviations: tuple[str, ...] = (
         "age",
         "app",

@@ -1,7 +1,15 @@
-"""Render the default ``.gruff-py.yaml`` from the built-in rule registry."""
+"""Create or canonically regenerate the user's ``.gruff-py.yaml`` safely.
 
+Fresh init renders registry defaults plus starter ignores. Forced regeneration
+loads every existing setting strictly, stages the resolved YAML beside the
+target, reloads it for semantic equality, then atomically replaces the file.
+Legacy YAML and TOML remain authoritative and are never shadowed by init.
+"""
+
+import os
+import tempfile
 import tomllib
-from collections.abc import Iterable, Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +21,8 @@ from gruffpy.config.analysis_config import (
     AnalysisConfig,
 )
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.config.loader import ConfigLoader
 from gruffpy.config.rule_settings import RuleSettings
-from gruffpy.config.yaml_loader import load_gruff_py_yaml
 from gruffpy.rule.registry import RuleRegistry
 
 _HEADER = (
@@ -35,126 +43,186 @@ DEFAULT_INIT_IGNORED_PATH_PATTERNS = (
     "tests/fixtures/**",
 )
 
+_TARGET_CONFIG_NAME = ".gruff-py.yaml"
+_ACCEPTED_ABBREVIATIONS_COMMENTS = (
+    "  # acceptedAbbreviations lets naming rules accept project vocabulary.",
+    "  # Configured values replace this seed; they do not merge with it.",
+)
 
-def render_default_config_yaml(
-    existing_ignored_path_patterns: Iterable[str] = (),
-    existing_minimum_severity: Mapping[str, str] | None = None,
-) -> str:
-    """Return the default config serialised as YAML text.
 
-    Args:
-        existing_ignored_path_patterns: Existing ``paths.ignore`` entries to preserve
-            ahead of the starter init ignores.
-        existing_minimum_severity: Existing ``minimumSeverity:`` block to preserve
-            byte-for-byte (modulo YAML canonicalisation). When empty or omitted,
-            the renderer writes the canonical three-key binary-default block.
+def render_default_config_yaml() -> str:
+    """Render the loadable starter config shown to a first-time init user.
 
     Returns:
-        YAML string equivalent to ``AnalysisConfig.from_registry(RuleRegistry.defaults())``,
-        with starter ``paths.ignore`` entries, in the shape ``ConfigLoader`` accepts.
+        YAML containing registry defaults, starter ignores, and family seed values.
     """
     registry = RuleRegistry.defaults()
-    config = AnalysisConfig.from_registry(registry).with_ignored_path_patterns(
-        _merged_init_ignored_path_patterns(existing_ignored_path_patterns)
+    return render_resolved_config_yaml(_default_init_analysis_config(registry))
+
+
+def render_resolved_config_yaml(config: AnalysisConfig) -> str:
+    """Render every supported value from one fully resolved user config.
+
+    Args:
+        config: Strictly loaded settings to preserve; empty collections stay empty.
+
+    Returns:
+        Canonical YAML whose strict reload must equal ``config``.
+    """
+    registry = RuleRegistry.defaults()
+    scaffold_yaml = yaml.safe_dump(
+        _scaffold_document(config),
+        sort_keys=False,
+        default_flow_style=False,
     )
-    scaffold = _scaffold_document(config, existing_minimum_severity or {})
-    scaffold_yaml = yaml.safe_dump(scaffold, sort_keys=False, default_flow_style=False)
-    rules_yaml = _render_rules_section(config, registry)
-    return _HEADER + scaffold_yaml + rules_yaml
+    allowlists_yaml = _render_allowlists_section(config)
+    selection_yaml = yaml.safe_dump(
+        _selection_document(config),
+        sort_keys=False,
+        default_flow_style=False,
+    )
+    return (
+        _HEADER
+        + scaffold_yaml
+        + allowlists_yaml
+        + selection_yaml
+        + _render_rules_section(config, registry)
+    )
 
 
-def existing_ignored_path_patterns(config_path: Path) -> tuple[str, ...]:
-    """Return existing ``paths.ignore`` entries from a YAML config file.
-
-    Args:
-        config_path: Existing ``.gruff-py.yaml`` path.
-
-    Returns:
-        Tuple of existing ignore entries, or an empty tuple when absent.
-
-    Raises:
-        ConfigError: When the file cannot be parsed or ``paths.ignore`` is malformed.
-    """
-    section = load_gruff_py_yaml(config_path)
-    paths = section.get("paths", {})
-    if paths is None:
-        return ()
-    if not isinstance(paths, dict):
-        raise ConfigError(f"{config_path}: paths must be a mapping to preserve paths.ignore.")
-    ignore = paths.get("ignore", [])
-    if not isinstance(ignore, list) or not all(isinstance(pattern, str) for pattern in ignore):
-        raise ConfigError(f"{config_path}: paths.ignore must be a list of strings.")
-    return tuple(ignore)
-
-
-def existing_minimum_severity(config_path: Path) -> dict[str, str]:
-    """Return existing ``minimumSeverity:`` entries from a YAML config file.
-
-    Reads the block verbatim so ``gruff-py init --force`` preserves a
-    user-tuned override across regeneration. Key/value validation is
-    intentionally delegated to ``ConfigLoader``; this helper only
-    enforces the structural shape (mapping of string to string).
+def initialise_project_config(project_root: Path, *, force: bool) -> Path:
+    """Create or safely regenerate the config requested by the CLI user.
 
     Args:
-        config_path: Existing ``.gruff-py.yaml`` path.
+        project_root: Project directory where discovery and writing occur.
+        force: Whether a valid existing target may be canonically regenerated.
 
     Returns:
-        Dict of existing per-command severities (e.g. ``{"analyse": "error"}``),
-        or an empty dict when the block is absent.
+        Path to the freshly written or atomically replaced target.
 
     Raises:
-        ConfigError: When the file cannot be parsed or the block is not a
-            string-to-string mapping.
+        ConfigError: When the operation would hide, discard, or partially write
+            user configuration. For example, malformed YAML is left untouched.
     """
-    section = load_gruff_py_yaml(config_path)
-    block = section.get("minimumSeverity")
-    if block is None:
-        return {}
-    if not isinstance(block, dict):
+    target = project_root / _TARGET_CONFIG_NAME
+    discovered_source = existing_config_source(project_root)
+    registry = RuleRegistry.defaults()
+    registry_defaults = AnalysisConfig.from_registry(registry)
+
+    # A first-time user receives the documented starter values.
+    if discovered_source is None:
+        resolved_config = _default_init_analysis_config(registry)
+    # Legacy YAML and TOML stay authoritative so init cannot change precedence.
+    elif discovered_source != target:
+        raise ConfigError(_different_source_error(discovered_source, target))
+    # An existing target requires explicit acknowledgment before canonical rewrite.
+    elif not force:
         raise ConfigError(
-            f"{config_path}: minimumSeverity must be a mapping to preserve a user-tuned block."
+            f"{target.name} already exists. Re-run with --force to canonically regenerate it; "
+            "all supported settings are preserved, but comments and formatting may change."
         )
-    for key, value in block.items():
-        if not isinstance(key, str) or not isinstance(value, str):
-            raise ConfigError(
-                f"{config_path}: minimumSeverity entries must be string-to-string "
-                f"(got {type(key).__name__}: {type(value).__name__})."
-            )
-    return dict(block)
+    else:
+        try:
+            resolved_config, _ = ConfigLoader(
+                project_root,
+                registry_defaults,
+                strict=True,
+            ).load(target)
+        except ConfigError as exc:
+            # Example: a user typo such as an unknown top-level key must keep every byte.
+            raise ConfigError(f"{target.name} is invalid and was left unchanged: {exc}") from exc
+
+    rendered_yaml = render_resolved_config_yaml(resolved_config)
+    _validate_and_atomically_replace(
+        target,
+        rendered_yaml,
+        expected_config=resolved_config,
+        registry_defaults=registry_defaults,
+    )
+    return target
 
 
-def _merged_init_ignored_path_patterns(
-    existing_ignored_path_patterns: Iterable[str],
-) -> tuple[str, ...]:
-    merged: list[str] = []
-    seen: set[str] = set()
-    for pattern in (*existing_ignored_path_patterns, *DEFAULT_INIT_IGNORED_PATH_PATTERNS):
-        if pattern in seen:
-            continue
-        seen.add(pattern)
-        merged.append(pattern)
-    return tuple(merged)
+def _default_init_analysis_config(registry: RuleRegistry) -> AnalysisConfig:
+    """Build the resolved starter settings used only when no config exists.
+
+    Args:
+        registry: Built-in rules whose defaults become generated rule entries.
+
+    Returns:
+        Config with starter ignores and per-command binary severity defaults.
+    """
+    return (
+        AnalysisConfig.from_registry(registry)
+        .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
+        .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
+    )
 
 
 def _scaffold_document(
     config: AnalysisConfig,
-    existing_minimum_severity: Mapping[str, str],
 ) -> dict[str, Any]:
+    """Build the settings users see before allowlists and rule selection.
+
+    Args:
+        config: Resolved user settings; empty severity and ignore maps stay empty.
+
+    Returns:
+        YAML-ready scalar and path settings for canonical regeneration.
+    """
     major, minor = config.minimum_python_version
+    # Each resolved enum is serialized back to the value the user configured.
+    minimum_severity = {
+        command: severity.value for command, severity in config.minimum_severity.items()
+    }
     return {
         "schemaVersion": CONFIG_SCHEMA_VERSION,
-        "minimumSeverity": _render_minimum_severity_block(existing_minimum_severity),
+        "minimumSeverity": minimum_severity,
         "minimumPythonVersion": f"{major}.{minor}",
+        "outputVolumeHintThreshold": config.output_volume_hint_threshold,
         "paths": {"ignore": list(config.ignored_path_patterns)},
-        "allowlists": {
-            "acceptedAbbreviations": list(config.accepted_abbreviations),
-            "secretPreviews": list(config.allowed_secret_previews),
-            "deadCode": {
-                "symbols": list(config.dead_code_allowlist.symbols),
-                "decorators": list(config.dead_code_allowlist.decorators),
-                "paths": list(config.dead_code_allowlist.paths),
-            },
+    }
+
+
+def _render_allowlists_section(config: AnalysisConfig) -> str:
+    """Show user allowlists with the family-required replacement explanation.
+
+    Args:
+        config: Resolved allowlists; empty lists mean no user exceptions are active.
+
+    Returns:
+        YAML section that retains every loaded allowlist value.
+    """
+    allowlists = {
+        "acceptedAbbreviations": list(config.accepted_abbreviations),
+        "secretPreviews": list(config.allowed_secret_previews),
+        "deadCode": {
+            "symbols": list(config.dead_code_allowlist.symbols),
+            "decorators": list(config.dead_code_allowlist.decorators),
+            "paths": list(config.dead_code_allowlist.paths),
         },
+    }
+    nested_yaml = yaml.safe_dump(
+        allowlists,
+        sort_keys=False,
+        default_flow_style=False,
+    )
+    lines = ["allowlists:", *_ACCEPTED_ABBREVIATIONS_COMMENTS]
+    # Every dumped allowlist line is nested under the user-visible section header.
+    for line in nested_yaml.rstrip("\n").split("\n"):
+        lines.append("  " + line)
+    return "\n".join(lines) + "\n"
+
+
+def _selection_document(config: AnalysisConfig) -> dict[str, Any]:
+    """Build every rule selector users configured, including empty lists.
+
+    Args:
+        config: Resolved selection; empty lists keep the corresponding filter inactive.
+
+    Returns:
+        YAML-ready include and exclude selectors for the regenerated config.
+    """
+    return {
         "selection": {
             "tiers": list(config.rule_selection.tiers),
             "pillars": list(config.rule_selection.pillars),
@@ -165,55 +233,155 @@ def _scaffold_document(
     }
 
 
-def _render_minimum_severity_block(
-    existing_minimum_severity: Mapping[str, str],
-) -> dict[str, str]:
-    """Return the ``minimumSeverity:`` mapping to emit in the rendered YAML.
+def _different_source_error(source: Path, target: Path) -> str:
+    """Explain why init cannot convert or shadow the user's discovered source.
 
-    Preserves a user-tuned block byte-for-byte (preserving key insertion order
-    where present); otherwise emits the canonical three-key binary-default
-    block in the documented order (analyse, report, dashboard).
+    Args:
+        source: Legacy YAML or pyproject path currently authoritative.
+        target: Higher-precedence YAML path that init deliberately leaves absent.
+
+    Returns:
+        Format-specific recovery guidance for the failed CLI action.
     """
-    if existing_minimum_severity:
-        return dict(existing_minimum_severity)
-    return {
-        command: MINIMUM_SEVERITY_BINARY_DEFAULTS[command].value
-        for command in ("analyse", "report", "dashboard")
-    }
+    # YAML users have a supported in-place migration command.
+    if source.suffix in {".yaml", ".yml"}:
+        return (
+            f"Existing gruff config found at {source.name}; {target.name} was not created. "
+            "init does not convert config sources. Run `gruff-py migrate-config` to "
+            "update the YAML source in place."
+        )
+    return (
+        f"Existing gruff config found at {source.name}; {target.name} was not created. "
+        "init does not convert TOML. Edit [tool.gruff-py] or [tool.gruff] in "
+        "pyproject.toml by hand; `migrate-config` supports YAML only."
+    )
+
+
+def _validate_and_atomically_replace(
+    target: Path,
+    rendered_yaml: str,
+    *,
+    expected_config: AnalysisConfig,
+    registry_defaults: AnalysisConfig,
+) -> None:
+    """Strictly reload staged YAML, compare semantics, and replace the target.
+
+    Args:
+        target: User config path to create or atomically replace.
+        rendered_yaml: Canonical full-config YAML awaiting validation.
+        expected_config: Resolved values that must survive byte-level regeneration.
+        registry_defaults: Same rule defaults used to load before and after rendering.
+
+    Raises:
+        ConfigError: When staging, reload, equality, or replacement fails; the
+            user's existing target remains untouched, and no partial target remains.
+    """
+    staged_path = _write_staged_yaml(target, rendered_yaml)
+    try:
+        try:
+            reloaded_config, _ = ConfigLoader(
+                target.parent,
+                registry_defaults,
+                strict=True,
+            ).load(staged_path)
+        except ConfigError as exc:
+            # Example: a renderer bug emits an unknown key before the user's file is replaced.
+            raise ConfigError(
+                f"Generated {target.name} failed strict validation; target was left unchanged: "
+                f"{exc}"
+            ) from exc
+        # A valid reload can still lose a supported setting, so equality is mandatory.
+        if reloaded_config != expected_config:
+            raise ConfigError(
+                f"Generated {target.name} failed semantic validation; target was left unchanged."
+            )
+        try:
+            os.replace(staged_path, target)
+        except OSError as exc:
+            # Example: antivirus or directory permissions deny the user's final rename.
+            raise ConfigError(
+                f"Unable to replace {target.name}; target was left unchanged: {exc}"
+            ) from exc
+    finally:
+        # A successful replace consumes the stage; every failure removes any remainder.
+        with suppress(OSError):
+            staged_path.unlink()
+
+
+def _write_staged_yaml(target: Path, rendered_yaml: str) -> Path:
+    """Write and flush canonical YAML to a same-directory temporary path.
+
+    Args:
+        target: Final user config whose directory owns the atomic rename boundary.
+        rendered_yaml: Complete non-empty YAML text to stage before validation.
+
+    Returns:
+        Existing temporary YAML path ready for strict reload.
+
+    Raises:
+        ConfigError: When a user filesystem cannot create, write, flush, or
+            permission-match the stage; no target bytes are changed.
+    """
+    try:
+        descriptor, raw_staged_path = tempfile.mkstemp(
+            prefix=f"{target.name}.",
+            suffix=".yaml",
+            dir=str(target.parent),
+            text=True,
+        )
+    except OSError as exc:
+        # Example: the project directory is read-only before any target is opened.
+        raise ConfigError(f"Unable to stage {target.name}: {exc}") from exc
+    staged_path = Path(raw_staged_path)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as staged_file:
+            staged_file.write(rendered_yaml)
+            staged_file.flush()
+            os.fsync(staged_file.fileno())
+        # Existing user permissions survive canonical replacement when a target exists.
+        if target.exists():
+            os.chmod(staged_path, target.stat().st_mode)
+    except OSError as exc:
+        # Example: disk exhaustion interrupts a staged write while the original stays intact.
+        with suppress(OSError):
+            staged_path.unlink()
+        raise ConfigError(f"Unable to stage {target.name}: {exc}") from exc
+    return staged_path
 
 
 def _render_rules_section(config: AnalysisConfig, registry: RuleRegistry) -> str:
-    """Render the ``rules:`` section with one description comment per rule.
+    """Show each configured rule beside a plain description users can review.
 
-    Each entry is built by ``yaml.safe_dump`` so the value formatting stays
-    in lockstep with the rest of the document; the comment line above the
-    rule key comes from the rule's registry description (falling back to its
-    display name when none is set).
+    Args:
+        config: Resolved rule settings; an empty map produces an empty rules section.
+        registry: Rule catalogue supplying the user-facing descriptions.
+
+    Returns:
+        Canonical ``rules:`` YAML with every loaded rule setting.
     """
+    # Users see catalogue descriptions before deciding which rule settings to tune.
     descriptions = {
         rule.definition().id: rule.definition().get_description() for rule in registry.all()
     }
     lines = ["rules:"]
+    # Stable rule order keeps regenerated config diffs easy for users to review.
     for rule_id in sorted(config.rules):
         lines.append(f"  # {descriptions.get(rule_id, rule_id)}")
         entry = _rule_entry(config.rules[rule_id])
         entry_yaml = yaml.safe_dump(
             {rule_id: entry}, sort_keys=False, default_flow_style=False, indent=2
         )
+        # Each dumped line belongs under the user-visible rules heading.
         for line in entry_yaml.rstrip("\n").split("\n"):
             lines.append("  " + line)
     return "\n".join(lines) + "\n"
 
 
 def existing_config_source(project_root: Path) -> Path | None:
-    """Return the project's existing gruff config path, or ``None`` if absent.
+    """Find the authoritative config that init must leave visible to the user.
 
-    Mirrors :class:`gruffpy.config.loader.ConfigLoader` discovery: prefers
-    ``.gruff-py.yaml`` / legacy ``.gruff.yaml``, then falls back to
-    ``pyproject.toml`` ``[tool.gruff-py]`` / ``[tool.gruff]``. A
-    ``pyproject.toml`` that exists but cannot be parsed is reported as the
-    existing source so callers do not silently create a competing
-    ``.gruff-py.yaml`` that would mask the original TOML error.
+    Unreadable or invalid TOML still counts as present so a new YAML file never
+    masks the source problem the user needs to fix.
 
     Args:
         project_root: Directory checked for config files.
@@ -221,35 +389,53 @@ def existing_config_source(project_root: Path) -> Path | None:
     Returns:
         Path to the discovered config source, or ``None`` when none exists.
     """
+    # YAML takes precedence, matching the config users get during normal scans.
     for name in (".gruff-py.yaml", ".gruff.yaml"):
         candidate = project_root / name
+        # The first existing YAML file is the source init must respect.
         if candidate.exists():
             return candidate
     pyproject = project_root / "pyproject.toml"
+    # No pyproject means the user has no remaining discoverable config source.
     if not pyproject.exists():
         return None
     try:
         with open(pyproject, "rb") as f:
             data = tomllib.load(f)
     except OSError:
+        # Example: the user can see pyproject.toml but their account cannot read it.
         return pyproject
     except tomllib.TOMLDecodeError:
+        # Example: an interrupted editor save leaves the user's TOML half-written.
         return pyproject
     tool = data.get("tool")
+    # A pyproject without a tool table contains no gruff settings to preserve.
     if not isinstance(tool, dict):
         return None
+    # Either current or legacy gruff tables remain authoritative until edited.
     if "gruff-py" in tool or "gruff" in tool:
         return pyproject
     return None
 
 
 def _rule_entry(settings: RuleSettings) -> dict[str, Any]:
+    """Build the rule knobs users see and can edit after init.
+
+    Args:
+        settings: Resolved rule values; absent thresholds/options remain omitted.
+
+    Returns:
+        YAML-ready rule mapping containing only supported active knobs.
+    """
     entry: dict[str, Any] = {"enabled": settings.enabled}
+    # A severity threshold tells users both where the rule fires and how it gates.
     if settings.severity_threshold is not None:
         entry["threshold"] = settings.severity_threshold.threshold
         entry["severity"] = settings.severity_threshold.severity.value
+    # Named thresholds expose only the rule-specific tuning values users loaded.
     if settings.thresholds:
         entry["thresholds"] = dict(settings.thresholds)
+    # Options stay absent when the user has no rule-specific choices to review.
     if settings.options:
         entry["options"] = dict(settings.options)
     return entry

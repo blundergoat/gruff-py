@@ -101,15 +101,24 @@ hypotheses, not just verification claims.
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
 
 **Created:** 2026-05-18
+**Updated:** 2026-07-12
 **Incident:** During M25, `uv run ruff format --check src tests` mixed a new
 touched-file formatting issue with pre-existing unrelated formatting drift
 outside the patch. The correction was to run `uv run ruff format` only on the
 M25-touched files, then keep the repo-wide format check marked as blocked by
 unrelated drift.
 
-When a repo-wide non-mutating format check is already known to fail, run a
-touched-file format check or formatter pass before the broad gate so the
-agent-owned formatting state is separated from unrelated workspace drift.
+The same sequencing mistake recurred twice during the 0.5.0 config work: M08's
+broad gate found three owned files, then M10's broad gate found the three new
+test files and a later assertion split left one of them unformatted again. In
+each case, focused behavior was already green and the broad failure added only
+a formatter round trip.
+
+After any test/source edit batch, run a touched-file formatter check or pass
+before the repo-wide non-mutating gate, even when the repository was clean at
+the start. Then rerun the touched focused tests. This separates agent-owned
+formatting from unrelated drift and prevents a later assertion split from
+invalidating an otherwise final gate ladder.
 
 ## Lesson: Re-run raw-source analyzers after formatting fixture strings
 
@@ -357,15 +366,24 @@ test is the right proof because it compares parsed config values against
 ## Lesson: Split regression tests by review surface before dogfood
 
 **Created:** 2026-05-31
+**Updated:** 2026-07-12
 **Incident:** While adding correlated scoring coverage, one test asserted file
 score, composite score, and pillar penalties together. The full pytest suite
 passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
 flagged `test-quality.eager-test` because the test had too many assertions.
 
+The pattern repeated during per-rule option validation: functional, static,
+and manual gates were green, but dogfood found warning wording, accepted-name
+alternatives, and applied-setting semantics packed into two eager tests. It
+also found raw numeric values repeated in assertions. Splitting those three
+review surfaces and naming the configured value made the original dogfood
+reproduction return zero findings without deleting any assertion.
+
 When a regression spans multiple outputs, keep one test per reviewer surface
 even if the setup is shared. This preserves the signal of
 `test-quality.eager-test` and keeps dogfood aligned with the
-reviewer-verification mission.
+reviewer-verification mission. Name configured boundary values before asserting
+them so the test explains the user's choice instead of embedding a magic number.
 
 ## Lesson: Tick task checkboxes when the proof passes, not during later cleanup
 
@@ -639,3 +657,21 @@ promised matrix and make every required group share the selector anchor. For
 branch-precedence behavior, include paired control and treatment assertions on
 the same input, choose a call target the matcher can actually resolve, and make
 sure reversing or removing the precedence branch fails the test.
+
+## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
+
+**Created:** 2026-07-12
+**Incident:** During safe `init --force` verification, focused tests, ruff, and
+mypy were green, but the required dogfood scan failed on seven documentation
+findings in newly rewritten tests. Four journey docstrings described the
+behavior but omitted their `tmp_path` and `monkeypatch` parameters; a nested
+filesystem-failure helper omitted both parameters and its deliberate
+`OSError`; one schema-recovery test omitted `tmp_path`. Adding the missing
+`Args` and `Raises` contracts made the same dogfood reproduction return zero
+findings without changing test behavior.
+
+Before broad dogfood, check every new or materially rewritten test docstring
+against its full signature, including pytest fixtures. A nested helper that
+models a user-visible failure also documents the exception it deliberately
+raises. Focused pytest and static type checks do not cover these documentation
+rules because the project analyser scans `tests/` as product-quality code.

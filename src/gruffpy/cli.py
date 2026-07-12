@@ -51,8 +51,7 @@ from gruffpy.command.check_ignore_verdict import (
 from gruffpy.command.dashboard_server import create_dashboard_server
 from gruffpy.command.init_config import (
     existing_config_source,
-    existing_ignored_path_patterns,
-    existing_minimum_severity,
+    initialise_project_config,
     render_default_config_yaml,
 )
 from gruffpy.command.metric_calibration import (
@@ -328,42 +327,21 @@ def _dashboard_server(request: _DashboardCliRequest) -> Any:
 
 @_init_command
 def init(force: bool) -> None:
-    """Write a default ``.gruff-py.yaml`` to the current directory.
+    """Create a starter config or canonically regenerate a valid target.
 
     Args:
-        force: When True, regenerate ``.gruff-py.yaml`` even if a config source
-            (``.gruff-py.yaml``, ``.gruff.yaml``, or
-            ``pyproject.toml`` ``[tool.gruff-py]``) already exists.
+        force: Regenerate a valid ``.gruff-py.yaml`` while preserving its
+            loaded settings. False leaves any discovered config untouched.
 
     Raises:
-        click.ClickException: When a config source already exists and
-            ``--force`` was not supplied, or when the file cannot be written.
+        click.ClickException: The user has an invalid target, an alternate
+            config source, or a file that cannot be safely replaced.
     """
-    project_root = Path.cwd()
-    target = project_root / ".gruff-py.yaml"
-    existing = existing_config_source(project_root)
-    if existing is not None and not force:
-        if existing == target:
-            raise click.ClickException(
-                f"{target.name} already exists. Re-run with --force to regenerate it."
-            )
-        raise click.ClickException(
-            f"Existing gruff config found at {existing.name}; writing "
-            f"{target.name} would change discovery precedence. "
-            "Re-run with --force to write it anyway."
-        )
     try:
-        ignored_path_patterns = existing_ignored_path_patterns(target) if target.exists() else ()
-        preserved_minimum_severity = existing_minimum_severity(target) if target.exists() else {}
+        target = initialise_project_config(Path.cwd(), force=force)
     except ConfigError as exc:
+        # A user may have malformed YAML or an authoritative TOML config.
         raise click.ClickException(str(exc)) from exc
-    _write_config_file(
-        target,
-        render_default_config_yaml(
-            ignored_path_patterns,
-            existing_minimum_severity=preserved_minimum_severity,
-        ),
-    )
     _write_stdout(_init_success_message(target))
 
 

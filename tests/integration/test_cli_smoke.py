@@ -8,6 +8,7 @@
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,9 @@ import yaml
 from click.testing import CliRunner
 
 from gruffpy.cli import _normalise_optional_diff_args, main
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.loader import ConfigLoader
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import VERSION
 
 _EXPECTED_ROOT_COMMANDS = (
@@ -691,6 +695,12 @@ def test_cli_list_rules_explain_rule_with_no_related_rules_shows_none_marker():
 
 
 def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a loadable starter config when the user's project has none.
+
+    Args:
+        tmp_path: Empty project that receives the generated config.
+        monkeypatch: Fixture that makes the empty project the CLI working directory.
+    """
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(main, ["init"])
@@ -700,6 +710,16 @@ def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.Monk
     assert target.exists()
     assert result.output.startswith(f"Wrote {target}\n")
     assert "gruff-py analyse . --generate-baseline" in result.output
+
+
+def test_cli_init_help_describes_canonical_regeneration_boundary() -> None:
+    """Tell users force preserves settings but may rewrite comments and layout."""
+    result = CliRunner().invoke(main, ["init", "--help"])
+    user_visible_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert "all supported settings" in user_visible_help
+    assert "comments and formatting may change" in user_visible_help
 
 
 def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -769,60 +789,174 @@ def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
 def test_cli_init_force_regenerates_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Canonically rewrite valid target YAML without changing loaded settings.
+
+    Args:
+        tmp_path: Project containing the valid target to regenerate.
+        monkeypatch: Fixture that makes the target's project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    existing.write_text("# do not clobber\n")
+    existing.write_text(
+        "# comments may be canonicalised\n"
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "minimumPythonVersion: '3.12'\n"
+    )
+    defaults = AnalysisConfig.from_registry(RuleRegistry.defaults())
+    before, _ = ConfigLoader(tmp_path, defaults, strict=True).load()
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
+    after, _ = ConfigLoader(tmp_path, defaults, strict=True).load()
     assert result.exit_code == 0, result.output
     assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+    assert after == before
 
 
 def test_cli_init_force_preserves_existing_ignore_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Keep the user's exact ignore semantics without adding starter entries.
+
+    Args:
+        tmp_path: Project containing user-selected ignore patterns.
+        monkeypatch: Fixture that makes the configured project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
     existing.write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
         "paths:\n"
         "  ignore:\n"
         "    - generated/**\n"
         "    - .codex/\n"
-        "rules:\n"
-        "  docs.missing-module-docstring:\n"
-        "    enabled: false\n"
     )
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
     document = yaml.safe_load(existing.read_text())
     assert result.exit_code == 0, result.output
-    assert document["paths"]["ignore"] == [
-        "generated/**",
-        ".codex/",
-        ".agents/",
-        ".antigravitycli/",
-        ".claude/",
-        ".github/",
-        ".goat-flow/",
-        "tests/fixtures/**",
-    ]
+    assert document["paths"]["ignore"] == ["generated/**", ".codex/"]
 
 
 def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Fail closed when existing target YAML cannot be loaded strictly.
+
+    Args:
+        tmp_path: Project containing a malformed user ignore value.
+        monkeypatch: Fixture that makes the malformed project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    original = "paths:\n  ignore: generated/**\n"
+    original = "schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore: generated/**\n"
     existing.write_text(original)
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
     assert result.exit_code != 0
-    assert "paths.ignore must be a list of strings" in result.output
+    assert "[tool.gruff-py.paths].ignore must be a list of strings" in result.output
     assert existing.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("source_name", "source_text", "expected_guidance"),
+    (
+        (
+            ".gruff.yaml",
+            "schemaVersion: gruff-py.config.v0.1\n",
+            "migrate-config",
+        ),
+        (
+            "pyproject.toml",
+            '[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n',
+            "TOML",
+        ),
+        (
+            "pyproject.toml",
+            '[tool.gruff]\nschemaVersion = "gruff-py.config.v0.1"\n',
+            "TOML",
+        ),
+    ),
+    ids=("legacy-yaml", "modern-toml", "legacy-toml"),
+)
+def test_cli_init_force_rejects_different_config_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_name: str,
+    source_text: str,
+    expected_guidance: str,
+) -> None:
+    """Refuse to shadow the user's authoritative legacy YAML or TOML source.
+
+    Args:
+        tmp_path: Project containing the alternate config source.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+        source_name: Discovered legacy YAML or pyproject filename.
+        source_text: Original source bytes that must remain unchanged.
+        expected_guidance: YAML migration or TOML hand-edit term shown to the user.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / source_name
+    source.write_text(source_text)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert expected_guidance in result.output
+    assert source.read_text() == source_text
+    assert not (tmp_path / ".gruff-py.yaml").exists()
+
+
+def test_cli_init_force_leaves_unknown_target_bytes_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Leave schema-incompatible target bytes untouched after CLI failure.
+
+    Args:
+        tmp_path: Project containing unknown target configuration.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / ".gruff-py.yaml"
+    original = "schemaVersion: gruff-py.config.v0.1\nunknownSurface: keep-me\n"
+    target.write_text(original)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert "left unchanged" in result.output
+    assert target.read_text() == original
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="chmod 0 read-denial only enforced on POSIX as a non-root user.",
+)
+def test_cli_init_force_rejects_unreadable_pyproject_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Create no YAML when the user's discovered TOML cannot be read.
+
+    Args:
+        tmp_path: Project containing an unreadable pyproject source.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "pyproject.toml"
+    source.write_text('[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n')
+    source.chmod(0)
+    try:
+        result = CliRunner().invoke(main, ["init", "--force"])
+    finally:
+        source.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    assert result.exit_code != 0
+    assert "pyproject.toml" in result.output
+    assert not (tmp_path / ".gruff-py.yaml").exists()
 
 
 def _seed_sample_project(tmp_path: Path) -> None:
@@ -935,7 +1069,8 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "missing required 'schemaVersion'" in result.stderr
-    assert "gruff-py init --force" in result.stderr
+    assert "gruff-py migrate-config" in result.stderr
+    assert "init --force" not in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -953,7 +1088,8 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "schemaVersion 'gruff-py.config.v0.99'" in result.stderr
-    assert "gruff-py init --force" in result.stderr
+    assert "gruff-py migrate-config" in result.stderr
+    assert "init --force" not in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -1919,6 +2055,15 @@ _LEGACY_THRESHOLD_YAML = (
     "      error: 30\n"
 )
 
+_UNKNOWN_OPTION_YAML = (
+    "schemaVersion: gruff-py.config.v0.1\n"
+    "rules:\n"
+    "  docs.dataclass-attributes:\n"
+    "    options:\n"
+    "      min_fields: 6\n"
+    "      allowBullet: false\n"
+)
+
 
 def _write_clean_legacy_project(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# demo\n")
@@ -1928,6 +2073,21 @@ def _write_clean_legacy_project(tmp_path: Path) -> None:
         '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
     )
     (tmp_path / ".gruff-py.yaml").write_text(_LEGACY_THRESHOLD_YAML)
+
+
+def _write_clean_unknown_option_project(project_root: Path) -> None:
+    """Create a finding-free project whose config contains one option typo.
+
+    Args:
+        project_root: Empty project that receives source, README, and config files.
+    """
+    (project_root / "README.md").write_text("# demo\n")
+    source_root = project_root / "src"
+    source_root.mkdir()
+    (source_root / "ok.py").write_text(
+        '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
+    )
+    (project_root / ".gruff-py.yaml").write_text(_UNKNOWN_OPTION_YAML)
 
 
 def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
@@ -1943,6 +2103,32 @@ def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
     assert "Accepted keys" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
+
+
+def test_cli_analyse_warns_on_unknown_option_and_proceeds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tell users the exact ignored option while a normal scan continues.
+
+    Args:
+        tmp_path: Finding-free project containing a valid option and one typo.
+        monkeypatch: Fixture that makes the configured project the working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write_clean_unknown_option_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Config warnings" in result.stdout
+    assert 'Unknown option "rules.docs.dataclass-attributes.options.allowBullet".' in result.stderr
+    assert (
+        "Option ignored; registered defaults and valid sibling options still apply."
+        in result.stderr
+    )
+    assert "options.allow_bullets" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cli_analyse_json_carries_additive_config_warnings(
