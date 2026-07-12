@@ -1585,6 +1585,43 @@ def test_analyse_tokenizer_error_file_reports_parse_error_without_crash(
     assert payload["summary"]["parseErrors"] >= 1
 
 
+def test_cli_parse_error_keeps_redacted_source_text_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Show the parse diagnostic and a safe raw-source finding for a broken file.
+
+    Args:
+        tmp_path: Temporary project root containing the broken Python file.
+        monkeypatch: Fixture that makes the temporary project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    (src / "broken.py").write_text(f"AWS_KEY = {aws_key!r}\neval('payload')\ndef broken(:\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "text",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "[PARSE-ERROR]" in result.output
+    assert "sensitive-data.aws-access-key" in result.output
+    assert "security.dangerous-function-call" not in result.output
+    assert aws_key not in result.output
+
+
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

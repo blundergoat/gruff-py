@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 **Date:** 2026-05-23
+**Clarified:** 2026-07-12 — bounded request accessor calls preserve the finite
+source vocabulary without changing the conservative unknown-call default.
 **Ticket/Context:** M35 ships `security.ssrf` and `security.path-traversal`,
 the first gruff-py rules that require source-to-sink reasoning rather than
 single-AST-node pattern matching. Without an explicit posture the helper
@@ -19,27 +21,30 @@ analysis lives in a single module - `src/gruffpy/rule/security/_security_taint_h
    Module-scope code is analysed as if it were a single anonymous
    function.
 2. **Sources are an explicit, finite set.** Today this is
-   `request.json/form/args/GET/POST/data/query_params/values` (reused from
-   `security.extract-compact-user-input`) plus FastAPI parameter
-   annotations (`Query`, `Body`, `Path`, `Form`, `Header`, `Cookie`).
-   New sources require an explicit code change, not configuration.
+   `request.json/form/args/GET/POST/data/query_params/values`, direct
+   `request.get_json()` (reused from `security.extract-compact-user-input`),
+   plus FastAPI parameter annotations (`Query`, `Body`, `Path`, `Form`,
+   `Header`, `Cookie`). New sources require an explicit code change, not
+   configuration.
 3. **Sanitisers are an explicit allowlist per rule.** Today:
    `urllib.parse.urlparse(...).netloc` chains and `validators.url(...)` for
    SSRF; `werkzeug.utils.secure_filename` and `os.path.realpath` for
    path traversal. Unknown calls are treated as **untainted** (the
    conservative posture - see the trade-off table below).
 4. **Taint propagates through:** `Name` references, `Subscript`,
-   `Attribute`, `BinOp(Add | Mod)`, `JoinedStr` (f-string), and
-   `<tainted>.format(...)` calls.
+   `Attribute`, `BinOp(Add | Mod)`, `JoinedStr` (f-string),
+   `<tainted>.format(...)`, and `get`/`getlist` only when their receiver is
+   already tainted. Generic mappings, caches, unrelated `.data` attributes,
+   and other methods such as `pop` remain untainted.
 5. **Reassignment kills taint.** `x = request.json; x = "literal"`
    leaves `x` untainted at the sink.
 6. **Branch joins are conservative.** If `x` is tainted in one branch and
    untainted in another, the join is **untainted** - favouring low
    false-positive rate over completeness.
 7. **No interprocedural analysis, no import-graph resolution, no symbolic
-   execution.** A call result is untainted; an attribute read on a
-   non-tainted name is untainted; a comprehension is treated as a single
-   expression.
+   execution.** Apart from the finite direct/request-accessor seam above, a
+   call result is untainted; an attribute read on a non-tainted name is
+   untainted; a comprehension is treated as a single expression.
 8. **No fingerprint or schema change.** Optional `metadata.source` and
    `metadata.sink` labels per ADR-011 are carried on findings but are
    not fingerprint inputs.

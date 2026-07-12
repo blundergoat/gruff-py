@@ -2,6 +2,29 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
+
+
+## v0.5.0 - 2026-07-12
+
+- **Source-text checks survive Python parse failures** - Syntactically invalid
+  Python still runs raw-source rules such as sensitive-data detection while
+  AST and project rules remain excluded; parser diagnostics stay fatal and
+  source suppressions still apply.
+- **SSRF sinks now require documented HTTP-client receivers** -
+  `security.ssrf` stays quiet for application-owned `.get()`/`.request()`
+  methods and bare `get()`, while direct `requests`, `httpx`, and
+  `urllib.request.urlopen` calls support positional and `url=` arguments.
+- **Framework request accessors retain security taint** - Flask, Django, DRF,
+  and Starlette `get`/`getlist` calls now preserve an already-recognised request
+  source, while `request.get_json()` is a direct source; generic mapping and
+  cache accessors, unsupported methods, and sanitised values stay quiet.
+- **Weak hashes honour the standard-library non-security opt-out** - MD5 and
+  SHA1 findings are suppressed only for the boolean literal
+  `usedforsecurity=False`; absent, true, numeric, null, and dynamic values still
+  warn, and fast SHA-256/SHA-512 password-hash findings remain unchanged.
+
+
+
 ## v0.4.1 - 2026-06-14
 
 - **New `correctness` pillar with `correctness.unsafe-numeric-coercion`** - Advisory, high confidence, on by default. Catches two unsafe `int()` conversions. (1) `int(x)` guarded by `x.isnumeric()` / `x.isdigit()` (direct, ternary, or early-exit): those checks pass characters `int()` rejects, so `int("²")` crashes even though `"²".isnumeric()` is True. (2) `int(f)` where `f` came from `float(...)` with no `math.isfinite()` check, only in functions whose parameters are all untyped / `object` / `Any` (`nan`/`inf` raise). It stays quiet when the call is already covered - by a `try` that catches the real error in its body (not `else`/`finally`), a `math.isfinite()` check, a typed parameter, a literal `float()` argument, or a re-bound `int`. The pillar is additive: a `correctness` row appears only when there are findings, so clean reports are unchanged.

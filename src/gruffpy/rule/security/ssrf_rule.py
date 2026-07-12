@@ -1,28 +1,10 @@
-"""``security.ssrf`` - HTTP client calls reached by user-controlled URLs.
+"""Report user-controlled URLs passed to direct, supported HTTP clients.
 
-Server-Side Request Forgery: an attacker who can influence the URL passed
-to an outbound HTTP client can pivot the server into making requests to
-internal services, cloud metadata endpoints, or other targets the client
-can reach but the attacker cannot.
-
-The rule uses the bounded intra-procedural taint helper
-(``_security_taint_helper.py``) per ADR-017. A finding fires when the URL
-argument of a known HTTP-client sink is tainted by a recognised request
-source in the same function.
-
-Recognised sinks (gated by ``requests`` / ``httpx`` / ``urllib`` / ``urllib3``
-import):
-
-- ``requests.get/post/put/patch/delete/head/options(<url>, ...)`` -
-  first argument is the URL.
-- ``requests.request("GET", <url>, ...)`` - second argument is the URL.
-- ``httpx.get/post/put/patch/delete/head/options(<url>, ...)`` - same.
-- ``httpx.request("GET", <url>, ...)`` - second argument.
-- ``urlopen(<url>, ...)`` (from ``urllib.request``) - first argument.
-
-Aliased imports (``import requests as r``, chained
-``requests.Session().get(...)`` shapes) are out of scope for v1 - they
-require import-graph or symbolic-receiver tracking.
+Users see this finding when request data reaches a documented outbound call.
+Supported calls are ``requests``/``httpx`` verbs and their ``request`` methods,
+plus ``urllib.request.urlopen`` and directly imported bare ``urlopen``.
+URLs may be positional or use ``url=``. Aliases, client instances, wrappers,
+and ``urllib3`` stay quiet; ADR-017 keeps taint within the current function.
 """
 
 import ast
@@ -37,15 +19,29 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_metadata import finding_security_metadata
-from gruffpy.rule.security._security_node_helper import call_target_name
+from gruffpy.rule.security._security_node_helper import call_keyword, call_target_name
 from gruffpy.rule.security._security_taint_helper import TaintAnalyser
 
-_HTTP_CLIENT_MODULES: frozenset[str] = frozenset({"requests", "httpx", "urllib", "urllib3"})
-_HTTP_VERB_LEAVES: frozenset[str] = frozenset(
-    {"get", "post", "put", "patch", "delete", "head", "options"}
+_HTTP_VERB_TARGETS: frozenset[str] = frozenset(
+    {
+        "requests.get",
+        "requests.post",
+        "requests.put",
+        "requests.patch",
+        "requests.delete",
+        "requests.head",
+        "requests.options",
+        "httpx.get",
+        "httpx.post",
+        "httpx.put",
+        "httpx.patch",
+        "httpx.delete",
+        "httpx.head",
+        "httpx.options",
+    }
 )
-_REQUEST_METHOD_LEAVES: frozenset[str] = frozenset({"request"})
-_URLOPEN_LEAVES: frozenset[str] = frozenset({"urlopen"})
+_REQUEST_METHOD_TARGETS: frozenset[str] = frozenset({"requests.request", "httpx.request"})
+_QUALIFIED_URLOPEN_TARGET = "urllib.request.urlopen"
 _SSRF_SANITISERS: frozenset[str] = frozenset()
 _SOURCE_NEEDLES: tuple[str, ...] = ("request", "urlopen", "httpx")
 _REMEDIATION = (
@@ -59,7 +55,11 @@ _REMEDIATION = (
 
 
 class SsrfRule(Rule):
-    """Detect HTTP-client calls whose URL is tainted by a user-controlled source."""
+    """Turn tainted, supported HTTP calls into user-facing SSRF findings.
+
+    The scanner uses exact call targets to avoid blaming application-owned
+    ``get`` or ``request`` methods while retaining the documented client matrix.
+    """
 
     ID = "security.ssrf"
 
@@ -84,60 +84,113 @@ class SsrfRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag HTTP-client sinks reached by tainted URL arguments.
+        """Show SSRF findings for supported calls reached by request data.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed user source; no tree means the file could not be inspected.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per call site whose URL argument is tainted.
+            Findings visible to the user, or an empty list when no supported sink is unsafe.
         """
+        # A parse failure or missing client token gives the user no reliable SSRF judgment.
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
-        if not _has_http_client_import(unit.tree):
-            return []
+        direct_urlopen_is_imported = _has_direct_urlopen_import(unit.tree)
         taint_map = TaintAnalyser(_SSRF_SANITISERS).analyse_tree(unit.tree)
         definition = self.definition()
         findings: list[Finding] = []
+        # Each parsed call is checked against the small matrix shown in rule documentation.
         for node in ast.walk(unit.tree):
+            # Non-call syntax cannot send a URL, so it never becomes a user finding.
             if not isinstance(node, ast.Call):
                 continue
-            url_arg = _ssrf_url_argument(node)
-            if url_arg is None or not taint_map.is_tainted(url_arg):
+            user_url = _supported_http_client_url_argument(
+                node,
+                direct_urlopen_is_imported=direct_urlopen_is_imported,
+            )
+            # Unsupported calls and fixed URLs stay out of the user's result list.
+            if user_url is None or not taint_map.is_tainted(user_url):
                 continue
             findings.append(_build_finding(definition, unit, node))
         return findings
 
 
-def _has_http_client_import(tree: ast.AST) -> bool:
+def _has_direct_urlopen_import(tree: ast.AST) -> bool:
+    """Return whether the user imported bare ``urlopen`` without an alias.
+
+    Args:
+        tree: Parsed module containing the user's imports.
+
+    Returns:
+        True only for ``from urllib.request import urlopen`` at module scope.
+    """
+    # Only a module can expose a direct import to the calls analysed below.
     if not isinstance(tree, ast.Module):
         return False
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                root = alias.name.split(".")[0]
-                if root in _HTTP_CLIENT_MODULES:
-                    return True
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            root = node.module.split(".")[0]
-            if root in _HTTP_CLIENT_MODULES:
+    # Module-level imports are the only direct binding this rule promises to resolve.
+    for statement in tree.body:
+        # Ordinary imports and user statements cannot bind a bare ``urlopen`` here.
+        if not isinstance(statement, ast.ImportFrom):
+            continue
+        # Other ``from`` imports do not authorize a bare URL-opening sink.
+        if statement.module != "urllib.request":
+            continue
+        # Aliased imports remain out of scope so the displayed matrix stays exact.
+        for imported_name in statement.names:
+            # The plain binding is safe to identify without import-graph or object flow.
+            if imported_name.name == "urlopen" and imported_name.asname is None:
                 return True
     return False
 
 
-def _ssrf_url_argument(call: ast.Call) -> ast.expr | None:
+def _supported_http_client_url_argument(
+    call: ast.Call,
+    *,
+    direct_urlopen_is_imported: bool,
+) -> ast.expr | None:
+    """Return the URL expression for a documented direct HTTP-client call.
+
+    Args:
+        call: User call expression being checked as a possible sink.
+        direct_urlopen_is_imported: Whether bare ``urlopen`` has its supported import.
+
+    Returns:
+        Positional or ``url=`` expression, or None for unsupported/missing URL shapes.
+    """
     target = call_target_name(call)
+    # Dynamic callees cannot be tied to a documented client in the UI.
     if target is None:
         return None
-    leaf = target.split(".")[-1]
-    if leaf in _HTTP_VERB_LEAVES and call.args:
-        return call.args[0]
-    if leaf in _REQUEST_METHOD_LEAVES and len(call.args) >= 2:
-        return call.args[1]
-    if leaf in _URLOPEN_LEAVES and call.args:
-        return call.args[0]
+    # Direct verbs take their URL first, or from the explicit ``url=`` keyword.
+    if target in _HTTP_VERB_TARGETS:
+        return _positional_or_keyword_url(call, positional_index=0)
+    # Generic request methods take method first and URL second, or use ``url=``.
+    if target in _REQUEST_METHOD_TARGETS:
+        return _positional_or_keyword_url(call, positional_index=1)
+    # The fully qualified standard-library call is unambiguous without import tracking.
+    if target == _QUALIFIED_URLOPEN_TARGET:
+        return _positional_or_keyword_url(call, positional_index=0)
+    # A bare name is supported only when the user imported it directly without an alias.
+    if target == "urlopen" and direct_urlopen_is_imported:
+        return _positional_or_keyword_url(call, positional_index=0)
     return None
+
+
+def _positional_or_keyword_url(call: ast.Call, *, positional_index: int) -> ast.expr | None:
+    """Return a supported positional URL before falling back to ``url=``.
+
+    Args:
+        call: Supported HTTP-client call from the user's source.
+        positional_index: Argument slot used by that client method.
+
+    Returns:
+        URL expression, or None when the user supplied no supported URL argument.
+    """
+    # Positional URLs are the client's primary public calling form.
+    if len(call.args) > positional_index:
+        return call.args[positional_index]
+    return call_keyword(call, "url")
 
 
 def _build_finding(
@@ -145,6 +198,16 @@ def _build_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
+    """Build the SSRF result shown to a user for one unsafe HTTP call.
+
+    Args:
+        definition: Stable rule classification used by reports and scoring.
+        unit: User source file containing the unsafe call.
+        call: Supported HTTP call whose URL is tainted.
+
+    Returns:
+        Finding with unchanged remediation and security metadata.
+    """
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,

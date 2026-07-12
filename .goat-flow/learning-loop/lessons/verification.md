@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-12
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -600,3 +600,42 @@ capture both the executable path and version in the same check. Compare the
 concrete binary used by verification with the repository's declared/configured
 version; do not collapse `node_modules/.bin/tool`, `uv run tool`, and a PATH
 global into one unnamed “tool version”.
+
+## Lesson: Grep the sibling port's source before claiming cross-implementation divergence
+
+**Created:** 2026-07-12
+**Incident:** A plan critique rated the 0.5.0 dashboard non-loopback guard a
+"py-only family CLI divergence", leaving sibling behaviour at INFERRED. An
+external cross-review then read the sibling source: gruff-go already ships the
+identical guard, so the finding's direction was wrong — py was converging with
+go, and gruff-php was the actual divergent port. All five ports are checked
+out side-by-side in the workspace; the correction was one grep away the whole
+time.
+**Evidence:** `../gruff-go/internal/dashboard/server.go` (search: "allow-public") -
+refuses non-loopback hosts unless `--allow-public` and warns on override;
+`../gruff-php/src/Cli/Dashboard/DashboardCommand.php` (search: "DEFAULT_HOST") -
+binds any `--host` with no guard.
+
+Before asserting any cross-port parity or divergence claim (in reviews,
+critiques, or plan premises), grep the named sibling repo's source in the
+workspace and cite the anchor. Never leave a divergence claim at INFERRED when
+the sibling checkout is locally readable.
+
+## Lesson: Focused selectors and precedence tests must expose every promised branch
+
+**Created:** 2026-07-12
+**Incident:** During request-accessor taint verification, the exact focused
+command initially passed while deselecting the collision-negative matrix because
+its test name lacked the selector anchor. The first sanitiser-precedence control
+also passed for the wrong reason: conservative unknown-call handling already
+made its wrapper untainted, whether or not the allowlist ran first. A follow-up
+literal-receiver control had no stable call target for allowlist matching. The
+final proof used the same resolvable accessor expression twice—tainted without
+an allowlist and untainted with its leaf allowlisted—and named every positive
+and negative case so the focused command selected them.
+
+Before accepting a focused gate, compare its selected/deselected counts with the
+promised matrix and make every required group share the selector anchor. For
+branch-precedence behavior, include paired control and treatment assertions on
+the same input, choose a call target the matcher can actually resolve, and make
+sure reversing or removing the precedence branch fails the test.
