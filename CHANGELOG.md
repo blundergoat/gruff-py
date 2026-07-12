@@ -96,6 +96,12 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   instead of copying numeric totals, and a multiline-aware invariant rejects
   future duplicates. Current schema, config-precedence, retired-rule, and agent
   path descriptions were reconciled while historical records remain preserved.
+- **CI inputs are pinned and lock drift fails early** - Existing checkout,
+  setup-uv, and shellcheck action versions now resolve through verified commit
+  SHAs; project installation uses the committed lock, version agreement runs
+  before generated docs/tests/build, and the Gruff self-check explicitly
+  disables baseline application. Triggers, permissions, matrix, cache settings,
+  action versions, dependencies, and other quality commands remain unchanged.
 
 
 

@@ -14,10 +14,10 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
           enable-cache: true
 
@@ -25,13 +25,13 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install project
-        run: uv sync --all-extras --dev --python ${{ matrix.python-version }}
+        run: uv sync --locked --all-extras --dev --python ${{ matrix.python-version }}
 
       - name: Bash syntax
         run: bash -n scripts/*.sh
 
       - name: Shellcheck
-        uses: ludeeus/action-shellcheck@master
+        uses: ludeeus/action-shellcheck@00b27aa7cb85167568cb48a3838b75f4265f2bca  # master
         with:
           scandir: ./scripts
 
@@ -47,6 +47,9 @@ jobs:
       - name: Typecheck
         run: uv run mypy src
 
+      - name: Version agreement
+        run: bash scripts/bump-version.sh --check
+
       - name: Rule docs
         run: uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 
@@ -54,7 +57,7 @@ jobs:
         run: uv run pytest
 
       - name: Gruff self-check
-        run: uv run gruff-py analyse src tests --fail-on advisory
+        run: uv run gruff-py analyse src tests --fail-on advisory --no-baseline
 
       - name: Package build
         run: uv build
