@@ -192,6 +192,23 @@ defaults. Keep `thresholds` for named tuning values. Do not combine
 
 Unknown keys are rejected: the default text output prints an error to stderr and exits `1`, while `--format json` emits a `config-error` diagnostic object and exits `2`.
 
+## Accepted Abbreviation Vocabulary
+
+`naming.abbreviation` treats tokens such as `ctx`, `cfg`, `req`, and `idx` as
+unclear until the project documents them. When one of those tokens has one
+established domain meaning, add it to `allowlists.acceptedAbbreviations` rather
+than suppressing each finding.
+
+The configured list replaces the universal seed; it does not extend it. Start
+from the visible list produced by `gruff-py init`, retain the seed entries the
+project uses, and append reviewed project vocabulary. Configuring only `ctx`
+would also remove seed entries such as `id`, `url`, and `db` from the resolved
+allowlist.
+
+Prefer a rename when the short token is temporary, ambiguous, or means
+different things in different modules. The allowlist is a project vocabulary
+contract, not a general exemption for short names.
+
 ## Boolean Boundary Names
 
 `naming.boolean-prefix` normally asks boolean-returning functions, methods, and
@@ -236,6 +253,64 @@ rules:
 Prefer the narrowest exact names needed by the boundary. Do not add broad
 project vocabulary when the identifier can be renamed to a clearer boolean
 prefix.
+
+## Tooling And Evaluation Paths
+
+gruff-py does not currently support path-scoped rule or severity overlays in a
+single config. `paths.ignore` is not a structural-noise control: it removes the
+matched files from every rule, including security and sensitive-data checks.
+
+For a tooling or evaluation tree that needs a lower structural bar, use
+explicit config files and separate runs. Explicit filenames such as
+`.gruff-py-tooling.yaml` are loaded only when passed with `--config`, so they do
+not change the normal project scan.
+
+For example, a reviewed guidance-only tooling config can relax selected
+structural rules:
+
+```yaml
+schemaVersion: gruff-py.config.v0.1
+rules:
+  naming.boolean-prefix:
+    enabled: false
+  complexity.cognitive:
+    threshold: 30
+    severity: warning
+```
+
+A separate safety config keeps the same tooling path gated without running the
+structural catalogue:
+
+```yaml
+schemaVersion: gruff-py.config.v0.1
+selection:
+  pillars:
+    - security
+    - sensitive-data
+```
+
+Run production, tooling guidance, and tooling safety as distinct checks:
+
+```bash
+gruff-py analyse src/ --config .gruff-py.yaml
+gruff-py analyse tools/ --config .gruff-py-tooling.yaml --fail-on none
+gruff-py analyse tools/ --config .gruff-py-tooling-security.yaml --fail-on advisory
+```
+
+The guidance run still renders structural findings but does not fail. The
+safety run gates every finding from the selected safety pillars. Calibrate the
+tooling config against the real scripts rather than copying the example
+threshold as a universal recommendation.
+
+For one isolated file contract, a precise file directive is smaller than a
+second config:
+
+```python
+# gruff: disable-file=naming.boolean-prefix -- external evaluation schema fixes these names
+```
+
+Keep the rationale local and suppress only the named rule. See
+[Suppressing Findings](rules.md#suppressing-findings) for the complete syntax.
 
 ## Markdown Link Sanitizers
 

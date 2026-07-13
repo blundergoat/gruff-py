@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Always run `git status` before suggesting a commit message
@@ -60,6 +60,17 @@ data from JSON consumers. The milestone scope is a starting point, not a
 ceiling-and-floor; reading the codebase first saves both directions
 (removes deliverables that already exist, and reveals the right container
 for the genuinely-new ones).
+
+**2026-07-13 follow-up:** `RuleDocs.config_keys` contains suffixes relative to
+`rules.<rule-id>`, not arbitrary fully qualified configuration paths.
+`src/gruffpy/cli_list_rules.py` (search: `_rule_detail_escape_hatches`) prefixes
+every entry with `rules.<rule-id>.`. Putting the global
+`allowlists.acceptedAbbreviations` key there rendered the invalid path
+`rules.naming.abbreviation.allowlists.acceptedAbbreviations`; the focused
+payload test passed until the human-readable `list-rules` proof exposed it.
+Keep global escape hatches in curated prose unless a separately designed docs
+field and renderer path is approved, and always run the final explain command
+when changing `config_keys`.
 
 
 
@@ -177,7 +188,7 @@ entry-point tests and the direct-consumer suite.
 ## Lesson: Split regression tests by review surface before dogfood
 
 **Created:** 2026-05-31
-**Updated:** 2026-07-12
+**Updated:** 2026-07-13
 **Incident:** While adding correlated scoring coverage, one test asserted file
 score, composite score, and pillar penalties together. The full pytest suite
 passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
@@ -196,6 +207,13 @@ terminology. Root dogfood found two eager tests even though all focused gates
 passed. Splitting by automation, terminal, pull-request, and browser review
 surface preserved every assertion and made the exact dogfood reproduction
 return zero findings.
+
+M29 repeated it in a smaller form: one curated-rule-doc test combined global
+allowlist routing, replacement semantics, four vocabulary examples, and the
+false-positive payload contract. Focused tests and the full suite passed, but
+root dogfood counted 11 assertions. Splitting allowlist guidance from
+false-positive guidance preserved the contract and kept each review surface
+cohesive.
 
 When a regression spans multiple outputs, keep one test per reviewer surface
 even if the setup is shared. This preserves the signal of

@@ -81,19 +81,32 @@ def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> Non
 
 
 def test_rule_docs_to_payload_omits_option_descriptions_when_absent() -> None:
-    docs = documentation_for_rule("naming.abbreviation")  # not in 12-rule list
+    docs = documentation_for_rule("naming.abbreviation")
 
     payload = docs.to_payload()
 
     assert "optionDescriptions" not in payload
 
 
-def test_rule_docs_to_payload_omits_false_positive_shapes_when_empty() -> None:
+def test_abbreviation_docs_explain_project_vocabulary_allowlist() -> None:
+    """Route idiomatic short forms through the global, replace-not-merge allowlist."""
     docs = documentation_for_rule("naming.abbreviation")
 
+    assert docs.config_keys == ()
+    assert "allowlists.acceptedAbbreviations" in docs.fix_guidance
+    assert "replaces the universal seed" in docs.fix_guidance
+    assert all(token in docs.good_example for token in ("ctx", "cfg", "req", "idx"))
+
+
+def test_abbreviation_docs_expose_false_positive_shape() -> None:
+    """Explain when documented project vocabulary is an accepted exception."""
+    docs = documentation_for_rule("naming.abbreviation")
     payload = docs.to_payload()
 
-    assert "falsePositiveShapes" not in payload
+    assert len(docs.false_positive_shapes) == 1
+    assert "project vocabulary" in docs.false_positive_shapes[0].shape
+    assert "allowlists.acceptedAbbreviations" in docs.false_positive_shapes[0].mitigation
+    assert "falsePositiveShapes" in payload
 
 
 def test_markdown_rule_explains_slot_specific_sanitizer_options() -> None:

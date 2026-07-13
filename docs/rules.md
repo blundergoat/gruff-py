@@ -595,11 +595,11 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `naming.abbreviation` protects the naming pillar by flagging abbreviation before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported abbreviation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `naming.abbreviation` leaves abbreviation unaddressed.
-- Good example: Code that satisfies `naming.abbreviation` makes abbreviation explicit or simpler.
+- Rationale: A curated blocklist catches shorthand that makes unfamiliar code harder to verify, while recognizing that abbreviations can be clear vocabulary inside a specific project or framework.
+- Fix guidance: Rename unclear shorthand to the full domain term. When a token is intentional project vocabulary, document its meaning and add the exact token to allowlists.acceptedAbbreviations; a configured list replaces the universal seed rather than extending it.
+- Confidence rationale: Medium confidence: matches come from a narrow curated token list, but tokens such as ctx, cfg, req, and idx can be idiomatic project vocabulary.
+- Bad example: `def load_cfg(ctx): ...` uses shorthand without documenting what the configuration or context represents.
+- Good example: Use `context`, `config`, `request`, and `index`, or document exact project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`.
 
 ### `naming.boolean-prefix`
 

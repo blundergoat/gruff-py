@@ -20,6 +20,7 @@ from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplement
 from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
+from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
@@ -171,7 +172,12 @@ def custom_docs_for(
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case BooleanPrefixRule.ID | HungarianNotationRule.ID | IdentifierQualityRule.ID:
+        case (
+            AbbreviationRule.ID
+            | BooleanPrefixRule.ID
+            | HungarianNotationRule.ID
+            | IdentifierQualityRule.ID
+        ):
             return _naming_rule_docs(definition.id, config_keys)
         case PiiTestFixtureRule.ID:
             return _pii_test_fixture_docs(config_keys)
@@ -551,11 +557,63 @@ def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
         Curated documentation for the matched naming rule.
     """
     documentation_factory = {
+        AbbreviationRule.ID: _abbreviation_docs,
         BooleanPrefixRule.ID: _boolean_prefix_docs,
         HungarianNotationRule.ID: _hungarian_notation_docs,
         IdentifierQualityRule.ID: _identifier_quality_docs,
     }[rule_id]
     return documentation_factory(config_keys)
+
+
+def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain the global project-vocabulary escape hatch without changing its seed.
+
+    Args:
+        config_keys: Per-rule tuning paths; empty because the abbreviation
+            escape hatch is a global allowlist documented in prose instead.
+
+    Returns:
+        Rule guidance that separates unclear shorthand from documented domain vocabulary.
+    """
+    return RuleDocs(
+        rationale=(
+            "A curated blocklist catches shorthand that makes unfamiliar code harder "
+            "to verify, while recognizing that abbreviations can be clear vocabulary "
+            "inside a specific project or framework."
+        ),
+        fix_guidance=(
+            "Rename unclear shorthand to the full domain term. When a token is "
+            "intentional project vocabulary, document its meaning and add the exact "
+            "token to allowlists.acceptedAbbreviations; a configured list replaces "
+            "the universal seed rather than extending it."
+        ),
+        bad_example=(
+            "`def load_cfg(ctx): ...` uses shorthand without documenting what the "
+            "configuration or context represents."
+        ),
+        good_example=(
+            "Use `context`, `config`, `request`, and `index`, or document exact "
+            "project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`."
+        ),
+        confidence_rationale=(
+            "Medium confidence: matches come from a narrow curated token list, but "
+            "tokens such as ctx, cfg, req, and idx can be idiomatic project vocabulary."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A blocked token such as ctx, cfg, req, or idx is established "
+                    "project vocabulary with one documented meaning."
+                ),
+                mitigation=(
+                    "Add the exact token to allowlists.acceptedAbbreviations with its "
+                    "project meaning; retain any universal seed values the project uses "
+                    "because configured values replace the seed."
+                ),
+            ),
+        ),
+    )
 
 
 def _boolean_prefix_docs(config_keys: tuple[str, ...]) -> RuleDocs:
