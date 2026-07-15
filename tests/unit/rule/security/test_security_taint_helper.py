@@ -247,6 +247,16 @@ def test_self_request_attr_recognised_as_source():
     assert taint_map.is_tainted(sink.args[0])
 
 
+def test_unrelated_request_attribute_is_not_a_framework_source() -> None:
+    """Keep an application object's request-shaped attribute outside the source set."""
+    source = "def view(other):\n    sink(other.request.json)\n"
+    tree, analyser = _analyse(source)
+    taint_map = analyser.analyse_tree(tree)
+    sink = _find_call(tree, "sink")
+
+    assert not taint_map.is_tainted(sink.args[0])
+
+
 @pytest.mark.parametrize("request_value_expression", _REQUEST_ACCESSOR_SOURCE_EXPRESSIONS)
 def test_request_accessor_framework_shape_is_tainted(request_value_expression: str) -> None:
     """Keep each supported framework accessor visible to security rules.

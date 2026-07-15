@@ -361,7 +361,12 @@ def _is_request_object(request_receiver: ast.expr) -> bool:
     if isinstance(request_receiver, ast.Name):
         return request_receiver.id == "request"
     # Class-based handlers can expose the same user request as ``self.request``.
-    return isinstance(request_receiver, ast.Attribute) and request_receiver.attr == "request"
+    return (
+        isinstance(request_receiver, ast.Attribute)
+        and request_receiver.attr == "request"
+        and isinstance(request_receiver.value, ast.Name)
+        and request_receiver.value.id == "self"
+    )
 
 
 def _names_from_target(target: ast.expr) -> set[str]:

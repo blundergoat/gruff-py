@@ -5,6 +5,7 @@ ignored. Strict scans stop on the same exact key without claiming it was
 ignored, so CI users never mistake a rejected config for an applied one.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -238,7 +239,7 @@ def test_markdown_sanitizer_options_reject_ambiguous_targets(
     """
     _write_yaml(tmp_path, _markdown_options_yaml(option_lines))
 
-    with pytest.raises(ConfigError, match=expected_message):
+    with pytest.raises(ConfigError, match=re.escape(expected_message)):
         ConfigLoader(tmp_path, _defaults()).load()
 
 
@@ -281,7 +282,7 @@ def test_markdown_sanitizer_toml_rejects_wildcard_target(tmp_path: Path) -> None
         'urlSanitizers = ["helpers.*"]\n'
     )
 
-    with pytest.raises(ConfigError, match="contains invalid call target 'helpers.\\*'"):
+    with pytest.raises(ConfigError, match=r"contains invalid call target 'helpers\.\*'"):
         ConfigLoader(tmp_path, _defaults()).load()
 
 

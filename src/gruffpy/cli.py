@@ -298,6 +298,8 @@ def dashboard(**kwargs: Any) -> None:
     # A missing project cannot seed the user's opening dashboard scan.
     if not dashboard_project_root.is_dir():
         raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
+    if not 0 <= request.port <= 65535:
+        raise click.ClickException("--port must be between 0 and 65535.")
     public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(
         request.host, request.has_acknowledged_public_bind
     )
@@ -327,9 +329,8 @@ def _dashboard_server(request: dashboard_cli._DashboardCliRequest) -> Any:
     project = (request.project_root or launch_root).resolve()
     if not project.is_dir():
         raise click.ClickException(f"Project root is not a directory: {project}")
-    if request.port < 0 or request.port > 65535:
+    if not 0 <= request.port <= 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
-
     initial_state = dashboard_cli.build_initial_dashboard_state(request, project)
     return create_dashboard_server(
         host=request.host,

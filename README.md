@@ -20,7 +20,7 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 
 | Field | Value |
 | --- | --- |
-| Release line | `0.4.1` package line |
+| Release line | `0.5.0` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
@@ -188,7 +188,7 @@ Verify the committed catalog without rewriting it:
 uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 ```
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.4.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.5.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 

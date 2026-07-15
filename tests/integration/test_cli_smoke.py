@@ -943,6 +943,26 @@ def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
     assert not (bogus / ".gruff-py.yaml").exists()
 
 
+def test_cli_dashboard_rejects_invalid_port_before_prompting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject an invalid port before config initialization or server startup.
+
+    Args:
+        monkeypatch: Fixture that records both side effects after option parsing.
+    """
+    config_prompt = Mock()
+    monkeypatch.setattr(cli_module, "_maybe_prompt_to_init_config", config_prompt)
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, "127.0.0.1")
+
+    result = CliRunner().invoke(main, ["dashboard", "--port", "65536"])
+
+    assert result.exit_code == 1, result.output
+    assert "--port must be between 0 and 65535." in result.output
+    config_prompt.assert_not_called()
+    dashboard_server_factory.assert_not_called()
+
+
 def test_cli_init_force_regenerates_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

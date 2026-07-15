@@ -32,7 +32,7 @@ from gruffpy.rule.security._markdown_sanitizer_model import (
 )
 from gruffpy.rule.security._markdown_sanitizer_provenance import MarkdownSanitizerProvenance
 
-_PLACEHOLDER = "\x00"
+_PLACEHOLDER_CHARACTER = "\x00"
 _LINK_PATTERN = re.compile(r"\[([^\[\]]*)\]\(([^()]*)\)")
 _FORMAT_FIELD_PATTERN = re.compile(r"\{([^{}:!]*)(?:[:!][^{}]*)?\}")
 _LINK_SLOT_GROUPS: tuple[tuple[MarkdownSlot, int], ...] = (("label", 1), ("url", 2))
@@ -134,16 +134,20 @@ def _joined_str_findings(
     Returns:
         Slot findings for this f-string; empty means it is not a link or every slot is safe.
     """
+    static_text = "".join(
+        value.value
+        for value in node.values
+        if isinstance(value, ast.Constant) and isinstance(value.value, str)
+    )
+    placeholder = _placeholder_absent_from(static_text)
     template_parts: list[str] = []
     dynamic_values: list[ast.expr] = []
-    # Every f-string component becomes static text or one ordered placeholder.
+    # Every f-string component becomes static text or one ordered collision-free placeholder.
     for value in node.values:
-        # Literal text preserves the Markdown delimiters users wrote.
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             template_parts.append(value.value)
-        # A formatted value is checked against the proof state at its source position.
         elif isinstance(value, ast.FormattedValue):
-            template_parts.append(_PLACEHOLDER)
+            template_parts.append(placeholder)
             dynamic_values.append(value.value)
         else:
             return []
@@ -152,6 +156,7 @@ def _joined_str_findings(
         unit,
         node,
         "".join(template_parts),
+        placeholder,
         dynamic_values,
         provenance,
     )
@@ -182,7 +187,7 @@ def _format_call_findings(
     # A dynamic format template does not give the scanner a stable Markdown link shape.
     if not (isinstance(template_owner, ast.Constant) and isinstance(template_owner.value, str)):
         return []
-    template, dynamic_values = _resolve_format_fields(template_owner.value, node)
+    template, placeholder, dynamic_values = _resolve_format_fields(template_owner.value, node)
     # Missing field arguments make the runtime template unresolved and unsuitable for a finding.
     if template is None:
         return []
@@ -191,6 +196,7 @@ def _format_call_findings(
         unit,
         node,
         template,
+        placeholder,
         dynamic_values,
         provenance,
     )
@@ -199,7 +205,7 @@ def _format_call_findings(
 def _resolve_format_fields(
     template: str,
     node: ast.Call,
-) -> tuple[str | None, list[ast.expr]]:
+) -> tuple[str | None, str, list[ast.expr]]:
     """Replace format fields with placeholders paired to the user's argument expressions.
 
     Args:
@@ -207,8 +213,10 @@ def _resolve_format_fields(
         node: `.format()` call whose missing arguments make resolution return ``None``.
 
     Returns:
-        Placeholder template and ordered values, or ``(None, [])`` when a field is unresolved.
+        Placeholder template, collision-free token, and ordered values. An unresolved
+        field returns ``(None, token, [])``.
     """
+    placeholder = _placeholder_absent_from(template)
     keyword_arguments = {
         keyword_argument.arg: keyword_argument.value
         for keyword_argument in node.keywords
@@ -235,17 +243,32 @@ def _resolve_format_fields(
                 index = int(root)
             # A user can write a Unicode digit such as `²` that `isdigit()` accepts but int rejects.
             except ValueError:
-                return None, []
+                return None, placeholder, []
             argument = node.args[index] if index < len(node.args) else None
         else:
             argument = keyword_arguments.get(root)
         # A missing positional/keyword value would make this user template fail at runtime.
         if argument is None:
-            return None, []
-        resolved.append(_PLACEHOLDER)
+            return None, placeholder, []
+        resolved.append(placeholder)
         dynamic_values.append(argument)
     resolved.append(template[last_end:])
-    return "".join(resolved), dynamic_values
+    return "".join(resolved), placeholder, dynamic_values
+
+
+def _placeholder_absent_from(static_text: str) -> str:
+    """Return a NUL token that cannot be mistaken for user-authored static text.
+
+    Args:
+        static_text: Decoded literal text from one f-string or format template.
+
+    Returns:
+        One or more NUL characters absent from the static text.
+    """
+    placeholder = _PLACEHOLDER_CHARACTER
+    while placeholder in static_text:
+        placeholder += _PLACEHOLDER_CHARACTER
+    return placeholder
 
 
 def _link_slot_findings(
@@ -253,6 +276,7 @@ def _link_slot_findings(
     unit: AnalysisUnit,
     node: ast.AST,
     template: str,
+    placeholder: str,
     dynamic_values: list[ast.expr],
     provenance: MarkdownSanitizerProvenance,
 ) -> list[Finding]:
@@ -263,6 +287,7 @@ def _link_slot_findings(
         unit: User file supplying stable path and source location.
         node: Whole link expression used for the existing finding location.
         template: Link text with placeholders; empty means no detected link shape.
+        placeholder: Per-template token absent from all decoded static text.
         dynamic_values: Expressions aligned to placeholders; empty means a literal link.
         provenance: Statement-ordered safety index for each expression and slot.
 
@@ -275,9 +300,9 @@ def _link_slot_findings(
         # Labels and URLs receive separate configured sanitizer proofs.
         for markdown_slot, group_index in _LINK_SLOT_GROUPS:
             slot_text = match.group(group_index)
-            first_value_index = template.count(_PLACEHOLDER, 0, match.start(group_index))
+            first_value_index = template.count(placeholder, 0, match.start(group_index))
             # Every placeholder in this rendered slot needs its own proof.
-            for offset in range(slot_text.count(_PLACEHOLDER)):
+            for offset in range(slot_text.count(placeholder)):
                 expression = dynamic_values[first_value_index + offset]
                 safety = provenance.proof_for(expression, markdown_slot)
                 # A proved sanitizer/literal path produces no warning for the user.

@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-16
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -93,3 +93,30 @@ cleared the finding without changing cases or assertions.
 threshold, put human-readable labels in the decorator's `ids=` argument even
 when individual `pytest.param` rows could carry their own ids. Run root
 dogfood because pytest, ruff, and mypy do not enforce this repository contract.
+
+## Lesson: Generated Python fixtures need a minimum-runtime execution gate
+
+**Created:** 2026-07-16
+**Incident:** The Markdown sanitizer test helper generated f-strings whose
+double-quoted expressions reused the outer double quote. Python 3.12 accepted
+that PEP 701 grammar, so local verification passed, but the supported Python
+3.11 CI job failed 23 tests before exercising their assertions. During repair,
+the first isolated 3.11 command also omitted the optional development
+dependencies and could not spawn pytest; adding `--all-extras` reproduced the
+actual CI environment without mutating the repository virtualenv. The first
+runtime repair also validated string-valued `ast.Constant` nodes in one loop
+and consumed them in a later loop; mypy correctly rejected the non-local
+narrowing until the consuming branch repeated the value-type check.
+
+**Evidence:** `tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
+(search: `def _link_source`) now uses a triple-quoted outer f-string, and its
+full module runs through:
+`uv run --isolated --locked --all-extras --python 3.11 pytest -o addopts=''
+tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`.
+
+**Prevention:** When tests generate source code, treat the generated text as a
+compatibility artifact. Run the affected module on the minimum supported
+interpreter, with the project's development extra, before relying on the
+default interpreter's parser or starting the full release gate. When an AST
+value's concrete type matters, narrow it in the branch that consumes it instead
+of assuming a prior traversal will carry type information forward.

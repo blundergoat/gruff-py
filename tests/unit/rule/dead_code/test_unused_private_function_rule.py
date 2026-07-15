@@ -141,6 +141,38 @@ def test_used_private_method_via_getattr_literal_does_not_fire():
     assert findings == []
 
 
+def test_sibling_method_reference_does_not_hide_unused_nested_private_function() -> None:
+    """Keep nested-function liveness inside its enclosing method's lexical scope."""
+    source = (
+        "class Service:\n"
+        "    def build(self):\n"
+        "        def _nested():\n"
+        "            return 1\n"
+        "        return 2\n"
+        "    def unrelated(self):\n"
+        "        return _nested\n"
+    )
+
+    findings = UnusedPrivateFunctionRule().analyse(_unit(source), _ctx())
+
+    assert [finding.metadata["name"] for finding in findings] == ["_nested"]
+
+
+def test_enclosing_method_call_keeps_nested_private_function_live() -> None:
+    """Accept a nested private function called from its own lexical scope."""
+    source = (
+        "class Service:\n"
+        "    def build(self):\n"
+        "        def _nested():\n"
+        "            return 1\n"
+        "        return _nested()\n"
+    )
+
+    findings = UnusedPrivateFunctionRule().analyse(_unit(source), _ctx())
+
+    assert findings == []
+
+
 def test_dispatcher_prefix_suppresses_matching_private_methods_only():
     src = (
         "class C:\n"

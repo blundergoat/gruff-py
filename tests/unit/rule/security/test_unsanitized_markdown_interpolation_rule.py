@@ -114,12 +114,12 @@ def _link_source(
             + parameters
             + "):\n"
             + setup_block
-            + '    return f"['
+            + '    return f"""['
             + "{"
             + label_expression
             + "}]({"
             + url_expression
-            + '})"\n'
+            + '})"""\n'
         )
     return (
         f"{module_prelude}def render({parameters}):\n"
@@ -139,6 +139,43 @@ def _metadata(finding: Finding) -> dict[str, object]:
         Fresh metadata mapping; empty would mean the rule omitted its explanation.
     """
     return dict(finding.metadata)
+
+
+@pytest.mark.parametrize(
+    ("syntax", "source"),
+    (
+        pytest.param(
+            "f-string",
+            (
+                "def render(raw_label, raw_url):\n"
+                '    return f"[prefix\\x00{raw_label}]({raw_url})"\n'
+            ),
+            id="f-string",
+        ),
+        pytest.param(
+            "format",
+            (
+                "def render(raw_label, raw_url):\n"
+                '    return "[prefix\\x00{label}]({url})".format('
+                "label=raw_label, url=raw_url)\n"
+            ),
+            id="format",
+        ),
+    ),
+)
+def test_static_nul_does_not_collide_with_dynamic_slot_placeholders(
+    syntax: LinkSyntax,
+    source: str,
+) -> None:
+    """Keep decoded NUL text distinct from ordered dynamic link slots.
+
+    Args:
+        syntax: User link-construction spelling covered by the collision regression.
+        source: Parseable link source containing one decoded static NUL.
+    """
+    findings = _analyse(source)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["label", "url"], syntax
 
 
 @pytest.mark.parametrize("syntax", _LINK_SYNTAXES)

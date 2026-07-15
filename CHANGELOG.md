@@ -17,7 +17,9 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **Framework request accessors retain security taint** - Flask, Django, DRF,
   and Starlette `get`/`getlist` calls now preserve an already-recognised request
   source, while `request.get_json()` is a direct source; generic mapping and
-  cache accessors, unsupported methods, and sanitised values stay quiet.
+  cache accessors, unsupported methods, and sanitised values stay quiet. Direct
+  request sources remain limited to `request` and `self.request`; an unrelated
+  object's `request` attribute is not treated as framework input.
 - **Weak hashes honour the standard-library non-security opt-out** - MD5 and
   SHA1 findings are suppressed only for the boolean literal
   `usedforsecurity=False`; absent, true, numeric, null, and dynamic values still
@@ -45,7 +47,9 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   branches. `html.escape`/`markupsafe.escape` remain label opt-ins only because
   they do not remove Markdown link delimiters. Emitted findings retain their
   text and identities while adding provisional `expressionKind` and
-  `sanitizerResolution` metadata registered in the family vocabulary.
+  `sanitizerResolution` metadata registered in the family vocabulary. Static
+  decoded NUL text no longer collides with dynamic slots, and the regression
+  matrix remains parseable on supported Python 3.11.
 - **Boolean naming now matches scalar annotation shapes exactly** -
   `naming.boolean-prefix` recognizes direct, optional, and `Annotated` scalar
   Boolean functions and attributes without treating containers, callables,
@@ -73,7 +77,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   Non-loopback hosts are refused unless the user passes `--allow-public`; an
   acknowledged bind warns that the unauthenticated dashboard lets remote users
   scan any directory readable by the server process. Default `127.0.0.1`,
-  `localhost`, and `::1` launches remain unchanged.
+  `localhost`, and `::1` launches remain unchanged. Invalid ports are rejected
+  before any optional config-initialization prompt.
 - **Human reports separate scan context from scoring mode** - Text, Markdown,
   and HTML now label `full-project`/`diff` as the scoring mode and show the
   existing partial-project caveat as scan context. Reports do not infer scan
@@ -89,7 +94,9 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   findings retain their identities and add provisionally registered
   `scanScope`/`externalReferenceCoverage` metadata; duplicate module layouts
   remain visible at LOW confidence, and dynamic framework/plugin loads keep
-  using `allowlists.deadCode`.
+  using `allowlists.deadCode`. Nested private functions now use their nearest
+  lexical callable, so a same-name reference in a sibling method cannot hide
+  dead code.
 - **Generated rule-catalog facts no longer drift across current docs** - Rule
   documentation now derives both its rule and pillar totals from registered
   definitions. README and current project memory link to that generated source
@@ -100,8 +107,13 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   setup-uv, and shellcheck action versions now resolve through verified commit
   SHAs; project installation uses the committed lock, version agreement runs
   before generated docs/tests/build, and the Gruff self-check explicitly
-  disables baseline application. Triggers, permissions, matrix, cache settings,
+  disables baseline application. Workflow permissions are read-only, and
+  checkout credentials are not persisted. Triggers, matrix, cache settings,
   action versions, dependencies, and other quality commands remain unchanged.
+- **Destructive-command hook preserves quoted cleanup targets** - Recursive
+  removal checks now keep quote-grouped project-local paths with spaces intact
+  while continuing to reject missing, absolute, traversal, expanded, and other
+  unproved targets.
 
 
 

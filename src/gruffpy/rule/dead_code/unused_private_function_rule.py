@@ -328,17 +328,24 @@ def _private_function_candidate(
     if _should_skip_private_function(node, parents, parent_cls, all_names):
         return None
 
-    # A definition nested in another function is local, not importable as module._name.
-    has_enclosing_function = any(
-        isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
-        for parent in parents
+    # Liveness belongs to the nearest lexical owner, not every method in an outer class.
+    scope = next(
+        (
+            parent
+            for parent in reversed(parents)
+            if isinstance(
+                parent,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef),
+            )
+        ),
+        tree,
     )
 
     return _PrivateFunctionCandidate(
         node=node,
         parents=parents,
-        scope=parent_cls if parent_cls is not None else tree,
-        is_module_level=parent_cls is None and not has_enclosing_function,
+        scope=scope,
+        is_module_level=scope is tree,
     )
 
 

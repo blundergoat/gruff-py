@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-16
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -151,6 +151,30 @@ When matching a shape for an exemption or a safe-guard, enumerate the equivalent
 spellings up front: `BoolOp` conjunctions, `Optional`/`Union` wrappers, prefix
 *and* suffix filename conventions, attribute as well as bare-name references,
 and modifier predicates (`isascii`) that change safety.
+
+## Footgun: fixed sentinels collide with decoded user literals
+
+**Status:** active | **Created:** 2026-07-16 | **Evidence:** OBSERVED
+
+Rules that flatten an AST template into text can accidentally use a character
+the parser also produces from a user literal. The Markdown interpolation rule
+used one NUL character for every dynamic slot; a source escape such as
+`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
+then exceeded the dynamic-expression list and both f-string and `.format()`
+paths raised `IndexError` instead of returning findings.
+
+The repaired implementation chooses a NUL run absent from each template's
+decoded static text in
+`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py`
+(search: `def _placeholder_absent_from`) and threads that exact token through
+slot matching. The collision controls live in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
+(search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`).
+
+When an analyzer needs an internal marker inside user-derived text, prove the
+marker is absent after parsing and decoding, or keep structural components
+separate instead of using a fixed sentinel. Test the literal marker itself in
+every supported source spelling.
 
 ## Resolved Entries
 

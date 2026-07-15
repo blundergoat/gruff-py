@@ -190,7 +190,11 @@ Use `threshold` plus `severity` for metric rules that have warning/error
 defaults. Keep `thresholds` for named tuning values. Do not combine
 `threshold` and `thresholds` in the same rule entry.
 
-Unknown keys are rejected: the default text output prints an error to stderr and exits `1`, while `--format json` emits a `config-error` diagnostic object and exits `2`.
+Unknown top-level keys and structural configuration errors are rejected: the
+default text output prints an error to stderr and exits `1`, while
+`--format json` emits a `config-error` diagnostic object and exits `2`.
+Unknown rule IDs and per-rule keys follow the warning policy in
+[Unknown Rule And Option Keys](#unknown-rule-and-option-keys-warn-by-default---strict-config-to-fail).
 
 ## Accepted Abbreviation Vocabulary
 
