@@ -415,7 +415,11 @@ def _rule_ids(payload: dict[str, Any]) -> set[str]:
 
 
 def _write_long_file(path: Path, *, total_lines: int) -> None:
-    path.write_text('"""Utilities for hook contract conformance."""\n' + "\n" * (total_lines - 2))
+    # Substantive assignments, not blank padding: file-length counts substantive lines only.
+    lines = ['"""Utilities for hook contract conformance."""\n']
+    for line in range(2, total_lines + 1):
+        lines.append(f"value_{line} = {line}\n")
+    path.write_text("".join(lines))
 
 
 def _write_long_file_with_eval(path: Path, *, eval_line: int, total_lines: int) -> None:
@@ -424,7 +428,7 @@ def _write_long_file_with_eval(path: Path, *, eval_line: int, total_lines: int) 
         if line == eval_line:
             lines.append('value = eval("1")\n')
         else:
-            lines.append("\n")
+            lines.append(f"value_{line} = {line}\n")
     path.write_text("".join(lines))
 
 

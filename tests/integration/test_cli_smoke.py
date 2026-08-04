@@ -292,8 +292,13 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     (tmp_path / "README.md").write_text("# Test project\n")
     src = tmp_path / "src"
     src.mkdir()
+    # The module docstring is free under substantive counting, so 1008 route entries keep the
+    # file at exactly 1010 substantive lines for the metadata pin below.
     (src / "sample.py").write_text(
-        '"""Utilities for changed-region file length regression coverage."""\n' + "\n" * 1008
+        '"""Utilities for changed-region file length regression coverage."""\n'
+        + "ROUTES = [\n"
+        + "".join(f'    "route-{index}",\n' for index in range(1008))
+        + "]\n"
     )
     base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
 

@@ -4,6 +4,10 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 
 
+## Unreleased
+
+- **file-length counts substantive lines (family ratification, 2026-08-05)** - blank lines, full-line `#` comments, and PEP 257 docstrings are free; string literals outside docstring positions are data and still count. Threshold 1000 and error severity are unchanged; messages now report substantive lines.
+
 ## v0.5.0 - 2026-07-13
 
 - **Source-text checks survive Python parse failures** - Syntactically invalid
