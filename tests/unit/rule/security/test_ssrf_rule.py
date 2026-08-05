@@ -487,19 +487,16 @@ def test_rebound_direct_urlopen_import_stays_quiet() -> None:
             "import requests",
             "requests.get = identity",
             "requests.get(target_url)",
-            id="requests-method",
         ),
         pytest.param(
             "import httpx",
             "httpx.get = identity",
             "httpx.get(target_url)",
-            id="httpx-method",
         ),
         pytest.param(
             "import urllib.request",
             "urllib.request.urlopen = identity",
             "urllib.request.urlopen(target_url)",
-            id="urllib-method",
         ),
     ),
     ids=("requests-method", "httpx-method", "urllib-method"),
@@ -526,6 +523,106 @@ def test_rebound_http_client_method_stays_quiet(
         f"    {client_call}\n"
     )
 
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "def identity(value): return value\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "    requests.get = identity\n",
+        ),
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "def identity(value): return value\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url); requests.get = identity\n",
+        ),
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "target_url = request.args['url']\n"
+            "requests.get(target_url)\n"
+            "requests = object()\n",
+        ),
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "class Fetch:\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "    requests = object()\n",
+        ),
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "def fetch():\n"
+            "    global requests\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "    requests = object()\n",
+        ),
+    ),
+    ids=(
+        "function-attribute-after-call",
+        "same-line-function-attribute-after-call",
+        "module-name-after-call",
+        "class-name-after-call",
+        "global-name-after-call",
+    ),
+)
+def test_later_non_retroactive_rebinding_keeps_earlier_supported_call(
+    source: str,
+) -> None:
+    """Honor execution order for stores that cannot change an earlier call.
+
+    Args:
+        source: Direct client call followed by a non-retroactive replacement.
+    """
+    findings = SsrfRule().analyse(make_unit(source), default_ctx())
+
+    assert [finding.metadata["target"] for finding in findings] == ["requests.get"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "    requests = object()\n",
+            id="name-assignment",
+        ),
+        pytest.param(
+            "import requests\n"
+            "from flask import request\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "    import requests\n",
+            id="local-import",
+        ),
+    ),
+)
+def test_later_function_local_binding_still_shadows_earlier_spelling(
+    source: str,
+) -> None:
+    """Retain Python's retroactive local-name semantics inside a function.
+
+    Args:
+        source: Function whose later local binding invalidates earlier spelling.
+    """
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 

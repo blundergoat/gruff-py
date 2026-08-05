@@ -8,6 +8,7 @@ keep existing private-method and dynamic exemptions visible during migration.
 import ast
 from collections import Counter
 from collections.abc import Iterator
+from dataclasses import replace
 
 import pytest
 
@@ -15,6 +16,7 @@ from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
+from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
@@ -90,6 +92,19 @@ def test_unused_private_module_function_fires():
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["name"] == "_helper"
+
+
+def test_local_analysis_uses_definition_from_active_rule_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rule = UnusedPrivateFunctionRule()
+    definition = replace(rule.definition(), default_severity=Severity.ERROR)
+    monkeypatch.setattr(rule, "definition", lambda: definition)
+
+    findings = rule.analyse(_unit("def _helper():\n    pass\n"), _ctx())
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
 
 
 def test_used_private_function_does_not_fire():

@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-08-05
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -89,6 +89,9 @@ The trap recurred on 2026-08-05 in
 `def test_rebound_http_client_method_stays_quiet`): every `pytest.param` row
 already had an `id=`, but root dogfood still required the checked decorator's
 own `ids=` surface.
+It recurred again on 2026-08-06 in the same file's source-order matrix:
+five readable row-level ids did not satisfy the rule until the decorator
+received its explicit `ids=` tuple.
 **Evidence:**
 `src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search:
 `def _parametrize_candidate`) checks `call_keyword(decorator, "ids")`, while
@@ -103,11 +106,14 @@ dogfood because pytest, ruff, and mypy do not enforce this repository contract.
 
 **Created:** 2026-08-05
 **What happened:** Focused pytest, ruff, and mypy were green, but root dogfood
-rejected three new Boolean-returning helpers whose names did not use the
+rejected two new Boolean-returning helpers whose names did not use the
 repository's predicate vocabulary. Renaming them preserved behavior and
-cleared all three `naming.boolean-prefix` findings. The tri-state receiver
-resolver was made an explicit status value instead of disguising `bool | None`
-as a predicate.
+cleared both `naming.boolean-prefix` findings. The companion tri-state
+receiver resolver was made an explicit status value instead of disguising
+`bool | None` as a predicate.
+The source-order follow-up repeated the naming trap once:
+`_binding_shadows_call` returned Boolean but lacked a registered prefix;
+`_is_call_shadowed_by_binding` made the predicate contract explicit.
 **Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
 `def _scope_client_binding_status`, search: `def _has_name_binding`) and
 `src/gruffpy/rule/size/file_length_rule.py` (search:
@@ -115,6 +121,33 @@ as a predicate.
 **Prevention:** Name Boolean-returning helpers for their predicate contract
 before the first root dogfood run; static tooling does not enforce the
 project's intent vocabulary.
+
+## Lesson: Rebinding guards need execution order and Python scope semantics
+
+**Created:** 2026-08-06
+**Incident:** PR #9's current-head review found that SSRF import proof treated
+every later store as if it had already shadowed the call. The RED matrix
+suppressed four real `requests.get` calls before later function-member,
+same-line member, module-name, and class-name stores. A control with a later
+function-local name assignment also stayed quiet, which is correct because
+Python makes that name local for the whole function.
+The first GREEN implementation then pushed `_scope_client_binding_status` to
+cognitive 37 and cyclomatic 24; extracting import classification and
+non-import shadow decisions made the exact dogfood reproduction clean.
+
+**Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
+`def _scope_client_binding_status`, search: `def _is_after_call`) now
+compares line and column positions for directly executed scopes while retaining
+retroactive function-local names.
+`tests/unit/rule/security/test_ssrf_rule.py` (search:
+`def test_later_non_retroactive_rebinding_keeps_earlier_supported_call`)
+pins member, module, class, same-line, global, local-assignment, and local-import
+cases.
+
+**Prevention:** A lexical binding collector cannot answer “what object did this
+call use?” from scope membership alone. Separate retroactive function-local
+bindings from source-ordered module, class, attribute, global, and nonlocal
+stores, and include a same-line case whenever columns decide execution order.
 
 ## Lesson: Generated Python fixtures need a minimum-runtime execution gate
 
@@ -142,3 +175,9 @@ interpreter, with the project's development extra, before relying on the
 default interpreter's parser or starting the full release gate. When an AST
 value's concrete type matters, narrow it in the branch that consumes it instead
 of assuming a prior traversal will carry type information forward.
+
+**2026-08-06 follow-up:** The environment trap recurred when a focused command
+used `uv run --python 3.11 pytest` without `--isolated --locked --all-extras`.
+uv replaced the repository virtualenv with a runtime-only environment, then
+could not spawn pytest. Reuse the proven isolated command above verbatim; the
+flags protect both dependency coverage and the user's working virtualenv.

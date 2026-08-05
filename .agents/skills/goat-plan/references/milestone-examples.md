@@ -37,133 +37,153 @@ For each milestone, produce:
 
 Assumptions are not tasks - they're beliefs about the system that affect the plan:
 
+The bracketed entries below are template placeholders, not execution evidence. Replace them with claims and proof from the active task.
+
 ```markdown
-## Assumptions
-- [x] Background job queue handles 500-item batches (benchmarked in the spike)
-- [ ] File upload endpoint accepts multipart form data (untested)
-- [x] Database migration runs without downtime (spike confirmed in the first milestone)
-- [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
+## Assumptions to validate
+
+- [ ] [Claim that changes the plan if false] (unverified)
+- [x] [Validated claim] ([literal command output or observation from this session])
+- [ ] [Invalidated claim] (INVALIDATED: [evidence]; plan updated at [path and anchor])
 ```
 
 When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
 
 ## Worked Example - Path-Only Intake
 
-User message: `.goat-flow/plans/oauth-refresh/`
+User message: `.goat-flow/plans/<existing-plan>/`
 
-Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` has `Status: complete`; `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` has `Status: in-progress`.
+Evidence read: the active pointer and existing milestone status/task fields at the supplied path.
 
 Expected output:
 
 ```markdown
-Mode: Path-Only Intake. Orientation summary for `.goat-flow/plans/oauth-refresh/`: active pointer is `checkout-hardening`, so I did not switch plans. `oauth-refresh` has M01 complete and M02 in-progress. Current unchecked task: `[CORE] Implement refresh callback`. Next action needed from user: summary, status check, plan update, or start a specific milestone?
+Mode: Path-Only Intake. [Plan path] is [active/inactive]. [Literal status summary]. Current unchecked task: [literal task or none]. Next action needed: summary, status check, plan update, or start a specific milestone?
 ```
 
 Expected outcome: no writes to `.goat-flow/plans/.active`, milestone status fields, task checkboxes, or code.
 
 ## Worked Example - Mode 4 File-Write
 
-User message: `Create milestones for adding OAuth refresh-token rotation to the dashboard login flow.`
+User message: `Create milestones for [approved outcome].`
 
 Expected writes:
-- `.goat-flow/plans/.active` is a one-line pointer: `oauth-refresh`
-- `.goat-flow/plans/oauth-refresh/ISSUE.md`
-- `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md`
-- `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md`
+- `.goat-flow/plans/.active` is a one-line pointer: `<plan-slug>`
+- `.goat-flow/plans/<plan-slug>/ISSUE.md`
+- `.goat-flow/plans/<plan-slug>/M01-<milestone-slug>.md`
 
-Expected `M01-prove-refresh-token-rotation.md` shape:
+Expected milestone shape; every bracketed value must be replaced with active-task evidence:
 
 ```markdown
-# Milestone 01: Prove refresh-token rotation
+# Milestone 01: [Riskiest bounded outcome]
+
 Status: not-started
 
 ## Objective
-Prove the OAuth provider issues rotated refresh tokens and that the app can persist the new token without breaking existing sessions.
+
+[One testable outcome.]
 
 ## Tasks
-- [ ] [RISKY] Verify the OAuth provider returns a replacement refresh token after refresh
-- [ ] [RISKY] Confirm the session store can atomically replace refresh-token metadata
-- [ ] [CORE] Add the minimal refresh-token persistence path
+
+- [ ] [RISKY] [Prove the highest-risk assumption]
+- [ ] [CORE] [Implement the approved behaviour]
+- [ ] [SAFE] [Reconcile documentation or mirrors]
+
+## Assumptions to validate
+
+- [ ] [Load-bearing claim] (unverified)
+
+## Exit criteria
+
+- [ ] [Binary acceptance condition]
 
 ## Testing Gate
+
 ### Static / Contract Check
-- [ ] `npm run typecheck` exits 0
+
+- [ ] `[exact project command]` exits 0
+
+### Automated
+
+- [ ] `[focused test command]` reports zero failures
 
 ### Manual
-- [ ] Refresh an expiring session in a local browser; expected: the user remains signed in and the stored refresh token changes
+
+- [ ] [One action]; expected: [one observable result]
+
+### Acceptance
+
+- [ ] [Named human or role] approves the evidence
+
+## Mid-implementation proof
+
+- [ ] `[focused command or reproduction]` produces [expected result]
+
+## Kill criteria
+
+- Stop if [specific observation invalidates the plan].
+
+## Depends on
+
+- None
+
+## Read first
+
+- `[actual relevant path]`
+
+## Deferred
+
+- None
 ```
 
-Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oauth-refresh/. Ready to start implementation.`
+Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/<plan-slug>/. Ready to start implementation.`
 
 ## Worked Example - Risk-Tagged Milestone
 
 ```markdown
-## Milestone 2: User authentication
+## Tasks
 
-- [ ] [RISKY] Verify OAuth provider supports refresh-token rotation (spike, throwaway)
-- [ ] [RISKY] Confirm session storage works under our load profile
-- [ ] [CORE] Implement login endpoint
-- [ ] [CORE] Implement logout endpoint
-- [ ] [CORE] Implement session expiry
-- [ ] [SAFE] Add login button to header
-- [ ] [SAFE] Update README with auth flow
-
-### Testing Gate
-
-#### Static / Contract Check (must pass before behavioural tests run)
-- [ ] `npm run typecheck` exits 0
-- [ ] `npx eslint --max-warnings 0 src/auth/` exits 0
-
-#### Automated
-- [ ] `npm test -- --testPathPattern=auth` exits 0
-
-#### Manual
-- [ ] Login flow tested in staging with real OAuth provider
-- [ ] Session persists across page reload
-- [ ] Expired session redirects to login
-
-#### Acceptance
-- Developer self-check
+- [ ] [RISKY] [Run the evidence-producing spike]
+- [ ] [RISKY] [Validate the remaining external dependency]
+- [ ] [CORE] [Implement essential logic]
+- [ ] [SAFE] [Update generated or explanatory material]
 ```
 
 ## Worked Example - Phase 3 Human Verification Gate
 
-Continuing the OAuth refresh-token example: M01 (`Prove refresh-token rotation`) finishes, the agent runs the AI Verification Gate, then presents the BLOCKING Human Verification Gate from SKILL.md Phase 3. Concrete presentation:
+Use this template only after running the checks. Replace every bracketed value with literal evidence from the current session; never mark a placeholder complete.
 
 ```markdown
 M01 complete - Human Verification Gate (BLOCKING)
 
 Files changed this session:
-- `src/auth/refresh.ts` - added `rotateRefreshToken()` persistence path
-- `src/auth/session-store.ts` - atomic refresh-token replacement
-- `test/auth/refresh.test.ts` - rotation + stale-token-rejection coverage
+- `[actual path]` - [observed delta]
 
 Exit criteria (evidence from this session):
-- [x] Provider issues a rotated refresh token - `npm test -- refresh.test.ts`: `rotates token on refresh` passing (12 passed, 0 failed)
-- [x] `npm run typecheck` exits 0 - ran this session, exit 0
-- [x] Stored token changes after a browser refresh - manual: session persisted, stored value differed pre/post
+- [x] [Criterion] - `[literal command]`: [literal pass line]
+- [ ] [Manual criterion] - pending human verification
 
 Assumptions:
-- [x] Provider returns a replacement refresh token (validated - observed in the provider response during the spike)
-- [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. M02 scope updated to add a per-session lock before wiring the login flow.
+- [x] [Validated claim] ([literal evidence])
+- [ ] [Invalidated claim] - INVALIDATED: [literal evidence]. [Next milestone] updated at [path and anchor].
 
 M01 complete. Approve to proceed with M02, or adjust?
 ```
 
-The agent stops here and waits. It does not set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The invalidated assumption has already amended M02's scope per the Milestone Retrospective protocol in `skill-conventions.md` - the plan is never changed silently.
+The agent stops here and waits. It does not set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. Any invalidated assumption has already amended M02's scope per the Milestone Retrospective protocol in `skill-conventions.md`.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 
-The same M01 can end the opposite way. Risk-weighted ordering puts the rotation spike first, so a blocker surfaces before any [CORE] work begins: where the gate above had the provider rotating tokens, here the spike finds it does not, and the kill criteria fire instead. M01's kill criteria: `Stop if the OAuth provider does not rotate refresh tokens at all - the rotation feature is moot without provider support.` During the spike the provider returned the same token on every refresh. Concrete output:
+Use this template only after a named kill criterion reproduces. Replace each bracketed value with current-session evidence.
 
 ```markdown
 KILL CRITERIA TRIGGERED - M01 (BLOCKING GATE)
 
-Trigger: `npm test -- refresh.test.ts` - assertion `tokenBefore !== tokenAfter` failed; the provider returned an identical refresh token on repeat refresh. Proof-class: RUNTIME, this session.
+Trigger: `[literal reproduction command]` - [literal failing result]. Proof-class: [RUNTIME or CONTRACT-GREP], this session.
 
-Impact: M01's riskiest assumption is false. Rotation cannot be built on this provider, so M02 (wire login refresh flow) and the rotation requirement in ISSUE.md are blocked, not merely delayed.
+Impact: [Named assumption] is false, so [dependent milestone and requirement] are blocked.
 
-Options: (a) switch to a provider/grant that rotates tokens, (b) drop rotation and re-scope the plan to access-token-only refresh, (c) abandon the plan.
+Options: (a) [approved alternative], (b) [re-scope path], (c) abandon the plan.
 
 Stopping. No further milestones started. Which direction?
 ```

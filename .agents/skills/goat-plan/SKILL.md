@@ -131,7 +131,7 @@ Analysis signals triggered this mode.
 - Run Phase 1. Present milestones. Do NOT write files or modify `.goat-flow/plans/`.
 - Skip Phase 3. Include summary format.
 
-**Transition out:** On "write these to files" / "let's go ahead", switch to Mode 4 using approved Phase 1 output. If prior-turn/session, re-read instructions, `.active`, named sources. Do NOT re-run breakdown.
+**Transition out:** A later explicit persistence request starts a new Mode 4 invocation using the approved Phase 1 output. Re-read instructions, `.active`, and named sources when crossing a turn or session; do not re-run the breakdown.
 
 **CHECKPOINT:** "Milestones for [feature] (no files written). Say 'write to files' to persist, or adjust first."
 
@@ -149,7 +149,7 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 **Filename format:** start with `M` plus a zero-padded number so dashboard and task tooling discover and order it; use a readable slug, e.g. `M01-prove-api-integration.md`.
 
-**File format:** use the Phase 1 milestone field set plus title and Status, ending with Testing Gate (static/contract + automated + manual + acceptance) and Mid-implementation proof.
+**File format:** use title and Status, then every Phase 1 milestone field in its listed order. Do not invent a different ending order for Testing Gate or Mid-implementation proof.
 
 **ISSUE.md:** Write `ISSUE.md` in the task directory. Format: `references/issue-format.md`. Three sections: **Why** (benefits), **What** (requirements, future tense), **How** (developer checklist). Keep stakeholder-readable - no file-level detail. Add "Out of scope" for exclusions.
 
@@ -215,7 +215,7 @@ Plan is NOT complete until the human explicitly approves.
 
 ## Constraints
 
-- MUST pick exactly one Step 0 mode and stay in it through Phase 2.
+- MUST pick exactly one Step 0 mode per invocation and stay in it through Phase 2; a later explicit persistence request starts a new Mode 4 invocation.
 - MUST check for existing milestone files before creating new ones
 - MUST treat bare task paths as read-only context, not implementation permission
 - MUST NOT update `.active`, status, checkboxes, or code from path-only intake

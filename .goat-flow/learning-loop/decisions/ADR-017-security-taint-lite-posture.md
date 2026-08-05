@@ -61,10 +61,10 @@ analysis lives in a single module - `src/gruffpy/rule/security/_security_taint_h
     may map a lexical call target to a configured canonical target. For example,
     `from urllib.parse import quote as encode_url` lets `encode_url(value)` match
     the configured `urllib.parse.quote` target until `encode_url` is rebound.
-    Parameters, assignments, definitions, and later imports that replace a root
-    kill that trust at the lexical position. Nested functions start fresh. The
-    analysis never imports code, follows an import graph, or resolves a symbol
-    through another module.
+    Parameters, assignments, definitions, and later imports that replace a
+    root binding kill that trust at the lexical position. Nested functions
+    start fresh. The analysis never imports code, follows an import graph, or
+    resolves a symbol through another module.
 11. **Markdown sanitizer configuration is slot-aware and exact.** Public options
     are `labelSanitizers` and `urlSanitizers`; entries are non-empty Python call
     targets such as `markdown_label` or `helpers.markdown_url`, never wildcard or

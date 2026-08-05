@@ -113,6 +113,7 @@ class UnusedPrivateFunctionRule(Rule):
         return _analyse_unit(
             unit,
             context,
+            definition=self.definition(),
             include_module_level=True,
             project_liveness=None,
         )
@@ -147,6 +148,7 @@ class UnusedPrivateFunctionRule(Rule):
             candidate_keys = _module_private_candidate_keys(parsed_units)
             project_liveness = build_private_function_liveness(parsed_units, candidate_keys)
 
+        definition = self.definition()
         findings: list[Finding] = []
         # Each scanned file keeps its existing class-local and allowlist checks.
         for unit in parsed_units:
@@ -154,6 +156,7 @@ class UnusedPrivateFunctionRule(Rule):
                 _analyse_unit(
                     unit,
                     context,
+                    definition=definition,
                     include_module_level=include_module_level,
                     project_liveness=project_liveness,
                 )
@@ -195,6 +198,7 @@ def _analyse_unit(
     unit: AnalysisUnit,
     context: RuleContext,
     *,
+    definition: RuleDefinition,
     include_module_level: bool,
     project_liveness: PrivateFunctionLiveness | None,
 ) -> list[Finding]:
@@ -203,6 +207,7 @@ def _analyse_unit(
     Args:
         unit: Parsed source file being reviewed; parse failures return no finding.
         context: Rule execution context supplying the dynamic allowlist.
+        definition: Metadata from the active rule instance.
         include_module_level: False when the user's scan cannot see all callers.
         project_liveness: Full-scan import evidence, or None for local/partial checks.
 
@@ -212,7 +217,6 @@ def _analyse_unit(
     # Files without a private definition token avoid an unnecessary AST walk.
     if unit.tree is None or not _PRIVATE_DEF_RE.search(unit.source):
         return []
-    definition = UnusedPrivateFunctionRule().definition()
     all_names = module_all_names(unit.tree)
     allowlist = context.config.dead_code_allowlist
 

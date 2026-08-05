@@ -135,7 +135,7 @@ Produce the prime critique. Lead with a **Verdict** block:
 - Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
 - Risk level: LOW / MEDIUM / HIGH / CRITICAL
 - Top 1-3 blockers (if any) - one line each, linked to findings below
-- If differential mode: append delta block (`Resolved: N | Regressed: M | New: K | Unchanged: J` vs prior critique)
+- If differential mode: append `Delta vs prior critique [diff-of: <prior-uuid>]: Resolved: N | Regressed: M | New: K | Unchanged: J`
 
 Then the full critique:
 - Consensus findings (preserved as-is)
@@ -154,7 +154,7 @@ Then the full critique:
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 
-**Phase 5.6 - Outcome capture.** After the human picks A/B/C/D, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
+**Phase 5.6 - Outcome capture.** A and D are terminal: A defaults surviving findings to `accepted`, while D defaults them to `deferred`. B returns to Phase 3 for deeper examination; C starts a fresh Phase 1 run. B/C MUST NOT persist `## Outcomes` before a later terminal A/D response. Explicit per-finding human decisions may use `rejected` or `partial`. Do not show `## Outcomes` in the initial Phase 5 gate response.
 
 **Integration hooks.** Populate from surviving findings when applicable:
 - `for-goat-plan` - milestone updates, reordering

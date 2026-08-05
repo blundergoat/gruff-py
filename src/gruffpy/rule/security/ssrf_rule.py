@@ -3,9 +3,11 @@
 Users see this finding when request data reaches a documented outbound call.
 Supported calls are ``requests``/``httpx`` verbs and their ``request`` methods,
 plus ``urllib.request.urlopen`` and directly imported bare ``urlopen``.
-Each receiver requires an exact, unshadowed same-unit import binding. URLs may
-be positional or use ``url=``. Aliases, client instances, wrappers, and
-``urllib3`` stay quiet; ADR-017 keeps taint within the current function.
+Each receiver requires an exact same-unit import binding that is live when the
+call executes. Function-local names bind retroactively; module, class, and
+member stores follow source order. URLs may be positional or use ``url=``.
+Aliases, client instances, wrappers, and ``urllib3`` stay quiet; ADR-017
+keeps taint within the current function.
 """
 
 import ast
@@ -155,11 +157,8 @@ def _supported_http_client_url_argument(
     # Generic request methods take method first and URL second, or use ``url=``.
     if target in _REQUEST_METHOD_TARGETS:
         return _positional_or_keyword_url(call, positional_index=1)
-    # The fully qualified standard-library call has a proved ``urllib.request`` binding.
-    if target == _QUALIFIED_URLOPEN_TARGET:
-        return _positional_or_keyword_url(call, positional_index=0)
-    # A bare name is supported only while its direct import remains unshadowed.
-    if target == "urlopen":
+    # Qualified and bare ``urlopen`` take the URL first; binding is already proved.
+    if target in (_QUALIFIED_URLOPEN_TARGET, "urlopen"):
         return _positional_or_keyword_url(call, positional_index=0)
     return None
 
@@ -210,6 +209,7 @@ def _call_has_supported_binding(
                 binding_name=binding_name,
                 canonical_import=canonical_import,
                 call_line=call.lineno,
+                call_column=call.col_offset,
                 require_prior_import=not crossed_function_scope,
             )
             if status != "unbound":
@@ -221,6 +221,7 @@ def _call_has_supported_binding(
                 binding_name=binding_name,
                 canonical_import=canonical_import,
                 call_line=call.lineno,
+                call_column=call.col_offset,
                 require_prior_import=True,
             )
             if status != "unbound":
@@ -233,6 +234,7 @@ def _call_has_supported_binding(
             binding_name=binding_name,
             canonical_import=canonical_import,
             call_line=call.lineno,
+            call_column=call.col_offset,
             require_prior_import=not crossed_function_scope,
         )
         == "supported"
@@ -245,6 +247,7 @@ def _scope_client_binding_status(
     binding_name: str,
     canonical_import: str,
     call_line: int,
+    call_column: int,
     require_prior_import: bool,
 ) -> _ClientBindingStatus:
     """Classify one scope's binding as imported, shadowed, or absent.
@@ -254,6 +257,7 @@ def _scope_client_binding_status(
         binding_name: Receiver root being resolved.
         canonical_import: Exact supported module or callable import.
         call_line: Source line of the candidate sink.
+        call_column: Source column of the candidate sink.
         require_prior_import: Whether this call executes directly in the scope.
 
     Returns:
@@ -264,24 +268,37 @@ def _scope_client_binding_status(
         scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
     ) and binding_name in _parameter_names(scope.args):
         return "shadowed"
+    has_retroactive_local_bindings = isinstance(
+        scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+    ) and not _has_external_binding_declaration(scope, binding_name)
     direct_statement_ids = {id(statement) for statement in _scope_statements(scope)}
     saw_supported_import = False
     for node in _scope_nodes(scope):
+        is_after_call = require_prior_import and _is_after_call(
+            node,
+            call_line=call_line,
+            call_column=call_column,
+        )
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+            status = _import_binding_status(
+                node,
+                binding_name=binding_name,
+                canonical_import=canonical_import,
+                is_direct_statement=id(node) in direct_statement_ids,
+                is_after_call=is_after_call,
+                should_ignore_later_binding=(is_after_call and not has_retroactive_local_bindings),
+            )
+            if status == "shadowed":
                 return "shadowed"
-            for imported_alias in node.names:
-                if _visible_import_name(node, imported_alias) != binding_name:
-                    continue
-                if (
-                    id(node) not in direct_statement_ids
-                    or (require_prior_import and node.lineno > call_line)
-                    or not _is_exact_supported_import(node, imported_alias, canonical_import)
-                ):
-                    return "shadowed"
+            if status == "supported":
                 saw_supported_import = True
             continue
-        if _has_name_binding(node, binding_name):
+        if _is_call_shadowed_by_binding(
+            node,
+            binding_name=binding_name,
+            is_after_call=is_after_call,
+            has_retroactive_local_bindings=has_retroactive_local_bindings,
+        ):
             return "shadowed"
     return "supported" if saw_supported_import else "unbound"
 
@@ -318,6 +335,112 @@ def _scope_nodes(
         return
     for statement in scope.body:
         yield from walk_statement_scope(statement)
+
+
+def _import_binding_status(
+    statement: ast.Import | ast.ImportFrom,
+    *,
+    binding_name: str,
+    canonical_import: str,
+    is_direct_statement: bool,
+    is_after_call: bool,
+    should_ignore_later_binding: bool,
+) -> _ClientBindingStatus:
+    """Classify one import statement relative to the candidate call.
+
+    Args:
+        statement: Import syntax in the current lexical scope.
+        binding_name: Receiver root being resolved.
+        canonical_import: Exact supported module or callable import.
+        is_direct_statement: Whether the import executes directly in the scope.
+        is_after_call: Whether the statement follows a directly executed call.
+        should_ignore_later_binding: Whether source order makes that import irrelevant.
+
+    Returns:
+        Supported, shadowed, or unbound for this one import statement.
+    """
+    if should_ignore_later_binding:
+        return "unbound"
+    if isinstance(statement, ast.ImportFrom) and any(
+        alias.name == "*" for alias in statement.names
+    ):
+        return "shadowed"
+    status: _ClientBindingStatus = "unbound"
+    for imported_alias in statement.names:
+        if _visible_import_name(statement, imported_alias) != binding_name:
+            continue
+        if (
+            not is_direct_statement
+            or is_after_call
+            or not _is_exact_supported_import(statement, imported_alias, canonical_import)
+        ):
+            return "shadowed"
+        status = "supported"
+    return status
+
+
+def _is_call_shadowed_by_binding(
+    node: ast.AST,
+    *,
+    binding_name: str,
+    is_after_call: bool,
+    has_retroactive_local_bindings: bool,
+) -> bool:
+    """Return whether one non-import binding invalidates the candidate call.
+
+    Args:
+        node: Scope-limited syntax that may bind the receiver.
+        binding_name: Supported receiver root whose trust is being protected.
+        is_after_call: Whether the binding follows a directly executed call.
+        has_retroactive_local_bindings: Whether local names bind for the whole scope.
+
+    Returns:
+        True when the binding controls the receiver at call time.
+    """
+    if not _has_name_binding(node, binding_name):
+        return False
+    if not is_after_call:
+        return True
+    if isinstance(node, ast.Attribute):
+        return False
+    return has_retroactive_local_bindings
+
+
+def _has_external_binding_declaration(
+    scope: ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda,
+    binding_name: str,
+) -> bool:
+    """Return whether a function explicitly resolves the name outside itself.
+
+    Args:
+        scope: Scope whose global/nonlocal declarations are inspected.
+        binding_name: Receiver root that may be external to the function.
+
+    Returns:
+        True when global or nonlocal removes retroactive local binding.
+    """
+    if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        return False
+    return any(
+        isinstance(node, (ast.Global, ast.Nonlocal)) and binding_name in node.names
+        for node in _scope_nodes(scope)
+    )
+
+
+def _is_after_call(node: ast.AST, *, call_line: int, call_column: int) -> bool:
+    """Return whether a binding executes after the candidate call.
+
+    Args:
+        node: Binding syntax carrying a source position.
+        call_line: One-based line where the call starts.
+        call_column: Zero-based column where the call starts.
+
+    Returns:
+        True for later lines or a later statement on the same line.
+    """
+    node_line = getattr(node, "lineno", call_line)
+    node_column = getattr(node, "col_offset", call_column)
+    return (node_line, node_column) > (call_line, call_column)
 
 
 def _parameter_names(arguments: ast.arguments) -> set[str]:

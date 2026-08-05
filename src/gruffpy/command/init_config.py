@@ -21,7 +21,11 @@ from gruffpy.config.analysis_config import (
     AnalysisConfig,
 )
 from gruffpy.config.exceptions import ConfigError
-from gruffpy.config.loader import ConfigLoader
+from gruffpy.config.loader import (
+    DEFAULT_YAML_CONFIG_NAME,
+    LEGACY_YAML_CONFIG_NAME,
+    ConfigLoader,
+)
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.rule.registry import RuleRegistry
 
@@ -43,7 +47,7 @@ DEFAULT_INIT_IGNORED_PATH_PATTERNS = (
     "tests/fixtures/**",
 )
 
-_TARGET_CONFIG_NAME = ".gruff-py.yaml"
+_TARGET_CONFIG_NAME = DEFAULT_YAML_CONFIG_NAME
 _ACCEPTED_ABBREVIATIONS_COMMENTS = (
     "  # acceptedAbbreviations lets naming rules accept project vocabulary.",
     "  # Configured values replace this seed; they do not merge with it.",
@@ -390,7 +394,7 @@ def existing_config_source(project_root: Path) -> Path | None:
         Path to the discovered config source, or ``None`` when none exists.
     """
     # YAML takes precedence, matching the config users get during normal scans.
-    for name in (".gruff-py.yaml", ".gruff.yaml"):
+    for name in (DEFAULT_YAML_CONFIG_NAME, LEGACY_YAML_CONFIG_NAME):
         candidate = project_root / name
         # The first existing YAML file is the source init must respect.
         if candidate.exists():

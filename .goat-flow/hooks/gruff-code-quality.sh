@@ -5,10 +5,10 @@
 #
 # Purpose:
 #   Optional PostToolUse hook that runs the matching gruff analyzer after
-#   a file edit (Edit / Write, or a multi-file edit payload) and surfaces only
-#   findings tied to the lines just changed. This keeps the quality feedback on
-#   the agent's current work instead of forcing cleanup of unrelated debt
-#   elsewhere in the same file.
+#   a file edit (apply_patch / Edit / Write, or a multi-file edit payload) and
+#   surfaces only findings tied to the lines just changed. This keeps the
+#   quality feedback on the agent's current work instead of forcing cleanup of
+#   unrelated debt elsewhere in the same file.
 #
 # Supported analyzers:
 #   - gruff-ts for .ts / .tsx / .mts / .cts / .js / .jsx / .mjs / .cjs
@@ -92,7 +92,7 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) ))
 fi
 
 FOOTER="For triage: consult .goat-flow/skill-docs/playbooks/gruff-code-quality.md"
-SUPPORTED_TOOLS=" edit write multiedit write_to_file replace_file_content multi_replace_file_content "
+SUPPORTED_TOOLS=" apply_patch edit write multiedit write_to_file replace_file_content multi_replace_file_content "
 SKIP_DIR_PATTERN='(^|/)(node_modules|vendor|\.goat-flow|dist|build|coverage|\.git|target|\.venv|\.mypy_cache|\.pytest_cache|\.ruff_cache)(/|$)'
 BINARY_SEARCH_PATHS='vendor/bin, node_modules/.bin, bin, .venv/bin, ~/.local/bin, PATH'
 GRUFF_CODE_QUALITY_TIMEOUT_SECONDS="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-60}"
@@ -612,6 +612,14 @@ self_test() {
   local sample_payload discovered config_path winner
   if ! command -v jq >/dev/null 2>&1; then
     printf 'gruff-code-quality self-test: jq unavailable\n' >&2
+    return 1
+  fi
+
+  payload='{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** End Patch"}}'
+  if [[ "$(json_tool_name "$payload")" != "apply_patch" ]] \
+    || ! supported_tool "apply_patch" \
+    || supported_tool "exec_command"; then
+    printf 'gruff-code-quality self-test: canonical apply_patch tool routing failed\n' >&2
     return 1
   fi
 

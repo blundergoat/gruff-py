@@ -1,7 +1,27 @@
 ---
 category: workflow
-last_reviewed: 2026-08-05
+last_reviewed: 2026-08-06
 ---
+
+## Lesson: Separate static contract defects from behavioral pressure failures
+
+**Created:** 2026-08-06
+**Incident:** PR #9 review feedback identified contradictory goat-plan mode
+language and incomplete goat-critique outcome language. Deterministic reads
+reproduced both defects, but six bounded RED pressure runs still chose the
+intended behavior. Calling that a behavioral RED would have fabricated failure
+evidence; ignoring the static contradictions would have left ambiguous
+contracts installed across three agent mirrors.
+
+Track the evidence separately. A contradictory instruction is a
+`CONTRACT-GREP` defect even when agents infer the intended path. Pressure-test
+results describe observed behavior only: use `RED no-repro` when the baseline
+complies and `stay-GREEN smoke` for a later passing rerun. Do not claim
+bulletproofing without three consecutive max-pressure passes after a real RED.
+
+TDD evidence:
+`.goat-flow/logs/sessions/2026-08-06-goat-plan-tdd.md` and
+`.goat-flow/logs/sessions/2026-08-06-goat-critique-tdd.md`.
 
 ## Lesson: Always run `git status` before suggesting a commit message
 
@@ -164,12 +184,19 @@ replay five independent PR-review reproductions. The same 50-segment guard
 blocked it before execution; five small `python -c` probes then produced the
 required defect-specific evidence independently.
 
+M34 hit the related pipe-to-shell guard while replaying a local hook payload
+with `printf ... | bash .goat-flow/hooks/gruff-code-quality.sh`. A here-string
+into that known local script delivered the same JSON without weakening the
+guard and produced `APPLY_PATCH_HOOK_EXIT=0`.
+
 When an inline validator contains many statements, split it into independently
 named checks whose output states exactly what passed (`STRUCTURE`, `RISK ORDER`,
 `LINKS`, `INDEX`). When a read-only script must inspect Markdown backtick spans,
 construct the delimiter inside the script (for example `chr(96)`) instead of
 placing literal backticks in the shell command text. Treat any PreToolUse block
-as “not run,” never as evidence about the artifact.
+as “not run,” never as evidence about the artifact. Feed a known local script
+through input redirection or a here-string instead of piping generated text to
+a shell interpreter.
 
 ## Lesson: New request fields need a fail-closed compatibility default
 
@@ -219,6 +246,11 @@ false-positive payload contract. Focused tests and the full suite passed, but
 root dogfood counted 11 assertions. Splitting allowlist guidance from
 false-positive guidance preserved the contract and kept each review surface
 cohesive.
+
+M34 repeated the raw-literal branch at one assertion: the Codex hook contract
+test compared its timeout directly with `90`. Focused pytest and ruff passed,
+but root dogfood reported `test-quality.magic-number-assertion`. Naming the
+timeout contract cleared the exact finding without suppressing the rule.
 
 When a regression spans multiple outputs, keep one test per reviewer surface
 even if the setup is shared. This preserves the signal of

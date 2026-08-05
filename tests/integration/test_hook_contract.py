@@ -19,6 +19,23 @@ from gruffpy.version import VERSION
 _GIT = shutil.which("git")
 _SEVERITIES = {"advisory", "warning", "error"}
 _SCOPES = {"line", "symbol", "file", "project"}
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CODEX_HOOK_TIMEOUT_SECONDS = 90
+
+
+def test_codex_registers_post_edit_quality_hook() -> None:
+    payload = json.loads((_REPO_ROOT / ".codex/hooks.json").read_text())
+
+    post_tool_use = payload["hooks"]["PostToolUse"]
+    assert len(post_tool_use) == 1
+    assert post_tool_use[0]["matcher"] == "Edit|Write"
+    handlers = post_tool_use[0]["hooks"]
+    assert len(handlers) == 1
+    handler = handlers[0]
+    assert handler["type"] == "command"
+    assert ".goat-flow/hooks/gruff-code-quality.sh" in handler["command"]
+    assert handler["timeout"] == _CODEX_HOOK_TIMEOUT_SECONDS
+    assert handler["statusMessage"] == "Gruff changed-line quality check"
 
 
 def test_hook_capabilities_advertise_contract() -> None:

@@ -24,12 +24,14 @@ Include an "Out of scope" list at the end of Why for deliberate exclusions that 
 
 Future tense. What needs to be delivered - not how. Each bullet is a testable requirement. A reviewer reading only this section should know what to verify in the diff.
 
+The bracketed entries below are structural placeholders, not project evidence. Replace each one with a requirement grounded in the active task.
+
 ```markdown
 ## What
 
-- Dashboard login needs refresh-token rotation so signed-in users can continue work after access tokens expire
-- Session storage needs atomic refresh-token replacement so concurrent requests cannot restore stale credentials
-- Operational documentation needs to explain the supported rotation behaviour and rollback trigger
+- [Required user-visible outcome]
+- [Required safety or compatibility property]
+- [Required operational or documentation outcome]
 ```
 
 Do not duplicate file-level detail that the milestone files or diff already show. No past tense - this section reads as "here is what must ship" even if the work is already done (the Phase 4 revision flips tense to confirm delivery).
@@ -41,11 +43,11 @@ Checkbox list. Ordered by execution sequence. Each item is an action a developer
 ```markdown
 ## How
 
-- [ ] Prove the OAuth provider returns a replacement refresh token
-- [ ] Wire refresh-token replacement into the login session flow
-- [ ] Add automated coverage for refresh success, stale-token rejection, and concurrent refresh attempts
-- [ ] Run verification: `npm run typecheck`, focused auth tests, and a local browser refresh-session check
-- [ ] Final pass: update milestone evidence, confirm cross-references, and prepare the human verification summary
+- [ ] [Run the evidence-producing inspection or spike]
+- [ ] [Implement the approved behaviour]
+- [ ] [Add focused automated coverage]
+- [ ] [Run exact project verification commands and the required manual check]
+- [ ] [Update milestone evidence and prepare the human verification summary]
 ```
 
 ### Out of scope (follow-ups)
