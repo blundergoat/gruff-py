@@ -10,114 +10,22 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.5.0 - 2026-07-13
 
-- **Source-text checks survive Python parse failures** - Syntactically invalid
-  Python still runs raw-source rules such as sensitive-data detection while
-  AST and project rules remain excluded; parser diagnostics stay fatal and
-  source suppressions still apply.
-- **SSRF sinks now require documented HTTP-client receivers** -
-  `security.ssrf` stays quiet for application-owned `.get()`/`.request()`
-  methods and bare `get()`, while direct `requests`, `httpx`, and
-  `urllib.request.urlopen` calls support positional and `url=` arguments.
-- **Framework request accessors retain security taint** - Flask, Django, DRF,
-  and Starlette `get`/`getlist` calls now preserve an already-recognised request
-  source, while `request.get_json()` is a direct source; generic mapping and
-  cache accessors, unsupported methods, and sanitised values stay quiet. Direct
-  request sources remain limited to `request` and `self.request`; an unrelated
-  object's `request` attribute is not treated as framework input.
-- **Weak hashes honour the standard-library non-security opt-out** - MD5 and
-  SHA1 findings are suppressed only for the boolean literal
-  `usedforsecurity=False`; absent, true, numeric, null, and dynamic values still
-  warn, and fast SHA-256/SHA-512 password-hash findings remain unchanged.
-- **BREAKING: `init --force` now preserves or refuses existing config** - A
-  valid `.gruff-py.yaml` is canonically regenerated with every supported loaded
-  setting preserved, though comments and formatting may change. Malformed
-  targets, legacy YAML, and modern or legacy `pyproject.toml` sources now fail
-  closed without changing files; use `migrate-config` for YAML or edit TOML by
-  hand instead of relying on force as a conversion or recovery command.
-- **Unknown per-rule options no longer reach rule execution** - YAML and TOML
-  option names are checked against each rule's registered defaults. Normal
-  scans warn, remove only unknown names, and retain valid siblings; strict
-  config stops on the exact dotted key. Registered option value handling stays
-  consumer-specific, with no new type schema or renamed option surface.
-- **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** -
-  `security.unsanitized-markdown-interpolation` no longer treats every wrapping
-  call as safe. Labels trust no call by default; URLs trust exact
-  `urllib.parse.quote`/`quote_plus` calls when their `safe` arguments cannot
-  retain `]`, `(`, or `)`. New `labelSanitizers` and `urlSanitizers` options
-  accept exact dotted call targets, including same-file import aliases until
-  rebinding; an empty list trusts no call. Migration from 0.4.1: list each
-  project Markdown helper in its matching slot and review new findings from
-  `str(...)`, identity wrappers, wrong-slot calls, overwrites, and ambiguous
-  branches. `html.escape`/`markupsafe.escape` remain label opt-ins only because
-  they do not remove Markdown link delimiters. Emitted findings retain their
-  text and identities while adding provisional `expressionKind` and
-  `sanitizerResolution` metadata registered in the family vocabulary. Static
-  decoded NUL text no longer collides with dynamic slots, and the regression
-  matrix remains parseable on supported Python 3.11.
-- **Boolean naming now matches scalar annotation shapes exactly** -
-  `naming.boolean-prefix` recognizes direct, optional, and `Annotated` scalar
-  Boolean functions and attributes without treating containers, callables,
-  iterators, generators, mixed unions, or arbitrary generics as Boolean merely
-  because a descendant contains `bool`. Explicit quoted annotations are parsed
-  as bounded inert syntax, never evaluated. Surviving findings keep their text
-  and identities while adding the registered provisional `annotationShape`
-  metadata explanation.
-- **Boolean predicate vocabulary now follows exact identifier tokens** -
-  Scalar Boolean names ending in `alive` or `contains`, plus names with a
-  distinct `has` token in any position, now communicate predicate intent.
-  Vague `status`/`result`/`value` names, `hash`/`hasher` substrings,
-  non-final `alive`/`contains` tokens, and action-result names still receive
-  guidance; exact external exceptions remain available through
-  `acceptedBooleanNames`.
-- **`todo` is no longer a universal placeholder identifier** -
-  `naming.identifier-quality` now leaves legitimate `todo` queue and domain
-  names alone regardless of initializer shape. First-token placeholders such
-  as `temp`/`foo` and numbered forms such as `result1` remain high-confidence
-  warnings; TODO/FIXME comment debt stays under the unchanged
-  `docs.todo-density` rule.
-- **Dashboard compatibility help is honest and remote binds are deliberate** -
-  Dashboard `--diff` and `--scan-timeout` remain accepted for family CLI
-  compatibility but now state that gruff-py does not implement their behavior.
-  Non-loopback hosts are refused unless the user passes `--allow-public`; an
-  acknowledged bind warns that the unauthenticated dashboard lets remote users
-  scan any directory readable by the server process. Default `127.0.0.1`,
-  `localhost`, and `::1` launches remain unchanged. Invalid ports are rejected
-  before any optional config-initialization prompt.
-- **Human reports separate scan context from scoring mode** - Text, Markdown,
-  and HTML now label `full-project`/`diff` as the scoring mode and show the
-  existing partial-project caveat as scan context. Reports do not infer scan
-  coverage when that caveat is absent. Native JSON keeps
-  `run.partialContextCaveat` and `score.scope`, hotspot keeps `scope`, and no
-  score, finding, fingerprint, filter, or exit-code value changes.
-- **Cross-module private-function loads now prove liveness** -
-  `dead-code.unused-private-function` keeps a module-private function when
-  another scanned file performs a real load through an unambiguously resolved
-  absolute or relative import. Import-only and rebound aliases still report.
-  Partial scans suppress module-level deletion advice while preserving
-  private-method checks and the run-level scan-context caveat. Full-project
-  findings retain their identities and add provisionally registered
-  `scanScope`/`externalReferenceCoverage` metadata; duplicate module layouts
-  remain visible at LOW confidence, and dynamic framework/plugin loads keep
-  using `allowlists.deadCode`. Nested private functions now use their nearest
-  lexical callable, so a same-name reference in a sibling method cannot hide
-  dead code.
-- **Generated rule-catalog facts no longer drift across current docs** - Rule
-  documentation now derives both its rule and pillar totals from registered
-  definitions. README and current project memory link to that generated source
-  instead of copying numeric totals, and a multiline-aware invariant rejects
-  future duplicates. Current schema, config-precedence, retired-rule, and agent
-  path descriptions were reconciled while historical records remain preserved.
-- **CI inputs are pinned and lock drift fails early** - Existing checkout,
-  setup-uv, and shellcheck action versions now resolve through verified commit
-  SHAs; project installation uses the committed lock, version agreement runs
-  before generated docs/tests/build, and the Gruff self-check explicitly
-  disables baseline application. Workflow permissions are read-only, and
-  checkout credentials are not persisted. Triggers, matrix, cache settings,
-  action versions, dependencies, and other quality commands remain unchanged.
-- **Destructive-command hook preserves quoted cleanup targets** - Recursive
-  removal checks now keep quote-grouped project-local paths with spaces intact
-  while continuing to reject missing, absolute, traversal, expanded, and other
-  unproved targets.
+- **Source-text checks survive Python parse failures** - Syntactically invalid Python still runs raw-source rules such as sensitive-data detection while AST and project rules remain excluded; parser diagnostics stay fatal and source suppressions still apply.
+- **SSRF sinks now require documented HTTP-client receivers** - `security.ssrf` stays quiet for application-owned `.get()`/`.request()` methods and bare `get()`, while direct `requests`, `httpx`, and `urllib.request.urlopen` calls support positional and `url=` arguments.
+- **Framework request accessors retain security taint** - Flask, Django, DRF, and Starlette `get`/`getlist` calls now preserve an already-recognised request source, while `request.get_json()` is a direct source; generic mapping and cache accessors, unsupported methods, and sanitised values stay quiet. Direct request sources remain limited to `request` and `self.request`; an unrelated object's `request` attribute is not treated as framework input.
+- **Weak hashes honour the standard-library non-security opt-out** - MD5 and SHA1 findings are suppressed only for the boolean literal `usedforsecurity=False`; absent, true, numeric, null, and dynamic values still warn, and fast SHA-256/SHA-512 password-hash findings remain unchanged.
+- **BREAKING: `init --force` now preserves or refuses existing config** - A valid `.gruff-py.yaml` is canonically regenerated with every supported loaded setting preserved, though comments and formatting may change. Malformed targets, legacy YAML, and modern or legacy `pyproject.toml` sources now fail closed without changing files; use `migrate-config` for YAML or edit TOML by hand instead of relying on force as a conversion or recovery command.
+- **Unknown per-rule options no longer reach rule execution** - YAML and TOML option names are checked against each rule's registered defaults. Normal scans warn, remove only unknown names, and retain valid siblings; strict config stops on the exact dotted key. Registered option value handling stays consumer-specific, with no new type schema or renamed option surface.
+- **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** - `security.unsanitized-markdown-interpolation` no longer treats every wrapping call as safe. Labels trust no call by default; URLs trust exact `urllib.parse.quote`/`quote_plus` calls when their `safe` arguments cannot retain `]`, `(`, or `)`. New `labelSanitizers` and `urlSanitizers` options accept exact dotted call targets, including same-file import aliases until rebinding; an empty list trusts no call. Migration from 0.4.1: list each project Markdown helper in its matching slot and review new findings from `str(...)`, identity wrappers, wrong-slot calls, overwrites, and ambiguous branches. `html.escape`/`markupsafe.escape` remain label opt-ins only because they do not remove Markdown link delimiters. Emitted findings retain their text and identities while adding provisional `expressionKind` and `sanitizerResolution` metadata registered in the family vocabulary. Static decoded NUL text no longer collides with dynamic slots, and the regression matrix remains parseable on supported Python 3.11.
+- **Boolean naming now matches scalar annotation shapes exactly** - `naming.boolean-prefix` recognizes direct, optional, and `Annotated` scalar Boolean functions and attributes without treating containers, callables, iterators, generators, mixed unions, or arbitrary generics as Boolean merely because a descendant contains `bool`. Explicit quoted annotations are parsed as bounded inert syntax, never evaluated. Surviving findings keep their text and identities while adding the registered provisional `annotationShape` metadata explanation.
+- **Boolean predicate vocabulary now follows exact identifier tokens** - Scalar Boolean names ending in `alive` or `contains`, plus names with a distinct `has` token in any position, now communicate predicate intent. Vague `status`/`result`/`value` names, `hash`/`hasher` substrings, non-final `alive`/`contains` tokens, and action-result names still receive guidance; exact external exceptions remain available through `acceptedBooleanNames`.
+- **`todo` is no longer a universal placeholder identifier** - `naming.identifier-quality` now leaves legitimate `todo` queue and domain names alone regardless of initializer shape. First-token placeholders such as `temp`/`foo` and numbered forms such as `result1` remain high-confidence warnings; TODO/FIXME comment debt stays under the unchanged `docs.todo-density` rule.
+- **Dashboard compatibility help is honest and remote binds are deliberate** - Dashboard `--diff` and `--scan-timeout` remain accepted for family CLI compatibility but now state that gruff-py does not implement their behavior. Non-loopback hosts are refused unless the user passes `--allow-public`; an acknowledged bind warns that the unauthenticated dashboard lets remote users scan any directory readable by the server process. Default `127.0.0.1`, `localhost`, and `::1` launches remain unchanged. Invalid ports are rejected before any optional config-initialization prompt.
+- **Human reports separate scan context from scoring mode** - Text, Markdown, and HTML now label `full-project`/`diff` as the scoring mode and show the existing partial-project caveat as scan context. Reports do not infer scan coverage when that caveat is absent. Native JSON keeps `run.partialContextCaveat` and `score.scope`, hotspot keeps `scope`, and no score, finding, fingerprint, filter, or exit-code value changes.
+- **Cross-module private-function loads now prove liveness** - `dead-code.unused-private-function` keeps a module-private function when another scanned file performs a real load through an unambiguously resolved absolute or relative import. Import-only and rebound aliases still report. Partial scans suppress module-level deletion advice while preserving private-method checks and the run-level scan-context caveat. Full-project findings retain their identities and add provisionally registered `scanScope`/`externalReferenceCoverage` metadata; duplicate module layouts remain visible at LOW confidence, and dynamic framework/plugin loads keep using `allowlists.deadCode`. Nested private functions now use their nearest lexical callable, so a same-name reference in a sibling method cannot hide dead code.
+- **Generated rule-catalog facts no longer drift across current docs** - Rule documentation now derives both its rule and pillar totals from registered definitions. README and current project memory link to that generated source instead of copying numeric totals, and a multiline-aware invariant rejects future duplicates. Current schema, config-precedence, retired-rule, and agent path descriptions were reconciled while historical records remain preserved.
+- **CI inputs are pinned and lock drift fails early** - Existing checkout, setup-uv, and shellcheck action versions now resolve through verified commit SHAs; project installation uses the committed lock, version agreement runs before generated docs/tests/build, and the Gruff self-check explicitly disables baseline application. Workflow permissions are read-only, and checkout credentials are not persisted. Triggers, matrix, cache settings, action versions, dependencies, and other quality commands remain unchanged.
+- **Destructive-command hook preserves quoted cleanup targets** - Recursive removal checks now keep quote-grouped project-local paths with spaces intact while continuing to reject missing, absolute, traversal, expanded, and other unproved targets.
 
 
 

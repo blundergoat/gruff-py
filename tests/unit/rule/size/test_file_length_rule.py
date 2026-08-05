@@ -100,6 +100,39 @@ def test_docstring_lines_are_free_but_data_strings_count():
     assert len(findings) == 1
 
 
+def test_hash_prefixed_lines_inside_multiline_data_still_count():
+    source = 'PAYLOAD = """start\n# data\npayload\n"""\n'
+    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
+    unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
+
+    findings = FileLengthRule().analyse(unit, _ctx(threshold=3))
+
+    assert len(findings) == 1
+    assert findings[0].metadata["lines"] == 4
+
+
+def test_inline_multiline_docstring_counts_only_code_bearing_header():
+    source = 'def tiny(): """Summary.\nContinuation.\n"""\n'
+    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
+    unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
+
+    findings = FileLengthRule().analyse(unit, _ctx(threshold=0))
+
+    assert len(findings) == 1
+    assert findings[0].metadata["lines"] == 1
+
+
+def test_parenthesized_multiline_docstring_is_free():
+    source = 'def tiny():\n    (\n        "Summary."\n    )\n'
+    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
+    unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
+
+    findings = FileLengthRule().analyse(unit, _ctx(threshold=0))
+
+    assert len(findings) == 1
+    assert findings[0].metadata["lines"] == 1
+
+
 def test_one_line_definition_docstring_keeps_its_header_counted():
     # A docstring sharing the def line must not free that line of code.
     source = "\n".join(['def tiny(): """doc"""'] * 101)

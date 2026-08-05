@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-07-13
+last_reviewed: 2026-08-05
 ---
 
 ## Lesson: Always run `git status` before suggesting a commit message
@@ -158,6 +158,11 @@ as having more than 50 chained segments. A later path-check heredoc was also
 rejected because its regular expression contained literal backticks, which the
 guard conservatively classified as hidden command substitution. Neither failure
 was a plan-validation result; both commands had to be reshaped and rerun.
+
+The trap recurred on 2026-08-05 when one combined read-only heredoc tried to
+replay five independent PR-review reproductions. The same 50-segment guard
+blocked it before execution; five small `python -c` probes then produced the
+required defect-specific evidence independently.
 
 When an inline validator contains many statements, split it into independently
 named checks whose output states exactly what passed (`STRUCTURE`, `RISK ORDER`,

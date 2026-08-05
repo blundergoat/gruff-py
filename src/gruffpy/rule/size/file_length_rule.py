@@ -1,6 +1,8 @@
 """``size.file-length`` - very large files slow navigation and review."""
 
 import ast
+import io
+import tokenize
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -99,36 +101,51 @@ def _substantive_line_count(source: str, tree: ast.AST | None) -> int:
         tree: Parsed AST when available; None for text files or parse failures.
 
     Returns:
-        Number of lines whose stripped text is non-empty, not a ``#`` comment,
-        and not part of a docstring.
+        Number of physical lines covered by code or non-docstring data tokens.
     """
-    docstring_lines = _docstring_line_numbers(tree)
-    count = 0
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+    docstring_spans = _docstring_source_spans(tree, source.splitlines())
+    try:
+        tokens = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        return _fallback_substantive_line_count(source)
+
+    ignored_types = {
+        tokenize.COMMENT,
+        tokenize.DEDENT,
+        tokenize.ENCODING,
+        tokenize.ENDMARKER,
+        tokenize.INDENT,
+        tokenize.NEWLINE,
+        tokenize.NL,
+    }
+    substantive_lines: set[int] = set()
+    for token in tokens:
+        if token.type in ignored_types:
             continue
-        if line_number in docstring_lines:
+        if token.type == tokenize.ERRORTOKEN and token.string.isspace():
             continue
-        count += 1
-    return count
+        if _is_inside_docstring_span(token, docstring_spans):
+            continue
+        substantive_lines.update(range(token.start[0], token.end[0] + 1))
+    return len(substantive_lines)
 
 
-def _docstring_line_numbers(tree: ast.AST | None) -> set[int]:
-    """Collect the line numbers covered by PEP 257 docstrings in the parsed tree.
-
-    A docstring sharing its line with the ``def``/``class`` header (one-line
-    definitions) is skipped so the header's code line always counts.
+def _docstring_source_spans(
+    tree: ast.AST | None,
+    source_lines: list[str],
+) -> tuple[tuple[tuple[int, int], tuple[int, int]], ...]:
+    """Collect token-compatible source spans for PEP 257 docstrings.
 
     Args:
         tree: Parsed AST, or None when the source did not parse.
+        source_lines: Source without newline terminators, used to normalize byte columns.
 
     Returns:
-        Set of 1-based line numbers occupied by conventional docstrings.
+        Start/end positions that enclose only conventional docstring tokens.
     """
     if tree is None:
-        return set()
-    lines: set[int] = set()
+        return ()
+    spans: list[tuple[tuple[int, int], tuple[int, int]]] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -143,11 +160,63 @@ def _docstring_line_numbers(tree: ast.AST | None) -> set[int]:
         )
         if not is_docstring:
             continue
-        header_line = getattr(node, "lineno", None)
-        if header_line is not None and first.lineno == header_line:
-            continue
-        lines.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
-    return lines
+        end_line = first.end_lineno or first.lineno
+        end_column = first.end_col_offset or first.col_offset
+        spans.append(
+            (
+                (first.lineno, _character_column(source_lines, first.lineno, first.col_offset)),
+                (end_line, _character_column(source_lines, end_line, end_column)),
+            )
+        )
+    return tuple(spans)
+
+
+def _character_column(source_lines: list[str], line_number: int, byte_column: int) -> int:
+    """Convert an AST UTF-8 byte column to tokenize's character column.
+
+    Args:
+        source_lines: Source without newline terminators.
+        line_number: One-based source line containing the offset.
+        byte_column: Zero-based UTF-8 byte offset reported by the AST.
+
+    Returns:
+        Zero-based Unicode character offset on the same line.
+    """
+    line = source_lines[line_number - 1]
+    return len(line.encode("utf-8")[:byte_column].decode("utf-8"))
+
+
+def _is_inside_docstring_span(
+    token: tokenize.TokenInfo,
+    spans: tuple[tuple[tuple[int, int], tuple[int, int]], ...],
+) -> bool:
+    """Return whether a token belongs to a conventional docstring expression.
+
+    Args:
+        token: Token whose physical lines would otherwise count as source.
+        spans: Parsed docstring boundaries in tokenize-compatible coordinates.
+
+    Returns:
+        True only when the complete token lies inside one docstring expression.
+    """
+    return any(start <= token.start and token.end <= end for start, end in spans)
+
+
+def _fallback_substantive_line_count(source: str) -> int:
+    """Count parse-failed source when tokenization cannot classify later lines.
+
+    Args:
+        source: Invalid or incomplete Python source text.
+
+    Returns:
+        Nonblank lines that are not visibly full-line comments.
+    """
+    count = 0
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            count += 1
+    return count
 
 
 def _format_number(value: int | float) -> str:

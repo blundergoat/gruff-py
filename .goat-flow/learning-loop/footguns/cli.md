@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-05
 ---
 
 ## Footgun: Click optional-value options + variadic positionals stay tempting
@@ -57,7 +57,7 @@ scan emitted `size.file-length`. Keeping the guard while removing two
 non-semantic lines in the same validation area returned the file to the exact
 1,000-line ceiling.
 
-Before adding any new function or dataclass to cli.py, check `wc -l
+Before adding any code to cli.py, check `wc -l
 src/gruffpy/cli.py` first. If it is within 20 lines of 1000, extract the
 new code to a sibling module before writing it (the natural seams are by
 subcommand — `cli_dashboard.py` already exists; `cli_summary.py`,

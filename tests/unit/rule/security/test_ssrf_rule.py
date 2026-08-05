@@ -365,6 +365,171 @@ def test_bare_get_is_not_supported_http_sink() -> None:
 
 
 @pytest.mark.parametrize(
+    ("receiver_name", "receiver_call"),
+    (
+        pytest.param("requests", "requests.get(target_url)", id="requests"),
+        pytest.param("httpx", "httpx.get(target_url)", id="httpx"),
+    ),
+)
+def test_application_owned_http_module_name_without_import_stays_quiet(
+    receiver_name: str,
+    receiver_call: str,
+) -> None:
+    """A familiar receiver spelling alone is not proof of an HTTP-client sink.
+
+    Args:
+        receiver_name: Application variable that resembles a supported module.
+        receiver_call: Same-shaped application method receiving tainted data.
+    """
+    source = (
+        "from flask import request\n"
+        "class LocalClient:\n"
+        "    def get(self, value): return value\n"
+        f"{receiver_name} = LocalClient()\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        f"    {receiver_call}\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize("receiver_name", ("requests", "httpx"))
+def test_rebound_http_module_import_stays_quiet(receiver_name: str) -> None:
+    """A module assignment invalidates earlier HTTP-client import evidence.
+
+    Args:
+        receiver_name: Supported module root replaced by an application object.
+    """
+    source = (
+        f"import {receiver_name}\n"
+        "from flask import request\n"
+        "class LocalClient:\n"
+        "    def get(self, value): return value\n"
+        f"{receiver_name} = LocalClient()\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        f"    {receiver_name}.get(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize("receiver_name", ("requests", "httpx"))
+def test_function_parameter_shadowing_http_module_stays_quiet(receiver_name: str) -> None:
+    """A local parameter is not the otherwise imported HTTP-client module.
+
+    Args:
+        receiver_name: Supported module root reused as a callback parameter.
+    """
+    source = (
+        f"import {receiver_name}\n"
+        "from flask import request\n"
+        f"def fetch({receiver_name}):\n"
+        "    target_url = request.args['url']\n"
+        f"    {receiver_name}.get(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_module_import_after_function_definition_still_proves_receiver() -> None:
+    """A global import is resolved when the previously defined endpoint runs."""
+    source = (
+        "from flask import request\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    requests.get(target_url)\n"
+        "import requests\n"
+    )
+
+    findings = SsrfRule().analyse(make_unit(source), default_ctx())
+
+    assert [finding.metadata["target"] for finding in findings] == ["requests.get"]
+
+
+def test_application_owned_urllib_receiver_without_import_stays_quiet() -> None:
+    """A same-shaped application namespace is not `urllib.request`."""
+    source = (
+        "from flask import request\n"
+        "class RequestClient:\n"
+        "    def urlopen(self, value): return value\n"
+        "class LocalClient:\n"
+        "    request = RequestClient()\n"
+        "urllib = LocalClient()\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    urllib.request.urlopen(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_rebound_direct_urlopen_import_stays_quiet() -> None:
+    """A local replacement invalidates an earlier bare `urlopen` import."""
+    source = (
+        "from urllib.request import urlopen\n"
+        "from flask import request\n"
+        "def identity(value): return value\n"
+        "urlopen = identity\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    urlopen(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    ("client_import", "replacement", "client_call"),
+    (
+        pytest.param(
+            "import requests",
+            "requests.get = identity",
+            "requests.get(target_url)",
+            id="requests-method",
+        ),
+        pytest.param(
+            "import httpx",
+            "httpx.get = identity",
+            "httpx.get(target_url)",
+            id="httpx-method",
+        ),
+        pytest.param(
+            "import urllib.request",
+            "urllib.request.urlopen = identity",
+            "urllib.request.urlopen(target_url)",
+            id="urllib-method",
+        ),
+    ),
+    ids=("requests-method", "httpx-method", "urllib-method"),
+)
+def test_rebound_http_client_method_stays_quiet(
+    client_import: str,
+    replacement: str,
+    client_call: str,
+) -> None:
+    """A method overwrite invalidates otherwise genuine module-import proof.
+
+    Args:
+        client_import: Direct import that initially establishes client trust.
+        replacement: Attribute assignment replacing the supported sink.
+        client_call: Same-shaped call after the replacement.
+    """
+    source = (
+        f"{client_import}\n"
+        "from flask import request\n"
+        "def identity(value): return value\n"
+        f"{replacement}\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        f"    {client_call}\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
     "source",
     (
         pytest.param(

@@ -696,6 +696,88 @@ def test_parameter_shadowing_loses_imported_sanitizer_trust(syntax: LinkSyntax) 
 
 
 @pytest.mark.parametrize(
+    "method_return",
+    [
+        '        return f"[docs]({quote(raw_url)})"\n',
+        '        return "[docs]({url})".format(url=quote(raw_url))\n',
+    ],
+    ids=_LINK_SYNTAXES,
+)
+def test_class_method_retains_prior_module_import_binding(method_return: str) -> None:
+    """A module import remains visible when a class method starts fresh.
+
+    Args:
+        method_return: F-string or `.format()` return line inside the method.
+    """
+    source = (
+        "from urllib.parse import quote\n"
+        "class Renderer:\n"
+        "    def render(self, raw_url):\n" + method_return
+    )
+
+    assert _analyse(source) == []
+
+
+@pytest.mark.parametrize(
+    "lambda_expression",
+    [
+        'lambda encoded_url: f"[docs]({encoded_url})"',
+        'lambda encoded_url: "[docs]({url})".format(url=encoded_url)',
+    ],
+    ids=_LINK_SYNTAXES,
+)
+def test_lambda_parameter_starts_with_fresh_value_provenance(
+    lambda_expression: str,
+) -> None:
+    """A lambda parameter cannot inherit a safe outer value with the same name.
+
+    Args:
+        lambda_expression: F-string or `.format()` lambda body using its raw parameter.
+    """
+    source = (
+        "from urllib.parse import quote\n"
+        "def render(raw_url):\n"
+        "    encoded_url = quote(raw_url)\n"
+        f"    formatter = {lambda_expression}\n"
+        "    return formatter(raw_url)\n"
+    )
+
+    findings = _analyse(source)
+
+    assert [_metadata(finding) for finding in findings] == [
+        {
+            "slot": "url",
+            "expressionKind": "name",
+            "sanitizerResolution": "raw",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "lambda_expression",
+    [
+        'lambda value: f"[docs]({quote(value)})"',
+        'lambda value: "[docs]({url})".format(url=quote(value))',
+    ],
+    ids=_LINK_SYNTAXES,
+)
+def test_lambda_body_retains_imported_callable_proof(lambda_expression: str) -> None:
+    """Fresh lambda values do not discard an imported sanitizer binding.
+
+    Args:
+        lambda_expression: F-string or `.format()` lambda body calling the import.
+    """
+    source = (
+        "from urllib.parse import quote\n"
+        "def render(raw_url):\n"
+        f"    formatter = {lambda_expression}\n"
+        "    return formatter(raw_url)\n"
+    )
+
+    assert _analyse(source) == []
+
+
+@pytest.mark.parametrize(
     "nested_return",
     [
         '        return f"[docs]({encoded_url})"\n',

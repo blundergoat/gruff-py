@@ -3,6 +3,7 @@
 # gruff: disable-file=test-quality.loop-assertion-without-message -- finding ruleId names the row.
 # gruff: disable-file=test-quality.conditional-logic -- threshold branch mirrors finding shape.
 # gruff: disable-file=docs.complex-branch-rationale -- threshold branch mirrors finding shape.
+import ast
 import json
 import shutil
 import subprocess
@@ -414,17 +415,35 @@ def _rule_ids(payload: dict[str, Any]) -> set[str]:
     return {finding["ruleId"] for finding in payload["findings"]}
 
 
+def test_long_file_helpers_honor_substantive_line_contract(tmp_path: Path) -> None:
+    """Both hook fixtures generate exactly the requested substantive assignments.
+
+    Args:
+        tmp_path: Temporary directory receiving the two generated Python files.
+    """
+    plain_file = tmp_path / "plain.py"
+    eval_file = tmp_path / "eval.py"
+
+    _write_long_file(plain_file, total_lines=3)
+    _write_long_file_with_eval(eval_file, eval_line=3, total_lines=3)
+
+    plain_tree = ast.parse(plain_file.read_text())
+    eval_tree = ast.parse(eval_file.read_text())
+    assert sum(isinstance(statement, ast.Assign) for statement in plain_tree.body) == 3
+    assert sum(isinstance(statement, ast.Assign) for statement in eval_tree.body) == 3
+
+
 def _write_long_file(path: Path, *, total_lines: int) -> None:
     # Substantive assignments, not blank padding: file-length counts substantive lines only.
     lines = ['"""Utilities for hook contract conformance."""\n']
-    for line in range(2, total_lines + 1):
+    for line in range(2, total_lines + 2):
         lines.append(f"value_{line} = {line}\n")
     path.write_text("".join(lines))
 
 
 def _write_long_file_with_eval(path: Path, *, eval_line: int, total_lines: int) -> None:
     lines = ['"""Utilities for hook contract conformance."""\n']
-    for line in range(2, total_lines + 1):
+    for line in range(2, total_lines + 2):
         if line == eval_line:
             lines.append('value = eval("1")\n')
         else:

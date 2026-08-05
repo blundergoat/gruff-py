@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-05
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -84,6 +84,11 @@ names and focused/static gates passed. Root dogfood still reported
 `test-quality.parametrize-annotation` because the project contract checks for
 the decorator-level `ids=` keyword. Moving the same labels to `ids=[...]`
 cleared the finding without changing cases or assertions.
+The trap recurred on 2026-08-05 in
+`tests/unit/rule/security/test_ssrf_rule.py` (search:
+`def test_rebound_http_client_method_stays_quiet`): every `pytest.param` row
+already had an `id=`, but root dogfood still required the checked decorator's
+own `ids=` surface.
 **Evidence:**
 `src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search:
 `def _parametrize_candidate`) checks `call_keyword(decorator, "ids")`, while
@@ -93,6 +98,23 @@ cleared the finding without changing cases or assertions.
 threshold, put human-readable labels in the decorator's `ids=` argument even
 when individual `pytest.param` rows could carry their own ids. Run root
 dogfood because pytest, ruff, and mypy do not enforce this repository contract.
+
+## Lesson: Predicate helper names are dogfood contracts
+
+**Created:** 2026-08-05
+**What happened:** Focused pytest, ruff, and mypy were green, but root dogfood
+rejected three new Boolean-returning helpers whose names did not use the
+repository's predicate vocabulary. Renaming them preserved behavior and
+cleared all three `naming.boolean-prefix` findings. The tri-state receiver
+resolver was made an explicit status value instead of disguising `bool | None`
+as a predicate.
+**Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
+`def _scope_client_binding_status`, search: `def _has_name_binding`) and
+`src/gruffpy/rule/size/file_length_rule.py` (search:
+`def _is_inside_docstring_span`) contain the corrected predicate anchors.
+**Prevention:** Name Boolean-returning helpers for their predicate contract
+before the first root dogfood run; static tooling does not enforce the
+project's intent vocabulary.
 
 ## Lesson: Generated Python fixtures need a minimum-runtime execution gate
 

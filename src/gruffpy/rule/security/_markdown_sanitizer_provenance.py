@@ -265,11 +265,14 @@ class MarkdownSanitizerProvenance:
             # Bases and decorators run in the outer user's current proof state.
             for header_expression in [*statement.bases, *statement.decorator_list]:
                 self._record_expression(header_expression, state)
-            class_state = _FlowState(callables=module_callables.clone())
+            visible_module_callables = (
+                state.callables.clone() if scope_kind == "module" else module_callables.clone()
+            )
+            class_state = _FlowState(callables=visible_module_callables)
             self._scan_statements(
                 statement.body,
                 class_state,
-                module_callables=module_callables,
+                module_callables=visible_module_callables,
                 scope_kind="class",
             )
             self._bind_declaration_name(statement.name, state, scope_kind)
@@ -457,16 +460,7 @@ class MarkdownSanitizerProvenance:
             statement: Return, expression, assertion, or unsupported bounded statement.
             state: Proof state visible while the statement evaluates.
         """
-        # Every expression below this simple statement sees the same incoming state.
-        for descendant in ast.walk(statement):
-            # Nested declarations are dispatched separately and must start fresh.
-            if descendant is not statement and isinstance(
-                descendant, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                continue
-            # Only expression nodes can appear inside a Markdown interpolation.
-            if isinstance(descendant, ast.expr):
-                self._state_by_expression[id(descendant)] = state.clone()
+        self._record_expression_tree(statement, state)
 
     def _record_optional_expression(
         self,
@@ -491,11 +485,32 @@ class MarkdownSanitizerProvenance:
             expression: User expression being evaluated at this source position.
             state: Proof state immediately before evaluation.
         """
-        # Child call arguments and f-string values share the enclosing expression's state.
-        for descendant in ast.walk(expression):
-            # Only expressions can later be queried as Markdown slot values.
-            if isinstance(descendant, ast.expr):
-                self._state_by_expression[id(descendant)] = state.clone()
+        self._record_expression_tree(expression, state)
+
+    def _record_expression_tree(self, node: ast.AST, state: _FlowState) -> None:
+        """Index expressions recursively while respecting fresh lexical scopes.
+
+        Args:
+            node: Statement or expression whose evaluated children need snapshots.
+            state: Proof state visible in the node's current lexical scope.
+        """
+        if isinstance(node, ast.Lambda):
+            # The lambda object is created in the outer scope, including its defaults.
+            self._state_by_expression[id(node)] = state.clone()
+            for default_expression in [*node.args.defaults, *node.args.kw_defaults]:
+                self._record_optional_expression(default_expression, state)
+            lambda_state = _FlowState(callables=state.callables.clone())
+            for parameter_name in function_parameter_names(node.args):
+                lambda_state.callables.shadow(parameter_name)
+            self._record_expression(node.body, lambda_state)
+            return
+        # Declarations encountered below an unsupported statement still own fresh bodies.
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return
+        if isinstance(node, ast.expr):
+            self._state_by_expression[id(node)] = state.clone()
+        for child in ast.iter_child_nodes(node):
+            self._record_expression_tree(child, state)
 
     def _assign_target(
         self,
