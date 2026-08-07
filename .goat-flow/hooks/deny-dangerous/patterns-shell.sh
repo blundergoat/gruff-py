@@ -27,14 +27,15 @@ rm_has_recursive() {
 # it ever executes.
 rm_is_safely_scoped() {
   local c="$1"
-  local -a rm_words=()
-  split_shell_words_into rm_words "$c"
-  # No arguments at all means there cannot be an explicit deletion target.
-  [[ "${#rm_words[@]}" -le 1 ]] && return 1
+  local targets_str
+  targets_str=$(drop_first_shell_word "$c")
+  targets_str="${targets_str#"${targets_str%%[![:space:]]*}"}"
+  targets_str="${targets_str%"${targets_str##*[![:space:]]}"}"
+  # No targets at all (bare `rm -rf`) -> unsafe; never guess what was meant.
+  [[ -z "$targets_str" ]] && return 1
   # Check each target independently - one unsafe path fails the whole command.
   local target
-  local has_target=0
-  for target in "${rm_words[@]:1}"; do
+  for target in $targets_str; do
     # Strip quotes before every scope check: a leading quote otherwise defeats
     # the absolute/home/drive checks below AND the safe-target allowlist, so
     # `rm -rf "/etc"` slipped through while `rm -rf "node_modules"` was blocked.
@@ -43,7 +44,6 @@ rm_is_safely_scoped() {
     [[ "$target" == "--" ]] && continue
     # Options like -rf are not paths either.
     [[ "$target" == -* ]] && continue
-    has_target=1
     # Normalize ./foo/ -> foo so the allowlist below sees one spelling.
     target="${target#./}"
     target="${target%/}"
@@ -77,7 +77,7 @@ rm_is_safely_scoped() {
     # Anything else is a bare top-level name we don't recognise -> unsafe.
     return 1
   done
-  [[ "$has_target" -eq 1 ]]
+  return 0
 }
 
 strip_xargs_payload_command() {
@@ -520,8 +520,6 @@ check_pipeline_xargs_destructive_payloads() {
 
 check_destructive_segment() {
   local cmd="$1"
-  local depth="${2:-0}"
-  prepare_segment_context "$cmd" "$depth" || return $?
   cmd="$CMD_TRIMMED"
 
   if [[ "$HAS_PIPE" -eq 1 ]]; then

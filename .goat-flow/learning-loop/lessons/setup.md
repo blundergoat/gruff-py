@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-07-13
+last_reviewed: 2026-08-08
 ---
 
 ## Lesson: Treat setup stats warnings as harness blockers
@@ -27,3 +27,14 @@ Do not infer uv flags across subcommands. Read `uv <subcommand> --help` before
 adding a safety option, and prove a build did not mutate a protected lockfile by
 capturing its hash before and after. Use `--offline` only to constrain network
 access; it is not a substitute for a lock-enforcement flag.
+
+## Lesson: Run setup audit variants as one coupled gate
+
+**Created:** 2026-08-08
+**Decision changed:** After any setup-document fix or observed dirty-path change, rerun the base, harness, and content audits together before treating any individual pass as final.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-08-08
+**Incident:** During the GOAT Flow 1.15.0 refresh, the first base and harness audits passed while the content audit found 11 setup warnings: a missing architecture anchor, stale orientation facts, and omitted playbook inventories. After those warnings were fixed, the content audit passed. The required full trio then caught a stale `AGENTS.md` commit-guide pointer because a staged guide rename had appeared during the audit cycle. Base and content remained green; only the harness detected the unresolved path. Updating the pointer and rerunning all three audits produced three passes against one filesystem state.
+
+Treat the three audit variants as one verification unit because their evidence is complementary. Before each bounded rerun, capture `git status --short`; if the dirty-path set changed, re-read affected references before interpreting a failure or attributing the mutation. Close the setup gate only when base, harness, and content all pass without another intervening write.

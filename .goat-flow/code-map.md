@@ -57,7 +57,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.13.1` declaration.
+- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.15.0` declaration.
 - `.agents/skills/` = installed Codex goat-flow skills; `.agents/hooks.json` is a separate shared-agent hook surface.
 - `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
 - `CLAUDE.md` = separate Claude peer instructions, retaining their `1.11.0` declaration.
@@ -72,12 +72,13 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/learning-loop/patterns/` = reusable project approaches.
 - `.goat-flow/learning-loop/decisions/` = ADRs when architectural decisions need durable context.
 - `.goat-flow/skill-docs/` = shared skill contract references.
-- `.goat-flow/skill-docs/playbooks/` = on-demand tool availability playbooks.
+- `.goat-flow/skill-docs/playbooks/` = indexed top-level playbooks: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, and `writing-style.md`.
 - `.goat-flow/logs/sessions/` = local session continuity logs.
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
+- GOAT Flow package metadata records its internal src/dashboard/views/ HTML view inventory as (about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace); this is installer/reference metadata, not gruff-py source.
 
 The workspace config, Codex instructions, shared references, hooks, and local
-CLI currently agree on GOAT Flow `1.13.1`; only the separate Claude peer
+CLI currently agree on GOAT Flow `1.15.0`; only the separate Claude peer
 instruction metadata still declares `1.11.0`. This map records that peer-owned
 metadata without rewriting the peer instruction file.
 

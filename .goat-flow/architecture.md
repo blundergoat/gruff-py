@@ -38,6 +38,10 @@ Durable project configuration may live in modern or legacy YAML, or in the corre
 
 The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`: native analysis uses `gruff.analysis.v2`, baselines use `gruff-py.baseline.v1`, and hotspot output uses `gruff-py.hotspot.v1`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing. `Finding.to_dict()` emits both `fingerprint` (line-precise identity used by baselines and SARIF) and `stableIdentity` (line-insensitive identity hashed from `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when `symbol` is `None`) — external diff tooling that wants "the same logical finding across line shifts" reads `stableIdentity`; baseline matching reads `fingerprint`. See ADR-020 for the input set and cross-port pairing.
 
+## Local Data and Evidence Budget
+
+Checkout-local GOAT Flow plans, session and event logs, review artifacts, and scratchpad notes may orient a resumed session, but they do not prove current behaviour or authorize external actions. Fresh command output and current project files provide verification evidence. Promote only verified durable conclusions into the learning loop, and leave retention or removal of local artifacts to the user because GOAT Flow does not purge them automatically.
+
 ## Rules And Scoring
 
 `RuleRegistry.defaults()` instantiates the full rule catalogue. The generated
@@ -73,7 +77,9 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `ruff check`, `ruff format --check`, `mypy`, and `pytest`.
 
-The active Codex/workspace tooling story is GOAT Flow `1.13.1`: `AGENTS.md`, `.goat-flow/config.yaml`, shared skill references, hooks, and the project-local `goat-flow` executable agree on that version. `CLAUDE.md` remains a separate peer instruction surface declaring `1.11.0`; its `.claude/` files coexist with `.agents/` and `.codex/`. The peer metadata is documented without widening Codex setup into peer-owned instructions.
+The active Codex/workspace tooling story is GOAT Flow `1.15.0`: `AGENTS.md`, `.goat-flow/config.yaml`, shared skill references, hooks, and the project-local `goat-flow` executable agree on that version. `CLAUDE.md` remains a separate peer instruction surface declaring `1.11.0`; its `.claude/` files coexist with `.agents/` and `.codex/`. The peer metadata is documented without widening Codex setup into peer-owned instructions.
+
+The installed top-level skill playbooks are `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, and `writing-style.md`; `.goat-flow/skill-docs/playbooks/README.md` is their index.
 
 Packaging uses Hatchling from `pyproject.toml`; `uv build` emits artifacts under `dist/`. Pre-commit config mirrors the same checks, but its ruff hook auto-fixes, so non-mutating verification should use the explicit CI commands.
 
