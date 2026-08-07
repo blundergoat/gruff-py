@@ -33,7 +33,7 @@ Ask First boundaries: cross-implementation contracts in `src/gruffpy/finding/fin
 - Ambiguous requirements: present interpretations and stop before risky writes.
 
 ## Commit Messages
-Use conventional commits (`type(scope): subject` or `type: subject`; observed types: feat, refactor, chore, docs, fix, test) — at least 70% of sampled history matches. Name the behavior, file family, or command that changed; add a body when the subject spans more than one axis. Full reference: `docs/coding-standards/git-commit.md`.
+Use conventional commits (`type(scope): subject` or `type: subject`; observed types: feat, refactor, chore, docs, fix, test) — at least 70% of sampled history matches. Name the behavior, file family, or command that changed; add a body when the subject spans more than one axis. Full reference: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 - Learning loop, grep before every change: `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.
@@ -104,5 +104,5 @@ Every line in this file must fit one of: behavioral rule, scope boundary, comman
 | Tests | `tests/` |
 | Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json`, `package-lock.json` |
-| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit.md` |
+| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit-message.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/`, `.goat-flow/scratchpad/` |
