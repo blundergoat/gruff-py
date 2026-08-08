@@ -30,7 +30,7 @@ There is no authentication layer, service account, or outbound network request. 
 
 `gruff-py dashboard` starts a long-running local HTTP server only when explicitly requested. It binds to `127.0.0.1` by default, has no authentication, and should be treated as a local development UI rather than a shared service. Dashboard HTML, iframe metadata, loading frames, and error frames escape interpolated values before rendering.
 
-Codex sessions use `AGENTS.md`, `.agents/`, and `.codex/`; the separate Claude peer surface uses `CLAUDE.md` and `.claude/`. Shared safety scripts live under `.goat-flow/hooks/`. These agent guardrails protect development sessions from secret reads/writes and dangerous shell operations; application runtime does not enforce them.
+Codex sessions use `AGENTS.md`, `.agents/`, and `.codex/`; the separate Claude peer surface uses `CLAUDE.md` and `.claude/`; the Copilot peer surface uses `.github/copilot-instructions.md` with `.github/skills/` and `.github/hooks/`. Shared safety scripts live under `.goat-flow/hooks/`. These agent guardrails protect development sessions from secret reads/writes and dangerous shell operations; application runtime does not enforce them.
 
 ## Data Flow
 

@@ -5,7 +5,9 @@ Supported calls are ``requests``/``httpx`` verbs and their ``request`` methods,
 plus ``urllib.request.urlopen`` and directly imported bare ``urlopen``.
 Each receiver requires an exact same-unit import binding that is live when the
 call executes. Function-local names bind retroactively; module, class, and
-member stores follow source order. URLs may be positional or use ``url=``.
+member stores resolve to the last one in source order, so a canonical import
+after an earlier shadow still proves the client. URLs may be positional or
+use ``url=``.
 Aliases, client instances, wrappers, and ``urllib3`` stay quiet; ADR-017
 keeps taint within the current function.
 """
@@ -261,8 +263,10 @@ def _scope_client_binding_status(
         require_prior_import: Whether this call executes directly in the scope.
 
     Returns:
-        ``supported`` for exclusive direct import proof, ``shadowed`` for
-        another binding, or ``unbound`` when this scope does not bind the name.
+        ``supported`` for direct import proof, ``shadowed`` for another
+        binding, or ``unbound`` when this scope does not bind the name. The
+        last effective binding in source order decides, so a canonical import
+        that follows an earlier shadow restores trust.
     """
     if isinstance(
         scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
@@ -272,7 +276,9 @@ def _scope_client_binding_status(
         scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
     ) and not _has_external_binding_declaration(scope, binding_name)
     direct_statement_ids = {id(statement) for statement in _scope_statements(scope)}
-    saw_supported_import = False
+    # The receiver a call sees is the last binding that executed before it, so
+    # scanning to the end lets a canonical import undo an earlier shadow.
+    status: _ClientBindingStatus = "unbound"
     for node in _scope_nodes(scope):
         is_after_call = require_prior_import and _is_after_call(
             node,
@@ -280,7 +286,7 @@ def _scope_client_binding_status(
             call_column=call_column,
         )
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            status = _import_binding_status(
+            import_status = _import_binding_status(
                 node,
                 binding_name=binding_name,
                 canonical_import=canonical_import,
@@ -288,10 +294,9 @@ def _scope_client_binding_status(
                 is_after_call=is_after_call,
                 should_ignore_later_binding=(is_after_call and not has_retroactive_local_bindings),
             )
-            if status == "shadowed":
-                return "shadowed"
-            if status == "supported":
-                saw_supported_import = True
+            # ``unbound`` means this import never touches the receiver root.
+            if import_status != "unbound":
+                status = import_status
             continue
         if _is_call_shadowed_by_binding(
             node,
@@ -299,8 +304,8 @@ def _scope_client_binding_status(
             is_after_call=is_after_call,
             has_retroactive_local_bindings=has_retroactive_local_bindings,
         ):
-            return "shadowed"
-    return "supported" if saw_supported_import else "unbound"
+            status = "shadowed"
+    return status
 
 
 def _scope_statements(

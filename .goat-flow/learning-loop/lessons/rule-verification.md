@@ -134,20 +134,33 @@ Python makes that name local for the whole function.
 The first GREEN implementation then pushed `_scope_client_binding_status` to
 cognitive 37 and cyclomatic 24; extracting import classification and
 non-import shadow decisions made the exact dogfood reproduction clean.
+The same guard failed again in the opposite direction on 2026-08-08: it
+returned `shadowed` at the *first* module-scope store and never reached a
+later canonical import, so `requests`, `httpx`, bare `urlopen`, and qualified
+`urllib.request.urlopen` calls inside a function all stayed quiet even though
+the whole module executes before the endpoint runs. That silence contradicted
+both the module docstring's "live when the call executes" promise and the
+already-pinned trailing-import test one scope away.
 
 **Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
 `def _scope_client_binding_status`, search: `def _is_after_call`) now
-compares line and column positions for directly executed scopes while retaining
-retroactive function-local names.
+compares line and column positions for directly executed scopes, retains
+retroactive function-local names, and accumulates the last effective binding
+instead of returning on the first shadow.
 `tests/unit/rule/security/test_ssrf_rule.py` (search:
 `def test_later_non_retroactive_rebinding_keeps_earlier_supported_call`)
 pins member, module, class, same-line, global, local-assignment, and local-import
-cases.
+cases; (search: `def test_restoring_module_import_after_shadow_proves_receiver`,
+search: `def test_module_shadow_after_import_keeps_call_quiet`) pins both
+directions of the shadow/import matrix across all four receivers.
 
 **Prevention:** A lexical binding collector cannot answer “what object did this
 call use?” from scope membership alone. Separate retroactive function-local
 bindings from source-ordered module, class, attribute, global, and nonlocal
 stores, and include a same-line case whenever columns decide execution order.
+Resolve a source-ordered scope by the *last* effective binding, never the first
+match - an early `return "shadowed"` silently converts a restoring rebind into
+a false negative. Whenever a guard has two directions, pin both in one matrix.
 
 ## Lesson: Generated Python fixtures need a minimum-runtime execution gate
 

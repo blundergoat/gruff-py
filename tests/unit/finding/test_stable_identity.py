@@ -177,7 +177,7 @@ def test_stable_identity_handles_php_compatible_slash_escaping() -> None:
     assert len(identity) == 16
     # determinism + length is the contract; precise digest belongs in a cross-port
     # ground-truth fixture (see test_fingerprint.PHP_GROUND_TRUTH) once gruff-php
-    # M05 lands and the two ports can co-generate expected values.
+    # emits stable identities and the two ports can co-generate expected values.
     again = stable_identity_for(
         rule_id="size.file-length",
         file_path="path/with/slashes.py",

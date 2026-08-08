@@ -1212,12 +1212,12 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `security.weak-crypto` protects the security pillar by flagging weak cryptographic hash before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported weak cryptographic hash directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Rationale: MD5 and SHA1 are broken for signatures, tokens, and password material, but they remain valid for cache keys and content digests. The rule reports them only where surrounding names or arguments imply security-sensitive material, so non-security digests stay quiet without configuration.
+- Fix guidance: Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and SHA-256 or better for signatures and tokens. When the digest is genuinely non-security, pass the standard-library keyword `usedforsecurity=False` rather than suppressing the rule.
+- Confidence rationale: High confidence: the call target must resolve to a literal weak algorithm, and a security-context smell in the surrounding names or arguments is required before reporting.
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
-- Bad example: Code that triggers `security.weak-crypto` leaves weak cryptographic hash unaddressed.
-- Good example: Code that satisfies `security.weak-crypto` makes weak cryptographic hash explicit or simpler.
+- Bad example: `hashlib.md5(session_token.encode()).hexdigest()`
+- Good example: `hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` for a non-security digest, or a KDF for password material.
 
 ### `security.xxe`
 

@@ -17,9 +17,11 @@ gruff-py governs AI-generated code so a human reviewer can verify, trust, and si
 - [Dashboard](dashboard.md) - local dashboard flags, controls, and safety notes.
 - [Releasing](releasing.md) - release checks and packaging notes.
 
-## Extra Docs
+## Task Docs
 
-- [Reporting](reporting.md) - combined reporting and CI details retained for existing links.
+- [Triage](triage.md) - read a noisy run with `summary --group-by=rule` instead of scrolling findings.
+- [Explain](explain.md) - inspect one rule's defaults, options, escape hatches, and related rules.
+- [Reporting](reporting.md) - stable link target that routes to the pages above.
 
 ## Shared Contract
 

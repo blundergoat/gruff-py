@@ -60,8 +60,10 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.15.0` declaration.
 - `.agents/skills/` = installed Codex goat-flow skills; `.agents/hooks.json` is a separate shared-agent hook surface.
 - `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
-- `CLAUDE.md` = separate Claude peer instructions, retaining their `1.11.0` declaration.
+- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.15.0` declaration.
 - `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
+- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.15.0` declaration.
+- `.github/skills/` = installed Copilot goat-flow skills; `.github/hooks/` is that surface's hook directory.
 - `.goat-flow/hooks/` = shared deny-dangerous and gruff-code-quality hook scripts, with policy patterns and self-test under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version, skill-install mode, and hook enablement state.
 - `.goat-flow/architecture.md` = cold-path system architecture.
@@ -77,10 +79,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
 - GOAT Flow package metadata records its internal src/dashboard/views/ HTML view inventory as (about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace); this is installer/reference metadata, not gruff-py source.
 
-The workspace config, Codex instructions, shared references, hooks, and local
-CLI currently agree on GOAT Flow `1.15.0`; only the separate Claude peer
-instruction metadata still declares `1.11.0`. This map records that peer-owned
-metadata without rewriting the peer instruction file.
+All four tracked agent instruction surfaces currently declare GOAT Flow
+`1.15.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
+`.goat-flow/config.yaml` workspace record, alongside the shared references,
+hooks, and local CLI. Each instruction file stays standalone and owns its own
+skills directory; a declaration here that disagrees with `.goat-flow/config.yaml`
+is drift to fix, not peer metadata to record.
 
 ## Generated Or Never-Edit Paths
 

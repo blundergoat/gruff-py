@@ -448,6 +448,139 @@ def test_module_import_after_function_definition_still_proves_receiver() -> None
     assert [finding.metadata["target"] for finding in findings] == ["requests.get"]
 
 
+@pytest.mark.parametrize(
+    ("source", "expected_target"),
+    (
+        pytest.param(
+            "from flask import request\n"
+            "class LocalClient:\n"
+            "    def get(self, url): return url\n"
+            "requests = LocalClient()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n"
+            "import requests\n",
+            "requests.get",
+            id="requests-shadow-then-import",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "class LocalClient:\n"
+            "    def get(self, url): return url\n"
+            "httpx = LocalClient()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    httpx.get(target_url)\n"
+            "import httpx\n",
+            "httpx.get",
+            id="httpx-shadow-then-import",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "def urlopen(url): return url\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    urlopen(target_url)\n"
+            "from urllib.request import urlopen\n",
+            "urlopen",
+            id="bare-urlopen-shadow-then-import",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "urllib = object()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    urllib.request.urlopen(target_url)\n"
+            "import urllib.request\n",
+            "urllib.request.urlopen",
+            id="qualified-urlopen-shadow-then-import",
+        ),
+    ),
+    ids=(
+        "requests-shadow-then-import",
+        "httpx-shadow-then-import",
+        "bare-urlopen-shadow-then-import",
+        "qualified-urlopen-shadow-then-import",
+    ),
+)
+def test_restoring_module_import_after_shadow_proves_receiver(
+    source: str,
+    expected_target: str,
+) -> None:
+    """Trust the last module-scope binding a called function actually sees.
+
+    The whole module executes before the endpoint runs, so a canonical import
+    that follows an earlier shadow restores the documented client.
+
+    Args:
+        source: Module shadow, then the endpoint, then the canonical import.
+        expected_target: Documented client spelling reported to the user.
+    """
+    findings = SsrfRule().analyse(make_unit(source), default_ctx())
+
+    assert [finding.metadata["target"] for finding in findings] == [expected_target]
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        pytest.param(
+            "from flask import request\n"
+            "import requests\n"
+            "class LocalClient:\n"
+            "    def get(self, url): return url\n"
+            "requests = LocalClient()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    requests.get(target_url)\n",
+            id="requests-import-then-shadow",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "import httpx\n"
+            "class LocalClient:\n"
+            "    def get(self, url): return url\n"
+            "httpx = LocalClient()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    httpx.get(target_url)\n",
+            id="httpx-import-then-shadow",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "from urllib.request import urlopen\n"
+            "def urlopen(url): return url\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    urlopen(target_url)\n",
+            id="bare-urlopen-import-then-shadow",
+        ),
+        pytest.param(
+            "from flask import request\n"
+            "import urllib.request\n"
+            "urllib = object()\n"
+            "def fetch():\n"
+            "    target_url = request.args['url']\n"
+            "    urllib.request.urlopen(target_url)\n",
+            id="qualified-urlopen-import-then-shadow",
+        ),
+    ),
+    ids=(
+        "requests-import-then-shadow",
+        "httpx-import-then-shadow",
+        "bare-urlopen-import-then-shadow",
+        "qualified-urlopen-import-then-shadow",
+    ),
+)
+def test_module_shadow_after_import_keeps_call_quiet(source: str) -> None:
+    """Keep application receivers quiet when the shadow is the last binding.
+
+    Args:
+        source: Canonical import replaced by an application binding before use.
+    """
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
 def test_application_owned_urllib_receiver_without_import_stays_quiet() -> None:
     """A same-shaped application namespace is not `urllib.request`."""
     source = (

@@ -2,18 +2,16 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
-
-
 ## Unreleased
 
-## v0.5.0 - 2026-08-06
+## v0.5.0 - 2026-08-09
 
 - **Source-text checks survive Python parse failures** - Invalid Python still runs raw-source rules; parser errors stay fatal and suppressions apply.
 - **SSRF sinks now require documented HTTP-client receivers** - Only live imports qualify; app-owned, shadowed, and unimported calls stay quiet.
 - **Framework request accessors retain security taint** - Supported Flask, Django, DRF, and Starlette accessors preserve request taint.
 - **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** - Configure exact label and URL sanitizer targets.
 - **Weak hashes honour the standard-library non-security opt-out** - Only literal `usedforsecurity=False` suppresses MD5/SHA1 warnings.
-- **BREAKING: `init --force` now preserves or refuses existing config** - Valid YAML is preserved; unsafe YAML/TOML sources fail closed.
+- **BREAKING: `init --force` regenerates, never overwrites** - Supported settings carry over; unsafe YAML or TOML is refused untouched.
 - **Unknown per-rule options no longer reach rule execution** - Normal scans warn and drop them; strict config fails on the dotted key.
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.
@@ -50,7 +48,6 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **Maintenance** - Catalog relations moved to `catalog_related.py`; rule docs stamp versions; source prefilters reduce work.
 
 ## v0.3.1 - 2026-06-09
-
 
 - **Agent-hook contract v1** - `gruff-py hook` emits `gruff.hook.v1`, supports baselines and changed ranges, and returns structured errors.
 - **Symbol-scoped diffs suppress inherited debt** - File and class findings surface only when their anchor or header is touched.

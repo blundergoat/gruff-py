@@ -29,6 +29,7 @@ from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
     UnsanitizedMarkdownInterpolationRule,
 )
+from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
@@ -156,8 +157,8 @@ def custom_docs_for(
             return _unsafe_numeric_coercion_docs(config_keys)
         case SubstringVocabularyMatchRule.ID:
             return _substring_vocabulary_match_docs(config_keys)
-        case UnsanitizedMarkdownInterpolationRule.ID:
-            return _unsanitized_markdown_interpolation_docs(config_keys, definition.id)
+        case UnsanitizedMarkdownInterpolationRule.ID | WeakCryptoRule.ID:
+            return _security_rule_docs(definition.id, config_keys)
         case RuntimeSysPathMutationRule.ID:
             return _runtime_sys_path_mutation_docs(config_keys)
         case ExportedButUnreferencedRule.ID | UnusedPrivateFunctionRule.ID:
@@ -269,6 +270,85 @@ def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
                     "Move the mutation under the __main__ guard, or suppress "
                     "with `# gruff: disable=design.runtime-sys-path-mutation` "
                     "plus the reason."
+                ),
+            ),
+        ),
+    )
+
+
+def _security_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch curated docs for security rules sharing one catalog arm.
+
+    Grouping these rules keeps ``custom_docs_for`` under the repository
+    cyclomatic-complexity limit, as its docstring requires.
+
+    Args:
+        rule_id: Rule being documented.
+        config_keys: Public config keys computed for the rule by the catalog.
+
+    Returns:
+        Curated ``RuleDocs`` for the requested security rule.
+    """
+    if rule_id == WeakCryptoRule.ID:
+        return _weak_crypto_docs(config_keys, rule_id)
+    return _unsanitized_markdown_interpolation_docs(config_keys, rule_id)
+
+
+def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "MD5 and SHA1 are broken for signatures, tokens, and password "
+            "material, but they remain valid for cache keys and content "
+            "digests. The rule reports them only where surrounding names or "
+            "arguments imply security-sensitive material, so non-security "
+            "digests stay quiet without configuration."
+        ),
+        fix_guidance=(
+            "Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and "
+            "SHA-256 or better for signatures and tokens. When the digest is "
+            "genuinely non-security, pass the standard-library keyword "
+            "`usedforsecurity=False` rather than suppressing the rule."
+        ),
+        bad_example="`hashlib.md5(session_token.encode()).hexdigest()`",
+        good_example=(
+            "`hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` "
+            "for a non-security digest, or a KDF for password material."
+        ),
+        confidence_rationale=(
+            "High confidence: the call target must resolve to a literal weak "
+            "algorithm, and a security-context smell in the surrounding names "
+            "or arguments is required before reporting."
+        ),
+        config_keys=config_keys,
+        security_metadata=rule_security_metadata(rule_id),
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A cache key, ETag, or content digest whose surrounding "
+                    "names (token, signature, password) read as security "
+                    "material even though the value is not a secret."
+                ),
+                mitigation=(
+                    "Pass `usedforsecurity=False`, which is the standard "
+                    "library's own non-security marker and suppresses the "
+                    "MD5/SHA1 finding without touching rule config."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A literal `usedforsecurity=False` on MD5 or SHA1 "
+                    "suppresses the finding even when the hashed value looks "
+                    "like a password. This is deliberate: the keyword is the "
+                    "caller's explicit non-security declaration, and only a "
+                    "literal False qualifies - True, 0, None, and dynamic "
+                    "flags all keep the finding."
+                ),
+                mitigation=(
+                    "Fast password hashing is covered separately: SHA-256 and "
+                    "SHA-512 on password material still report regardless of "
+                    "the keyword, because no non-security reading of that "
+                    "call exists. Review `usedforsecurity=False` on MD5 in "
+                    "code review rather than expecting this rule to reject it."
                 ),
             ),
         ),

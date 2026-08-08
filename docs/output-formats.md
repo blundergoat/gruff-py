@@ -1,7 +1,14 @@
 # Output Formats
 
 `gruff-py analyse --format <format>` renders the same analysis data for
-different consumers. The combined legacy page remains at [Reporting](reporting.md).
+different consumers. Every format is generated from one `AnalysisReport` model,
+so switching format changes presentation, never which findings were produced.
+
+`gruff-py report` is a convenience wrapper for release artifacts: it runs the
+same analyser and writes HTML or JSON to stdout or `--output`.
+
+This page is the reference for every format. [Reporting](reporting.md) is kept
+as a stable link target and points back here.
 
 ## Text
 
@@ -18,6 +25,30 @@ Use `json` for automation. JSON reports use `gruff.analysis.v2`.
 ```sh
 uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 ```
+
+The top-level shape is `schemaVersion`, `tool`, `run`, `summary`,
+`ignoredPaths`, `ignoredPathDetails`, `missingPaths`, `diagnostics`, `findings`,
+and `score`. Changed-region runs add `suppressedCount` and `diff`; a full scan
+emits neither. The output is stable enough for automation, but the project is
+pre-1.0 — the strongest compatibility promises are the schema strings and the
+finding identity fields below.
+
+### Finding identity
+
+Every finding payload exposes two identity fields:
+
+- `fingerprint` — line-precise 16-character SHA-256 prefix derived from
+  `[ruleId, file, line, endLine, column, symbol]`. Baseline matching
+  (`BaselineFilter` and `gruff-baseline.json`) and SARIF
+  `partialFingerprints.gruffFingerprint` consume this one.
+- `stableIdentity` — line-insensitive 16-character SHA-256 prefix derived from
+  `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when
+  `symbol` is `null`. Use it for external diff tooling that needs to match the
+  same logical finding across line shifts without re-baselining a moved
+  violation.
+
+Both digests use the same PHP-compatible canonical-JSON encoding, so cross-port
+consumers see identical values for identical inputs.
 
 When a requested path is narrower than the project root and at least one
 project-wide rule is enabled, JSON additively records
@@ -104,7 +135,7 @@ native `gruff.analysis.v2` report:
 ```json
 {
   "contractVersion": "gruff.hook.v1",
-  "analyzer": { "name": "gruff-py", "version": "0.4.1" },
+  "analyzer": { "name": "gruff-py", "version": "0.5.0" },
   "findings": [],
   "suppressed": { "count": 0 },
   "ignored": { "paths": [] },
@@ -132,6 +163,17 @@ Use `html` for archived human review or dashboard scan output:
 ```sh
 uv run gruff-py report src tests --format html --output gruff-py.html
 ```
+
+HTML reports are self-contained: no external fonts, scripts, or stylesheets.
+Two optional renderers extend them:
+
+```sh
+uv run gruff-py analyse src/ --format html --report-interactive > gruff-py.html
+uv run gruff-py analyse src/ --format html --report-editor-link vscode > gruff-py.html
+```
+
+`--report-interactive` adds browser-side finding filters; `--report-editor-link`
+accepts `vscode` or `phpstorm` and turns file references into editor links.
 
 HTML metadata labels `full-project`/`diff` as **scoring mode** and adds a
 separate escaped **scan context** section only when the run carries
@@ -162,13 +204,49 @@ Use `sarif` for GitHub code scanning or other SARIF consumers:
 uv run gruff-py analyse src tests --format sarif --fail-on none > gruff-py.sarif
 ```
 
+SARIF is a renderer over the native `gruff.analysis.v2` model, not a replacement
+schema. It preserves native rule ids, fingerprints, severity, paths, locations,
+metadata, scoring, and fail-on behaviour. Fingerprints are emitted as
+`partialFingerprints.gruffFingerprint`, and run properties carry
+`gruffSchemaVersion` with the native schema string plus score and grade when
+available. The driver is named `gruff-py`, uses the project version as
+`semanticVersion`, and emits registry rule metadata sorted by stable rule id.
+Artifact URIs use `/` separators with leading `./` removed.
+
+Validate a generated file when releasing or changing the renderer:
+
+```sh
+uvx check-jsonschema --schemafile https://json.schemastore.org/sarif-2.1.0.json gruff-py.sarif
+```
+
+Upload it with GitHub's SARIF upload action; see
+[CI Integration](ci-integration.md#github-actions) for a working workflow.
+
 ## Summary
 
-`summary` has its own compact text/JSON contract:
+`summary` has its own compact text/JSON contract, covering file counts,
+per-pillar counts, top rules, and top file offenders:
 
 ```sh
 uv run gruff-py summary src tests --format json --top 5
 ```
+
+To read a noisy run rule-by-rule, see [Triage](triage.md).
+
+## Display Filters
+
+Display filters apply after analysis and scoring:
+
+```sh
+uv run gruff-py analyse src/ --min-severity warning
+uv run gruff-py analyse src/ --include-pillar security
+uv run gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
+```
+
+They change which findings are rendered and are recorded under `run.filters`.
+They do not change the score or the exit code. Text output reports how many
+findings were hidden; in JSON, `summary.findings` follows displayed findings
+while `score` and `summary.exitCode` reflect the full analysed set.
 
 ## Exit Codes
 
