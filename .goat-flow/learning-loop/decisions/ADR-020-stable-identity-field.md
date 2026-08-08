@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-05-27
 **Cross-implementation pair:** `gruff-php/.goat-flow/tasks/0.1.4/M05-stable-identity-field-for-diffs.md` (pending; identical field name, input set, and 16-char SHA-256 prefix — adopting this contract on the Python side first lets gruff-php land verbatim).
-**Ticket/Context:** `.goat-flow/tasks/0.1.2/M02-stable-identity-field-for-cross-impl-diffs-v0.1.2.md`; `.goat-flow/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
+**Ticket/Context:** 0.1.2 stable-identity delivery; `.goat-flow/learning-loop/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
 
 ## Decision
 

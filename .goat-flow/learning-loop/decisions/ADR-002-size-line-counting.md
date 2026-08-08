@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M02-size-pillar-v0.1.md`; cross-impl parity with gruff-php M05.
+**Ticket/Context:** 0.1 size-pillar delivery; cross-impl parity with gruff-php M05.
 
 ## Decision
 
@@ -38,7 +38,7 @@ Python's `ast` exposes `node.end_lineno` reliably on Python ≥3.8 (gruff-py's s
 
 ## Reversibility
 
-**One-way door inside v0.1.** Reversing this decision after any size pillar v0.1 release breaks every cross-impl baseline byte-for-byte (per `.goat-flow/footguns/compatibility.md`). The decision can be revisited in v0.2 only with an explicit baseline migration path AND a coordinated gruff-php change.
+**One-way door inside v0.1.** Reversing this decision after any size pillar v0.1 release breaks every cross-impl baseline byte-for-byte (per `.goat-flow/learning-loop/footguns/compatibility.md`). The decision can be revisited in v0.2 only with an explicit baseline migration path AND a coordinated gruff-php change.
 
 Revisit triggers (any of):
 

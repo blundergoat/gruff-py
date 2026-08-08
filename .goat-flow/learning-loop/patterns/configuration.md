@@ -18,7 +18,7 @@ ships, or alias-vs-rename divergence becomes permanent.
 **Approach:** Land the change in the following order so each step's
 verification gate fires before the next step depends on it.
 
-1. **Write the ADR first.** `.goat-flow/decisions/ADR-NNN-<topic>.md` records
+1. **Write the ADR first.** `.goat-flow/learning-loop/decisions/ADR-NNN-<topic>.md` records
    the precedence rule, the accept-sets for keys and values, the rejected
    alternatives (so future agents do not re-litigate them), the off-switch
    value (`none` not `never` for the family-wide invariant), and the
@@ -56,7 +56,7 @@ verification gate fires before the next step depends on it.
    `docs/output-formats.md`, `README.md`, and a `[Unreleased]` section in
    `CHANGELOG.md` calling out the cross-port status note.
 8. **Add the lockstep footgun** in
-   `.goat-flow/footguns/compatibility.md` so future agents know which
+   `.goat-flow/learning-loop/footguns/compatibility.md` so future agents know which
    surfaces move together when the binary default changes.
 
 **Verification:** Each step has a discrete test gate. Run

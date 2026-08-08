@@ -20,12 +20,12 @@ Do not write an ADR for routine implementation details, temporary workarounds, b
 
 | Note type | Correct home |
 | --- | --- |
-| Implementation TODO, checklist, milestone, or scoped plan | `.goat-flow/tasks/` or the issue tracker |
-| Reproducible hazard, trap, or recurring failure with measured evidence | `.goat-flow/footguns/` |
-| Reusable takeaway from a completed fix or verification failure | `.goat-flow/lessons/` |
+| Implementation TODO, checklist, milestone, or scoped plan | `.goat-flow/plans/` or the issue tracker |
+| Reproducible hazard, trap, or recurring failure with measured evidence | `.goat-flow/learning-loop/footguns/` |
+| Reusable takeaway from a completed fix or verification failure | `.goat-flow/learning-loop/lessons/` |
 | Temporary scratch note, benchmark trace, raw command output, or local hypothesis | `.goat-flow/scratchpad/` |
 | Backlog request, product question, or work that needs prioritisation | Linear/GitHub issue |
-| Durable architecture, policy, contract, or trade-off decision | `.goat-flow/decisions/ADR-NNN-kebab-case-title.md` |
+| Durable architecture, policy, contract, or trade-off decision | `.goat-flow/learning-loop/decisions/ADR-NNN-kebab-case-title.md` |
 
 ## Naming
 
@@ -104,6 +104,6 @@ Check all five before creating a file here:
 - The decision constrains future choices or explains a non-obvious trade-off.
 - The evidence is real and cited in the ADR.
 - The file can honestly use an `ADR-NNN-kebab-case-title.md` name.
-- The note does not belong in tasks, footguns, lessons, scratchpad, or the issue tracker.
+- The note does not belong in plans, footguns, lessons, scratchpad, or the issue tracker.
 
 If any check fails, do not write an ADR. Route the note to the correct home. If you are an AI agent and cannot decide, ask a human before creating a file in this directory.

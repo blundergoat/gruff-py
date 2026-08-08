@@ -38,3 +38,14 @@ access; it is not a substitute for a lock-enforcement flag.
 **Incident:** During the GOAT Flow 1.15.0 refresh, the first base and harness audits passed while the content audit found 11 setup warnings: a missing architecture anchor, stale orientation facts, and omitted playbook inventories. After those warnings were fixed, the content audit passed. The required full trio then caught a stale `AGENTS.md` commit-guide pointer because a staged guide rename had appeared during the audit cycle. Base and content remained green; only the harness detected the unresolved path. Updating the pointer and rerunning all three audits produced three passes against one filesystem state.
 
 Treat the three audit variants as one verification unit because their evidence is complementary. Before each bounded rerun, capture `git status --short`; if the dirty-path set changed, re-read affected references before interpreting a failure or attributing the mutation. Close the setup gate only when base, harness, and content all pass without another intervening write.
+
+## Lesson: Instruction-file path references resolve from the project root
+
+**Created:** 2026-08-08
+**Decision changed:** Write every backticked path in an instruction file as a full project-root-relative path, even when the surrounding prose already names its directory.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-08-08
+**Incident:** A router-table row in `CLAUDE.md` was extended to say that `writing-style.md` binds human-read output. The row already pointed at `.goat-flow/skill-docs/playbooks/`, so the bare filename read correctly to a human. The same edit was mirrored into `.github/copilot-instructions.md`. Both agents then failed `audit --harness` on `doc-paths-resolve`, which reported 117 of 118 paths resolved with the single unresolved ref recorded as `writing-style.md` from `CLAUDE.md`; the base and content audits stayed green and named nothing. Rewriting both refs as `.goat-flow/skill-docs/playbooks/writing-style.md` returned 118 of 118 and passed the harness for claude, copilot, and codex.
+
+The checker treats a backticked ref as a path from the repository root and has no notion of the row it sits in, so adjacency to the owning directory buys nothing. Neither the base nor the content audit catches this, which is why the harness variant has to run after any router-table or Key Resources edit. When a check reports one unresolved ref, read the `details.docPaths.unresolved` entry for the literal `ref` and `source` rather than re-reading the whole table.
