@@ -312,6 +312,7 @@ def _collect_unit_liveness(
         nodes,
         scope_index,
         resolver,
+        candidate_keys,
     )
     load_evidence = _LoadEvidenceIndex(
         scope_index=scope_index,
@@ -329,6 +330,7 @@ def _build_binding_events(
     nodes: list[ast.AST],
     scope_index: _ScopeIndex,
     resolver: _ModuleResolver,
+    candidate_keys: frozenset[PrivateFunctionKey],
 ) -> tuple[dict[tuple[int, str], list[_BindingEvent]], set[tuple[int, str]]]:
     """Index imports and rebinds before interpreting later user expressions.
 
@@ -337,6 +339,7 @@ def _build_binding_events(
         nodes: One materialized AST walk; empty means no bindings or loads.
         scope_index: Lexical ownership used to separate local user bindings.
         resolver: Scanned-module resolver used for each import declaration.
+        candidate_keys: Producer functions that may be package attributes.
 
     Returns:
         Sorted event histories and locally bound names; both may be empty.
@@ -358,7 +361,7 @@ def _build_binding_events(
         # From-import aliases may bind a function directly or a scanned child module.
         elif isinstance(node, ast.ImportFrom):
             # Each alias needs its own later-load and rebinding history.
-            for binding in _bindings_for_from_import(unit, node, resolver):
+            for binding in _bindings_for_from_import(unit, node, resolver, candidate_keys):
                 events_by_scope_and_name[(event_scope, binding.bound_name)].append(
                     _BindingEvent(position=position, binding=binding)
                 )
@@ -500,6 +503,7 @@ def _build_scope_index(nodes: list[ast.AST], tree: ast.Module) -> _ScopeIndex:
     scope_by_node: dict[int, int] = {root_scope_id: root_scope_id}
     parent_by_scope: dict[int, int | None] = {root_scope_id: None}
     scope_nodes: dict[int, _ScopeNode] = {root_scope_id: tree}
+    evaluation_scope_overrides: dict[int, int] = {}
     # The root is already indexed; every later node inherits or opens a scope.
     for node in nodes[1:]:
         parent = getattr(node, "parent", None)
@@ -507,19 +511,34 @@ def _build_scope_index(nodes: list[ast.AST], tree: ast.Module) -> _ScopeIndex:
         if not isinstance(parent, ast.AST):
             scope_by_node[id(node)] = root_scope_id
             continue
-        parent_scope_id = scope_by_node.get(id(parent), root_scope_id)
+        parent_scope_id = evaluation_scope_overrides.get(
+            id(node),
+            scope_by_node.get(id(parent), root_scope_id),
+        )
         # Functions, classes, lambdas, and comprehensions own their local bindings.
         if _is_scope_node(node):
             node_scope_id = id(node)
             scope_by_node[node_scope_id] = node_scope_id
             scope_nodes[node_scope_id] = node
             lexical_parent_scope_id: int | None = parent_scope_id
-            # A method closes over its module/function, not the class namespace.
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and isinstance(
-                scope_nodes.get(parent_scope_id), ast.ClassDef
-            ):
+            # Function-like scopes close over the class's parent, not its namespace.
+            if isinstance(
+                node,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.Lambda,
+                    ast.ListComp,
+                    ast.SetComp,
+                    ast.DictComp,
+                    ast.GeneratorExp,
+                ),
+            ) and isinstance(scope_nodes.get(parent_scope_id), ast.ClassDef):
                 lexical_parent_scope_id = parent_by_scope[parent_scope_id]
             parent_by_scope[node_scope_id] = lexical_parent_scope_id
+            # Headers and the leftmost comprehension iterable execute outside the new scope.
+            for expression in _outer_evaluated_expressions(node):
+                evaluation_scope_overrides[id(expression)] = parent_scope_id
         else:
             scope_by_node[id(node)] = parent_scope_id
     return _ScopeIndex(
@@ -527,6 +546,56 @@ def _build_scope_index(nodes: list[ast.AST], tree: ast.Module) -> _ScopeIndex:
         parent_by_scope=parent_by_scope,
         scope_nodes=scope_nodes,
     )
+
+
+def _outer_evaluated_expressions(node: _ScopeNode) -> tuple[ast.expr, ...]:
+    """Return expressions Python evaluates before entering a new lexical scope.
+
+    Args:
+        node: Function, class, lambda, or comprehension that opens a scope.
+
+    Returns:
+        Expression roots that inherit the containing scope rather than ``node``.
+    """
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        argument_annotations = tuple(
+            argument.annotation
+            for argument in (
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+            )
+            if argument.annotation is not None
+        )
+        optional_argument_annotations = tuple(
+            argument.annotation
+            for argument in (node.args.vararg, node.args.kwarg)
+            if argument is not None and argument.annotation is not None
+        )
+        return tuple(
+            expression
+            for expression in (
+                *node.decorator_list,
+                *node.args.defaults,
+                *node.args.kw_defaults,
+                *argument_annotations,
+                *optional_argument_annotations,
+                node.returns,
+            )
+            if expression is not None
+        )
+    if isinstance(node, ast.Lambda):
+        return tuple(
+            expression
+            for expression in (*node.args.defaults, *node.args.kw_defaults)
+            if expression is not None
+        )
+    if isinstance(node, ast.ClassDef):
+        return (*node.decorator_list, *node.bases, *(keyword.value for keyword in node.keywords))
+    if isinstance(node, ast.Module):
+        return ()
+    # Only the leftmost iterable runs before the comprehension's local target exists.
+    return (node.generators[0].iter,) if node.generators else ()
 
 
 def _is_scope_node(node: ast.AST) -> TypeGuard[_ScopeNode]:
@@ -607,6 +676,7 @@ def _bindings_for_from_import(
     unit: AnalysisUnit,
     node: ast.ImportFrom,
     resolver: _ModuleResolver,
+    candidate_keys: frozenset[PrivateFunctionKey],
 ) -> tuple[_ImportBinding, ...]:
     """Build direct-function or child-module bindings for a from-import.
 
@@ -614,6 +684,7 @@ def _bindings_for_from_import(
         unit: Consumer file whose path anchors relative imports.
         node: User from-import declaration containing one or more aliases.
         resolver: Scanned-file resolver for parent and child modules.
+        candidate_keys: Producer functions eligible for liveness evidence.
 
     Returns:
         Bindings for explicit aliases; star imports intentionally return none.
@@ -629,6 +700,17 @@ def _bindings_for_from_import(
     for alias in node.names:
         # Star imports cannot prove which private function a later name came from.
         if alias.name == "*":
+            continue
+        # Python uses an existing package attribute before importing a same-named child.
+        if any((module_path, alias.name) in candidate_keys for module_path in parent_module_paths):
+            bindings.append(
+                _ImportBinding(
+                    bound_name=alias.asname or alias.name,
+                    module_paths=parent_module_paths,
+                    imported_function_name=alias.name,
+                    attribute_prefix=(),
+                )
+            )
             continue
         child_module_paths = resolver.resolve_child(
             unit.file.display_path,
@@ -714,8 +796,12 @@ def _active_binding(
             binding_events = events_by_scope_and_name.get(scope_name, [])
             # Only imports/rebinds before this expression can affect its value.
             prior_events = [event for event in binding_events if event.position < load_position]
-            # A later-only local binding shadows outer imports in Python functions.
+            # Class bodies resolve earlier loads outward before a later class assignment.
             if not prior_events:
+                if isinstance(scope_index.scope_nodes.get(current_scope_id), ast.ClassDef):
+                    current_scope_id = scope_index.parent_by_scope.get(current_scope_id)
+                    continue
+                # Function and comprehension locals apply across their complete scope.
                 return None
             return prior_events[-1].binding
         current_scope_id = scope_index.parent_by_scope.get(current_scope_id)

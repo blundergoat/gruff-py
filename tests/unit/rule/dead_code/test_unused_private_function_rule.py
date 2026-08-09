@@ -286,6 +286,82 @@ def test_project_relative_import_load_proves_liveness() -> None:
     assert _project_findings([producer, consumer]) == []
 
 
+def test_project_class_load_before_later_binding_uses_outer_import() -> None:
+    """A later class attribute does not retroactively shadow an earlier load."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "class Registry:\n"
+        "    CALLBACK = _helper\n"
+        "    _helper = None\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_class_binding_before_load_shadows_outer_import() -> None:
+    """A class attribute already assigned at the load site remains authoritative."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "class Registry:\n"
+        "    _helper = None\n"
+        "    CALLBACK = _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert [finding.symbol for finding in _project_findings([producer, consumer])] == ["_helper"]
+
+
+def test_project_function_default_uses_enclosing_import_binding() -> None:
+    """Definition defaults execute before a same-named function local exists."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def consume(callback=_helper):\n"
+        "    _helper = None\n"
+        "    return callback\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_package_attribute_precedes_same_named_child_module() -> None:
+    """Resolve an existing package function before a scanned child module."""
+    package = _unit("def _helper():\n    return 1\n", "pkg/__init__.py")
+    child_module = _unit("VALUE = 1\n", "pkg/_helper.py")
+    consumer = _unit(
+        "from pkg import _helper\nCALLBACK = _helper\n",
+        "consumer.py",
+    )
+
+    assert _project_findings([package, child_module, consumer]) == []
+
+
+def test_project_leftmost_comprehension_iterable_uses_enclosing_import() -> None:
+    """The first iterable evaluates before its same-named target is bound."""
+    producer = _unit("def _helper():\n    return []\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\nVALUES = [_helper for _helper in _helper()]\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_comprehension_target_shadows_outer_import_in_element() -> None:
+    """A target load inside the comprehension body does not use the import."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\nVALUES = [_helper for _helper in values]\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert [finding.symbol for finding in _project_findings([producer, consumer])] == ["_helper"]
+
+
 def test_project_rebound_import_does_not_prove_original_liveness() -> None:
     """Keep the finding when user code replaces an import before loading it."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")

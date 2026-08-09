@@ -494,6 +494,9 @@ class MarkdownSanitizerProvenance:
             node: Statement or expression whose evaluated children need snapshots.
             state: Proof state visible in the node's current lexical scope.
         """
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            self._record_comprehension(node, state)
+            return
         if isinstance(node, ast.Lambda):
             # The lambda object is created in the outer scope, including its defaults.
             self._state_by_expression[id(node)] = state.clone()
@@ -511,6 +514,39 @@ class MarkdownSanitizerProvenance:
             self._state_by_expression[id(node)] = state.clone()
         for child in ast.iter_child_nodes(node):
             self._record_expression_tree(child, state)
+
+    def _record_comprehension(
+        self,
+        expression: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
+        state: _FlowState,
+    ) -> None:
+        """Index a comprehension in Python evaluation order with local targets.
+
+        Args:
+            expression: Comprehension whose leftmost iterable runs in the outer scope.
+            state: Outer proof state captured by the comprehension.
+        """
+        self._state_by_expression[id(expression)] = state.clone()
+        if not expression.generators:
+            return
+        first_generator, *remaining_generators = expression.generators
+        # Python evaluates the leftmost iterable before opening the comprehension scope.
+        self._record_expression(first_generator.iter, state)
+        comprehension_state = state.clone()
+        self._invalidate_target(first_generator.target, comprehension_state)
+        for condition in first_generator.ifs:
+            self._record_expression(condition, comprehension_state)
+        # Later iterables can use earlier targets and bind their own fresh values in order.
+        for generator in remaining_generators:
+            self._record_expression(generator.iter, comprehension_state)
+            self._invalidate_target(generator.target, comprehension_state)
+            for condition in generator.ifs:
+                self._record_expression(condition, comprehension_state)
+        if isinstance(expression, ast.DictComp):
+            self._record_expression(expression.key, comprehension_state)
+            self._record_expression(expression.value, comprehension_state)
+            return
+        self._record_expression(expression.elt, comprehension_state)
 
     def _assign_target(
         self,

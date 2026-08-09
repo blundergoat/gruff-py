@@ -778,6 +778,66 @@ def test_lambda_body_retains_imported_callable_proof(lambda_expression: str) -> 
 
 
 @pytest.mark.parametrize(
+    "comprehension_expression",
+    [
+        '[f"[docs]({safe})" for safe in raw_urls]',
+        '["[docs]({url})".format(url=safe) for safe in raw_urls]',
+    ],
+    ids=_LINK_SYNTAXES,
+)
+def test_comprehension_target_shadows_outer_sanitized_value(
+    comprehension_expression: str,
+) -> None:
+    """A comprehension target cannot inherit a same-named outer proof.
+
+    Args:
+        comprehension_expression: F-string or `.format()` link built from the target.
+    """
+    source = (
+        "from urllib.parse import quote\n"
+        "def render(raw_url, raw_urls):\n"
+        "    safe = quote(raw_url)\n"
+        f"    return {comprehension_expression}\n"
+    )
+
+    findings = _analyse(source)
+
+    assert [_metadata(finding) for finding in findings] == [
+        {
+            "slot": "url",
+            "expressionKind": "name",
+            "sanitizerResolution": "uncertain-provenance",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "comprehension_expression",
+    [
+        '[f"[docs]({safe})" for item in raw_urls]',
+        '["[docs]({url})".format(url=safe) for item in raw_urls]',
+    ],
+    ids=_LINK_SYNTAXES,
+)
+def test_comprehension_body_retains_unshadowed_outer_sanitized_value(
+    comprehension_expression: str,
+) -> None:
+    """A comprehension may capture a safe outer value under another target name.
+
+    Args:
+        comprehension_expression: F-string or `.format()` link capturing the outer value.
+    """
+    source = (
+        "from urllib.parse import quote\n"
+        "def render(raw_url, raw_urls):\n"
+        "    safe = quote(raw_url)\n"
+        f"    return {comprehension_expression}\n"
+    )
+
+    assert _analyse(source) == []
+
+
+@pytest.mark.parametrize(
     "nested_return",
     [
         '        return f"[docs]({encoded_url})"\n',
