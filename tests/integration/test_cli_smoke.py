@@ -903,8 +903,8 @@ def test_cli_dashboard_warns_after_remote_host_acknowledgment(
 
 @pytest.mark.parametrize(
     "loopback_dashboard_host",
-    ("127.0.0.1", "localhost", "::1"),
-    ids=("ipv4", "hostname", "ipv6"),
+    ("127.0.0.1", "localhost", "::1", "127.0.0.2"),
+    ids=("ipv4", "hostname", "ipv6", "ipv4-range"),
 )
 def test_cli_dashboard_keeps_loopback_hosts_available_without_acknowledgment(
     monkeypatch: pytest.MonkeyPatch,

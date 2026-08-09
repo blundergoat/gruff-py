@@ -945,3 +945,61 @@ def test_definition_exposes_slot_asymmetric_sanitizer_defaults() -> None:
     assert definition.confidence.value == "medium"
     assert definition.pillar.value == "security"
     assert definition.default_enabled is True
+
+
+def test_match_case_body_keeps_a_configured_url_sanitizer_proved() -> None:
+    """A helper called inside a `case` body still proves the URL the user clicks."""
+    source = (
+        "def render(mode, raw_url):\n"
+        "    match mode:\n"
+        "        case 'link':\n"
+        "            safe_url = markdown_url(raw_url)\n"
+        "            return f'[text]({safe_url})'\n"
+        "    return ''\n"
+    )
+
+    assert _analyse(source, _CUSTOM_SANITIZERS) == []
+
+
+def test_match_case_rebinding_a_sanitizer_removes_its_proof() -> None:
+    """Reassigning the helper in one `case` leaves every later link unproved."""
+    source = (
+        "def render(mode, raw_url):\n"
+        "    match mode:\n"
+        "        case 'raw':\n"
+        "            markdown_url = str\n"
+        "    return f'[text]({markdown_url(raw_url)})'\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["sanitizerResolution"] for finding in findings] == ["shadowed-target"]
+
+
+def test_match_capture_name_is_never_a_proved_value() -> None:
+    """A value captured out of the subject is raw, so the user still sees a finding."""
+    source = (
+        "def render(payload):\n"
+        "    match payload:\n"
+        "        case {'url': captured_url}:\n"
+        "            return f'[text]({captured_url})'\n"
+        "    return ''\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["sanitizerResolution"] for finding in findings] == ["raw"]
+
+
+def test_except_star_handler_proves_the_same_url_as_a_plain_handler() -> None:
+    """An `except*` group merges like `except`, so the safe URL stays quiet."""
+    source = (
+        "def render(raw_url):\n"
+        "    try:\n"
+        "        safe_url = markdown_url(raw_url)\n"
+        "    except* ValueError:\n"
+        "        safe_url = ''\n"
+        "    return f'[text]({safe_url})'\n"
+    )
+
+    assert _analyse(source, _CUSTOM_SANITIZERS) == []

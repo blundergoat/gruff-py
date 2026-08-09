@@ -4,6 +4,7 @@ The CLI uses these helpers to seed the first scan form and prevent accidental
 remote exposure before opening the local HTTP dashboard.
 """
 
+import ipaddress
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +16,7 @@ from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.rule.registry import RuleRegistry
 
-_LOOPBACK_DASHBOARD_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_LOOPBACK_DASHBOARD_HOST_NAMES = frozenset({"localhost"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +62,8 @@ def remote_dashboard_bind_warning(
         click.ClickException: The user selected a non-loopback host without
             acknowledging that remote users could scan readable directories.
     """
-    normalized_dashboard_host = dashboard_host.casefold()
-
     # A loopback choice keeps the dashboard local, so the user needs no warning.
-    if normalized_dashboard_host in _LOOPBACK_DASHBOARD_HOSTS:
+    if _is_loopback_dashboard_host(dashboard_host):
         return None
 
     # A remote bind without the flag is likely an accidental dashboard exposure.
@@ -80,6 +79,30 @@ def remote_dashboard_bind_warning(
         "users can access the unauthenticated dashboard and scan any directory "
         "readable by this process."
     )
+
+
+def _is_loopback_dashboard_host(dashboard_host: str) -> bool:
+    """Decide whether a host keeps the dashboard reachable only from this machine.
+
+    Call from the bind guard so a user binding any loopback address is not asked to
+    acknowledge remote exposure that cannot happen.
+
+    Args:
+        dashboard_host: Host the user typed; an unparsable value is treated as remote.
+
+    Returns:
+        True for ``localhost`` and every loopback IP, covering the whole ``127.0.0.0/8``
+        range; False sends the user through the acknowledgment gate.
+    """
+    normalized_dashboard_host = dashboard_host.casefold()
+    # A named host resolves at bind time, so only the documented local name is trusted here.
+    if normalized_dashboard_host in _LOOPBACK_DASHBOARD_HOST_NAMES:
+        return True
+    try:
+        return ipaddress.ip_address(normalized_dashboard_host).is_loopback
+    # A hostname, or a URL-style bracketed address the socket cannot bind, proves nothing.
+    except ValueError:
+        return False
 
 
 def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) -> DashboardState:

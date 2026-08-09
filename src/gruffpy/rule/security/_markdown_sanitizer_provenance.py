@@ -23,6 +23,7 @@ from gruffpy.rule.security._markdown_sanitizer_model import (
     combine_expression_safety,
     function_parameter_names,
     is_quote_call_delimiter_safe,
+    match_capture_names,
     merge_flow_states,
     target_root_name,
 )
@@ -319,36 +320,10 @@ class MarkdownSanitizerProvenance:
                 else_state = state.clone()
             return merge_flow_states([body_state, else_state])
         # A loop may execute zero times, so pre-loop state always participates in the join.
-        if isinstance(statement, (ast.For, ast.AsyncFor)):
-            self._record_expression(statement.iter, state)
-            body_state = state.clone()
-            self._invalidate_target(statement.target, body_state)
-            body_state = self._scan_statements(
-                statement.body,
-                body_state,
-                module_callables=module_callables,
-                scope_kind=scope_kind,
-            )
-            merged_loop_state = merge_flow_states([state.clone(), body_state])
-            return self._scan_statements(
-                statement.orelse,
-                merged_loop_state,
-                module_callables=module_callables,
-                scope_kind=scope_kind,
-            )
-        # A while body is optional from the user's runtime perspective.
-        if isinstance(statement, ast.While):
-            self._record_expression(statement.test, state)
-            body_state = self._scan_statements(
-                statement.body,
-                state.clone(),
-                module_callables=module_callables,
-                scope_kind=scope_kind,
-            )
-            merged_loop_state = merge_flow_states([state.clone(), body_state])
-            return self._scan_statements(
-                statement.orelse,
-                merged_loop_state,
+        if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+            return self._scan_loop_statement(
+                statement,
+                state,
                 module_callables=module_callables,
                 scope_kind=scope_kind,
             )
@@ -367,8 +342,17 @@ class MarkdownSanitizerProvenance:
                 module_callables=module_callables,
                 scope_kind=scope_kind,
             )
+        # Each `case` body is one path the user's subject can take, and none may match.
+        if isinstance(statement, ast.Match):
+            return self._scan_match_statement(
+                statement,
+                state,
+                module_callables=module_callables,
+                scope_kind=scope_kind,
+            )
         # Try/except paths disagree unless every successful or handled path proves safety.
-        if isinstance(statement, ast.Try):
+        # `except*` groups are a separate node type carrying the same handler shape.
+        if isinstance(statement, (ast.Try, ast.TryStar)):
             return self._scan_try_statement(
                 statement,
                 state,
@@ -377,9 +361,89 @@ class MarkdownSanitizerProvenance:
             )
         return None
 
+    def _scan_loop_statement(
+        self,
+        statement: ast.For | ast.AsyncFor | ast.While,
+        state: _FlowState,
+        *,
+        module_callables: _CallableBindings,
+        scope_kind: Literal["module", "class", "function"],
+    ) -> _FlowState:
+        """Join a loop body with the pre-loop state a user reaches on zero iterations.
+
+        Args:
+            statement: `for`, `async for`, or `while` whose body may not run at all.
+            state: Proof state before the loop header is evaluated.
+            module_callables: Same-file imports visible to nested functions.
+            scope_kind: Current lexical scope for declarations inside the body.
+
+        Returns:
+            State after the merged body and any `else` clause; an empty body still joins.
+        """
+        body_state = state.clone()
+        # A `for` target takes a fresh runtime element each pass, so it proves nothing.
+        if isinstance(statement, (ast.For, ast.AsyncFor)):
+            self._record_expression(statement.iter, state)
+            self._invalidate_target(statement.target, body_state)
+        else:
+            self._record_expression(statement.test, state)
+        body_state = self._scan_statements(
+            statement.body,
+            body_state,
+            module_callables=module_callables,
+            scope_kind=scope_kind,
+        )
+        merged_loop_state = merge_flow_states([state.clone(), body_state])
+        return self._scan_statements(
+            statement.orelse,
+            merged_loop_state,
+            module_callables=module_callables,
+            scope_kind=scope_kind,
+        )
+
+    def _scan_match_statement(
+        self,
+        statement: ast.Match,
+        state: _FlowState,
+        *,
+        module_callables: _CallableBindings,
+        scope_kind: Literal["module", "class", "function"],
+    ) -> _FlowState:
+        """Merge every ``match`` case the user's value can take, plus the no-match path.
+
+        Args:
+            statement: `match` statement whose cases may each establish or destroy a proof.
+            state: Proof state before the subject is evaluated.
+            module_callables: Same-file imports visible to nested functions.
+            scope_kind: Current lexical scope for declarations inside a case body.
+
+        Returns:
+            Conservative join; no case body means the pre-match state survives unchanged.
+        """
+        self._record_expression(statement.subject, state)
+        # A subject matching no case leaves the proofs the user already had in force.
+        possible_states = [state.clone()]
+        # Only one case body runs, so every case must agree before a later link is trusted.
+        for case in statement.cases:
+            case_state = state.clone()
+            # Captured names hold runtime pieces of the subject, never a proved sanitizer result.
+            for capture_name in match_capture_names(case.pattern):
+                self._invalidate_name(capture_name, case_state)
+            # A guard runs once the pattern has bound, so it sees the captured names.
+            self._record_optional_expression(case.guard, case_state)
+            possible_states.append(
+                self._scan_statements(
+                    case.body,
+                    case_state,
+                    module_callables=module_callables,
+                    scope_kind=scope_kind,
+                )
+            )
+        return merge_flow_states(possible_states)
+
     def _scan_try_statement(
         self,
-        statement: ast.Try,
+        statement: ast.Try | ast.TryStar,
         state: _FlowState,
         *,
         module_callables: _CallableBindings,

@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-10
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -175,6 +175,36 @@ When an analyzer needs an internal marker inside user-derived text, prove the
 marker is absent after parsing and decoding, or keep structural components
 separate instead of using a fixed sentinel. Test the literal marker itself in
 every supported source spelling.
+
+## Footgun: flow-state walkers dispatch on statement type and silently skip whole node classes
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** OBSERVED
+
+A walker that advances analysis state through an `isinstance` chain handles only
+the node classes it names. Any statement type missing from the chain falls
+through to the generic expression recorder, which snapshots children against the
+pre-statement state and never applies their bindings. The failure is
+two-directional and silent: a proved value assigned inside the skipped statement
+reads as raw, and a rebinding that should destroy trust stays invisible.
+
+`MarkdownSanitizerProvenance._scan_control_statement`
+(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py`, search:
+`def _scan_control_statement`) named `If`, `For`, `While`, `With`, and `Try` but
+omitted `ast.Match` and `ast.TryStar`. A sanitizer rebound inside a `case` body
+stayed trusted, so `security.unsanitized-markdown-interpolation` suppressed the
+finding for a defeated helper. Ruff, mypy, and the full pytest run stayed green
+throughout, because no fixture used either statement form.
+
+`ast.TryStar` is the specific language trap: `except*` parses to a distinct node
+class that is not a subclass of `ast.Try`, so `isinstance(node, ast.Try)`
+excludes it. `ast.AsyncFor` and `ast.AsyncWith` behave the same way against their
+synchronous counterparts.
+
+Mitigation: when adding or extending a statement dispatcher, enumerate every
+statement type that binds a name or branches control flow, and add `match` and
+`except*` fixtures beside the `if` and `try` ones. Regression coverage lives in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
+(search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`).
 
 ## Resolved Entries
 

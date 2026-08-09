@@ -338,6 +338,26 @@ def bound_names(target: ast.expr) -> set[str]:
     return set()
 
 
+def match_capture_names(pattern: ast.pattern) -> set[str]:
+    """Return the names one ``match`` case binds before its body renders anything.
+
+    Args:
+        pattern: Case pattern the user wrote; a literal pattern captures nothing.
+
+    Returns:
+        Captured local names; empty means no later link can read a value from this case.
+    """
+    capture_names: set[str] = set()
+    # Capture, star, and mapping-rest patterns each hand the user's subject to a fresh local name.
+    for node in ast.walk(pattern):
+        # A wildcard ``case _`` carries no name, so it binds nothing a link could show.
+        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name is not None:
+            capture_names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest is not None:
+            capture_names.add(node.rest)
+    return capture_names
+
+
 def target_root_name(target: ast.expr) -> str | None:
     """Return the root changed by an attribute/subscript assignment, if any.
 
