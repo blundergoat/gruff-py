@@ -5,8 +5,8 @@
 # - Filesystem allow/deny policy uses Codex permission profiles, not Claude's
 #   settings.json permissions.allow/permissions.deny syntax
 # - Hook registrations live in .codex/hooks.json
-# - The project adds a PostToolUse changed-line quality hook manually because
-#   goat-flow 1.15.0 still removes that Codex registration during hooks sync
+# - goat-flow registers the PostToolUse changed-line quality hook for Codex
+#   itself; it matches Codex's patch tool, not Claude's Edit/Write tool names
 # - Command deny policy still lives in the Bash-matched PreToolUse hook because
 #   Codex permission profiles describe filesystem/network access, not shell
 #   command pattern denies like git push or sudo

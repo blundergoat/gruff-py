@@ -21,6 +21,7 @@ _SEVERITIES = {"advisory", "warning", "error"}
 _SCOPES = {"line", "symbol", "file", "project"}
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODEX_HOOK_TIMEOUT_SECONDS = 90
+_CODEX_PATCH_TOOL_MATCHER = "^apply_patch$"
 
 
 def test_codex_registers_post_edit_quality_hook() -> None:
@@ -28,14 +29,19 @@ def test_codex_registers_post_edit_quality_hook() -> None:
 
     post_tool_use = payload["hooks"]["PostToolUse"]
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["matcher"] == "Edit|Write"
+    # goat-flow owns this registration and matches Codex's patch tool, not the
+    # Edit/Write tool names Claude uses.
+    assert post_tool_use[0]["matcher"] == _CODEX_PATCH_TOOL_MATCHER
     handlers = post_tool_use[0]["hooks"]
     assert len(handlers) == 1
     handler = handlers[0]
     assert handler["type"] == "command"
     assert ".goat-flow/hooks/gruff-code-quality.sh" in handler["command"]
+    # Codex hooks run from the session cwd, so the registration reaches the
+    # script through the Node git-root launcher instead of invoking it directly.
+    assert ".goat-flow/hooks/run-with-bash.mjs" in handler["command"]
     assert handler["timeout"] == _CODEX_HOOK_TIMEOUT_SECONDS
-    assert handler["statusMessage"] == "Gruff changed-line quality check"
+    assert handler["statusMessage"] == "gruff code quality"
 
 
 def test_hook_capabilities_advertise_contract() -> None:

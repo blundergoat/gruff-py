@@ -41,13 +41,19 @@ and re-verified 2026-08-08 after the learning-loop relocation:
 same path fails ("did not match any file(s) known to git"). A
 `git grep -lE '\bM[0-9]+[a-z]?\b'` over tracked files (excluding the gitignored
 plans dir and the goat-plan skill files that *teach* the `M<NN>-<slug>`
-convention) returned **28 files** on 2026-05-31, **27** on 2026-08-08, and
-**26** on 2026-08-09: 15 under `.goat-flow/learning-loop/decisions/`, 5 under
+convention) returned **28 files** on 2026-05-31, **27** on 2026-08-08, **26** on
+2026-08-09, and **25** on 2026-08-11: 15 under
+`.goat-flow/learning-loop/decisions/`, 5 under
 `.goat-flow/learning-loop/footguns/` (this file included, near search:
 `reconcile all three doc surfaces`), 3 under `.goat-flow/learning-loop/lessons/`,
-2 under `.goat-flow/learning-loop/patterns/`, and a comment in
-`.goat-flow/hooks/gruff-code-quality.sh` (search: `See M02 for the`) - the trap
-reaches shell comments, not just Markdown.
+and 2 under `.goat-flow/learning-loop/patterns/`.
+
+The 2026-08-11 drop was not a repair. Until then the count included a comment in
+the goat-flow-managed `.goat-flow/hooks/gruff-code-quality.sh`, which proved the
+trap reaches shell comments and not just Markdown. The goat-flow 1.15.1 upgrade
+replaced that managed script and the comment went with it. A citation anchored
+in a managed file is only as durable as the vendor's next release, so evidence
+for this footgun should anchor in project-owned files.
 
 The 2026-08-09 drop is the repair of the last `src`/`tests` occurrence: a
 comment in `tests/unit/finding/test_stable_identity.py` (now search:
@@ -55,8 +61,7 @@ comment in `tests/unit/finding/test_stable_identity.py` (now search:
 a cross-port ground-truth fixture. It blocked release closeout's stale-name
 audit twice before an operator approved the comment-only reword to name the
 real precondition instead. No committed code or test now carries a milestone
-code; the remaining occurrences are all learning-loop prose and one shell
-comment.
+code; the remaining occurrences are all learning-loop prose.
 
 The non-obvious failure mode is twofold. For a cloner, the reference is a dead
 pointer — they get the doc but not the `M22` file, so the rationale citation
