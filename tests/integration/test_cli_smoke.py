@@ -146,6 +146,15 @@ def test_cli_command_help_lists_symfony_style_global_options():
     }
 
 
+def test_analyse_help_explains_fail_on_diagnostic_boundary() -> None:
+    """Keep parse failures outside the findings-only severity gate."""
+    result = CliRunner().invoke(main, ["analyse", "--help"])
+    searchable_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert "Gates findings only; parse errors exit 2 even with --fail-on none." in searchable_help
+
+
 def test_cli_dashboard_help_labels_accepted_compatibility_options_honestly() -> None:
     """Tell dashboard users that accepted family flags have no Python behavior."""
     result = CliRunner().invoke(main, ["dashboard", "--help"])
@@ -1993,10 +2002,16 @@ def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
     assert payload["diff"]["enabled"] is True
 
 
-def test_analyse_tokenizer_error_file_reports_parse_error_without_crash(
+def test_analyse_parse_error_exits_2_even_with_fail_on_none(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Prove fatal parse diagnostics bypass the findings-only severity gate.
+
+    Args:
+        tmp_path: Project root containing a tokenizer-invalid Python file.
+        monkeypatch: Fixture that makes the temporary project the CLI working directory.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()

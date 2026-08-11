@@ -2,8 +2,8 @@
 
 Fires on emails and phone numbers that look real (not placeholder or reserved
 domains, not ``555`` US-test prefixes, not timestamp-shaped fixture numbers).
-Scoped to test paths so production config containing the same patterns isn't
-surfaced.
+Scoped to explicit test and fixture path conventions so unrelated parent names
+cannot turn production metadata into a fixture finding.
 """
 
 import re
@@ -23,6 +23,10 @@ _EMAIL_RE = re.compile(r"(?<!\\)\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[
 _PHONE_RE = re.compile(
     r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b"
 )
+_TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset(
+    {"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"}
+)
+_SEQUENTIAL_DIGIT_FIXTURES: frozenset[str] = frozenset({"0123456789", "1234567890"})
 _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
     {
         "example.com",
@@ -92,10 +96,11 @@ class PiiTestFixtureRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag realistic emails and phone numbers in files under test paths.
 
-        Path gate: the file path must contain ``test`` or ``fixture``.
-        Placeholder domains (``example.com``, ``test.com``, reserved final
-        labels such as ``.local`` / ``.test``), US ``555`` area / exchange
-        codes, and timestamp-context bare numbers are recognised and skipped.
+        Path gate: the file must use a recognised test/fixture directory or
+        filename convention. Placeholder domains (``example.com``,
+        ``test.com``, reserved final labels such as ``.local`` / ``.test``),
+        US ``555`` area / exchange codes, timestamp-shaped values, and known
+        sequential digit fixtures are recognised and skipped.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -104,22 +109,29 @@ class PiiTestFixtureRule(SourceTextRule):
         Returns:
             One finding per realistic email or phone in a test/fixture file.
         """
-        if not _is_test_path(unit.file.display_path):
+        # Production files remain outside this fixture-specific signal even when a parent path
+        # happens to contain text such as ``test-scan-repos``.
+        if not _is_test_fixture_path(unit.file.display_path):
             return []
         definition = self.definition()
         findings: list[Finding] = []
+        # Each realistic email remains a separate reviewable fixture occurrence.
         for match in _EMAIL_RE.finditer(unit.source):
             value = match.group(0)
+            # Git SSH references contain an email-shaped user/host prefix, not a person's address.
             if _is_scp_style_git_reference(unit.source, match.end(), value):
                 continue
+            # Reserved domains are safe fixture placeholders rather than third-party PII.
             if _is_placeholder_email_domain(match.group("domain")):
                 continue
             findings.append(_build_finding(definition, unit, match.start(), value, "email"))
+        # Phone candidates need a plausible shape or an explicit nearby phone label.
         for match in _PHONE_RE.finditer(unit.source):
+            # Known placeholders and numeric fixtures do not identify a person.
             if (
                 match.group("area") in _PLACEHOLDER_PHONE_SEGMENTS
                 or match.group("exchange") in _PLACEHOLDER_PHONE_SEGMENTS
-                or _is_timestamp_like_phone_match(unit.source, match)
+                or _is_known_non_phone_number(unit.source, match)
             ):
                 continue
             findings.append(
@@ -128,8 +140,27 @@ class PiiTestFixtureRule(SourceTextRule):
         return findings
 
 
-def _is_test_path(display_path: str) -> bool:
-    return "test" in display_path.lower() or "fixture" in display_path.lower()
+def _is_test_fixture_path(display_path: str) -> bool:
+    """Return whether a path follows a recognised test or fixture convention.
+
+    Args:
+        display_path: Report path to classify; an empty path has no test/fixture convention.
+
+    Returns:
+        True for recognised directory segments or filenames; false for incidental substrings in
+        parent paths.
+    """
+    normalised_path = display_path.replace("\\", "/").lower()
+    path_parts = normalised_path.split("/")
+    filename = path_parts[-1]
+    filename_stem = filename.rsplit(".", 1)[0]
+    directory_names = frozenset(path_parts[:-1])
+    return (
+        bool(directory_names & _TEST_FIXTURE_DIRECTORY_NAMES)
+        or filename_stem in {"conftest", "fixture", "fixtures", "test", "tests"}
+        or filename_stem.startswith(("fixture_", "test_"))
+        or filename_stem.endswith(("_fixture", "_test"))
+    )
 
 
 def _is_scp_style_git_reference(source: str, match_end: int, value: str) -> bool:
@@ -150,15 +181,30 @@ def _is_placeholder_email_domain(domain: str) -> bool:
     return domain.rsplit(".", 1)[-1] in _RESERVED_EMAIL_TLDS
 
 
-def _is_timestamp_like_phone_match(source: str, match: re.Match[str]) -> bool:
-    """Return whether a bare phone-shaped match sits in timestamp context."""
+def _is_known_non_phone_number(source: str, match: re.Match[str]) -> bool:
+    """Return whether a bare digit sequence is a known non-phone fixture shape.
+
+    Args:
+        source: Full fixture text containing the candidate.
+        match: Phone-shaped regex match; separator-bearing matches are already phone-like.
+
+    Returns:
+        True for decimal fragments, timestamps, and sequential digit fixtures; false for other
+        bare or formatted values.
+    """
     raw = match.group(0)
+    # Formatted values retain the security signal unless an existing placeholder rule handles them.
     if not raw.isdigit():
         return False
+    # A matched slice inside a decimal metric is numeric data, not a contact number.
     if _is_decimal_number_fragment(source, match):
         return True
     context = _source_context_for_match(source, match)
-    return any(term in context for term in _TIMESTAMP_CONTEXT_TERMS)
+    # Timestamp labels explain bare digits without weakening other unformatted phone findings.
+    if any(term in context for term in _TIMESTAMP_CONTEXT_TERMS):
+        return True
+    # These measured charset/test-string values are deterministic sequences, not contact numbers.
+    return raw in _SEQUENTIAL_DIGIT_FIXTURES
 
 
 def _is_decimal_number_fragment(source: str, match: re.Match[str]) -> bool:

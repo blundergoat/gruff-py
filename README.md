@@ -128,6 +128,10 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 | `1` | At least one finding met `--fail-on`. |
 | `2` | Fatal diagnostic such as input, parse, configuration, baseline, or diff failure. |
 
+`--fail-on` gates findings only. A parse error is a fatal diagnostic and exits
+`2` even with `--fail-on none`; `none` makes findings report-only, not
+diagnostics.
+
 `analyse` defaults to `--fail-on advisory`. Set
 `minimumSeverity.analyse` in `.gruff-py.yaml` to change the default
 per-project (see [docs/configuration.md](docs/configuration.md#severity-gate)).

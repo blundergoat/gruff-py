@@ -543,6 +543,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help=(
             "Finding severity that fails the run: advisory, warning, error, or none. "
+            "Gates findings only; parse errors exit 2 even with --fail-on none. "
             "Overridden by minimumSeverity.analyse in .gruff-py.yaml when --fail-on "
             "is not passed explicitly."
         ),

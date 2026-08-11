@@ -251,7 +251,10 @@ while `score` and `summary.exitCode` reflect the full analysed set.
 ## Exit Codes
 
 `analyse` exits `1` when at least one finding meets `--fail-on`. Use
-`--fail-on none` for report-only jobs. The default is `advisory` for
-`analyse` and `none` for `report` and `dashboard`; override via the CLI
-flag or via `minimumSeverity:` in `.gruff-py.yaml` (see
+`--fail-on none` for report-only jobs. `--fail-on` gates findings only. Parse
+errors are fatal diagnostics and exit `2` even with `--fail-on none`, so
+`none` makes findings report-only rather than making every diagnostic
+successful. The default is `advisory` for `analyse` and `none` for `report`
+and `dashboard`; override via the CLI flag or via `minimumSeverity:` in
+`.gruff-py.yaml` (see
 [Configuration → Severity Gate](configuration.md#severity-gate)).

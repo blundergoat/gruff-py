@@ -1,6 +1,6 @@
 ---
 category: performance
-last_reviewed: 2026-05-20
+last_reviewed: 2026-08-11
 ---
 
 ## Pattern: Measure performance changes with the shipped harness
@@ -17,24 +17,28 @@ last_reviewed: 2026-05-20
 ## Pattern: Gate expensive rule walks with necessary source tokens
 
 **Created:** 2026-05-20
-**Context:** Rule modules that inspect rare sink shapes can spend most of their
-cost walking ASTs for files that cannot possibly match. This showed up in the
-performance harness cProfile after `scripts/test-performance.sh --json
-perf-out/perf-before.json`: security rule `analyse` methods cumulatively spent
-over two profiled seconds walking `src/` even though most files had no matching
-security sink tokens.
+**Context:** Syntax-aware parsers and rules that inspect rare shapes can spend
+most of their time traversing files that cannot match. A 2026-08-11
+cryptography scan exposed the parser form of this problem: the suppression
+parser tokenized a 5.9 MB JSON vector even though the source contained no
+`gruff` marker.
 
-**Approach:** Before walking an AST, add a conservative source-text gate only
-when the token is required by the existing matcher. Examples: `src/gruffpy/rule/security/disabled_ssl_verification_rule.py`
+**Approach:** Before walking an AST or tokenizing a complete source file, add a
+conservative source-text gate only when the token is required by the existing
+matcher. Examples: `src/gruffpy/rule/security/disabled_ssl_verification_rule.py`
 (`_SOURCE_NEEDLES`) requires `verify`, `_create_unverified_context`, or
 `disable_warnings`; `src/gruffpy/rule/security/unsafe_yaml_load_rule.py`
 requires `yaml`; `src/gruffpy/rule/waste/unused_import_rule.py`
 (`_collect_used_names`) keeps annotation parsing tied to the same walk that
-collects direct import uses. Do not gate on a token that is merely common in
-positive examples if the AST matcher can fire without it.
+collects direct import uses. `src/gruffpy/suppression/parser.py`
+(`parse_suppressions`) requires a case-insensitive `gruff` marker before Python
+tokenization. Do not gate on a token that is merely common in positive examples
+if the structural matcher can fire without it.
 
-**Evidence:** After the source gates and unused-import walk consolidation,
-`scripts/test-performance.sh --json perf-out/perf-after.json --baseline
-perf-out/perf-before.json` reported no regressions. Medians improved on
-`analyse-src-text` from 3.5779s to 3.1986s, `analyse-src-json` from 3.4860s to
-3.0260s, and `synthetic-1000` from 5.2085s to 4.8498s in the observed run.
+**Evidence:** The marker gate reduced the 281-file cryptography scan from 621.07
+seconds to 16.46 seconds while retaining all 3,889 findings; normalized
+before/after findings were identical. Earlier source gates and unused-import
+walk consolidation also passed `scripts/test-performance.sh` without
+regressions: observed medians improved for `analyse-src-text` from 3.5779s to
+3.1986s, `analyse-src-json` from 3.4860s to 3.0260s, and `synthetic-1000` from
+5.2085s to 4.8498s.

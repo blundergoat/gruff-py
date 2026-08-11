@@ -18,7 +18,7 @@ idempotently and collapses the copies back to one, so sync is the repair.
 
 Measured 2026-08-11 on goat-flow 1.15.1 while upgrading from 1.15.0. Running
 `install . --agent claude|codex|antigravity|copilot` sequentially left
-`.claude/settings.json` (search: `post-turn-safety.sh`) with two identical
+`.codex/hooks.json` (search: `post-turn-safety.sh`) with two identical
 `Stop` entries where it previously had one, and `.codex/hooks.json` (search:
 `post-turn-safety.sh`) with two where it previously had none.
 `hooks sync . --agent claude` collapsed claude back to a single entry. A later

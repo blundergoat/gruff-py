@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-11
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -130,27 +130,43 @@ requires `child in current.body` before treating the ancestor as exempting.
 
 ## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
 
-**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 6 | **Latest occurrence:** 2026-08-11
+**Decision changed:** Resolve import aliases and equivalent syntax at the file
+boundary before classifying individual nodes.
 
-When a rule keys on a syntactic shape to *exempt* a node or treat a guard as
-"safe", it tends to match only the simplest spelling and miss equivalent ones -
-producing false positives (an unrecognized safe form fires) or false negatives.
-PR #8's new rules hit this five times: `_is_main_guard`
+When a rule keys on a syntactic shape to exempt a node or treat a guard as safe,
+it tends to match only the simplest spelling and miss equivalent ones. The
+result can be a false positive when an unrecognised safe form fires, or a false
+negative when an unsafe variant bypasses detection.
+
+PR #8's rules hit this five times: `_is_main_guard`
 (`runtime_sys_path_mutation_rule.py`) matched `__name__ == "__main__"` but not
-the compound `... and __package__ is None` (`ast.BoolOp`); `_annotation_head_names`
-(`substring_vocabulary_match_rule.py`) matched `dict[..]` and `X | None` but not
-`Optional[list]` / `Union[..., dict]`; the `isdigit()` guard
-(`unsafe_numeric_coercion_rule.py`, search: `_ascii_guarded_names`) ignored an
-`and x.isascii()` modifier that makes the conversion safe; `_is_test_unit`
-(`exported_but_unreferenced_rule.py`) matched the `test_` prefix but not the
-`*_test.py` suffix; and `_names_in_expression` (same file) collected `Name`
-nodes from a quoted annotation but not `Attribute` attrs, dropping
-`"models.Payload"`'s `Payload`.
+the compound `... and __package__ is None` (`ast.BoolOp`);
+`_annotation_head_names` (`substring_vocabulary_match_rule.py`) matched
+`dict[..]` and `X | None` but not `Optional[list]` or `Union[..., dict]`; the
+`isdigit()` guard (`unsafe_numeric_coercion_rule.py`, search:
+`_ascii_guarded_names`) ignored an `and x.isascii()` modifier that makes the
+conversion safe; `_is_test_unit` (`exported_but_unreferenced_rule.py`) matched
+the `test_` prefix but not the `*_test.py` suffix; and `_names_in_expression`
+(same file) collected `Name` nodes from a quoted annotation but not `Attribute`
+names, dropping `"models.Payload"`'s `Payload`.
 
-When matching a shape for an exemption or a safe-guard, enumerate the equivalent
-spellings up front: `BoolOp` conjunctions, `Optional`/`Union` wrappers, prefix
-*and* suffix filename conventions, attribute as well as bare-name references,
-and modifier predicates (`isascii`) that change safety.
+The sixth incident was measured on 2026-08-11.
+`test-quality.no-assertions` recognised `pytest.raises(...)` but not
+`from pytest import raises`, a renamed direct import, or
+`import pytest as pt; pt.raises(...)`. The pytest corpus contained two false
+findings from the direct-import form.
+`src/gruffpy/rule/test_quality/no_assertions_rule.py` (search:
+`_imported_pytest_assertion_callees`) now resolves supported helper bindings
+once per source file before it inspects test functions.
+
+When matching a shape for an exemption or safe guard, enumerate equivalent
+spellings up front: aliases and direct imports, Boolean conjunctions,
+`Optional`/`Union` wrappers, prefix and suffix filename conventions, attribute
+and bare-name references, and modifier predicates that change safety. Add one
+focused fixture for each supported spelling and rerun the real source that
+exposed the gap.
 
 ## Footgun: fixed sentinels collide with decoded user literals
 

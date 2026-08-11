@@ -4,6 +4,11 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## Unreleased
 
+- **Large source files analyse without tokenizer stalls** - Cryptography's 281-file scan fell from 621.07s to 16.46s with identical findings.
+- **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
+- **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
+- **Known limitation: composite scores remain volume-sensitive** - PyGoat scores 58.45 while requests, Flask, and pytest remain below 23.
+
 ## v0.5.0 - 2026-08-09
 
 - **Source-text checks survive Python parse failures** - Invalid Python still runs raw-source rules; parser errors stay fatal and suppressions apply.

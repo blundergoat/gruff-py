@@ -1,3 +1,8 @@
+from unittest.mock import Mock
+
+import pytest
+
+import gruffpy.suppression.parser as suppression_parser
 from gruffpy.suppression.parser import parse_suppressions
 
 
@@ -20,6 +25,29 @@ def test_disable_next_targets_next_physical_line_only() -> None:
 
 def test_disable_file_is_file_local() -> None:
     parsed = parse_suppressions("# gruff: disable-file=size.file-length\nx = 1\n")
+
+    assert parsed.file_disabled_rule_ids == frozenset({"size.file-length"})
+
+
+def test_marker_free_source_skips_python_tokenization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep irrelevant non-Python sources out of the suppression tokenizer.
+
+    Args:
+        monkeypatch: Replaces the tokenizer so any accidental call fails the test.
+    """
+    reject_tokenization = Mock(side_effect=AssertionError("tokenized marker-free source"))
+
+    monkeypatch.setattr(suppression_parser, "_comment_tokens", reject_tokenization)
+
+    parsed = parse_suppressions('{"payload": "marker-free non-Python source"}')
+
+    assert parsed == suppression_parser.ParsedSuppressions()
+    reject_tokenization.assert_not_called()
+
+
+def test_marker_prefilter_preserves_case_insensitive_syntax() -> None:
+    """Keep mixed-case public suppression syntax eligible for tokenization."""
+    parsed = parse_suppressions("# GrUfF: disable-file=size.file-length\nx = 1\n")
 
     assert parsed.file_disabled_rule_ids == frozenset({"size.file-length"})
 
