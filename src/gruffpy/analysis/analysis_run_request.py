@@ -16,7 +16,10 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 
 @dataclass(frozen=True, slots=True)
 class AnalysisRunRequest:
-    """Inputs for one end-to-end analysis run.
+    """Carry validated user choices into one end-to-end analysis run.
+
+    Use after the CLI, dashboard, or API has resolved its options and paths.
+    The runner reads this single boundary to produce the report returned to that caller.
 
     Attributes:
         paths: CLI-supplied paths; empty tuple is reported as ``(".",)``.

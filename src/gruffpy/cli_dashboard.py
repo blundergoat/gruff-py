@@ -140,13 +140,17 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
 
 
 def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -> str | None:
-    """Return ``config.minimum_severity['dashboard'].value`` or ``None`` if absent.
+    """Load the dashboard threshold from the same project config used by later scans.
 
-    Mirrors ``dashboard_server._config_path`` by resolving a relative *config_path*
-    against the dashboard *project* root, so the initial form seed reads the same
-    file that ``/scan`` will read at run time. Without this normalisation a
-    relative ``--config`` resolves against the launch CWD and diverges from the
-    scan path when ``--project <dir>`` is invoked from elsewhere.
+    Use while seeding the form; None keeps the CLI default visible.
+    Project-relative resolution keeps startup and later scan settings aligned.
+
+    Args:
+        config_path: User-selected config; None asks normal project discovery to choose one.
+        project: Dashboard project root; an empty path follows ``Path``'s current-directory meaning.
+
+    Returns:
+        Configured threshold text, or None when the user has no dashboard-specific setting.
     """
     # A relative config was chosen from the project, not the launch directory.
     if config_path is not None and not config_path.is_absolute():

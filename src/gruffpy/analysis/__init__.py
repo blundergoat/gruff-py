@@ -1,3 +1,9 @@
+"""Expose stable analysis report and schema boundaries to calling developers.
+
+Use these exports when an integration consumes a run without reaching into implementation modules.
+They connect results and diagnostics to compatible report versions expected by sibling tools.
+"""
+
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import (

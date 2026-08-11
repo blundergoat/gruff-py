@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-12
 ---
 
 ## Lesson: Separate static contract defects from behavioral pressure failures
@@ -257,3 +257,19 @@ even if the setup is shared. This preserves the signal of
 `test-quality.eager-test` and keeps dogfood aligned with the
 reviewer-verification mission. Name configured boundary values before asserting
 them so the test explains the user's choice instead of embedding a magic number.
+
+## Lesson: Prove generated comments semantically before a broad write
+
+**Created:** 2026-08-12
+**Decision changed:** A comment-coverage codemod must pass a representative diff review before it may write beyond one file.
+**Trigger phase:** ACT
+**Incident count:** 1
+**Latest occurrence:** 2026-08-12
+
+**Incident:** A source-wide documentation pass tried two deterministic codemods after a hand-written file established the desired shape. The first inserted repeated
+“this case applies” comments; the second included identifiers but produced phrases such as “needs parse ranges.” Ruff also rejected the generated docstring lines at the
+repository's 100-character limit. Both batches were reversed before behavior verification because they narrated structure instead of explaining a caller consequence.
+
+For comment-density work, let an audit identify omissions but keep prose generation semantic. Before a bulk writer can expand past one file, inspect a sample containing a
+branch, loop, exception, existing structured docstring, and missing private-method docstring. Reject the writer if phrases repeat, expose syntax as prose, or fail the normal
+lint width. Structural completeness is not evidence of readable comments.
