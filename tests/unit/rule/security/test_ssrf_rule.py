@@ -993,6 +993,21 @@ def test_carries_security_metadata():
     assert finding.metadata["sourceLabel"] == "user-controlled-url"
 
 
+def test_module_qualified_request_taints_arg():
+    """Warn when the module-qualified Flask proxy reaches ``requests.get``."""
+    src = (
+        "import requests\nimport flask\ndef fetch():\n    requests.get(flask.request.args['url'])\n"
+    )
+    findings = SsrfRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_application_object_request_attribute_stays_quiet():
+    """Keep an application object's request-shaped attribute out of SSRF findings."""
+    src = "import requests\ndef fetch(other):\n    requests.get(other.request.args['url'])\n"
+    assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
+
+
 def test_fastapi_query_parameter_taints_arg():
     """Warn when a FastAPI query parameter reaches ``requests.get``."""
     src = (

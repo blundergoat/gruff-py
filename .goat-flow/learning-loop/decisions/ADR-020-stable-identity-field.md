@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-27
-**Cross-implementation pair:** `gruff-php/.goat-flow/tasks/0.1.4/M05-stable-identity-field-for-diffs.md` (pending; identical field name, input set, and 16-char SHA-256 prefix — adopting this contract on the Python side first lets gruff-php land verbatim).
+**Cross-implementation pair:** gruff-php, pending and not yet recorded in a durable file there. The contract is stated inline under Cross-port below, so this ADR remains readable without it.
 **Ticket/Context:** 0.1.2 stable-identity delivery; `.goat-flow/learning-loop/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
 
 ## Decision
@@ -83,7 +83,7 @@ The field name `stableIdentity` was selected over `partialFingerprint` (collides
 
 **Cross-port:**
 
-- `gruff-php/.goat-flow/tasks/0.1.4/M05-stable-identity-field-for-diffs.md` documents the same field name, same input set, same 16-char SHA-256 prefix — both sides adopt verbatim. The PHP side is still pending; the Python side ships first without blocking, and the byte-equivalence test (`test_json_byte_equivalence.py`) will pick up identical digests once both sides are populated with the same fixture.
+- gruff-php adopts this verbatim: same field name `stableIdentity`, same input set, same 16-char SHA-256 prefix. Recorded inline here because the PHP-side plan directory that once described it is gitignored working state and no longer exists; `gruff-php/.goat-flow/architecture.md` is the only surviving PHP-side mention. The Python side ships first without blocking, and the byte-equivalence test (`test_json_byte_equivalence.py`) will pick up identical digests once both sides are populated with the same fixture.
 
 ## Reversibility
 

@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## Unreleased
 
+- **Module-qualified request receivers taint again** - `flask.request.args` seeds security taint when an import binds the module; `other.request` stays quiet.
+- **A first-time `init` writes a umask-derived config mode** - Fresh generation no longer emits `0600`; regeneration still preserves an existing file's mode.
 - **Large source files analyse without tokenizer stalls** - Cryptography's 281-file scan fell from 621.07s to 16.46s with identical findings.
 - **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
 - **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.

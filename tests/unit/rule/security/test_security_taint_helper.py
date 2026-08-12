@@ -257,6 +257,47 @@ def test_unrelated_request_attribute_is_not_a_framework_source() -> None:
     assert not taint_map.is_tainted(sink.args[0])
 
 
+@pytest.mark.parametrize(
+    "module_qualified_source",
+    (
+        pytest.param("import flask", id="module-import"),
+        pytest.param("import flask as flask", id="aliased-import"),
+    ),
+)
+def test_module_qualified_request_receiver_is_a_source(module_qualified_source: str) -> None:
+    """Seed taint for the module-qualified proxy a Flask user reads without a name import.
+
+    Args:
+        module_qualified_source: Import statement binding the framework module.
+    """
+    source = f"{module_qualified_source}\ndef view():\n    sink(flask.request.args['url'])\n"
+    tree, analyser = _analyse(source)
+    taint_map = analyser.analyse_tree(tree)
+    sink = _find_call(tree, "sink")
+
+    assert taint_map.is_tainted(sink.args[0])
+
+
+def test_module_qualified_request_receiver_without_an_import_stays_quiet() -> None:
+    """Keep a request-shaped receiver quiet when no import binds the module name."""
+    source = "def view(flask):\n    sink(flask.request.args['url'])\n"
+    tree, analyser = _analyse(source)
+    taint_map = analyser.analyse_tree(tree)
+    sink = _find_call(tree, "sink")
+
+    assert not taint_map.is_tainted(sink.args[0])
+
+
+def test_module_qualified_get_json_is_a_direct_source() -> None:
+    """Read the JSON body through the module-qualified proxy as a direct source."""
+    source = "import flask\ndef view():\n    sink(flask.request.get_json())\n"
+    tree, analyser = _analyse(source)
+    taint_map = analyser.analyse_tree(tree)
+    sink = _find_call(tree, "sink")
+
+    assert taint_map.is_tainted(sink.args[0])
+
+
 @pytest.mark.parametrize("request_value_expression", _REQUEST_ACCESSOR_SOURCE_EXPRESSIONS)
 def test_request_accessor_framework_shape_is_tainted(request_value_expression: str) -> None:
     """Keep each supported framework accessor visible to security rules.

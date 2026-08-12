@@ -486,6 +486,38 @@ def frameworks_in_use(tree: ast.AST) -> frozenset[str]:
     return frozenset(detected)
 
 
+def imported_module_names(tree: ast.AST) -> frozenset[str]:
+    """Return every name an ``import`` statement binds anywhere in a module.
+
+    Used to tell a framework's module-level request proxy (``flask.request``)
+    from an application object that merely owns a ``request`` attribute
+    (``other.request``), without naming individual frameworks. Function-local
+    imports count, because a handler may import its framework inside the body.
+
+    ``import flask`` binds ``flask``; ``import flask as f`` binds ``f``;
+    ``import urllib.request`` binds ``urllib``; ``from a import b`` binds ``b``.
+    A star import binds nothing this can name.
+
+    Args:
+        tree: Module AST to inspect.
+
+    Returns:
+        Names bound by import statements; empty for a non-module tree.
+    """
+    if not isinstance(tree, ast.Module):
+        return frozenset()
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Import | ast.ImportFrom):
+            continue
+        for alias in node.names:
+            # `from x import *` binds names this analyser cannot enumerate.
+            if alias.name == "*":
+                continue
+            bound.add(alias.asname or alias.name.split(".", 1)[0])
+    return frozenset(bound)
+
+
 def _frameworks_for_import(node: ast.stmt) -> set[str]:
     if isinstance(node, ast.Import):
         return {_framework_for_name(alias.name) for alias in node.names} - {""}

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-26
-**Cross-implementation pair:** `gruff-go/.goat-flow/decisions/ADR-010-per-command-minimum-severity.md` (planned; gruff-go's current 0.1.2 draft still ships `never` as the off-switch value and needs to flip to `none` to match this ADR).
+**Cross-implementation pair:** `gruff-go/.goat-flow/learning-loop/decisions/ADR-010-per-command-minimum-severity.md` (planned; gruff-go's current 0.1.2 draft still ships `never` as the off-switch value and needs to flip to `none` to match this ADR).
 **Ticket/Context:** 0.1.2 per-command severity issue brief; wording-brainstorm critique at `gruff-go/.goat-flow/logs/critiques/2026-05-26-config-wording-brainstorm-b5k2x.md`.
 
 ## Decision

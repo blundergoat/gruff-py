@@ -45,6 +45,11 @@ _FAMILY_ACCEPTED_ABBREVIATIONS = (
     "url",
 )
 
+# Mode `open()` requests for a new file before the process umask narrows it.
+_NEW_FILE_BASE_MODE = 0o666
+# A deliberate non-default mode a user would set on their own config.
+_USER_CHOSEN_TARGET_MODE = 0o640
+
 _FULLY_CUSTOMISED_YAML = (
     "schemaVersion: gruff-py.config.v0.1\n"
     "minimumPythonVersion: '3.12'\n"
@@ -265,6 +270,47 @@ def test_init_force_preserves_all_supported_semantics(tmp_path: Path) -> None:
 
     assert written_target == target
     assert after == before
+
+
+@pytest.mark.skipif(os.name != "posix", reason="umask-derived modes only apply on POSIX.")
+@pytest.mark.parametrize("active_umask", (0o022, 0o077), ids=("umask-022", "umask-077"))
+def test_init_generates_the_same_mode_as_every_other_config_writer(
+    tmp_path: Path,
+    active_umask: int,
+) -> None:
+    """Match the mode a plain write produces, rather than mkstemp's private 0600.
+
+    Args:
+        tmp_path: Empty project so init takes the first-time branch.
+        active_umask: Process umask under which both writers create their file.
+    """
+    previous_umask = os.umask(active_umask)
+    try:
+        written_target = init_config.initialise_project_config(tmp_path, force=False)
+        plain_write = tmp_path / "written-the-ordinary-way.yaml"
+        plain_write.write_text("compare: mode\n")
+
+        init_mode = stat.S_IMODE(written_target.stat().st_mode)
+        assert init_mode == stat.S_IMODE(plain_write.stat().st_mode)
+        assert init_mode == _NEW_FILE_BASE_MODE & ~active_umask
+    finally:
+        os.umask(previous_umask)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="umask-derived modes only apply on POSIX.")
+def test_init_force_preserves_an_existing_target_mode(tmp_path: Path) -> None:
+    """Keep a user's deliberate config permissions across canonical regeneration.
+
+    Args:
+        tmp_path: Project whose existing target carries a non-default mode.
+    """
+    target = tmp_path / ".gruff-py.yaml"
+    target.write_text(_FULLY_CUSTOMISED_YAML)
+    target.chmod(_USER_CHOSEN_TARGET_MODE)
+
+    written_target = init_config.initialise_project_config(tmp_path, force=True)
+
+    assert stat.S_IMODE(written_target.stat().st_mode) == _USER_CHOSEN_TARGET_MODE
 
 
 @pytest.mark.parametrize(

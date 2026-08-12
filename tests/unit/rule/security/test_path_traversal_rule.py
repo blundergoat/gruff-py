@@ -13,6 +13,26 @@ def test_open_tainted_path_emits():
     assert len(findings) == 1
 
 
+def test_open_module_qualified_request_path_emits():
+    """Flag the module-qualified Flask idiom reaching a filesystem sink."""
+    src = (
+        "import flask\ndef view():\n    name = flask.request.args['file']\n    open(name).read()\n"
+    )
+    findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
+    assert len(findings) == 1
+
+
+def test_open_application_object_request_path_skipped():
+    """Keep an application object's request-shaped attribute quiet inside a web file."""
+    src = (
+        "from flask import request\n"
+        "def view(other):\n"
+        "    name = other.request.args['file']\n"
+        "    open(name).read()\n"
+    )
+    assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
+
+
 def test_open_literal_path_skipped():
     src = "from flask import request\ndef view():\n    open('/etc/config.json').read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []

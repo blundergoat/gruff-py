@@ -312,6 +312,23 @@ def _validate_and_atomically_replace(
             staged_path.unlink()
 
 
+def _umask_derived_file_mode() -> int:
+    """Return the permission bits ``open()`` gives a newly created file.
+
+    ``tempfile.mkstemp`` hardcodes ``0600``, so without this a first-time
+    config would ship tighter than the interactive prompt's ``Path.write_text``
+    produces for the same file. Reading a umask requires setting one, so the
+    caller's value is restored immediately; a CLI generating one config has no
+    concurrent writer to race.
+
+    Returns:
+        Permission bits for a new regular file under the active umask.
+    """
+    active_umask = os.umask(0o077)
+    os.umask(active_umask)
+    return 0o666 & ~active_umask
+
+
 def _write_staged_yaml(target: Path, rendered_yaml: str) -> Path:
     """Write and flush canonical YAML to a same-directory temporary path.
 
@@ -345,6 +362,9 @@ def _write_staged_yaml(target: Path, rendered_yaml: str) -> Path:
         # Existing user permissions survive canonical replacement when a target exists.
         if target.exists():
             os.chmod(staged_path, target.stat().st_mode)
+        else:
+            # A first-time config matches every other writer instead of mkstemp's 0600.
+            os.chmod(staged_path, _umask_derived_file_mode())
     except OSError as exc:
         # Example: disk exhaustion interrupts a staged write while the original stays intact.
         with suppress(OSError):

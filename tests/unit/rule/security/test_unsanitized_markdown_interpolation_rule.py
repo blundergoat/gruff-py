@@ -1003,3 +1003,116 @@ def test_except_star_handler_proves_the_same_url_as_a_plain_handler() -> None:
     )
 
     assert _analyse(source, _CUSTOM_SANITIZERS) == []
+
+
+_LOOP_HEADERS = (
+    pytest.param("def render", "    for item in items:", id="for"),
+    pytest.param("async def render", "    async for item in items:", id="async-for"),
+    pytest.param("def render", "    while items:", id="while"),
+)
+
+
+@pytest.mark.parametrize(("declaration", "loop_header"), _LOOP_HEADERS)
+def test_loop_carried_rebinding_is_not_proved_safe(declaration: str, loop_header: str) -> None:
+    """A body that rebinds a proved name to a raw value is unsafe from the second pass.
+
+    Args:
+        declaration: `def` or `async def` matching the loop form under test.
+        loop_header: Loop statement the user wrote around the rendered link.
+    """
+    source = (
+        f"{declaration}(raw_url, items):\n"
+        "    safe_url = markdown_url(raw_url)\n"
+        f"{loop_header}\n"
+        "        rendered = f'[text]({safe_url})'\n"
+        "        safe_url = raw_url\n"
+        "    return rendered\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+@pytest.mark.parametrize(("declaration", "loop_header"), _LOOP_HEADERS)
+def test_loop_body_that_proves_before_rendering_stays_quiet(
+    declaration: str,
+    loop_header: str,
+) -> None:
+    """Keep a value the body sanitizes before every render out of findings.
+
+    Args:
+        declaration: `def` or `async def` matching the loop form under test.
+        loop_header: Loop statement the user wrote around the rendered link.
+    """
+    source = (
+        f"{declaration}(raw_url, items):\n"
+        f"{loop_header}\n"
+        "        safe_url = markdown_url(raw_url)\n"
+        "        rendered = f'[text]({safe_url})'\n"
+        "    return rendered\n"
+    )
+
+    assert _analyse(source, _CUSTOM_SANITIZERS) == []
+
+
+def test_loop_body_without_a_rebinding_keeps_its_pre_loop_proof() -> None:
+    """Keep a proof established before the loop when the body never rebinds it."""
+    source = (
+        "def render(raw_url, items):\n"
+        "    safe_url = markdown_url(raw_url)\n"
+        "    for item in items:\n"
+        "        rendered = f'[text]({safe_url})'\n"
+        "    return rendered\n"
+    )
+
+    assert _analyse(source, _CUSTOM_SANITIZERS) == []
+
+
+def test_inner_loop_render_sees_an_outer_loop_rebinding() -> None:
+    """Invalidate across nested loops, where the rebinding sits in the outer body."""
+    source = (
+        "def render(raw_url, rows, cols):\n"
+        "    safe_url = markdown_url(raw_url)\n"
+        "    for row in rows:\n"
+        "        for col in cols:\n"
+        "            rendered = f'[text]({safe_url})'\n"
+        "        safe_url = raw_url\n"
+        "    return rendered\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+def test_context_manager_target_rebinding_inside_a_loop_is_not_proved_safe() -> None:
+    """Treat a `with ... as name` rebinding like an assignment for the next pass."""
+    source = (
+        "def render(raw_url, items, opened):\n"
+        "    safe_url = markdown_url(raw_url)\n"
+        "    for item in items:\n"
+        "        rendered = f'[text]({safe_url})'\n"
+        "        with opened as safe_url:\n"
+        "            pass\n"
+        "    return rendered\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+def test_sanitizer_rebound_inside_a_loop_stops_proving_later_passes() -> None:
+    """A body that reassigns the configured sanitizer name cannot prove its own render."""
+    source = (
+        "def render(raw_url, items, identity):\n"
+        "    for item in items:\n"
+        "        rendered = f'[text]({markdown_url(raw_url)})'\n"
+        "        markdown_url = identity\n"
+        "    return rendered\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]

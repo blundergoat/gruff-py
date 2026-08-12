@@ -10,7 +10,7 @@ Every other call remains untainted under ADR-017's conservative posture.
 import ast
 from dataclasses import dataclass, field
 
-from gruffpy.rule.security._security_node_helper import call_target_name
+from gruffpy.rule.security._security_node_helper import call_target_name, imported_module_names
 
 _REQUEST_ATTRS: frozenset[str] = frozenset(
     {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
@@ -86,7 +86,8 @@ class TaintAnalyser:
         taint_map = TaintMap()
         if not isinstance(tree, ast.Module):
             return taint_map
-        _ScopeWalker(taint_map, self._sanitisers).walk_body(tree.body, tainted=set())
+        walker = _ScopeWalker(taint_map, self._sanitisers, imported_module_names(tree))
+        walker.walk_body(tree.body, tainted=set())
         return taint_map
 
 
@@ -97,9 +98,15 @@ class _ScopeWalker:
     Users reach this walk after the parser accepts an endpoint or module body.
     """
 
-    def __init__(self, taint_map: TaintMap, sanitisers: frozenset[str]) -> None:
+    def __init__(
+        self,
+        taint_map: TaintMap,
+        sanitisers: frozenset[str],
+        imported_modules: frozenset[str],
+    ) -> None:
         self._map = taint_map
         self._sanitisers = sanitisers
+        self._imported_modules = imported_modules
 
     def walk_body(self, body: list[ast.stmt], tainted: set[str]) -> set[str]:
         """Walk a list of statements in order, mutating *tainted* in place.
@@ -259,7 +266,7 @@ class _ScopeWalker:
         if isinstance(expr, ast.Name):
             return expr.id in tainted
         if isinstance(expr, ast.Attribute):
-            if _is_request_source(expr):
+            if _is_request_source(expr, self._imported_modules):
                 return True
             return self._is_tainted(expr.value, tainted)
         return self._is_tainted(expr.value, tainted) or self._is_tainted(expr.slice, tainted)
@@ -326,18 +333,22 @@ class _ScopeWalker:
         accessor_receiver = request_accessor_call.func.value
         # Flask users may read their JSON body directly from the recognised request object.
         if accessor_method in _DIRECT_REQUEST_SOURCE_METHODS:
-            return _is_request_object(accessor_receiver)
+            return _is_request_object(accessor_receiver, self._imported_modules)
         # Other methods, such as pop, stay conservative even on a tainted request container.
         if accessor_method not in _REQUEST_ACCESSOR_METHODS:
             return False
         return self._is_tainted(accessor_receiver, tainted_names)
 
 
-def _is_request_source(request_attribute: ast.Attribute) -> bool:
+def _is_request_source(
+    request_attribute: ast.Attribute,
+    imported_modules: frozenset[str],
+) -> bool:
     """Return whether an attribute is one of the finite request data sources.
 
     Args:
         request_attribute: Attribute a user read from a possible request object.
+        imported_modules: Names bound by an import in the same file.
 
     Returns:
         True for a supported source; false prevents unrelated attributes becoming findings.
@@ -345,28 +356,34 @@ def _is_request_source(request_attribute: ast.Attribute) -> bool:
     # Attributes outside the documented framework vocabulary are ordinary application data.
     if request_attribute.attr not in _REQUEST_ATTRS:
         return False
-    return _is_request_object(request_attribute.value)
+    return _is_request_object(request_attribute.value, imported_modules)
 
 
-def _is_request_object(request_receiver: ast.expr) -> bool:
+def _is_request_object(request_receiver: ast.expr, imported_modules: frozenset[str]) -> bool:
     """Return whether syntax identifies the framework request object.
 
     Args:
         request_receiver: Receiver before a request attribute or direct method.
+        imported_modules: Names bound by an import in the same file, which
+            separate a framework's module-level request proxy from an
+            application object that merely owns a ``request`` attribute.
 
     Returns:
-        True for ``request``/``self.request`` shapes; false for application objects.
+        True for ``request``, ``self.request``, and ``<imported>.request``.
     """
     # A typical endpoint imports and reads the framework's request object directly.
     if isinstance(request_receiver, ast.Name):
         return request_receiver.id == "request"
+    if not isinstance(request_receiver, ast.Attribute) or request_receiver.attr != "request":
+        return False
+    if not isinstance(request_receiver.value, ast.Name):
+        return False
     # Class-based handlers can expose the same user request as ``self.request``.
-    return (
-        isinstance(request_receiver, ast.Attribute)
-        and request_receiver.attr == "request"
-        and isinstance(request_receiver.value, ast.Name)
-        and request_receiver.value.id == "self"
-    )
+    if request_receiver.value.id == "self":
+        return True
+    # ``flask.request`` is the framework proxy only when this file imported the module;
+    # an application object's ``other.request`` binds a parameter or local instead.
+    return request_receiver.value.id in imported_modules
 
 
 def _names_from_target(target: ast.expr) -> set[str]:

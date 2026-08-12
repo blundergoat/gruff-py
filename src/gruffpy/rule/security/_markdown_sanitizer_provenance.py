@@ -371,6 +371,13 @@ class MarkdownSanitizerProvenance:
     ) -> _FlowState:
         """Join a loop body with the pre-loop state a user reaches on zero iterations.
 
+        The body is scanned once, not to a fixpoint. Dropping every proof the
+        body can rebind before that single scan makes the result sound for any
+        iteration count: a name proved safe before the loop and reassigned to a
+        raw value inside it is uncertain at the top of the body, as it is on the
+        user's second pass. Names the body proves before using them keep their
+        proof, because the body scan re-establishes those in source order.
+
         Args:
             statement: `for`, `async for`, or `while` whose body may not run at all.
             state: Proof state before the loop header is evaluated.
@@ -387,6 +394,7 @@ class MarkdownSanitizerProvenance:
             self._invalidate_target(statement.target, body_state)
         else:
             self._record_expression(statement.test, state)
+        self._invalidate_loop_rebindings(statement.body, body_state)
         body_state = self._scan_statements(
             statement.body,
             body_state,
@@ -400,6 +408,93 @@ class MarkdownSanitizerProvenance:
             module_callables=module_callables,
             scope_kind=scope_kind,
         )
+
+    def _invalidate_loop_rebindings(self, body: list[ast.stmt], state: _FlowState) -> None:
+        """Drop proofs for every name a loop body can rebind, before scanning it once.
+
+        Walks the body without descending into nested function, class, or lambda
+        scopes: those bind their own names, while the declaration itself rebinds
+        a name in the loop's scope. Missing a binding form here would leave the
+        same loop-carried unsoundness this pre-pass exists to close.
+
+        Args:
+            body: Statements the user's loop repeats.
+            state: Body-entry proof state mutated before the body scan.
+        """
+        pending: list[ast.AST] = list(body)
+        while pending:
+            node = pending.pop()
+            # A declaration rebinds its own name; its body belongs to a separate scope.
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                self._invalidate_name(node.name, state)
+                state.callables.shadow(node.name)
+                continue
+            # A lambda binds only its parameters, inside its own scope.
+            if isinstance(node, ast.Lambda):
+                continue
+            self._invalidate_rebinding(node, state)
+            pending.extend(ast.iter_child_nodes(node))
+
+    def _invalidate_rebinding(self, node: ast.AST, state: _FlowState) -> None:
+        """Invalidate the names one binding node introduces into the loop's scope.
+
+        Args:
+            node: Candidate binding node from inside a loop body.
+            state: Proof state mutated for the body scan that follows.
+        """
+        if isinstance(node, ast.Assign):
+            # Chained assignment rebinds every target from one value.
+            for assigned_target in node.targets:
+                self._invalidate_target(assigned_target, state)
+            return
+        if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            self._invalidate_target(node.target, state)
+            return
+        # A nested loop's target takes a fresh runtime element on every pass.
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            self._invalidate_target(node.target, state)
+            return
+        if isinstance(node, ast.withitem):
+            # A context manager without `as name` introduces no local value.
+            if node.optional_vars is not None:
+                self._invalidate_target(node.optional_vars, state)
+            return
+        if isinstance(node, ast.ExceptHandler):
+            # `except E as name` binds only when the user named the exception.
+            if node.name is not None:
+                self._invalidate_name(node.name, state)
+                state.callables.shadow(node.name)
+            return
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            self._invalidate_import_aliases(node, state)
+            return
+        if isinstance(node, ast.Delete):
+            # Deleting a name inside the body removes a proof the pre-loop state held.
+            for deleted_target in node.targets:
+                self._invalidate_target(deleted_target, state)
+
+    def _invalidate_import_aliases(
+        self,
+        node: ast.Import | ast.ImportFrom,
+        state: _FlowState,
+    ) -> None:
+        """Invalidate names an import inside the loop body binds.
+
+        A body-local import re-establishes its own canonical binding when the
+        body scan reaches it, so this only removes trust the user's later
+        spelling has not yet earned.
+
+        Args:
+            node: Import statement found inside the loop body.
+            state: Proof state mutated for the body scan that follows.
+        """
+        for imported_alias in node.names:
+            # `from x import *` binds names this walker cannot enumerate.
+            if imported_alias.name == "*":
+                continue
+            bound_alias = imported_alias.asname or imported_alias.name.split(".", 1)[0]
+            self._invalidate_name(bound_alias, state)
+            state.callables.shadow(bound_alias)
 
     def _scan_match_statement(
         self,

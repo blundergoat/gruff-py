@@ -23,6 +23,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.security._security_node_helper import imported_module_names
 
 _REQUEST_ATTRS: frozenset[str] = frozenset(
     {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
@@ -74,6 +75,7 @@ class ExtractCompactUserInputRule(Rule):
         if unit.tree is None or "request" not in unit.source or "**" not in unit.source:
             return []
         definition = self.definition()
+        imported_modules = imported_module_names(unit.tree)
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.Call):
@@ -81,7 +83,7 @@ class ExtractCompactUserInputRule(Rule):
             for kw in node.keywords:
                 if kw.arg is not None:
                     continue
-                if not _is_request_attribute(kw.value):
+                if not _is_request_attribute(kw.value, imported_modules):
                     continue
                 findings.append(
                     Finding(
@@ -109,8 +111,20 @@ class ExtractCompactUserInputRule(Rule):
         return findings
 
 
-def _is_request_attribute(node: ast.expr) -> bool:
-    """True when *node* is ``<something>.request.<attr>`` or ``request.<attr>``."""
+def _is_request_attribute(node: ast.expr, imported_modules: frozenset[str]) -> bool:
+    """True for ``request.<attr>``, ``self.request.<attr>``, or ``<imported>.request.<attr>``.
+
+    Matches the receiver policy in ``_security_taint_helper`` so the two
+    request-detecting rules agree on the shape. An application object's
+    ``other.request`` binds a parameter or local, not an imported module.
+
+    Args:
+        node: Expression splatted into a callee's keyword arguments.
+        imported_modules: Names bound by an import in the same file.
+
+    Returns:
+        True for a recognised request receiver; false for application objects.
+    """
     if not isinstance(node, ast.Attribute):
         return False
     if node.attr not in _REQUEST_ATTRS:
@@ -118,4 +132,8 @@ def _is_request_attribute(node: ast.expr) -> bool:
     receiver = node.value
     if isinstance(receiver, ast.Name) and receiver.id == "request":
         return True
-    return isinstance(receiver, ast.Attribute) and receiver.attr == "request"
+    if not isinstance(receiver, ast.Attribute) or receiver.attr != "request":
+        return False
+    if not isinstance(receiver.value, ast.Name):
+        return False
+    return receiver.value.id == "self" or receiver.value.id in imported_modules

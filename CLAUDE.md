@@ -102,5 +102,5 @@ Every line in this file must fit one of: behavioral rule, scope boundary, comman
 | Tests | `tests/` |
 | Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json`, `package-lock.json` |
-| CI and commit guidance | `.github/workflows/ci.yml`, `.github/git-commit-instructions.md` |
+| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit-message.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/`, `.goat-flow/scratchpad/` |
