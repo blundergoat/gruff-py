@@ -4,24 +4,22 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## Unreleased
 
-- **Module-qualified request receivers taint again** - `flask.request.args` seeds security taint when an import binds the module; `other.request` stays quiet.
-- **A first-time `init` writes a umask-derived config mode** - Fresh generation no longer emits `0600`; regeneration still preserves an existing file's mode.
-- **Large source files analyse without tokenizer stalls** - Cryptography's 281-file scan fell from 621.07s to 16.46s with identical findings.
-- **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
-- **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
-- **Known limitation: composite scores remain volume-sensitive** - PyGoat scores 58.45 while requests, Flask, and pytest remain below 23.
-
-## v0.5.0 - 2026-08-09
+## v0.5.0 - 2026-08-12
 
 - **Source-text checks survive Python parse failures** - Invalid Python still runs raw-source rules; parser errors stay fatal and suppressions apply.
 - **SSRF sinks now require documented HTTP-client receivers** - Only live imports qualify; app-owned, shadowed, and unimported calls stay quiet.
 - **Framework request accessors retain security taint** - Supported Flask, Django, DRF, and Starlette accessors preserve request taint.
+- **Module-qualified request receivers taint again** - `flask.request.args` seeds taint when an import binds the module; `other.request` stays quiet.
 - **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** - Configure exact label and URL sanitizer targets.
 - **Weak hashes honour the standard-library non-security opt-out** - Only literal `usedforsecurity=False` suppresses MD5/SHA1 warnings.
 - **BREAKING: `init --force` regenerates, never overwrites** - Supported settings carry over; unsafe YAML or TOML is refused untouched.
+- **A first-time `init` writes a umask-derived config mode** - Fresh generation no longer emits `0600`; regeneration preserves an existing mode.
 - **Unknown per-rule options no longer reach rule execution** - Normal scans warn and drop them; strict config fails on the dotted key.
+- **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
+- **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.
+- **Large source files analyse without tokenizer stalls** - Cryptography's 281-file scan fell from 621.07s to 16.46s with identical findings.
 - **Dashboard compatibility help is honest and remote binds are deliberate** - Public binds need `--allow-public`; no-op flags are disclosed.
 - **Human reports separate scan context from scoring mode** - Text, Markdown, and HTML relabel scope without changing results.
 - **Boolean naming now matches scalar annotation shapes exactly** - Scalar bools qualify; containers, callables, and mixed unions do not.
@@ -30,6 +28,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **CI inputs are pinned and lock drift fails early** - Actions use verified SHAs; installs use the lock and permissions stay read-only.
 - **Destructive-command hook preserves quoted cleanup targets** - Proven local paths with spaces pass; unsafe or unresolved targets fail.
 - **Generated rule-catalog facts no longer drift across current docs** - Current docs derive rule and pillar totals from registered definitions.
+- **Known limitation: composite scores remain volume-sensitive** - PyGoat scores 58.45 while requests, Flask, and pytest remain below 23.
 
 ## v0.4.1 - 2026-06-14
 
