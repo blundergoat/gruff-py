@@ -1116,3 +1116,85 @@ def test_sanitizer_rebound_inside_a_loop_stops_proving_later_passes() -> None:
     findings = _analyse(source, _CUSTOM_SANITIZERS)
 
     assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+def test_sanitizer_rebound_by_a_match_case_inside_a_loop_stops_proving_later_passes() -> None:
+    """A `match` case that captures the sanitizer name invalidates a loop-carried proof.
+
+    A later pass renders before the case runs, so the captured runtime value -
+    not the configured helper - is what a subsequent iteration would call.
+    """
+    source = (
+        "def render(raw_url, items):\n"
+        "    for item in items:\n"
+        "        rendered = f'[text]({markdown_url(raw_url)})'\n"
+        "        match item:\n"
+        "            case {'handler': markdown_url}:\n"
+        "                pass\n"
+        "    return rendered\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+def test_format_template_with_padding_placeholder_characters_does_not_crash() -> None:
+    """Static NUL padding around a `.format()` field must not overrun the value list.
+
+    The placeholder token is derived from the field-stripped static text, so a
+    literal NUL adjacent to a field cannot merge with it and be counted twice.
+    """
+    source = 'link = "[\\x00{label}\\x00]({url})".format(label=raw_label, url=raw_url)\n'
+
+    findings = _analyse(source)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["label", "url"]
+
+
+def test_walrus_rebinding_a_proved_value_stops_proving_the_render() -> None:
+    """A ``:=`` assignment destroys an earlier sanitizer proof like any other rebind."""
+    source = (
+        "def render(raw_url):\n"
+        "    safe_url = markdown_url(raw_url)\n"
+        "    if (safe_url := raw_url):\n"
+        "        pass\n"
+        "    return f'[text]({safe_url})'\n"
+    )
+
+    findings = _analyse(source, _CUSTOM_SANITIZERS)
+
+    assert [finding.metadata["slot"] for finding in findings] == ["url"]
+
+
+def test_walrus_proving_a_value_is_trusted_at_a_later_render() -> None:
+    """A ``:=`` assignment can also establish the proof a later render relies on."""
+    source = (
+        "def render(raw_url):\n"
+        "    if (safe_url := markdown_url(raw_url)):\n"
+        "        pass\n"
+        "    return f'[text]({safe_url})'\n"
+    )
+
+    assert _analyse(source, _CUSTOM_SANITIZERS) == []
+
+
+def test_label_sanitizer_preserving_link_delimiters_is_not_trusted() -> None:
+    """A configured quote helper that keeps `]`, `(`, `)` cannot prove a safe label."""
+    source = (
+        "import urllib.parse\n"
+        "def render(raw_label, raw_url):\n"
+        '    return f\'[{urllib.parse.quote(raw_label, safe="]()")}]'
+        "({urllib.parse.quote(raw_url)})'\n"
+    )
+
+    findings = _analyse(
+        source,
+        {
+            "labelSanitizers": ["urllib.parse.quote"],
+            "urlSanitizers": ["urllib.parse.quote"],
+        },
+    )
+
+    assert [finding.metadata["slot"] for finding in findings] == ["label"]
+    assert findings[0].metadata["sanitizerResolution"] == "unsafe-arguments"

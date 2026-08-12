@@ -482,3 +482,50 @@ def test_project_index_walks_each_generated_module_a_bounded_number_of_times(
     ]
     assert set(module_walk_counts) == unit_tree_ids
     assert max(module_walk_counts.values()) <= _MAX_MODULE_WALKS_ACROSS_TWO_ANALYSES
+
+
+def test_project_conditional_rebind_keeps_the_import_reachable() -> None:
+    """A branch the user may skip cannot prove the imported producer is unused."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "if use_local:\n"
+        "    _helper = None\n"
+        "REGISTRY = {'helper': _helper}\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_global_declaration_keeps_the_module_import_visible() -> None:
+    """A ``global`` store rebinds the module name instead of shadowing it locally."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def swap():\n"
+        "    global _helper\n"
+        "    callback = _helper\n"
+        "    _helper = None\n"
+        "    return callback\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_class_except_target_does_not_shadow_a_later_load() -> None:
+    """Python deletes an ``except`` target, so a later class load sees the import."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "class Registry:\n"
+        "    try:\n"
+        "        pass\n"
+        "    except Exception as _helper:\n"
+        "        pass\n"
+        "    CALLBACK = _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []

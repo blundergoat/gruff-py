@@ -26,6 +26,11 @@ _PHONE_RE = re.compile(
 _TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset(
     {"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"}
 )
+# Compound directories such as `integration_tests` end in one of these tokens;
+# an incidental qualifier such as `test-scan-repos` does not.
+_TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset(
+    {"fixture", "fixtures", "test", "tests"}
+)
 _SEQUENTIAL_DIGIT_FIXTURES: frozenset[str] = frozenset({"0123456789", "1234567890"})
 _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
     {
@@ -157,10 +162,28 @@ def _is_test_fixture_path(display_path: str) -> bool:
     directory_names = frozenset(path_parts[:-1])
     return (
         bool(directory_names & _TEST_FIXTURE_DIRECTORY_NAMES)
+        or any(_is_test_fixture_directory_name(name) for name in directory_names)
         or filename_stem in {"conftest", "fixture", "fixtures", "test", "tests"}
         or filename_stem.startswith(("fixture_", "test_"))
         or filename_stem.endswith(("_fixture", "_test"))
     )
+
+
+def _is_test_fixture_directory_name(directory_name: str) -> bool:
+    """Return whether a compound directory names a test or fixture collection.
+
+    The final token decides, so ``integration_tests`` and ``test-fixtures`` are
+    recognised while an incidental qualifier such as ``test-scan-repos`` - whose
+    last token names repositories, not tests - stays out of this fixture signal.
+
+    Args:
+        directory_name: One lowercase path segment; empty text names nothing.
+
+    Returns:
+        True when the segment's last token is a test or fixture word.
+    """
+    last_token = re.split(r"[-_.]", directory_name)[-1]
+    return last_token in _TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS
 
 
 def _is_scp_style_git_reference(source: str, match_end: int, value: str) -> bool:

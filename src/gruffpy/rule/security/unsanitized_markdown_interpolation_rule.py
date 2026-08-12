@@ -216,7 +216,13 @@ def _resolve_format_fields(
         Placeholder template, collision-free token, and ordered values. An unresolved
         field returns ``(None, token, [])``.
     """
-    placeholder = _placeholder_absent_from(template)
+    # Derive the placeholder from the field-stripped static text, not the raw
+    # template: removing a ``{field}`` can splice the NUL runs on either side of
+    # it into one longer run, so a token chosen against the raw template can
+    # merge with adjacent static NULs and be over-counted in a slot (an
+    # ``IndexError`` on the value list). This mirrors the f-string path, which
+    # derives its token from the concatenated static constants.
+    placeholder = _placeholder_absent_from(_FORMAT_FIELD_PATTERN.sub("", template))
     keyword_arguments = {
         keyword_argument.arg: keyword_argument.value
         for keyword_argument in node.keywords

@@ -174,3 +174,47 @@ def test_scan_parent_name_does_not_classify_package_metadata_as_fixture(
     findings = PiiTestFixtureRule().analyse(make_unit(source, display_path), default_ctx())
 
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    "display_path",
+    [
+        "integration_tests/users.py",
+        "unit_tests/data.py",
+        "test-fixtures/seed.py",
+    ],
+    ids=["integration-tests", "unit-tests", "test-fixtures"],
+)
+def test_compound_test_directory_names_are_scanned(display_path: str) -> None:
+    """Recognise the common compound conventions, not just a bare ``tests`` directory.
+
+    Args:
+        display_path: Fixture path whose directory ends in a test or fixture token.
+    """
+    source = f"user_email = {_REAL_EMAIL!r}\n"
+
+    findings = PiiTestFixtureRule().analyse(make_unit(source, display_path), default_ctx())
+
+    assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "display_path",
+    [
+        "latest/config.py",
+        "contest_results/data.py",
+        "manifest/app.py",
+    ],
+    ids=["latest", "contest-results", "manifest"],
+)
+def test_directories_merely_containing_test_text_are_not_scanned(display_path: str) -> None:
+    """Keep production directories whose names only embed the letters ``test`` out of scope.
+
+    Args:
+        display_path: Production path whose final directory token is not a test word.
+    """
+    source = f"user_email = {_REAL_EMAIL!r}\n"
+
+    findings = PiiTestFixtureRule().analyse(make_unit(source, display_path), default_ctx())
+
+    assert findings == []

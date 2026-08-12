@@ -16,6 +16,17 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 
 PrivateFunctionKey: TypeAlias = tuple[str, str]
 ExternalReferenceCoverage: TypeAlias = Literal["complete", "ambiguous"]
+_CONDITIONAL_STATEMENTS: tuple[type[ast.AST], ...] = (
+    ast.If,
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.Try,
+    ast.TryStar,
+    ast.Match,
+    ast.match_case,
+    ast.ExceptHandler,
+)
 _ScopeNode: TypeAlias = (
     ast.Module
     | ast.FunctionDef
@@ -93,10 +104,13 @@ class _BindingEvent:
 
     ``binding`` is None after the user overwrites or deletes the imported name;
     otherwise it identifies the candidate producer modules for later loads.
+    ``is_conditional`` marks a rebind the user's control flow may skip, which
+    therefore cannot prove an earlier import is unreachable at a later load.
     """
 
     position: tuple[int, int, int]
     binding: _ImportBinding | None
+    is_conditional: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +360,7 @@ def _build_binding_events(
     """
     events_by_scope_and_name: defaultdict[tuple[int, str], list[_BindingEvent]] = defaultdict(list)
     bound_names: set[tuple[int, str]] = set()
+    externally_declared_names = _externally_declared_names(nodes, scope_index)
     # The first in-memory pass records imports and every lexical invalidation.
     for sequence, node in enumerate(nodes):
         event_scope = _event_scope_id(node, scope_index)
@@ -368,9 +383,14 @@ def _build_binding_events(
                 bound_names.add((event_scope, binding.bound_name))
 
         # Assignments, parameters, definitions, and pattern captures invalidate imports.
+        is_conditional = _is_conditionally_executed(node)
         for rebound_name in _rebound_names(node):
+            # ``global``/``nonlocal`` send the store to an outer scope, so the name
+            # never becomes a local shadow of the import this scope can still see.
+            if rebound_name in externally_declared_names.get(event_scope, frozenset()):
+                continue
             events_by_scope_and_name[(event_scope, rebound_name)].append(
-                _BindingEvent(position=position, binding=None)
+                _BindingEvent(position=position, binding=None, is_conditional=is_conditional)
             )
             bound_names.add((event_scope, rebound_name))
 
@@ -740,6 +760,63 @@ def _bindings_for_from_import(
     return tuple(bindings)
 
 
+def _externally_declared_names(
+    nodes: list[ast.AST],
+    scope_index: _ScopeIndex,
+) -> dict[int, frozenset[str]]:
+    """Map each scope to the names it resolves outside itself.
+
+    A ``global`` or ``nonlocal`` statement means later stores in that scope
+    rebind an outer name instead of creating a local shadow, so the scope keeps
+    seeing whatever import the outer scope established.
+
+    Args:
+        nodes: One materialized AST walk; empty means no declarations exist.
+        scope_index: Lexical ownership used to attribute each declaration.
+
+    Returns:
+        Declared names per scope; an absent scope declares nothing.
+    """
+    declared_names: defaultdict[int, set[str]] = defaultdict(set)
+    # Each declaration applies to every store of that name in the same scope.
+    for node in nodes:
+        # Only these two statements move a scope's stores to an outer binding.
+        if not isinstance(node, (ast.Global, ast.Nonlocal)):
+            continue
+        declaring_scope = scope_index.scope_by_node.get(id(node))
+        # A detached declaration without an indexed scope binds nothing here.
+        if declaring_scope is None:
+            continue
+        declared_names[declaring_scope].update(node.names)
+    return {scope_id: frozenset(names) for scope_id, names in declared_names.items()}
+
+
+def _is_conditionally_executed(node: ast.AST) -> bool:
+    """Return whether the user's control flow can skip this binding.
+
+    A rebind the interpreter may never reach cannot prove an earlier import is
+    unreachable at a later load, so deletion advice must not rely on it. Walking
+    stops at the first enclosing scope because an outer branch does not make a
+    binding inside a nested scope conditional within that scope.
+
+    Args:
+        node: Binding node whose enclosing statements are inspected.
+
+    Returns:
+        True when a branch, loop, handler, or match case may skip the binding.
+    """
+    current = getattr(node, "parent", None)
+    # Hand-built ASTs without parent links keep the previous unconditional reading.
+    while isinstance(current, ast.AST):
+        # A nested scope boundary ends the containing statements for this binding.
+        if _is_scope_node(current):
+            return False
+        if isinstance(current, _CONDITIONAL_STATEMENTS):
+            return True
+        current = getattr(current, "parent", None)
+    return False
+
+
 def _rebound_names(node: ast.AST) -> tuple[str, ...]:
     """Return names this AST node binds independently of import declarations.
 
@@ -794,8 +871,16 @@ def _active_binding(
         # A local name prevents fallback to an outer import after rebinding.
         if scope_name in bound_names:
             binding_events = events_by_scope_and_name.get(scope_name, [])
-            # Only imports/rebinds before this expression can affect its value.
-            prior_events = [event for event in binding_events if event.position < load_position]
+            # Only imports/rebinds before this expression can affect its value, and
+            # a rebind the user's control flow may skip cannot prove the earlier
+            # import is unreachable here. Keeping it would advise deleting a
+            # producer the not-taken path still loads.
+            prior_events = [
+                event
+                for event in binding_events
+                if event.position < load_position
+                and not (event.binding is None and event.is_conditional)
+            ]
             # Class bodies resolve earlier loads outward before a later class assignment.
             if not prior_events:
                 if isinstance(scope_index.scope_nodes.get(current_scope_id), ast.ClassDef):

@@ -465,6 +465,14 @@ class MarkdownSanitizerProvenance:
                 self._invalidate_name(node.name, state)
                 state.callables.shadow(node.name)
             return
+        # A `match` case binds capture/star/mapping-rest names before its body
+        # renders anything, so a later iteration can read that runtime piece of
+        # the subject instead of a proof the pre-loop state held.
+        if isinstance(node, ast.match_case):
+            for capture_name in match_capture_names(node.pattern):
+                self._invalidate_name(capture_name, state)
+                state.callables.shadow(capture_name)
+            return
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             self._invalidate_import_aliases(node, state)
             return
@@ -665,6 +673,14 @@ class MarkdownSanitizerProvenance:
             for parameter_name in function_parameter_names(node.args):
                 lambda_state.callables.shadow(parameter_name)
             self._record_expression(node.body, lambda_state)
+            return
+        # A walrus binds in the enclosing scope wherever an expression may appear,
+        # so its target must gain or lose a proof exactly where Python assigns it.
+        if isinstance(node, ast.NamedExpr):
+            self._state_by_expression[id(node)] = state.clone()
+            # Python evaluates the value before binding the user's target name.
+            self._record_expression_tree(node.value, state)
+            self._assign_target(node.target, node.value, state)
             return
         # Declarations encountered below an unsupported statement still own fresh bodies.
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -968,11 +984,11 @@ class MarkdownSanitizerProvenance:
         target_spellings = {lexical_target, canonical_target}
         # The current slot trusts either the exact spelling or its proven import canonicalization.
         if target_spellings & requested_targets:
-            # A splat or delimiter-preserving `safe` defeats Python's default URL encoders.
-            if (
-                slot == "url"
-                and canonical_target in _DEFAULT_QUOTE_TARGETS
-                and not is_quote_call_delimiter_safe(call)
+            # A splat or delimiter-preserving `safe` defeats Python's default quote
+            # helpers. This applies to both slots: `]`, `(`, and `)` break out of a
+            # visible label exactly as they break out of a click target.
+            if canonical_target in _DEFAULT_QUOTE_TARGETS and not is_quote_call_delimiter_safe(
+                call
             ):
                 return _unsafe("unsafe-arguments")
             return _safe()
