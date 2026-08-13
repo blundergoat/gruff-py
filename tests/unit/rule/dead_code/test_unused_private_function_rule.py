@@ -286,6 +286,23 @@ def test_project_relative_import_load_proves_liveness() -> None:
     assert _project_findings([producer, consumer]) == []
 
 
+def test_project_relative_import_escaping_the_scan_root_does_not_crash() -> None:
+    """Dots consuming the whole path resolve to nothing instead of raising.
+
+    ``from .. import sys`` one directory below the scan root leaves the scanned
+    set. Resolving it built an empty ``PurePosixPath('.')`` and ``with_suffix``
+    raised ``ValueError``, aborting the whole run with a traceback and no report
+    - reproduced on the bandit corpus repo, whose ``examples/imports-from.py``
+    carries exactly this import.
+    """
+    producer = _unit("def _helper():\n    return 1\n", "pkg/helpers.py")
+    escaping_consumer = _unit("from .. import sys\n", "pkg/imports_from.py")
+
+    findings = _project_findings([producer, escaping_consumer])
+
+    assert [finding.symbol for finding in findings] == ["_helper"]
+
+
 def test_project_class_load_before_later_binding_uses_outer_import() -> None:
     """A later class attribute does not retroactively shadow an earlier load."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")

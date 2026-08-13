@@ -20,7 +20,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
 - **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.
-- **Large source files analyse without tokenizer stalls** - Cryptography's 281-file scan fell from 621.07s to 16.46s with identical findings.
+- **Large source files analyse without tokenizer stalls** - Sources carrying no `gruff` suppression marker skip tokenization, removing a stall on large generated files.
+- **Scans are slower than 0.4.1** - New whole-project analysis costs wall-clock time: calibration-corpus scans run roughly 15-30% slower, and `cryptography` (281 files) moves from 15.5s to 17.7s.
 - **Dashboard compatibility help is honest and remote binds are deliberate** - Public binds need `--allow-public`; no-op flags are disclosed.
 - **Human reports separate scan context from scoring mode** - Text, Markdown, and HTML relabel scope without changing results.
 - **Boolean naming now matches scalar annotation shapes exactly** - Scalar bools qualify; containers, callables, and mixed unions do not.

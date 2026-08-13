@@ -253,7 +253,12 @@ class _ModuleResolver:
         ]
         # An empty module name targets the current package initializer directly.
         module_parts = [part for part in module_name.split(".") if part]
-        target_path = PurePosixPath(*retained_parent_parts, *module_parts)
+        target_parts = [*retained_parent_parts, *module_parts]
+        # Dots that consume the whole path (``from .. import x`` one directory
+        # below the scan root) name the root itself, which owns no module file.
+        if not target_parts:
+            return tuple(path for path in ("__init__.py",) if path in self._paths)
+        target_path = PurePosixPath(*target_parts)
         candidate_paths = (
             str(target_path.with_suffix(".py")),
             str(target_path / "__init__.py"),
