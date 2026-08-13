@@ -16,6 +16,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **A first-time `init` writes a umask-derived config mode** - Fresh generation no longer emits `0600`; regeneration preserves an existing mode.
 - **Unknown per-rule options no longer reach rule execution** - Normal scans warn and drop them; strict config fails on the dotted key.
 - **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
+- **Reports separate scan context from scoring mode** - The `Scope` heading is now `Scan context` and its score line reads `Scoring mode:` in text, Markdown, and HTML. Scripts matching the old `Scope:` label need updating.
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
 - **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.

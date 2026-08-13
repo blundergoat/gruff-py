@@ -449,6 +449,69 @@ def test_module_import_after_function_definition_still_proves_receiver() -> None
 
 
 @pytest.mark.parametrize(
+    "import_block",
+    (
+        "import requests.adapters\n",
+        "import requests\nimport requests.adapters\n",
+        "import requests.adapters\nimport requests\n",
+    ),
+    ids=(
+        "submodule-only",
+        "package-then-submodule",
+        "submodule-then-package",
+    ),
+)
+def test_submodule_import_still_proves_the_http_client(import_block: str) -> None:
+    """A submodule import binds the same package root, so the sink stays visible.
+
+    ``import requests.adapters`` binds ``requests`` exactly as ``import requests``
+    does, and configuring an adapter alongside the package is ordinary usage. If
+    either spelling is read as a shadowing binding the rule goes silent on a real
+    tainted sink.
+
+    Args:
+        import_block: Supported package or submodule import ordering under test.
+    """
+    source = (
+        f"{import_block}"
+        "from flask import request\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    requests.get(target_url)\n"
+    )
+
+    findings = SsrfRule().analyse(make_unit(source), default_ctx())
+
+    assert [finding.metadata["target"] for finding in findings] == ["requests.get"]
+
+
+def test_unrelated_module_sharing_a_client_name_prefix_stays_quiet() -> None:
+    """``requests_oauthlib`` is a different distribution, not the supported client."""
+    source = (
+        "import requests_oauthlib\n"
+        "from flask import request\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    requests.get(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_parent_package_import_alone_does_not_prove_qualified_urlopen() -> None:
+    """``import urllib`` does not bind ``urllib.request``, so the sink stays unproven."""
+    source = (
+        "import urllib\n"
+        "from flask import request\n"
+        "def fetch():\n"
+        "    target_url = request.args['url']\n"
+        "    urllib.request.urlopen(target_url)\n"
+    )
+
+    assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
     ("source", "expected_target"),
     (
         pytest.param(

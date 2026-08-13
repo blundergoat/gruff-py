@@ -4,6 +4,11 @@ The rule recognizes f-strings and literal ``str.format`` link shapes, then asks
 the local provenance index whether each dynamic slot came from a configured
 sanitizer. CLI users reach this path when their source builds ``[label](url)``;
 unknown wrappers and uncertain assignments remain visible as advisory findings.
+
+Only those two shapes are inspected. Concatenation chains
+(``"[" + a + "](" + b + ")"``) and percent formatting (``"[%s](%s)" % (a, b)``)
+build the same link without being examined, so a clean result for a file is not
+evidence that the file has no Markdown link injection.
 """
 
 import ast

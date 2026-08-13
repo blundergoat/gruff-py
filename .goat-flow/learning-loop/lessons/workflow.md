@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-08-12
+last_reviewed: 2026-08-13
 ---
 
 ## Lesson: Separate static contract defects from behavioral pressure failures
@@ -273,3 +273,26 @@ repository's 100-character limit. Both batches were reversed before behavior ver
 For comment-density work, let an audit identify omissions but keep prose generation semantic. Before a bulk writer can expand past one file, inspect a sample containing a
 branch, loop, exception, existing structured docstring, and missing private-method docstring. Reject the writer if phrases repeat, expose syntax as prose, or fail the normal
 lint width. Structural completeness is not evidence of readable comments.
+
+## Lesson: Prove which copy of the code a comparison probe actually loaded
+
+**Created:** 2026-08-13
+**Incident:** A PR review compared one rule's behaviour across two commits by
+running a probe inside `git worktree add <scratch> <base>` with `PYTHONPATH=.`.
+Because `gruffpy` lives under `src/`, `.` never exposed it and every import
+resolved through the editable install back to the main checkout, so the "base"
+run measured head twice and returned numbers identical to head. That near-miss
+was one step from publishing "base and head behave the same" as a refutation of
+a real regression. Re-running with `PYTHONPATH=src:.`, printing
+`gruffpy.__file__`, and asserting the head-only symbol was absent showed the
+true result: three cases regressed.
+**Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
+`_is_exact_supported_import`) - exists only on the newer revision, so a
+`hasattr` check is a cheap provenance assertion when probing a base worktree.
+**Prevention:** an editable install silently outranks a scratch checkout. Any
+probe comparing two revisions MUST print the resolved path of the module under
+test and assert a revision-distinguishing symbol before its numbers count as
+evidence; identical results across revisions are a provenance smell, not a
+refutation. This is the imported-module case of the executable-path lesson in
+`.goat-flow/learning-loop/lessons/verification.md`
+(search: "A version check must identify the executable path").

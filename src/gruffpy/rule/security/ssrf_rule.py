@@ -507,7 +507,11 @@ def _is_exact_supported_import(
             and statement.module == "urllib.request"
             and alias.name == "urlopen"
         )
-    return isinstance(statement, ast.Import) and alias.name == canonical_import
+    if not isinstance(statement, ast.Import):
+        return False
+    # `import requests.adapters` binds `requests` to the same package `import
+    # requests` binds, so a submodule import proves the client just as directly.
+    return alias.name == canonical_import or alias.name.startswith(f"{canonical_import}.")
 
 
 def _has_name_binding(node: ast.AST, binding_name: str) -> bool:
