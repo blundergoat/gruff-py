@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-08-08
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Treat setup stats warnings as harness blockers
@@ -49,3 +49,18 @@ Treat the three audit variants as one verification unit because their evidence i
 **Incident:** A router-table row in `CLAUDE.md` was extended to say that `writing-style.md` binds human-read output. The row already pointed at `.goat-flow/skill-docs/playbooks/`, so the bare filename read correctly to a human. The same edit was mirrored into `.github/copilot-instructions.md`. Both agents then failed `audit --harness` on `doc-paths-resolve`, which reported 117 of 118 paths resolved with the single unresolved ref recorded as `writing-style.md` from `CLAUDE.md`; the base and content audits stayed green and named nothing. Rewriting both refs as `.goat-flow/skill-docs/playbooks/writing-style.md` returned 118 of 118 and passed the harness for claude, copilot, and codex.
 
 The checker treats a backticked ref as a path from the repository root and has no notion of the row it sits in, so adjacency to the owning directory buys nothing. Neither the base nor the content audit catches this, which is why the harness variant has to run after any router-table or Key Resources edit. When a check reports one unresolved ref, read the `details.docPaths.unresolved` entry for the literal `ref` and `source` rather than re-reading the whole table.
+
+## Lesson: Check the sibling ports before deleting local divergence an audit calls stale
+
+**Created:** 2026-08-14
+**Decision changed:** Before removing local config an audit calls stale, check sibling intent and the current provider contract; a template difference alone proves neither safety nor error.
+**Trigger phase:** SCOPE
+**Incident count:** 1
+**Latest occurrence:** 2026-08-14
+**Incident:** `goat-flow audit . --agent claude --harness` failed `settings-rules-matched`, reporting 20 `Write(...)` deny rules in `.claude/settings.json` as "unmatched rule form - Edit(path) covers file edits". Three checks appeared to confirm they were safe to delete: `deny-covers-secrets` still passed, `grep -rln 'Write(\*\*/\.env)' node_modules/@blundergoat/goat-flow/` found no shipped template containing them, and the commit that added them (`51d9db4`) was titled for an unrelated SSRF fix and documented nothing in `CHANGELOG.md`. Eight rules were deleted before a read of the sibling gruff-go port's 1.15.1 feedback report showed gruff-go had made the identical deletion and reverted it. That port's changelog entry (search: "The Claude permission profile denies secret writes again") records the same rule set as a deliberate divergence, added because the template gates `Read` and `Edit` while the only `PreToolUse` hook matches `Bash`, leaving the `Write` tool ungated. Its own Claude settings still carry 21 such rules. Here `.claude/settings.json` was restored and proven byte-identical to HEAD by md5.
+
+Every signal available inside one port pointed the wrong way, because they all measured agreement with the template rather than intent. "Not in the shipped template" is the definition of divergence, so it cannot also be evidence that the divergence is accidental. The workspace rule that a change to one port is incomplete until the other four are checked applies in reverse too: before removing a port's local security divergence, grep the siblings and their changelogs for the same shape. An undocumented commit is weaker evidence of accident than a sibling's documented decision is of intent.
+
+**Follow-up evidence (2026-08-14):** [Claude Code's permissions reference](https://code.claude.com/docs/en/permissions) (search: `Claude Code checks file permissions against Edit(path) and Read(path) rules only`) says versions 2.1.228 and newer check writes against `Edit(path)` and `Read(path)`; `Write(path)` rules are accepted but never consulted. It also states that a matching `Read` deny blocks Edit and Write, including file creation. The local `claude --version` returned `2.1.232 (Claude Code)`.
+
+This primary provider evidence resolves the uncertainty that stopped the first removal. The gruff-go rationale does not apply to the installed version: the existing `Read` and `Edit` rules enforce the protected paths, while the duplicate `Write(path)` rules add warnings without protection. The sibling check remains mandatory, but current versioned provider evidence decides whether an intentional divergence works.

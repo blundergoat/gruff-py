@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Separate static contract defects from behavioral pressure failures
@@ -296,3 +296,32 @@ evidence; identical results across revisions are a provenance smell, not a
 refutation. This is the imported-module case of the executable-path lesson in
 `.goat-flow/learning-loop/lessons/verification.md`
 (search: "A version check must identify the executable path").
+
+## Lesson: Discover ignored plan state with ignore-independent tools
+
+**Created:** 2026-08-14
+**Decision changed:** Inspect local plan directories with `ls` or `rg --files --hidden --no-ignore` before deciding they are empty.
+**Trigger phase:** READ
+**Incident count:** 1
+**Latest occurrence:** 2026-08-14
+
+During a `goat-plan` update, `rg --files .goat-flow/plans/claude-harness-repair` returned no paths because `.goat-flow/plans/.gitignore` ignores milestone contents. The directory still contained M01 and M02. Treating the empty output as an empty directory created a second M01, and `goat-flow plans check .goat-flow/plans/claude-harness-repair --strict` failed with `duplicate milestone ID M01 conflicts with M01`.
+
+Plan state is intentionally ignored, so default repository-aware discovery is the wrong probe. List the selected directory without ignore filtering before writing, read every existing status, and run the strict plan check before presenting the checkpoint.
+
+## Lesson: Block invalidated review milestones before opening a replacement
+
+**Created:** 2026-08-14
+**Incident:** M01 remained `human-verification-pending` after later evidence
+invalidated its harness exit proof. When repaired M03 reached the same status,
+`goat-flow plans check` with strict validation exited 1 with:
+`error: plan: multiple active milestones: M01, M03`. The coupled audits and
+typecheck had passed; the failure was plan state, not project behaviour.
+
+The lifecycle reserves `human-verification-pending` for one currently valid
+evidence set awaiting approval. When later evidence falsifies an exit
+criterion, move the original milestone to `blocked` and preserve its completed
+checkboxes, proof, and regression note. The replacement milestone can then
+enter human review without creating two active boundaries. Run strict plan
+validation after every status transition, not only when the plan is first
+written.

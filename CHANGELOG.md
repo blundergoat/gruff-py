@@ -4,10 +4,10 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## Unreleased
 
-## v0.5.0 - 2026-08-12
+## v0.5.0 - 2026-08-16
 
 - **Source-text checks survive Python parse failures** - Invalid Python still runs raw-source rules; parser errors stay fatal and suppressions apply.
-- **SSRF sinks now require documented HTTP-client receivers** - Only live imports qualify; app-owned, shadowed, and unimported calls stay quiet.
+- **SSRF sinks now require documented HTTP-client receivers** - Package and submodule imports qualify; app-owned and unimported calls stay quiet.
 - **Framework request accessors retain security taint** - Supported Flask, Django, DRF, and Starlette accessors preserve request taint.
 - **Module-qualified request receivers taint again** - `flask.request.args` seeds taint when an import binds the module; `other.request` stays quiet.
 - **BREAKING: Markdown-link sanitizer trust is now explicit and slot-aware** - Configure exact label and URL sanitizer targets.
@@ -16,14 +16,14 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **A first-time `init` writes a umask-derived config mode** - Fresh generation no longer emits `0600`; regeneration preserves an existing mode.
 - **Unknown per-rule options no longer reach rule execution** - Normal scans warn and drop them; strict config fails on the dotted key.
 - **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
-- **Reports separate scan context from scoring mode** - The `Scope` heading is now `Scan context` and its score line reads `Scoring mode:` in text, Markdown, and HTML. Scripts matching the old `Scope:` label need updating.
+- **Reports rename `Scope` to `Scan context`** - Text, Markdown, and HTML add a `Scoring mode:` line; scripts matching `Scope:` need updating.
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
 - **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
+- **PII fixture scanning follows path segments, not substrings** - `integration_tests` still qualifies; `latest` and `test-scan-repos` no longer do.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.
-- **Large source files analyse without tokenizer stalls** - Sources carrying no `gruff` suppression marker skip tokenization, removing a stall on large generated files.
-- **Scans are slower than 0.4.1** - New whole-project analysis costs wall-clock time: calibration-corpus scans run roughly 15-30% slower, and `cryptography` (281 files) moves from 15.5s to 17.7s.
+- **Large source files analyse without tokenizer stalls** - Sources with no `gruff` suppression marker skip tokenization instead of stalling.
+- **Scans are slower than 0.4.1** - Whole-project analysis costs time: corpus scans run 15-30% slower and `cryptography` moves from 15.5s to 17.7s.
 - **Dashboard compatibility help is honest and remote binds are deliberate** - Public binds need `--allow-public`; no-op flags are disclosed.
-- **Human reports separate scan context from scoring mode** - Text, Markdown, and HTML relabel scope without changing results.
 - **Boolean naming now matches scalar annotation shapes exactly** - Scalar bools qualify; containers, callables, and mixed unions do not.
 - **Boolean predicate vocabulary now follows exact identifier tokens** - Final `alive`/`contains` and standalone `has` qualify.
 - **`todo` is no longer a universal placeholder identifier** - Domain names stay quiet; first-token and numbered placeholders still warn.
