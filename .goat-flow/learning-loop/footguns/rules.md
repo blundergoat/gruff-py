@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-16
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -221,6 +221,49 @@ statement type that binds a name or branches control flow, and add `match` and
 `except*` fixtures beside the `if` and `try` ones. Regression coverage lives in
 `tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
 (search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`).
+
+## Footgun: dropping a `global`/`nonlocal` store silently makes a name immortal
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** In a scope-walking name resolver, record a
+`global`/`nonlocal` store in the scope that wrote it and teach the resolver the
+name is not local; never skip the store at index time.
+**Trigger phase:** ACT
+
+A resolver that walks scopes outward decides two things per name: which scope
+owns it, and which store was last before the load. `global`/`nonlocal` splits
+those two answers apart - the owning scope is outer, but the ordering evidence
+lives in the inner body. Code that handles the split by skipping the store
+keeps only the outer answer, so every later load in that body resolves to the
+outer import as if the store never ran.
+
+`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py`,
+search: `def _build_binding_events`) did exactly that: a `continue` dropped any
+store whose name appeared in `_externally_declared_names`. Four shapes of
+`dead-code.unused-private-function` finding went missing, measured against the
+registry path - `global` then store then load in one function; the same at
+module scope; `nonlocal` against an import in an enclosing function; and `del`
+through a `global`. Ruff, mypy, and 3193 pytest cases stayed green throughout,
+because the one regression test in the file pinned only the load-before-store
+ordering.
+
+The inverse fix is equally wrong and does not announce itself either. Routing
+the store to the outer scope as an ordinary event makes a module-level load
+resolve against a store written inside a function that may never be called, so
+a genuinely used producer gets deletion advice. Source position is not
+execution order across a scope boundary. The shape to keep working is a
+`global` store inside a function defined *above* a module-level load of the
+same name.
+
+Mitigation: record the store in the declaring scope, and give the resolver the
+declared-name map so a load with no store ordered before it keeps walking
+outward instead of reading the name as a local
+(`_active_binding`, search: `def _active_binding`). Cover both directions -
+loads the store precedes, and loads it cannot be ordered against. Regression
+coverage lives in
+`tests/unit/rule/dead_code/test_unused_private_function_rule.py` (search:
+`test_project_global_store_before_a_later_load_hides_the_import` and
+`test_project_global_store_does_not_reach_a_module_level_load`).
 
 ## Resolved Entries
 

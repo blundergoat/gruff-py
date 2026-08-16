@@ -18,6 +18,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **`--fail-on` now states its diagnostic boundary** - It gates findings only; parse errors still exit 2 with `--fail-on none`.
 - **Reports rename `Scope` to `Scan context`** - Text, Markdown, and HTML add a `Scoring mode:` line; scripts matching `Scope:` need updating.
 - **Cross-module private-function loads now prove liveness** - Real imports keep functions; partial scans suppress unsafe advice.
+- **`global` and `nonlocal` rebinds now invalidate the import they overwrite** - Loads after the rebind in that body stop proving liveness.
 - **Test and fixture heuristics reject more false positives** - Pytest aliases, package metadata, and sequential digit fixtures classify correctly.
 - **PII fixture scanning follows path segments, not substrings** - `integration_tests` still qualifies; `latest` and `test-scan-repos` no longer do.
 - **File length counts substantive lines** - Blank lines, comments, and PEP 257 docstrings are free; other strings count. Limits stay fixed.

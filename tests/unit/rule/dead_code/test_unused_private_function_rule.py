@@ -531,6 +531,120 @@ def test_project_global_declaration_keeps_the_module_import_visible() -> None:
     assert _project_findings([producer, consumer]) == []
 
 
+def test_project_global_store_before_a_later_load_hides_the_import() -> None:
+    """A ``global`` store runs before a load in the same body, so that load reads it."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def swap():\n"
+        "    global _helper\n"
+        "    _helper = None\n"
+        "    callback = _helper\n"
+        "    return callback\n",
+        "src/pkg/consumer.py",
+    )
+
+    findings = _project_findings([producer, consumer])
+
+    assert [finding.metadata["name"] for finding in findings] == ["_helper"]
+
+
+def test_project_module_level_global_store_hides_a_later_load() -> None:
+    """A module-scope ``global`` declares the name it already owns, so order still holds."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\nglobal _helper\n_helper = None\ncallback = _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    findings = _project_findings([producer, consumer])
+
+    assert [finding.metadata["name"] for finding in findings] == ["_helper"]
+
+
+def test_project_nonlocal_store_before_a_later_load_hides_the_import() -> None:
+    """A ``nonlocal`` store reaches an enclosing function import the same way."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "def outer():\n"
+        "    from pkg.helpers import _helper\n"
+        "    def inner():\n"
+        "        nonlocal _helper\n"
+        "        _helper = None\n"
+        "        return _helper\n"
+        "    return inner\n",
+        "src/pkg/consumer.py",
+    )
+
+    findings = _project_findings([producer, consumer])
+
+    assert [finding.metadata["name"] for finding in findings] == ["_helper"]
+
+
+def test_project_global_store_does_not_reach_a_module_level_load() -> None:
+    """Module code runs at import time, before any call performs the ``global`` store."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def swap():\n"
+        "    global _helper\n"
+        "    _helper = None\n"
+        "CALLBACK = _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_nonlocal_store_does_not_reach_an_enclosing_load() -> None:
+    """The enclosing load cannot be ordered against a call that may never happen."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "def outer():\n"
+        "    from pkg.helpers import _helper\n"
+        "    def inner():\n"
+        "        nonlocal _helper\n"
+        "        _helper = None\n"
+        "    return _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_conditional_global_store_keeps_the_import_reachable() -> None:
+    """A branch the user may skip cannot prove the import unreachable at the load."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def swap():\n"
+        "    global _helper\n"
+        "    if flag:\n"
+        "        _helper = None\n"
+        "    return _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    assert _project_findings([producer, consumer]) == []
+
+
+def test_project_global_delete_before_a_later_load_hides_the_import() -> None:
+    """``del`` through a ``global`` declaration invalidates the name for later loads."""
+    producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
+    consumer = _unit(
+        "from pkg.helpers import _helper\n"
+        "def swap():\n"
+        "    global _helper\n"
+        "    del _helper\n"
+        "    return _helper\n",
+        "src/pkg/consumer.py",
+    )
+
+    findings = _project_findings([producer, consumer])
+
+    assert [finding.metadata["name"] for finding in findings] == ["_helper"]
+
+
 def test_project_class_except_target_does_not_shadow_a_later_load() -> None:
     """Python deletes an ``except`` target, so a later class load sees the import."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")

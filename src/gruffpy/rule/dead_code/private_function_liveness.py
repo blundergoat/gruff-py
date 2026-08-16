@@ -138,6 +138,7 @@ class _LoadEvidenceIndex:
     scope_index: _ScopeIndex
     events_by_scope_and_name: dict[tuple[int, str], list[_BindingEvent]]
     bound_names: set[tuple[int, str]]
+    externally_declared_names: dict[int, frozenset[str]]
     candidate_keys: frozenset[PrivateFunctionKey]
     live_keys: set[PrivateFunctionKey]
     ambiguous_keys: set[PrivateFunctionKey]
@@ -337,6 +338,7 @@ def _collect_unit_liveness(
         scope_index=scope_index,
         events_by_scope_and_name=events_by_scope_and_name,
         bound_names=bound_names,
+        externally_declared_names=_externally_declared_names(nodes, scope_index),
         candidate_keys=candidate_keys,
         live_keys=live_keys,
         ambiguous_keys=ambiguous_keys,
@@ -365,7 +367,6 @@ def _build_binding_events(
     """
     events_by_scope_and_name: defaultdict[tuple[int, str], list[_BindingEvent]] = defaultdict(list)
     bound_names: set[tuple[int, str]] = set()
-    externally_declared_names = _externally_declared_names(nodes, scope_index)
     # The first in-memory pass records imports and every lexical invalidation.
     for sequence, node in enumerate(nodes):
         event_scope = _event_scope_id(node, scope_index)
@@ -390,10 +391,10 @@ def _build_binding_events(
         # Assignments, parameters, definitions, and pattern captures invalidate imports.
         is_conditional = _is_conditionally_executed(node)
         for rebound_name in _rebound_names(node):
-            # ``global``/``nonlocal`` send the store to an outer scope, so the name
-            # never becomes a local shadow of the import this scope can still see.
-            if rebound_name in externally_declared_names.get(event_scope, frozenset()):
-                continue
+            # A ``global``/``nonlocal`` store is recorded here too. It writes to an
+            # outer scope, so it is not a local shadow, but statements after it in
+            # this same body do read what it wrote; ``_active_binding`` keeps the
+            # outward walk for the loads it cannot order against this store.
             events_by_scope_and_name[(event_scope, rebound_name)].append(
                 _BindingEvent(position=position, binding=None, is_conditional=is_conditional)
             )
@@ -459,6 +460,7 @@ def _record_attribute_load(
         load_evidence.scope_index,
         load_evidence.events_by_scope_and_name,
         load_evidence.bound_names,
+        load_evidence.externally_declared_names,
     )
     # Only module imports resolve a later private attribute to a producer.
     if attribute_binding is None or attribute_binding.imported_function_name is not None:
@@ -501,6 +503,7 @@ def _record_direct_name_load(
         load_evidence.scope_index,
         load_evidence.events_by_scope_and_name,
         load_evidence.bound_names,
+        load_evidence.externally_declared_names,
     )
     # A module Name alone does not identify which private function was loaded.
     if direct_binding is None or direct_binding.imported_function_name is None:
@@ -771,9 +774,10 @@ def _externally_declared_names(
 ) -> dict[int, frozenset[str]]:
     """Map each scope to the names it resolves outside itself.
 
-    A ``global`` or ``nonlocal`` statement means later stores in that scope
-    rebind an outer name instead of creating a local shadow, so the scope keeps
-    seeing whatever import the outer scope established.
+    A ``global`` or ``nonlocal`` statement means stores in that scope rebind an
+    outer name instead of creating a local shadow. Stores still order normally
+    against loads in the same body, so ``_active_binding`` uses this map only to
+    keep walking outward for a load no store in this scope precedes.
 
     Args:
         nodes: One materialized AST walk; empty means no declarations exist.
@@ -855,6 +859,7 @@ def _active_binding(
     scope_index: _ScopeIndex,
     events_by_scope_and_name: dict[tuple[int, str], list[_BindingEvent]],
     bound_names: set[tuple[int, str]],
+    externally_declared_names: dict[int, frozenset[str]],
 ) -> _ImportBinding | None:
     """Resolve the import binding visible at one later Name/Attribute load.
 
@@ -865,6 +870,7 @@ def _active_binding(
         scope_index: Node and closure ownership for the current module.
         events_by_scope_and_name: Sorted imports and invalidations by scope/name.
         bound_names: Names considered local in each scope, even if bound later.
+        externally_declared_names: ``global``/``nonlocal`` names per scope.
 
     Returns:
         Active import binding, or None for unbound, shadowed, or rebound names.
@@ -887,8 +893,13 @@ def _active_binding(
                 and not (event.binding is None and event.is_conditional)
             ]
             # Class bodies resolve earlier loads outward before a later class assignment.
+            # A ``global``/``nonlocal`` name is never local either, so with no store
+            # ordered before this load the value still comes from the declared scope.
             if not prior_events:
-                if isinstance(scope_index.scope_nodes.get(current_scope_id), ast.ClassDef):
+                declared_here = name in externally_declared_names.get(current_scope_id, frozenset())
+                if declared_here or isinstance(
+                    scope_index.scope_nodes.get(current_scope_id), ast.ClassDef
+                ):
                     current_scope_id = scope_index.parent_by_scope.get(current_scope_id)
                     continue
                 # Function and comprehension locals apply across their complete scope.
