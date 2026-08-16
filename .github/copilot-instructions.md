@@ -1,8 +1,8 @@
-# copilot-instructions.md (2026-06-09)
+# copilot-instructions.md (2026-08-08)
 
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
-goat-flow version: 1.10.1
+goat-flow version: 1.15.1
 
 ## Workspace Boundary
 
@@ -33,13 +33,13 @@ Ask First boundaries: cross-implementation contracts in `src/gruffpy/finding/fin
 - Ambiguous requirements: present interpretations and stop before risky writes.
 
 ## Commit Messages
-Use conventional commits (`type(scope): subject` or `type: subject`; observed types: feat, refactor, chore, docs, fix, test) — at least 70% of sampled history matches. Name the behavior, file family, or command that changed; add a body when the subject spans more than one axis. Full reference: `docs/coding-standards/git-commit.md`.
+Use conventional commits (`type(scope): subject` or `type: subject`; observed types: feat, refactor, chore, docs, fix, test) — at least 70% of sampled history matches. Name the behavior, file family, or command that changed; add a body when the subject spans more than one axis. Full reference: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 - Learning loop, grep before every change: `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.
 - Architecture and orientation: `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`.
 - Skill reference (meta): `.goat-flow/skill-docs/`; read before changing skill contracts.
-- Tool playbooks: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`, `.goat-flow/skill-docs/skill-quality-testing/`; read before declaring a tool unavailable.
+- Tool playbooks: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; read before declaring a tool unavailable. Skill-authoring methodology: `.goat-flow/skill-docs/skill-quality-testing/`.
 
 ## Essential Commands
 ```bash
@@ -96,7 +96,8 @@ Every line in this file must fit one of: behavioral rule, scope boundary, comman
 | Peer instructions | `CLAUDE.md`, `AGENTS.md` |
 | Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
 | Skill reference (meta) | `.goat-flow/skill-docs/` - read before changing skill contracts |
-| Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (availability checks, changelog, release notes, code comments, writing style, observability, gruff triage, hook policy) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable; `.goat-flow/skill-docs/playbooks/writing-style.md` binds human-read output |
+| Skill-authoring methodology | `.goat-flow/skill-docs/skill-quality-testing/` - read before creating or hardening a skill |
 | Architecture | `.goat-flow/architecture.md` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Copilot skills/config/hooks | `.github/skills/`, `.github/hooks/hooks.json`, `.goat-flow/hooks/` |
@@ -104,5 +105,5 @@ Every line in this file must fit one of: behavioral rule, scope boundary, comman
 | Tests | `tests/` |
 | Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json`, `package-lock.json` |
-| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit.md` |
+| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit-message.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/`, `.goat-flow/scratchpad/` |

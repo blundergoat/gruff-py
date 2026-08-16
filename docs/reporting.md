@@ -1,175 +1,26 @@
 # Reporting
 
-`gruff-py analyse` renders one report per run. All formats are generated from the
-same `AnalysisReport` model.
+This page is a stable link target. The reporting reference moved to pages split
+by task; each section below names where its content now lives.
 
-`gruff-py report` is a convenience wrapper for release artifacts. It runs the same
-analyser and writes an HTML or JSON report to stdout or `--output`.
-
-## Formats
-
-```bash
-gruff-py analyse src/ --format text
-gruff-py analyse src/ --format json
-gruff-py analyse src/ --format html
-gruff-py analyse src/ --format markdown
-gruff-py analyse src/ --format github
-gruff-py analyse src/ --format hotspot
-gruff-py analyse src/ --format sarif
-gruff-py report src/ --format html --output gruff-report.html
-```
-
-| Format | Best for |
+| Topic | Page |
 |---|---|
-| `text` | Local terminal review |
-| `json` | Automation, snapshots, cross-implementation checks |
-| `html` | Human inspection in a browser |
-| `markdown` | Pull request comments and release notes |
-| `github` | GitHub Actions annotation commands |
-| `hotspot` | File-level offender summaries |
-| `sarif` | Code-scanning upload |
-
-## Summary
-
-Use `summary` when CI or a release script needs aggregate counts without
-per-finding output:
-
-```bash
-gruff-py summary src/ --format text
-gruff-py summary src/ --format json --top 5
-```
-
-The digest includes file counts, per-pillar counts, top rules, and top file
-offenders.
-
-## Severity Gate
-
-`analyse` and `report` consult the `minimumSeverity:` config block for the
-`--fail-on` default when the CLI flag is not passed explicitly. See
-[Configuration → Severity Gate](configuration.md#severity-gate) for the
-precedence rule and accepted values.
+| Every `--format` value, and what each is for | [Output Formats](output-formats.md) |
+| JSON shape, finding identity, schema strings | [Output Formats → JSON](output-formats.md#json) |
+| SARIF renderer contract and validation | [Output Formats → SARIF](output-formats.md#sarif) |
+| Display filters (`--min-severity`, `--include-pillar`, `--exclude-rule`) | [Output Formats → Display Filters](output-formats.md#display-filters) |
+| Changed-region scoping and `suppressedCount` | [Output Formats → Changed-Region Scoping](output-formats.md#changed-region-scoping-native-diff-mode) |
+| GitHub Actions workflow, SARIF upload, baselines | [CI Integration](ci-integration.md) |
+| `--fail-on`, `minimumSeverity:`, and exit codes | [Configuration → Severity Gate](configuration.md#severity-gate) |
+| Reading a noisy run | [Triage](triage.md) |
 
 ## JSON
 
-JSON reports use schema string `gruff.analysis.v2`.
-
-The top-level shape includes:
-
-- `schemaVersion`
-- `tool`
-- `run`
-- `summary`
-- `ignoredPaths`
-- `missingPaths`
-- `diagnostics`
-- `findings`
-- `score`
-
-The output is stable enough for automation, but the project is still pre-1.0.
-The strongest compatibility promises are schema strings and finding
-fingerprints.
-
-Every finding payload exposes two identity fields:
-
-- `fingerprint` — line-precise 16-char SHA-256 prefix derived from
-  `[ruleId, file, line, endLine, column, symbol]`. Use this for baseline
-  matching (`BaselineFilter` and `gruff-baseline.json` consume it) and for
-  SARIF `partialFingerprints.gruffFingerprint`.
-- `stableIdentity` — line-insensitive 16-char SHA-256 prefix derived from
-  `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when
-  `symbol` is `null`. Use this for external diff tooling that wants to match
-  "the same logical finding across line shifts" without re-baselining a moved
-  violation. Both digests use the same PHP-compatible canonical-JSON encoding
-  so cross-port consumers see identical values for identical inputs.
-
-## HTML
-
-HTML reports are self-contained and do not load external fonts, scripts, or
-stylesheets.
-
-```bash
-gruff-py analyse src/ --format html > gruff-report.html
-```
-
-Enable browser-side finding filters:
-
-```bash
-gruff-py analyse src/ --format html --report-interactive > gruff-report.html
-```
-
-Enable editor links:
-
-```bash
-gruff-py analyse src/ --format html --report-editor-link vscode > gruff-report.html
-gruff-py analyse src/ --format html --report-editor-link phpstorm > gruff-report.html
-```
-
-## GitHub Actions
-
-For annotations:
-
-```yaml
-- name: gruff annotations
-  run: gruff-py analyse src tests --format github --fail-on warning
-```
-
-For SARIF upload, generate the file first:
-
-```bash
-gruff-py analyse src tests --format sarif --fail-on none > gruff.sarif
-```
-
-Then upload with GitHub's SARIF upload action in your workflow.
-
-SARIF output is a renderer over the native `gruff.analysis.v2` report model,
-not a replacement for the native JSON schema. It preserves native rule ids,
-finding fingerprints, severity, paths, locations, metadata, scoring, and
-fail-on behaviour. Result fingerprints are emitted as
-`partialFingerprints.gruffFingerprint`, and run properties include
-`gruffSchemaVersion` with the native schema string plus score and grade when
-available.
-
-The SARIF driver is named `gruff-py`, uses the project version as
-`semanticVersion`, and emits registry rule metadata sorted by stable rule id.
-Artifact URIs are normalized for SARIF consumers by using `/` separators and
-removing leading `./`.
-
-To validate a generated file during release or renderer changes:
-
-```bash
-uvx check-jsonschema --schemafile https://json.schemastore.org/sarif-2.1.0.json gruff.sarif
-```
-
-## Display Filters
-
-Display filters are applied after analysis and scoring:
-
-```bash
-gruff-py analyse src/ --min-severity warning
-gruff-py analyse src/ --include-pillar security
-gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
-```
-
-They affect rendered findings and are recorded under `run.filters`. They do not
-change score or exit-code calculation. Text output reports how many findings
-were hidden when filters hide findings; JSON keeps the existing shape, so
-`summary.findings` follows displayed findings while `score` and
-`summary.exitCode` reflect the full analysed set.
-
-## Project-Rule Scope Caveat
-
-Project-wide rules can only see the files discovered for the requested paths.
-When a scan is narrower than the project root and a project rule is enabled,
-text output adds a scope caveat and JSON additively records
-`run.partialContextCaveat`. Changed-region scans (`--diff`, `--since`) count
-as partial the same way. Full-project scans omit the field.
+JSON reports use schema string `gruff.analysis.v2`. The top-level shape, the
+`fingerprint` and `stableIdentity` input sets, and the changed-region additions
+are documented in [Output Formats → JSON](output-formats.md#json).
 
 ## Exit Codes
 
-| Code | Meaning |
-|---|---|
-| `0` | Run completed and no finding reached the fail threshold |
-| `1` | At least one finding reached the fail threshold |
-| `2` | Diagnostic such as config error, parse error, or missing path |
-
-Use `--fail-on none` for report-only jobs.
+Codes `0`, `1`, and `2`, and the per-command `--fail-on` defaults, are in
+[Output Formats → Exit Codes](output-formats.md#exit-codes).

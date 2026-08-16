@@ -37,11 +37,14 @@ gruff-py dashboard [PATHS]...
 | Option | Meaning |
 |---|---|
 | `--host 127.0.0.1` | Host interface to bind |
+| `--allow-public` | Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host |
 | `--port 8765` | Port to bind; use `0` for an OS-selected port |
+| `--scan-timeout <seconds>` | Accepted for cross-port compatibility; not implemented in gruff-py |
 | `--project <path>` | Project root to analyse |
 | `--project-root <path>` | Alias for `--project` |
 | `--config <path>` | Initial config path |
 | `--no-config` | Skip config loading |
+| `--diff` | Accepted for cross-port compatibility; not implemented in gruff-py |
 | `--fail-on <severity>` | Initial fail threshold |
 | `--include-ignored` | Scan default-ignored directories and `.gitignore` exclusions |
 | `--report-interactive` | Enable HTML finding filters |
@@ -75,5 +78,11 @@ still change the threshold per-scan in the dropdown. See
 The dashboard has no authentication. It is intended for local development and
 binds to `127.0.0.1` by default.
 
-Only bind to a non-loopback host when you understand the risk of exposing local
-project paths and static-analysis output on your network.
+`gruff-py` refuses non-loopback hosts unless you pass `--allow-public`. The flag
+is an acknowledgment, not access control: startup prints a warning, and remote
+users can use the unauthenticated dashboard to scan any directory readable by
+the server process.
+
+Keep the dashboard on `127.0.0.1`, `localhost`, or `::1` unless remote access is
+intentional. Authentication and project-root confinement are deferred security
+design work and are not provided by `--allow-public`.

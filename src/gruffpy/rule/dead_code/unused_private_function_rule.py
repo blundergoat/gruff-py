@@ -1,21 +1,9 @@
-"""Private function/method never called in its enclosing scope.
+"""Find private functions or methods with no proved caller in the scan.
 
-A private function/method has a name starting with ``_`` (single underscore)
-or ``__`` (double underscore - name-mangled). The rule scans the enclosing
-scope (module for module-level functions, class for methods) and reports
-when the name is never referenced.
-
-Skip:
-
-- names listed in ``__all__`` (intentional re-exports);
-- dunder methods (``__init__``, ``__repr__``, etc.) - they ARE callable by
-  the framework even when not explicitly referenced;
-- abstract methods, overload stubs, Protocol method stubs;
-- methods of classes extending a framework base (the protocol calls them);
-- functions/methods carrying framework-hook decorators.
-
-Confidence: MEDIUM. False positives are still possible on metaprogramming
-(``getattr``, ``__getattr__``, plugin registries).
+Project scans combine each file's local references with later loads through
+resolved imports, so users do not receive deletion advice for registered
+callbacks visible elsewhere. Narrow scans omit module-level conclusions while
+retaining class-local method checks and the existing dynamic allowlist.
 """
 
 import ast
@@ -40,6 +28,12 @@ from gruffpy.rule._python_dynamism import (
     module_all_names,
 )
 from gruffpy.rule.context import RuleContext
+from gruffpy.rule.dead_code.private_function_liveness import (
+    ExternalReferenceCoverage,
+    PrivateFunctionKey,
+    PrivateFunctionLiveness,
+    build_private_function_liveness,
+)
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
@@ -50,16 +44,25 @@ _PRIVATE_DEF_RE = re.compile(r"\bdef\s+_")
 
 @dataclass(frozen=True, slots=True)
 class _PrivateFunctionCandidate:
-    """A private function/method paired with its parents and enclosing-scope node."""
+    """Carry one private definition through local and project evidence checks.
+
+    Module-level candidates may use external import-load evidence. Methods and
+    nested functions keep their existing enclosing-scope analysis.
+    """
 
     node: FunctionNode
     parents: list[ast.AST]
     scope: ast.AST
+    is_module_level: bool
 
 
 @dataclass(frozen=True, slots=True)
 class _ReferenceCounts:
-    """Name, attribute, and ``getattr`` occurrence counts in one scope, used to detect use."""
+    """Count static references visible in one user source scope.
+
+    The rule compares enclosing and defining scopes so a function's own name or
+    body does not accidentally prove that another caller exists.
+    """
 
     names: Counter[str]
     attributes: Counter[str]
@@ -68,7 +71,12 @@ class _ReferenceCounts:
 
 
 class UnusedPrivateFunctionRule(Rule):
-    """Detect underscore-prefixed functions or methods never called in their enclosing scope."""
+    """Show deletion advice only when scanned static evidence proves no caller.
+
+    Registry users reach project dispatch, which handles full versus partial
+    scope and cross-module imports. Direct per-file analysis remains available
+    for local rule tests and preserves the pre-project behavior.
+    """
 
     ID = "dead-code.unused-private-function"
 
@@ -93,14 +101,7 @@ class UnusedPrivateFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``_``-prefixed functions/methods with no reference in their enclosing scope.
-
-        Scope is the module for module-level functions and the class body
-        for methods. References include ``Name`` reads, attribute access by
-        bare name, and ``getattr(obj, "name")`` / f-string-prefix lookups
-        for partial matches. The rule honours the project-level
-        ``dead_code_allowlist`` so generated code or framework hooks can opt
-        out by path, symbol, or decorator.
+        """Run the legacy local check used by focused rule-level journeys.
 
         Args:
             unit: Parsed source file to inspect.
@@ -109,30 +110,163 @@ class UnusedPrivateFunctionRule(Rule):
         Returns:
             One finding per unreferenced private function or method.
         """
-        if unit.tree is None or not _PRIVATE_DEF_RE.search(unit.source):
-            return []
-        definition = self.definition()
-        all_names = module_all_names(unit.tree)
-        allowlist = context.config.dead_code_allowlist
+        return _analyse_unit(
+            unit,
+            context,
+            definition=self.definition(),
+            include_module_level=True,
+            project_liveness=None,
+        )
 
+    def analyse_project(
+        self,
+        units: list[AnalysisUnit],
+        context: RuleContext,
+    ) -> list[Finding]:
+        """Combine local checks with external import loads for the user's scan.
+
+        Args:
+            units: Parsed Python files selected for the current analysis journey.
+            context: Run configuration and full/partial scan classification.
+
+        Returns:
+            Ordered candidate findings; module-level rows are absent on partial scans.
+        """
+        parsed_units: list[AnalysisUnit] = []
+        # Only parsed Python modules can contribute candidates or import evidence.
+        for unit in units:
+            # A parse failure has no trustworthy private-definition structure.
+            if not isinstance(unit.tree, ast.Module):
+                continue
+            parsed_units.append(unit)
+
+        # Full-project discovery is required before absence can support deletion advice.
+        include_module_level = context.scan_scope == "full-project"
+        project_liveness: PrivateFunctionLiveness | None = None
+        # Complete scans build external evidence once before checking each producer.
+        if include_module_level:
+            candidate_keys = _module_private_candidate_keys(parsed_units)
+            project_liveness = build_private_function_liveness(parsed_units, candidate_keys)
+
+        definition = self.definition()
         findings: list[Finding] = []
-        scope_references: dict[int, _ReferenceCounts] = {}
-        for raw_node in ast.walk(unit.tree):
-            candidate = _private_function_candidate(raw_node, unit.tree, all_names)
-            if candidate is None:
-                continue
-            scope_key = id(candidate.scope)
-            references = scope_references.get(scope_key)
-            if references is None:
-                references = _collect_references(candidate.scope)
-                scope_references[scope_key] = references
-            own_references = _collect_references(candidate.node)
-            if _has_external_reference(candidate.node.name, references, own_references):
-                continue
-            if _is_allowlisted(unit, candidate, allowlist):
-                continue
-            findings.append(_unused_private_function_finding(unit, definition, candidate))
+        # Each scanned file keeps its existing class-local and allowlist checks.
+        for unit in parsed_units:
+            findings.extend(
+                _analyse_unit(
+                    unit,
+                    context,
+                    definition=definition,
+                    include_module_level=include_module_level,
+                    project_liveness=project_liveness,
+                )
+            )
         return findings
+
+
+def _module_private_candidate_keys(
+    units: list[AnalysisUnit],
+) -> frozenset[PrivateFunctionKey]:
+    """Collect importable top-level private functions from scanned user files.
+
+    Args:
+        units: Parsed Python modules from a complete project scan; empty is valid.
+
+    Returns:
+        Producer path/name keys eligible for cross-module liveness evidence.
+    """
+    candidate_keys: set[PrivateFunctionKey] = set()
+    # Direct module-body definitions are the functions another module can import.
+    for unit in units:
+        tree = unit.tree
+        # Parsed-unit filtering normally guarantees a module; keep direct calls safe.
+        if not isinstance(tree, ast.Module):
+            continue
+        # A class or nested function is not importable as ``module._name``.
+        for node in tree.body:
+            # Public, dunder, and non-function declarations cannot become candidates.
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            # The local rule applies the remaining framework and export exemptions.
+            if not _is_private(node.name) or _is_dunder(node.name):
+                continue
+            candidate_keys.add((unit.file.display_path, node.name))
+    return frozenset(candidate_keys)
+
+
+def _analyse_unit(
+    unit: AnalysisUnit,
+    context: RuleContext,
+    *,
+    definition: RuleDefinition,
+    include_module_level: bool,
+    project_liveness: PrivateFunctionLiveness | None,
+) -> list[Finding]:
+    """Apply local evidence and optional project liveness to one scanned file.
+
+    Args:
+        unit: Parsed source file being reviewed; parse failures return no finding.
+        context: Rule execution context supplying the dynamic allowlist.
+        definition: Metadata from the active rule instance.
+        include_module_level: False when the user's scan cannot see all callers.
+        project_liveness: Full-scan import evidence, or None for local/partial checks.
+
+    Returns:
+        Findings safe to show for this file and the user's selected scan scope.
+    """
+    # Files without a private definition token avoid an unnecessary AST walk.
+    if unit.tree is None or not _PRIVATE_DEF_RE.search(unit.source):
+        return []
+    all_names = module_all_names(unit.tree)
+    allowlist = context.config.dead_code_allowlist
+
+    findings: list[Finding] = []
+    scope_references: dict[int, _ReferenceCounts] = {}
+    # Every candidate keeps the existing module/class reference and exemption model.
+    for raw_node in ast.walk(unit.tree):
+        candidate = _private_function_candidate(raw_node, unit.tree, all_names)
+        # Non-private declarations and built-in dynamic exemptions produce no advice.
+        if candidate is None:
+            continue
+        # A narrow scan cannot prove that an importable module function has no caller.
+        if candidate.is_module_level and not include_module_level:
+            continue
+        scope_key = id(candidate.scope)
+        references = scope_references.get(scope_key)
+        # Each enclosing module/class is counted once regardless of candidate count.
+        if references is None:
+            references = _collect_references(candidate.scope)
+            scope_references[scope_key] = references
+        own_references = _collect_references(candidate.node)
+        # A local call or static getattr already proves the user's function is live.
+        if _has_external_reference(candidate.node.name, references, own_references):
+            continue
+        # One uniquely resolved external load also proves a top-level function is live.
+        if (
+            candidate.is_module_level
+            and project_liveness is not None
+            and project_liveness.is_live(unit.file.display_path, candidate.node.name)
+        ):
+            continue
+        # Framework/plugin cases the static model cannot prove stay on ADR-015 allowlists.
+        if _is_allowlisted(unit, candidate, allowlist):
+            continue
+        coverage: ExternalReferenceCoverage | None = None
+        # Only full-project module findings disclose external-reference completeness.
+        if candidate.is_module_level and project_liveness is not None:
+            coverage = project_liveness.coverage_for(
+                unit.file.display_path,
+                candidate.node.name,
+            )
+        findings.append(
+            _unused_private_function_finding(
+                unit,
+                definition,
+                candidate,
+                coverage,
+            )
+        )
+    return findings
 
 
 def _is_allowlisted(
@@ -177,18 +311,45 @@ def _private_function_candidate(
     tree: ast.AST,
     all_names: Container[str],
 ) -> _PrivateFunctionCandidate | None:
+    """Return one definition eligible for local and project evidence checks.
+
+    Args:
+        node: Parsed declaration candidate; non-functions return None.
+        tree: User module that owns top-level candidates; never None.
+        all_names: Explicit exports that users intend other modules to import.
+
+    Returns:
+        Candidate with its scan scope, or None when no finding can apply.
+    """
+    # Non-function nodes cannot produce private-function advice for the user.
     if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return None
 
     parents = parent_chain(node)
+    # The nearest class makes this a class-local method rather than a module import.
     parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
+    # Dunder, export, protocol, framework, and public shapes remain exempt.
     if _should_skip_private_function(node, parents, parent_cls, all_names):
         return None
+
+    # Liveness belongs to the nearest lexical owner, not every method in an outer class.
+    scope = next(
+        (
+            parent
+            for parent in reversed(parents)
+            if isinstance(
+                parent,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef),
+            )
+        ),
+        tree,
+    )
 
     return _PrivateFunctionCandidate(
         node=node,
         parents=parents,
-        scope=parent_cls if parent_cls is not None else tree,
+        scope=scope,
+        is_module_level=scope is tree,
     )
 
 
@@ -214,8 +375,33 @@ def _unused_private_function_finding(
     unit: AnalysisUnit,
     definition: RuleDefinition,
     candidate: _PrivateFunctionCandidate,
+    coverage: ExternalReferenceCoverage | None = None,
 ) -> Finding:
+    """Build the deletion advice shown after local and project checks finish.
+
+    Args:
+        unit: User file displayed as the finding location; never None.
+        definition: Stable public rule details used in every output format.
+        candidate: Private definition with no proved caller in the current scan.
+        coverage: Project evidence quality, or None for class-local/local analysis.
+
+    Returns:
+        One finding whose identity stays stable as coverage metadata is added.
+    """
     symbol = qualified_symbol(candidate.node, candidate.parents)
+    metadata: dict[str, object] = {"name": candidate.node.name}
+    confidence = definition.confidence
+    # Full-project module findings tell users whether duplicate paths limited proof.
+    if coverage is not None:
+        metadata.update(
+            {
+                "scanScope": "full-project",
+                "externalReferenceCoverage": coverage,
+            }
+        )
+        # A loaded ambiguous import cannot prove which duplicate module owns the call.
+        if coverage == "ambiguous":
+            confidence = Confidence.LOW
     return Finding(
         rule_id=definition.id,
         message=(f"Private function {symbol!r} is never called in its enclosing scope."),
@@ -224,14 +410,15 @@ def _unused_private_function_finding(
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
-        confidence=definition.confidence,
+        confidence=confidence,
         end_line=candidate.node.end_lineno,
         symbol=symbol,
         remediation=(
-            "Delete the function or remove the leading underscore if external callers are expected."
+            "Delete the function or add a real caller. If a framework or plugin loads it "
+            "dynamically, keep the underscore and add the documented dead-code allowlist."
         ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"name": candidate.node.name},
+        metadata=metadata,
     )
 
 

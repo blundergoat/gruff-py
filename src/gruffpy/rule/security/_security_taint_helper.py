@@ -1,32 +1,22 @@
-"""Intra-procedural taint-lite helper for security rules.
+"""Track bounded user-controlled values within one parsed Python scope.
 
-Implements the bounded posture documented in
-`.goat-flow/learning-loop/decisions/ADR-017-security-taint-lite-posture.md`:
-
-- per-FunctionDef tainted-name set;
-- explicit, finite source set (web-framework request attrs + FastAPI
-  parameter sources);
-- explicit sanitiser allowlist passed in by each consumer rule;
-- conservative branch joins (intersection - a name stays tainted only if
-  tainted in every branch);
-- reassignment kills taint; augmented assignment preserves taint;
-- nested function bodies analyse with a fresh scope;
-- unknown calls return untainted values (conservative).
-
-The helper exposes :class:`TaintAnalyser`. Consumer rules construct one
-with their sanitiser allowlist, call :meth:`analyse_tree` once per file,
-and query the returned :class:`TaintMap` for any expression they
-encounter while walking sinks.
+Security rules use this helper while turning a user's endpoint into findings.
+The finite sources cover request attributes, ``request.get_json()``, and
+FastAPI parameters. ``get``/``getlist`` preserve an already-tainted receiver.
+Consumer sanitisers win, reassignment can clear taint, and branches join safely.
+Every other call remains untainted under ADR-017's conservative posture.
 """
 
 import ast
 from dataclasses import dataclass, field
 
-from gruffpy.rule.security._security_node_helper import call_target_name
+from gruffpy.rule.security._security_node_helper import call_target_name, imported_module_names
 
 _REQUEST_ATTRS: frozenset[str] = frozenset(
     {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
 )
+_DIRECT_REQUEST_SOURCE_METHODS: frozenset[str] = frozenset({"get_json"})
+_REQUEST_ACCESSOR_METHODS: frozenset[str] = frozenset({"get", "getlist"})
 _FASTAPI_PARAM_SOURCES: frozenset[str] = frozenset(
     {"Query", "Body", "Path", "Form", "Header", "Cookie", "File"}
 )
@@ -96,16 +86,27 @@ class TaintAnalyser:
         taint_map = TaintMap()
         if not isinstance(tree, ast.Module):
             return taint_map
-        _ScopeWalker(taint_map, self._sanitisers).walk_body(tree.body, tainted=set())
+        walker = _ScopeWalker(taint_map, self._sanitisers, imported_module_names(tree))
+        walker.walk_body(tree.body, tainted=set())
         return taint_map
 
 
 class _ScopeWalker:
-    """Walks statements within one lexical scope, propagating tainted names."""
+    """Track user-controlled names while walking one lexical scope.
 
-    def __init__(self, taint_map: TaintMap, sanitisers: frozenset[str]) -> None:
+    Security consumers receive the resulting expression map for their sink checks.
+    Users reach this walk after the parser accepts an endpoint or module body.
+    """
+
+    def __init__(
+        self,
+        taint_map: TaintMap,
+        sanitisers: frozenset[str],
+        imported_modules: frozenset[str],
+    ) -> None:
         self._map = taint_map
         self._sanitisers = sanitisers
+        self._imported_modules = imported_modules
 
     def walk_body(self, body: list[ast.stmt], tainted: set[str]) -> set[str]:
         """Walk a list of statements in order, mutating *tainted* in place.
@@ -265,7 +266,7 @@ class _ScopeWalker:
         if isinstance(expr, ast.Name):
             return expr.id in tainted
         if isinstance(expr, ast.Attribute):
-            if _is_request_source(expr):
+            if _is_request_source(expr, self._imported_modules):
                 return True
             return self._is_tainted(expr.value, tainted)
         return self._is_tainted(expr.value, tainted) or self._is_tainted(expr.slice, tainted)
@@ -285,24 +286,104 @@ class _ScopeWalker:
             return self._is_tainted(expr.value, tainted)
         return self._is_tainted(expr.body, tainted) or self._is_tainted(expr.orelse, tainted)
 
-    def _is_call_tainted(self, call: ast.Call, tainted: set[str]) -> bool:
-        target = call_target_name(call)
-        if target is not None and target.split(".")[-1] in self._sanitisers:
+    def _is_call_tainted(self, call: ast.Call, tainted_names: set[str]) -> bool:
+        """Return whether a supported call exposes user-controlled data.
+
+        Args:
+            call: Call from the user's source being evaluated.
+            tainted_names: Names currently known as user-controlled; empty means none.
+
+        Returns:
+            True when a bounded call preserves taint; false keeps the call out of findings.
+        """
+        call_target = call_target_name(call)
+        # A named sanitizer wins; None means a dynamic call cannot match the allowlist.
+        if call_target is not None and call_target.split(".")[-1] in self._sanitisers:
             return False
+        # Supported request accessors reflect user input without opening all unknown calls.
+        if self._is_user_request_accessor_tainted(call, tainted_names):
+            return True
+        # Users can interpolate request values through the documented string format call.
         if isinstance(call.func, ast.Attribute) and call.func.attr == "format":
-            if self._is_tainted(call.func.value, tainted):
+            # A tainted template keeps the formatted result user-controlled.
+            if self._is_tainted(call.func.value, tainted_names):
                 return True
-            return any(self._is_tainted(arg, tainted) for arg in call.args)
+            # Any tainted format argument makes the text shown to the sink user-controlled.
+            return any(self._is_tainted(arg, tainted_names) for arg in call.args)
         return False
 
+    def _is_user_request_accessor_tainted(
+        self,
+        request_accessor_call: ast.Call,
+        tainted_names: set[str],
+    ) -> bool:
+        """Recognise only direct JSON reads or accessors on tainted request data.
 
-def _is_request_source(expr: ast.Attribute) -> bool:
-    if expr.attr not in _REQUEST_ATTRS:
+        Args:
+            request_accessor_call: User call that may read a request value.
+            tainted_names: Current user-controlled names; empty excludes assigned containers.
+
+        Returns:
+            True for the finite request seam; false leaves generic collection calls quiet.
+        """
+        # Bare functions have no receiver that can be tied to the user's request data.
+        if not isinstance(request_accessor_call.func, ast.Attribute):
+            return False
+        accessor_method = request_accessor_call.func.attr
+        accessor_receiver = request_accessor_call.func.value
+        # Flask users may read their JSON body directly from the recognised request object.
+        if accessor_method in _DIRECT_REQUEST_SOURCE_METHODS:
+            return _is_request_object(accessor_receiver, self._imported_modules)
+        # Other methods, such as pop, stay conservative even on a tainted request container.
+        if accessor_method not in _REQUEST_ACCESSOR_METHODS:
+            return False
+        return self._is_tainted(accessor_receiver, tainted_names)
+
+
+def _is_request_source(
+    request_attribute: ast.Attribute,
+    imported_modules: frozenset[str],
+) -> bool:
+    """Return whether an attribute is one of the finite request data sources.
+
+    Args:
+        request_attribute: Attribute a user read from a possible request object.
+        imported_modules: Names bound by an import in the same file.
+
+    Returns:
+        True for a supported source; false prevents unrelated attributes becoming findings.
+    """
+    # Attributes outside the documented framework vocabulary are ordinary application data.
+    if request_attribute.attr not in _REQUEST_ATTRS:
         return False
-    receiver = expr.value
-    if isinstance(receiver, ast.Name) and receiver.id == "request":
+    return _is_request_object(request_attribute.value, imported_modules)
+
+
+def _is_request_object(request_receiver: ast.expr, imported_modules: frozenset[str]) -> bool:
+    """Return whether syntax identifies the framework request object.
+
+    Args:
+        request_receiver: Receiver before a request attribute or direct method.
+        imported_modules: Names bound by an import in the same file, which
+            separate a framework's module-level request proxy from an
+            application object that merely owns a ``request`` attribute.
+
+    Returns:
+        True for ``request``, ``self.request``, and ``<imported>.request``.
+    """
+    # A typical endpoint imports and reads the framework's request object directly.
+    if isinstance(request_receiver, ast.Name):
+        return request_receiver.id == "request"
+    if not isinstance(request_receiver, ast.Attribute) or request_receiver.attr != "request":
+        return False
+    if not isinstance(request_receiver.value, ast.Name):
+        return False
+    # Class-based handlers can expose the same user request as ``self.request``.
+    if request_receiver.value.id == "self":
         return True
-    return isinstance(receiver, ast.Attribute) and receiver.attr == "request"
+    # ``flask.request`` is the framework proxy only when this file imported the module;
+    # an application object's ``other.request`` binds a parameter or local instead.
+    return request_receiver.value.id in imported_modules
 
 
 def _names_from_target(target: ast.expr) -> set[str]:

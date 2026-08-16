@@ -1,7 +1,27 @@
 ---
 category: workflow
-last_reviewed: 2026-06-04
+last_reviewed: 2026-08-14
 ---
+
+## Lesson: Separate static contract defects from behavioral pressure failures
+
+**Created:** 2026-08-06
+**Incident:** PR #9 review feedback identified contradictory goat-plan mode
+language and incomplete goat-critique outcome language. Deterministic reads
+reproduced both defects, but six bounded RED pressure runs still chose the
+intended behavior. Calling that a behavioral RED would have fabricated failure
+evidence; ignoring the static contradictions would have left ambiguous
+contracts installed across three agent mirrors.
+
+Track the evidence separately. A contradictory instruction is a
+`CONTRACT-GREP` defect even when agents infer the intended path. Pressure-test
+results describe observed behavior only: use `RED no-repro` when the baseline
+complies and `stay-GREEN smoke` for a later passing rerun. Do not claim
+bulletproofing without three consecutive max-pressure passes after a real RED.
+
+TDD evidence:
+`.goat-flow/logs/sessions/2026-08-06-goat-plan-tdd.md` and
+`.goat-flow/logs/sessions/2026-08-06-goat-critique-tdd.md`.
 
 ## Lesson: Always run `git status` before suggesting a commit message
 
@@ -60,6 +80,17 @@ data from JSON consumers. The milestone scope is a starting point, not a
 ceiling-and-floor; reading the codebase first saves both directions
 (removes deliverables that already exist, and reveals the right container
 for the genuinely-new ones).
+
+**2026-07-13 follow-up:** `RuleDocs.config_keys` contains suffixes relative to
+`rules.<rule-id>`, not arbitrary fully qualified configuration paths.
+`src/gruffpy/cli_list_rules.py` (search: `_rule_detail_escape_hatches`) prefixes
+every entry with `rules.<rule-id>.`. Putting the global
+`allowlists.acceptedAbbreviations` key there rendered the invalid path
+`rules.naming.abbreviation.allowlists.acceptedAbbreviations`; the focused
+payload test passed until the human-readable `list-rules` proof exposed it.
+Keep global escape hatches in curated prose unless a separately designed docs
+field and renderer path is approved, and always run the final explain command
+when changing `config_keys`.
 
 
 
@@ -136,3 +167,161 @@ forms the guard accepts - `rm <file>` then `rmdir <dir>` rather than
 `rm -rf <dir>`. More generally, when a result contradicts a check you already
 proved, first confirm the prior mutation actually applied (`wc -l`,
 `git status`, `md5sum`) before re-theorising.
+
+## Lesson: Keep inline verification scripts below shell-guard complexity limits
+
+**Created:** 2026-07-11
+**Incident:** While validating the repaired 0.5.0 milestone tree, the agent sent
+one long read-only Python heredoc containing structure, link, risk-order, and
+index checks. `.goat-flow/hooks/deny-dangerous.sh` rejected it before execution
+as having more than 50 chained segments. A later path-check heredoc was also
+rejected because its regular expression contained literal backticks, which the
+guard conservatively classified as hidden command substitution. Neither failure
+was a plan-validation result; both commands had to be reshaped and rerun.
+
+The trap recurred on 2026-08-05 when one combined read-only heredoc tried to
+replay five independent PR-review reproductions. The same 50-segment guard
+blocked it before execution; five small `python -c` probes then produced the
+required defect-specific evidence independently.
+
+M34 hit the related pipe-to-shell guard while replaying a local hook payload
+with `printf ... | bash .goat-flow/hooks/gruff-code-quality.sh`. A here-string
+into that known local script delivered the same JSON without weakening the
+guard and produced `APPLY_PATCH_HOOK_EXIT=0`.
+
+When an inline validator contains many statements, split it into independently
+named checks whose output states exactly what passed (`STRUCTURE`, `RISK ORDER`,
+`LINKS`, `INDEX`). When a read-only script must inspect Markdown backtick spans,
+construct the delimiter inside the script (for example `chr(96)`) instead of
+placing literal backticks in the shell command text. Treat any PreToolUse block
+as “not run,” never as evidence about the artifact. Feed a known local script
+through input redirection or a here-string instead of piping generated text to
+a shell interpreter.
+
+## Lesson: New request fields need a fail-closed compatibility default
+
+**Created:** 2026-07-12
+**Incident:** While adding the dashboard public-bind acknowledgment, the agent
+made `has_acknowledged_public_bind` a required `_DashboardCliRequest` field.
+Focused CLI tests passed because Click supplied the new value, but the existing
+dashboard-server suite had six direct request constructors and failed before
+testing form-state behavior.
+**Evidence:** `src/gruffpy/cli_dashboard.py` (search:
+`has_acknowledged_public_bind`) - the Boolean request field now defaults to
+false; `tests/integration/test_dashboard_server.py` (search:
+`def _dashboard_request`) - direct internal construction intentionally omits
+the CLI-only acknowledgment and therefore remains fail-closed.
+
+When extending an internal request dataclass, grep every constructor before the
+first green claim. If omission has a safe meaning, encode that meaning as a
+fail-closed default; otherwise update every caller explicitly and run both the
+entry-point tests and the direct-consumer suite.
+
+## Lesson: Split regression tests by review surface before dogfood
+
+**Created:** 2026-05-31
+**Updated:** 2026-07-13
+**Incident:** While adding correlated scoring coverage, one test asserted file
+score, composite score, and pillar penalties together. The full pytest suite
+passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
+flagged `test-quality.eager-test` because the test had too many assertions.
+
+The pattern repeated during per-rule option validation: functional, static,
+and manual gates were green, but dogfood found warning wording, accepted-name
+alternatives, and applied-setting semantics packed into two eager tests. It
+also found raw numeric values repeated in assertions. Splitting those three
+review surfaces and naming the configured value made the original dogfood
+reproduction return zero findings without deleting any assertion.
+
+M09 repeated the same trap across reporters: one test combined native JSON and
+hotspot shape assertions, while another combined text, Markdown, and HTML
+terminology. Root dogfood found two eager tests even though all focused gates
+passed. Splitting by automation, terminal, pull-request, and browser review
+surface preserved every assertion and made the exact dogfood reproduction
+return zero findings.
+
+M29 repeated it in a smaller form: one curated-rule-doc test combined global
+allowlist routing, replacement semantics, four vocabulary examples, and the
+false-positive payload contract. Focused tests and the full suite passed, but
+root dogfood counted 11 assertions. Splitting allowlist guidance from
+false-positive guidance preserved the contract and kept each review surface
+cohesive.
+
+M34 repeated the raw-literal branch at one assertion: the Codex hook contract
+test compared its timeout directly with `90`. Focused pytest and ruff passed,
+but root dogfood reported `test-quality.magic-number-assertion`. Naming the
+timeout contract cleared the exact finding without suppressing the rule.
+
+When a regression spans multiple outputs, keep one test per reviewer surface
+even if the setup is shared. This preserves the signal of
+`test-quality.eager-test` and keeps dogfood aligned with the
+reviewer-verification mission. Name configured boundary values before asserting
+them so the test explains the user's choice instead of embedding a magic number.
+
+## Lesson: Prove generated comments semantically before a broad write
+
+**Created:** 2026-08-12
+**Decision changed:** A comment-coverage codemod must pass a representative diff review before it may write beyond one file.
+**Trigger phase:** ACT
+**Incident count:** 1
+**Latest occurrence:** 2026-08-12
+
+**Incident:** A source-wide documentation pass tried two deterministic codemods after a hand-written file established the desired shape. The first inserted repeated
+“this case applies” comments; the second included identifiers but produced phrases such as “needs parse ranges.” Ruff also rejected the generated docstring lines at the
+repository's 100-character limit. Both batches were reversed before behavior verification because they narrated structure instead of explaining a caller consequence.
+
+For comment-density work, let an audit identify omissions but keep prose generation semantic. Before a bulk writer can expand past one file, inspect a sample containing a
+branch, loop, exception, existing structured docstring, and missing private-method docstring. Reject the writer if phrases repeat, expose syntax as prose, or fail the normal
+lint width. Structural completeness is not evidence of readable comments.
+
+## Lesson: Prove which copy of the code a comparison probe actually loaded
+
+**Created:** 2026-08-13
+**Incident:** A PR review compared one rule's behaviour across two commits by
+running a probe inside `git worktree add <scratch> <base>` with `PYTHONPATH=.`.
+Because `gruffpy` lives under `src/`, `.` never exposed it and every import
+resolved through the editable install back to the main checkout, so the "base"
+run measured head twice and returned numbers identical to head. That near-miss
+was one step from publishing "base and head behave the same" as a refutation of
+a real regression. Re-running with `PYTHONPATH=src:.`, printing
+`gruffpy.__file__`, and asserting the head-only symbol was absent showed the
+true result: three cases regressed.
+**Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
+`_is_exact_supported_import`) - exists only on the newer revision, so a
+`hasattr` check is a cheap provenance assertion when probing a base worktree.
+**Prevention:** an editable install silently outranks a scratch checkout. Any
+probe comparing two revisions MUST print the resolved path of the module under
+test and assert a revision-distinguishing symbol before its numbers count as
+evidence; identical results across revisions are a provenance smell, not a
+refutation. This is the imported-module case of the executable-path lesson in
+`.goat-flow/learning-loop/lessons/verification.md`
+(search: "A version check must identify the executable path").
+
+## Lesson: Discover ignored plan state with ignore-independent tools
+
+**Created:** 2026-08-14
+**Decision changed:** Inspect local plan directories with `ls` or `rg --files --hidden --no-ignore` before deciding they are empty.
+**Trigger phase:** READ
+**Incident count:** 1
+**Latest occurrence:** 2026-08-14
+
+During a `goat-plan` update, `rg --files .goat-flow/plans/claude-harness-repair` returned no paths because `.goat-flow/plans/.gitignore` ignores milestone contents. The directory still contained M01 and M02. Treating the empty output as an empty directory created a second M01, and `goat-flow plans check .goat-flow/plans/claude-harness-repair --strict` failed with `duplicate milestone ID M01 conflicts with M01`.
+
+Plan state is intentionally ignored, so default repository-aware discovery is the wrong probe. List the selected directory without ignore filtering before writing, read every existing status, and run the strict plan check before presenting the checkpoint.
+
+## Lesson: Block invalidated review milestones before opening a replacement
+
+**Created:** 2026-08-14
+**Incident:** M01 remained `human-verification-pending` after later evidence
+invalidated its harness exit proof. When repaired M03 reached the same status,
+`goat-flow plans check` with strict validation exited 1 with:
+`error: plan: multiple active milestones: M01, M03`. The coupled audits and
+typecheck had passed; the failure was plan state, not project behaviour.
+
+The lifecycle reserves `human-verification-pending` for one currently valid
+evidence set awaiting approval. When later evidence falsifies an exit
+criterion, move the original milestone to `blocked` and preserve its completed
+checkboxes, proof, and regression note. The replacement milestone can then
+enter human review without creating two active boundaries. Run strict plan
+validation after every status transition, not only when the plan is first
+written.

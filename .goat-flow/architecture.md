@@ -18,11 +18,11 @@ The main runtime components are `ConfigLoader`, `SourceDiscovery`, `PythonFilePa
 
 ## Request Flow
 
-Representative command path: `gruff-py analyse src/ --format json` enters `src/gruffpy/cli.py`, builds default rule settings from `RuleRegistry.defaults()`, loads project config via `ConfigLoader` (precedence: `--config <path>`, then `.gruff.yaml` in the project root, then `[tool.gruff-py]` in `pyproject.toml`), discovers Python and text files with `SourceDiscovery`, parses Python files with `PythonFileParser`, runs enabled per-unit and project-level rules through `RuleRegistry.analyse()`, synthesises composite findings, calculates a score with `ScoreCalculator`, applies display-only filters, renders the `AnalysisReport` with the selected reporter, and exits with `0`, `1`, or `2` based on diagnostics and `--fail-on`.
+Representative command path: `gruff-py analyse src/ --format json` enters `src/gruffpy/cli.py`, builds default rule settings from `RuleRegistry.defaults()`, and loads project config via `ConfigLoader`. Precedence is an explicit `--config <path>`, modern `.gruff-py.yaml` then legacy `.gruff.yaml` in the project root, modern `[tool.gruff-py]` then legacy `[tool.gruff]` in `pyproject.toml`, and finally built-in defaults. `SourceDiscovery` finds Python and text files, `PythonFileParser` parses Python, `RuleRegistry.analyse()` runs enabled per-unit and project-level rules, `ScoreCalculator` calculates the score, display-only filters select rendered findings, and the chosen reporter emits the `AnalysisReport`. Diagnostics and `--fail-on` select exit `0`, `1`, or `2`.
 
 Dashboard path: `gruff-py dashboard src/` builds an initial `DashboardState`, starts a stdlib `ThreadingHTTPServer` on loopback by default, serves `/` as a self-contained dark dashboard shell, and serves `/scan` by calling the same `run_analysis()` helper used by `analyse` before rendering `HtmlReporter`. Scan metadata is injected into the iframe report as HTML-safe JSON so the parent shell can show exit code, duration, project root, and the equivalent `gruff-py analyse --format html` command.
 
-Unknown keys in `[tool.gruff-py]` or `.gruff.yaml` reject strictly with a `config-error` diagnostic. Parse or config diagnostics are part of the report and force exit code `2`. Findings at or above the selected `FailThreshold` force exit code `1`; clean runs exit `0`.
+Structural, type, top-level, and schema config errors are fatal. Unsupported per-rule keys warn and are removed during a normal scan; strict config loading stops on the same exact key. Parse or fatal config diagnostics are part of the report and force exit code `2`. Findings at or above the selected `FailThreshold` force exit code `1`; clean runs exit `0`.
 
 ## Auth / Trust Boundaries
 
@@ -30,26 +30,32 @@ There is no authentication layer, service account, or outbound network request. 
 
 `gruff-py dashboard` starts a long-running local HTTP server only when explicitly requested. It binds to `127.0.0.1` by default, has no authentication, and should be treated as a local development UI rather than a shared service. Dashboard HTML, iframe metadata, loading frames, and error frames escape interpolated values before rendering.
 
-`.claude/settings.json` and `.goat-flow/hooks/deny-dangerous.sh` protect Claude Code from secret reads/writes and dangerous shell operations during agent sessions. Application runtime does not enforce those agent guardrails.
+Codex sessions use `AGENTS.md`, `.agents/`, and `.codex/`; the separate Claude peer surface uses `CLAUDE.md` and `.claude/`; the Copilot peer surface uses `.github/copilot-instructions.md` with `.github/skills/` and `.github/hooks/`. Shared safety scripts live under `.goat-flow/hooks/`. These agent guardrails protect development sessions from secret reads/writes and dangerous shell operations; application runtime does not enforce them.
 
 ## Data Flow
 
-Durable project configuration lives in `pyproject.toml`; package resolution is locked by `uv.lock`. Runtime analysis state is in memory: discovered `SourceFile` objects become `AnalysisUnit` objects, rules produce `Finding` objects, and `AnalysisReport.to_dict()` provides the JSON schema payload.
+Durable project configuration may live in modern or legacy YAML, or in the corresponding `pyproject.toml` tool table; package resolution is locked by `uv.lock`. Runtime analysis state is in memory: discovered `SourceFile` objects become `AnalysisUnit` objects, rules produce `Finding` objects, and `AnalysisReport.to_dict()` provides the JSON schema payload.
 
-The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing. `Finding.to_dict()` emits both `fingerprint` (line-precise identity used by baselines and SARIF) and `stableIdentity` (line-insensitive identity hashed from `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when `symbol` is `None`) — external diff tooling that wants "the same logical finding across line shifts" reads `stableIdentity`; baseline matching reads `fingerprint`. See ADR-020 for the input set and cross-port pairing.
+The compatibility contracts are explicit in `src/gruffpy/analysis/schema.py` and `src/gruffpy/finding/fingerprint.py`: native analysis uses `gruff.analysis.v2`, baselines use `gruff-py.baseline.v1`, and hotspot output uses `gruff-py.hotspot.v1`. Fingerprints intentionally reproduce gruff-php byte behaviour, including PHP-style slash escaping before hashing. `Finding.to_dict()` emits both `fingerprint` (line-precise identity used by baselines and SARIF) and `stableIdentity` (line-insensitive identity hashed from `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when `symbol` is `None`) — external diff tooling that wants "the same logical finding across line shifts" reads `stableIdentity`; baseline matching reads `fingerprint`. See ADR-020 for the input set and cross-port pairing.
+
+## Local Data and Evidence Budget
+
+Checkout-local GOAT Flow plans, session and event logs, review artifacts, and scratchpad notes may orient a resumed session, but they do not prove current behaviour or authorize external actions. Fresh command output and current project files provide verification evidence. Promote only verified durable conclusions into the learning loop, and leave retention or removal of local artifacts to the user because GOAT Flow does not purge them automatically.
 
 ## Rules And Scoring
 
-`RuleRegistry.defaults()` instantiates the full rule catalogue: 125 rules across
-11 active pillars (`size`, `complexity`, `maintainability`, `dead-code`,
-`naming`, `documentation`, `security`, `sensitive-data`, `test-quality`,
-`design`, and `modernisation`). Each pillar lives under
-`src/gruffpy/rule/<pillar>/`, with legacy `waste.*` rule IDs emitting under the
-`dead-code` pillar. `ProjectRuleProtocol` handles cross-file rules such as
+`RuleRegistry.defaults()` instantiates the full rule catalogue. The generated
+[`docs/rules.md`](../docs/rules.md) header and pillar table are the only current
+numeric totals; verify them with
+`uv run python -m gruffpy.command.rule_docs --check docs/rules.md`. Pillars come
+from each `RuleDefinition.pillar`, not the rule-ID prefix or directory name:
+legacy `waste.*` rules emit under `dead-code`, and the maintainability-index
+implementation lives in the complexity package while emitting under
+`maintainability`. `ProjectRuleProtocol` handles cross-file rules such as
 `design.single-implementor-protocol`. Overlapping `size.*` and `complexity.*`
 findings on one symbol are billed once by `ScoreCalculator`'s correlated-rule
-clustering (`CORRELATED_COMPLEXITY_RULES`); the `design.god-method` composite
-that previously named that overlap was retired (ADR-024).
+clustering (`CORRELATED_COMPLEXITY_RULES`); the former synthetic
+`design.god-method` finding remains retired under ADR-024.
 `AnalysisConfig.from_registry()` snapshots each rule's default settings;
 selection and per-rule overrides are applied by `ConfigLoader`.
 
@@ -59,7 +65,7 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 ## Reporting And Schemas
 
-`JsonReporter` serializes `AnalysisReport.to_dict()` with four-space indentation, slashes not escaped, and non-ASCII escaped, matching the PHP reference's `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` behaviour for shared keys. `TextReporter`, `HtmlReporter`, `MarkdownReporter`, `GithubAnnotationsReporter`, `HotspotReporter`, and `SarifReporter` render the same `AnalysisReport` for human, CI, and code-scanning consumers.
+`JsonReporter` serializes `AnalysisReport.to_dict()` with four-space indentation, slashes not escaped, and non-ASCII escaped, matching the PHP reference's `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` behaviour for shared keys. `TextReporter`, `HtmlReporter`, `MarkdownReporter`, `GithubAnnotationsReporter`, `HotspotReporter`, and `SarifReporter` render the same `AnalysisReport` for human, CI, and code-scanning consumers. Native JSON, hotspot, and baseline consumers use the schema versions declared in `src/gruffpy/analysis/schema.py` rather than prose-local constants.
 
 `FindingDisplayFilter` applies display-only filters after scoring and exit-code selection, recording the active filter set under `run.filters`. The `gruff-py.hotspot.v1` schema is declared in `src/gruffpy/analysis/schema.py` and emitted by `HotspotReporter`.
 
@@ -70,6 +76,10 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 ## Deployment / Operations
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `ruff check`, `ruff format --check`, `mypy`, and `pytest`.
+
+The active workspace tooling story is GOAT Flow `1.15.1`, and all four tracked agent surfaces now declare it: `AGENTS.md` with `.agents/` and `.codex/`, `CLAUDE.md` with `.claude/`, `.github/copilot-instructions.md` with `.github/skills/`, plus `.goat-flow/config.yaml`, the shared skill references, the hooks, and the project-local `goat-flow` executable. Each instruction file stays standalone and owns its own skills directory; a version declared here that disagrees with `.goat-flow/config.yaml` is drift to fix, not peer metadata to record.
+
+The installed top-level skill playbooks are `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, and `writing-style.md`; `.goat-flow/skill-docs/playbooks/README.md` is their index.
 
 Packaging uses Hatchling from `pyproject.toml`; `uv build` emits artifacts under `dist/`. Pre-commit config mirrors the same checks, but its ruff hook auto-fixes, so non-mutating verification should use the explicit CI commands.
 

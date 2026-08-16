@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-13
+last_reviewed: 2026-07-12
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -101,15 +101,35 @@ hypotheses, not just verification claims.
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
 
 **Created:** 2026-05-18
+**Updated:** 2026-07-12
 **Incident:** During M25, `uv run ruff format --check src tests` mixed a new
 touched-file formatting issue with pre-existing unrelated formatting drift
 outside the patch. The correction was to run `uv run ruff format` only on the
 M25-touched files, then keep the repo-wide format check marked as blocked by
 unrelated drift.
 
-When a repo-wide non-mutating format check is already known to fail, run a
-touched-file format check or formatter pass before the broad gate so the
-agent-owned formatting state is separated from unrelated workspace drift.
+The same sequencing mistake recurred twice during the 0.5.0 config work: M08's
+broad gate found three owned files, then M10's broad gate found the three new
+test files and a later assertion split left one of them unformatted again. In
+each case, focused behavior was already green and the broad failure added only
+a formatter round trip.
+
+The recurrence appeared again across naming-rule calibration: one edited rule
+and a later identifier-quality test each needed a formatter round trip after
+focused behavior was green. Touched-file checks caught both before the final
+broad ladder, and replaying focused/static gates cleared the failures without
+touching unrelated source.
+
+The cross-module private-function liveness batch repeated the same trap: three
+approved source and test files needed formatting after the focused behavior
+passed. Formatting only those paths, then replaying the focused and
+repository-wide checks, kept unrelated reporting worktree files untouched.
+
+After any test/source edit batch, run a touched-file formatter check or pass
+before the repo-wide non-mutating gate, even when the repository was clean at
+the start. Then rerun the touched focused tests. This separates agent-owned
+formatting from unrelated drift and prevents a later assertion split from
+invalidating an otherwise final gate ladder.
 
 ## Lesson: Re-run raw-source analyzers after formatting fixture strings
 
@@ -320,6 +340,25 @@ under 1000 lines and that factory stayed at the 100-line threshold; the per-rule
 custom-docs factories have since been extracted to
 `src/gruffpy/rule/catalog_docs.py` (search: `def custom_docs_for`).
 
+The trap recurred during scalar Boolean annotation work: one new
+`BooleanPrefixRule` match arm raised `custom_docs_for` from the allowed
+cyclomatic complexity of 20 to 21 even though focused tests, ruff, mypy, and
+generated-doc checks were green. The correction shares one naming-rule match
+arm and dispatches both naming documentation factories through
+`_naming_rule_docs` (same file), preserving the existing branch count without
+removing either rule card. Before extending a near-threshold dispatcher, share
+an existing family arm or extract a branch-free keyed dispatch, then rerun root
+dogfood.
+
+The same two shapes recurred during cross-module private-function liveness
+work. A separate dead-code catalog arm again raised `custom_docs_for` to 21,
+while one 118-line import/load collector crossed cyclomatic, cognitive,
+maintainability, and function-length thresholds. Sharing the dead-code arm via
+branch-free keyed dispatch and splitting binding collection from attribute/name
+load handling removed all five errors without changing focused outcomes. Treat
+one materialized AST walk as a data boundary, not a reason to keep both
+in-memory processing stages in one function.
+
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
 **Created:** 2026-05-25
@@ -353,19 +392,6 @@ When adding string-list defaults to `.gruff-py.yaml`, quote YAML 1.1
 boolean-like scalars such as `yes`, `no`, `on`, and `off`. The registry coverage
 test is the right proof because it compares parsed config values against
 `RuleDefinition.default_options`, not raw text.
-
-## Lesson: Split regression tests by review surface before dogfood
-
-**Created:** 2026-05-31
-**Incident:** While adding correlated scoring coverage, one test asserted file
-score, composite score, and pillar penalties together. The full pytest suite
-passed, but `uv run gruff-py analyse src tests --fail-on advisory --no-baseline`
-flagged `test-quality.eager-test` because the test had too many assertions.
-
-When a regression spans multiple outputs, keep one test per reviewer surface
-even if the setup is shared. This preserves the signal of
-`test-quality.eager-test` and keeps dogfood aligned with the
-reviewer-verification mission.
 
 ## Lesson: Tick task checkboxes when the proof passes, not during later cleanup
 
@@ -492,6 +518,14 @@ When crafting rule repros, mirror the rule's path gate as well as its source
 shape. A true-positive source fixture can still report zero findings when the
 file path prevents the rule from running.
 
+**Updated:** 2026-07-12. The first ambiguous-module CLI proof used `app` and
+`vendor` as duplicate package source roots, but discovery default-ignored the
+latter; only one producer reached the resolver and the expected two LOW
+findings did not appear. Replacing the second temporary root with `lib` made
+the duplicate visible and the full matrix passed. For multi-file ambiguity
+fixtures, verify every intended path appears in discovery (or deliberately use
+`--include-ignored`) before interpreting resolver counts.
+
 ## Lesson: Module-scope invalidation walks must cover nested statement blocks
 
 **Created:** 2026-06-10
@@ -566,3 +600,76 @@ When a `NodeVisitor` counts references, every recording path (`visit_Name`,
 discipline. Pair a store-target fixture with a load-usage fixture
 (`tests/unit/rule/design/test_single_implementor_protocol_rule.py`, search:
 `attribute_store_target_alone_still_flags`).
+
+## Lesson: Resolve relative Markdown links after moving or rewriting plans
+
+**Created:** 2026-07-11
+**Incident:** While rebuilding the `0.5.0` plan tree, the agent moved the
+cross-implementation baseline proposal to backlog and linked it to the related
+`0.7.0` M03 using a plausible remembered filename,
+`M03-baseline-v2-count-based-suppression.md`. The real file was
+`M03-baseline-file-count-redesign-v0.4.0.md`. The plan structure and milestone
+counts passed, but the explicit link-target verification failed and forced a
+correction.
+
+After moving, renaming, or rewriting planning/docs files, enumerate Markdown
+links and resolve each local target relative to the file that contains it. A
+milestone number or remembered title is not a path contract; list the target
+directory and verify the exact filename. Run this alongside stale-old-name
+greps so both dangling new links and forgotten old references are caught.
+
+## Lesson: A version check must identify the executable path
+
+**Created:** 2026-07-11
+**Incident:** During the same plan verification, the agent checked the
+project-local `node_modules/.bin/goat-flow` and observed `1.12.1`, then wrote a
+plan assumption that the “goat-flow binary/config” agreed. The final command
+audit ran `goat-flow --version` and exposed a different global executable on
+`PATH` reporting `1.13.0`; `command -v goat-flow` resolved it outside the
+project. The earlier version value was accurate for one binary but the generic
+claim was false.
+
+Whenever a repository can have project-local and global copies of a tool,
+capture both the executable path and version in the same check. Compare the
+concrete binary used by verification with the repository's declared/configured
+version; do not collapse `node_modules/.bin/tool`, `uv run tool`, and a PATH
+global into one unnamed “tool version”.
+
+## Lesson: Grep the sibling port's source before claiming cross-implementation divergence
+
+**Created:** 2026-07-12
+**Incident:** A plan critique rated the 0.5.0 dashboard non-loopback guard a
+"py-only family CLI divergence", leaving sibling behaviour at INFERRED. An
+external cross-review then read the sibling source: gruff-go already ships the
+identical guard, so the finding's direction was wrong — py was converging with
+go, and gruff-php was the actual divergent port. All five ports are checked
+out side-by-side in the workspace; the correction was one grep away the whole
+time.
+**Evidence:** `../gruff-go/internal/dashboard/server.go` (search: "allow-public") -
+refuses non-loopback hosts unless `--allow-public` and warns on override;
+`../gruff-php/src/Cli/Dashboard/DashboardCommand.php` (search: "DEFAULT_HOST") -
+binds any `--host` with no guard.
+
+Before asserting any cross-port parity or divergence claim (in reviews,
+critiques, or plan premises), grep the named sibling repo's source in the
+workspace and cite the anchor. Never leave a divergence claim at INFERRED when
+the sibling checkout is locally readable.
+
+## Lesson: Focused selectors and precedence tests must expose every promised branch
+
+**Created:** 2026-07-12
+**Incident:** During request-accessor taint verification, the exact focused
+command initially passed while deselecting the collision-negative matrix because
+its test name lacked the selector anchor. The first sanitiser-precedence control
+also passed for the wrong reason: conservative unknown-call handling already
+made its wrapper untainted, whether or not the allowlist ran first. A follow-up
+literal-receiver control had no stable call target for allowlist matching. The
+final proof used the same resolvable accessor expression twice—tainted without
+an allowlist and untainted with its leaf allowlisted—and named every positive
+and negative case so the focused command selected them.
+
+Before accepting a focused gate, compare its selected/deselected counts with the
+promised matrix and make every required group share the selector anchor. For
+branch-precedence behavior, include paired control and treatment assertions on
+the same input, choose a call target the matcher can actually resolve, and make
+sure reversing or removing the precedence branch fails the test.

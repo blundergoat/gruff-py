@@ -402,6 +402,17 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "(loop counters, math axes, exception variables)."
         ),
     },
+    "security.unsanitized-markdown-interpolation": {
+        "labelSanitizers": (
+            "Exact call targets trusted for visible link labels. Empty is strict; "
+            "html.escape and markupsafe.escape are opt-ins only after verifying "
+            "the renderer because they leave Markdown link delimiters unchanged."
+        ),
+        "urlSanitizers": (
+            "Exact call targets trusted for click targets. Defaults to urllib.parse.quote "
+            "and quote_plus with delimiter-safe arguments; an empty list trusts no call."
+        ),
+    },
     "test-quality.magic-number-assertion": {
         "allowed_numbers": (
             "Integer literals accepted in test assertions without extraction "

@@ -1,4 +1,9 @@
-"""Loads YAML and ``pyproject.toml`` config into an ``AnalysisConfig``."""
+"""Resolve user YAML or TOML into the settings used by every scan command.
+
+The loader applies source precedence, validates shared config shapes, and
+merges registered rule defaults with supported overrides. Normal scans expose
+recoverable rule-key mistakes as warnings; strict scans stop on the same key.
+"""
 
 import tomllib
 from pathlib import Path
@@ -8,6 +13,11 @@ from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.config.markdown_sanitizer_options import (
+    MARKDOWN_SANITIZER_OPTION_NAMES,
+    MARKDOWN_SANITIZER_RULE_ID,
+    validate_markdown_sanitizer_targets,
+)
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
@@ -56,8 +66,8 @@ VALID_SELECTION_KEYS = frozenset(
 )
 VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
 MIGRATION_HINT = (
-    'Run "gruff-py migrate-config" to rewrite legacy keys, '
-    'or "gruff-py init --force" to regenerate the config.'
+    'Run "gruff-py migrate-config" to rewrite legacy YAML keys. '
+    "For TOML, edit [tool.gruff-py] in pyproject.toml by hand."
 )
 TOML_TOOL_KEY = "gruff-py"
 LEGACY_TOML_TOOL_KEY = "gruff"
@@ -68,16 +78,12 @@ LEGACY_YAML_CONFIG_NAME = ".gruff.yaml"
 
 
 class ConfigLoader:
-    """Resolves the active ``AnalysisConfig`` from YAML / `pyproject.toml` / defaults.
+    """Resolve the settings every user command needs before analysis begins.
 
-    Unknown rule-level keys (unknown rule ids, unknown rule-section keys,
-    unknown ``thresholds.<name>`` knobs, ``threshold`` on non-rubric rules,
-    and ``severity`` without ``threshold``) downgrade to warnings by default:
-    the offending key is ignored, the rule keeps its defaults, and the warning
-    is collected on :attr:`warnings`. With ``strict=True`` the same shapes
-    raise :class:`ConfigError`. Structural errors (non-table sections, bad
-    value types, unknown top-level keys, schema-version mismatches) always
-    raise regardless of strictness.
+    Discovery chooses YAML, TOML, or registered defaults in documented order.
+    Normal scans warn and remove unsupported rule, threshold, and option keys;
+    strict scans stop on the same exact key. Structural, type, and schema errors
+    always stop because continuing would misrepresent the user's configuration.
     """
 
     def __init__(
@@ -215,14 +221,16 @@ class ConfigLoader:
             raise ConfigError(
                 f"{source} is missing required 'schemaVersion'. "
                 f"Expected {CONFIG_SCHEMA_VERSION!r}; "
-                f"run `gruff-py init --force` to regenerate."
+                "run `gruff-py migrate-config` for YAML, or edit "
+                "[tool.gruff-py] in TOML by hand."
             )
         value = section["schemaVersion"]
         if value != CONFIG_SCHEMA_VERSION:
             raise ConfigError(
                 f"{source} has schemaVersion {value!r}; "
                 f"expected {CONFIG_SCHEMA_VERSION!r}. "
-                f"Run `gruff-py init --force` to regenerate."
+                "Run `gruff-py migrate-config` for YAML, or edit "
+                "[tool.gruff-py] in TOML by hand."
             )
 
     @staticmethod
@@ -400,14 +408,20 @@ class ConfigLoader:
         rule_section: dict[str, Any],
         defaults: RuleSettings,
     ) -> dict[str, Any]:
-        """Strip legacy/unknown rule keys, warning (or raising under strict) per key.
+        """Keep only registered rule keys before applying the user's overrides.
 
-        The returned section only contains shapes the strict merge logic
-        accepts, so every remaining raise in ``_merged_thresholds`` /
-        ``_severity_threshold`` is a structural or type error that stays fatal.
+        Args:
+            rule_id: Public rule id whose dotted config keys appear in feedback.
+            rule_section: User table; an empty table keeps every registered default.
+            defaults: Registered settings that define accepted threshold and option names.
+
+        Returns:
+            Sanitised table; empty means no supported override remains to apply.
         """
         section: dict[str, Any] = {}
+        # Each top-level rule key is checked before users see any override applied.
         for key, value in rule_section.items():
+            # Unsupported keys warn in normal scans and stop strict scans.
             if key not in VALID_RULE_KEYS:
                 self._warn_or_raise(
                     f'Unknown key "rules.{rule_id}.{key}".',
@@ -417,14 +431,26 @@ class ConfigLoader:
                 continue
             section[key] = value
         thresholds = section.get("thresholds")
+        # A table of named thresholds keeps only knobs registered by this rule.
         if isinstance(thresholds, dict):
             kept = self._sanitised_thresholds(rule_id, thresholds, defaults)
+            # An explicitly empty table remains harmless and visible to the merge.
             if kept or not thresholds:
                 section["thresholds"] = kept
             else:
-                # Every entry was a legacy/unknown knob: drop the emptied table
-                # so it cannot trip the threshold/thresholds combination error.
+                # Unknown-only input disappears so the user's registered defaults survive.
                 del section["thresholds"]
+        options = section.get("options")
+        # A user option table keeps only names declared by the registered rule.
+        if isinstance(options, dict):
+            kept_options = self._sanitised_options(rule_id, options, defaults)
+            # An explicitly empty table still means the user supplied no overrides.
+            if kept_options or not options:
+                section["options"] = kept_options
+            else:
+                # Unknown-only input disappears so it cannot enter rule execution.
+                del section["options"]
+        # Single thresholds are only meaningful for rules with a registered rubric.
         if "threshold" in section and defaults.severity_threshold is None:
             self._warn_or_raise(
                 f'Config key "rules.{rule_id}.threshold" is only supported for '
@@ -434,6 +460,7 @@ class ConfigLoader:
             )
             section.pop("threshold", None)
             section.pop("severity", None)
+        # A severity alone cannot tell the user where the rule should begin firing.
         if "severity" in section and "threshold" not in section:
             self._warn_or_raise(
                 f'Config key "rules.{rule_id}.severity" requires "threshold".',
@@ -450,7 +477,9 @@ class ConfigLoader:
         defaults: RuleSettings,
     ) -> dict[str, Any]:
         kept: dict[str, Any] = {}
+        # Each named threshold is checked in the order the user wrote it.
         for key, value in overrides.items():
+            # Unknown knobs leave the corresponding registered default unchanged.
             if key not in defaults.thresholds:
                 self._warn_or_raise(
                     f'Unknown threshold "rules.{rule_id}.thresholds.{key}".',
@@ -458,6 +487,39 @@ class ConfigLoader:
                     f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
                 )
                 continue
+            kept[key] = value
+        return kept
+
+    def _sanitised_options(
+        self,
+        rule_id: str,
+        overrides: dict[str, Any],
+        defaults: RuleSettings,
+    ) -> dict[str, Any]:
+        """Keep option overrides whose names the registered rule exposes.
+
+        Args:
+            rule_id: Public rule id whose exact dotted typo appears in feedback.
+            overrides: User option table; empty means no options were requested.
+            defaults: Registered options serving as the sole accepted-name source.
+
+        Returns:
+            Supported sibling overrides in the user's original order; empty when none remain.
+        """
+        kept: dict[str, Any] = {}
+        # Each option is checked in user order so multiple warnings stay predictable.
+        for key, value in overrides.items():
+            # A missing registered default means this option is not public for the rule.
+            if key not in defaults.options:
+                self._warn_or_raise(
+                    f'Unknown option "rules.{rule_id}.options.{key}".',
+                    "Option ignored; registered defaults and valid sibling options still apply.",
+                    f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
+                )
+                continue
+            # Markdown users need malformed trust targets rejected before findings are hidden.
+            if rule_id == MARKDOWN_SANITIZER_RULE_ID and key in MARKDOWN_SANITIZER_OPTION_NAMES:
+                value = validate_markdown_sanitizer_targets(key, value)
             kept[key] = value
         return kept
 

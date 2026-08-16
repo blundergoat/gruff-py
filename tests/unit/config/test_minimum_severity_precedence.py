@@ -120,11 +120,21 @@ def test_minimum_severity_surfaces_multiple_errors_at_once(tmp_path: Path) -> No
     assert "medium" in message
 
 
-def test_schema_version_missing_points_at_init_force(tmp_path: Path) -> None:
+def test_schema_version_missing_points_at_format_correct_recovery(tmp_path: Path) -> None:
+    """Direct YAML users to migration without claiming force can discard config.
+
+    Args:
+        tmp_path: Project containing the schema-less YAML shown to the user.
+    """
     _write_yaml(tmp_path, "minimumPythonVersion: '3.11'\n")
 
-    with pytest.raises(ConfigError, match=r"missing required 'schemaVersion'.*init --force"):
+    with pytest.raises(ConfigError) as excinfo:
         ConfigLoader(tmp_path, _defaults()).load()
+    message = str(excinfo.value)
+    assert "missing required 'schemaVersion'" in message
+    assert "gruff-py migrate-config" in message
+    assert "TOML" in message
+    assert "init --force" not in message
 
 
 def test_schema_version_wrong_value_names_expected_literal(tmp_path: Path) -> None:

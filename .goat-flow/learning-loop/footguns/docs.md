@@ -8,9 +8,9 @@ last_reviewed: 2026-06-14
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** ACTUAL_MEASURED
 **Tags:** hallucination-risk: high
 
-Hand-written rule-count summaries and capability claims in the docs go stale because the catalogue is the source of truth, not the prose. Measured 2026-05-30: `gruff-py list-rules --format json` reports **115** rules, but `.goat-flow/architecture.md` (search: `instantiates the full rule catalogue`) says "103 rules across 10 active pillars", and `README.md` says "116 rules" in one place (search: `rules across 11 pillars`) and "115" in another (search: `catalogue contains`). `.goat-flow/decisions/ADR-021-reviewability-profile.md` (search: `some `test-quality` members ship default-off`) also claims a subset of test-quality rules ship default-off — but no rule sets `default_enabled=False`: `src/gruffpy/rule/definition.py` (search: `default_enabled: bool = True`) and a grep of `src/gruffpy/rule/` for `default_enabled=False` returns nothing.
+Hand-written rule-count summaries and capability claims in the docs go stale because the catalogue is the source of truth, not the prose. Measured 2026-05-30: `gruff-py list-rules --format json` reports **115** rules, but `.goat-flow/architecture.md` (search: `instantiates the full rule catalogue`) says "103 rules across 10 active pillars", and `README.md` says "116 rules" in one place (search: `rules across 11 pillars`) and "115" in another (search: `catalogue contains`). `.goat-flow/learning-loop/decisions/ADR-021-reviewability-profile.md` (search: `some `test-quality` members ship default-off`) also claims a subset of test-quality rules ship default-off — but no rule sets `default_enabled=False`: `src/gruffpy/rule/definition.py` (search: `default_enabled: bool = True`) and a grep of `src/gruffpy/rule/` for `default_enabled=False` returns nothing.
 
-The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a milestone changes the count (`.goat-flow/tasks/1.0.0/M01-*` removes npath → 114; M05/M06 add rules), reconcile all three doc surfaces in one pass. Group the per-pillar table by `Pillar`, not rule-ID prefix: `complexity.maintainability-index` → `maintainability`, every `docs.*` → `documentation`, every `waste.*` → `dead-code`, so counting `docs/rules.md` headers by prefix gives wrong per-pillar numbers (e.g. complexity 5-by-prefix vs 4-by-pillar, dead-code 3 vs 11). Authoritative counts come from iterating `RuleRegistry.defaults().all()` grouped on `definition().pillar.value` (2026-06-14 0.4.1 bump: 130 rules, 12 pillars).
+The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a rule lands or retires (removing `complexity.npath` under ADR-021 took the count to 114; later pillar work raises it), reconcile all three doc surfaces in one pass. Group the per-pillar table by `Pillar`, not rule-ID prefix: `complexity.maintainability-index` → `maintainability`, every `docs.*` → `documentation`, every `waste.*` → `dead-code`, so counting `docs/rules.md` headers by prefix gives wrong per-pillar numbers (e.g. complexity 5-by-prefix vs 4-by-pillar, dead-code 3 vs 11). Authoritative counts come from iterating `RuleRegistry.defaults().all()` grouped on `definition().pillar.value` (2026-06-14 0.4.1 bump: 130 rules, 12 pillars).
 
 ## Footgun: Docs parameter rules treat leading cls as an implicit receiver
 
@@ -34,18 +34,34 @@ the `cls` parameter entry.
 
 Tracked docs across the repo cite milestone codes (`M01`, `M22`, `M33+M34+M35`,
 etc.) as if they were stable references, but the task files those codes name
-live under `.goat-flow/tasks/`, which is fully gitignored. Verified 2026-05-31:
-`git check-ignore -v .goat-flow/tasks/0.3.0/<file>.md` matches
-`.goat-flow/tasks/.gitignore:3:*`, and `git ls-files --error-unmatch` on the
+live under `.goat-flow/plans/`, which is fully gitignored. Verified 2026-05-31
+and re-verified 2026-08-08 after the learning-loop relocation:
+`git check-ignore -v .goat-flow/plans/<version>/<file>.md` matches
+`.goat-flow/plans/.gitignore:3:*`, and `git ls-files --error-unmatch` on the
 same path fails ("did not match any file(s) known to git"). A
 `git grep -lE '\bM[0-9]+[a-z]?\b'` over tracked files (excluding the gitignored
-tasks dir and the goat-plan skill files that *teach* the `M<NN>-<slug>`
-convention) returns **28 files**: 18 under `.goat-flow/decisions/`, 5 under
-`.goat-flow/footguns/` (this file included — `M01-*`, `M05/M06` near search:
-`reconcile all three doc surfaces`), 2 under `.goat-flow/lessons/`,
-`.goat-flow/patterns/configuration.md`, and the test docstrings in
-`tests/unit/finding/test_stable_identity.py` (search: `M05 lands`) and
-`tests/unit/rule/test_explain_metadata.py` (search: `explain-mode metadata`).
+plans dir and the goat-plan skill files that *teach* the `M<NN>-<slug>`
+convention) returned **28 files** on 2026-05-31, **27** on 2026-08-08, **26** on
+2026-08-09, and **25** on 2026-08-11: 15 under
+`.goat-flow/learning-loop/decisions/`, 5 under
+`.goat-flow/learning-loop/footguns/` (this file included, near search:
+`reconcile all three doc surfaces`), 3 under `.goat-flow/learning-loop/lessons/`,
+and 2 under `.goat-flow/learning-loop/patterns/`.
+
+The 2026-08-11 drop was not a repair. Until then the count included a comment in
+the goat-flow-managed `.goat-flow/hooks/gruff-code-quality.sh`, which proved the
+trap reaches shell comments and not just Markdown. The goat-flow 1.15.1 upgrade
+replaced that managed script and the comment went with it. A citation anchored
+in a managed file is only as durable as the vendor's next release, so evidence
+for this footgun should anchor in project-owned files.
+
+The 2026-08-09 drop is the repair of the last `src`/`tests` occurrence: a
+comment in `tests/unit/finding/test_stable_identity.py` (now search:
+`emits stable identities`) cited a gitignored milestone as the precondition for
+a cross-port ground-truth fixture. It blocked release closeout's stale-name
+audit twice before an operator approved the comment-only reword to name the
+real precondition instead. No committed code or test now carries a milestone
+code; the remaining occurrences are all learning-loop prose.
 
 The non-obvious failure mode is twofold. For a cloner, the reference is a dead
 pointer — they get the doc but not the `M22` file, so the rationale citation

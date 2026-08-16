@@ -1,4 +1,8 @@
-"""Symfony-style root help menu rendering."""
+"""Render the terminal menu a user sees before choosing a gruff command.
+
+Use this module for the root help journey, including global options and available commands.
+It applies the user's colour preference while preserving stable help text and alignment.
+"""
 
 import click
 
@@ -7,12 +11,9 @@ from gruffpy.version import TOOL_NAME, VERSION
 
 
 def root_menu(ctx: click.Context) -> str:
-    """Render the Symfony-style help screen shown when ``gruff-py`` runs without a subcommand.
+    """Render the help screen shown when a user runs gruff-py without a subcommand.
 
-    Joins three sections - header (tool/version + usage line), global
-    options, and the available-commands list - into one terminal-friendly
-    string. ANSI styling honours ``--ansi``/``--no-ansi`` via
-    :func:`should_use_color`.
+    Use at root dispatch; it joins identity, options, and commands using the selected colour mode.
 
     Args:
         ctx: Current Click context (carries CLI state and ANSI setting).
@@ -31,6 +32,10 @@ def root_menu(ctx: click.Context) -> str:
 
 
 def _root_menu_header(ctx: click.Context) -> list[str]:
+    """Build the tool identity and usage lines at the top of root help.
+
+    Use before options so a CLI user can confirm the version and invocation shape.
+    """
     return [
         f"{TOOL_NAME} {_style(VERSION, 'green', ctx)}",
         "",
@@ -41,6 +46,10 @@ def _root_menu_header(ctx: click.Context) -> list[str]:
 
 
 def _root_menu_options(ctx: click.Context) -> list[str]:
+    """Build the global option rows shown in root help.
+
+    Use after the menu header so users can see terminal controls that apply to every command.
+    """
     return [
         _section("Options:", ctx),
         _option_line(
@@ -69,6 +78,10 @@ def _root_menu_options(ctx: click.Context) -> list[str]:
 
 
 def _root_menu_commands(ctx: click.Context) -> list[str]:
+    """Build the command list a user can choose from root help.
+
+    Use after global options; an empty command catalog would leave only the section heading.
+    """
     return [
         _section("Available commands:", ctx),
         _command_line("analyse", "Run gruff-py analysis.", ctx),
@@ -93,45 +106,63 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
 
 
 def _section(label: str, ctx: click.Context) -> str:
+    """Style a root-help section label using the user's colour choice.
+
+    Use when joining menu sections; empty text remains empty and receives no visible content.
+    """
     return _style(label, "yellow", ctx)
 
 
 def _option_line(label: str, description: str, ctx: click.Context) -> str:
+    """Align one global option with the explanation shown beside it.
+
+    Use while building root help; empty labels still reserve the normal option column.
+    """
     return f"  {_style(label, 'green', ctx)}{' ' * (22 - len(label))}{description}"
 
 
 def _command_line(name: str, description: str, ctx: click.Context) -> str:
+    """Align one command name with the action a CLI user can take.
+
+    Use while building the command list; empty names still preserve the display gutter.
+    """
     # Pad past the longest command name ("migrate-config", 14) so every description
     # keeps a column gutter; a width equal to the name length renders them flush.
     return f"  {_style(name, 'green', ctx)}{' ' * (16 - len(name))}{description}"
 
 
 def _style(text: str, color: str, ctx: click.Context) -> str:
+    """Apply terminal colour only when the user's effective setting permits it.
+
+    Use for help labels and names; empty text stays empty whether colour is enabled or disabled.
+    """
+    # Disabled ANSI means the user receives plain text suitable for redirected or colourless output.
     if should_use_color(ctx) is False:
         return text
     return click.style(text, fg=color)
 
 
 def should_use_color(ctx: click.Context) -> bool | None:
-    """Resolve whether ANSI color should be applied for the current context.
+    """Resolve the colour choice that applies to the current help output.
 
-    Precedence: an ``ansi`` parameter on *ctx*, then the ``should_use_ansi``
-    flag from the shared :class:`CliState`, then Click's own ``ctx.color``
-    (which respects ``NO_COLOR`` and TTY detection). ``None`` means "let
-    Click decide".
+    Use before styling; command input wins, then shared state, then Click's terminal detection.
+    None means the user made no choice and Click decides from the output environment.
 
     Args:
         ctx: Current Click context.
 
     Returns:
-        ``True``/``False`` to force color on/off; ``None`` to defer to Click.
+        True or False to force colour; None means the caller should defer to Click.
     """
     parameters = getattr(ctx, "params", {})
+    # A command-local ANSI choice is the most specific preference the user supplied.
     if "ansi" in parameters:
         value = parameters["ansi"]
+        # Click may expose non-boolean test data; only a real flag value can override colour.
         if isinstance(value, bool):
             return value
     state = _state(ctx)
+    # Root-level ANSI state applies when this command did not carry its own flag value.
     if state.should_use_ansi is not None:
         return state.should_use_ansi
     return ctx.color

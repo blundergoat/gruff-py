@@ -1,7 +1,20 @@
 ---
 category: compatibility
-last_reviewed: 2026-06-09
+last_reviewed: 2026-08-11
 ---
+
+## Footgun: Baseline and hotspot schema strings are language-prefixed while every sibling uses the shared `gruff.*` name
+
+**Status:** active | **Created:** 2026-08-11 | **Evidence:** OBSERVED
+**Decision changed:** Treat `gruff-py.baseline.v1` and `gruff-py.hotspot.v1` as known divergences, not as the cross-port contract; verify against the sibling checkouts before writing or "restoring" either string.
+**Trigger phase:** READ
+**Tags:** hallucination-risk: high
+
+`src/gruffpy/analysis/schema.py` (search: `BASELINE_SCHEMA_VERSION`) emits `gruff-py.baseline.v1` and `gruff-py.hotspot.v1`, while the analysis and summary strings were migrated to the shared, unprefixed `gruff.analysis.v2` and `gruff.summary.v2`. The module docstring records that split as "unchanged" rather than as a decision, and no ADR in `.goat-flow/learning-loop/decisions/` covers it.
+
+The sibling checkouts do not agree with gruff-py on either string. gruff-ts and gruff-rs emit `gruff.baseline.v1` and `gruff.hotspot.v1`. gruff-php has already moved past both: its `BaselineStore` class (grep the gruff-php checkout for `SCHEMA_VERSION = 'gruff.baseline.v2'`) writes v2 and fails closed on v1 with "Baseline schema gruff.baseline.v1 is no longer supported". Sibling paths are deliberately not written as backticked refs here, because the learning-loop ref checker resolves those from this project root.
+
+The non-obvious failure mode is directional. `src/gruffpy/analysis/baseline.py` (search: `LEGACY_BASELINE_SCHEMA_VERSION`) accepts `gruff.baseline.v1` on read, so a sibling-written baseline loads and the divergence stays invisible locally - but every baseline gruff-py writes carries a string no sibling accepts, and gruff-php rejects the v1 form gruff-py reads. Hotspot output has no read path and no fallback at all, so `gruff-py.hotspot.v1` never matches a consumer parsing sibling hotspot reports. Naming the prefixed strings as the compatibility contract is the specific mistake to avoid; before changing either string, grep the sibling checkouts for the current constant rather than trusting a local doc.
 
 ## Footgun: Finding fingerprints depend on PHP-style JSON bytes
 
@@ -77,7 +90,7 @@ moves, six source surfaces must move together: the deciding ADR
 `src/gruffpy/cli_options.py` (search: `minimumSeverity.analyse in .gruff-py.yaml`); the validator
 accept-set in `src/gruffpy/config/loader.py` (search:
 `VALID_MINIMUM_SEVERITY_VALUES`); the init renderer in
-`src/gruffpy/command/init_config.py` (search: `_render_minimum_severity_block`);
+`src/gruffpy/command/init_config.py` (search: `_default_init_analysis_config`);
 and the dashboard state factory in `src/gruffpy/cli_dashboard.py` (search:
 `_resolve_config_dashboard_fail_on`). Two doc surfaces move alongside:
 `docs/configuration.md` (search: `Severity Gate`) and `CHANGELOG.md`

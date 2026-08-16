@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M02.5-gruff-yaml-config-v0.1.md`; cross-impl parity with gruff-php and gruff-ts, both of which use `.gruff.yaml` as their primary config surface.
+**Ticket/Context:** 0.1 `.gruff.yaml` config-surface delivery; cross-impl parity with gruff-php and gruff-ts, both of which use `.gruff.yaml` as their primary config surface.
 
 ## Decision
 
@@ -52,7 +52,7 @@ gruff-php and gruff-ts ship with `.gruff.yaml` as the canonical config. Python u
 
 - `pyyaml>=6.0` becomes a runtime dependency (~500KB install). `safe_load` only - no arbitrary tag construction. Crosses the Ask First boundary in `CLAUDE.md` for `pyproject.toml` dependency edits.
 - `[tool.gruff-py.rules]` in TOML uses keys like `"size.file-length"` (quoted because of the dot). In YAML, the same key is `rules.size.file-length` (unquoted; dots in YAML keys are legal). Both forms produce the same `AnalysisConfig` shape.
-- Cross-impl JSON byte-equivalence (per `.goat-flow/footguns/compatibility.md`) is unaffected - config affects WHICH rules run, not the JSON shape they emit.
+- Cross-impl JSON byte-equivalence (per `.goat-flow/learning-loop/footguns/compatibility.md`) is unaffected - config affects WHICH rules run, not the JSON shape they emit.
 
 ## Reversibility
 

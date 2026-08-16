@@ -13,18 +13,23 @@ from typing import Any
 from gruffpy.rule.correctness.substring_vocabulary_match_rule import SubstringVocabularyMatchRule
 from gruffpy.rule.correctness.unsafe_numeric_coercion_rule import UnsafeNumericCoercionRule
 from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
+from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
 from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
+from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
+from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
+from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
 from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
     UnsanitizedMarkdownInterpolationRule,
 )
+from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
@@ -136,10 +141,9 @@ def custom_docs_for(
 ) -> RuleDocs | None:
     """Resolve hand-curated docs for rules whose generated text would mislead.
 
-    Deliberately a flat one-arm-per-rule ``match``: the branch count tracks
-    the curated-docs roster, not logic depth, and the literal rule-class arms
-    keep each curated entry greppable from its rule. Extracting the table
-    into a dict would trade that greppability for the same line count.
+    Deliberately a flat ``match``: literal rule-class arms keep curated entries
+    greppable, while closely related rule families share branch-free dispatch
+    when another arm would cross the repository complexity limit.
 
     Args:
         definition: Rule definition being documented.
@@ -153,12 +157,12 @@ def custom_docs_for(
             return _unsafe_numeric_coercion_docs(config_keys)
         case SubstringVocabularyMatchRule.ID:
             return _substring_vocabulary_match_docs(config_keys)
-        case UnsanitizedMarkdownInterpolationRule.ID:
-            return _unsanitized_markdown_interpolation_docs(config_keys, definition.id)
+        case UnsanitizedMarkdownInterpolationRule.ID | WeakCryptoRule.ID:
+            return _security_rule_docs(definition.id, config_keys)
         case RuntimeSysPathMutationRule.ID:
             return _runtime_sys_path_mutation_docs(config_keys)
-        case ExportedButUnreferencedRule.ID:
-            return _exported_but_unreferenced_docs(config_keys)
+        case ExportedButUnreferencedRule.ID | UnusedPrivateFunctionRule.ID:
+            return _dead_code_rule_docs(definition.id, config_keys)
         case ApiKeyPatternRule.ID:
             return _api_key_pattern_docs(config_keys)
         case GcpServiceAccountKeyRule.ID:
@@ -169,8 +173,13 @@ def custom_docs_for(
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case HungarianNotationRule.ID:
-            return _hungarian_notation_docs(config_keys)
+        case (
+            AbbreviationRule.ID
+            | BooleanPrefixRule.ID
+            | HungarianNotationRule.ID
+            | IdentifierQualityRule.ID
+        ):
+            return _naming_rule_docs(definition.id, config_keys)
         case PiiTestFixtureRule.ID:
             return _pii_test_fixture_docs(config_keys)
         case NoAssertionsRule.ID:
@@ -267,6 +276,85 @@ def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
+def _security_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch curated docs for security rules sharing one catalog arm.
+
+    Grouping these rules keeps ``custom_docs_for`` under the repository
+    cyclomatic-complexity limit, as its docstring requires.
+
+    Args:
+        rule_id: Rule being documented.
+        config_keys: Public config keys computed for the rule by the catalog.
+
+    Returns:
+        Curated ``RuleDocs`` for the requested security rule.
+    """
+    if rule_id == WeakCryptoRule.ID:
+        return _weak_crypto_docs(config_keys, rule_id)
+    return _unsanitized_markdown_interpolation_docs(config_keys, rule_id)
+
+
+def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "MD5 and SHA1 are broken for signatures, tokens, and password "
+            "material, but they remain valid for cache keys and content "
+            "digests. The rule reports them only where surrounding names or "
+            "arguments imply security-sensitive material, so non-security "
+            "digests stay quiet without configuration."
+        ),
+        fix_guidance=(
+            "Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and "
+            "SHA-256 or better for signatures and tokens. When the digest is "
+            "genuinely non-security, pass the standard-library keyword "
+            "`usedforsecurity=False` rather than suppressing the rule."
+        ),
+        bad_example="`hashlib.md5(session_token.encode()).hexdigest()`",
+        good_example=(
+            "`hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` "
+            "for a non-security digest, or a KDF for password material."
+        ),
+        confidence_rationale=(
+            "High confidence: the call target must resolve to a literal weak "
+            "algorithm, and a security-context smell in the surrounding names "
+            "or arguments is required before reporting."
+        ),
+        config_keys=config_keys,
+        security_metadata=rule_security_metadata(rule_id),
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A cache key, ETag, or content digest whose surrounding "
+                    "names (token, signature, password) read as security "
+                    "material even though the value is not a secret."
+                ),
+                mitigation=(
+                    "Pass `usedforsecurity=False`, which is the standard "
+                    "library's own non-security marker and suppresses the "
+                    "MD5/SHA1 finding without touching rule config."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A literal `usedforsecurity=False` on MD5 or SHA1 "
+                    "suppresses the finding even when the hashed value looks "
+                    "like a password. This is deliberate: the keyword is the "
+                    "caller's explicit non-security declaration, and only a "
+                    "literal False qualifies - True, 0, None, and dynamic "
+                    "flags all keep the finding."
+                ),
+                mitigation=(
+                    "Fast password hashing is covered separately: SHA-256 and "
+                    "SHA-512 on password material still report regardless of "
+                    "the keyword, because no non-security reading of that "
+                    "call exists. Review `usedforsecurity=False` on MD5 in "
+                    "code review rather than expecting this rule to reject it."
+                ),
+            ),
+        ),
+    )
+
+
 def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     return RuleDocs(
         rationale=(
@@ -309,6 +397,75 @@ def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             ),
         ),
     )
+
+
+def _unused_private_function_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain when users can trust or configure private-function findings.
+
+    Args:
+        config_keys: Public settings shown in generated docs; empty means none.
+
+    Returns:
+        Curated guidance for interpreting and resolving this rule's findings.
+    """
+    return RuleDocs(
+        rationale=(
+            "A private function with no local caller may still be live through "
+            "another module's callback registry. Full-project scans therefore "
+            "require a real load after an unambiguously resolved import; narrow "
+            "scans omit module-level deletion advice because external callers "
+            "are outside the evidence boundary."
+        ),
+        fix_guidance=(
+            "Delete a genuinely unused function or add the real caller. For "
+            "framework, plugin, or string-based loading that static imports cannot "
+            "prove, use allowlists.deadCode.symbols, decorators, or paths with the "
+            "project's documented reason."
+        ),
+        bad_example=(
+            "`def _legacy_handler(): ...` with no local call and no loaded import "
+            "anywhere in a full-project scan."
+        ),
+        good_example=(
+            "`from handlers import _format_failed; REGISTRY['failed'] = "
+            "_format_failed` in another scanned module."
+        ),
+        confidence_rationale=(
+            "Medium confidence when full-project import coverage is complete; "
+            "LOW when a real load maps to duplicate scanned module paths. "
+            "Private methods retain class-local evidence in every scan scope."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A framework or plugin loads the private function dynamically "
+                    "through a string, entry point, or unscanned external package."
+                ),
+                mitigation=(
+                    "Add the exact symbol, framework decorator, or path to "
+                    "allowlists.deadCode rather than adding a fake static caller."
+                ),
+            ),
+        ),
+    )
+
+
+def _dead_code_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch one project-scope dead-code card without growing catalog branching.
+
+    Args:
+        rule_id: Matched dead-code rule id; empty or unknown ids never reach here.
+        config_keys: Public settings shown in generated docs; empty means none.
+
+    Returns:
+        Curated guidance for the matched project-scope dead-code rule.
+    """
+    documentation_factory = {
+        ExportedButUnreferencedRule.ID: _exported_but_unreferenced_docs,
+        UnusedPrivateFunctionRule.ID: _unused_private_function_docs,
+    }[rule_id]
+    return documentation_factory(config_keys)
 
 
 def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
@@ -358,6 +515,15 @@ def _unsanitized_markdown_interpolation_docs(
     config_keys: tuple[str, ...],
     rule_id: str,
 ) -> RuleDocs:
+    """Explain slot-specific sanitizer trust in CLI cards and generated rule docs.
+
+    Args:
+        config_keys: Public option paths; empty would leave users no tuning route.
+        rule_id: Registered rule id used to attach standard security metadata.
+
+    Returns:
+        User guidance including the deliberate HTML-escaper retained positive.
+    """
     return RuleDocs(
         rationale=(
             "A markdown link label of `evil](https://bad.example) trick` turns "
@@ -367,17 +533,20 @@ def _unsanitized_markdown_interpolation_docs(
             "sanitiser."
         ),
         fix_guidance=(
-            "Escape `]`, `(`, and `)` (or percent-encode the url) in a helper "
-            "and wrap every interpolated link slot in it; any wrapping call "
-            "satisfies the rule."
+            "Use an exact helper from the matching labelSanitizers or urlSanitizers "
+            "list. Labels must remove `]`, `(`, and `)`; URLs may use the default "
+            "urllib.parse.quote/quote_plus calls without a delimiter-preserving "
+            "`safe` argument."
         ),
         bad_example='`f"[{title}]({url})"` with `title`/`url` from parameters.',
-        good_example='`f"[{markdown_label(title)}]({markdown_url(url)})"`',
+        good_example=(
+            '`f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with '
+            "markdown_label listed under labelSanitizers."
+        ),
         confidence_rationale=(
-            "Medium confidence: any wrapping call is accepted as the "
-            "sanitiser proxy, so unrelated calls also satisfy the rule; the "
-            "gruff-py corpus sweep found zero candidate sites, so the rule "
-            "ships enabled."
+            "Medium confidence: exact configured call targets, same-function "
+            "assignments, one-hop aliases, and conservative branch/rebinding "
+            "joins replace the former any-call proxy."
         ),
         config_keys=config_keys,
         security_metadata=rule_security_metadata(rule_id),
@@ -393,6 +562,19 @@ def _unsanitized_markdown_interpolation_docs(
                     "and self-documenting), or suppress with "
                     "`# gruff: disable=security.unsanitized-markdown-interpolation` "
                     "plus the constraint."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A label wrapped in html.escape(...) or markupsafe.escape(...) "
+                    "still reports under the strict default. This is deliberate: "
+                    "HTML escaping leaves `]`, `(`, and `)` unchanged, so "
+                    "`evil](https://bad.example)` still injects a Markdown link."
+                ),
+                mitigation=(
+                    "After verifying that the project's renderer makes HTML escaping "
+                    "sufficient, add the exact helper to labelSanitizers; otherwise use "
+                    "a Markdown-aware label sanitizer."
                 ),
             ),
         ),
@@ -444,6 +626,111 @@ def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> R
     )
 
 
+def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch one curated naming-rule card without growing catalog branching.
+
+    Args:
+        rule_id: Matched naming rule id; empty or unknown ids are never routed here.
+        config_keys: Public tuning paths; empty means the rule has no user knobs.
+
+    Returns:
+        Curated documentation for the matched naming rule.
+    """
+    documentation_factory = {
+        AbbreviationRule.ID: _abbreviation_docs,
+        BooleanPrefixRule.ID: _boolean_prefix_docs,
+        HungarianNotationRule.ID: _hungarian_notation_docs,
+        IdentifierQualityRule.ID: _identifier_quality_docs,
+    }[rule_id]
+    return documentation_factory(config_keys)
+
+
+def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain the global project-vocabulary escape hatch without changing its seed.
+
+    Args:
+        config_keys: Per-rule tuning paths; empty because the abbreviation
+            escape hatch is a global allowlist documented in prose instead.
+
+    Returns:
+        Rule guidance that separates unclear shorthand from documented domain vocabulary.
+    """
+    return RuleDocs(
+        rationale=(
+            "A curated blocklist catches shorthand that makes unfamiliar code harder "
+            "to verify, while recognizing that abbreviations can be clear vocabulary "
+            "inside a specific project or framework."
+        ),
+        fix_guidance=(
+            "Rename unclear shorthand to the full domain term. When a token is "
+            "intentional project vocabulary, document its meaning and add the exact "
+            "token to allowlists.acceptedAbbreviations; a configured list replaces "
+            "the universal seed rather than extending it."
+        ),
+        bad_example=(
+            "`def load_cfg(ctx): ...` uses shorthand without documenting what the "
+            "configuration or context represents."
+        ),
+        good_example=(
+            "Use `context`, `config`, `request`, and `index`, or document exact "
+            "project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`."
+        ),
+        confidence_rationale=(
+            "Medium confidence: matches come from a narrow curated token list, but "
+            "tokens such as ctx, cfg, req, and idx can be idiomatic project vocabulary."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A blocked token such as ctx, cfg, req, or idx is established "
+                    "project vocabulary with one documented meaning."
+                ),
+                mitigation=(
+                    "Add the exact token to allowlists.acceptedAbbreviations with its "
+                    "project meaning; retain any universal seed values the project uses "
+                    "because configured values replace the seed."
+                ),
+            ),
+        ),
+    )
+
+
+def _boolean_prefix_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain exact scalar Boolean annotation matching to scan users.
+
+    Args:
+        config_keys: Public tuning paths; empty means users cannot preserve an
+            external boundary name through configuration.
+
+    Returns:
+        Rule guidance covering supported shapes and deliberate collisions.
+    """
+    return RuleDocs(
+        rationale=(
+            "Scalar Boolean returns and attributes are easier to review when "
+            "their names reveal predicate intent; container members and callable "
+            "return parameters do not impose that naming contract."
+        ),
+        fix_guidance=(
+            "Rename a scalar Boolean declaration with an is_/has_/can_-style "
+            "predicate, or list an exact external boundary name under "
+            "acceptedBooleanNames."
+        ),
+        bad_example="`def status() -> bool: ...` hides the Boolean result in a noun.",
+        good_example=(
+            "`def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` "
+            "is outside this scalar rule."
+        ),
+        confidence_rationale=(
+            "Medium confidence: exact bool, optional-bool, and Annotated scalar "
+            "syntax is matched structurally, including bounded quoted annotations; "
+            "containers, callables, mixed unions, and arbitrary generics stay quiet."
+        ),
+        config_keys=config_keys,
+    )
+
+
 def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     return RuleDocs(
         rationale=(
@@ -457,6 +744,38 @@ def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         good_example='`message = "hello"` or `num_users = len(users)`',
         confidence_rationale=(
             "High confidence: narrow type-prefix vocabulary; count abbreviations are excluded."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain the narrow placeholder vocabulary shown to scan users.
+
+    Args:
+        config_keys: Public tuning paths; empty means no user options exist.
+
+    Returns:
+        Rule guidance separating draft names from legitimate domain words.
+    """
+    return RuleDocs(
+        rationale=(
+            "Draft names such as temp, foo, and result1 hide the value or role a "
+            "reviewer must verify; legitimate domain words such as todo do not "
+            "prove unfinished work from the identifier alone."
+        ),
+        fix_guidance=(
+            "Rename first-token or numbered placeholders for their concrete role; "
+            "keep legitimate queue/domain names when they already describe the value."
+        ),
+        bad_example="`temp = load_tasks()` or `result1 = publish()` hides the value's role.",
+        good_example=(
+            "`pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be "
+            "legitimate work-queue vocabulary."
+        ),
+        confidence_rationale=(
+            "High confidence: only reviewed first-token placeholder families and "
+            "numbered base-plus-digit shapes match; exact domain words are not inferred."
         ),
         config_keys=config_keys,
     )

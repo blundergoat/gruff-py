@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.4.1` registers 130 rules in `RuleRegistry.defaults()`.
+gruff-py `0.5.0` registers 130 rules across 12 pillars in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -348,11 +348,11 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `dead-code.unused-private-function` protects the dead-code pillar by flagging unused private function before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported unused private function directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `dead-code.unused-private-function` leaves unused private function unaddressed.
-- Good example: Code that satisfies `dead-code.unused-private-function` makes unused private function explicit or simpler.
+- Rationale: A private function with no local caller may still be live through another module's callback registry. Full-project scans therefore require a real load after an unambiguously resolved import; narrow scans omit module-level deletion advice because external callers are outside the evidence boundary.
+- Fix guidance: Delete a genuinely unused function or add the real caller. For framework, plugin, or string-based loading that static imports cannot prove, use allowlists.deadCode.symbols, decorators, or paths with the project's documented reason.
+- Confidence rationale: Medium confidence when full-project import coverage is complete; LOW when a real load maps to duplicate scanned module paths. Private methods retain class-local evidence in every scan scope.
+- Bad example: `def _legacy_handler(): ...` with no local call and no loaded import anywhere in a full-project scan.
+- Good example: `from handlers import _format_failed; REGISTRY['failed'] = _format_failed` in another scanned module.
 
 ### `design.runtime-sys-path-mutation`
 
@@ -595,11 +595,11 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `naming.abbreviation` protects the naming pillar by flagging abbreviation before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported abbreviation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `naming.abbreviation` leaves abbreviation unaddressed.
-- Good example: Code that satisfies `naming.abbreviation` makes abbreviation explicit or simpler.
+- Rationale: A curated blocklist catches shorthand that makes unfamiliar code harder to verify, while recognizing that abbreviations can be clear vocabulary inside a specific project or framework.
+- Fix guidance: Rename unclear shorthand to the full domain term. When a token is intentional project vocabulary, document its meaning and add the exact token to allowlists.acceptedAbbreviations; a configured list replaces the universal seed rather than extending it.
+- Confidence rationale: Medium confidence: matches come from a narrow curated token list, but tokens such as ctx, cfg, req, and idx can be idiomatic project vocabulary.
+- Bad example: `def load_cfg(ctx): ...` uses shorthand without documenting what the configuration or context represents.
+- Good example: Use `context`, `config`, `request`, and `index`, or document exact project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`.
 
 ### `naming.boolean-prefix`
 
@@ -609,12 +609,12 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `naming.boolean-prefix` protects the naming pillar by flagging boolean prefix before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported boolean prefix directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: Scalar Boolean returns and attributes are easier to review when their names reveal predicate intent; container members and callable return parameters do not impose that naming contract.
+- Fix guidance: Rename a scalar Boolean declaration with an is_/has_/can_-style predicate, or list an exact external boundary name under acceptedBooleanNames.
+- Confidence rationale: Medium confidence: exact bool, optional-bool, and Annotated scalar syntax is matched structurally, including bounded quoted annotations; containers, callables, mixed unions, and arbitrary generics stay quiet.
 - Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
-- Bad example: Code that triggers `naming.boolean-prefix` leaves boolean prefix unaddressed.
-- Good example: Code that satisfies `naming.boolean-prefix` makes boolean prefix explicit or simpler.
+- Bad example: `def status() -> bool: ...` hides the Boolean result in a noun.
+- Good example: `def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` is outside this scalar rule.
 
 ### `naming.confusing-name`
 
@@ -668,11 +668,11 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `naming.identifier-quality` protects the naming pillar by flagging identifier quality before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported identifier quality directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `naming.identifier-quality` leaves identifier quality unaddressed.
-- Good example: Code that satisfies `naming.identifier-quality` makes identifier quality explicit or simpler.
+- Rationale: Draft names such as temp, foo, and result1 hide the value or role a reviewer must verify; legitimate domain words such as todo do not prove unfinished work from the identifier alone.
+- Fix guidance: Rename first-token or numbered placeholders for their concrete role; keep legitimate queue/domain names when they already describe the value.
+- Confidence rationale: High confidence: only reviewed first-token placeholder families and numbered base-plus-digit shapes match; exact domain words are not inferred.
+- Bad example: `temp = load_tasks()` or `result1 = publish()` hides the value's role.
+- Good example: `pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary.
 
 ### `naming.module-name-mismatch`
 
@@ -1184,10 +1184,11 @@ except ValueError:
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: A markdown link label of `evil](https://bad.example) trick` turns `[{label}]({url})` into markdown whose first parsed link is the injected pair, redirecting the rendered target; the rule exists to catch the one interpolation site that forgot the project's sanitiser.
-- Fix guidance: Escape `]`, `(`, and `)` (or percent-encode the url) in a helper and wrap every interpolated link slot in it; any wrapping call satisfies the rule.
-- Confidence rationale: Medium confidence: any wrapping call is accepted as the sanitiser proxy, so unrelated calls also satisfy the rule; the gruff-py corpus sweep found zero candidate sites, so the rule ships enabled.
+- Fix guidance: Use an exact helper from the matching labelSanitizers or urlSanitizers list. Labels must remove `]`, `(`, and `)`; URLs may use the default urllib.parse.quote/quote_plus calls without a delimiter-preserving `safe` argument.
+- Confidence rationale: Medium confidence: exact configured call targets, same-function assignments, one-hop aliases, and conservative branch/rebinding joins replace the former any-call proxy.
+- Options: `labelSanitizers` = `[]`, `urlSanitizers` = `['urllib.parse.quote', 'urllib.parse.quote_plus']`
 - Bad example: `f"[{title}]({url})"` with `title`/`url` from parameters.
-- Good example: `f"[{markdown_label(title)}]({markdown_url(url)})"`
+- Good example: `f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with markdown_label listed under labelSanitizers.
 
 ### `security.variable-import`
 
@@ -1211,12 +1212,12 @@ except ValueError:
 - Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: `security.weak-crypto` protects the security pillar by flagging weak cryptographic hash before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported weak cryptographic hash directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Rationale: MD5 and SHA1 are broken for signatures, tokens, and password material, but they remain valid for cache keys and content digests. The rule reports them only where surrounding names or arguments imply security-sensitive material, so non-security digests stay quiet without configuration.
+- Fix guidance: Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and SHA-256 or better for signatures and tokens. When the digest is genuinely non-security, pass the standard-library keyword `usedforsecurity=False` rather than suppressing the rule.
+- Confidence rationale: High confidence: the call target must resolve to a literal weak algorithm, and a security-context smell in the surrounding names or arguments is required before reporting.
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
-- Bad example: Code that triggers `security.weak-crypto` leaves weak cryptographic hash unaddressed.
-- Good example: Code that satisfies `security.weak-crypto` makes weak cryptographic hash explicit or simpler.
+- Bad example: `hashlib.md5(session_token.encode()).hexdigest()`
+- Good example: `hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` for a non-security digest, or a KDF for password material.
 
 ### `security.xxe`
 

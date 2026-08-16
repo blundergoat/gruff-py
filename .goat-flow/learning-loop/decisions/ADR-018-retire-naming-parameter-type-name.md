@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-25
-**Cross-implementation pair:** `gruff-php/.goat-flow/decisions/ADR-014-retire-naming-parameter-type-name.md` (same decision in the sibling port).
+**Cross-implementation pair:** `gruff-php/.goat-flow/learning-loop/decisions/ADR-014-retire-naming-parameter-type-name.md` (same decision in the sibling port).
 
 ## Decision
 

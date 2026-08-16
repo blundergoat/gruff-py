@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-14
+last_reviewed: 2026-08-16
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -130,27 +130,140 @@ requires `child in current.body` before treating the ancestor as exempting.
 
 ## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
 
-**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 6 | **Latest occurrence:** 2026-08-11
+**Decision changed:** Resolve import aliases and equivalent syntax at the file
+boundary before classifying individual nodes.
 
-When a rule keys on a syntactic shape to *exempt* a node or treat a guard as
-"safe", it tends to match only the simplest spelling and miss equivalent ones -
-producing false positives (an unrecognized safe form fires) or false negatives.
-PR #8's new rules hit this five times: `_is_main_guard`
+When a rule keys on a syntactic shape to exempt a node or treat a guard as safe,
+it tends to match only the simplest spelling and miss equivalent ones. The
+result can be a false positive when an unrecognised safe form fires, or a false
+negative when an unsafe variant bypasses detection.
+
+PR #8's rules hit this five times: `_is_main_guard`
 (`runtime_sys_path_mutation_rule.py`) matched `__name__ == "__main__"` but not
-the compound `... and __package__ is None` (`ast.BoolOp`); `_annotation_head_names`
-(`substring_vocabulary_match_rule.py`) matched `dict[..]` and `X | None` but not
-`Optional[list]` / `Union[..., dict]`; the `isdigit()` guard
-(`unsafe_numeric_coercion_rule.py`, search: `_ascii_guarded_names`) ignored an
-`and x.isascii()` modifier that makes the conversion safe; `_is_test_unit`
-(`exported_but_unreferenced_rule.py`) matched the `test_` prefix but not the
-`*_test.py` suffix; and `_names_in_expression` (same file) collected `Name`
-nodes from a quoted annotation but not `Attribute` attrs, dropping
-`"models.Payload"`'s `Payload`.
+the compound `... and __package__ is None` (`ast.BoolOp`);
+`_annotation_head_names` (`substring_vocabulary_match_rule.py`) matched
+`dict[..]` and `X | None` but not `Optional[list]` or `Union[..., dict]`; the
+`isdigit()` guard (`unsafe_numeric_coercion_rule.py`, search:
+`_ascii_guarded_names`) ignored an `and x.isascii()` modifier that makes the
+conversion safe; `_is_test_unit` (`exported_but_unreferenced_rule.py`) matched
+the `test_` prefix but not the `*_test.py` suffix; and `_names_in_expression`
+(same file) collected `Name` nodes from a quoted annotation but not `Attribute`
+names, dropping `"models.Payload"`'s `Payload`.
 
-When matching a shape for an exemption or a safe-guard, enumerate the equivalent
-spellings up front: `BoolOp` conjunctions, `Optional`/`Union` wrappers, prefix
-*and* suffix filename conventions, attribute as well as bare-name references,
-and modifier predicates (`isascii`) that change safety.
+The sixth incident was measured on 2026-08-11.
+`test-quality.no-assertions` recognised `pytest.raises(...)` but not
+`from pytest import raises`, a renamed direct import, or
+`import pytest as pt; pt.raises(...)`. The pytest corpus contained two false
+findings from the direct-import form.
+`src/gruffpy/rule/test_quality/no_assertions_rule.py` (search:
+`_imported_pytest_assertion_callees`) now resolves supported helper bindings
+once per source file before it inspects test functions.
+
+When matching a shape for an exemption or safe guard, enumerate equivalent
+spellings up front: aliases and direct imports, Boolean conjunctions,
+`Optional`/`Union` wrappers, prefix and suffix filename conventions, attribute
+and bare-name references, and modifier predicates that change safety. Add one
+focused fixture for each supported spelling and rerun the real source that
+exposed the gap.
+
+## Footgun: fixed sentinels collide with decoded user literals
+
+**Status:** active | **Created:** 2026-07-16 | **Evidence:** OBSERVED
+
+Rules that flatten an AST template into text can accidentally use a character
+the parser also produces from a user literal. The Markdown interpolation rule
+used one NUL character for every dynamic slot; a source escape such as
+`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
+then exceeded the dynamic-expression list and both f-string and `.format()`
+paths raised `IndexError` instead of returning findings.
+
+The repaired implementation chooses a NUL run absent from each template's
+decoded static text in
+`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py`
+(search: `def _placeholder_absent_from`) and threads that exact token through
+slot matching. The collision controls live in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
+(search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`).
+
+When an analyzer needs an internal marker inside user-derived text, prove the
+marker is absent after parsing and decoding, or keep structural components
+separate instead of using a fixed sentinel. Test the literal marker itself in
+every supported source spelling.
+
+## Footgun: flow-state walkers dispatch on statement type and silently skip whole node classes
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** OBSERVED
+
+A walker that advances analysis state through an `isinstance` chain handles only
+the node classes it names. Any statement type missing from the chain falls
+through to the generic expression recorder, which snapshots children against the
+pre-statement state and never applies their bindings. The failure is
+two-directional and silent: a proved value assigned inside the skipped statement
+reads as raw, and a rebinding that should destroy trust stays invisible.
+
+`MarkdownSanitizerProvenance._scan_control_statement`
+(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py`, search:
+`def _scan_control_statement`) named `If`, `For`, `While`, `With`, and `Try` but
+omitted `ast.Match` and `ast.TryStar`. A sanitizer rebound inside a `case` body
+stayed trusted, so `security.unsanitized-markdown-interpolation` suppressed the
+finding for a defeated helper. Ruff, mypy, and the full pytest run stayed green
+throughout, because no fixture used either statement form.
+
+`ast.TryStar` is the specific language trap: `except*` parses to a distinct node
+class that is not a subclass of `ast.Try`, so `isinstance(node, ast.Try)`
+excludes it. `ast.AsyncFor` and `ast.AsyncWith` behave the same way against their
+synchronous counterparts.
+
+Mitigation: when adding or extending a statement dispatcher, enumerate every
+statement type that binds a name or branches control flow, and add `match` and
+`except*` fixtures beside the `if` and `try` ones. Regression coverage lives in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
+(search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`).
+
+## Footgun: dropping a `global`/`nonlocal` store silently makes a name immortal
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** In a scope-walking name resolver, record a
+`global`/`nonlocal` store in the scope that wrote it and teach the resolver the
+name is not local; never skip the store at index time.
+**Trigger phase:** ACT
+
+A resolver that walks scopes outward decides two things per name: which scope
+owns it, and which store was last before the load. `global`/`nonlocal` splits
+those two answers apart - the owning scope is outer, but the ordering evidence
+lives in the inner body. Code that handles the split by skipping the store
+keeps only the outer answer, so every later load in that body resolves to the
+outer import as if the store never ran.
+
+`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py`,
+search: `def _build_binding_events`) did exactly that: a `continue` dropped any
+store whose name appeared in `_externally_declared_names`. Four shapes of
+`dead-code.unused-private-function` finding went missing, measured against the
+registry path - `global` then store then load in one function; the same at
+module scope; `nonlocal` against an import in an enclosing function; and `del`
+through a `global`. Ruff, mypy, and 3193 pytest cases stayed green throughout,
+because the one regression test in the file pinned only the load-before-store
+ordering.
+
+The inverse fix is equally wrong and does not announce itself either. Routing
+the store to the outer scope as an ordinary event makes a module-level load
+resolve against a store written inside a function that may never be called, so
+a genuinely used producer gets deletion advice. Source position is not
+execution order across a scope boundary. The shape to keep working is a
+`global` store inside a function defined *above* a module-level load of the
+same name.
+
+Mitigation: record the store in the declaring scope, and give the resolver the
+declared-name map so a load with no store ordered before it keeps walking
+outward instead of reading the name as a local
+(`_active_binding`, search: `def _active_binding`). Cover both directions -
+loads the store precedes, and loads it cannot be ordered against. Regression
+coverage lives in
+`tests/unit/rule/dead_code/test_unused_private_function_rule.py` (search:
+`test_project_global_store_before_a_later_load_hides_the_import` and
+`test_project_global_store_does_not_reach_a_module_level_load`).
 
 ## Resolved Entries
 

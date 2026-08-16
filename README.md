@@ -20,19 +20,19 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 
 | Field | Value |
 | --- | --- |
-| Release line | `0.4.1` package line |
+| Release line | `0.5.0` package line |
 | Runtime | Python `3.11+` |
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | 130 rules across 12 pillars |
+| Rule catalogue | Generated from `RuleRegistry.defaults()`; see [Rules](docs/rules.md) |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
 | Analysis schema | `gruff.analysis.v2` |
 | Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
 | Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `minimumSeverity:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
-Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v2` schema string; baseline, hotspot, and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/reporting.md`](docs/reporting.md#json) for the input set.
+Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v2` schema string; baseline, hotspot, and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/output-formats.md`](docs/output-formats.md#finding-identity) for the input set.
 
 ## Requirements
 
@@ -96,6 +96,8 @@ Open `http://127.0.0.1:8765/` for the dashboard.
 | `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
 | `list-rules [rule-id]` | Print rule metadata as text or JSON; pass a rule id for explain mode. |
 | `check-ignore [paths...]` | Report whether each path is ignored, and why (exit codes mirror `git check-ignore`). |
+| `hook [paths...]` | Run analysis for a coding-agent hook; emits `gruff.hook.v1` JSON. |
+| `migrate-config` | Rewrite legacy config keys to the current schema; `--dry-run` prints the diff. |
 | `dashboard [paths...]` | Serve the local browser dashboard. |
 | `completion [shell]` | Print a shell completion script. |
 | `list`, `help` | Show command lists and command-specific help. |
@@ -125,6 +127,10 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 | `0` | Run completed and no finding met `--fail-on`. |
 | `1` | At least one finding met `--fail-on`. |
 | `2` | Fatal diagnostic such as input, parse, configuration, baseline, or diff failure. |
+
+`--fail-on` gates findings only. A parse error is a fatal diagnostic and exits
+`2` even with `--fail-on none`; `none` makes findings report-only, not
+diagnostics.
 
 `analyse` defaults to `--fail-on advisory`. Set
 `minimumSeverity.analyse` in `.gruff-py.yaml` to change the default
@@ -178,24 +184,17 @@ See [Configuration](docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-The v0.4.1 catalogue contains 130 rules across 12 pillars:
+[`docs/rules.md`](docs/rules.md) is the generated source for current rule IDs,
+declared pillars, defaults, and catalog totals. Its header and pillar table come
+from `RuleRegistry.defaults()` rather than hand-maintained README values.
 
-| Pillar | Rules |
-| --- | ---: |
-| `size` | 7 |
-| `complexity` | 4 |
-| `maintainability` | 1 |
-| `correctness` | 2 |
-| `dead-code` | 11 |
-| `modernisation` | 1 |
-| `naming` | 9 |
-| `documentation` | 13 |
-| `security` | 35 |
-| `sensitive-data` | 11 |
-| `test-quality` | 34 |
-| `design` | 2 |
+Verify the committed catalog without rewriting it:
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.4.1`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+```bash
+uv run python -m gruffpy.command.rule_docs --check docs/rules.md
+```
+
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.5.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 
@@ -231,7 +230,11 @@ discloses when findings are hidden by these filters.
 uv run gruff-py dashboard src/ --host 127.0.0.1 --port 8765 --report-interactive
 ```
 
-The dashboard serves a local browser UI for repeated scans. It has no authentication and is intended for local development; keep it on loopback unless the network is trusted. See [Dashboard](docs/dashboard.md) for supported controls and safety notes.
+The dashboard serves a local browser UI for repeated scans. It has no
+authentication and is intended for local development. Non-loopback hosts are
+refused unless you pass `--allow-public`; that acknowledgment warns that remote
+users can scan any directory readable by the server process. See
+[Dashboard](docs/dashboard.md) for supported controls and safety notes.
 
 In polyglot repositories, remember that `gruff-go`, `gruff-php`, and `gruff-py` all default to port `8765`; use `--port` when running multiple dashboards at the same time.
 
@@ -241,7 +244,7 @@ Default scans are local source inspections. `gruff-py` parses Python source and 
 
 ## Stability Contract
 
-The `0.1.x` line treats rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, SARIF rendering, and CLI exit semantics as compatibility-sensitive. Breaking changes should be tagged as a future minor release and recorded in [`CHANGELOG.md`](CHANGELOG.md).
+Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, `gruff.hook.v1`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## How It Compares
 
@@ -272,6 +275,11 @@ make check
 - [Changelog](CHANGELOG.md)
 - [Configuration](docs/configuration.md)
 - [Rules](docs/rules.md)
+- [Output formats](docs/output-formats.md)
+- [Coding-agent hook](docs/agent-hook.md)
+- [CI integration](docs/ci-integration.md)
+- [Triage a noisy run](docs/triage.md)
+- [Explain a rule](docs/explain.md)
 - [Reports](docs/reporting.md)
 - [Dashboard](docs/dashboard.md)
 - [Release checklist](docs/releasing.md)

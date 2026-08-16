@@ -2,7 +2,7 @@
 
 **Status:** Superseded by [ADR-024](ADR-024-retire-god-method-composite.md)
 **Date:** 2026-05-13
-**Ticket/Context:** cross-impl parity with gruff-php's `Scoring/CompositeFindingFactory`; `.goat-flow/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
+**Ticket/Context:** cross-impl parity with gruff-php's `Scoring/CompositeFindingFactory`; `.goat-flow/learning-loop/footguns/compatibility.md` "Finding fingerprints depend on PHP-style JSON bytes".
 
 > **Superseded (2026-05-31):** the `design.god-method` composite this ADR fingerprinted has been retired (ADR-024). `CompositeFindingFactory` and its synthesis path are deleted; P5 root-cause clustering now rests entirely on `ScoreCalculator`'s `CORRELATED_COMPLEXITY_RULES`. The `fingerprint_for(...)` algorithm and its gruff-php byte-compatibility are unchanged and still govern every remaining finding — only this composite's input mapping no longer applies. The record below is retained as history.
 
@@ -33,7 +33,7 @@ where `<N>` is `len(componentRules)`. The message is NOT part of the fingerprint
 
 `design.god-method` is a *synthesised* finding emitted by `CompositeFindingFactory` after per-unit rules run. The factory groups per-unit findings by `(file_path, symbol)` and emits a composite when at least one finding from each of {Size, Complexity} pillars co-occurs on the same symbol.
 
-Without a locked fingerprint policy, the order of contributing rule IDs in `metadata.componentRules`, the chosen `line`/`endLine`, or a divergent `message` template silently produce different fingerprints between gruff-py and gruff-php. That breaks every cross-impl baseline (per `.goat-flow/footguns/compatibility.md`).
+Without a locked fingerprint policy, the order of contributing rule IDs in `metadata.componentRules`, the chosen `line`/`endLine`, or a divergent `message` template silently produce different fingerprints between gruff-py and gruff-php. That breaks every cross-impl baseline (per `.goat-flow/learning-loop/footguns/compatibility.md`).
 
 ## Failure Mode Comparison
 

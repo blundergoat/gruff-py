@@ -5,19 +5,32 @@
 # gruff: disable-file=test-quality.conditional-logic -- branches mirror the --format axis.
 # gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
 # gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
+"""Exercise complete CLI journeys from user-entered options to visible output.
+
+The smoke suite protects every command's parsing, diagnostics, and report shape.
+Dashboard launch tests replace the blocking HTTP server while preserving the
+startup messages and validation a terminal user sees.
+"""
+
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 import yaml
 from click.testing import CliRunner
 
+import gruffpy.cli as cli_module
 from gruffpy.cli import _normalise_optional_diff_args, main
+from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.loader import ConfigLoader
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.version import VERSION
 
 _EXPECTED_ROOT_COMMANDS = (
@@ -44,6 +57,7 @@ _EXPECTED_GLOBAL_OPTIONS = (
     "--verbose",
 )
 _GIT = shutil.which("git")
+_DASHBOARD_COMPAT_HELP_PHRASE = "accepted for cross-port compatibility; not implemented in gruff-py"
 
 
 def test_cli_help_lists_analyse_command():
@@ -130,6 +144,29 @@ def test_cli_command_help_lists_symfony_style_global_options():
         "missing_sarif": False,
         "leaked_docstring_sections": [],
     }
+
+
+def test_analyse_help_explains_fail_on_diagnostic_boundary() -> None:
+    """Keep parse failures outside the findings-only severity gate."""
+    result = CliRunner().invoke(main, ["analyse", "--help"])
+    searchable_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert "Gates findings only; parse errors exit 2 even with --fail-on none." in searchable_help
+
+
+def test_cli_dashboard_help_labels_accepted_compatibility_options_honestly() -> None:
+    """Tell dashboard users that accepted family flags have no Python behavior."""
+    result = CliRunner().invoke(main, ["dashboard", "--help"])
+    searchable_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert f"--diff Diff-only dashboard scans: {_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
+    assert (
+        "--scan-timeout INTEGER Dashboard scan timeouts: "
+        f"{_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
+    )
+    assert result.output.count(_DASHBOARD_COMPAT_HELP_PHRASE) == 2
 
 
 def test_analyse_changed_ranges_returns_only_changed_method_findings(
@@ -264,8 +301,13 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     (tmp_path / "README.md").write_text("# Test project\n")
     src = tmp_path / "src"
     src.mkdir()
+    # The module docstring is free under substantive counting, so 1008 route entries keep the
+    # file at exactly 1010 substantive lines for the metadata pin below.
     (src / "sample.py").write_text(
-        '"""Utilities for changed-region file length regression coverage."""\n' + "\n" * 1008
+        '"""Utilities for changed-region file length regression coverage."""\n'
+        + "ROUTES = [\n"
+        + "".join(f'    "route-{index}",\n' for index in range(1008))
+        + "]\n"
     )
     base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
 
@@ -691,6 +733,12 @@ def test_cli_list_rules_explain_rule_with_no_related_rules_shows_none_marker():
 
 
 def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a loadable starter config when the user's project has none.
+
+    Args:
+        tmp_path: Empty project that receives the generated config.
+        monkeypatch: Fixture that makes the empty project the CLI working directory.
+    """
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(main, ["init"])
@@ -700,6 +748,16 @@ def test_cli_init_writes_default_config(tmp_path: Path, monkeypatch: pytest.Monk
     assert target.exists()
     assert result.output.startswith(f"Wrote {target}\n")
     assert "gruff-py analyse . --generate-baseline" in result.output
+
+
+def test_cli_init_help_describes_canonical_regeneration_boundary() -> None:
+    """Tell users force preserves settings but may rewrite comments and layout."""
+    result = CliRunner().invoke(main, ["init", "--help"])
+    user_visible_help = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert "all supported settings" in user_visible_help
+    assert "comments and formatting may change" in user_visible_help
 
 
 def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -746,6 +804,139 @@ def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
     assert not (tmp_path / ".gruff-py.yaml").exists()
 
 
+def _stub_dashboard_server(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_host: str,
+) -> Mock:
+    """Replace the blocking HTTP server while preserving the user's launch flow.
+
+    Args:
+        monkeypatch: Fixture that redirects dashboard startup to the test double.
+        dashboard_host: Non-empty host shown back to the user in the startup URL.
+
+    Returns:
+        Server-factory mock used to prove whether startup was attempted; never None.
+    """
+    dashboard_server = Mock()
+    dashboard_server.server_address = (dashboard_host, 8765)
+    dashboard_server_factory = Mock(return_value=dashboard_server)
+    monkeypatch.setattr(cli_module, "_dashboard_server", dashboard_server_factory)
+    return dashboard_server_factory
+
+
+@pytest.mark.parametrize(
+    "compatibility_arguments",
+    (("--diff",), ("--scan-timeout", "5")),
+    ids=("diff", "scan-timeout"),
+)
+def test_cli_dashboard_compatibility_options_still_reach_server_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    compatibility_arguments: tuple[str, ...],
+) -> None:
+    """Keep family-compatible flags parseable without claiming they affect scans.
+
+    Args:
+        monkeypatch: Fixture that prevents a real dashboard server from blocking.
+        compatibility_arguments: Non-empty dashboard flag invocation under test.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, "127.0.0.1")
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", *compatibility_arguments],
+    )
+
+    assert result.exit_code == 0, result.output
+    dashboard_server_factory.assert_called_once()
+
+
+@pytest.mark.parametrize("remote_dashboard_host", ("0.0.0.0", "192.0.2.1"))
+def test_cli_dashboard_refuses_remote_host_without_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    remote_dashboard_host: str,
+) -> None:
+    """Stop users from exposing an unauthenticated dashboard accidentally.
+
+    Args:
+        monkeypatch: Fixture that proves refusal happens before server startup.
+        remote_dashboard_host: Non-loopback host the user attempted to expose.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, remote_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", "--host", remote_dashboard_host],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "Refusing to bind the unauthenticated dashboard to non-loopback host "
+        f'"{remote_dashboard_host}". Pass --allow-public to acknowledge that remote '
+        "users can scan any directory readable by this process."
+    ) in result.output
+    dashboard_server_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("remote_dashboard_host", ("0.0.0.0", "192.0.2.1"))
+def test_cli_dashboard_warns_after_remote_host_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    remote_dashboard_host: str,
+) -> None:
+    """Warn users who intentionally acknowledge remote dashboard exposure.
+
+    Args:
+        monkeypatch: Fixture that lets the acknowledged launch finish immediately.
+        remote_dashboard_host: Non-loopback host accepted after acknowledgment.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, remote_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "dashboard",
+            "--no-config",
+            "--host",
+            remote_dashboard_host,
+            "--allow-public",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        f"WARNING: binding dashboard to non-loopback host {remote_dashboard_host}; remote "
+        "users can access the unauthenticated dashboard and scan any directory readable "
+        "by this process."
+    ) in result.output
+    dashboard_server_factory.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "loopback_dashboard_host",
+    ("127.0.0.1", "localhost", "::1", "127.0.0.2"),
+    ids=("ipv4", "hostname", "ipv6", "ipv4-range"),
+)
+def test_cli_dashboard_keeps_loopback_hosts_available_without_acknowledgment(
+    monkeypatch: pytest.MonkeyPatch,
+    loopback_dashboard_host: str,
+) -> None:
+    """Keep local dashboard launches unchanged and free of exposure warnings.
+
+    Args:
+        monkeypatch: Fixture that lets each local launch finish immediately.
+        loopback_dashboard_host: Local-only host that needs no acknowledgment.
+    """
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, loopback_dashboard_host)
+
+    result = CliRunner().invoke(
+        main,
+        ["dashboard", "--no-config", "--host", loopback_dashboard_host],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING: binding dashboard to non-loopback host" not in result.output
+    dashboard_server_factory.assert_called_once()
+
+
 def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -766,63 +957,197 @@ def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
     assert not (bogus / ".gruff-py.yaml").exists()
 
 
+def test_cli_dashboard_rejects_invalid_port_before_prompting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject an invalid port before config initialization or server startup.
+
+    Args:
+        monkeypatch: Fixture that records both side effects after option parsing.
+    """
+    config_prompt = Mock()
+    monkeypatch.setattr(cli_module, "_maybe_prompt_to_init_config", config_prompt)
+    dashboard_server_factory = _stub_dashboard_server(monkeypatch, "127.0.0.1")
+
+    result = CliRunner().invoke(main, ["dashboard", "--port", "65536"])
+
+    assert result.exit_code == 1, result.output
+    assert "--port must be between 0 and 65535." in result.output
+    config_prompt.assert_not_called()
+    dashboard_server_factory.assert_not_called()
+
+
 def test_cli_init_force_regenerates_existing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Canonically rewrite valid target YAML without changing loaded settings.
+
+    Args:
+        tmp_path: Project containing the valid target to regenerate.
+        monkeypatch: Fixture that makes the target's project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    existing.write_text("# do not clobber\n")
+    existing.write_text(
+        "# comments may be canonicalised\n"
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "minimumPythonVersion: '3.12'\n"
+    )
+    defaults = AnalysisConfig.from_registry(RuleRegistry.defaults())
+    before, _ = ConfigLoader(tmp_path, defaults, strict=True).load()
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
+    after, _ = ConfigLoader(tmp_path, defaults, strict=True).load()
     assert result.exit_code == 0, result.output
     assert existing.read_text().startswith("# gruff-py configuration - .gruff-py.yaml\n")
+    assert after == before
 
 
 def test_cli_init_force_preserves_existing_ignore_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Keep the user's exact ignore semantics without adding starter entries.
+
+    Args:
+        tmp_path: Project containing user-selected ignore patterns.
+        monkeypatch: Fixture that makes the configured project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
     existing.write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
         "paths:\n"
         "  ignore:\n"
         "    - generated/**\n"
         "    - .codex/\n"
-        "rules:\n"
-        "  docs.missing-module-docstring:\n"
-        "    enabled: false\n"
     )
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
     document = yaml.safe_load(existing.read_text())
     assert result.exit_code == 0, result.output
-    assert document["paths"]["ignore"] == [
-        "generated/**",
-        ".codex/",
-        ".agents/",
-        ".antigravitycli/",
-        ".claude/",
-        ".github/",
-        ".goat-flow/",
-        "tests/fixtures/**",
-    ]
+    assert document["paths"]["ignore"] == ["generated/**", ".codex/"]
 
 
 def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Fail closed when existing target YAML cannot be loaded strictly.
+
+    Args:
+        tmp_path: Project containing a malformed user ignore value.
+        monkeypatch: Fixture that makes the malformed project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    original = "paths:\n  ignore: generated/**\n"
+    original = "schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore: generated/**\n"
     existing.write_text(original)
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
     assert result.exit_code != 0
-    assert "paths.ignore must be a list of strings" in result.output
+    assert "[tool.gruff-py.paths].ignore must be a list of strings" in result.output
     assert existing.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("source_name", "source_text", "expected_guidance"),
+    (
+        (
+            ".gruff.yaml",
+            "schemaVersion: gruff-py.config.v0.1\n",
+            "migrate-config",
+        ),
+        (
+            "pyproject.toml",
+            '[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n',
+            "TOML",
+        ),
+        (
+            "pyproject.toml",
+            '[tool.gruff]\nschemaVersion = "gruff-py.config.v0.1"\n',
+            "TOML",
+        ),
+    ),
+    ids=("legacy-yaml", "modern-toml", "legacy-toml"),
+)
+def test_cli_init_force_rejects_different_config_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_name: str,
+    source_text: str,
+    expected_guidance: str,
+) -> None:
+    """Refuse to shadow the user's authoritative legacy YAML or TOML source.
+
+    Args:
+        tmp_path: Project containing the alternate config source.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+        source_name: Discovered legacy YAML or pyproject filename.
+        source_text: Original source bytes that must remain unchanged.
+        expected_guidance: YAML migration or TOML hand-edit term shown to the user.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / source_name
+    source.write_text(source_text)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert expected_guidance in result.output
+    assert source.read_text() == source_text
+    assert not (tmp_path / ".gruff-py.yaml").exists()
+
+
+def test_cli_init_force_leaves_unknown_target_bytes_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Leave schema-incompatible target bytes untouched after CLI failure.
+
+    Args:
+        tmp_path: Project containing unknown target configuration.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / ".gruff-py.yaml"
+    original = "schemaVersion: gruff-py.config.v0.1\nunknownSurface: keep-me\n"
+    target.write_text(original)
+
+    result = CliRunner().invoke(main, ["init", "--force"])
+
+    assert result.exit_code != 0
+    assert "left unchanged" in result.output
+    assert target.read_text() == original
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="chmod 0 read-denial only enforced on POSIX as a non-root user.",
+)
+def test_cli_init_force_rejects_unreadable_pyproject_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Create no YAML when the user's discovered TOML cannot be read.
+
+    Args:
+        tmp_path: Project containing an unreadable pyproject source.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "pyproject.toml"
+    source.write_text('[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n')
+    source.chmod(0)
+    try:
+        result = CliRunner().invoke(main, ["init", "--force"])
+    finally:
+        source.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    assert result.exit_code != 0
+    assert "pyproject.toml" in result.output
+    assert not (tmp_path / ".gruff-py.yaml").exists()
 
 
 def _seed_sample_project(tmp_path: Path) -> None:
@@ -935,7 +1260,8 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "missing required 'schemaVersion'" in result.stderr
-    assert "gruff-py init --force" in result.stderr
+    assert "gruff-py migrate-config" in result.stderr
+    assert "init --force" not in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -953,7 +1279,8 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "schemaVersion 'gruff-py.config.v0.99'" in result.stderr
-    assert "gruff-py init --force" in result.stderr
+    assert "gruff-py migrate-config" in result.stderr
+    assert "init --force" not in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -1444,6 +1771,112 @@ def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "Score" in result.output
 
 
+def test_analyse_full_project_unused_private_function_keeps_registered_load_live(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Omit deletion advice when another scanned module registers the function.
+
+    Args:
+        tmp_path: Temporary full project containing producer and consumer modules.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+
+    Returns:
+        None; CLI assertions prove the registered function stays out of the report.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_text("# Registry fixture\n")
+    package = tmp_path / "src" / "mail"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('"""Mail package for registry coverage."""\n')
+    (package / "formatters.py").write_text(
+        '"""Format failed-email batches for the delivery UI."""\n\n'
+        "def _format_failed_emails():\n"
+        "    return []\n\n"
+        "def _unused_control():\n"
+        "    return None\n"
+    )
+    (package / "registry.py").write_text(
+        '"""Register formatters selected by the delivery UI."""\n\n'
+        "from mail.formatters import _format_failed_emails\n\n"
+        "FAILED_EMAIL_FORMATTERS = {'default': _format_failed_emails}\n"
+    )
+
+    analysis_command = [
+        "analyse",
+        "--format",
+        "json",
+        "--fail-on",
+        "none",
+        "--no-config",
+        "--no-baseline",
+        "--include-rule",
+        "dead-code.unused-private-function",
+        ".",
+    ]
+    result = CliRunner().invoke(main, analysis_command)
+    repeated_result = CliRunner().invoke(main, analysis_command)
+
+    assert result.exit_code == 0, result.output
+    assert repeated_result.exit_code == 0, repeated_result.output
+    assert repeated_result.output == result.output
+    findings = json.loads(result.output)["findings"]
+    assert [finding["symbol"] for finding in findings] == ["_unused_control"]
+    assert findings[0]["metadata"]["externalReferenceCoverage"] == "complete"
+
+
+def test_analyse_partial_unused_private_function_suppresses_module_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep class-local advice but omit module deletion advice on a narrow scan.
+
+    Args:
+        tmp_path: Temporary project containing module and class-private helpers.
+        monkeypatch: Fixture that makes the project the CLI working directory.
+
+    Returns:
+        None; CLI assertions prove narrow-scan suppression and caveat rendering.
+    """
+    monkeypatch.chdir(tmp_path)
+    source_root = tmp_path / "src"
+    source_root.mkdir()
+    target = source_root / "service.py"
+    target.write_text(
+        '"""Serve user requests through local helper functions."""\n\n'
+        "def _module_helper():\n"
+        "    return 1\n\n"
+        "class Service:\n"
+        "    def _method_helper(self):\n"
+        "        return 2\n\n"
+        "    def run(self):\n"
+        "        return 3\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--include-rule",
+            "dead-code.unused-private-function",
+            "src/service.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0, result.output
+    assert [finding["symbol"] for finding in payload["findings"]] == ["Service._method_helper"]
+    assert payload["run"]["partialContextCaveat"] == (
+        "partial project scan: project-wide rules may need full-project context"
+    )
+
+
 def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1460,9 +1893,12 @@ def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
 
     assert result.exit_code == 0, result.output
     assert (
-        "Caveat: partial project scan: project-wide rules may need full-project context"
+        "Scan context\n"
+        "  Caveat: partial project scan: project-wide rules may need full-project context"
         in result.output
     )
+    assert "  Scoring mode: full-project" in result.output
+    assert "  Scope: full-project" not in result.output
 
 
 def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
@@ -1566,10 +2002,16 @@ def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
     assert payload["diff"]["enabled"] is True
 
 
-def test_analyse_tokenizer_error_file_reports_parse_error_without_crash(
+def test_analyse_parse_error_exits_2_even_with_fail_on_none(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Prove fatal parse diagnostics bypass the findings-only severity gate.
+
+    Args:
+        tmp_path: Project root containing a tokenizer-invalid Python file.
+        monkeypatch: Fixture that makes the temporary project the CLI working directory.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1583,6 +2025,43 @@ def test_analyse_tokenizer_error_file_reports_parse_error_without_crash(
     assert result.exit_code == 2, result.output
     payload = json.loads(result.output)
     assert payload["summary"]["parseErrors"] >= 1
+
+
+def test_cli_parse_error_keeps_redacted_source_text_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Show the parse diagnostic and a safe raw-source finding for a broken file.
+
+    Args:
+        tmp_path: Temporary project root containing the broken Python file.
+        monkeypatch: Fixture that makes the temporary project the CLI working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    (src / "broken.py").write_text(f"AWS_KEY = {aws_key!r}\neval('payload')\ndef broken(:\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "text",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "[PARSE-ERROR]" in result.output
+    assert "sensitive-data.aws-access-key" in result.output
+    assert "security.dangerous-function-call" not in result.output
+    assert aws_key not in result.output
 
 
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
@@ -1882,6 +2361,15 @@ _LEGACY_THRESHOLD_YAML = (
     "      error: 30\n"
 )
 
+_UNKNOWN_OPTION_YAML = (
+    "schemaVersion: gruff-py.config.v0.1\n"
+    "rules:\n"
+    "  docs.dataclass-attributes:\n"
+    "    options:\n"
+    "      min_fields: 6\n"
+    "      allowBullet: false\n"
+)
+
 
 def _write_clean_legacy_project(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# demo\n")
@@ -1891,6 +2379,21 @@ def _write_clean_legacy_project(tmp_path: Path) -> None:
         '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
     )
     (tmp_path / ".gruff-py.yaml").write_text(_LEGACY_THRESHOLD_YAML)
+
+
+def _write_clean_unknown_option_project(project_root: Path) -> None:
+    """Create a finding-free project whose config contains one option typo.
+
+    Args:
+        project_root: Empty project that receives source, README, and config files.
+    """
+    (project_root / "README.md").write_text("# demo\n")
+    source_root = project_root / "src"
+    source_root.mkdir()
+    (source_root / "ok.py").write_text(
+        '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
+    )
+    (project_root / ".gruff-py.yaml").write_text(_UNKNOWN_OPTION_YAML)
 
 
 def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
@@ -1906,6 +2409,32 @@ def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
     assert "Accepted keys" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
+
+
+def test_cli_analyse_warns_on_unknown_option_and_proceeds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tell users the exact ignored option while a normal scan continues.
+
+    Args:
+        tmp_path: Finding-free project containing a valid option and one typo.
+        monkeypatch: Fixture that makes the configured project the working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write_clean_unknown_option_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "src"])
+
+    assert result.exit_code == 0, result.output
+    assert "Config warnings" in result.stdout
+    assert 'Unknown option "rules.docs.dataclass-attributes.options.allowBullet".' in result.stderr
+    assert (
+        "Option ignored; registered defaults and valid sibling options still apply."
+        in result.stderr
+    )
+    assert "options.allow_bullets" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_cli_analyse_json_carries_additive_config_warnings(

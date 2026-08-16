@@ -10,7 +10,9 @@ Proves that:
 
 import json
 import re
+from dataclasses import replace
 
+from gruffpy.parser.analysis_unit import ParseDiagnostic
 from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
@@ -80,6 +82,21 @@ def test_aws_key_fires_on_json_file_via_text_seam():
     # A Python-only rule must NOT fire on this text file. complexity rules require
     # an AST; they should be inert when tree is None.
     assert "complexity.cyclomatic" not in text_findings
+
+
+def test_parse_broken_python_still_runs_source_text_rules():
+    """Keep raw-source findings while AST-only rules stay out of a broken file."""
+    source = f"AWS_KEY = {_AWS_KEY!r}\neval('payload')\ndef broken(:\n"
+    broken_unit = replace(
+        make_unit(source),
+        diagnostics=(ParseDiagnostic(message="invalid syntax", line=3),),
+    )
+
+    findings = RuleRegistry.defaults().analyse([broken_unit], default_ctx())
+    rule_ids = {finding.rule_id for finding in findings}
+
+    assert "sensitive-data.aws-access-key" in rule_ids
+    assert "security.dangerous-function-call" not in rule_ids
 
 
 def test_redaction_in_json_output_never_leaks_raw_secret():

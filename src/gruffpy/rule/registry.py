@@ -155,12 +155,15 @@ class RuleRegistry:
         python_rules: list[Rule],
         text_rules: list[SourceTextRule],
     ) -> list[Finding]:
-        if unit.has_parse_errors():
-            return []
+        """Run only the rule families supported by this unit's parse state."""
         findings: list[Finding] = []
-        if unit.file.is_python():
+        # A broken Python file retains useful source text but has no AST that
+        # Python rules can inspect honestly.
+        if unit.file.is_python() and not unit.has_parse_errors():
+            # Parseable Python units follow the existing per-file AST rule order.
             for rule in python_rules:
                 findings.extend(rule.analyse(unit, context))
+        # Every discovered unit keeps its original source, including parser failures.
         for rule in text_rules:
             findings.extend(rule.analyse(unit, context))
         return findings

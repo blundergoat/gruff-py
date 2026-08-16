@@ -1,3 +1,5 @@
+import pytest
+
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
@@ -19,12 +21,14 @@ def test_assert_skipped():
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
-def test_unittest_assert_method_skipped():
+def test_unittest_assert_method_counts_as_assertion() -> None:
+    """Recognise unittest assertion methods as test verification."""
     src = "class TestX:\n    def test_a(self):\n        self.assertEqual(1, 1)\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
-def test_pytest_raises_block_skipped():
+def test_pytest_raises_block_counts_as_assertion() -> None:
+    """Recognise the canonical pytest exception context manager."""
     src = (
         "import pytest\n"
         "def test_foo():\n"
@@ -34,13 +38,52 @@ def test_pytest_raises_block_skipped():
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
-def test_parametrized_pytest_raises_context_skipped():
+def test_parametrized_pytest_raises_context_counts_as_assertion() -> None:
+    """Recognise a verification context constructed by parametrisation."""
     src = (
         "import pytest\n"
         '@pytest.mark.parametrize("exception", [pytest.raises(ValueError)])\n'
         "def test_foo(exception):\n"
         "    with exception:\n"
         "        raise ValueError\n"
+    )
+    assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from pytest import raises\n"
+        "def test_value():\n"
+        "    with raises(ValueError):\n"
+        "        int('not-an-integer')\n",
+        "from pytest import raises as expect_error\n"
+        "def test_value():\n"
+        "    with expect_error(ValueError):\n"
+        "        int('not-an-integer')\n",
+        "import pytest as test_framework\n"
+        "def test_value():\n"
+        "    with test_framework.raises(ValueError):\n"
+        "        int('not-an-integer')\n",
+    ],
+    ids=["direct-helper", "renamed-helper", "renamed-module"],
+)
+def test_imported_pytest_raises_counts_as_assertion(source: str) -> None:
+    """Recognise exception assertions through each supported pytest import form.
+
+    Args:
+        source: Test source using a direct, renamed, or module-aliased pytest helper.
+    """
+    assert NoAssertionsRule().analyse(make_unit(source), default_ctx()) == []
+
+
+def test_pytest_warns_block_counts_as_assertion() -> None:
+    """Recognise the canonical pytest warning context manager."""
+    src = (
+        "import pytest\n"
+        "def test_value():\n"
+        "    with pytest.warns(UserWarning):\n"
+        "        warn_user()\n"
     )
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 

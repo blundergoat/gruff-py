@@ -78,7 +78,7 @@ A subset of this is buildable **today** without ADR-009's preset layer: per-rule
 
 **Cross-implementation:** threshold/severity/confidence are per-impl *policy*, not part of the byte-for-byte contract (fingerprints, score math, grade bands, schema strings, exit codes, rule IDs are). The `default` profile stays aligned with gruff-php. The `reviewability` profile *concept* should ideally be shared across gruff-php/-ts/-rs/-go so cross-impl users get consistent agent-hook behaviour; gruff-py can ship first (as ADR-020 did) and siblings adopt the same profile name and posture. Until then this is a deliberate, documented per-impl profile, not accidental drift.
 
-**Follow-ups (not decided here):** (1) the maintainability-index scale reconciliation with gruff-php; (2) ADR-009 promotion from `Proposed` to `Accepted`; (3) the agent-generated calibration corpus and its threshold outputs (a `.goat-flow/tasks/` milestone, not an ADR).
+**Follow-ups (not decided here):** (1) the maintainability-index scale reconciliation with gruff-php; (2) ADR-009 promotion from `Proposed` to `Accepted`; (3) the agent-generated calibration corpus and its threshold outputs (a `.goat-flow/plans/` milestone, not an ADR).
 
 ## Reversibility
 

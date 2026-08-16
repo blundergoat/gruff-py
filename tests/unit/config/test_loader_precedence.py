@@ -1,4 +1,9 @@
-"""Precedence + format-detection tests for ConfigLoader (ADR-006)."""
+"""Config precedence and shared YAML/TOML validation journeys.
+
+Users reach this loader through every command that reads project settings.
+These tests keep source discovery, rule overrides, lenient warnings, and strict
+failures identical across both supported configuration formats (ADR-006).
+"""
 
 from pathlib import Path
 
@@ -22,6 +27,204 @@ _LEGACY_PYPROJECT_THRESHOLD = 444
 _MODERN_PYPROJECT_THRESHOLD = 222
 _EXPLICIT_YAML_THRESHOLD = 555
 _EXPLICIT_TOML_THRESHOLD = 222
+_CUSTOM_MIN_FIELDS = 6
+
+_VALID_OPTION_CONFIGS = (
+    pytest.param(
+        ".gruff-py.yaml",
+        f"""schemaVersion: gruff-py.config.v0.1
+rules:
+  docs.dataclass-attributes:
+    options:
+      min_fields: {_CUSTOM_MIN_FIELDS}
+""",
+        id="yaml",
+    ),
+    pytest.param(
+        "pyproject.toml",
+        f"""[tool.gruff-py]
+schemaVersion = "gruff-py.config.v0.1"
+[tool.gruff-py.rules."docs.dataclass-attributes".options]
+min_fields = {_CUSTOM_MIN_FIELDS}
+""",
+        id="toml",
+    ),
+)
+
+_UNKNOWN_OPTION_CONFIGS = (
+    pytest.param(
+        ".gruff-py.yaml",
+        f"""schemaVersion: gruff-py.config.v0.1
+rules:
+  docs.dataclass-attributes:
+    options:
+      min_fields: {_CUSTOM_MIN_FIELDS}
+      allowBullet: false
+""",
+        "rules.docs.dataclass-attributes.options.allowBullet",
+        id="yaml-with-defaults",
+    ),
+    pytest.param(
+        "pyproject.toml",
+        f"""[tool.gruff-py]
+schemaVersion = "gruff-py.config.v0.1"
+[tool.gruff-py.rules."docs.dataclass-attributes".options]
+min_fields = {_CUSTOM_MIN_FIELDS}
+allowBullet = false
+""",
+        "rules.docs.dataclass-attributes.options.allowBullet",
+        id="toml-with-defaults",
+    ),
+)
+
+_NO_DEFAULT_OPTION_CONFIGS = (
+    pytest.param(
+        ".gruff-py.yaml",
+        """schemaVersion: gruff-py.config.v0.1
+rules:
+  size.file-length:
+    options:
+      unexpected: true
+""",
+        "rules.size.file-length.options.unexpected",
+        id="yaml-without-defaults",
+    ),
+    pytest.param(
+        "pyproject.toml",
+        """[tool.gruff-py]
+schemaVersion = "gruff-py.config.v0.1"
+[tool.gruff-py.rules."size.file-length".options]
+unexpected = true
+""",
+        "rules.size.file-length.options.unexpected",
+        id="toml-without-defaults",
+    ),
+)
+
+
+def _write_option_config(project_root: Path, config_name: str, config_text: str) -> None:
+    """Place one YAML or TOML option fixture where a user would configure it.
+
+    Args:
+        project_root: Temporary project that receives the config source.
+        config_name: Discovery filename for the selected format; never empty.
+        config_text: Complete non-empty config content to load.
+    """
+    (project_root / config_name).write_text(config_text)
+
+
+@pytest.mark.parametrize(("config_name", "config_text"), _VALID_OPTION_CONFIGS)
+def test_valid_option_override_loads_identically_from_yaml_and_toml(
+    tmp_path: Path,
+    config_name: str,
+    config_text: str,
+) -> None:
+    """Apply a registered option override without warning in either format.
+
+    Args:
+        tmp_path: Project receiving the YAML or TOML source.
+        config_name: Discovery filename selected by the parameterized format.
+        config_text: Valid option override expressed in that format.
+    """
+    _write_option_config(tmp_path, config_name, config_text)
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    config, _ = loader.load()
+
+    assert loader.warnings == ()
+    assert config.rules["docs.dataclass-attributes"].options["min_fields"] == _CUSTOM_MIN_FIELDS
+
+
+@pytest.mark.parametrize(
+    ("config_name", "config_text", "unknown_option_key"),
+    _UNKNOWN_OPTION_CONFIGS,
+)
+def test_unknown_option_yaml_or_toml_warns_and_keeps_valid_sibling(
+    tmp_path: Path,
+    config_name: str,
+    config_text: str,
+    unknown_option_key: str,
+) -> None:
+    """Ignore a typo while preserving a valid sibling and registered defaults.
+
+    Args:
+        tmp_path: Project receiving the YAML or TOML source.
+        config_name: Discovery filename selected by the parameterized format.
+        config_text: Config containing one valid option and one typo.
+        unknown_option_key: Full dotted typo users must see in the warning.
+    """
+    _write_option_config(tmp_path, config_name, config_text)
+    defaults = _defaults()
+    loader = ConfigLoader(tmp_path, defaults)
+
+    config, _ = loader.load()
+    options = config.rules["docs.dataclass-attributes"].options
+
+    assert len(loader.warnings) == 1
+    assert unknown_option_key in loader.warnings[0]
+    assert options["min_fields"] == _CUSTOM_MIN_FIELDS
+    assert (
+        options["allow_bullets"]
+        is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
+    )
+    assert "allowBullet" not in options
+
+
+@pytest.mark.parametrize(
+    ("config_name", "config_text", "unknown_option_key"),
+    _NO_DEFAULT_OPTION_CONFIGS,
+)
+def test_unknown_option_yaml_or_toml_is_rejected_when_rule_has_no_options(
+    tmp_path: Path,
+    config_name: str,
+    config_text: str,
+    unknown_option_key: str,
+) -> None:
+    """Reject every option on a rule that registered no option surface.
+
+    Args:
+        tmp_path: Project receiving the YAML or TOML source.
+        config_name: Discovery filename selected by the parameterized format.
+        config_text: Config containing an option where none are supported.
+        unknown_option_key: Full dotted key users must see in the warning.
+    """
+    _write_option_config(tmp_path, config_name, config_text)
+    loader = ConfigLoader(tmp_path, _defaults())
+
+    config, _ = loader.load()
+
+    assert len(loader.warnings) == 1
+    assert unknown_option_key in loader.warnings[0]
+    assert config.rules["size.file-length"].options == {}
+
+
+@pytest.mark.parametrize(
+    ("config_name", "config_text", "unknown_option_key"),
+    (*_UNKNOWN_OPTION_CONFIGS, *_NO_DEFAULT_OPTION_CONFIGS),
+)
+def test_unknown_option_yaml_or_toml_raises_with_accepted_names_under_strict(
+    tmp_path: Path,
+    config_name: str,
+    config_text: str,
+    unknown_option_key: str,
+) -> None:
+    """Stop strict commands with the typo and registry-derived alternatives.
+
+    Args:
+        tmp_path: Project receiving the YAML or TOML source.
+        config_name: Discovery filename selected by the parameterized format.
+        config_text: Config containing an unsupported option key.
+        unknown_option_key: Full dotted key users must see in the error.
+    """
+    _write_option_config(tmp_path, config_name, config_text)
+
+    with pytest.raises(ConfigError) as error:
+        ConfigLoader(tmp_path, _defaults(), strict=True).load()
+
+    message = str(error.value)
+    assert unknown_option_key in message
+    assert "Accepted keys" in message
+    assert "ignored" not in message.lower()
 
 
 def test_no_config_files_returns_defaults_and_none_source(tmp_path: Path):

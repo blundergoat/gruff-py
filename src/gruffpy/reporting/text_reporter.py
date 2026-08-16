@@ -1,4 +1,8 @@
-"""Renders an AnalysisReport as plain text for terminal output."""
+"""Render one analysis journey as plain text for terminal review.
+
+The reporter keeps the family score/finding block stable while adding Python
+run details that help users distinguish scan context from scoring mode.
+"""
 
 import shlex
 
@@ -9,7 +13,11 @@ from gruffpy.version import TOOL_NAME
 
 
 class TextReporter:
-    """Render an analysis report as the plain-text terminal output for ``gruff-py analyse``."""
+    """Present an analysis report in the default terminal-friendly layout.
+
+    Use this reporter when a user runs ``gruff-py analyse`` without selecting
+    a machine-readable or browser format.
+    """
 
     def render(self, report: AnalysisReport) -> str:
         """Render *report* as the terminal-friendly default ``gruff-py analyse`` output.
@@ -42,9 +50,10 @@ class TextReporter:
         _append_config_warnings(lines, report)
         _append_diagnostics(lines, report.diagnostics)
         _append_baseline(lines, report)
-        _append_partial_context_caveat(lines, report)
         _append_score(lines, report, counts)
         _append_findings(lines, report.findings)
+        _append_scoring_mode(lines, report)
+        _append_partial_context_caveat(lines, report)
 
         lines.append("")
         lines.append("Summary")
@@ -147,14 +156,52 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
 
 
 def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> None:
+    """Append the runner's partial-project warning as the user's scan context.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey.
+        report: Run result; a missing caveat means no scan-context claim is shown.
+
+    Returns:
+        None; the supplied output list is updated only when a caveat exists.
+    """
+    # No caveat means the runner cannot claim either partial or full scan context.
     if report.partial_context_caveat is None:
         return
     lines.append("")
-    lines.append("Scope")
+    lines.append("Scan context")
     lines.append(f"  Caveat: {report.partial_context_caveat}")
 
 
+def _append_scoring_mode(lines: list[str], report: AnalysisReport) -> None:
+    """Show how the displayed score was calculated after frozen finding output.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey.
+        report: Run result; a missing score means no scoring mode can be shown.
+
+    Returns:
+        None; the supplied output list receives a mode only when a score exists.
+    """
+    # A diagnostic-only run has no score, so users have no scoring mode to review.
+    if report.score is None:
+        return
+    lines.append("")
+    lines.append(f"  Scoring mode: {report.score.scope}")
+
+
 def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, int]) -> None:
+    """Append the stable score block for the user's quality review.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey.
+        report: Run result; a missing score means no score block is rendered.
+        counts: Displayed finding counts used by the family summary line.
+
+    Returns:
+        None; the supplied output list receives the score presentation in place.
+    """
+    # A diagnostic-only report may have no score for the user to review.
     if report.score is None:
         return
     lines.append("")
@@ -162,6 +209,7 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
     lines.append(
         f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
     )
+    # Active display filters explain why shown findings differ from score inputs.
     if report.hidden_by_display_filter > 0:
         finding_label = (
             f"{counts['total']} shown ({report.hidden_by_display_filter} hidden by display "
@@ -173,9 +221,10 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
         f"  Findings: {finding_label} · {counts['error']} error · "
         f"{counts['warning']} warning · {counts['advisory']} advisory"
     )
-    lines.append(f"  Scope: {report.score.scope}")
     lines.append("  Pillars:")
+    # Each pillar row lets the user trace the composite back to one quality area.
     for pillar in report.score.pillars:
+        # A non-applicable pillar has no grade, so the terminal shows n/a explicitly.
         if pillar.grade is None:
             grade_letter = "n/a"
             grade_score = "n/a"

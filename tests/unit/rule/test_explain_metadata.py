@@ -1,4 +1,8 @@
-"""Unit coverage for the M04 explain-mode metadata: related rules and option_descriptions."""
+"""Keep rule explanations aligned with the options users can configure.
+
+The catalog feeds CLI detail cards and generated rule docs. These tests ensure
+every public option has guidance and unrelated empty metadata stays omitted.
+"""
 
 from dataclasses import FrozenInstanceError
 
@@ -17,6 +21,7 @@ _OPTION_DESCRIPTION_RULES = (
     "naming.generic-function",
     "naming.module-name-mismatch",
     "naming.short-variable",
+    "security.unsanitized-markdown-interpolation",
     "test-quality.extends-production-class",
     "test-quality.magic-number-assertion",
     "test-quality.mocking-domain-object",
@@ -76,16 +81,56 @@ def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> Non
 
 
 def test_rule_docs_to_payload_omits_option_descriptions_when_absent() -> None:
-    docs = documentation_for_rule("naming.abbreviation")  # not in 12-rule list
+    docs = documentation_for_rule("naming.abbreviation")
 
     payload = docs.to_payload()
 
     assert "optionDescriptions" not in payload
 
 
-def test_rule_docs_to_payload_omits_false_positive_shapes_when_empty() -> None:
+def test_abbreviation_docs_explain_project_vocabulary_allowlist() -> None:
+    """Route idiomatic short forms through the global, replace-not-merge allowlist."""
     docs = documentation_for_rule("naming.abbreviation")
 
+    assert docs.config_keys == ()
+    assert "allowlists.acceptedAbbreviations" in docs.fix_guidance
+    assert "replaces the universal seed" in docs.fix_guidance
+    assert all(token in docs.good_example for token in ("ctx", "cfg", "req", "idx"))
+
+
+def test_abbreviation_docs_expose_false_positive_shape() -> None:
+    """Explain when documented project vocabulary is an accepted exception."""
+    docs = documentation_for_rule("naming.abbreviation")
     payload = docs.to_payload()
 
-    assert "falsePositiveShapes" not in payload
+    assert len(docs.false_positive_shapes) == 1
+    assert "project vocabulary" in docs.false_positive_shapes[0].shape
+    assert "allowlists.acceptedAbbreviations" in docs.false_positive_shapes[0].mitigation
+    assert "falsePositiveShapes" in payload
+
+
+def test_markdown_rule_explains_slot_specific_sanitizer_options() -> None:
+    """Give users separate label and URL guidance in explain-mode payloads."""
+    docs = documentation_for_rule("security.unsanitized-markdown-interpolation")
+
+    assert "labelSanitizers" in docs.option_descriptions
+    assert "urlSanitizers" in docs.option_descriptions
+    assert any("html.escape" in shape.shape for shape in docs.false_positive_shapes)
+
+
+def test_boolean_prefix_docs_explain_scalar_annotation_boundary() -> None:
+    """Tell users why containers and callables receive no predicate-name finding."""
+    docs = documentation_for_rule("naming.boolean-prefix")
+
+    assert "Scalar Boolean" in docs.rationale
+    assert "containers" in docs.confidence_rationale
+    assert "acceptedBooleanNames" in docs.fix_guidance
+
+
+def test_identifier_quality_docs_separate_domain_names_from_placeholders() -> None:
+    """Tell users why `todo` stays valid while draft-name families still warn."""
+    docs = documentation_for_rule("naming.identifier-quality")
+
+    assert "todo" in docs.rationale
+    assert "result1" in docs.rationale
+    assert "work-queue vocabulary" in docs.good_example

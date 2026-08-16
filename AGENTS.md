@@ -1,8 +1,8 @@
-# AGENTS.md (2026-06-09)
+# AGENTS.md (2026-08-08)
 
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, and finding fingerprints remain compatible with sibling gruff implementations.
 
-goat-flow version: 1.10.1
+goat-flow version: 1.15.1
 
 ## Workspace Boundary
 
@@ -19,11 +19,13 @@ gruff-py governs AI-generated code so a human reviewer can sign off on it: guide
 5. Skill files loaded on demand from `.agents/skills/`.
 6. Peer instructions such as `CLAUDE.md` for cross-agent context only.
 
+The Never tier and accepted architecture/ADR safety constraints are non-overridable: user approval can release Ask First work, but cannot authorize commit, push, secret exposure, or bypassing safety enforcement.
+
 ## Autonomy Tiers
 **Always:** read relevant `src/gruffpy/`, `tests/`, `docs/`, `pyproject.toml`, and `.goat-flow/` files before changes; declare scope before writes; verify changed surfaces with focused commands.
-**Ask First:** before touching risky boundaries, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
+**Ask First:** before touching risky boundaries, ask and wait for approval; state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprint.py`, `src/gruffpy/analysis/schema.py`, and `tests/unit/finding/test_fingerprint.py`; CLI output or exit codes in `src/gruffpy/cli.py`, `src/gruffpy/reporting/`, and `tests/integration/test_cli_smoke.py`; dependency, packaging, or release metadata in `pyproject.toml`, `uv.lock`, `package.json`, `Makefile`, and `docs/releasing.md`; CI/hooks/agent config in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.codex/`, `.agents/skills/`, and peer agent files; public rule IDs, config keys, schemas, or output formats across `src/gruffpy/rule/`, `src/gruffpy/config/`, `src/gruffpy/finding/`, and `src/gruffpy/scoring/`.
-**Never:** edit secrets or `.env*` files; commit, push, publish, delete user work, or modify `CLAUDE.md` unless explicitly asked; use `make lint` or `make check` as non-mutating verification because ruff runs with `--fix`; invent compatibility claims without tests or code evidence.
+**Never:** if interrupted or told no changes, freeze writes first; do not edit secrets or `.env*` files; do not commit, push, publish, delete user work, or modify `CLAUDE.md` unless explicitly asked; never use `make lint` or `make check` as non-mutating verification because ruff runs with `--fix`; never invent compatibility claims without tests or code evidence.
 
 ## Hard Rules
 - If a file exists, modify it in place; never create `_modified`, `_new`, `_backup`, or `_v2` variants.
@@ -31,15 +33,17 @@ Ask First boundaries: compatibility contracts in `src/gruffpy/finding/fingerprin
 - Keep cross-file contracts consistent: rule definitions, config defaults, docs, reporters, schemas, and tests must move together.
 - Preserve evidence with semantic anchors, not stale line numbers.
 - Use real incidents and observed project files; do not add hypothetical footguns, lessons, patterns, or examples.
+- Use sub-agents only when explicitly requested; give each one objective, a structured return, and a 5-call budget.
+- Do not add features, abstractions, or error handling beyond the requested scope.
 - New rules must be registered in `RuleRegistry.defaults()` and covered by focused rule tests.
 - Fingerprint or schema compatibility edits require `uv run pytest tests/unit/finding/test_fingerprint.py` plus relevant integration tests.
 - Ambiguous requirements: present interpretations and stop before risky writes.
 
 ## Key Resources
-- Learning loop, grep before every change: `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.
+- Learning-loop indexes: `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md`; open source entries on candidate hits, then grep buckets only after the index pass or a known miss.
 - Architecture and orientation: `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`.
 - Skill reference (meta): `.goat-flow/skill-docs/`; read before changing skill contracts.
-- Tool playbooks: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`, `.goat-flow/skill-docs/skill-quality-testing/`; read before declaring a tool unavailable.
+- Tool playbooks: `.goat-flow/skill-docs/playbooks/README.md` is the full index; read the relevant tool or writing-discipline playbook when its surface is in scope.
 
 ## Essential Commands
 ```bash
@@ -53,11 +57,14 @@ uv run gruff-py analyse src/
 ```
 Use explicit non-mutating commands for release verification; `make lint` and `make check` may rewrite files.
 
+## Commit Messages
+Follow `docs/coding-standards/git-commit-message.md`; this repository uses conventional commit subjects based on recent history.
+
 ## Execution Loop: READ -> SCOPE -> ACT -> VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
-MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first. Use grep-first retrieval across `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and `.goat-flow/learning-loop/patterns/`; include `.goat-flow/learning-loop/decisions/` for architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; README, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-style.md` - the trigger is touching the surface, not the request naming it.
 
 ### SCOPE
 Declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius before writes. Expanding beyond scope means stop and re-scope.
@@ -87,14 +94,18 @@ Rationalisations to reject: see `.goat-flow/skill-docs/skill-preamble.md` for th
 ## Artifact Routing
 Requests to add durable project knowledge route to `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/`, or `.goat-flow/learning-loop/patterns/` after reading that directory's `README.md`. Runtime code, hooks, and agent config changes stay separate from documentation artifacts.
 
+## Quality Bar
+Every hot-path line must be a behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge belongs in cold-path files; strict constraints must say whether they are prose-only or mechanically enforced.
+
 ## Router Table
 | Resource | Path |
 |----------|------|
 | Project instructions | `AGENTS.md` |
-| Peer instructions | `CLAUDE.md` |
+| Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` |
 | Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
 | Skill reference (meta) | `.goat-flow/skill-docs/` - read before changing skill contracts |
-| Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index; tools e.g. browser-use, page-capture; disciplines e.g. changelog, release notes, prose style) | `.goat-flow/skill-docs/playbooks/` - read when a request names one, and BEFORE declaring a tool unavailable |
+| Skill-authoring methodology | `.goat-flow/skill-docs/skill-quality-testing/` - load the README, then the topical authoring guide |
 | Architecture | `.goat-flow/architecture.md` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Codex skills/config/hooks | `.agents/skills/`, `.codex/config.toml`, `.codex/hooks.json`, `.goat-flow/hooks/` |
@@ -102,5 +113,5 @@ Requests to add durable project knowledge route to `.goat-flow/learning-loop/foo
 | Tests | `tests/` |
 | Documentation | `README.md`, `docs/` |
 | Project config and packaging | `pyproject.toml`, `uv.lock`, `Makefile`, `package.json` |
-| CI and commit guidance | `.github/workflows/ci.yml`, `.github/git-commit-instructions.md` |
+| CI and commit guidance | `.github/workflows/ci.yml`, `docs/coding-standards/git-commit-message.md` |
 | Local workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/`, `.goat-flow/scratchpad/` |

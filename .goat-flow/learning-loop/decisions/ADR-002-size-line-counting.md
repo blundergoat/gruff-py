@@ -2,7 +2,12 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M02-size-pillar-v0.1.md`; cross-impl parity with gruff-php M05.
+**Updated:** 2026-08-08
+**Ticket/Context:** 0.1 size-pillar delivery; cross-impl parity with gruff-php M05.
+
+> **Amendment (2026-08-08) — `size.file-length` counts substantive lines.** The gruff family ratified substantive-line counting for file length on 2026-08-05, and every port shipped it: gruff-php added `src/Rules/Size/SubstantiveLineCounter.php`, and gruff-go, gruff-rs, and gruff-ts each record "file-length: 1000 substantive lines at error (family ratification)" in their changelogs. gruff-py's `size.file-length` therefore counts substantive lines — blank lines, full-line `#` comments, and PEP 257 docstrings are free, while strings outside docstring positions still count. This satisfies the coordinated-sibling-change condition in Reversibility below; it is family convergence, not gruff-py drift.
+>
+> Scope of the amendment: **`size.file-length` only.** Every other size rule, the `complexity.maintainability-index` LOC term, and the test-length rules still consume raw `lines_for_size(...)` spans exactly as ratified above. Baselines are unaffected: `fingerprint` hashes `[ruleId, file, line, endLine, column, symbol]`, the finding stays anchored at line 1, and `end_line` still reports `unit.line_count()`, so only the `metadata.lines` measurement changed. Because substantive counts are never greater than raw counts, the change can only remove findings, never add them.
 
 ## Decision
 
@@ -38,7 +43,7 @@ Python's `ast` exposes `node.end_lineno` reliably on Python ≥3.8 (gruff-py's s
 
 ## Reversibility
 
-**One-way door inside v0.1.** Reversing this decision after any size pillar v0.1 release breaks every cross-impl baseline byte-for-byte (per `.goat-flow/footguns/compatibility.md`). The decision can be revisited in v0.2 only with an explicit baseline migration path AND a coordinated gruff-php change.
+**One-way door inside v0.1.** Reversing this decision after any size pillar v0.1 release breaks every cross-impl baseline byte-for-byte (per `.goat-flow/learning-loop/footguns/compatibility.md`). The decision can be revisited in v0.2 only with an explicit baseline migration path AND a coordinated gruff-php change.
 
 Revisit triggers (any of):
 

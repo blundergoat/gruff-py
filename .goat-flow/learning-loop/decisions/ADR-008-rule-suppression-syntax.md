@@ -1,6 +1,6 @@
 # ADR-008: Rule suppression syntax
 
-**Status:** Proposed
+**Status:** Implemented
 **Date:** 2026-05-16
 **Ticket/Context:** M13 related-project study found that Pylint, Flake8, mypy,
 and Vulture all need precise suppression controls. Gruff currently has ad hoc
@@ -47,6 +47,15 @@ consistently.
 | Reuse global `# noqa` everywhere | Hides unrelated tools' intent and creates ambiguity between Ruff/Flake8/gruff. | Rejected: compatibility comments should not silently suppress gruff findings unless explicitly designed. |
 | Per-rule ad hoc suppression | Each rule drifts in syntax, line matching, and tests. | Rejected: this is the current failure mode. |
 | Pylint-style block disable/enable | More expressive, but much harder to implement and explain. | Deferred: no current gruff use case requires block-state semantics. |
+
+## Implementation
+
+Shipped as proposed. `src/gruffpy/suppression/parser.py` (search:
+`_VALID_DIRECTIVES`) parses `disable`, `disable-next`, and `disable-file` from
+`# gruff:` comments over the token stream, requires explicit rule ids
+(search: `_RULE_ID_RE`), and adds neither block semantics nor wildcard groups.
+`src/gruffpy/suppression/filter.py` (search: `apply_suppressions`) is the single
+post-execution filter, called once from `src/gruffpy/analysis/runner.py`.
 
 ## Reversibility
 

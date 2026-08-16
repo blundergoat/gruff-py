@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M05-naming-pillar-v0.1.md`; cross-impl parity with gruff-php's `src/Rule/Naming/`.
+**Ticket/Context:** 0.1 naming-pillar delivery; cross-impl parity with gruff-php's `src/Rule/Naming/`.
 
 ## Decision
 

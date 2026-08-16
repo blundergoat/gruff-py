@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Ticket/Context:** `.goat-flow/tasks/0.1/M03-complexity-pillar-v0.1.md`; cross-impl parity with gruff-php's `complexity.cognitive`.
+**Ticket/Context:** 0.1 complexity-pillar delivery; cross-impl parity with gruff-php's `complexity.cognitive`.
 
 ## Decision
 

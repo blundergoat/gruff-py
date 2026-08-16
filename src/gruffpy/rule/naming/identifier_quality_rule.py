@@ -1,15 +1,8 @@
-"""Placeholder/generic identifier patterns.
+"""Guide users away from identifiers that still read like draft placeholders.
 
-Flags names that signal "I'll rename this later" - ``temp``, ``temp1``,
-``foo``, ``bar``, ``baz``, ``result1``, ``data2``, ``thing``, ``stuff``,
-``todo``.
-
-Detection uses the identifier tokenizer:
-
-- Token ``temp`` / ``foo`` / ``bar`` / ``baz`` / ``qux`` / ``thing`` / ``stuff``
-  appearing as the first token (case-insensitive).
-- Token ``result`` / ``data`` / ``value`` / ``item`` followed by a numeric
-  token (e.g. ``result1``, ``data42``).
+The scan matches exact first tokens such as ``temp`` and ``foo``, plus numbered
+forms such as ``result1``. Legitimate domain words such as ``todo`` stay outside
+the rule because a name alone cannot prove unfinished work.
 """
 
 import ast
@@ -28,22 +21,20 @@ from gruffpy.rule.rule import Rule
 _PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
     {"temp", "foo", "bar", "baz", "qux", "thing", "stuff"}
 )
-_EXACT_PLACEHOLDER_TOKENS: frozenset[str] = frozenset({"todo"})
 _NUMBERED_BASES: frozenset[str] = frozenset({"result", "data", "value", "item", "var", "x"})
 
 
 class IdentifierQualityRule(Rule):
-    """Detect placeholder identifiers like `temp`/`foo`/`bar` or numbered names like `result1`."""
+    """Report identifiers that obscure the value or role a user will review.
+
+    Normal scans use token boundaries so domain vocabulary remains available.
+    Users act on each result by choosing a name that explains the concrete role.
+    """
 
     ID = "naming.identifier-quality"
 
     def definition(self) -> RuleDefinition:
-        """Describe the identifier-quality rule as a high-confidence warning.
-
-        High confidence because the matched tokens (``temp``, ``foo``,
-        ``bar``, numbered ``result1``, etc.) are placeholder-only - there
-        are essentially no legitimate domain uses, so false positives are
-        rare.
+        """Describe the high-confidence warning shown in rule listings.
 
         Returns:
             Definition for the identifier-quality rule under the naming pillar.
@@ -58,124 +49,210 @@ class IdentifierQualityRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag identifiers that match placeholder patterns left over from drafts.
-
-        Three families of pattern: exact ``todo`` matches; first-token
-        ``temp``/``foo``/``bar``/``baz``/``qux``/``thing``/``stuff``; and
-        numbered placeholders (``result1``, ``data42``, ``value2``). Each
-        unique ``(name, line)`` fires once.
+        """Return draft-placeholder findings visible in the user's scan.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context (unused - no thresholds).
+            unit: Parsed user file; a missing tree means no identifiers can be reviewed.
+            context: Active scan context; empty settings are valid because this rule
+                has no user options.
 
         Returns:
-            One finding per placeholder identifier (variable, parameter,
-            function, or class).
+            One finding per name/line; empty means every identifier is descriptive.
         """
+        # A parse failure leaves the UI without reliable declaration names.
         if unit.tree is None:
             return []
         definition = self.definition()
-        findings: list[Finding] = []
-        seen: set[tuple[str, int]] = set()
+        user_findings: list[Finding] = []
+        reported_identifiers: set[tuple[str, int]] = set()
 
-        for node in ast.walk(unit.tree):
-            for name, lineno in _identifiers_in(node):
-                if (name, lineno) in seen:
+        # Each parsed declaration may contribute a renameable user-facing name.
+        for candidate_node in ast.walk(unit.tree):
+            # One declaration can expose multiple parameter or assignment names.
+            for identifier_name, identifier_line in _identifiers_in(candidate_node):
+                # Duplicate AST routes must not repeat the same UI result.
+                if (identifier_name, identifier_line) in reported_identifiers:
                     continue
-                pattern = _placeholder_pattern(name)
-                if pattern is None:
+                placeholder_reason = _placeholder_pattern(identifier_name)
+                # No reason means the identifier already communicates a useful role.
+                if placeholder_reason is None:
                     continue
-                seen.add((name, lineno))
-                findings.append(
+                reported_identifiers.add((identifier_name, identifier_line))
+                user_findings.append(
                     _finding_for_identifier(
                         definition,
                         unit.file.display_path,
-                        name,
-                        lineno,
-                        pattern,
+                        identifier_name,
+                        identifier_line,
+                        placeholder_reason,
                     )
                 )
-        return findings
+        return user_findings
 
 
 def _finding_for_identifier(
     definition: RuleDefinition,
     file_path: str,
-    name: str,
-    lineno: int,
-    pattern: str,
+    identifier_name: str,
+    identifier_line: int,
+    placeholder_reason: str,
 ) -> Finding:
+    """Build the warning and rename guidance shown to a scan user.
+
+    Args:
+        definition: Stable rule policy used by reporters.
+        file_path: User-visible path; empty means the source has no display path.
+        identifier_name: Name shown in the result; empty names never reach here.
+        identifier_line: One-based source line shown to the user.
+        placeholder_reason: Token evidence explaining why the name was flagged.
+
+    Returns:
+        Complete finding with unchanged message and identity inputs.
+    """
     return Finding(
         rule_id=definition.id,
-        message=f"Identifier {name!r} is a placeholder ({pattern}).",
+        message=f"Identifier {identifier_name!r} is a placeholder ({placeholder_reason}).",
         file_path=file_path,
-        line=lineno,
+        line=identifier_line,
         severity=definition.default_severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
-        end_line=lineno,
-        symbol=name,
+        end_line=identifier_line,
+        symbol=identifier_name,
         remediation="Rename to something descriptive of the value or role.",
         secondary_pillars=definition.secondary_pillars,
-        metadata={"identifier": name, "pattern": pattern},
+        metadata={"identifier": identifier_name, "pattern": placeholder_reason},
     )
 
 
-def _placeholder_pattern(name: str) -> str | None:
-    if name.startswith("__") and name.endswith("__"):
+def _placeholder_pattern(identifier_name: str) -> str | None:
+    """Return token evidence when a user's identifier reads like a draft name.
+
+    Args:
+        identifier_name: Declaration name; empty text has no placeholder evidence.
+
+    Returns:
+        User-facing reason, or ``None`` when the name should stay out of results.
+    """
+    # Python-owned dunder names keep their language-defined spelling.
+    if identifier_name.startswith("__") and identifier_name.endswith("__"):
         return None
-    tokens = lower_tokens(name)
-    if not tokens:
+    identifier_tokens = lower_tokens(identifier_name)
+    # An empty tokenizer result gives the UI no placeholder word to explain.
+    if not identifier_tokens:
         return None
-    if _is_exact_placeholder(tokens) or _has_placeholder_prefix(tokens):
-        return f"placeholder token {tokens[0]!r}"
-    # numbered placeholder: result1, data42, value2
-    if _is_numbered_placeholder(tokens):
-        return f"numbered placeholder {tokens[0]!r}+{tokens[1]!r}"
+    # Exact first tokens cover draft names such as temp/cache-independent temp_item.
+    if _has_placeholder_prefix(identifier_tokens):
+        return f"placeholder token {identifier_tokens[0]!r}"
+    # Numbered families cover user-visible drafts such as result1 and data42.
+    if _is_numbered_placeholder(identifier_tokens):
+        return f"numbered placeholder {identifier_tokens[0]!r}+{identifier_tokens[1]!r}"
     return None
 
 
-def _is_exact_placeholder(tokens: list[str]) -> bool:
-    return len(tokens) == 1 and tokens[0] in _EXACT_PLACEHOLDER_TOKENS
+def _has_placeholder_prefix(identifier_tokens: list[str]) -> bool:
+    """Return whether the first user-visible token is reserved for draft names.
+
+    Args:
+        identifier_tokens: Nonempty lowercase tokens from one declaration.
+
+    Returns:
+        ``True`` when the name begins with a reviewed placeholder token.
+    """
+    return identifier_tokens[0] in _PLACEHOLDER_TOKENS
 
 
-def _has_placeholder_prefix(tokens: list[str]) -> bool:
-    return tokens[0] in _PLACEHOLDER_TOKENS
+def _is_numbered_placeholder(identifier_tokens: list[str]) -> bool:
+    """Return whether a user's name starts with a numbered draft family.
+
+    Args:
+        identifier_tokens: Lowercase tokens; empty/single-token names return false.
+
+    Returns:
+        ``True`` for shapes such as ``result1`` or ``data42``.
+    """
+    return (
+        len(identifier_tokens) >= 2
+        and identifier_tokens[0] in _NUMBERED_BASES
+        and identifier_tokens[1].isdigit()
+    )
 
 
-def _is_numbered_placeholder(tokens: list[str]) -> bool:
-    return len(tokens) >= 2 and tokens[0] in _NUMBERED_BASES and tokens[1].isdigit()
+def _identifiers_in(candidate_node: ast.AST) -> list[tuple[str, int]]:
+    """Return renameable identifiers exposed by one parsed user declaration.
 
+    Args:
+        candidate_node: Parsed node; unrelated nodes return an empty list.
 
-def _identifiers_in(node: ast.AST) -> list[tuple[str, int]]:
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-        return [(node.name, node.lineno), *_argument_identifiers(node.args)]
-    if isinstance(node, ast.ClassDef):
-        return [(node.name, node.lineno)]
-    if isinstance(node, ast.Assign):
-        return _assignment_identifiers(node.targets)
-    if isinstance(node, ast.AnnAssign):
-        return _target_identifiers(node.target)
+    Returns:
+        Identifier/line pairs shown in findings, or empty for unsupported nodes.
+    """
+    # Function names and parameters are both visible in the user's API journey.
+    if isinstance(candidate_node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return [
+            (candidate_node.name, candidate_node.lineno),
+            *_argument_identifiers(candidate_node.args),
+        ]
+    # Class declarations expose one renameable type name.
+    if isinstance(candidate_node, ast.ClassDef):
+        return [(candidate_node.name, candidate_node.lineno)]
+    # Chained and unpacked assignments may expose several user names.
+    if isinstance(candidate_node, ast.Assign):
+        return _assignment_identifiers(candidate_node.targets)
+    # An annotated assignment exposes the same user-facing target shapes.
+    if isinstance(candidate_node, ast.AnnAssign):
+        return _target_identifiers(candidate_node.target)
     return []
 
 
 def _argument_identifiers(arguments: ast.arguments) -> list[tuple[str, int]]:
-    all_args = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
-    return [(arg.arg, arg.lineno) for arg in all_args]
+    """Return names a user chose for positional and keyword-only parameters.
+
+    Args:
+        arguments: Parsed signature; empty parameter groups return no names.
+
+    Returns:
+        Parameter/line pairs in declaration order.
+    """
+    user_parameters = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
+    # Every declared parameter can independently appear in the scan results.
+    return [(parameter.arg, parameter.lineno) for parameter in user_parameters]
 
 
-def _assignment_identifiers(targets: list[ast.expr]) -> list[tuple[str, int]]:
-    identifiers: list[tuple[str, int]] = []
-    for target in targets:
-        identifiers.extend(_target_identifiers(target))
-    return identifiers
+def _assignment_identifiers(assignment_targets: list[ast.expr]) -> list[tuple[str, int]]:
+    """Collect user-visible names from every target in one assignment.
+
+    Args:
+        assignment_targets: Parsed targets; an empty list contributes no names.
+
+    Returns:
+        Flattened identifier/line pairs from simple and unpacked targets.
+    """
+    user_identifiers: list[tuple[str, int]] = []
+    # Chained assignments let users bind more than one reviewed name at a line.
+    for assignment_target in assignment_targets:
+        user_identifiers.extend(_target_identifiers(assignment_target))
+    return user_identifiers
 
 
-def _target_identifiers(target: ast.expr) -> list[tuple[str, int]]:
-    if isinstance(target, ast.Name):
-        return [(target.id, target.lineno)]
-    if isinstance(target, ast.Tuple | ast.List):
-        return [(elt.id, elt.lineno) for elt in target.elts if isinstance(elt, ast.Name)]
+def _target_identifiers(assignment_target: ast.expr) -> list[tuple[str, int]]:
+    """Return simple names a user can rename in one assignment target.
+
+    Args:
+        assignment_target: Parsed target; attributes/subscripts return no names.
+
+    Returns:
+        Renameable identifier/line pairs, or empty for non-name targets.
+    """
+    # A direct assignment exposes one local name in the user's report.
+    if isinstance(assignment_target, ast.Name):
+        return [(assignment_target.id, assignment_target.lineno)]
+    # Tuple/list unpacking exposes each simple child name independently.
+    if isinstance(assignment_target, ast.Tuple | ast.List):
+        return [
+            (element.id, element.lineno)
+            for element in assignment_target.elts
+            if isinstance(element, ast.Name)
+        ]
     return []

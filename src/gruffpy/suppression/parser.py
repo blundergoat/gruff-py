@@ -82,6 +82,11 @@ def parse_suppressions(
     Returns:
         Parsed suppression data and parser diagnostics.
     """
+    # Marker-free sources cannot contain directives; skipping their tokenizer avoids cliffs on
+    # large non-Python fixtures discovered for source-text rules.
+    if "gruff" not in source.casefold():
+        return ParsedSuppressions()
+
     file_rule_ids: set[str] = set()
     line_rule_ids: dict[int, set[str]] = {}
     next_line_rule_ids: dict[int, set[str]] = {}

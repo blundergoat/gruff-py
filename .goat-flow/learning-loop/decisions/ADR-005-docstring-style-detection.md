@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-14
-**Ticket/Context:** `.goat-flow/tasks/0.1/M06-documentation-pillar-v0.1.md`; gate for the documentation pillar (10 rules, several of which need to compare docstring fields against Python signatures across Google, NumPy, and Sphinx styles).
+**Ticket/Context:** 0.1 documentation-pillar delivery; gate for the documentation pillar (10 rules, several of which need to compare docstring fields against Python signatures across Google, NumPy, and Sphinx styles).
 
 ## Decision
 
