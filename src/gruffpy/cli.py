@@ -187,6 +187,7 @@ class _AnalysisCliRequest:
     changed_ranges: str
     changed_scope: str
     strict_config: bool = False
+    deep_scan_budget: str = ""
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -607,6 +608,7 @@ def _analysis_request(
         changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
         changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
         strict_config=cast(bool, kwargs.get("strict_config", False)),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
@@ -649,6 +651,7 @@ def _summary_analysis_request(
         changed_ranges="",
         changed_scope="symbol",
         strict_config=cast(bool, kwargs.get("strict_config", False)),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
@@ -673,6 +676,7 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> dashboard_cli._DashboardCli
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
         has_acknowledged_public_bind=cast(bool, kwargs["allow_public"]),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
@@ -759,6 +763,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 changed_ranges=request.changed_ranges,
                 changed_scope=request.changed_scope,
                 strict_config=request.strict_config,
+                deep_scan_budget=request.deep_scan_budget,
             )
         )
     except ConfigError as exc:

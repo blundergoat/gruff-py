@@ -55,7 +55,11 @@ class FileLengthRule(Rule):
         """
         definition = self.definition()
         settings = context.settings_for(definition)
-        line_count = _substantive_line_count(unit.source, unit.tree)
+        line_count = (
+            _fallback_substantive_line_count(unit.source)
+            if unit.is_deep_scan_bounded()
+            else _substantive_line_count(unit.source, unit.tree)
+        )
         threshold_match = settings.high_value_threshold_match(line_count)
         if threshold_match is None:
             return []

@@ -18,7 +18,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
-    redact_preview,
+    fixed_preview,
     shannon_entropy,
 )
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_api_key
@@ -31,16 +31,19 @@ _MIN_LENGTH = 20
 
 
 class HighEntropyStringRule(SourceTextRule):
-    """Detect long base64-alphabet substrings whose Shannon entropy exceeds the secret threshold."""
+    """Detect long base64-alphabet strings above the secret entropy threshold.
+
+    Users see a review finding for unknown random-looking literals after common benign shapes and
+    provider keys are removed, with no candidate-derived text included in the preview.
+    """
 
     ID = "sensitive-data.high-entropy-string"
 
     def definition(self) -> RuleDefinition:
         """Describe the high-entropy-string rule as a low-confidence warning.
 
-        Low confidence because base64-like strings have many legitimate uses
-        (hashes, IDs, encoded payloads); reviewers should expect to triage
-        these and add benign previews to ``allowlists.secretPreviews``.
+        Base64-like text has legitimate uses, so users receive a low-confidence item to triage
+        without copying secret-derived preview values into configuration.
 
         Returns:
             Definition for the high-entropy-string rule under the
@@ -58,9 +61,8 @@ class HighEntropyStringRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag 20+ char base64-alphabet runs whose Shannon entropy exceeds 4.5 bits/char.
 
-        Benign-shape suppressions filter out filesystem paths (multiple
-        ``/``), PascalCase identifiers, short hex (< 40 chars - probably
-        a checksum), and snake_case names without digits.
+        Users see random-looking literals after paths, identifiers, and short checksums are
+        removed as common benign shapes.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -72,13 +74,16 @@ class HighEntropyStringRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in _CANDIDATE_RE.finditer(unit.source):
-            candidate = match.group(0)
-            if _is_benign_literal(candidate):
+        # Each random-looking literal is assessed independently so users can triage its source line.
+        for candidate_match in _CANDIDATE_RE.finditer(unit.source):
+            secret_candidate = candidate_match.group(0)
+            # Known benign shapes stay out of the report before the entropy threshold is applied.
+            if _is_benign_literal(secret_candidate):
                 continue
-            if shannon_entropy(candidate) < _ENTROPY_THRESHOLD:
+            # Lower-entropy text lacks enough secret signal to justify a user-facing warning.
+            if shannon_entropy(secret_candidate) < _ENTROPY_THRESHOLD:
                 continue
-            line = unit.source.count("\n", 0, match.start()) + 1
+            line = unit.source.count("\n", 0, candidate_match.start()) + 1
             findings.append(
                 Finding(
                     rule_id=definition.id,
@@ -91,15 +96,14 @@ class HighEntropyStringRule(SourceTextRule):
                     confidence=definition.confidence,
                     remediation=(
                         "If this is genuinely a secret, rotate it and move it out of "
-                        "the repository. If it's a benign identifier, add the preview to "
-                        "`allowlists.secretPreviews` to suppress future findings."
+                        "the repository. If it is benign, confirm that judgment during review; "
+                        "secret-derived preview allowlisting is not supported."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={
-                        "preview": redact_preview(candidate),
-                        "entropy": round(shannon_entropy(candidate), 2),
-                        "length": len(candidate),
-                    },
+                    # The rule's own thresholds already explain why this fired. The candidate's
+                    # entropy and character count are statistics computed from the matched value
+                    # and are forbidden in serialized output by FAMILY-CONTRACT section 5.
+                    metadata={"preview": fixed_preview()},
                 ),
             )
         return findings

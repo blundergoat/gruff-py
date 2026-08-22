@@ -8,7 +8,16 @@ def test_high_entropy_random_string_emits():
     src = f"KEY = {_HIGH_ENTROPY!r}\n"
     findings = HighEntropyStringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
-    assert findings[0].metadata["entropy"] > 4.5
+    assert findings[0].metadata == {"preview": "[redacted]"}
+
+
+def test_high_entropy_finding_publishes_no_value_derived_statistic():
+    """FAMILY-CONTRACT section 5 forbids publishing the matched value's length or entropy."""
+    src = f"KEY = {_HIGH_ENTROPY!r}\n"
+    findings = HighEntropyStringRule().analyse(make_unit(src), default_ctx())
+    assert "entropy" not in findings[0].metadata
+    assert "length" not in findings[0].metadata
+    assert str(len(_HIGH_ENTROPY)) not in str(findings[0].metadata)
 
 
 def test_pascal_case_identifier_skipped():

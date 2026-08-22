@@ -1,3 +1,9 @@
+"""Exercise realistic contact details found in test and fixture files.
+
+The suite separates user-reviewable email and phone shapes from safe domains, 555 values,
+timestamps, Git references, and numeric fixtures. Findings expose only a fixed preview marker.
+"""
+
 import pytest
 
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
@@ -21,6 +27,7 @@ def test_real_email_in_test_file_emits():
     src = f"user_email = {_REAL_EMAIL!r}\n"
     findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
     assert len(findings) == 1
+    assert findings[0].metadata["preview"] == "[redacted]"
 
 
 def test_example_email_skipped():

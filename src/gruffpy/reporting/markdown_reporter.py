@@ -60,6 +60,15 @@ class MarkdownReporter:
                 f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`"
             )
 
+        if report.diagnostics:
+            lines.extend(["", "## Diagnostics", ""])
+            for diagnostic in report.diagnostics:
+                location = diagnostic.file_path or diagnostic.path
+                if diagnostic.file_path is not None and diagnostic.line is not None:
+                    location = f"{diagnostic.file_path}:{diagnostic.line}"
+                suffix = "" if location is None else f" `{_md(location)}`"
+                lines.append(f"- **{_md(diagnostic.type)}**{suffix} - {_md(diagnostic.message)}")
+
         lines.extend(
             [
                 "",

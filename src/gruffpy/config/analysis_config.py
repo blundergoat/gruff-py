@@ -1,4 +1,8 @@
-"""Frozen value object holding the resolved analyser configuration for one run."""
+"""Store the resolved analyser configuration for one run.
+
+The loader builds this immutable value before rules execute. CLI and dashboard scans then share
+the same rule settings, path filters, allowlists, and output behavior.
+"""
 
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
@@ -6,7 +10,9 @@ from typing import TYPE_CHECKING
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
+from gruffpy.config.sensitive_exclusions import SensitiveExclusion
 from gruffpy.finding.fail_threshold import FailThreshold
+from gruffpy.finding.pillar import Pillar
 
 if TYPE_CHECKING:
     from gruffpy.rule.registry import RuleRegistry
@@ -21,6 +27,19 @@ MINIMUM_SEVERITY_BINARY_DEFAULTS: dict[str, FailThreshold] = {
 These are the values ``gruff-py init`` writes into the ``minimumSeverity:`` block
 and the values the CLI consumers fall back to when neither a ``--fail-on`` flag
 nor a configured override is set."""
+
+DEEP_SCAN_DEFAULT_MAX_LINES = 20_000
+DEEP_SCAN_DEFAULT_MAX_BYTES = 2_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class DeepScanBudget:
+    """Carry the effective paired bound for expensive Python source analysis."""
+
+    enabled: bool = True
+    max_lines: int = DEEP_SCAN_DEFAULT_MAX_LINES
+    max_bytes: int = DEEP_SCAN_DEFAULT_MAX_BYTES
+    override: str = "default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +60,13 @@ class AnalysisConfig:
         rule_selection: Include and exclude selectors applied before analysis.
         ignored_path_patterns: Configured path globs excluded during discovery.
         accepted_abbreviations: Project-approved abbreviations for naming rules.
-        allowed_secret_previews: Redacted secret previews allowed by config.
+        allowed_secret_previews: Retained legacy field; supported configs leave it empty and
+            analysis ignores it.
+        sensitive_exclusions: Reviewed scopes in which one sensitive-data rule stays quiet,
+            sourced from the ``sensitiveExclusions:`` config block.
+        sensitive_data_rule_ids: Registered rule ids inside the sensitive-data pillar.
+            ``from_registry`` fills this because ``gruffpy.config`` cannot import the rule
+            registry, and the ``sensitiveExclusions`` validator needs pillar facts.
         dead_code_allowlist: Symbols, decorators, and paths allowed for dead-code rules.
         output_volume_hint_threshold: Finding count at which ``analyse --format text``
             appends a hint pointing at ``summary --group-by=rule``. ``0`` disables the
@@ -74,10 +99,14 @@ class AnalysisConfig:
         "url",
     )
     allowed_secret_previews: tuple[str, ...] = ()
+    sensitive_exclusions: tuple[SensitiveExclusion, ...] = ()
+    sensitive_data_rule_ids: frozenset[str] = frozenset()
     dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
     output_volume_hint_threshold: int = 50
+    deep_scan_budget: DeepScanBudget = field(default_factory=DeepScanBudget)
 
     def __post_init__(self) -> None:
+        """Reject a Python target that would make the user's modernisation advice unsupported."""
         if self.minimum_python_version < (3, 11):
             raise ValueError("Minimum Python version must be at least 3.11.")
 
@@ -85,10 +114,8 @@ class AnalysisConfig:
     def from_registry(cls, registry: "RuleRegistry") -> "AnalysisConfig":
         """Build a baseline config from each rule's declared defaults.
 
-        Initialises the ``rules`` mapping with one ``RuleSettings`` per
-        registered rule, seeded from its ``RuleDefinition`` defaults
-        (enabled flag, thresholds, options). Loader code then layers
-        user overrides on top via :meth:`with_rule_settings`.
+        Each registered rule contributes its enabled state, thresholds, and options before the
+        loader layers the user's overrides on top.
 
         Args:
             registry: Registry of all built-in and plugin rules.
@@ -97,8 +124,13 @@ class AnalysisConfig:
             Config with every known rule populated at its default values.
         """
         rules: dict[str, RuleSettings] = {}
+        sensitive_data_rule_ids: set[str] = set()
         for rule in registry.all():
             definition = rule.definition()
+            # The sensitiveExclusions validator rejects a rule outside this pillar, and it runs
+            # where the registry is not importable, so the pillar answer is captured here.
+            if definition.pillar is Pillar.SENSITIVE_DATA:
+                sensitive_data_rule_ids.add(definition.id)
             rules[definition.id] = RuleSettings(
                 enabled=definition.default_enabled,
                 thresholds=dict(definition.default_thresholds),
@@ -109,14 +141,13 @@ class AnalysisConfig:
                     else None
                 ),
             )
-        return cls(rules=rules)
+        return cls(rules=rules, sensitive_data_rule_ids=frozenset(sensitive_data_rule_ids))
 
     def rule_settings(self, rule_id: str) -> RuleSettings:
         """Return the merged settings for *rule_id*.
 
-        Raises ``KeyError`` for unknown ids - this is a programming error
-        on the caller's part, not a user-input issue (unknown rules in
-        user config are flagged separately by the loader).
+        Unknown IDs raise ``KeyError`` for callers; the loader reports unknown user config keys
+        before they reach this method.
 
         Args:
             rule_id: Canonical rule id (e.g. ``"size.function-length"``).
@@ -167,9 +198,7 @@ class AnalysisConfig:
     def with_minimum_severity(self, minimum_severity: dict[str, FailThreshold]) -> "AnalysisConfig":
         """Return a new config whose per-command ``--fail-on`` defaults are *minimum_severity*.
 
-        Consumed by the analyse / report / dashboard CLI consumers as the
-        middle tier of the precedence rule (CLI flag wins, then this map,
-        then the binary default).
+        The user's CLI flag wins, followed by this map and then the binary default.
 
         Args:
             minimum_severity: Mapping from gateable subcommand name to
@@ -218,18 +247,35 @@ class AnalysisConfig:
         return replace(self, accepted_abbreviations=abbrevs)
 
     def with_allowed_secret_previews(self, previews: tuple[str, ...]) -> "AnalysisConfig":
-        """Return a new config whose sensitive-data allowlist is *previews*.
+        """Return a copy carrying the legacy secret-preview field.
 
-        Each preview is the redacted token surfaced in a finding; matching
-        previews are silently filtered before reporting.
+        The loader accepts only an empty list and analysis ignores this field, so users cannot
+        hide sensitive-data findings with preview text.
 
         Args:
-            previews: Redacted-preview strings copied from prior findings.
+            previews: Legacy values; an empty tuple means the retired setting has no effect for
+                the user.
 
         Returns:
-            New ``AnalysisConfig`` with the allowlist updated.
+            New ``AnalysisConfig`` carrying the legacy field.
         """
         return replace(self, allowed_secret_previews=previews)
+
+    def with_sensitive_exclusions(
+        self, exclusions: tuple[SensitiveExclusion, ...]
+    ) -> "AnalysisConfig":
+        """Return a new config whose reviewed sensitive-data suppressions are *exclusions*.
+
+        Every entry is already validated; analysis drops the findings each one claims and reports
+        the count, so a suppressed finding is never silently invisible.
+
+        Args:
+            exclusions: Validated entries in the order the user wrote them.
+
+        Returns:
+            New ``AnalysisConfig`` carrying the sensitive-data exclusions.
+        """
+        return replace(self, sensitive_exclusions=exclusions)
 
     def with_output_volume_hint_threshold(self, threshold: int) -> "AnalysisConfig":
         """Return a new config whose ``analyse --format text`` hint threshold is *threshold*.
@@ -242,6 +288,17 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the threshold updated.
         """
         return replace(self, output_volume_hint_threshold=threshold)
+
+    def with_deep_scan_budget(self, budget: DeepScanBudget) -> "AnalysisConfig":
+        """Return a new config with the effective deep-scan budget replaced.
+
+        Args:
+            budget: Validated paired line/byte limits and their provenance.
+
+        Returns:
+            New ``AnalysisConfig`` carrying the supplied budget.
+        """
+        return replace(self, deep_scan_budget=budget)
 
     def with_dead_code_allowlist(self, allowlist: DeadCodeAllowlist) -> "AnalysisConfig":
         """Return a new config whose dead-code allowlist is *allowlist*.

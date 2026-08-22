@@ -5,11 +5,10 @@ Proves that:
 2. The SourceTextRule routing works for sensitive-data without new wiring:
    a planted secret in a .json file is detected, and a .py-only rule does NOT
    fire on the same file.
-3. Findings never leak the raw secret - every metadata.preview is redacted.
+3. Findings never leak raw secret data - every metadata.preview is the fixed marker.
 """
 
 import json
-import re
 from dataclasses import replace
 
 from gruffpy.parser.analysis_unit import ParseDiagnostic
@@ -17,7 +16,7 @@ from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"
-_AWS_KEY_PREVIEW = "AKIA...CDEF"
+_FIXED_PREVIEW = "[redacted]"
 _STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
 _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
 _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
@@ -66,9 +65,13 @@ _EXPECTED_RULE_IDS = {
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
-    fired = {f.rule_id for f in findings if f.rule_id.startswith("sensitive-data.")}
+    sensitive_findings = [
+        finding for finding in findings if finding.rule_id.startswith("sensitive-data.")
+    ]
+    fired = {finding.rule_id for finding in sensitive_findings}
     missing = _EXPECTED_RULE_IDS - fired
     assert not missing, f"Missing fires: {sorted(missing)}"
+    assert {finding.metadata.get("preview") for finding in sensitive_findings} == {_FIXED_PREVIEW}
 
 
 def test_aws_key_fires_on_json_file_via_text_seam():
@@ -108,24 +111,24 @@ def test_redaction_in_json_output_never_leaks_raw_secret():
     assert len(aws_findings) == 1
     payload = json.dumps(aws_findings[0].to_dict())
     assert _AWS_KEY not in payload
-    assert _AWS_KEY_PREVIEW in payload
+    assert _FIXED_PREVIEW in payload
+    assert not any(secret_detail in payload for secret_detail in ("AKIA", "CDEF", "20 chars"))
 
 
-def test_redact_preview_shape():
-    """Preview matches `first4...last4 (redacted, N chars)` for secrets ≥ 8 chars."""
+def test_every_secret_uses_the_fixed_zero_payload_preview():
+    """Users see a classification marker without secret-derived characters or length."""
     src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
-    assert re.match(
-        r"^[A-Za-z0-9]{4}\.\.\.[A-Za-z0-9]{4} \(redacted, \d+ chars\)$", aws.metadata["preview"]
-    )
+    assert aws.metadata["preview"] == _FIXED_PREVIEW
 
 
 def test_npm_integrity_style_hashes_suppressed():
     """package-lock.json content is ignored at the discovery layer via the lockfile filter."""
-    # We don't have the discovery layer here, but the integration test for that lives in
-    # the discovery module. We assert that a high-entropy hash in non-lockfile content
-    # still produces a finding (positive control).
+    # This unit test cannot exercise the lockfile filter owned by discovery.
+
+    # A high-entropy hash in non-lockfile content is the positive control and must still produce
+    # a finding.
     hash_value = _ENTROPY_VALUE + "abcdef0123456789"
     src = f"sha512 = {hash_value!r}\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())

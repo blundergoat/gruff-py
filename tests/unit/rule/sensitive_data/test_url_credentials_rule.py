@@ -1,3 +1,9 @@
+"""Exercise findings for HTTP(S) URLs with embedded user credentials.
+
+The suite covers valid, public, placeholder, and database URLs plus registry routing. User output
+must retain a fixed preview without exposing the password or credential-bearing URL.
+"""
+
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
@@ -14,7 +20,7 @@ def test_https_url_with_embedded_password_emits_redacted_preview():
     assert finding.rule_id == "sensitive-data.url-credentials"
     assert finding.metadata == {
         "category": "url-credentials",
-        "preview": "https://deploy:<redacted:15 chars>@api.example.test/v1",
+        "preview": "[redacted]",
     }
     _assert_url_raw_values_redacted(finding.message, str(finding.metadata))
 

@@ -1,3 +1,9 @@
+"""Exercise secret-like literal values found in committed ``.env`` files.
+
+The suite keeps placeholders, runtime substitutions, and non-environment files quiet. Real-looking
+values produce a finding whose user-visible preview contains no value-derived text.
+"""
+
 from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
@@ -8,6 +14,7 @@ def test_env_with_high_entropy_secret_emits():
     src = f"API_KEY={_ENV_SECRET}\nDEBUG=true\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx())
     assert len(findings) == 1
+    assert findings[0].metadata["preview"] == "[redacted]"
 
 
 def test_env_placeholder_skipped():

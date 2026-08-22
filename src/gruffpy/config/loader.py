@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.markdown_sanitizer_options import (
@@ -20,6 +20,10 @@ from gruffpy.config.markdown_sanitizer_options import (
 )
 from gruffpy.config.rule_selection import RuleSelection
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
+from gruffpy.config.sensitive_exclusions import (
+    SENSITIVE_EXCLUSIONS_KEY,
+    parse_sensitive_exclusions,
+)
 from gruffpy.config.yaml_loader import load_gruff_py_yaml
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.pillar import Pillar
@@ -32,9 +36,11 @@ VALID_TOP_LEVEL_KEYS = frozenset(
         "minimumPythonVersion",
         "minimumSeverity",
         "outputVolumeHintThreshold",
+        "deepScanBudget",
         "paths",
         "allowlists",
         "selection",
+        SENSITIVE_EXCLUSIONS_KEY,
         "rules",
     }
 )
@@ -75,6 +81,10 @@ TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
 LEGACY_TOML_TABLE = f"[tool.{LEGACY_TOML_TOOL_KEY}]"
 DEFAULT_YAML_CONFIG_NAME = ".gruff-py.yaml"
 LEGACY_YAML_CONFIG_NAME = ".gruff.yaml"
+LEGACY_SECRET_PREVIEWS_ERROR = (
+    'Config key "allowlists.secretPreviews" only accepts an empty list; '
+    "remove all configured entries because secret previews no longer suppress findings."
+)
 
 
 class ConfigLoader:
@@ -93,6 +103,7 @@ class ConfigLoader:
         *,
         strict: bool = False,
     ) -> None:
+        """Prepare config discovery for one project and the command's strictness choice."""
         self._project_root = Path(project_root)
         self._defaults = analysis_config
         self._strict = strict
@@ -121,12 +132,8 @@ class ConfigLoader:
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
         """Load config, honouring YAML / `pyproject.toml` precedence.
 
-        Precedence:
-
-        1. Explicit *config_path* (format auto-detected by extension).
-        2. ``.gruff-py.yaml`` or legacy ``.gruff.yaml`` in the project root.
-        3. ``pyproject.toml`` ``[tool.gruff-py]`` or legacy ``[tool.gruff]``.
-        4. Built-in defaults.
+        An explicit path wins, followed by modern or legacy YAML, modern or legacy TOML, and
+        finally built-in defaults when the project has no Gruff settings.
 
         Args:
             config_path: Optional explicit config path; when set, skips the
@@ -162,6 +169,7 @@ class ConfigLoader:
         return self._defaults, None
 
     def _load_explicit(self, path: Path) -> tuple[AnalysisConfig, Path | None]:
+        """Load the exact YAML or TOML path supplied by the user, without project discovery."""
         if not path.exists():
             raise ConfigError(f"Config file does not exist: {path}")
         if path.suffix in {".yaml", ".yml"}:
@@ -182,9 +190,11 @@ class ConfigLoader:
         return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
+        """Read the supported Gruff table from TOML, or return no table for normal discovery."""
         try:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
+        # For example, malformed TOML or a permissions error should tell the user which file failed.
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"Failed to read config file {path}: {exc}") from exc
         tool_section = data.get("tool", {})
@@ -204,6 +214,7 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_top_level(section: dict[str, Any], source: str) -> None:
+        """Validate shared top-level keys before any user setting can affect analysis."""
         unknown = set(section.keys()) - VALID_TOP_LEVEL_KEYS
         if unknown:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
@@ -214,9 +225,12 @@ class ConfigLoader:
             ConfigLoader._validate_output_volume_hint_threshold(
                 section["outputVolumeHintThreshold"], source
             )
+        if "deepScanBudget" in section:
+            ConfigLoader._validate_deep_scan_budget(section["deepScanBudget"], source)
 
     @staticmethod
     def _validate_schema_version(section: dict[str, Any], source: str) -> None:
+        """Require the schema version that this binary can interpret for the user."""
         if "schemaVersion" not in section:
             raise ConfigError(
                 f"{source} is missing required 'schemaVersion'. "
@@ -235,6 +249,7 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_minimum_severity(block: Any, source: str) -> None:
+        """Validate per-command failure thresholds before a scan can report the wrong exit code."""
         if not isinstance(block, dict):
             raise ConfigError(
                 f"{source} minimumSeverity must be a mapping of command name to severity."
@@ -264,6 +279,7 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_output_volume_hint_threshold(value: Any, source: str) -> None:
+        """Validate when text users should see the high-volume findings hint."""
         if isinstance(value, bool) or not isinstance(value, int):
             raise ConfigError(
                 f"{source} outputVolumeHintThreshold must be a non-negative integer; "
@@ -275,7 +291,29 @@ class ConfigLoader:
                 f"(set to 0 to disable the hint)."
             )
 
+    @staticmethod
+    def _validate_deep_scan_budget(value: Any, source: str) -> None:
+        """Reject a malformed or partial paired deep-scan budget."""
+        if not isinstance(value, dict):
+            raise ConfigError(f"{source} deepScanBudget must be a mapping.")
+        unknown = set(value) - {"enabled", "maxLines", "maxBytes"}
+        if unknown:
+            raise ConfigError(
+                f"Unknown deepScanBudget keys in {source}: {sorted(unknown)}; "
+                "allowed: ['enabled', 'maxBytes', 'maxLines']."
+            )
+        enabled = value.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"{source} deepScanBudget.enabled must be true or false.")
+        for key in ("maxLines", "maxBytes"):
+            if key not in value:
+                continue
+            limit = value[key]
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+                raise ConfigError(f"{source} deepScanBudget.{key} must be a positive integer.")
+
     def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
+        """Layer every present user section over registered defaults in documented order."""
         config = self._defaults
 
         if "minimumPythonVersion" in section:
@@ -291,10 +329,23 @@ class ConfigLoader:
         if "outputVolumeHintThreshold" in section:
             config = config.with_output_volume_hint_threshold(section["outputVolumeHintThreshold"])
 
+        if "deepScanBudget" in section:
+            value = section["deepScanBudget"]
+            current = config.deep_scan_budget
+            config = config.with_deep_scan_budget(
+                DeepScanBudget(
+                    enabled=value.get("enabled", current.enabled),
+                    max_lines=value.get("maxLines", current.max_lines),
+                    max_bytes=value.get("maxBytes", current.max_bytes),
+                    override="config",
+                )
+            )
+
         applicators = (
             ("paths", self._apply_paths),
             ("allowlists", self._apply_allowlists),
             ("selection", self._apply_selection),
+            (SENSITIVE_EXCLUSIONS_KEY, self._apply_sensitive_exclusions),
             ("rules", self._apply_rules),
         )
         for key, applicator in applicators:
@@ -305,6 +356,7 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_paths(config: AnalysisConfig, paths: Any) -> AnalysisConfig:
+        """Apply path ignores that control which files the user's scan discovers."""
         if not isinstance(paths, dict):
             raise ConfigError("[tool.gruff-py.paths] must be a table.")
         unknown = set(paths.keys()) - VALID_PATHS_KEYS
@@ -317,6 +369,7 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_allowlists(config: AnalysisConfig, allowlists: Any) -> AnalysisConfig:
+        """Apply supported user exceptions after validating every allowlist shape."""
         if not isinstance(allowlists, dict):
             raise ConfigError("[tool.gruff-py.allowlists] must be a table.")
         unknown = set(allowlists.keys()) - VALID_ALLOWLISTS_KEYS
@@ -327,15 +380,27 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_string_list_allowlists(allowlists: dict[str, Any]) -> None:
-        for key in ("acceptedAbbreviations", "secretPreviews"):
-            value = allowlists.get(key, [])
-            if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-                raise ConfigError(f"[tool.gruff-py.allowlists].{key} must be a list of strings.")
+        """Validate naming entries and keep the retired preview setting empty for users."""
+        accepted_abbreviations = allowlists.get("acceptedAbbreviations", [])
+        # Invalid naming entries stop the command so the user never sees results based on a
+        # partly applied allowlist.
+        if not isinstance(accepted_abbreviations, list) or not all(
+            isinstance(abbreviation, str) for abbreviation in accepted_abbreviations
+        ):
+            raise ConfigError(
+                "[tool.gruff-py.allowlists].acceptedAbbreviations must be a list of strings."
+            )
+
+        # A user may leave the retired key as [], but a configured preview must fail before
+        # analysis because preview text cannot authorize a finding.
+        if "secretPreviews" in allowlists and allowlists["secretPreviews"] != []:
+            raise ConfigError(LEGACY_SECRET_PREVIEWS_ERROR)
 
     @staticmethod
     def _apply_present_allowlists(
         config: AnalysisConfig, allowlists: dict[str, Any]
     ) -> AnalysisConfig:
+        """Copy validated allowlists into the immutable config used by the user's scan."""
         if "acceptedAbbreviations" in allowlists:
             config = config.with_accepted_abbreviations(tuple(allowlists["acceptedAbbreviations"]))
         if "secretPreviews" in allowlists:
@@ -347,7 +412,30 @@ class ConfigLoader:
         return config
 
     @staticmethod
+    def _apply_sensitive_exclusions(config: AnalysisConfig, section: Any) -> AnalysisConfig:
+        """Apply the reviewed scopes in which one sensitive-data rule may stay quiet.
+
+        Every problem in this section is fatal, so a user never gets results from a partly
+        understood suppression list.
+
+        Args:
+            config: Config carrying the registered rule ids and their sensitive-data membership.
+            section: Raw ``sensitiveExclusions`` value from the user's YAML or TOML.
+
+        Returns:
+            New config carrying the validated entries.
+        """
+        return config.with_sensitive_exclusions(
+            parse_sensitive_exclusions(
+                section,
+                known_rule_ids=frozenset(config.rules),
+                sensitive_rule_ids=config.sensitive_data_rule_ids,
+            )
+        )
+
+    @staticmethod
     def _apply_selection(config: AnalysisConfig, selection: Any) -> AnalysisConfig:
+        """Apply the user's include and exclude selectors after rejecting unknown values."""
         if not isinstance(selection, dict):
             raise ConfigError("[tool.gruff-py.selection] must be a table.")
         unknown = set(selection.keys()) - VALID_SELECTION_KEYS
@@ -369,6 +457,7 @@ class ConfigLoader:
         )
 
     def _apply_rules(self, config: AnalysisConfig, rules: Any) -> AnalysisConfig:
+        """Merge per-rule user overrides while retaining defaults for unsupported keys."""
         if not isinstance(rules, dict):
             raise ConfigError("[tool.gruff-py.rules] must be a table.")
         for rule_id, rule_section in rules.items():
@@ -476,6 +565,7 @@ class ConfigLoader:
         overrides: dict[str, Any],
         defaults: RuleSettings,
     ) -> dict[str, Any]:
+        """Keep registered threshold overrides and explain unsupported knobs to the user."""
         kept: dict[str, Any] = {}
         # Each named threshold is checked in the order the user wrote it.
         for key, value in overrides.items():
@@ -535,6 +625,7 @@ def _accepted_keys_sentence(rule_id: str, defaults: RuleSettings) -> str:
 
 
 def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) -> bool:
+    """Return the user's enabled override, or the registered default when it is absent."""
     if "enabled" not in rule_section:
         return rule_settings.enabled
     enabled = rule_section["enabled"]
@@ -544,6 +635,7 @@ def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) 
 
 
 def _validate_selection_values(config: AnalysisConfig, selection: dict[str, Any]) -> None:
+    """Reject selectors that cannot match a known tier, pillar, or rule for the user."""
     valid_tiers = {tier.value for tier in RuleTier}
     valid_pillars = {pillar.value for pillar in Pillar}
     valid_rules = set(config.rules)
@@ -562,6 +654,7 @@ def _reject_unknown_selection_values(
     values: list[str],
     valid_values: set[str],
 ) -> None:
+    """Report unknown values under the exact selection key the user needs to edit."""
     unknown = sorted(set(values) - valid_values)
     if unknown:
         raise ConfigError(f"Unknown [tool.gruff-py.selection].{key} values: {unknown}")
@@ -572,6 +665,7 @@ def _merged_thresholds(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> dict[str, int | float]:
+    """Merge supported named thresholds into the settings used by rule findings."""
     if "severity" in rule_section:
         raise ConfigError(f'Config key "rules.{rule_id}.severity" requires "threshold".')
     thresholds = dict(rule_settings.thresholds)
@@ -594,6 +688,7 @@ def _severity_threshold(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> SeverityThreshold | None:
+    """Build a single severity rubric from the user's paired threshold and severity."""
     if "threshold" not in rule_section:
         return None
     if "thresholds" in rule_section:
@@ -623,6 +718,7 @@ def _merged_options(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> dict[str, Any]:
+    """Merge validated rule options so the user's scan receives each explicit override."""
     options = dict(rule_settings.options)
     if "options" not in rule_section:
         return options
@@ -634,6 +730,7 @@ def _merged_options(
 
 
 def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
+    """Parse dead-code exceptions that keep intentional entry points out of user findings."""
     if not isinstance(section, dict):
         raise ConfigError("[tool.gruff-py.allowlists.deadCode] must be a table.")
     unknown = set(section.keys()) - VALID_DEAD_CODE_ALLOWLIST_KEYS
@@ -653,11 +750,13 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
 
 
 def _parse_python_version(value: Any) -> tuple[int, int]:
+    """Parse the minimum Python version used to tailor modernisation findings."""
     if isinstance(value, str):
         parts = value.split(".")
         if len(parts) >= 2:
             try:
                 return (int(parts[0]), int(parts[1]))
+            # For example, ``3.next`` reaches this path and becomes a concise config error below.
             except ValueError:
                 pass
     raise ConfigError(f"minimumPythonVersion must be a string like '3.11', got {value!r}")

@@ -37,6 +37,7 @@ class _DashboardCliRequest:
     should_skip_config: bool
     should_include_ignored: bool
     should_render_interactive: bool
+    deep_scan_budget: str = ""
     # False keeps existing callers fail-closed until a user explicitly opts in.
     has_acknowledged_public_bind: bool = False
 
@@ -136,6 +137,7 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
         no_config=request.should_skip_config,
         include_ignored=request.should_include_ignored,
         report_interactive=request.should_render_interactive,
+        deep_scan_budget=request.deep_scan_budget,
     )
 
 

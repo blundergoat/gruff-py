@@ -27,9 +27,13 @@ uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 ```
 
 The top-level shape is `schemaVersion`, `tool`, `run`, `summary`,
-`ignoredPaths`, `ignoredPathDetails`, `missingPaths`, `diagnostics`, `findings`,
-and `score`. Changed-region runs add `suppressedCount` and `diff`; a full scan
-emits neither. The output is stable enough for automation, but the project is
+`ignoredPaths`, `ignoredPathDetails`, `missingPaths`, `diagnostics`,
+`suppressions`, `findings`, and `score`. Changed-region runs add
+`suppressedCount` and `diff`; a full scan emits neither. `suppressions` carries
+one `{index, rule, paths, symbol, reason, suppressed}` audit row per configured
+`sensitiveExclusions` entry, including entries that matched nothing, and is `[]`
+when the project configures none — see
+[Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions). The output is stable enough for automation, but the project is
 pre-1.0 — the strongest compatibility promises are the schema strings and the
 finding identity fields below.
 

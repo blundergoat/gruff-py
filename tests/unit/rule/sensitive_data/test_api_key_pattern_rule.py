@@ -1,3 +1,9 @@
+"""Exercise the provider API-key findings users receive during source scans.
+
+Fixtures cover supported vendor shapes, placeholders, deduplication, fixed preview output, and the
+provider label a user needs when choosing a credential-rotation workflow.
+"""
+
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
@@ -109,7 +115,7 @@ def test_provider_metadata_and_message_do_not_leak_raw_key():
     assert _GOOGLE_API_KEY not in finding.message
     assert _GOOGLE_API_KEY not in str(finding.metadata)
     assert finding.metadata == {
-        "preview": "AIza...5p6Q (redacted, 39 chars)",
+        "preview": "[redacted]",
         "vendor": "google",
     }
 

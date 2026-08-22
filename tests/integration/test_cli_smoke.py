@@ -105,8 +105,9 @@ def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
 def test_optional_diff_args_resolves_sys_argv_for_real_entrypoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Console-script / python -m calls reach CliGroup.main with args=None; Click would
-    # then read sys.argv itself, skipping normalisation. The helper must resolve
+    # Console-script / python -m calls reach CliGroup.main with args=None.
+
+    # Click would then read sys.argv itself, skipping normalisation. The helper must resolve
     # sys.argv so a bare --diff still becomes --diff=working-tree outside CliRunner.
     monkeypatch.setattr(sys, "argv", ["gruff-py", "analyse", "--diff"])
     assert _normalise_optional_diff_args(None) == ["analyse", "--diff=working-tree"]
@@ -124,6 +125,7 @@ _EXPECTED_ANALYSE_LOCAL_OPTIONS = (
     "--baseline-path",
     "--generate-baseline",
     "--generate-baseline-path",
+    "--deep-scan-budget",
 )
 
 
@@ -395,16 +397,16 @@ def test_analyse_changed_scope_symbol_accounts_for_every_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Native changed-region contract the agent hook trusts (it does not re-filter by
-    # line): with the full rule set the hook runs, every finding a full scan produces
-    # is either surfaced or counted in suppressedCount, and both counters are present
-    # and equal. No display filter here (e.g. --include-rule): a display filter narrows
-    # `findings[]` only, not `suppressedCount`, so it is not part of this invariant.
+    # The agent hook trusts native changed-region results and does not filter again by line.
+
+    # Without display filters, each full-scan finding is surfaced or counted in suppressedCount.
+    # Both counters must be present and equal for the terminal user's selected symbol.
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    # Three undocumented functions -> findings across the alpha/beta/gamma symbols
-    # (plus module-docstring/readme debt), reported at the def lines (alpha:1, beta:5,
+    # Three undocumented functions produce findings across the alpha/beta/gamma symbols.
+
+    # Module-docstring and README debt may also appear; definition lines are alpha:1, beta:5,
     # gamma:9). N is read from the run, not hard-coded, so it survives catalogue growth.
     (src / "sample.py").write_text(
         "def alpha():\n    return 1\n\n\n"
@@ -1578,9 +1580,9 @@ def test_cli_summary_text_hints_when_paths_were_ignored(
     src = tmp_path / "src"
     src.mkdir()
     (src / "ok.py").write_text("x = 1\n")
-    generated = tmp_path / "generated"
-    generated.mkdir()
-    (generated / "ignored.py").write_text("x = 2\n")
+    cache = tmp_path / ".pytest_cache"
+    cache.mkdir()
+    (cache / "ignored.py").write_text("x = 2\n")
 
     result = CliRunner().invoke(main, ["summary", "--no-config", "."])
 
@@ -1588,6 +1590,34 @@ def test_cli_summary_text_hints_when_paths_were_ignored(
     assert "1 ignored" in result.output
     assert "--include-ignored" in result.output
     assert "configured paths.ignore still applies" in result.output
+
+
+@pytest.mark.parametrize("command", ("report", "summary"))
+def test_report_and_summary_publish_bounded_deep_scan_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "large.py").write_text("value = 1\nvalue = 2\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            command,
+            "--format",
+            "json",
+            "--no-config",
+            "--deep-scan-budget",
+            "1:10000",
+            "large.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "bounded-deep-scan"
+    assert payload["diagnostics"][0]["invalidatesRun"] is False
 
 
 def test_cli_metric_calibration_json_is_developer_dump(
@@ -2064,6 +2094,111 @@ def test_cli_parse_error_keeps_redacted_source_text_finding(
     assert aws_key not in result.output
 
 
+def test_cli_bounded_deep_scan_retains_text_rules_and_nonfatal_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    lines = [f"AWS_KEY = {aws_key!r}", "result = eval('payload')"]
+    lines.extend(f"value_{index} = {index}" for index in range(1_000))
+    (src / "large.py").write_text("\n".join(lines) + "\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--deep-scan-budget",
+            "1:1000000",
+            "src/large.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["filesDiscovered"] == 1
+    assert payload["summary"]["filesParsed"] == 1
+    diagnostic = payload["diagnostics"][0]
+    assert diagnostic["type"] == "bounded-deep-scan"
+    assert diagnostic["invalidatesRun"] is False
+    assert "maxLines=1; maxBytes=1000000; override=cli" in diagnostic["message"]
+    rule_ids = {finding["ruleId"] for finding in payload["findings"]}
+    assert "sensitive-data.aws-access-key" in rule_ids
+    assert "size.file-length" in rule_ids
+    assert "security.dangerous-function-call" not in rule_ids
+    assert aws_key not in result.output
+
+
+@pytest.mark.parametrize("override", ("100:100000", "off"))
+def test_cli_deep_scan_budget_overrides_config_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    override: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("result = eval('payload')\n")
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "deepScanBudget:\n  enabled: true\n  maxLines: 1\n  maxBytes: 1\n"
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-baseline",
+            "--deep-scan-budget",
+            override,
+            "sample.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert not any(item["type"] == "bounded-deep-scan" for item in payload["diagnostics"])
+    assert "security.dangerous-function-call" in {
+        finding["ruleId"] for finding in payload["findings"]
+    }
+
+
+def test_cli_rejects_partial_deep_scan_budget_override_as_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--no-config",
+            "--deep-scan-budget",
+            "100",
+            "sample.py",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "config-error"
+    assert "LINES:BYTES, or off" in payload["diagnostics"][0]["message"]
+
+
 def test_cli_analyse_docs_messages_describe_intent_not_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2230,19 +2365,19 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
     assert payload["run"]["filters"]["includePillars"] == ["size", "documentation"]
 
 
-def test_cli_applies_configured_secret_preview_allowlist(
+def test_cli_rejects_configured_secret_preview_before_analysis(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     aws_key = "AKIA" + "1234567890ABCDEF"
-    aws_preview = "AKIA...CDEF (redacted, 20 chars)"
+    configured_preview = "AKIA...CDEF (redacted, 20 chars)"
     stripe_key = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
     (src / "secrets.py").write_text(f"AWS_KEY = '{aws_key}'\nSTRIPE = '{stripe_key}'\n")
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\n"
-        f"allowlists:\n  secretPreviews:\n    - '{aws_preview}'\n"
+        f"allowlists:\n  secretPreviews:\n    - '{configured_preview}'\n"
     )
 
     result = CliRunner().invoke(
@@ -2250,17 +2385,23 @@ def test_cli_applies_configured_secret_preview_allowlist(
         ["analyse", "--format", "json", "--fail-on", "error", "src"],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
     payload = json.loads(result.output)
-    rule_ids = [finding["ruleId"] for finding in payload["findings"]]
-    previews = [
-        finding["metadata"].get("preview")
-        for finding in payload["findings"]
-        if isinstance(finding.get("metadata"), dict)
+    assert payload["findings"] == []
+    assert payload["diagnostics"] == [
+        {
+            "type": "config-error",
+            "message": (
+                'Config key "allowlists.secretPreviews" only accepts an empty list; '
+                "remove all configured entries because secret previews no longer suppress findings."
+            ),
+            "file": None,
+            "line": None,
+            "path": None,
+        }
     ]
-    assert "sensitive-data.aws-access-key" not in rule_ids
-    assert "sensitive-data.api-key-pattern" in rule_ids
-    assert aws_preview not in previews
+    assert aws_key not in result.output
+    assert configured_preview not in result.output
 
 
 def test_cli_fail_on_error_exits_1_when_errors_present(

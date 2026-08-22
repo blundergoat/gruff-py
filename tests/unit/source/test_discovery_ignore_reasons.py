@@ -30,30 +30,26 @@ def test_classify_config_match_wins_even_with_include_ignored(tmp_path: Path) ->
 
 
 def test_classify_reports_default_directory_source(tmp_path: Path) -> None:
-    _write(tmp_path / "node_modules" / "lib.py")
+    (tmp_path / "node_modules").mkdir()
 
-    result = SourceDiscovery(tmp_path).classify("node_modules/lib.py")
+    result = SourceDiscovery(tmp_path).classify("node_modules")
 
-    assert result == IgnoredPath(
-        path="node_modules/lib.py", source="default", pattern="node_modules"
-    )
+    assert result == IgnoredPath(path="node_modules", source="default", pattern="node_modules")
 
 
-def test_classify_reports_gitignore_source(tmp_path: Path) -> None:
+def test_classify_existing_file_uses_explicit_semantics(tmp_path: Path) -> None:
     _write(tmp_path / ".gitignore", "secret.py\n")
     _write(tmp_path / "secret.py")
 
     result = SourceDiscovery(tmp_path).classify("secret.py")
 
-    assert result is not None
-    assert result.source == "gitignore"
-    assert result.pattern is None
+    assert result is None
 
 
-def test_classify_reports_generated_lockfile_source(tmp_path: Path) -> None:
+def test_classify_does_not_ignore_lockfile_by_filename(tmp_path: Path) -> None:
     result = SourceDiscovery(tmp_path).classify("uv.lock")
 
-    assert result == IgnoredPath(path="uv.lock", source="generated", pattern="uv.lock")
+    assert result is None
 
 
 def test_classify_returns_none_for_non_ignored_path(tmp_path: Path) -> None:
@@ -83,28 +79,73 @@ def test_discover_records_ignore_reason_for_explicit_config_match(tmp_path: Path
     )
 
 
-def test_discover_records_generated_lockfile_for_explicit_request(tmp_path: Path) -> None:
+def test_explicit_ineligible_lockfile_is_not_reported_as_ignored(tmp_path: Path) -> None:
     _write(tmp_path / "uv.lock", "# lock\n")
 
     result = SourceDiscovery(tmp_path).discover(["uv.lock"])
 
     assert result.files == ()
-    assert result.ignored_path_reasons == (
-        IgnoredPath(path="uv.lock", source="generated", pattern="uv.lock"),
-    )
+    assert result.ignored_path_reasons == ()
 
 
-def test_discover_records_generated_lockfile_found_during_walk(tmp_path: Path) -> None:
+def test_walk_treats_ineligible_lockfile_as_unsupported_not_ignored(tmp_path: Path) -> None:
     _write(tmp_path / "uv.lock", "# lock\n")
     _write(tmp_path / "app.py", "x = 1\n")
 
     result = SourceDiscovery(tmp_path).discover(["."])
 
     assert [source.display_path for source in result.files] == ["app.py"]
-    assert (
-        IgnoredPath(path="uv.lock", source="generated", pattern="uv.lock")
-        in result.ignored_path_reasons
+    assert result.ignored_path_reasons == ()
+
+
+def test_eligible_json_lockfile_is_scanned(tmp_path: Path) -> None:
+    _write(tmp_path / "package-lock.json", "{}\n")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert [source.display_path for source in result.files] == ["package-lock.json"]
+
+
+def test_vcs_internals_remain_blocked_for_explicit_file_and_include_ignored(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path / ".git" / "config.py")
+
+    result = SourceDiscovery(tmp_path).discover([".git/config.py"], include_ignored=True)
+
+    assert result.files == ()
+    assert result.ignored_path_reasons == (
+        IgnoredPath(path=".git/config.py", source="default", pattern=".git"),
     )
+
+
+def test_python_fallback_exceptions_apply_at_any_depth(tmp_path: Path) -> None:
+    ignored_names = (
+        ".mypy_cache",
+        ".pyre",
+        ".pytest_cache",
+        ".pytype",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "__pycache__",
+        "htmlcov",
+        "venv",
+    )
+    for name in ignored_names:
+        _write(tmp_path / "nested" / name / "hidden.py")
+    _write(tmp_path / "cache" / "visible.py")
+    _write(tmp_path / "generated" / "visible.py")
+    _write(tmp_path / ".goat-flow" / "visible.py")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert {source.display_path for source in result.files} == {
+        ".goat-flow/visible.py",
+        "cache/visible.py",
+        "generated/visible.py",
+    }
+    assert {reason.pattern for reason in result.ignored_path_reasons} == set(ignored_names)
 
 
 def test_discover_ignored_paths_remains_plain_strings(tmp_path: Path) -> None:

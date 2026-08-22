@@ -55,6 +55,11 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 )
 @click.option("--no-config", is_flag=True, default=False, help="Skip config loading.")
 @click.option(
+    "--deep-scan-budget",
+    default="",
+    help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+)
+@click.option(
     "--include-ignored",
     is_flag=True,
     default=False,
@@ -75,6 +80,7 @@ def hook(
     hook_baseline_path: Path | None,
     config_path: Path | None,
     no_config: bool,
+    deep_scan_budget: str,
     include_ignored: bool,
     exclude_rule: tuple[str, ...],
     paths: tuple[str, ...],
@@ -99,6 +105,7 @@ def hook(
             config_path=config_path,
             no_config=no_config,
             include_ignored=include_ignored,
+            deep_scan_budget=deep_scan_budget,
         )
         report = _run_hook_analysis(
             paths=paths,
@@ -106,6 +113,7 @@ def hook(
             no_config=no_config,
             include_ignored=include_ignored,
             exclude_rule=exclude_rule,
+            deep_scan_budget=deep_scan_budget,
         )
         # Build the payload inside the try: a malformed --changed-ranges value
         # raises ValueError here, which must surface as a controlled exit 2 rather
@@ -144,6 +152,7 @@ def _run_hook_analysis(
     no_config: bool,
     include_ignored: bool,
     exclude_rule: tuple[str, ...],
+    deep_scan_budget: str,
 ) -> AnalysisReport:
     return run_analysis(
         AnalysisRunRequest(
@@ -157,6 +166,7 @@ def _run_hook_analysis(
             display_filter=FindingDisplayFilter(),
             baseline=BaselineOptions(disabled=True),
             execution_exclude_rules=_split_repeated_csv(exclude_rule),
+            deep_scan_budget=deep_scan_budget,
         )
     )
 
@@ -169,6 +179,7 @@ def _hook_base_identities(
     config_path: Path | None,
     no_config: bool,
     include_ignored: bool,
+    deep_scan_budget: str,
 ) -> frozenset[str] | None:
     """Resolve hook base stable identities for ``--baseline`` / ``--diff`` runs."""
     if hook_baseline_path is not None:
@@ -181,5 +192,6 @@ def _hook_base_identities(
             config_path=config_path,
             no_config=no_config,
             include_ignored=include_ignored,
+            deep_scan_budget=deep_scan_budget,
         )
     return None

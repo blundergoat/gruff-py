@@ -1,4 +1,8 @@
-"""End-to-end pipeline (`run_analysis`) shared by `gruff-py analyse` and dashboard scans."""
+"""Run the analysis pipeline shared by ``gruff-py analyse`` and dashboard scans.
+
+The pipeline turns a user's paths and options into deterministic findings, diagnostics, scores,
+and exit status. Reporters receive one complete result without reapplying config or suppression.
+"""
 
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -22,11 +26,12 @@ from gruffpy.analysis.changed_region import (
 )
 from gruffpy.analysis.report import AnalysisReport, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.analysis.suppression_summary import SuppressionSummary
+from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
+from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
-from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.rule.context import RuleContext
@@ -38,6 +43,7 @@ from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
+from gruffpy.suppression.sensitive_exclusion_filter import partition_sensitive_exclusions
 from gruffpy.version import VERSION
 
 _PARTIAL_PROJECT_CONTEXT_CAVEAT = (
@@ -47,7 +53,11 @@ _PARTIAL_PROJECT_CONTEXT_CAVEAT = (
 
 @dataclass(frozen=True, slots=True)
 class _ReportAssembly:
-    """Values needed to project a completed pipeline run into an analysis report."""
+    """Hold the completed scan state used to build one user-facing report.
+
+    This keeps report rendering separate from discovery, analysis, and filtering.
+    CLI and dashboard consumers receive the same assembled view.
+    """
 
     request: AnalysisRunRequest
     config: AnalysisConfig
@@ -65,6 +75,7 @@ class _ReportAssembly:
     changed: ChangedRegionSet
     changed_suppressed_count: int
     config_warnings: tuple[str, ...]
+    suppressions: tuple[SuppressionSummary, ...]
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
@@ -86,6 +97,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         strict_config=request.strict_config,
     )
     config, fail_threshold = _resolve_threshold_and_exclusions(request, config)
+    config = _apply_deep_scan_budget_override(config, request.deep_scan_budget)
 
     (
         discovery_result,
@@ -119,9 +131,11 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         registry=registry,
         units=units,
         context=context,
-        config=config,
         suppressions_by_file=suppressions_by_file,
     )
+    # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
+    # exactly like the inline directive channel, and every drop is counted for the report.
+    findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
@@ -161,11 +175,13 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             changed=changed,
             changed_suppressed_count=changed_filter_result.suppressed_count,
             config_warnings=config_warnings,
+            suppressions=suppressions,
         )
     )
 
 
 def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
+    """Project completed scan state into the report consumed by CLI and dashboard users."""
     return AnalysisReport(
         tool_version=VERSION,
         requested_paths=tuple(assembly.request.paths) if assembly.request.paths else (".",),
@@ -191,6 +207,7 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         output_volume_hint_threshold=assembly.config.output_volume_hint_threshold,
         suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
         config_warnings=assembly.config_warnings,
+        suppressions=assembly.suppressions,
     )
 
 
@@ -223,6 +240,7 @@ def _partial_project_context_caveat(
     config: AnalysisConfig,
     scan_scope: str,
 ) -> str | None:
+    """Return the caveat users need when project-wide rules receive only part of a project."""
     if scan_scope == "full-project":
         return None
     if any(isinstance(rule, ProjectRuleProtocol) for rule in registry.enabled_rules(config)):
@@ -234,6 +252,7 @@ def _with_execution_exclude_rules(
     config: AnalysisConfig,
     exclude_rules: tuple[str, ...],
 ) -> AnalysisConfig:
+    """Merge command-only rule exclusions into the config used for this user request."""
     selection = config.rule_selection
     merged = tuple(dict.fromkeys((*selection.exclude_rules, *exclude_rules)))
     return config.with_rule_selection(replace(selection, exclude_rules=merged))
@@ -257,6 +276,7 @@ def _discover_and_parse_sources(
     list[RunDiagnostic],
     ChangedRegionSet,
 ]:
+    """Discover requested files, narrow diff scans, and parse sources for rule execution."""
     discovery = SourceDiscovery(project_root)
     discovery_result = discovery.discover(
         list(paths),
@@ -278,7 +298,10 @@ def _discover_and_parse_sources(
             discovery_result,
             files=filter_sources_for_changed_regions(discovery_result.files, changed),
         )
-    units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
+    units, files_parsed, parse_diagnostics = _parse_sources(
+        discovery_result.files,
+        config.deep_scan_budget,
+    )
     return discovery_result, units, files_parsed, parse_diagnostics, changed
 
 
@@ -293,6 +316,7 @@ def _resolve_changed_regions(
     diff_patch: str,
     diagnostics: list[RunDiagnostic],
 ) -> ChangedRegionSet:
+    """Resolve the user's explicit ranges, patch, or Git selector into changed source regions."""
     try:
         if changed_ranges:
             return parse_explicit_ranges(source_paths, changed_ranges)
@@ -304,6 +328,8 @@ def _resolve_changed_regions(
             return changed_regions_from_git(project_root, since, paths)
         if diff_mode:
             return changed_regions_from_git(project_root, diff_mode, paths)
+    # For example, a malformed ``--changed-ranges`` value becomes a CLI diagnostic rather than
+    # a traceback.
     except ValueError as exc:
         diagnostics.append(RunDiagnostic(type="diff-error", message=str(exc)))
         return ChangedRegionSet(source="")
@@ -314,6 +340,7 @@ def _changed_region_payload(
     changed: ChangedRegionSet,
     suppressed_count: int,
 ) -> dict[str, object] | None:
+    """Describe active changed-region filtering in the JSON extension shown to users."""
     if not changed.active:
         return None
     return {
@@ -330,12 +357,12 @@ def _collect_findings(
     registry: RuleRegistry,
     units: list[AnalysisUnit],
     context: RuleContext,
-    config: AnalysisConfig,
     suppressions_by_file: dict[str, ParsedSuppressions],
 ) -> list[Finding]:
+    """Run enabled rules and inline suppressions, then order the findings shown to the user."""
     findings = registry.analyse(units, context)
     findings = apply_suppressions(findings, suppressions_by_file)
-    findings = _filter_allowed_secret_previews(findings, config)
+    # Findings without a source line sort at the file start so repeated CLI runs remain stable.
     findings.sort(
         key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
     )
@@ -350,6 +377,7 @@ def _handle_baseline(
     options: BaselineOptions,
     scan_scope: str,
 ) -> BaselineReport | None:
+    """Apply the user's baseline choice and append actionable diagnostics when it cannot run."""
     conflict = _baseline_option_conflict(options)
     if conflict is not None:
         diagnostics.append(conflict)
@@ -375,10 +403,8 @@ def _handle_baseline(
 def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
     """Classify the run as full-project or partial for caveats and baseline staleness.
 
-    ``--diff`` / ``--since`` narrow discovery to changed files before rules
-    run, so those runs are partial regardless of the requested paths.
-    Explicit ``--changed-ranges`` only filters findings after analysis, so
-    the requested paths decide.
+    ``--diff`` and ``--since`` make the run partial before rules execute; explicit
+    ``--changed-ranges`` filters later, so the user's requested paths decide.
     """
     if changed.active and not request.changed_ranges:
         return "partial-scope"
@@ -388,9 +414,8 @@ def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) 
 def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
     """Classify the requested paths as a full-project or partial scan.
 
-    A path counts as full-project when it resolves to the project root, so
-    ``.``, ``./``, ``src/..``, and an absolute path to the root all classify
-    the same way discovery treats them.
+    Paths such as ``.``, ``./``, ``src/..``, and the absolute project root all give
+    users the same full-project behavior.
     """
     if not paths:
         return "full-project"
@@ -401,6 +426,7 @@ def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
 
 
 def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
+    """Explain mutually exclusive baseline flags before users receive a misleading scan."""
     if options.generate_path is not None and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
@@ -425,8 +451,11 @@ def _generate_baseline_safely(
     diagnostics: list[RunDiagnostic],
     path: Path,
 ) -> BaselineReport | None:
+    """Generate a requested baseline, converting file failures into user-facing diagnostics."""
     try:
         return generate_baseline(project_root=project_root, path=path, findings=findings)
+    # For example, an unwritable baseline path should explain the filesystem failure without
+    # a traceback.
     except BaselineError as exc:
         diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(path)))
         return None
@@ -440,6 +469,7 @@ def _apply_baseline_if_present(
     explicit_path: Path | None,
     scan_scope: str,
 ) -> BaselineReport | None:
+    """Apply an available baseline while keeping malformed or unreadable files visible to users."""
     selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
     if selected_path is None:
         return None
@@ -451,6 +481,7 @@ def _apply_baseline_if_present(
             source=source,
             scan_scope=scan_scope,
         )
+    # For example, invalid baseline JSON becomes a diagnostic and leaves current findings intact.
     except BaselineError as exc:
         diagnostics.append(
             RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path))
@@ -463,6 +494,7 @@ def _apply_baseline_if_present(
 def _resolve_baseline_selection(
     project_root: Path, explicit_path: Path | None
 ) -> tuple[Path | None, str]:
+    """Choose the explicit or default baseline path a user asked the scan to apply."""
     if explicit_path is not None:
         return explicit_path, "explicit"
     default_path = default_baseline_path(project_root)
@@ -479,6 +511,7 @@ def _load_analysis_config(
     registry: RuleRegistry,
     strict_config: bool = False,
 ) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic], tuple[str, ...]]:
+    """Load settings for this request and preserve the config source and warnings for users."""
     config = AnalysisConfig.from_registry(registry)
     if no_config and config_path is not None:
         return (
@@ -503,24 +536,26 @@ def _load_analysis_config(
 
 def _parse_sources(
     source_files: tuple[SourceFile, ...],
+    deep_scan_budget: DeepScanBudget,
 ) -> tuple[list[AnalysisUnit], int, list[RunDiagnostic]]:
+    """Parse discovered files and retain parse failures for the final CLI report."""
     parser = PythonFileParser()
     units: list[AnalysisUnit] = []
     diagnostics: list[RunDiagnostic] = []
     files_parsed = 0
 
     for source_file in source_files:
-        unit = parser.parse(source_file)
+        unit = parser.parse(source_file, deep_scan_budget)
         units.append(unit)
         if not unit.has_parse_errors():
             files_parsed += 1
-            continue
         diagnostics.extend(
             RunDiagnostic(
-                type="parse-error",
+                type=diagnostic.type,
                 message=diagnostic.message,
                 file_path=source_file.display_path,
                 line=diagnostic.line,
+                invalidates_run=False if diagnostic.non_fatal else None,
             )
             for diagnostic in unit.diagnostics
         )
@@ -529,6 +564,7 @@ def _parse_sources(
 
 
 def _missing_path_diagnostics(missing_paths: tuple[str, ...]) -> list[RunDiagnostic]:
+    """Turn requested paths that do not exist into diagnostics users can act on."""
     return [
         RunDiagnostic(type="missing-path", message="path not found", path=missing)
         for missing in missing_paths
@@ -539,6 +575,7 @@ def _parse_suppressions(
     units: list[AnalysisUnit],
     registry: RuleRegistry,
 ) -> dict[str, ParsedSuppressions]:
+    """Parse inline suppression directives before findings are prepared for the user."""
     known_rule_ids = frozenset(rule.definition().id for rule in registry.all())
     return {
         unit.file.display_path: parse_suppressions(
@@ -546,13 +583,14 @@ def _parse_suppressions(
             known_rule_ids=known_rule_ids,
         )
         for unit in units
-        if unit.source
+        if unit.source and not unit.is_deep_scan_bounded()
     }
 
 
 def _suppression_diagnostics(
     suppressions_by_file: dict[str, ParsedSuppressions],
 ) -> list[RunDiagnostic]:
+    """Expose malformed or unknown suppression directives alongside scan findings."""
     diagnostics: list[RunDiagnostic] = []
     for file_path, suppressions in suppressions_by_file.items():
         diagnostics.extend(
@@ -586,7 +624,7 @@ def compute_exit_code(
         ``2`` when diagnostics exist, ``1`` when any finding meets the
         threshold, otherwise ``0``.
     """
-    if diagnostics:
+    if any(diagnostic.invalidates_run is not False for diagnostic in diagnostics):
         return 2
     for finding in findings:
         if fail_threshold.is_triggered_by(finding.severity):
@@ -594,19 +632,43 @@ def compute_exit_code(
     return 0
 
 
-def _filter_allowed_secret_previews(
-    findings: list[Finding],
+def _apply_deep_scan_budget_override(
     config: AnalysisConfig,
-) -> list[Finding]:
-    if not config.allowed_secret_previews:
-        return findings
-    allowed = set(config.allowed_secret_previews)
-    return [
-        finding
-        for finding in findings
-        if (
-            finding.pillar != Pillar.SENSITIVE_DATA
-            or not isinstance(finding.metadata.get("preview"), str)
-            or finding.metadata["preview"] not in allowed
+    value: str,
+) -> AnalysisConfig:
+    """Apply the atomic CLI budget after config so both limits share provenance."""
+    if value == "":
+        return config
+    current = config.deep_scan_budget
+    if value == "off":
+        return config.with_deep_scan_budget(
+            DeepScanBudget(
+                enabled=False,
+                max_lines=current.max_lines,
+                max_bytes=current.max_bytes,
+                override="cli",
+            )
         )
-    ]
+    parts = value.split(":")
+    if len(parts) != 2:
+        raise ConfigError(
+            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
+        )
+    try:
+        max_lines, max_bytes = (int(part) for part in parts)
+    except ValueError as exc:
+        raise ConfigError(
+            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
+        ) from exc
+    if max_lines <= 0 or max_bytes <= 0:
+        raise ConfigError(
+            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
+        )
+    return config.with_deep_scan_budget(
+        DeepScanBudget(
+            enabled=True,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
+            override="cli",
+        )
+    )

@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.schema import SUMMARY_SCHEMA_VERSION
+from gruffpy.reporting.text_reporter import append_sensitive_exclusions
 from gruffpy.version import TOOL_NAME
 
 
@@ -53,6 +54,7 @@ def summary_payload(
         "pillars": _summary_pillar_rows(report),
         "topRules": _counter_rows(rule_counts, top),
         "topFiles": _counter_rows(file_counts, top),
+        "diagnostics": [diagnostic.to_dict() for diagnostic in report.diagnostics],
     }
     if group_by == "rule":
         rule_rows = report.finding_counts_by_rule()
@@ -72,6 +74,11 @@ def summary_text(
     group_by: str = "none",
 ) -> str:
     """Render the summary command's text output.
+
+    Sensitive exclusions filter this command's findings, so the audit section ``analyse`` prints is
+    rendered below the canonical block through the same helper: FAMILY-CONTRACT.md (search:
+    ``**Where the audit must appear**``) forbids filtering a surface without publishing its count
+    there.
 
     Args:
         report: Analysis report to summarise.
@@ -120,6 +127,15 @@ def summary_text(
         lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
+    if report.diagnostics:
+        lines.extend(["", "Diagnostics"])
+        for diagnostic in report.diagnostics:
+            location = diagnostic.file_path or diagnostic.path
+            if diagnostic.file_path is not None and diagnostic.line is not None:
+                location = f"{diagnostic.file_path}:{diagnostic.line}"
+            suffix = "" if location is None else f" {location}"
+            lines.append(f"  [{diagnostic.type.upper()}]{suffix} {diagnostic.message}")
+    append_sensitive_exclusions(lines, report)
     _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
 

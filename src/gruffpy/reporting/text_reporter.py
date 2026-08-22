@@ -23,8 +23,9 @@ class TextReporter:
         """Render *report* as the terminal-friendly default ``gruff-py analyse`` output.
 
         Layout: tool/version header, file counts, ignored/missing path
-        listings, run diagnostics, the score block, every finding, and a
-        summary footer with severity counts and the exit code.
+        listings, run diagnostics, the score block, every finding, the
+        sensitive-exclusion total, and a summary footer with severity
+        counts and the exit code.
 
         Args:
             report: Fully-populated analysis report.
@@ -53,6 +54,7 @@ class TextReporter:
         _append_score(lines, report, counts)
         _append_findings(lines, report.findings)
         _append_scoring_mode(lines, report)
+        append_sensitive_exclusions(lines, report)
         _append_partial_context_caveat(lines, report)
 
         lines.append("")
@@ -153,6 +155,38 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
             "  Tip: regenerate after review with "
             f"`gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`."
         )
+
+
+def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> None:
+    """Show how many sensitive-data findings configuration removed, and under which rationale.
+
+    Follows the family total gruff-rs renders (``gruff-rs/src/render/text.rs``, search:
+    ``Suppressed findings:``) so no configured suppression is invisible in terminal output.
+
+    Shared with the ``summary`` command: FAMILY-CONTRACT.md (search: ``**Where the audit must
+    appear**``) requires every surface that applies an exclusion to publish the count on that same
+    surface, so both text surfaces render this one section instead of two wordings.
+
+    Args:
+        lines: Terminal output lines collected for the current analyse or summary journey.
+        report: Run result carrying one audit row per configured exclusion.
+
+    Returns:
+        None; the supplied output list gains a section only when a finding was suppressed.
+    """
+    total = sum(summary.suppressed for summary in report.suppressions)
+    # A run where no configured scope matched has no suppression total to reconcile.
+    if total == 0:
+        return
+    details = "; ".join(
+        f"sensitiveExclusions[{summary.index}] {summary.rule}: "
+        f"{summary.suppressed} ({summary.reason})"
+        for summary in report.suppressions
+        if summary.suppressed > 0
+    )
+    lines.append("")
+    lines.append("Sensitive exclusions")
+    lines.append(f"  Suppressed findings: {total} via {details}")
 
 
 def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> None:

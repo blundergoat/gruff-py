@@ -159,10 +159,18 @@ class RuleRegistry:
         findings: list[Finding] = []
         # A broken Python file retains useful source text but has no AST that
         # Python rules can inspect honestly.
-        if unit.file.is_python() and not unit.has_parse_errors():
+        if (
+            unit.file.is_python()
+            and not unit.has_parse_errors()
+            and not unit.is_deep_scan_bounded()
+        ):
             # Parseable Python units follow the existing per-file AST rule order.
             for rule in python_rules:
                 findings.extend(rule.analyse(unit, context))
+        elif unit.file.is_python() and unit.is_deep_scan_bounded():
+            for rule in python_rules:
+                if rule.definition().id == "size.file-length":
+                    findings.extend(rule.analyse(unit, context))
         # Every discovered unit keeps its original source, including parser failures.
         for rule in text_rules:
             findings.extend(rule.analyse(unit, context))

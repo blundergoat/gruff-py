@@ -491,6 +491,11 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_ANALYSIS_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
         help="Hide these comma-separated rule IDs or repeated values (score/exit unchanged).",
@@ -585,6 +590,11 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--report-interactive",
         is_flag=True,
@@ -700,6 +710,11 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_REPORT_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
         help="Hide these comma-separated rule IDs or repeated values.",
@@ -795,6 +810,11 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--include-ignored",
         is_flag=True,

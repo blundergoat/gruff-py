@@ -60,12 +60,14 @@ def test_hook_capabilities_advertise_contract() -> None:
         "stableIdentity": True,
         "ignoreReport": True,
         "newOnly": True,
+        "deepScanBudget": True,
     }
     assert payload["flags"] == {
         "changedRanges": "--changed-ranges",
         "diff": "--diff",
         "baseline": "--baseline",
         "excludeRule": "--exclude-rule",
+        "deepScanBudget": "--deep-scan-budget",
     }
     assert payload["flagOrder"] == "any"
 
@@ -386,6 +388,29 @@ def test_hook_exclude_rule_accepts_repeated_and_csv_values(
             "docs.missing-readme",
         }
     )
+
+
+def test_hook_publishes_nonfatal_bounded_deep_scan_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    (tmp_path / "large.py").write_text(f"AWS_KEY = {aws_key!r}\nresult = eval('payload')\n")
+
+    payload = _hook(
+        "--no-config",
+        "--deep-scan-budget",
+        "1:10000",
+        "large.py",
+    )
+
+    assert payload["diagnostics"][0]["type"] == "bounded-deep-scan"
+    assert payload["diagnostics"][0]["invalidatesRun"] is False
+    assert "override=cli" in payload["diagnostics"][0]["message"]
+    assert "sensitive-data.aws-access-key" in _rule_ids(payload)
+    assert "security.dangerous-function-call" not in _rule_ids(payload)
+    assert aws_key not in json.dumps(payload)
 
 
 def test_hook_reports_ignored_paths_and_config_errors(

@@ -9,6 +9,10 @@ minimumSeverity:
   report: none
   dashboard: none
 minimumPythonVersion: '3.11'
+deepScanBudget:
+  enabled: true
+  maxLines: 20000
+  maxBytes: 2000000
 paths:
   ignore:
   - .agents/
@@ -204,6 +208,11 @@ selection:
   - waste.unused-parameter
   excludePillars: []
   excludeRules: []
+# sensitiveExclusions is the only way to silence a sensitive-data finding.
+# Write each entry by hand with rule, path, and reason; symbol is optional.
+# No preview or matched value is ever turned into an entry automatically,
+# and every entry reports how many findings it suppressed.
+sensitiveExclusions: []
 rules:
   # Cognitive complexity
   complexity.cognitive:

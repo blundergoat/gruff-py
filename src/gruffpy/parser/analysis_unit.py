@@ -12,6 +12,8 @@ class ParseDiagnostic:
 
     message: str
     line: int | None = None
+    type: str = "parse-error"
+    non_fatal: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +38,11 @@ class AnalysisUnit:
         Returns:
             True when the unit has one or more parse diagnostics.
         """
-        return bool(self.diagnostics)
+        return any(not diagnostic.non_fatal for diagnostic in self.diagnostics)
+
+    def is_deep_scan_bounded(self) -> bool:
+        """Return whether this code unit deliberately omitted deep parsing."""
+        return any(diagnostic.type == "bounded-deep-scan" for diagnostic in self.diagnostics)
 
     def line_count(self) -> int:
         """Return the number of physical source lines.

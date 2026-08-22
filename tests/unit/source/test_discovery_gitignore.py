@@ -99,15 +99,24 @@ def test_gitignore_contents_glob_reincluded_child_is_discovered(tmp_path: Path) 
     assert "foo/baz.py" not in paths
 
 
-def test_explicit_gitignored_path_is_skipped_unless_include_ignored(tmp_path: Path) -> None:
+def test_explicit_gitignored_path_is_scanned(tmp_path: Path) -> None:
     _write(tmp_path / ".gitignore", "secret.py\n")
     _write(tmp_path / "secret.py")
 
     default = SourceDiscovery(tmp_path).discover(["secret.py"])
-    forced = SourceDiscovery(tmp_path).discover(["secret.py"], include_ignored=True)
+    assert "secret.py" in _display_paths(default.files)
 
-    assert "secret.py" not in _display_paths(default.files)
-    assert "secret.py" in _display_paths(forced.files)
+
+def test_ancestor_gitignore_disables_non_vcs_fallback_for_its_subtree(tmp_path: Path) -> None:
+    _write(tmp_path / "packages" / "app" / ".gitignore", "*.log\n")
+    _write(tmp_path / "packages" / "app" / "vendor" / "visible.py")
+    _write(tmp_path / "packages" / "other" / "vendor" / "hidden.py")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    paths = _display_paths(result.files)
+    assert "packages/app/vendor/visible.py" in paths
+    assert "packages/other/vendor/hidden.py" not in paths
 
 
 def test_gitignored_directory_descent_is_skipped(tmp_path: Path) -> None:

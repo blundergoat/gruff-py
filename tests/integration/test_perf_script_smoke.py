@@ -69,6 +69,7 @@ def quick_run_payload(tmp_path_factory: pytest.TempPathFactory) -> dict[str, obj
 _EXPECTED_TOP_LEVEL_KEYS = {
     "schemaVersion",
     "host",
+    "source",
     "repeat",
     "workloads",
     "perRuleCost",
@@ -97,6 +98,23 @@ def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
     workloads = quick_run_payload["workloads"]
     workload_names = {w["name"] for w in workloads}
     assert {"cold-start", "analyse-src-text"}.issubset(workload_names)
+
+
+def test_perf_script_payload_binds_runtime_source_and_host(
+    quick_run_payload: dict[str, object],
+) -> None:
+    host = quick_run_payload["host"]
+    source = quick_run_payload["source"]
+    runtime_source = source["runtimeSource"]
+
+    assert host["platform"]
+    assert host["uname"]
+    assert host["cpu"]
+    assert len(source["gitCommit"]) == 40
+    assert isinstance(source["gitDirty"], bool)
+    assert runtime_source["includedPaths"] == ["src/gruffpy", "pyproject.toml", "uv.lock"]
+    assert runtime_source["fileCount"] > 0
+    assert len(runtime_source["digest"]) == 64
 
 
 def test_perf_script_workloads_have_well_formed_timing_record(

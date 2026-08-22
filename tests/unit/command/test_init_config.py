@@ -21,6 +21,7 @@ from gruffpy.command.init_config import (
 from gruffpy.config.analysis_config import (
     MINIMUM_SEVERITY_BINARY_DEFAULTS,
     AnalysisConfig,
+    DeepScanBudget,
 )
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
@@ -58,7 +59,7 @@ _FULLY_CUSTOMISED_YAML = (
     "paths:\n  ignore:\n    - custom/**\n"
     "allowlists:\n"
     "  acceptedAbbreviations:\n    - biz\n"
-    "  secretPreviews:\n    - safe-preview\n"
+    "  secretPreviews: []\n"
     "  deadCode:\n"
     "    symbols:\n    - retained_symbol\n"
     "    decorators:\n    - retained_decorator\n"
@@ -131,6 +132,7 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
         AnalysisConfig.from_registry(RuleRegistry.defaults())
         .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
         .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
+        .with_deep_scan_budget(DeepScanBudget(override="config"))
     )
     loader = ConfigLoader(tmp_path, defaults)
     loaded, source = loader.load()
@@ -148,6 +150,13 @@ def test_render_default_config_yaml_lists_every_registered_rule() -> None:
 def test_render_default_config_yaml_prefills_starter_ignore_patterns() -> None:
     document = yaml.safe_load(render_default_config_yaml())
     assert document["paths"]["ignore"] == list(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
+
+
+def test_render_default_config_yaml_keeps_legacy_secret_previews_empty() -> None:
+    """Show users the only valid value for the retired preview setting."""
+    document = yaml.safe_load(render_default_config_yaml())
+
+    assert document["allowlists"]["secretPreviews"] == []
 
 
 def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> None:

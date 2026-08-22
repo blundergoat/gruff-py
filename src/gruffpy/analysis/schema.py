@@ -13,6 +13,12 @@ bumps it, per the cross-impl CONTRACT.md compatibility policy):
 - ``gruff.analysis.v2`` replaces the language-prefixed analysis schema string
   for cross-port JSON consumers. Baseline, hotspot, summary, and config schema
   strings are unchanged.
+- ``gruff.analysis.v2`` gained an additive ``suppressions`` array carrying one
+  ``{index, rule, paths, symbol, reason, suppressed}`` audit row per configured
+  ``sensitiveExclusions`` entry, including entries that matched nothing. The
+  array is always present and is empty when nothing is configured; the shape is
+  the family reference gruff-rs already ships. Consumers reading ``findings``
+  are unaffected.
 """
 
 ANALYSIS_SCHEMA_VERSION = "gruff.analysis.v2"

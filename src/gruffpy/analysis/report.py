@@ -13,6 +13,7 @@ from typing import Any
 
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
+from gruffpy.analysis.suppression_summary import SuppressionSummary
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
@@ -71,6 +72,8 @@ class AnalysisReport:
             omitted from ``gruff.analysis.v2`` JSON unless the schema is explicitly extended.
         partial_context_caveat: Optional run-level caveat for partial project-rule context.
         suppressed_count: Optional count of changed-region out-of-scope findings.
+        suppressions: One audit row per configured ``sensitiveExclusions`` entry, including
+            entries that matched nothing. Serialized as the family ``suppressions`` array.
         config_warnings: Non-fatal config-loader warnings (unknown rule-level
             keys downgraded by the default non-strict policy). Serialized as
             the additive ``run.configWarnings`` array only when non-empty;
@@ -98,6 +101,7 @@ class AnalysisReport:
     suppressed_count: int | None = None
     ignored_path_details: tuple[IgnoredPath, ...] = ()
     config_warnings: tuple[str, ...] = ()
+    suppressions: tuple[SuppressionSummary, ...] = ()
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -178,6 +182,7 @@ class AnalysisReport:
             "ignoredPathDetails": [detail.to_dict() for detail in self.ignored_path_details],
             "missingPaths": list(self.missing_paths),
             "diagnostics": [d.to_dict() for d in self.diagnostics],
+            "suppressions": [summary.to_dict() for summary in self.suppressions],
             "findings": [f.to_dict() for f in self.findings],
         }
         if self.suppressed_count is not None:

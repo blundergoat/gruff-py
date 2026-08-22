@@ -18,7 +18,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
-    redact_preview,
+    fixed_preview,
     shannon_entropy,
 )
 
@@ -36,16 +36,19 @@ _MIN_VALUE_LENGTH = 12
 
 
 class HardcodedEnvValueRule(SourceTextRule):
-    """Detect secret-named keys in `.env` files paired with high-entropy non-placeholder values."""
+    """Detect secret-named ``.env`` keys with high-entropy literal values.
+
+    Users encounter this rule after placing a real-looking credential in a committed environment
+    file; the finding names the setting but replaces its value with a fixed marker.
+    """
 
     ID = "sensitive-data.hardcoded-env-value"
 
     def definition(self) -> RuleDefinition:
         """Describe the hardcoded-env-value rule as a medium-confidence warning.
 
-        Medium confidence because entropy-based detection can fire on
-        deterministic-but-random-looking values (test fixtures, generated
-        IDs); the secret-key-name gate keeps the noise bounded.
+        Secret-like key names bound the noise, but random-looking fixtures can still match, so
+        users receive a medium-confidence warning rather than an error.
 
         Returns:
             Definition for the hardcoded-env-value rule under the
@@ -63,10 +66,8 @@ class HardcodedEnvValueRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``.env`` lines where a secret-shaped KEY=value has a high-entropy literal value.
 
-        Only runs on files named ``.env`` or ``.env.*``. Values prefixed
-        with ``$`` / ``${`` are treated as variable interpolation, not
-        literals. Below 12 characters or entropy < 3.0 bits/char, the
-        value is considered too small/structured to be a real secret.
+        Users see only literal values in ``.env`` files that meet the length and entropy gates;
+        placeholders and runtime variable references remain quiet.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -76,24 +77,30 @@ class HardcodedEnvValueRule(SourceTextRule):
             One finding per ``.env`` line whose value crosses the
             entropy/length gates.
         """
+        # Non-environment files stay out of this focused signal so users do not receive duplicate
+        # noise.
         if not _is_env_file(unit.file.display_path):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for match in _SECRET_KEY_RE.finditer(unit.source):
-            key = match.group("key")
-            value = match.group("value").strip().strip("\"'")
-            if value in _PLACEHOLDER_VALUES or len(value) < _MIN_VALUE_LENGTH:
+        # Each secret-named assignment remains independently actionable in the user's report.
+        for secret_assignment in _SECRET_KEY_RE.finditer(unit.source):
+            environment_key = secret_assignment.group("key")
+            secret_value = secret_assignment.group("value").strip().strip("\"'")
+            # Empty, short, and known placeholder values do not require credential rotation.
+            if secret_value in _PLACEHOLDER_VALUES or len(secret_value) < _MIN_VALUE_LENGTH:
                 continue
-            if value.startswith("${") or value.startswith("$"):
-                continue  # Variable interpolation - not a literal secret.
-            if shannon_entropy(value) < _ENTROPY_THRESHOLD:
+            # A runtime variable reference means the user did not commit the secret value itself.
+            if secret_value.startswith("${") or secret_value.startswith("$"):
                 continue
-            line = unit.source.count("\n", 0, match.start()) + 1
+            # Structured low-entropy values are unlikely to be live credentials worth surfacing.
+            if shannon_entropy(secret_value) < _ENTROPY_THRESHOLD:
+                continue
+            line = unit.source.count("\n", 0, secret_assignment.start()) + 1
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=f"`.env` value for `{key}` looks like a hard-coded secret.",
+                    message=f"`.env` value for `{environment_key}` looks like a hard-coded secret.",
                     file_path=unit.file.display_path,
                     line=line,
                     severity=definition.default_severity,
@@ -105,16 +112,16 @@ class HardcodedEnvValueRule(SourceTextRule):
                         "real secrets via the deployment environment or a secret manager."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={
-                        "preview": redact_preview(value),
-                        "key": key,
-                        "entropy": round(shannon_entropy(value), 2),
-                    },
+                    # The environment key names the setting the user must fix. The value's entropy
+                    # is a statistic computed from the matched secret and is forbidden in
+                    # serialized output by FAMILY-CONTRACT section 5.
+                    metadata={"preview": fixed_preview(), "key": environment_key},
                 ),
             )
         return findings
 
 
 def _is_env_file(display_path: str) -> bool:
+    """Return whether the user's discovered file uses an ``.env`` filename."""
     name = display_path.rsplit("/", 1)[-1]
     return name == ".env" or name.startswith(".env.")

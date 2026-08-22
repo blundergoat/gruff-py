@@ -19,6 +19,7 @@ from gruffpy.analysis.schema import CONFIG_SCHEMA_VERSION
 from gruffpy.config.analysis_config import (
     MINIMUM_SEVERITY_BINARY_DEFAULTS,
     AnalysisConfig,
+    DeepScanBudget,
 )
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import (
@@ -51,6 +52,12 @@ _TARGET_CONFIG_NAME = DEFAULT_YAML_CONFIG_NAME
 _ACCEPTED_ABBREVIATIONS_COMMENTS = (
     "  # acceptedAbbreviations lets naming rules accept project vocabulary.",
     "  # Configured values replace this seed; they do not merge with it.",
+)
+_SENSITIVE_EXCLUSIONS_COMMENTS = (
+    "# sensitiveExclusions is the only way to silence a sensitive-data finding.",
+    "# Write each entry by hand with rule, path, and reason; symbol is optional.",
+    "# No preview or matched value is ever turned into an entry automatically,",
+    "# and every entry reports how many findings it suppressed.",
 )
 
 
@@ -90,6 +97,7 @@ def render_resolved_config_yaml(config: AnalysisConfig) -> str:
         + scaffold_yaml
         + allowlists_yaml
         + selection_yaml
+        + _render_sensitive_exclusions_section(config)
         + _render_rules_section(config, registry)
     )
 
@@ -159,6 +167,7 @@ def _default_init_analysis_config(registry: RuleRegistry) -> AnalysisConfig:
         AnalysisConfig.from_registry(registry)
         .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
         .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
+        .with_deep_scan_budget(DeepScanBudget(override="config"))
     )
 
 
@@ -178,27 +187,34 @@ def _scaffold_document(
     minimum_severity = {
         command: severity.value for command, severity in config.minimum_severity.items()
     }
-    return {
+    document: dict[str, Any] = {
         "schemaVersion": CONFIG_SCHEMA_VERSION,
         "minimumSeverity": minimum_severity,
         "minimumPythonVersion": f"{major}.{minor}",
         "outputVolumeHintThreshold": config.output_volume_hint_threshold,
         "paths": {"ignore": list(config.ignored_path_patterns)},
     }
+    if config.deep_scan_budget.override == "config":
+        document["deepScanBudget"] = {
+            "enabled": config.deep_scan_budget.enabled,
+            "maxLines": config.deep_scan_budget.max_lines,
+            "maxBytes": config.deep_scan_budget.max_bytes,
+        }
+    return document
 
 
 def _render_allowlists_section(config: AnalysisConfig) -> str:
-    """Show user allowlists with the family-required replacement explanation.
+    """Show active user allowlists and retain the retired secret-preview key as an empty list.
 
     Args:
         config: Resolved allowlists; empty lists mean no user exceptions are active.
 
     Returns:
-        YAML section that retains every loaded allowlist value.
+        YAML section that preserves active allowlists while keeping ``secretPreviews`` inert.
     """
     allowlists = {
         "acceptedAbbreviations": list(config.accepted_abbreviations),
-        "secretPreviews": list(config.allowed_secret_previews),
+        "secretPreviews": [],
         "deadCode": {
             "symbols": list(config.dead_code_allowlist.symbols),
             "decorators": list(config.dead_code_allowlist.decorators),
@@ -215,6 +231,32 @@ def _render_allowlists_section(config: AnalysisConfig) -> str:
     for line in nested_yaml.rstrip("\n").split("\n"):
         lines.append("  " + line)
     return "\n".join(lines) + "\n"
+
+
+def _render_sensitive_exclusions_section(config: AnalysisConfig) -> str:
+    """Show the sensitive-data suppression section, empty by default, with authoring guidance.
+
+    Args:
+        config: Resolved settings; an empty list means the project suppresses nothing.
+
+    Returns:
+        YAML section listing every configured entry, preceded by the authoring comments.
+    """
+    entries: list[dict[str, Any]] = []
+    # Each entry is regenerated in the user's original order so audit indexes are preserved.
+    for exclusion in config.sensitive_exclusions:
+        entry: dict[str, Any] = {"rule": exclusion.rule, "path": exclusion.path}
+        # An absent symbol stays absent, because writing it back would narrow the scope.
+        if exclusion.symbol is not None:
+            entry["symbol"] = exclusion.symbol
+        entry["reason"] = exclusion.reason
+        entries.append(entry)
+    section_yaml = yaml.safe_dump(
+        {"sensitiveExclusions": entries},
+        sort_keys=False,
+        default_flow_style=False,
+    )
+    return "\n".join(_SENSITIVE_EXCLUSIONS_COMMENTS) + "\n" + section_yaml
 
 
 def _selection_document(config: AnalysisConfig) -> dict[str, Any]:
@@ -315,11 +357,8 @@ def _validate_and_atomically_replace(
 def _umask_derived_file_mode() -> int:
     """Return the permission bits ``open()`` gives a newly created file.
 
-    ``tempfile.mkstemp`` hardcodes ``0600``, so without this a first-time
-    config would ship tighter than the interactive prompt's ``Path.write_text``
-    produces for the same file. Reading a umask requires setting one, so the
-    caller's value is restored immediately; a CLI generating one config has no
-    concurrent writer to race.
+    ``mkstemp`` uses ``0600``; matching the active umask keeps ``init`` consistent with other
+    config writers. The user's umask is restored immediately after it is read.
 
     Returns:
         Permission bits for a new regular file under the active umask.

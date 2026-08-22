@@ -80,3 +80,38 @@ def test_threshold_rejects_boolean(tmp_path: Path) -> None:
         ConfigError, match=r"outputVolumeHintThreshold must be a non-negative integer"
     ):
         ConfigLoader(tmp_path, _defaults()).load()
+
+
+def test_deep_scan_budget_defaults_and_config_provenance(tmp_path: Path) -> None:
+    default_config, _ = ConfigLoader(tmp_path, _defaults()).load()
+    assert default_config.deep_scan_budget.override == "default"
+    assert default_config.deep_scan_budget.max_lines == 20_000
+    assert default_config.deep_scan_budget.max_bytes == 2_000_000
+
+    _write_yaml(
+        tmp_path,
+        "schemaVersion: gruff-py.config.v0.1\n"
+        "deepScanBudget:\n  enabled: true\n  maxLines: 12\n  maxBytes: 345\n",
+    )
+    configured, _ = ConfigLoader(tmp_path, _defaults()).load()
+    assert configured.deep_scan_budget.enabled is True
+    assert configured.deep_scan_budget.max_lines == 12
+    assert configured.deep_scan_budget.max_bytes == 345
+    assert configured.deep_scan_budget.override == "config"
+
+
+@pytest.mark.parametrize(
+    "body",
+    (
+        "deepScanBudget: true\n",
+        "deepScanBudget:\n  unknown: 1\n",
+        'deepScanBudget:\n  enabled: "yes"\n',
+        "deepScanBudget:\n  maxLines: 0\n",
+        "deepScanBudget:\n  maxBytes: 1.5\n",
+    ),
+)
+def test_deep_scan_budget_rejects_malformed_config(tmp_path: Path, body: str) -> None:
+    _write_yaml(tmp_path, "schemaVersion: gruff-py.config.v0.1\n" + body)
+
+    with pytest.raises(ConfigError, match="deepScanBudget"):
+        ConfigLoader(tmp_path, _defaults()).load()

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
@@ -39,27 +40,51 @@ class SarifReporter:
 
         rule_ids = sorted(rules)
         rule_indexes = {rule_id: index for index, rule_id in enumerate(rule_ids)}
+        run: dict[str, Any] = {
+            "tool": {
+                "driver": {
+                    "name": TOOL_NAME,
+                    "semanticVersion": report.tool_version,
+                    "rules": [rules[rule_id] for rule_id in rule_ids],
+                }
+            },
+            "results": [
+                _result(finding, rule_indexes[finding.rule_id]) for finding in report.findings
+            ],
+            "properties": _run_properties(report),
+        }
+        if report.diagnostics:
+            run["invocations"] = [
+                {
+                    "executionSuccessful": all(
+                        diagnostic.invalidates_run is False for diagnostic in report.diagnostics
+                    ),
+                    "toolExecutionNotifications": [
+                        _diagnostic_notification(diagnostic) for diagnostic in report.diagnostics
+                    ],
+                }
+            ]
         payload = {
             "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
             "version": "2.1.0",
-            "runs": [
-                {
-                    "tool": {
-                        "driver": {
-                            "name": TOOL_NAME,
-                            "semanticVersion": report.tool_version,
-                            "rules": [rules[rule_id] for rule_id in rule_ids],
-                        }
-                    },
-                    "results": [
-                        _result(finding, rule_indexes[finding.rule_id])
-                        for finding in report.findings
-                    ],
-                    "properties": _run_properties(report),
-                }
-            ],
+            "runs": [run],
         }
         return json.dumps(payload, indent=4) + "\n"
+
+
+def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
+    notification: dict[str, Any] = {
+        "descriptor": {"id": diagnostic.type},
+        "level": "note" if diagnostic.invalidates_run is False else "error",
+        "message": {"text": diagnostic.message},
+    }
+    path = diagnostic.file_path or diagnostic.path
+    if path is not None:
+        physical_location: dict[str, Any] = {"artifactLocation": {"uri": _uri(path)}}
+        if diagnostic.line is not None:
+            physical_location["region"] = {"startLine": diagnostic.line}
+        notification["locations"] = [{"physicalLocation": physical_location}]
+    return notification
 
 
 def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:

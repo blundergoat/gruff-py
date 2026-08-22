@@ -1,3 +1,9 @@
+"""Exercise Google Cloud service-account key findings in JSON-shaped input.
+
+The suite covers registry routing, real and placeholder key material, source locations, and the
+fixed preview users receive without private-key or key-ID fragments.
+"""
+
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
@@ -22,7 +28,7 @@ def test_gcp_service_account_key_emits_with_redacted_preview():
     assert finding.line == 2
     assert finding.metadata == {
         "category": "service-account-key",
-        "preview": "----...--\\n (redacted, 183 chars)",
+        "preview": "[redacted]",
         "provider": "gcp",
     }
     _assert_gcp_raw_values_redacted(finding.message, str(finding.metadata))

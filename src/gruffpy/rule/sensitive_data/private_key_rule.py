@@ -18,8 +18,8 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
+    fixed_preview,
     iter_matches,
-    redact_preview,
 )
 
 _PATTERN = compile_pattern(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
@@ -32,16 +32,19 @@ _MIN_REAL_KEY_BODY_LEN = 100
 
 
 class PrivateKeyRule(SourceTextRule):
-    """Detect ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM headers across RSA, EC, ED25519, etc."""
+    """Detect PEM private-key headers across common key formats.
+
+    Users see the committed header's source line and rotation guidance for RSA, EC, DSA, ED25519,
+    and OpenSSH keys, while the finding preview contains no key-derived text.
+    """
 
     ID = "sensitive-data.private-key"
 
     def definition(self) -> RuleDefinition:
         """Describe the private-key rule as a high-confidence ERROR.
 
-        ERROR severity because the PEM header itself is the canonical
-        signal of a committed private key; the body's validity isn't
-        load-bearing.
+        A PEM header gives users a high-confidence signal, and error severity reflects the need to
+        remove and rotate a committed private key.
 
         Returns:
             Definition for the private-key rule under the sensitive-data
@@ -59,9 +62,8 @@ class PrivateKeyRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag any ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM header in source.
 
-        Covers RSA, EC, DSA, ED25519, and OpenSSH variants - the rule
-        doesn't validate the rest of the PEM body because committed
-        headers alone leak the intent and require rotation.
+        Users see common key headers without full PEM validation, while short placeholder bodies
+        remain quiet.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -72,15 +74,17 @@ class PrivateKeyRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in iter_matches(_PATTERN, unit.source):
-            if _is_placeholder_pem_block(unit.source, match.start_offset):
+        # Every PEM header is reviewed independently so users can rotate each committed key.
+        for key_header_match in iter_matches(_PATTERN, unit.source):
+            # Short placeholder bodies remain useful examples and do not require user remediation.
+            if _is_placeholder_pem_block(unit.source, key_header_match.start_offset):
                 continue
             findings.append(
                 Finding(
                     rule_id=definition.id,
                     message="Private-key PEM header in source.",
                     file_path=unit.file.display_path,
-                    line=match.line,
+                    line=key_header_match.line,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
@@ -90,7 +94,7 @@ class PrivateKeyRule(SourceTextRule):
                         "store the new one in a secret manager, and reference it at runtime."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": redact_preview(match.raw)},
+                    metadata={"preview": fixed_preview()},
                 ),
             )
         return findings
@@ -98,7 +102,9 @@ class PrivateKeyRule(SourceTextRule):
 
 def _is_placeholder_pem_block(source: str, header_offset: int) -> bool:
     """Return whether a full PEM block has only a short placeholder body."""
+    # Only the block containing this header can determine whether the user's key is a placeholder.
     for block_match in _PEM_BLOCK_RE.finditer(source):
+        # Other PEM blocks in the same file must not suppress this reported header.
         if not (block_match.start() <= header_offset < block_match.end()):
             continue
         body = _PEM_ARMOR_RE.sub("", block_match.group(0))

@@ -1,6 +1,7 @@
 """Renders findings as GitHub Actions workflow annotations."""
 
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.finding.finding import Finding
 
 
@@ -20,8 +21,20 @@ class GithubAnnotationsReporter:
         Returns:
             Annotation lines (empty string when there are no findings).
         """
-        lines = [_annotation(finding) for finding in report.findings]
+        lines = [*(_diagnostic_annotation(item) for item in report.diagnostics)]
+        lines.extend(_annotation(finding) for finding in report.findings)
         return "" if not lines else "\n".join(lines) + "\n"
+
+
+def _diagnostic_annotation(diagnostic: RunDiagnostic) -> str:
+    level = "notice" if diagnostic.invalidates_run is False else "error"
+    properties = [f"title={_escape_property(diagnostic.type)}"]
+    path = diagnostic.file_path or diagnostic.path
+    if path is not None:
+        properties.insert(0, f"file={_escape_property(path)}")
+    if diagnostic.line is not None:
+        properties.append(f"line={diagnostic.line}")
+    return f"::{level} {','.join(properties)}::{_escape_data(diagnostic.message)}"
 
 
 def _annotation(finding: Finding) -> str:

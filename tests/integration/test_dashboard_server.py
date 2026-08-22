@@ -46,6 +46,21 @@ def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
     assert _missing(interactive_scan, _EXPECTED_INTERACTIVE_SCAN_SUBSTRINGS) == []
 
 
+def test_dashboard_round_trips_deep_scan_budget_and_diagnostic(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text("value = 1\n")
+
+    with _served_dashboard(tmp_path, ("src",)) as base_url:
+        shell = _fetch(base_url + "/?deepScanBudget=1%3A10000")
+        scan = _fetch(base_url + "/scan?deepScanBudget=1%3A10000")
+
+    assert 'name="deepScanBudget" value="1:10000"' in shell
+    assert "bounded-deep-scan" in scan
+    assert "override=cli" in scan
+    assert "--deep-scan-budget 1:10000" in scan
+
+
 def _missing(body: str, expected: tuple[str, ...]) -> list[str]:
     return [s for s in expected if s not in body]
 

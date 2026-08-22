@@ -40,6 +40,7 @@ class AnalysisRunRequest:
         execution_exclude_rules: Rule ids excluded before analysis execution.
         strict_config: When true, unknown rule-level config keys raise instead
             of downgrading to warnings.
+        deep_scan_budget: Atomic CLI override in ``LINES:BYTES`` or ``off`` form.
     """
 
     paths: tuple[str, ...]
@@ -59,3 +60,4 @@ class AnalysisRunRequest:
     changed_scope: str = "symbol"
     execution_exclude_rules: tuple[str, ...] = ()
     strict_config: bool = False
+    deep_scan_budget: str = ""

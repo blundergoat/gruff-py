@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -82,6 +83,7 @@ def _finding(**overrides: Any) -> Finding:
 def _report(
     findings: tuple[Finding, ...] | None = None,
     filters: FindingDisplayFilter | None = None,
+    diagnostics: tuple[RunDiagnostic, ...] = (),
 ) -> AnalysisReport:
     """Build the native report a user would send to each output renderer.
 
@@ -102,12 +104,45 @@ def _report(
         files_parsed=1,
         ignored_paths=(),
         missing_paths=(),
-        diagnostics=(),
+        diagnostics=diagnostics,
         findings=selected,
         exit_code=0,
         score=ScoreCalculator().calculate(list(selected)),
         filters=filters,
     )
+
+
+def test_bounded_deep_scan_is_visible_in_every_analysis_renderer() -> None:
+    diagnostic = RunDiagnostic(
+        type="bounded-deep-scan",
+        message=(
+            "path=src/large.py; lines=20001; bytes=2000001; maxLines=20000; "
+            "maxBytes=2000000; override=config"
+        ),
+        file_path="src/large.py",
+        line=1,
+        invalidates_run=False,
+    )
+    report = _report(diagnostics=(diagnostic,))
+    rendered = {
+        "json": JsonReporter().render(report),
+        "text": TextReporter().render(report),
+        "html": HtmlReporter().render(report),
+        "markdown": MarkdownReporter().render(report),
+        "github": GithubAnnotationsReporter().render(report),
+        "hotspot": HotspotReporter().render(report),
+        "sarif": SarifReporter().render(report),
+    }
+
+    for output in rendered.values():
+        assert "bounded-deep-scan" in output.casefold()
+        assert "override=config" in output
+
+    assert "::notice file=src/large.py,title=bounded-deep-scan,line=1::" in rendered["github"]
+    sarif = json.loads(rendered["sarif"])
+    invocation = sarif["runs"][0]["invocations"][0]
+    assert invocation["executionSuccessful"] is True
+    assert invocation["toolExecutionNotifications"][0]["level"] == "note"
 
 
 def test_json_reporter_records_display_filters():
@@ -176,6 +211,7 @@ def test_hotspot_keeps_existing_scope_shape_for_partial_context() -> None:
         "type",
         "limitations",
         "scope",
+        "diagnostics",
         "hotspots",
     }
     assert hotspot_payload["scope"] == "full-project"

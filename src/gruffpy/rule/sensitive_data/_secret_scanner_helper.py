@@ -3,8 +3,8 @@
 - Regex compilation utilities (case-sensitive by default; sensitive-data
   patterns rely on character classes that should NOT be loosened).
 - Shannon entropy over byte/character distributions.
-- Preview redaction in the canonical ``first 4 + ... + last 4 (redacted, N chars)``
-  shape so findings never leak the raw secret.
+- Fixed zero-payload preview markers so findings never expose secret-derived
+  characters or lengths.
 - Line resolution: map a string offset into a 1-based line number.
 """
 
@@ -13,10 +13,6 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-# Strings shorter than this are too small to redact meaningfully and too
-# common in benign text (IDs, short tokens). Sensitive-data rules typically
-# specify their own min lengths via the regex.
-MIN_REDACTABLE_LEN = 8
 _PLACEHOLDER_MARKERS = frozenset(
     {
         "changeme",
@@ -35,6 +31,9 @@ _PLACEHOLDER_MARKERS = frozenset(
 @dataclass(frozen=True, slots=True)
 class SecretMatch:
     """One match of a sensitive-data pattern inside a source file.
+
+    Rules use this location to show users which line needs review while keeping the matched value
+    inside the scanner until a zero-payload finding is built.
 
     Attributes:
         raw: Matched secret text before redaction.
@@ -111,23 +110,13 @@ def shannon_entropy(text: str) -> float:
     return -sum((c / length) * math.log2(c / length) for c in counts.values())
 
 
-def redact_preview(secret: str) -> str:
-    """Return a redacted preview of *secret* safe for logs and findings.
-
-    Shape: ``first4...last4 (redacted, N chars)``. Shorter secrets get a
-    single asterisk per character so the structure is still recognisable
-    without leaking content.
-
-    Args:
-        secret: Raw secret-like value that must not be exposed directly.
+def fixed_preview() -> str:
+    """Return the fixed marker used for every secret-like value.
 
     Returns:
-        Redacted preview preserving only length and limited edge context.
+        Classification-only marker with no value-derived characters or length.
     """
-    length = len(secret)
-    if length < MIN_REDACTABLE_LEN:
-        return f"{'*' * length} (redacted, {length} chars)"
-    return f"{secret[:4]}...{secret[-4:]} (redacted, {length} chars)"
+    return "[redacted]"
 
 
 def is_likely_placeholder_secret(secret: str) -> bool:

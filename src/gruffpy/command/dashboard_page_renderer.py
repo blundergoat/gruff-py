@@ -52,6 +52,8 @@ class DashboardPageRenderer:
             "</div>"
             '<div class="field-grid">'
             f"{_field('Config path', 'config', state['config'], '.gruff-py.yaml')}"
+            f"{_field('Deep scan budget', 'deepScanBudget', state.get('deepScanBudget', ''), '20000:2000000 or off')}"
+            '</div><div class="field-grid">'
             '<label>Fail on<select name="failOn">'
             f"{_option('none', state['failOn'])}"
             f"{_option('advisory', state['failOn'])}"

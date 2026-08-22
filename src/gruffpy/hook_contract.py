@@ -98,12 +98,14 @@ def capabilities_payload() -> dict[str, Any]:
             "stableIdentity": True,
             "ignoreReport": True,
             "newOnly": True,
+            "deepScanBudget": True,
         },
         "flags": {
             "changedRanges": "--changed-ranges",
             "diff": "--diff",
             "baseline": "--baseline",
             "excludeRule": "--exclude-rule",
+            "deepScanBudget": "--deep-scan-budget",
         },
         "flagOrder": "any",
     }
@@ -173,6 +175,7 @@ def hook_payload(
         "findings": [_finding_payload(finding) for finding in findings],
         "suppressed": {"count": filtered.suppressed_count},
         "ignored": {"paths": [detail.to_dict() for detail in report.ignored_path_details]},
+        "diagnostics": [diagnostic.to_dict() for diagnostic in report.diagnostics],
         "config": {"schemaOk": True, "error": None},
     }
 
@@ -301,6 +304,7 @@ def stable_identities_from_git_base(
     config_path: Path | None,
     no_config: bool,
     include_ignored: bool,
+    deep_scan_budget: str = "",
 ) -> frozenset[str]:
     """Analyze the git base tree and return hook stable identities.
 
@@ -334,6 +338,7 @@ def stable_identities_from_git_base(
                 project_root=base_root,
                 display_filter=FindingDisplayFilter(),
                 baseline=BaselineOptions(disabled=True),
+                deep_scan_budget=deep_scan_budget,
             )
         )
         return frozenset(
