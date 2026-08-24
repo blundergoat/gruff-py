@@ -647,6 +647,14 @@ def test_cli_list_rules_json_lists_rule_metadata():
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
 
+    heuristic_rule = next(
+        candidate
+        for candidate in payload["rules"]
+        if candidate["id"] == "complexity.halstead-volume"
+    )
+    assert heuristic_rule["falsePositiveShapes"]
+    assert "falsePositiveShapes" not in heuristic_rule["documentation"]
+
 
 def test_cli_list_rules_accepts_text_alias():
     result = CliRunner().invoke(main, ["list-rules", "--format", "text"])
@@ -702,6 +710,7 @@ def test_cli_list_rules_explain_json_emits_structured_payload():
     assert payload["relatedRules"] == ["naming.abbreviation", "naming.identifier-quality"]
     assert "optionDescriptions" in payload["documentation"]
     assert "acceptedShortNames" in payload["documentation"]["optionDescriptions"]
+    assert payload["documentation"]["falsePositiveShapes"]
 
 
 def test_cli_list_rules_explain_unknown_id_exits_one_with_suggestion():

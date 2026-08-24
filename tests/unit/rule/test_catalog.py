@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.catalog import (
@@ -121,6 +122,28 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
     assert docs.bad_example
     assert docs.good_example
     assert docs.confidence_rationale
+
+
+def test_medium_and_low_confidence_rules_publish_false_positive_guidance() -> None:
+    heuristic_definitions = [
+        definition
+        for definition in _ALL_DEFINITIONS
+        if definition.confidence in {Confidence.MEDIUM, Confidence.LOW}
+    ]
+    missing = [
+        definition.id
+        for definition in heuristic_definitions
+        if not documentation_for_rule(definition.id).false_positive_shapes
+    ]
+    incomplete = [
+        definition.id
+        for definition in heuristic_definitions
+        for shape in documentation_for_rule(definition.id).false_positive_shapes
+        if not shape.shape.strip() or not shape.mitigation.strip()
+    ]
+
+    assert missing == []
+    assert incomplete == []
 
 
 _METRIC_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.id in _FORMULA_RULES]

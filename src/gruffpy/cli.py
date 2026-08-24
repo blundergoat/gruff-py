@@ -848,8 +848,28 @@ def _init_success_message(config_path: Path) -> str:
     )
 
 
+_LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS = frozenset(
+    {
+        "correctness.substring-vocabulary-match",
+        "correctness.unsafe-numeric-coercion",
+        "dead-code.exported-but-unreferenced",
+        "dead-code.unused-private-function",
+        "design.runtime-sys-path-mutation",
+        "naming.abbreviation",
+        "security.unsanitized-markdown-interpolation",
+        "security.weak-crypto",
+        "test-quality.static-analysis-redundant-test",
+    }
+)
+
+
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
     documentation = documentation_for_rule(definition.id)
+    documentation_payload = documentation.to_payload()
+    false_positive_shapes_payload = documentation_payload.get("falsePositiveShapes", [])
+    # The full catalogue keeps its 0.5 nested envelope; M04's canonical mirror is top-level.
+    if definition.id not in _LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS:
+        documentation_payload.pop("falsePositiveShapes", None)
     return {
         "id": definition.id,
         "name": definition.name,
@@ -861,7 +881,12 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         **definition.threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
-        "documentation": documentation.to_payload(),
+        **(
+            {"falsePositiveShapes": false_positive_shapes_payload}
+            if documentation.false_positive_shapes
+            else {}
+        ),
+        "documentation": documentation_payload,
     }
 
 

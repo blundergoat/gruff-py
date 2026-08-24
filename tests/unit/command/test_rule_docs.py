@@ -65,6 +65,8 @@ def test_rendered_rule_docs_include_catalog_details() -> None:
         "Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`"
     )
     assert threshold_metadata in _RENDERED_DOCS
+    assert "- Common false-positive shapes:" in _RENDERED_DOCS
+    assert "A declarative builder dominated by one literal table" in _RENDERED_DOCS
 
 
 def test_rendered_rule_docs_header_uses_runtime_totals() -> None:

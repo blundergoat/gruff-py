@@ -284,6 +284,11 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     # Security metadata gives users the sink/source context attached to a finding.
     if docs.security_metadata:
         lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
+    if docs.false_positive_shapes:
+        lines.append("- Common false-positive shapes:")
+        for false_positive_shape in docs.false_positive_shapes:
+            lines.append(f"  - {false_positive_shape.shape}")
+            lines.append(f"    Mitigation: {false_positive_shape.mitigation}")
     lines.extend(
         [
             f"- Bad example: {docs.bad_example}",
