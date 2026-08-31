@@ -122,9 +122,7 @@ def _ctx(options: dict | None = None) -> RuleContext:
     configured_options = {} if options is None else options
     return RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(enabled=True, options=configured_options)}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True, options=configured_options)}),
     )
 
 
@@ -260,9 +258,7 @@ def test_future_annotations_keep_structural_optional_shape(
         declaration_template: Function/attribute source shown to the scanner.
         declaration_kind: Expected user-facing metadata kind.
     """
-    user_source = "from __future__ import annotations\n" + declaration_template.format(
-        annotation="Optional[bool]"
-    )
+    user_source = "from __future__ import annotations\n" + declaration_template.format(annotation="Optional[bool]")
 
     findings = BooleanPrefixRule().analyse(_unit(user_source), _ctx())
 
@@ -290,15 +286,9 @@ def test_quoted_annotation_parse_failures_and_calls_stay_quiet(annotation: str) 
 def test_annotation_depth_limit_stays_quiet() -> None:
     """Stop deeply wrapped annotations before a crafted file exhausts the scanner."""
     # A generated model can nest metadata repeatedly; excessive depth is unproved.
-    deeply_wrapped_annotation = (
-        "Annotated[" * _OVER_LIMIT_ANNOTATION_WRAPPERS
-        + "bool"
-        + ", 1]" * _OVER_LIMIT_ANNOTATION_WRAPPERS
-    )
+    deeply_wrapped_annotation = "Annotated[" * _OVER_LIMIT_ANNOTATION_WRAPPERS + "bool" + ", 1]" * _OVER_LIMIT_ANNOTATION_WRAPPERS
 
-    assert (
-        _findings_for_annotation(deeply_wrapped_annotation, _DECLARATION_CASES[0].values[0]) == []
-    )
+    assert _findings_for_annotation(deeply_wrapped_annotation, _DECLARATION_CASES[0].values[0]) == []
 
 
 def test_scalar_boolean_annotation_keeps_survivor_identity() -> None:
@@ -330,12 +320,7 @@ def test_has_prefix_does_not_fire():
 
 
 def test_verb_predicate_does_not_fire():
-    src = (
-        "def uses_quoted_placeholder() -> bool:\n"
-        "    return True\n"
-        "def check_rules_markdown() -> bool:\n"
-        "    return True\n"
-    )
+    src = "def uses_quoted_placeholder() -> bool:\n    return True\ndef check_rules_markdown() -> bool:\n    return True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -347,13 +332,7 @@ def test_bool_adjective_attribute_does_not_fire():
 
 
 def test_flag_prefix_and_suffix_patterns_do_not_fire():
-    src = (
-        "class C:\n"
-        "    include_ignored: bool = True\n"
-        "    no_config: bool = False\n"
-        "    query_bool: bool = True\n"
-        "    feature_flag: bool = False\n"
-    )
+    src = "class C:\n    include_ignored: bool = True\n    no_config: bool = False\n    query_bool: bool = True\n    feature_flag: bool = False\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -414,13 +393,7 @@ def test_bool_typed_attribute_with_prefix_does_not_fire():
 
 
 def test_override_decorator_skips_rule():
-    src = (
-        "from typing import override\n"
-        "class C:\n"
-        "    @override\n"
-        "    def valid(self) -> bool:\n"
-        "        return True\n"
-    )
+    src = "from typing import override\nclass C:\n    @override\n    def valid(self) -> bool:\n        return True\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -443,21 +416,13 @@ def test_upper_snake_module_constant_does_not_fire():
 def test_pydantic_basemodel_field_does_not_fire():
     # Pydantic field name is part of the JSON API contract; rename would break
     # every consumer.
-    src = (
-        "from pydantic import BaseModel\n"
-        "class SuggestedAction(BaseModel):\n"
-        "    actioned: bool = False\n"
-    )
+    src = "from pydantic import BaseModel\nclass SuggestedAction(BaseModel):\n    actioned: bool = False\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_typeddict_field_does_not_fire():
-    src = (
-        "from typing import TypedDict\n"
-        "class Session(TypedDict, total=False):\n"
-        "    skip_verification: bool\n"
-    )
+    src = "from typing import TypedDict\nclass Session(TypedDict, total=False):\n    skip_verification: bool\n"
     findings = BooleanPrefixRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -650,12 +615,7 @@ def test_unconfigured_accepted_boolean_name_still_fires() -> None:
 def test_accepted_boolean_name_keeps_exact_publish_index_boundary() -> None:
     """Preserve only the exact external name selected in user configuration."""
     # A user may keep one protocol method while still reviewing nearby result names.
-    user_source = (
-        "def publish_index() -> bool:\n"
-        "    return True\n"
-        "def deploy_result() -> bool:\n"
-        "    return True\n"
-    )
+    user_source = "def publish_index() -> bool:\n    return True\ndef deploy_result() -> bool:\n    return True\n"
     configured_context = _ctx(options={"acceptedBooleanNames": ["publish_index"]})
 
     user_findings = BooleanPrefixRule().analyse(_unit(user_source), configured_context)

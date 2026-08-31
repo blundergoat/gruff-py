@@ -59,9 +59,7 @@ class HtmlReporter:
         numeric_score = f"{score.composite.score:.2f} / 100" if score is not None else "n/a"
         counts = report.finding_counts()
         title = f"gruff-py inspection report - {grade}"
-        script = (
-            f'<script type="module">{_INTERACTIVE_SCRIPT}</script>\n' if self.interactive else ""
-        )
+        script = f'<script type="module">{_INTERACTIVE_SCRIPT}</script>\n' if self.interactive else ""
 
         return (
             "<!DOCTYPE html>\n"
@@ -171,11 +169,7 @@ class HtmlReporter:
 
     def _pillars(self, report: AnalysisReport) -> str:
         rows = _pillar_summary_rows(report)
-        body = (
-            "".join(_pillar_row(row) for row in rows)
-            if rows
-            else '<tr><td colspan="7">No pillars.</td></tr>'
-        )
+        body = "".join(_pillar_row(row) for row in rows) if rows else '<tr><td colspan="7">No pillars.</td></tr>'
         return (
             '<section class="pillars"><h2 class="section-head">pillars '
             '<span class="aside">weighted composite</span></h2>'
@@ -212,13 +206,8 @@ class HtmlReporter:
         axis = []
         for label, count in distribution.items():
             height = max(4, round((count / max_count) * 100))
-            class_name = (
-                " fail" if label in {"16-20", "21+"} else " warn" if label == "11-15" else ""
-            )
-            bars.append(
-                f'<div class="bar{class_name}" style="height:{height}%;">'
-                f'<span class="count">{count}</span></div>'
-            )
+            class_name = " fail" if label in {"16-20", "21+"} else " warn" if label == "11-15" else ""
+            bars.append(f'<div class="bar{class_name}" style="height:{height}%;"><span class="count">{count}</span></div>')
             axis.append(f"<span>{_esc(label)}</span>")
         return (
             '<section class="chart-section"><h2 class="section-head">distribution '
@@ -320,10 +309,7 @@ class HtmlReporter:
 
     def _finding_filters(self, report: AnalysisReport) -> str:
         pillars = sorted({finding.pillar.value for finding in report.findings})
-        pillar_options = "".join(
-            f'<option value="{_escape_attribute(pillar)}">{_esc(pillar)}</option>'
-            for pillar in pillars
-        )
+        pillar_options = "".join(f'<option value="{_escape_attribute(pillar)}">{_esc(pillar)}</option>' for pillar in pillars)
         pillar_size = max(2, min(6, len(pillars)))
         return (
             '<form class="finding-filters" data-finding-filters aria-label="Filter flagged findings">'
@@ -392,25 +378,18 @@ def _pillar_row(pillar: PillarScore) -> str:
 
 
 def _meta_row(label: str, value: str) -> str:
-    return (
-        f'<div><span class="label">{_esc(label)}</span><span class="val">{_esc(value)}</span></div>'
-    )
+    return f'<div><span class="label">{_esc(label)}</span><span class="val">{_esc(value)}</span></div>'
 
 
 def _stat(number: str, label: str, class_name: str) -> str:
-    return (
-        f'<div class="stat"><div class="num {_escape_attribute(class_name)}">{_esc(number)}</div>'
-        f'<div class="lbl">{_esc(label)}</div></div>'
-    )
+    return f'<div class="stat"><div class="num {_escape_attribute(class_name)}">{_esc(number)}</div><div class="lbl">{_esc(label)}</div></div>'
 
 
 def _diagnostic_row(diagnostic: RunDiagnostic) -> str:
     location = diagnostic.file_path or diagnostic.path
     if diagnostic.file_path is not None and diagnostic.line is not None:
         location = f"{diagnostic.file_path}:{diagnostic.line}"
-    location_html = (
-        "" if location is None else f'<span class="diagnostic-location">{_esc(location)}</span>'
-    )
+    location_html = "" if location is None else f'<span class="diagnostic-location">{_esc(location)}</span>'
     return (
         '<div class="diagnostic">'
         f'<span class="diagnostic-type">{_esc(diagnostic.type)}</span>'
@@ -423,17 +402,10 @@ def _verdict_summary(report: AnalysisReport, counts: dict[str, int]) -> str:
     threshold_findings = counts["warning"] + counts["error"]
     if threshold_findings == 0:
         return "No warning or error findings flagged."
-    pillars = {
-        finding.pillar.value
-        for finding in report.findings
-        if finding.severity.value in {"warning", "error"}
-    }
+    pillars = {finding.pillar.value for finding in report.findings if finding.severity.value in {"warning", "error"}}
     finding_label = "finding" if threshold_findings == 1 else "findings"
     pillar_label = "pillar" if len(pillars) == 1 else "pillars"
-    return (
-        f"{threshold_findings} {finding_label} at warning or error severity "
-        f"across {len(pillars)} {pillar_label}."
-    )
+    return f"{threshold_findings} {finding_label} at warning or error severity across {len(pillars)} {pillar_label}."
 
 
 def _cyclomatic_summary(distribution: dict[str, int]) -> str:
@@ -443,10 +415,7 @@ def _cyclomatic_summary(distribution: dict[str, int]) -> str:
     exceeds = moderate + high + severe
     method_label = "function" if exceeds == 1 else "functions"
     verb = "exceeds" if exceeds == 1 else "exceed"
-    return (
-        f"{exceeds} {method_label} {verb} CC 10 "
-        f"({moderate} in 11-15, {high} in 16-20, {severe} at 21+)."
-    )
+    return f"{exceeds} {method_label} {verb} CC 10 ({moderate} in 11-15, {high} in 16-20, {severe} at 21+)."
 
 
 def _optional_int(value: int | None) -> str:

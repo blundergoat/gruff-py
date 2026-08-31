@@ -58,9 +58,7 @@ def test_repo_yaml_rules_section_keys_match_registry_ids() -> None:
 
 
 _SEVERITY_THRESHOLD_DEFINITIONS = [d for d in _DEFINITIONS if d.default_threshold is not None]
-_KNOB_THRESHOLD_DEFINITIONS = [
-    d for d in _DEFINITIONS if d.default_threshold is None and d.default_thresholds
-]
+_KNOB_THRESHOLD_DEFINITIONS = [d for d in _DEFINITIONS if d.default_threshold is None and d.default_thresholds]
 
 
 @pytest.mark.parametrize("definition", _DEFINITIONS, ids=lambda d: d.id)
@@ -92,9 +90,7 @@ def test_knob_rule_keeps_thresholds_block(definition: RuleDefinition) -> None:
 # extends conventionalModuleNames so the rule recognises them as intentional.
 _RULES_WITH_PROJECT_OPTION_OVERRIDES = frozenset({"naming.module-name-mismatch"})
 
-_DEFINITIONS_USING_DEFAULT_OPTIONS = [
-    d for d in _DEFINITIONS if d.id not in _RULES_WITH_PROJECT_OPTION_OVERRIDES
-]
+_DEFINITIONS_USING_DEFAULT_OPTIONS = [d for d in _DEFINITIONS if d.id not in _RULES_WITH_PROJECT_OPTION_OVERRIDES]
 
 
 @pytest.mark.parametrize("definition", _DEFINITIONS_USING_DEFAULT_OPTIONS, ids=lambda d: d.id)

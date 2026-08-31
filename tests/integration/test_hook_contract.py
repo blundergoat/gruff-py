@@ -135,13 +135,9 @@ def test_hook_stable_identity_survives_line_shift_and_measured_value_change(
 
     line_file = src / "line.py"
     line_file.write_text('value = eval("1")\n')
-    before_shift = _finding_by_rule(
-        _hook("--no-config", "src/line.py"), "security.dangerous-function-call"
-    )
+    before_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
     line_file.write_text("# inserted\n" + line_file.read_text())
-    after_shift = _finding_by_rule(
-        _hook("--no-config", "src/line.py"), "security.dangerous-function-call"
-    )
+    after_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
 
     assert before_shift["stableIdentity"] == after_shift["stableIdentity"]
     assert before_shift["fingerprint"] != after_shift["fingerprint"]
@@ -423,14 +419,10 @@ def test_hook_reports_ignored_paths_and_config_errors(
     (src / "ignored.py").write_text('value = eval("1")\n')
     (src / "sample.py").write_text('value = eval("1")\n')
     config = tmp_path / ".gruff-py.yaml"
-    config.write_text(
-        "schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - src/ignored.py\n"
-    )
+    config.write_text("schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - src/ignored.py\n")
 
     ignored = _hook("src/ignored.py")
-    assert ignored["ignored"]["paths"] == [
-        {"path": "src/ignored.py", "source": "config", "pattern": "src/ignored.py"}
-    ]
+    assert ignored["ignored"]["paths"] == [{"path": "src/ignored.py", "source": "config", "pattern": "src/ignored.py"}]
     assert ignored["findings"] == []
 
     config.write_text("paths:\n  ignore: []\n")

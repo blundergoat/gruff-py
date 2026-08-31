@@ -24,9 +24,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
     walk_test_body,
 )
 
-_MYSTERY_PREFIXES: frozenset[str] = frozenset(
-    {"requests", "urllib", "urllib3", "socket", "httpx", "aiohttp", "ftplib", "smtplib"}
-)
+_MYSTERY_PREFIXES: frozenset[str] = frozenset({"requests", "urllib", "urllib3", "socket", "httpx", "aiohttp", "ftplib", "smtplib"})
 _MYSTERY_LEAVES: frozenset[str] = frozenset({"open", "popen"})
 
 
@@ -83,10 +81,7 @@ class MysteryGuestRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} touches external state via `{target_found}` - "
-                        f"non-hermetic dependency."
-                    ),
+                    message=(f"Test {symbol!r} touches external state via `{target_found}` - non-hermetic dependency."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -95,10 +90,7 @@ class MysteryGuestRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Mock the I/O boundary or use a tmp_path fixture for filesystem "
-                        "interactions."
-                    ),
+                    remediation=("Mock the I/O boundary or use a tmp_path fixture for filesystem interactions."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target_found},
                 ),

@@ -44,13 +44,9 @@ def test_reserved_tld_email_domains_skipped():
         "a" + "@" + "b.localhost",
         "team" + "@" + "corp.example",
     )
-    src = "\n".join(
-        f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails)
-    )
+    src = "\n".join(f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails))
 
-    findings = PiiTestFixtureRule().analyse(
-        make_unit(f"{src}\n", "tests/test_users.py"), default_ctx()
-    )
+    findings = PiiTestFixtureRule().analyse(make_unit(f"{src}\n", "tests/test_users.py"), default_ctx())
 
     assert findings == []
 
@@ -114,10 +110,7 @@ def test_unlabelled_bare_realistic_number_remains_in_scope() -> None:
 
 def test_rfc3986_digit_charset_is_not_a_phone_number() -> None:
     """Exclude the separator-free digit run in requests' RFC 3986 character set."""
-    source = (
-        'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" '
-        '"abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
-    )
+    source = 'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" "abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
 
     findings = PiiTestFixtureRule().analyse(make_unit(source, "tests/test_utils.py"), default_ctx())
 

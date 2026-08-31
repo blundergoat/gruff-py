@@ -59,9 +59,7 @@ def quick_run_payload(tmp_path_factory: pytest.TempPathFactory) -> dict[str, obj
     tmp_path = tmp_path_factory.mktemp("perf_quick")
     json_out = tmp_path / "perf-results.json"
     proc = _run_perf_script_quick(json_out, tmp_path / "perf-out")
-    assert proc.returncode == 0, (
-        f"perf script exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-    )
+    assert proc.returncode == 0, f"perf script exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     assert json_out.exists(), "expected JSON output file was not written"
     return json.loads(json_out.read_text())
 
@@ -87,9 +85,7 @@ def test_perf_script_payload_advertises_schema_version_1(
 def test_perf_script_payload_publishes_documented_top_level_keys(
     quick_run_payload: dict[str, object],
 ) -> None:
-    assert _EXPECTED_TOP_LEVEL_KEYS.issubset(quick_run_payload), (
-        f"missing top-level keys: {_EXPECTED_TOP_LEVEL_KEYS - quick_run_payload.keys()}"
-    )
+    assert _EXPECTED_TOP_LEVEL_KEYS.issubset(quick_run_payload), f"missing top-level keys: {_EXPECTED_TOP_LEVEL_KEYS - quick_run_payload.keys()}"
 
 
 def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
@@ -122,10 +118,7 @@ def test_perf_script_workloads_have_well_formed_timing_record(
 ) -> None:
     workloads = quick_run_payload["workloads"]
     assert all(
-        isinstance(w["command"], list)
-        and isinstance(w["exitCode"], int)
-        and w["median"] > 0
-        and w["min"] <= w["median"] <= w["max"]
+        isinstance(w["command"], list) and isinstance(w["exitCode"], int) and w["median"] > 0 and w["min"] <= w["median"] <= w["max"]
         for w in workloads
     ), workloads
 
@@ -177,9 +170,7 @@ def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
         check=False,
     )
 
-    assert proc.returncode == 1, (
-        f"expected regression exit 1\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
-    )
+    assert proc.returncode == 1, f"expected regression exit 1\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     assert "regressions detected" in proc.stdout
 
 

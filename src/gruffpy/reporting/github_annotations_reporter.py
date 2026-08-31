@@ -55,13 +55,7 @@ def _annotation(finding: Finding) -> str:
 
 
 def _escape_property(value: str) -> str:
-    return (
-        value.replace("%", "%25")
-        .replace("\r", "%0D")
-        .replace("\n", "%0A")
-        .replace(":", "%3A")
-        .replace(",", "%2C")
-    )
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(":", "%3A").replace(",", "%2C")
 
 
 def _escape_data(value: str) -> str:

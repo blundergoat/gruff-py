@@ -341,10 +341,7 @@ def stable_identities_from_git_base(
                 deep_scan_budget=deep_scan_budget,
             )
         )
-        return frozenset(
-            _hook_stable_identity(finding, _scope_for_finding(finding))
-            for finding in report.findings
-        )
+        return frozenset(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in report.findings)
 
 
 def render_json(payload: dict[str, Any]) -> str:
@@ -435,19 +432,13 @@ def _changed_region_set(
         *(path.replace("\\", "/").strip("/") for path in paths),
         *(finding.file_path for finding in findings),
     }
-    return parse_explicit_ranges(
-        tuple(sorted(path for path in source_paths if path)), changed_ranges
-    )
+    return parse_explicit_ranges(tuple(sorted(path for path in source_paths if path)), changed_ranges)
 
 
 def _is_finding_intersecting_changed_region(finding: Finding, changed: ChangedRegionSet) -> bool:
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
-    end_line = (
-        finding.end_line
-        if finding.end_line is not None and finding.end_line >= finding.line
-        else finding.line
-    )
+    end_line = finding.end_line if finding.end_line is not None and finding.end_line >= finding.line else finding.line
     return changed.has_changed_range(finding.file_path, finding.line, end_line)
 
 

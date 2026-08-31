@@ -61,18 +61,14 @@ class FunctionLengthRule(Rule):
         settings = context.settings_for(definition)
         threshold = _active_high_threshold(settings)
 
-        return [
-            _function_length_finding(unit, definition, node, settings)
-            for node in _long_functions(unit.tree, threshold)
-        ]
+        return [_function_length_finding(unit, definition, node, settings) for node in _long_functions(unit.tree, threshold)]
 
 
 def _long_functions(tree: ast.AST, warning_threshold: int | float) -> list[FunctionNode]:
     return [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
-        and lines_for_size(node) > warning_threshold
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) and lines_for_size(node) > warning_threshold
     ]
 
 

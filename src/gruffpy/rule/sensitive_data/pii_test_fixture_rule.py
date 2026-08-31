@@ -20,17 +20,11 @@ from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import fixed_preview
 
 _EMAIL_RE = re.compile(r"(?<!\\)\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
-_PHONE_RE = re.compile(
-    r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b"
-)
-_TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset(
-    {"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"}
-)
+_PHONE_RE = re.compile(r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b")
+_TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset({"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"})
 # Compound directories such as `integration_tests` end in one of these tokens;
 # an incidental qualifier such as `test-scan-repos` does not.
-_TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset(
-    {"fixture", "fixtures", "test", "tests"}
-)
+_TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset({"fixture", "fixtures", "test", "tests"})
 _SEQUENTIAL_DIGIT_FIXTURES: frozenset[str] = frozenset({"0123456789", "1234567890"})
 _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
     {
@@ -43,9 +37,7 @@ _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
         "domain.tld",
     }
 )
-_RESERVED_EMAIL_TLDS: frozenset[str] = frozenset(
-    {"example", "invalid", "localhost", "local", "test"}
-)
+_RESERVED_EMAIL_TLDS: frozenset[str] = frozenset({"example", "invalid", "localhost", "local", "test"})
 # 555 in the exchange position (NXX-555-NNNN) is the canonical US placeholder.
 
 # Area-code 555 is also reserved for directory assistance.
@@ -277,8 +269,7 @@ def _build_pii_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         remediation=(
-            "Replace with documented placeholders (`user@example.com`, `user@app.test`, "
-            "`+1-555-...`) so test failures don't expose third-party PII."
+            "Replace with documented placeholders (`user@example.com`, `user@app.test`, `+1-555-...`) so test failures don't expose third-party PII."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"preview": fixed_preview(), "kind": kind},

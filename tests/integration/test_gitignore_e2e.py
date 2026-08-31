@@ -71,9 +71,7 @@ def test_include_ignored_surfaces_gitignored_findings() -> None:
     assert any("vendor/third_party.py" in p for p in paths), paths
 
 
-def test_project_without_gitignore_behaves_normally(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_project_without_gitignore_behaves_normally(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write(tmp_path / "src" / "app.py", "x = 1\n")
 

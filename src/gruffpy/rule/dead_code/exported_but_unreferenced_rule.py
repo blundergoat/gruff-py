@@ -132,12 +132,7 @@ def _is_test_unit(unit: AnalysisUnit) -> bool:
     display_path = unit.file.display_path.replace("\\", "/")
     parts = display_path.split("/")
     name = parts[-1]
-    return (
-        "tests" in parts[:-1]
-        or name.startswith("test_")
-        or name.endswith("_test.py")
-        or name == "conftest.py"
-    )
+    return "tests" in parts[:-1] or name.startswith("test_") or name.endswith("_test.py") or name == "conftest.py"
 
 
 def _used_names(trees: list[ast.Module]) -> set[str]:
@@ -173,12 +168,7 @@ def _node_references(node: ast.AST) -> set[str]:
 
 
 def _getattr_string_literal(node: ast.AST) -> str | None:
-    if not (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
-        and len(node.args) >= 2
-    ):
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr" and len(node.args) >= 2):
         return None
     literal = node.args[1]
     if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
@@ -231,11 +221,7 @@ def _is_exempt(
         return True
     if allowlist.matches_symbol(candidate.name):
         return True
-    decorator_names = tuple(
-        name
-        for decorator in candidate.node.decorator_list
-        for name in _decorator_name_forms(decorator)
-    )
+    decorator_names = tuple(name for decorator in candidate.node.decorator_list for name in _decorator_name_forms(decorator))
     if decorator_names and allowlist.matches_decorator(decorator_names):
         return True
     return any(fnmatch.fnmatchcase(candidate.name, pattern) for pattern in entry_point_patterns)

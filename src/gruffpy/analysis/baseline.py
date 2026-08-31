@@ -20,9 +20,7 @@ from gruffpy.finding.finding import Finding
 
 DEFAULT_BASELINE_FILENAME = "gruff-baseline.json"
 LEGACY_BASELINE_SCHEMA_VERSION = "gruff.baseline.v1"
-ACCEPTED_BASELINE_SCHEMA_VERSIONS = frozenset(
-    {BASELINE_SCHEMA_VERSION, LEGACY_BASELINE_SCHEMA_VERSION}
-)
+ACCEPTED_BASELINE_SCHEMA_VERSIONS = frozenset({BASELINE_SCHEMA_VERSION, LEGACY_BASELINE_SCHEMA_VERSION})
 
 
 class BaselineError(ValueError):
@@ -119,15 +117,11 @@ class BaselineEntry:
         line = row.get("line")
         # File-level findings have no line; any other value prevents a safe baseline match.
         if line is not None and not isinstance(line, int):
-            raise BaselineError(
-                f'Baseline finding {index} field "line" must be an integer or null.'
-            )
+            raise BaselineError(f'Baseline finding {index} field "line" must be an integer or null.')
         symbol = row.get("symbol")
         # Findings outside named symbols store null; malformed values cannot identify accepted debt.
         if symbol is not None and not isinstance(symbol, str):
-            raise BaselineError(
-                f'Baseline finding {index} field "symbol" must be a string or null.'
-            )
+            raise BaselineError(f'Baseline finding {index} field "symbol" must be a string or null.')
         message = row.get("message", "")
         # Older baselines may omit the display message, but a non-text value makes the file invalid.
         if not isinstance(message, str):
@@ -327,9 +321,7 @@ class BaselineStore:
         # For example, a read-only project can prevent --generate-baseline replacing the file.
         except OSError as exc:
             raise BaselineError(f"Unable to write baseline file: {_display_path(path)}") from exc
-        return BaselineData(
-            path=_report_path(self._project_root, path, absolute_path), entries=entries
-        )
+        return BaselineData(path=_report_path(self._project_root, path, absolute_path), entries=entries)
 
     def _absolute_path(self, path: str | Path) -> Path:
         """Resolve a selected baseline path against this analysis project.
@@ -413,11 +405,8 @@ def apply_baseline(
             continue
         filtered.append(finding)
 
-    # Only a full scan proves unmatched debt is stale rather than outside the requested paths.
-    if scan_scope == "full-project":
-        stale = tuple(entry for entry in baseline.entries if entry.key() not in matched_keys)
-    else:
-        stale = ()
+    # Only a full scan proves unmatched debt is stale rather than simply outside the paths the caller asked for.
+    stale = tuple(entry for entry in baseline.entries if entry.key() not in matched_keys) if scan_scope == "full-project" else ()
     return BaselineApplyResult(
         findings=filtered,
         report=BaselineReport(
@@ -493,9 +482,7 @@ def _baseline_file_path(row: dict[str, Any], index: int) -> str:
         value = row.get("filePath")
     # A finding without a usable file path cannot be matched and must be corrected.
     if not isinstance(value, str) or value == "":
-        raise BaselineError(
-            f'Baseline finding {index} must include non-empty "file" (or legacy "filePath").'
-        )
+        raise BaselineError(f'Baseline finding {index} must include non-empty "file" (or legacy "filePath").')
     return value
 
 

@@ -136,9 +136,7 @@ class AnalysisConfig:
                 thresholds=dict(definition.default_thresholds),
                 options=dict(definition.default_options),
                 severity_threshold=(
-                    SeverityThreshold(definition.default_threshold, definition.default_severity)
-                    if definition.default_threshold is not None
-                    else None
+                    SeverityThreshold(definition.default_threshold, definition.default_severity) if definition.default_threshold is not None else None
                 ),
             )
         return cls(rules=rules, sensitive_data_rule_ids=frozenset(sensitive_data_rule_ids))
@@ -261,9 +259,7 @@ class AnalysisConfig:
         """
         return replace(self, allowed_secret_previews=previews)
 
-    def with_sensitive_exclusions(
-        self, exclusions: tuple[SensitiveExclusion, ...]
-    ) -> "AnalysisConfig":
+    def with_sensitive_exclusions(self, exclusions: tuple[SensitiveExclusion, ...]) -> "AnalysisConfig":
         """Return a new config whose reviewed sensitive-data suppressions are *exclusions*.
 
         Every entry is already validated; analysis drops the findings each one claims and reports

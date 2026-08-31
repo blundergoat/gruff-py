@@ -25,9 +25,7 @@ VALID_SENSITIVE_EXCLUSION_KEYS = frozenset({"rule", "path", "symbol", "reason"})
 
 _RULE_METACHARACTERS = "*?[]{}()|^$+\\"
 _PATH_GLOB_METACHARACTERS = "*?[]{}"
-_SELECTOR_VALUES = frozenset(pillar.value for pillar in Pillar) | frozenset(
-    tier.value for tier in RuleTier
-)
+_SELECTOR_VALUES = frozenset(pillar.value for pillar in Pillar) | frozenset(tier.value for tier in RuleTier)
 _WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:/")
 
 
@@ -109,9 +107,7 @@ def _parse_entry(
     """Build one validated entry, rejecting every key the contract does not accept."""
     entry_path = f"{SENSITIVE_EXCLUSIONS_KEY}[{index}]"
     if not isinstance(entry, dict):
-        raise ConfigError(
-            f'Config key "{entry_path}" must be a table with "rule", "path", and "reason" keys.'
-        )
+        raise ConfigError(f'Config key "{entry_path}" must be a table with "rule", "path", and "reason" keys.')
     _reject_unaccepted_keys(entry_path, entry)
     return SensitiveExclusion(
         index=index,
@@ -146,14 +142,11 @@ def _parse_rule(
     # A wildcard or expression would hide findings the user never enumerated.
     if any(character in rule for character in _RULE_METACHARACTERS):
         raise ConfigError(
-            f'Config key "{entry_path}.rule" must be one exact rule id; {rule!r} contains a '
-            "wildcard, glob, or regular-expression metacharacter."
+            f'Config key "{entry_path}.rule" must be one exact rule id; {rule!r} contains a wildcard, glob, or regular-expression metacharacter.'
         )
     # A pillar or tier name is a group selector wearing a rule id.
     if rule in _SELECTOR_VALUES:
-        raise ConfigError(
-            f'Config key "{entry_path}.rule" must be one exact rule id, not the selector {rule!r}.'
-        )
+        raise ConfigError(f'Config key "{entry_path}.rule" must be one exact rule id, not the selector {rule!r}.')
     # A typo must fail loudly instead of silently suppressing nothing.
     if rule not in known_rule_ids:
         raise ConfigError(f'Config key "{entry_path}.rule" names unknown rule id {rule!r}.')
@@ -170,20 +163,12 @@ def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
     path = _normalise_report_path(_required_string(f"{entry_path}.path", entry, "path"))
     # An absolute path leaks the author's machine layout and escapes the project.
     if path.startswith("/") or _WINDOWS_DRIVE_PATTERN.match(path):
-        raise ConfigError(
-            f'Config key "{entry_path}.path" must be project-relative; {path!r} is absolute.'
-        )
+        raise ConfigError(f'Config key "{entry_path}.path" must be project-relative; {path!r} is absolute.')
     if ".." in path.split("/"):
-        raise ConfigError(
-            f'Config key "{entry_path}.path" must stay inside the project; {path!r} traverses '
-            "out of it."
-        )
+        raise ConfigError(f'Config key "{entry_path}.path" must stay inside the project; {path!r} traverses out of it.')
     # A glob would claim files nobody enumerated, which is a blanket suppression.
     if any(character in path for character in _PATH_GLOB_METACHARACTERS):
-        raise ConfigError(
-            f'Config key "{entry_path}.path" must be one exact path; {path!r} contains a glob '
-            "metacharacter."
-        )
+        raise ConfigError(f'Config key "{entry_path}.path" must be one exact path; {path!r} contains a glob metacharacter.')
     return path
 
 
@@ -199,8 +184,7 @@ def _parse_reason(entry_path: str, entry: dict[Any, Any]) -> str:
     reason = entry.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ConfigError(
-            f'Config key "{entry_path}.reason" must be a non-empty rationale; a suppression '
-            "nobody can review is worse than the finding it hides."
+            f'Config key "{entry_path}.reason" must be a non-empty rationale; a suppression nobody can review is worse than the finding it hides.'
         )
     return reason
 

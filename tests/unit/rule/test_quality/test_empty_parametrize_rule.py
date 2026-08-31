@@ -9,10 +9,5 @@ def test_empty_list_emits():
 
 
 def test_non_empty_list_skipped():
-    src = (
-        "import pytest\n"
-        "@pytest.mark.parametrize('x', [1, 2, 3])\n"
-        "def test_foo(x):\n"
-        "    assert True\n"
-    )
+    src = "import pytest\n@pytest.mark.parametrize('x', [1, 2, 3])\ndef test_foo(x):\n    assert True\n"
     assert EmptyParametrizeRule().analyse(make_unit(src), default_ctx()) == []

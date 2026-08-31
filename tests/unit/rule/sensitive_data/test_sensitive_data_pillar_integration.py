@@ -26,14 +26,7 @@ _DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
 _URL_CREDENTIAL = "https://deploy:" + "rem0teSecret!42" + "@api.example.test/v1"
 _SSN = "412" + "-78-" + "3491"
 _PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
-_GCP_PRIVATE_KEY_VALUE = (
-    "-----BEGIN "
-    + "PRIVATE KEY-----\\n"
-    + "MIIEv"
-    + ("A" * 120)
-    + "\\n-----END "
-    + "PRIVATE KEY-----\\n"
-)
+_GCP_PRIVATE_KEY_VALUE = "-----BEGIN " + "PRIVATE KEY-----\\n" + "MIIEv" + ("A" * 120) + "\\n-----END " + "PRIVATE KEY-----\\n"
 
 _DANGEROUS_FIXTURE = (
     f"AWS_KEY = '{_AWS_KEY}'\n"
@@ -65,9 +58,7 @@ _EXPECTED_RULE_IDS = {
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
-    sensitive_findings = [
-        finding for finding in findings if finding.rule_id.startswith("sensitive-data.")
-    ]
+    sensitive_findings = [finding for finding in findings if finding.rule_id.startswith("sensitive-data.")]
     fired = {finding.rule_id for finding in sensitive_findings}
     missing = _EXPECTED_RULE_IDS - fired
     assert not missing, f"Missing fires: {sorted(missing)}"
@@ -77,9 +68,7 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
 def test_aws_key_fires_on_json_file_via_text_seam():
     """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
     src = f'{{"region": "us-east-1", "key": "{_AWS_KEY}"}}\n'
-    findings = RuleRegistry.defaults().analyse(
-        [make_unit(src, display_path="aws.json", source_type="text")], default_ctx()
-    )
+    findings = RuleRegistry.defaults().analyse([make_unit(src, display_path="aws.json", source_type="text")], default_ctx())
     text_findings = {f.rule_id for f in findings}
     assert "sensitive-data.aws-access-key" in text_findings
     # A Python-only rule must NOT fire on this text file. complexity rules require

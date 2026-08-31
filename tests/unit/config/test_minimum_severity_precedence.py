@@ -24,8 +24,7 @@ def _write_yaml(tmp_path: Path, body: str) -> Path:
 def test_minimum_severity_yaml_parses_into_analysis_config(tmp_path: Path) -> None:
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "minimumSeverity:\n  analyse: error\n  report: warning\n  dashboard: none\n",
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n  report: warning\n  dashboard: none\n",
     )
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
@@ -109,8 +108,7 @@ def test_minimum_severity_rejects_never_alias(tmp_path: Path) -> None:
 def test_minimum_severity_surfaces_multiple_errors_at_once(tmp_path: Path) -> None:
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "minimumSeverity:\n  summary: advisory\n  analyse: medium\n",
+        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  summary: advisory\n  analyse: medium\n",
     )
 
     with pytest.raises(ConfigError) as excinfo:

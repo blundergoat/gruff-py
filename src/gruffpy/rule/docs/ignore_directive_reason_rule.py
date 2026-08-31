@@ -160,10 +160,7 @@ def _directive_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=match.comment.line,
-        remediation=(
-            "Add a short rationale that names the compatibility, framework, or "
-            "testing reason for the suppression."
-        ),
+        remediation=("Add a short rationale that names the compatibility, framework, or testing reason for the suppression."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "directive": match.directive,

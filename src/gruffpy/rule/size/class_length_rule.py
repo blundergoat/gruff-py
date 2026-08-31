@@ -55,18 +55,11 @@ class ClassLengthRule(Rule):
         settings = context.settings_for(definition)
         threshold = _active_high_threshold(settings)
 
-        return [
-            _class_length_finding(unit, definition, node, settings)
-            for node in _long_classes(unit.tree, threshold)
-        ]
+        return [_class_length_finding(unit, definition, node, settings) for node in _long_classes(unit.tree, threshold)]
 
 
 def _long_classes(tree: ast.AST, warning_threshold: int | float) -> list[ast.ClassDef]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef) and lines_for_size(node) > warning_threshold
-    ]
+    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and lines_for_size(node) > warning_threshold]
 
 
 def _class_length_finding(
@@ -95,10 +88,7 @@ def _class_length_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Split the class along responsibility boundaries; "
-            "extract collaborators or value objects."
-        ),
+        remediation=("Split the class along responsibility boundaries; extract collaborators or value objects."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "lines": line_count,

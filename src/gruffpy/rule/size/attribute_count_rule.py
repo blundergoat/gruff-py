@@ -155,11 +155,7 @@ def _init_self_assignments(init: ast.FunctionDef | ast.AsyncFunctionDef) -> set[
 
 
 def _collect_self_attribute(target: ast.AST, names: set[str]) -> None:
-    if (
-        isinstance(target, ast.Attribute)
-        and isinstance(target.value, ast.Name)
-        and target.value.id == "self"
-    ):
+    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
         names.add(target.attr)
     elif isinstance(target, ast.Tuple | ast.List):
         for elt in target.elts:

@@ -70,10 +70,7 @@ class UnreachableCodeRule(Rule):
                     findings.append(
                         Finding(
                             rule_id=definition.id,
-                            message=(
-                                f"Statement on line {next_stmt.lineno} is unreachable: "
-                                f"preceded by `{terminator}` on line {stmt.lineno}."
-                            ),
+                            message=(f"Statement on line {next_stmt.lineno} is unreachable: preceded by `{terminator}` on line {stmt.lineno}."),
                             file_path=unit.file.display_path,
                             line=next_stmt.lineno,
                             severity=definition.default_severity,
@@ -81,9 +78,7 @@ class UnreachableCodeRule(Rule):
                             tier=definition.tier,
                             confidence=definition.confidence,
                             end_line=getattr(next_stmt, "end_lineno", None),
-                            remediation=(
-                                "Remove the unreachable code or move it before the terminator."
-                            ),
+                            remediation=("Remove the unreachable code or move it before the terminator."),
                             secondary_pillars=definition.secondary_pillars,
                             metadata={
                                 "terminator": terminator,
@@ -156,24 +151,12 @@ def _literal_condition_findings(
         if isinstance(node, ast.If):
             truthiness = _is_literal_truthy(node.test)
             if truthiness is False and node.body:
-                findings.append(
-                    _literal_condition_finding(
-                        unit, definition, node.body[0], node, "literal-false-condition"
-                    )
-                )
+                findings.append(_literal_condition_finding(unit, definition, node.body[0], node, "literal-false-condition"))
             elif truthiness is True and node.orelse:
-                findings.append(
-                    _literal_condition_finding(
-                        unit, definition, node.orelse[0], node, "literal-true-condition"
-                    )
-                )
+                findings.append(_literal_condition_finding(unit, definition, node.orelse[0], node, "literal-true-condition"))
         elif isinstance(node, ast.While):
             if _is_literal_truthy(node.test) is False and node.body:
-                findings.append(
-                    _literal_condition_finding(
-                        unit, definition, node.body[0], node, "literal-false-condition"
-                    )
-                )
+                findings.append(_literal_condition_finding(unit, definition, node.body[0], node, "literal-false-condition"))
     return findings
 
 
@@ -194,10 +177,7 @@ def _literal_condition_finding(
     keyword = "if" if isinstance(condition_node, ast.If) else "while"
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Statement on line {stmt.lineno} is unreachable: "
-            f"the `{keyword}` on line {condition_node.lineno} has a literal condition."
-        ),
+        message=(f"Statement on line {stmt.lineno} is unreachable: the `{keyword}` on line {condition_node.lineno} has a literal condition."),
         file_path=unit.file.display_path,
         line=stmt.lineno,
         severity=definition.default_severity,
@@ -205,9 +185,7 @@ def _literal_condition_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=getattr(stmt, "end_lineno", None),
-        remediation=(
-            "Remove the unreachable branch or replace the literal condition with the real check."
-        ),
+        remediation=("Remove the unreachable branch or replace the literal condition with the real check."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "cause": cause,

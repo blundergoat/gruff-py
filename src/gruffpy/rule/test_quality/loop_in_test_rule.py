@@ -77,10 +77,7 @@ class LoopInTestRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} contains a loop - prefer "
-                            f"`@pytest.mark.parametrize` for case enumeration."
-                        ),
+                        message=(f"Test {symbol!r} contains a loop - prefer `@pytest.mark.parametrize` for case enumeration."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -89,10 +86,7 @@ class LoopInTestRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Convert the loop into a parametrised test so each case "
-                            "produces its own pass/fail signal."
-                        ),
+                        remediation=("Convert the loop into a parametrised test so each case produces its own pass/fail signal."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
                     ),

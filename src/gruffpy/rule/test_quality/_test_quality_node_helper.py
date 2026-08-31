@@ -123,11 +123,7 @@ def is_catch_warnings_call(call: ast.Call) -> bool:
         True for ``warnings.catch_warnings(...)`` calls.
     """
     callee = call.func
-    return (
-        isinstance(callee, ast.Attribute)
-        and callee.attr == "catch_warnings"
-        and _dotted_name(callee.value) == "warnings"
-    )
+    return isinstance(callee, ast.Attribute) and callee.attr == "catch_warnings" and _dotted_name(callee.value) == "warnings"
 
 
 def has_error_warnings_filter(node: ast.AST) -> bool:
@@ -148,11 +144,7 @@ def has_error_warnings_filter(node: ast.AST) -> bool:
         if not isinstance(child, ast.Call):
             continue
         callee = child.func
-        if not (
-            isinstance(callee, ast.Attribute)
-            and callee.attr in {"simplefilter", "filterwarnings"}
-            and _dotted_name(callee.value) == "warnings"
-        ):
+        if not (isinstance(callee, ast.Attribute) and callee.attr in {"simplefilter", "filterwarnings"} and _dotted_name(callee.value) == "warnings"):
             continue
         first_arg = child.args[0] if child.args else None
         if isinstance(first_arg, ast.Constant) and first_arg.value == "error":
@@ -268,12 +260,7 @@ def _assign_mock_bindings(node: ast.Assign) -> dict[str, ast.AST]:
 
 
 def _ann_assign_mock_bindings(node: ast.AnnAssign) -> dict[str, ast.AST]:
-    if (
-        node.value is None
-        or not isinstance(node.value, ast.Call)
-        or not is_mock_factory_call(node.value)
-        or not isinstance(node.target, ast.Name)
-    ):
+    if node.value is None or not isinstance(node.value, ast.Call) or not is_mock_factory_call(node.value) or not isinstance(node.target, ast.Name):
         return {}
     return {node.target.id: node}
 
@@ -281,11 +268,7 @@ def _ann_assign_mock_bindings(node: ast.AnnAssign) -> dict[str, ast.AST]:
 def _with_mock_bindings(node: ast.With) -> dict[str, ast.AST]:
     bindings: dict[str, ast.AST] = {}
     for item in node.items:
-        if (
-            isinstance(item.context_expr, ast.Call)
-            and is_mock_factory_call(item.context_expr)
-            and isinstance(item.optional_vars, ast.Name)
-        ):
+        if isinstance(item.context_expr, ast.Call) and is_mock_factory_call(item.context_expr) and isinstance(item.optional_vars, ast.Name):
             bindings[item.optional_vars.id] = item
     return bindings
 

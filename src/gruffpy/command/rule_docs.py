@@ -39,9 +39,7 @@ _PILLAR_NOTES = {
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
-    Pillar.DOCUMENTATION: (
-        "Docstring presence and quality, stale docs, TODO density, README presence"
-    ),
+    Pillar.DOCUMENTATION: ("Docstring presence and quality, stale docs, TODO density, README presence"),
     Pillar.SECURITY: "Heuristic AST-level dangerous patterns",
     Pillar.SENSITIVE_DATA: "Secret, key, PII, and PHI patterns",
     Pillar.TEST_QUALITY: "Pytest-aware test smells and project config checks",
@@ -82,10 +80,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     lines = [
         "# Rules",
         "",
-        (
-            f"gruff-py `{VERSION}` registers {len(definitions)} rules across "
-            f"{len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."
-        ),
+        (f"gruff-py `{VERSION}` registers {len(definitions)} rules across {len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."),
         "",
         "This file is generated from the first-party built-in rule catalog.",
         "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
@@ -100,9 +95,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         registered_rule_count = rule_counts_by_pillar.get(pillar, 0)
         # An empty pillar is reserved and gives users no rule row to configure.
         if registered_rule_count:
-            lines.append(
-                f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |"
-            )
+            lines.append(f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |")
     lines.extend(["", "## Rule IDs", ""])
     by_group = _definitions_by_group(definitions)
     # Readers browse familiar feature sections before opening individual rule details.
@@ -121,8 +114,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         [
             "## Rule Details",
             "",
-            "Each rule detail includes the runtime defaults, documentation metadata, "
-            "and threshold contract where applicable.",
+            "Each rule detail includes the runtime defaults, documentation metadata, and threshold contract where applicable.",
             "",
         ]
     )
@@ -263,11 +255,7 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     ]
     # Metric rules show the threshold a user can tune for finding severity.
     if _has_severity_thresholds(definition):
-        lines.append(
-            "- Config threshold: "
-            f"`threshold` = `{definition.default_threshold!r}`, "
-            f"`severity` = `{definition.default_severity.value}`"
-        )
+        lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")
     # Named thresholds expose several user-tunable limits instead of one metric cutoff.
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")

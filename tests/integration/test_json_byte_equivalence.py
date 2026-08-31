@@ -62,9 +62,7 @@ def _fixture_report() -> AnalysisReport:
         files_discovered=1,
         files_parsed=1,
         ignored_paths=("vendor/package.py",),
-        ignored_path_details=(
-            IgnoredPath(path="vendor/package.py", source="config", pattern="vendor/**"),
-        ),
+        ignored_path_details=(IgnoredPath(path="vendor/package.py", source="config", pattern="vendor/**"),),
         missing_paths=("missing.py",),
         diagnostics=(),
         findings=findings,

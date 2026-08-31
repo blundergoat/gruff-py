@@ -115,10 +115,7 @@ def _report(
 def test_bounded_deep_scan_is_visible_in_every_analysis_renderer() -> None:
     diagnostic = RunDiagnostic(
         type="bounded-deep-scan",
-        message=(
-            "path=src/large.py; lines=20001; bytes=2000001; maxLines=20000; "
-            "maxBytes=2000000; override=config"
-        ),
+        message=("path=src/large.py; lines=20001; bytes=2000001; maxLines=20000; maxBytes=2000000; override=config"),
         file_path="src/large.py",
         line=1,
         invalidates_run=False,
@@ -160,9 +157,7 @@ def test_json_reporter_records_display_filters():
     assert payload["run"]["filters"]["includeRules"] == ["security.dangerous-function-call"]
 
 
-_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
-    "partial project scan: project-wide rules may need full-project context"
-)
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = "partial project scan: project-wide rules may need full-project context"
 
 
 def _report_with_partial_context(
@@ -222,14 +217,8 @@ def test_text_reporter_keeps_family_contract_block_byte_for_value() -> None:
     rendered_text = TextReporter().render(_report())
 
     assert rendered_text.startswith("gruff-py 0.1.0-test analyse\n")
-    assert (
-        "  Composite: A (95.20 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n"
-    ) in rendered_text
-    assert (
-        "  [error] security.dangerous-function-call\n"
-        "    src/app.py:12\n"
-        "    Dangerous call to eval().\n"
-    ) in rendered_text
+    assert ("  Composite: A (95.20 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n") in rendered_text
+    assert ("  [error] security.dangerous-function-call\n    src/app.py:12\n    Dangerous call to eval().\n") in rendered_text
 
 
 @pytest.mark.parametrize("scoring_mode", ("full-project", "diff"), ids=("full", "diff"))
@@ -370,11 +359,7 @@ def test_markdown_reporter_pillars_table_uses_pillar_score_counts():
 
     markdown = MarkdownReporter().render(_report(findings))
 
-    pillar_lines = [
-        line
-        for line in markdown.splitlines()
-        if line.startswith("| documentation |") or line.startswith("| security |")
-    ]
+    pillar_lines = [line for line in markdown.splitlines() if line.startswith("| documentation |") or line.startswith("| security |")]
     # 7 columns => 8 pipes per row.
     # gruff: disable-next=test-quality.magic-number-assertion -- 8 pipes is the contract under test.
     assert all(line.count("|") == 8 for line in pillar_lines)
@@ -523,11 +508,7 @@ def test_unknown_rule_fallback_result_rule_index_points_to_matching_driver_rule(
 
 def test_sarif_reporter_projects_registry_thresholds_and_options():
     payload = json.loads(SarifReporter().render(_report()))
-    rules = {
-        rule["id"]: rule
-        for rule in payload["runs"][0]["tool"]["driver"]["rules"]
-        if isinstance(rule, dict)
-    }
+    rules = {rule["id"]: rule for rule in payload["runs"][0]["tool"]["driver"]["rules"] if isinstance(rule, dict)}
 
     assert rules["size.file-length"]["properties"]["threshold"] == 1000
     assert "thresholds" not in rules["size.file-length"]["properties"]
@@ -630,11 +611,7 @@ def test_dependency_security_findings_do_not_leak_raw_references_in_reporters() 
         GithubAnnotationsReporter().render(report),
         SarifReporter().render(report),
     )
-    leaked = [
-        raw_reference
-        for raw_reference in _RAW_DEPENDENCY_REFERENCES
-        if any(raw_reference in output for output in rendered_outputs)
-    ]
+    leaked = [raw_reference for raw_reference in _RAW_DEPENDENCY_REFERENCES if any(raw_reference in output for output in rendered_outputs)]
 
     assert {finding.rule_id for finding in findings} == {
         "security.dependency-git-reference",
@@ -663,11 +640,7 @@ def test_sensitive_data_findings_do_not_leak_raw_secrets_in_reporters() -> None:
         HotspotReporter().render(report),
         SarifReporter().render(report),
     )
-    leaked = [
-        raw_secret
-        for raw_secret in raw_secrets
-        if any(raw_secret in output for output in rendered_outputs)
-    ]
+    leaked = [raw_secret for raw_secret in raw_secrets if any(raw_secret in output for output in rendered_outputs)]
 
     assert {
         "sensitive-data.api-key-pattern",
@@ -709,13 +682,7 @@ def _sensitive_data_findings() -> list[Finding]:
     url_password = "rem0te" + "Secret!42"
     private_key_id = "abc123" + "def456" + "abc123" + "def456"
     private_key_body = "MIIEv" + ("A" * 120)
-    private_key_value = (
-        "-----BEGIN "
-        + "PRIVATE KEY-----\\n"
-        + private_key_body
-        + "\\n-----END "
-        + "PRIVATE KEY-----\\n"
-    )
+    private_key_value = "-----BEGIN " + "PRIVATE KEY-----\\n" + private_key_body + "\\n-----END " + "PRIVATE KEY-----\\n"
     source = (
         f"GOOGLE_API_KEY={google_key}\n"
         f"REMOTE=https://deploy:{url_password}@api.example.test/v1\n"
@@ -759,9 +726,7 @@ def test_sarif_reporter_normalizes_paths_and_maps_native_severities():
     payload = json.loads(SarifReporter().render(report))
     results = payload["runs"][0]["results"]
     levels = [result["level"] for result in results]
-    uris = [
-        result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for result in results
-    ]
+    uris = [result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for result in results]
 
     assert levels == ["error", "warning", "note"]
     assert uris == ["src/error.py", "src/warning.py", "src/advisory.py"]

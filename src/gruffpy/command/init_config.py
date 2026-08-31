@@ -184,9 +184,7 @@ def _scaffold_document(
     """
     major, minor = config.minimum_python_version
     # Each resolved enum is serialized back to the value the user configured.
-    minimum_severity = {
-        command: severity.value for command, severity in config.minimum_severity.items()
-    }
+    minimum_severity = {command: severity.value for command, severity in config.minimum_severity.items()}
     document: dict[str, Any] = {
         "schemaVersion": CONFIG_SCHEMA_VERSION,
         "minimumSeverity": minimum_severity,
@@ -332,22 +330,15 @@ def _validate_and_atomically_replace(
             ).load(staged_path)
         except ConfigError as exc:
             # Example: a renderer bug emits an unknown key before the user's file is replaced.
-            raise ConfigError(
-                f"Generated {target.name} failed strict validation; target was left unchanged: "
-                f"{exc}"
-            ) from exc
+            raise ConfigError(f"Generated {target.name} failed strict validation; target was left unchanged: {exc}") from exc
         # A valid reload can still lose a supported setting, so equality is mandatory.
         if reloaded_config != expected_config:
-            raise ConfigError(
-                f"Generated {target.name} failed semantic validation; target was left unchanged."
-            )
+            raise ConfigError(f"Generated {target.name} failed semantic validation; target was left unchanged.")
         try:
             os.replace(staged_path, target)
         except OSError as exc:
             # Example: antivirus or directory permissions deny the user's final rename.
-            raise ConfigError(
-                f"Unable to replace {target.name}; target was left unchanged: {exc}"
-            ) from exc
+            raise ConfigError(f"Unable to replace {target.name}; target was left unchanged: {exc}") from exc
     finally:
         # A successful replace consumes the stage; every failure removes any remainder.
         with suppress(OSError):
@@ -423,17 +414,13 @@ def _render_rules_section(config: AnalysisConfig, registry: RuleRegistry) -> str
         Canonical ``rules:`` YAML with every loaded rule setting.
     """
     # Users see catalogue descriptions before deciding which rule settings to tune.
-    descriptions = {
-        rule.definition().id: rule.definition().get_description() for rule in registry.all()
-    }
+    descriptions = {rule.definition().id: rule.definition().get_description() for rule in registry.all()}
     lines = ["rules:"]
     # Stable rule order keeps regenerated config diffs easy for users to review.
     for rule_id in sorted(config.rules):
         lines.append(f"  # {descriptions.get(rule_id, rule_id)}")
         entry = _rule_entry(config.rules[rule_id])
-        entry_yaml = yaml.safe_dump(
-            {rule_id: entry}, sort_keys=False, default_flow_style=False, indent=2
-        )
+        entry_yaml = yaml.safe_dump({rule_id: entry}, sort_keys=False, default_flow_style=False, indent=2)
         # Each dumped line belongs under the user-visible rules heading.
         for line in entry_yaml.rstrip("\n").split("\n"):
             lines.append("  " + line)

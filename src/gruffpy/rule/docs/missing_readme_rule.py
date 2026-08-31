@@ -71,10 +71,7 @@ class MissingReadmeRule(Rule):
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                remediation=(
-                    "Add a README.md at the project root describing the project's purpose, "
-                    "install instructions, and a usage example."
-                ),
+                remediation=("Add a README.md at the project root describing the project's purpose, install instructions, and a usage example."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={"projectRoot": root},
             ),

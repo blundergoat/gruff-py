@@ -29,12 +29,7 @@ def test_unittest_assert_method_counts_as_assertion() -> None:
 
 def test_pytest_raises_block_counts_as_assertion() -> None:
     """Recognise the canonical pytest exception context manager."""
-    src = (
-        "import pytest\n"
-        "def test_foo():\n"
-        "    with pytest.raises(ValueError):\n"
-        "        raise ValueError\n"
-    )
+    src = "import pytest\ndef test_foo():\n    with pytest.raises(ValueError):\n        raise ValueError\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -53,18 +48,9 @@ def test_parametrized_pytest_raises_context_counts_as_assertion() -> None:
 @pytest.mark.parametrize(
     "source",
     [
-        "from pytest import raises\n"
-        "def test_value():\n"
-        "    with raises(ValueError):\n"
-        "        int('not-an-integer')\n",
-        "from pytest import raises as expect_error\n"
-        "def test_value():\n"
-        "    with expect_error(ValueError):\n"
-        "        int('not-an-integer')\n",
-        "import pytest as test_framework\n"
-        "def test_value():\n"
-        "    with test_framework.raises(ValueError):\n"
-        "        int('not-an-integer')\n",
+        "from pytest import raises\ndef test_value():\n    with raises(ValueError):\n        int('not-an-integer')\n",
+        "from pytest import raises as expect_error\ndef test_value():\n    with expect_error(ValueError):\n        int('not-an-integer')\n",
+        "import pytest as test_framework\ndef test_value():\n    with test_framework.raises(ValueError):\n        int('not-an-integer')\n",
     ],
     ids=["direct-helper", "renamed-helper", "renamed-module"],
 )
@@ -79,12 +65,7 @@ def test_imported_pytest_raises_counts_as_assertion(source: str) -> None:
 
 def test_pytest_warns_block_counts_as_assertion() -> None:
     """Recognise the canonical pytest warning context manager."""
-    src = (
-        "import pytest\n"
-        "def test_value():\n"
-        "    with pytest.warns(UserWarning):\n"
-        "        warn_user()\n"
-    )
+    src = "import pytest\ndef test_value():\n    with pytest.warns(UserWarning):\n        warn_user()\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -116,21 +97,13 @@ def test_warnings_filterwarnings_error_counts_as_assertion():
 
 
 def test_bare_catch_warnings_without_error_filter_emits():
-    src = (
-        "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        do_work()\n"
-    )
+    src = "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        do_work()\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_catch_warnings_with_ignore_filter_emits():
-    src = (
-        "import warnings\n"
-        "def test_foo():\n"
-        "    with warnings.catch_warnings():\n"
-        "        warnings.simplefilter('ignore')\n"
-        "        do_work()\n"
-    )
+    src = "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        warnings.simplefilter('ignore')\n        do_work()\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

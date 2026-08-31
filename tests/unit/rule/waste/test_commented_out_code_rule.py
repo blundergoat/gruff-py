@@ -76,15 +76,7 @@ def test_docstring_comment_looking_example_does_not_fire():
 
 
 def test_markdown_code_fence_inside_docstring_does_not_fire():
-    src = (
-        "def f():\n"
-        '    """Example:\n'
-        "    ```python\n"
-        "    # import os\n"
-        "    ```\n"
-        '    """\n'
-        "    return 1\n"
-    )
+    src = 'def f():\n    """Example:\n    ```python\n    # import os\n    ```\n    """\n    return 1\n'
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
 

@@ -113,13 +113,8 @@ def summary_text(
         ),
     ]
     if report.score is not None:
-        lines.append(
-            f"Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
-        )
-    lines.append(
-        f"Findings: {counts['total']} total · {counts['error']} error · "
-        f"{counts['warning']} warning · {counts['advisory']} advisory"
-    )
+        lines.append(f"Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)")
+    lines.append(f"Findings: {counts['total']} total · {counts['error']} error · {counts['warning']} warning · {counts['advisory']} advisory")
     lines.extend(
         [
             f"Elapsed: {summary['elapsedSeconds']:.3f}s",
@@ -159,12 +154,7 @@ def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
     rule_id_width = max(len(row["ruleId"]) for row in rows)
     formatted = [header]
     for row in rows:
-        line = (
-            f"  {row['count']:>4}  "
-            f"{row['ruleId']:<{rule_id_width}}  "
-            f"{row['severity']:<8}  "
-            f"{row['confidence']}"
-        )
+        line = f"  {row['count']:>4}  {row['ruleId']:<{rule_id_width}}  {row['severity']:<8}  {row['confidence']}"
         formatted.append(line.rstrip())
     return formatted
 
@@ -251,15 +241,10 @@ def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
 def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
     hints: list[str] = []
     if summary["ignored"]:
-        hints.append(
-            "Ignored paths: add --include-ignored to include built-in and .gitignore "
-            "exclusions; configured paths.ignore still applies."
-        )
+        hints.append("Ignored paths: add --include-ignored to include built-in and .gitignore exclusions; configured paths.ignore still applies.")
     if summary["findings"]:
         hints.append(
-            "Baseline: after review, run "
-            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
-            "to accept current findings as known debt."
+            f"Baseline: after review, run `{_generate_baseline_command(cast(list[str], summary['paths']))}` to accept current findings as known debt."
         )
     if not hints:
         return

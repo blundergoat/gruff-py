@@ -28,9 +28,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 )
 from gruffpy.rule.test_quality._test_quality_scope import TestScope, TestScopeKind
 
-_PYTEST_ASSERTION_HELPERS: frozenset[str] = frozenset(
-    {"raises", "warns", "deprecated_call", "approx", "fail"}
-)
+_PYTEST_ASSERTION_HELPERS: frozenset[str] = frozenset({"raises", "warns", "deprecated_call", "approx", "fail"})
 
 
 class NoAssertionsRule(Rule):
@@ -103,10 +101,7 @@ class NoAssertionsRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Assert the expected behaviour, raise on the unexpected, or "
-                        "delete the test if it's not exercising anything."
-                    ),
+                    remediation=("Assert the expected behaviour, raise on the unexpected, or delete the test if it's not exercising anything."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),
@@ -134,14 +129,10 @@ def _has_any_assertion(
         if isinstance(node, ast.Assert):
             return True
         # Standalone framework helpers can fail without a language-level assert statement.
-        if isinstance(node, ast.Call) and _is_standalone_assertion_call(
-            node, imported_pytest_assertions
-        ):
+        if isinstance(node, ast.Call) and _is_standalone_assertion_call(node, imported_pytest_assertions):
             return True
         # Exception and warning expectations are expressed as context managers.
-        if isinstance(node, ast.With) and _has_with_item_assertion(
-            node, imported_pytest_assertions
-        ):
+        if isinstance(node, ast.With) and _has_with_item_assertion(node, imported_pytest_assertions):
             return True
     return _has_decorator_assertion_call(fn, imported_pytest_assertions)
 
@@ -160,9 +151,7 @@ def _is_standalone_assertion_call(
     Returns:
         True when the call can directly fail the test on an unmet expectation.
     """
-    return _is_recognised_assertion_call(
-        call, imported_pytest_assertions
-    ) and not is_catch_warnings_call(call)
+    return _is_recognised_assertion_call(call, imported_pytest_assertions) and not is_catch_warnings_call(call)
 
 
 def _has_with_item_assertion(
@@ -182,10 +171,7 @@ def _has_with_item_assertion(
     # Any assertion-like context manager is enough to make the test verifiable.
     for item in with_statement.items:
         # Ordinary resource managers do not verify an outcome.
-        if not (
-            isinstance(item.context_expr, ast.Call)
-            and _is_recognised_assertion_call(item.context_expr, imported_pytest_assertions)
-        ):
+        if not (isinstance(item.context_expr, ast.Call) and _is_recognised_assertion_call(item.context_expr, imported_pytest_assertions)):
             continue
         # Catching warnings verifies behavior only when warnings are promoted to failures.
         if is_catch_warnings_call(item.context_expr):
@@ -216,9 +202,7 @@ def _has_decorator_assertion_call(
         # Assertion helpers may be nested inside a list or tuple of parameter values.
         for node in ast.walk(decorator):
             # The decorator supplies a verification context even if the body only enters it.
-            if isinstance(node, ast.Call) and _is_standalone_assertion_call(
-                node, imported_pytest_assertions
-            ):
+            if isinstance(node, ast.Call) and _is_standalone_assertion_call(node, imported_pytest_assertions):
                 return True
     return False
 
@@ -261,10 +245,7 @@ def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:
                 # Canonical ``pytest`` calls are already covered by the shared matcher.
                 if imported_module.name != "pytest" or imported_module.asname is None:
                     continue
-                assertion_callees.update(
-                    f"{imported_module.asname}.{helper_name}"
-                    for helper_name in _PYTEST_ASSERTION_HELPERS
-                )
+                assertion_callees.update(f"{imported_module.asname}.{helper_name}" for helper_name in _PYTEST_ASSERTION_HELPERS)
             continue
         # Direct imports bind one helper name, optionally under a local alias.
         if isinstance(node, ast.ImportFrom) and node.module == "pytest":

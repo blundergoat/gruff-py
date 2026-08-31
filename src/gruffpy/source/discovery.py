@@ -303,9 +303,7 @@ class SourceDiscovery:
     def _record_ignored(decision: _IgnoreDecision, ignored_paths: list[IgnoredPath]) -> None:
         if decision.display_path is None or decision.reason is None:
             return
-        ignored_paths.append(
-            IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern)
-        )
+        ignored_paths.append(IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern))
 
     def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
         canonical = self._canonical(path)
@@ -346,11 +344,7 @@ class SourceDiscovery:
         suffix = path.suffix.lower()
         if suffix in PYTHON_EXTENSIONS:
             return "python"
-        if (
-            suffix in TEXT_EXTENSIONS
-            or self._is_env_like(path)
-            or self._is_dependency_metadata_file(path)
-        ):
+        if suffix in TEXT_EXTENSIONS or self._is_env_like(path) or self._is_dependency_metadata_file(path):
             return "text"
         return None
 
@@ -362,9 +356,7 @@ class SourceDiscovery:
     @staticmethod
     def _is_dependency_metadata_file(path: Path) -> bool:
         name = path.name.lower()
-        return name in TEXT_FILENAMES or (
-            name.startswith("requirements") and name.endswith((".txt", ".in"))
-        )
+        return name in TEXT_FILENAMES or (name.startswith("requirements") and name.endswith((".txt", ".in")))
 
     def _ignored_component_match(self, path: Path, ignored_names: tuple[str, ...]) -> str | None:
         display = self._display_path(path).replace("\\", "/")
@@ -417,9 +409,7 @@ class SourceDiscovery:
         display_path = self._display_path(path)
         configured = self._configured_pattern(path, patterns)
         if configured is not None:
-            return _IgnoreDecision(
-                True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured)
-            )
+            return _IgnoreDecision(True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured))
         if is_dir is None:
             is_dir = path.is_dir()
         vcs_match = self._ignored_component_match(path, VCS_IGNORED_DIRECTORIES)
@@ -434,9 +424,7 @@ class SourceDiscovery:
         default_match = self._ignored_component_match(path, FALLBACK_IGNORED_DIRECTORIES)
         if default_match is not None and self._fallback_applies_at(path):
             recorded = display_path if record_file or is_dir else None
-            return _IgnoreDecision(
-                True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match)
-            )
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match))
         return _IgnoreDecision(False)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
@@ -456,7 +444,5 @@ def _is_pattern_match(display_path: str, pattern: str) -> bool:
     if normalised_path.startswith(normalised_pattern + "/"):
         return True
     escaped = re.escape(normalised_pattern)
-    regex = (
-        "^" + escaped.replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]") + "$"
-    )
+    regex = "^" + escaped.replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]") + "$"
     return re.match(regex, normalised_path) is not None

@@ -18,9 +18,7 @@ _PRIVATE_KEY_ID = "abc123" + "def456" + "abc123" + "def456"
 def test_gcp_service_account_key_emits_with_redacted_preview():
     src = _service_account_source(_PRIVATE_KEY_VALUE)
 
-    findings = GcpServiceAccountKeyRule().analyse(
-        make_unit(src, "service-account.json"), default_ctx()
-    )
+    findings = GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx())
 
     assert len(findings) == 1
     finding = findings[0]
@@ -47,10 +45,7 @@ def test_gcp_service_account_key_routes_through_default_registry():
 def test_service_account_marker_without_private_key_skipped():
     src = '{"type": "service_account", "client_email": "fixture@' + 'example.test"}\n'
 
-    assert (
-        GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx())
-        == []
-    )
+    assert GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx()) == []
 
 
 def test_private_key_without_service_account_marker_skipped_by_gcp_rule():
@@ -62,20 +57,11 @@ def test_private_key_without_service_account_marker_skipped_by_gcp_rule():
 def test_placeholder_service_account_key_skipped():
     src = _service_account_source(f"{_PRIVATE_KEY_HEADER}\\nplaceholder\\n{_PRIVATE_KEY_FOOTER}\\n")
 
-    assert (
-        GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx())
-        == []
-    )
+    assert GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx()) == []
 
 
 def _service_account_source(private_key: str) -> str:
-    return (
-        "{\n"
-        '  "type": "service_account",\n'
-        f'  "private_key_id": "{_PRIVATE_KEY_ID}",\n'
-        f'  "private_key": "{private_key}"\n'
-        "}\n"
-    )
+    return f'{{\n  "type": "service_account",\n  "private_key_id": "{_PRIVATE_KEY_ID}",\n  "private_key": "{private_key}"\n}}\n'
 
 
 def _assert_gcp_raw_values_redacted(*rendered_values: str) -> None:

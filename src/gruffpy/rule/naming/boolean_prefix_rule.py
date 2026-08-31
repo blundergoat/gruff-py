@@ -355,10 +355,7 @@ class BooleanPrefixRule(Rule):
             confidence=rule_definition.confidence,
             end_line=declaration_line,
             symbol=declaration_name,
-            remediation=(
-                f"Rename {declaration_name!r} with a boolean prefix "
-                f"(e.g. ``is_{_strip_lead(declaration_name)}``)."
-            ),
+            remediation=(f"Rename {declaration_name!r} with a boolean prefix (e.g. ``is_{_strip_lead(declaration_name)}``)."),
             secondary_pillars=rule_definition.secondary_pillars,
             metadata={
                 "identifier": declaration_name,
@@ -377,11 +374,7 @@ def _is_dunder(declaration_name: str) -> bool:
     Returns:
         ``True`` when the scan should preserve Python's special spelling.
     """
-    return (
-        declaration_name.startswith("__")
-        and declaration_name.endswith("__")
-        and len(declaration_name) > 4
-    )
+    return declaration_name.startswith("__") and declaration_name.endswith("__") and len(declaration_name) > 4
 
 
 def _has_override_decorator(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -395,10 +388,7 @@ def _has_override_decorator(function_node: ast.FunctionDef | ast.AsyncFunctionDe
         ``True`` when an ``@override`` spelling exempts the method.
     """
     # Each decorator spelling is reduced to its user-visible leaf name.
-    return any(
-        _decorator_name(decorator).split(".")[-1] == "override"
-        for decorator in function_node.decorator_list
-    )
+    return any(_decorator_name(decorator).split(".")[-1] == "override" for decorator in function_node.decorator_list)
 
 
 def _accepted_boolean_names(
@@ -574,11 +564,7 @@ def _annotation_target_name(annotation_target: ast.expr) -> str:
     if isinstance(annotation_target, ast.Name):
         return annotation_target.id
     # Only the explicit typing module receives dotted-wrapper equivalence.
-    if (
-        isinstance(annotation_target, ast.Attribute)
-        and isinstance(annotation_target.value, ast.Name)
-        and annotation_target.value.id == "typing"
-    ):
+    if isinstance(annotation_target, ast.Attribute) and isinstance(annotation_target.value, ast.Name) and annotation_target.value.id == "typing":
         return f"typing.{annotation_target.attr}"
     return ""
 
@@ -752,10 +738,7 @@ def _is_upper_snake_constant(
     if not _UPPER_SNAKE_PATTERN.fullmatch(attribute_name):
         return False
     # Module and class parents make the uppercase declaration user-visible state.
-    return any(
-        isinstance(parent_node, ast.Module | ast.ClassDef)
-        for parent_node in parent_chain(attribute_node)
-    )
+    return any(isinstance(parent_node, ast.Module | ast.ClassDef) for parent_node in parent_chain(attribute_node))
 
 
 def _is_schema_field(attribute_node: ast.AnnAssign) -> bool:
@@ -790,6 +773,4 @@ def _is_test_file(display_path: str) -> bool:
     if normalized_path.startswith("tests/") or "/tests/" in normalized_path:
         return True
     # A root-level pytest filename receives the same user-facing exemption.
-    return (
-        "/" not in normalized_path and file_name.startswith("test_") and file_name.endswith(".py")
-    )
+    return "/" not in normalized_path and file_name.startswith("test_") and file_name.endswith(".py")

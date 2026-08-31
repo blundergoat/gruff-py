@@ -67,12 +67,7 @@ def test_if_else_two():
 
 def test_if_elif_else_three():
     # if (1) + elif (1) + else (1) = 3
-    src = (
-        "def f(x):\n"
-        "    if x > 0:\n        return 1\n"
-        "    elif x < 0:\n        return -1\n"
-        "    else:\n        return 0\n"
-    )
+    src = "def f(x):\n    if x > 0:\n        return 1\n    elif x < 0:\n        return -1\n    else:\n        return 0\n"
     assert cognitive_for(_first_fn(src)) == 3
 
 
@@ -114,12 +109,7 @@ def test_try_except_one_handler():
 
 
 def test_try_two_excepts_two():
-    src = (
-        "def f():\n"
-        "    try:\n        pass\n"
-        "    except ValueError:\n        pass\n"
-        "    except KeyError:\n        pass\n"
-    )
+    src = "def f():\n    try:\n        pass\n    except ValueError:\n        pass\n    except KeyError:\n        pass\n"
     assert cognitive_for(_first_fn(src)) == 2
 
 
@@ -130,12 +120,7 @@ def test_ternary_one():
 
 def test_match_one():
     # match at 0 = 1+0 = 1; cases do NOT add B1 per ADR-003
-    src = (
-        "def f(x):\n"
-        "    match x:\n"
-        "        case 1:\n            return 'one'\n"
-        "        case 2:\n            return 'two'\n"
-    )
+    src = "def f(x):\n    match x:\n        case 1:\n            return 'one'\n        case 2:\n            return 'two'\n"
     assert cognitive_for(_first_fn(src)) == 1
 
 
@@ -150,27 +135,14 @@ def test_deep_nesting_compounds():
     # for at 1: 1+1 = 2
     # if at 2: 1+2 = 3
     # Total: 6
-    src = (
-        "def f(xs):\n"
-        "    if xs:\n"
-        "        for x in xs:\n"
-        "            if x > 0:\n"
-        "                print(x)\n"
-    )
+    src = "def f(xs):\n    if xs:\n        for x in xs:\n            if x > 0:\n                print(x)\n"
     assert cognitive_for(_first_fn(src)) == 6
 
 
 def test_nested_function_does_not_inflate_outer():
     # Outer is empty (just defines + returns inner); inner has its own
     # complexity. cognitive_for(outer) should NOT include inner's body.
-    src = (
-        "def outer():\n"
-        "    def inner(x):\n"
-        "        if x:\n"
-        "            return 1\n"
-        "        return 0\n"
-        "    return inner\n"
-    )
+    src = "def outer():\n    def inner(x):\n        if x:\n            return 1\n        return 0\n    return inner\n"
     outer = _first_fn(src)
     assert cognitive_for(outer) == 0
 

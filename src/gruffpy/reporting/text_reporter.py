@@ -146,15 +146,9 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
         if baseline.source == "default":
             lines.append(f"  Tip: commit {baseline.path} and rerun `gruff-py analyse` to apply it.")
         else:
-            lines.append(
-                f"  Tip: commit {baseline.path} and rerun with "
-                f"`--baseline-path {shlex.quote(baseline.path)}` to apply it."
-            )
+            lines.append(f"  Tip: commit {baseline.path} and rerun with `--baseline-path {shlex.quote(baseline.path)}` to apply it.")
     elif baseline.stale_entries:
-        lines.append(
-            "  Tip: regenerate after review with "
-            f"`gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`."
-        )
+        lines.append(f"  Tip: regenerate after review with `gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`.")
 
 
 def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> None:
@@ -179,8 +173,7 @@ def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> Non
     if total == 0:
         return
     details = "; ".join(
-        f"sensitiveExclusions[{summary.index}] {summary.rule}: "
-        f"{summary.suppressed} ({summary.reason})"
+        f"sensitiveExclusions[{summary.index}] {summary.rule}: {summary.suppressed} ({summary.reason})"
         for summary in report.suppressions
         if summary.suppressed > 0
     )
@@ -240,21 +233,15 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
         return
     lines.append("")
     lines.append("Score")
-    lines.append(
-        f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
-    )
+    lines.append(f"  Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)")
     # Active display filters explain why shown findings differ from score inputs.
     if report.hidden_by_display_filter > 0:
         finding_label = (
-            f"{counts['total']} shown ({report.hidden_by_display_filter} hidden by display "
-            "filters; score and exit code reflect all findings)"
+            f"{counts['total']} shown ({report.hidden_by_display_filter} hidden by display filters; score and exit code reflect all findings)"
         )
     else:
         finding_label = f"{counts['total']} total"
-    lines.append(
-        f"  Findings: {finding_label} · {counts['error']} error · "
-        f"{counts['warning']} warning · {counts['advisory']} advisory"
-    )
+    lines.append(f"  Findings: {finding_label} · {counts['error']} error · {counts['warning']} warning · {counts['advisory']} advisory")
     lines.append("  Pillars:")
     # Each pillar row lets the user trace the composite back to one quality area.
     for pillar in report.score.pillars:
@@ -265,9 +252,7 @@ def _append_score(lines: list[str], report: AnalysisReport, counts: dict[str, in
         else:
             grade_letter = pillar.grade.letter
             grade_score = f"{pillar.grade.score:.2f}"
-        lines.append(
-            f"    {pillar.pillar}: {grade_letter} ({grade_score}) findings={pillar.findings}"
-        )
+        lines.append(f"    {pillar.pillar}: {grade_letter} ({grade_score}) findings={pillar.findings}")
 
 
 def _append_findings(lines: list[str], findings: tuple[Finding, ...]) -> None:

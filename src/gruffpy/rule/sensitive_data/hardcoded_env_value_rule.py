@@ -28,9 +28,7 @@ _SECRET_KEY_RE = re.compile(
     re.MULTILINE,
 )
 _TASK_PLACEHOLDER = "".join(("TO", "DO"))
-_PLACEHOLDER_VALUES: frozenset[str] = frozenset(
-    {"changeme", "your_secret_here", _TASK_PLACEHOLDER, "REPLACE_ME", "xxx", "***", ""}
-)
+_PLACEHOLDER_VALUES: frozenset[str] = frozenset({"changeme", "your_secret_here", _TASK_PLACEHOLDER, "REPLACE_ME", "xxx", "***", ""})
 _ENTROPY_THRESHOLD = 3.0
 _MIN_VALUE_LENGTH = 12
 
@@ -108,8 +106,7 @@ class HardcodedEnvValueRule(SourceTextRule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     remediation=(
-                        "Use placeholder values in committed `.env` files and inject "
-                        "real secrets via the deployment environment or a secret manager."
+                        "Use placeholder values in committed `.env` files and inject real secrets via the deployment environment or a secret manager."
                     ),
                     secondary_pillars=definition.secondary_pillars,
                     # The environment key names the setting the user must fix. The value's entropy

@@ -43,9 +43,7 @@ def test_too_short_skipped():
 
 def test_finding_in_json_text_file():
     src = f'{{"awsKey": "{_AKIA_KEY}"}}\n'
-    findings = AwsAccessKeyRule().analyse(
-        make_unit(src, "config.json", source_type="text"), default_ctx()
-    )
+    findings = AwsAccessKeyRule().analyse(make_unit(src, "config.json", source_type="text"), default_ctx())
     assert len(findings) == 1
 
 

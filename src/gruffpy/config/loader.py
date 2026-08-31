@@ -71,10 +71,7 @@ VALID_SELECTION_KEYS = frozenset(
     }
 )
 VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
-MIGRATION_HINT = (
-    'Run "gruff-py migrate-config" to rewrite legacy YAML keys. '
-    "For TOML, edit [tool.gruff-py] in pyproject.toml by hand."
-)
+MIGRATION_HINT = 'Run "gruff-py migrate-config" to rewrite legacy YAML keys. For TOML, edit [tool.gruff-py] in pyproject.toml by hand.'
 TOML_TOOL_KEY = "gruff-py"
 LEGACY_TOML_TOOL_KEY = "gruff"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
@@ -179,14 +176,10 @@ class ConfigLoader:
             self._validate_top_level(section, source=str(path))
             return self._apply_config_section(section), path
         if path.suffix != ".toml":
-            raise ConfigError(
-                f"Unsupported config file extension for {path}; use .yaml, .yml, or .toml."
-            )
+            raise ConfigError(f"Unsupported config file extension for {path}; use .yaml, .yml, or .toml.")
         toml_section = self._load_toml_section(path)
         if toml_section is None:
-            raise ConfigError(
-                f"Config file {path} has no {TOML_TABLE} or {LEGACY_TOML_TABLE} table."
-            )
+            raise ConfigError(f"Config file {path} has no {TOML_TABLE} or {LEGACY_TOML_TABLE} table.")
         return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
@@ -222,9 +215,7 @@ class ConfigLoader:
         if "minimumSeverity" in section:
             ConfigLoader._validate_minimum_severity(section["minimumSeverity"], source)
         if "outputVolumeHintThreshold" in section:
-            ConfigLoader._validate_output_volume_hint_threshold(
-                section["outputVolumeHintThreshold"], source
-            )
+            ConfigLoader._validate_output_volume_hint_threshold(section["outputVolumeHintThreshold"], source)
         if "deepScanBudget" in section:
             ConfigLoader._validate_deep_scan_budget(section["deepScanBudget"], source)
 
@@ -251,29 +242,17 @@ class ConfigLoader:
     def _validate_minimum_severity(block: Any, source: str) -> None:
         """Validate per-command failure thresholds before a scan can report the wrong exit code."""
         if not isinstance(block, dict):
-            raise ConfigError(
-                f"{source} minimumSeverity must be a mapping of command name to severity."
-            )
+            raise ConfigError(f"{source} minimumSeverity must be a mapping of command name to severity.")
         errors: list[str] = []
         for key, value in block.items():
             if key in NON_GATING_COMMANDS:
-                errors.append(
-                    f"minimumSeverity.{key!r} is a non-gating subcommand; "
-                    f"only {sorted(GATEABLE_COMMANDS)} accept a per-command default."
-                )
+                errors.append(f"minimumSeverity.{key!r} is a non-gating subcommand; only {sorted(GATEABLE_COMMANDS)} accept a per-command default.")
             elif key not in GATEABLE_COMMANDS:
-                errors.append(
-                    f"Unknown minimumSeverity key {key!r}; allowed: {sorted(GATEABLE_COMMANDS)}."
-                )
+                errors.append(f"Unknown minimumSeverity key {key!r}; allowed: {sorted(GATEABLE_COMMANDS)}.")
             elif not isinstance(value, str):
-                errors.append(
-                    f"minimumSeverity.{key} must be a string; got {type(value).__name__}."
-                )
+                errors.append(f"minimumSeverity.{key} must be a string; got {type(value).__name__}.")
             elif value not in VALID_MINIMUM_SEVERITY_VALUES:
-                errors.append(
-                    f"minimumSeverity.{key} has invalid value {value!r}; "
-                    f"allowed: {sorted(VALID_MINIMUM_SEVERITY_VALUES)}."
-                )
+                errors.append(f"minimumSeverity.{key} has invalid value {value!r}; allowed: {sorted(VALID_MINIMUM_SEVERITY_VALUES)}.")
         if errors:
             raise ConfigError(f"{source} has minimumSeverity errors: {'; '.join(errors)}")
 
@@ -281,15 +260,9 @@ class ConfigLoader:
     def _validate_output_volume_hint_threshold(value: Any, source: str) -> None:
         """Validate when text users should see the high-volume findings hint."""
         if isinstance(value, bool) or not isinstance(value, int):
-            raise ConfigError(
-                f"{source} outputVolumeHintThreshold must be a non-negative integer; "
-                f"got {type(value).__name__}."
-            )
+            raise ConfigError(f"{source} outputVolumeHintThreshold must be a non-negative integer; got {type(value).__name__}.")
         if value < 0:
-            raise ConfigError(
-                f"{source} outputVolumeHintThreshold must be >= 0; got {value} "
-                f"(set to 0 to disable the hint)."
-            )
+            raise ConfigError(f"{source} outputVolumeHintThreshold must be >= 0; got {value} (set to 0 to disable the hint).")
 
     @staticmethod
     def _validate_deep_scan_budget(value: Any, source: str) -> None:
@@ -298,10 +271,7 @@ class ConfigLoader:
             raise ConfigError(f"{source} deepScanBudget must be a mapping.")
         unknown = set(value) - {"enabled", "maxLines", "maxBytes"}
         if unknown:
-            raise ConfigError(
-                f"Unknown deepScanBudget keys in {source}: {sorted(unknown)}; "
-                "allowed: ['enabled', 'maxBytes', 'maxLines']."
-            )
+            raise ConfigError(f"Unknown deepScanBudget keys in {source}: {sorted(unknown)}; allowed: ['enabled', 'maxBytes', 'maxLines'].")
         enabled = value.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ConfigError(f"{source} deepScanBudget.enabled must be true or false.")
@@ -317,14 +287,10 @@ class ConfigLoader:
         config = self._defaults
 
         if "minimumPythonVersion" in section:
-            config = config.with_minimum_python_version(
-                _parse_python_version(section["minimumPythonVersion"])
-            )
+            config = config.with_minimum_python_version(_parse_python_version(section["minimumPythonVersion"]))
 
         if "minimumSeverity" in section:
-            config = config.with_minimum_severity(
-                {key: FailThreshold(value) for key, value in section["minimumSeverity"].items()}
-            )
+            config = config.with_minimum_severity({key: FailThreshold(value) for key, value in section["minimumSeverity"].items()})
 
         if "outputVolumeHintThreshold" in section:
             config = config.with_output_volume_hint_threshold(section["outputVolumeHintThreshold"])
@@ -384,12 +350,8 @@ class ConfigLoader:
         accepted_abbreviations = allowlists.get("acceptedAbbreviations", [])
         # Invalid naming entries stop the command so the user never sees results based on a
         # partly applied allowlist.
-        if not isinstance(accepted_abbreviations, list) or not all(
-            isinstance(abbreviation, str) for abbreviation in accepted_abbreviations
-        ):
-            raise ConfigError(
-                "[tool.gruff-py.allowlists].acceptedAbbreviations must be a list of strings."
-            )
+        if not isinstance(accepted_abbreviations, list) or not all(isinstance(abbreviation, str) for abbreviation in accepted_abbreviations):
+            raise ConfigError("[tool.gruff-py.allowlists].acceptedAbbreviations must be a list of strings.")
 
         # A user may leave the retired key as [], but a configured preview must fail before
         # analysis because preview text cannot authorize a finding.
@@ -397,18 +359,14 @@ class ConfigLoader:
             raise ConfigError(LEGACY_SECRET_PREVIEWS_ERROR)
 
     @staticmethod
-    def _apply_present_allowlists(
-        config: AnalysisConfig, allowlists: dict[str, Any]
-    ) -> AnalysisConfig:
+    def _apply_present_allowlists(config: AnalysisConfig, allowlists: dict[str, Any]) -> AnalysisConfig:
         """Copy validated allowlists into the immutable config used by the user's scan."""
         if "acceptedAbbreviations" in allowlists:
             config = config.with_accepted_abbreviations(tuple(allowlists["acceptedAbbreviations"]))
         if "secretPreviews" in allowlists:
             config = config.with_allowed_secret_previews(tuple(allowlists["secretPreviews"]))
         if "deadCode" in allowlists:
-            config = config.with_dead_code_allowlist(
-                _parse_dead_code_allowlist(allowlists["deadCode"])
-            )
+            config = config.with_dead_code_allowlist(_parse_dead_code_allowlist(allowlists["deadCode"]))
         return config
 
     @staticmethod
@@ -473,18 +431,12 @@ class ConfigLoader:
             rule_settings = config.rules[rule_id]
             section = self._sanitised_rule_section(rule_id, rule_section, rule_settings)
             override = _severity_threshold(rule_id, rule_settings, section)
-            severity_threshold = (
-                override if override is not None else rule_settings.severity_threshold
-            )
+            severity_threshold = override if override is not None else rule_settings.severity_threshold
             config = config.with_rule_settings(
                 rule_id,
                 RuleSettings(
                     enabled=_is_rule_enabled(rule_settings, section),
-                    thresholds=(
-                        dict(rule_settings.thresholds)
-                        if override is not None
-                        else _merged_thresholds(rule_id, rule_settings, section)
-                    ),
+                    thresholds=(dict(rule_settings.thresholds) if override is not None else _merged_thresholds(rule_id, rule_settings, section)),
                     options=_merged_options(rule_id, rule_settings, section),
                     severity_threshold=severity_threshold,
                 ),
@@ -542,8 +494,7 @@ class ConfigLoader:
         # Single thresholds are only meaningful for rules with a registered rubric.
         if "threshold" in section and defaults.severity_threshold is None:
             self._warn_or_raise(
-                f'Config key "rules.{rule_id}.threshold" is only supported for '
-                "severity-threshold rubrics.",
+                f'Config key "rules.{rule_id}.threshold" is only supported for severity-threshold rubrics.',
                 f'Ignored; "{rule_id}" keeps its defaults.',
                 f"{_accepted_keys_sentence(rule_id, defaults)} {MIGRATION_HINT}",
             )
@@ -642,9 +593,7 @@ def _validate_selection_values(config: AnalysisConfig, selection: dict[str, Any]
 
     _reject_unknown_selection_values("tiers", selection.get("tiers", []), valid_tiers)
     _reject_unknown_selection_values("pillars", selection.get("pillars", []), valid_pillars)
-    _reject_unknown_selection_values(
-        "excludePillars", selection.get("excludePillars", []), valid_pillars
-    )
+    _reject_unknown_selection_values("excludePillars", selection.get("excludePillars", []), valid_pillars)
     _reject_unknown_selection_values("rules", selection.get("rules", []), valid_rules)
     _reject_unknown_selection_values("excludeRules", selection.get("excludeRules", []), valid_rules)
 
@@ -692,14 +641,9 @@ def _severity_threshold(
     if "threshold" not in rule_section:
         return None
     if "thresholds" in rule_section:
-        raise ConfigError(
-            f'Config key "rules.{rule_id}" cannot combine "threshold" and "thresholds".'
-        )
+        raise ConfigError(f'Config key "rules.{rule_id}" cannot combine "threshold" and "thresholds".')
     if rule_settings.severity_threshold is None:
-        raise ConfigError(
-            f'Config key "rules.{rule_id}.threshold" is only supported for '
-            "severity-threshold rubrics."
-        )
+        raise ConfigError(f'Config key "rules.{rule_id}.threshold" is only supported for severity-threshold rubrics.')
 
     threshold = rule_section["threshold"]
     if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
@@ -739,9 +683,7 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
     for key in VALID_DEAD_CODE_ALLOWLIST_KEYS:
         value = section.get(key, [])
         if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-            raise ConfigError(
-                f"[tool.gruff-py.allowlists.deadCode].{key} must be a list of strings."
-            )
+            raise ConfigError(f"[tool.gruff-py.allowlists.deadCode].{key} must be a list of strings.")
     return DeadCodeAllowlist(
         symbols=tuple(section.get("symbols", [])),
         decorators=tuple(section.get("decorators", [])),

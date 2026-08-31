@@ -11,9 +11,7 @@ from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.source.source_file import SourceFile
 
 
-def test_ast_value_error_is_reported_as_parse_diagnostic(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ast_value_error_is_reported_as_parse_diagnostic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source_path = tmp_path / "broken.py"
     source_path.write_text("value = 1\n", encoding="utf-8")
 
@@ -34,9 +32,7 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(
 
     monkeypatch.setattr(ast, "parse", raise_value_error)
 
-    unit = PythonFileParser().parse(
-        SourceFile(absolute_path=str(source_path), display_path="broken.py")
-    )
+    unit = PythonFileParser().parse(SourceFile(absolute_path=str(source_path), display_path="broken.py"))
 
     assert unit.tree is None
     assert len(unit.diagnostics) == 1
@@ -60,8 +56,7 @@ def test_python_source_over_either_bound_degrades_before_ast(
     assert unit.diagnostics[0].type == "bounded-deep-scan"
     assert unit.diagnostics[0].non_fatal is True
     assert (
-        unit.diagnostics[0].message
-        == "path=large.py; lines=3; bytes=20; maxLines=1; maxBytes=10000; override=cli. "
+        unit.diagnostics[0].message == "path=large.py; lines=3; bytes=20; maxLines=1; maxBytes=10000; override=cli. "
         "Text-level rules (size, sensitive-data, config) still ran; masking, block parsing, "
         "AST walking, and other deep script analysis were skipped."
     )

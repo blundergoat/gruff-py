@@ -71,10 +71,7 @@ class MissingModuleDocstringRule(Rule):
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                remediation=(
-                    "Name what this module owns and what callers can rely on, "
-                    "in one short paragraph at the top of the file."
-                ),
+                remediation=("Name what this module owns and what callers can rely on, in one short paragraph at the top of the file."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={},
             ),
@@ -96,11 +93,7 @@ def _is_reexport_shim(module: ast.Module, display_path: str) -> bool:
             target = node.targets[0]
             if isinstance(target, ast.Name) and target.id == "__all__":
                 continue
-        if (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "__all__"
-        ):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__":
             continue
         return False
     return True

@@ -126,32 +126,20 @@ def test_dunder_method_skipped():
 
 
 def test_unused_private_method_fires():
-    src = (
-        "class C:\n"
-        "    def _helper(self):\n        return 1\n"
-        "    def main(self):\n        return 2\n"
-    )
+    src = "class C:\n    def _helper(self):\n        return 1\n    def main(self):\n        return 2\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "C._helper"
 
 
 def test_used_private_method_via_self_does_not_fire():
-    src = (
-        "class C:\n"
-        "    def _helper(self):\n        return 1\n"
-        "    def main(self):\n        return self._helper()\n"
-    )
+    src = "class C:\n    def _helper(self):\n        return 1\n    def main(self):\n        return self._helper()\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_used_private_method_via_getattr_literal_does_not_fire():
-    src = (
-        "class C:\n"
-        "    def _helper(self):\n        return 1\n"
-        "    def main(self):\n        return getattr(self, '_helper')()\n"
-    )
+    src = "class C:\n    def _helper(self):\n        return 1\n    def main(self):\n        return getattr(self, '_helper')()\n"
     findings = UnusedPrivateFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -175,13 +163,7 @@ def test_sibling_method_reference_does_not_hide_unused_nested_private_function()
 
 def test_enclosing_method_call_keeps_nested_private_function_live() -> None:
     """Accept a nested private function called from its own lexical scope."""
-    source = (
-        "class Service:\n"
-        "    def build(self):\n"
-        "        def _nested():\n"
-        "            return 1\n"
-        "        return _nested()\n"
-    )
+    source = "class Service:\n    def build(self):\n        def _nested():\n            return 1\n        return _nested()\n"
 
     findings = UnusedPrivateFunctionRule().analyse(_unit(source), _ctx())
 
@@ -237,8 +219,7 @@ def test_project_imported_and_registered_private_function_is_live(
         producer_path,
     )
     consumer = _unit(
-        "from mail.formatters import _format_failed_emails\n"
-        "FAILED_EMAIL_FORMATTERS = {'default': _format_failed_emails}\n",
+        "from mail.formatters import _format_failed_emails\nFAILED_EMAIL_FORMATTERS = {'default': _format_failed_emails}\n",
         "src/mail/registry.py" if producer_path.startswith("src/") else "mail/registry.py",
     )
 
@@ -307,10 +288,7 @@ def test_project_class_load_before_later_binding_uses_outer_import() -> None:
     """A later class attribute does not retroactively shadow an earlier load."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "class Registry:\n"
-        "    CALLBACK = _helper\n"
-        "    _helper = None\n",
+        "from pkg.helpers import _helper\nclass Registry:\n    CALLBACK = _helper\n    _helper = None\n",
         "src/pkg/consumer.py",
     )
 
@@ -321,10 +299,7 @@ def test_project_class_binding_before_load_shadows_outer_import() -> None:
     """A class attribute already assigned at the load site remains authoritative."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "class Registry:\n"
-        "    _helper = None\n"
-        "    CALLBACK = _helper\n",
+        "from pkg.helpers import _helper\nclass Registry:\n    _helper = None\n    CALLBACK = _helper\n",
         "src/pkg/consumer.py",
     )
 
@@ -335,10 +310,7 @@ def test_project_function_default_uses_enclosing_import_binding() -> None:
     """Definition defaults execute before a same-named function local exists."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def consume(callback=_helper):\n"
-        "    _helper = None\n"
-        "    return callback\n",
+        "from pkg.helpers import _helper\ndef consume(callback=_helper):\n    _helper = None\n    return callback\n",
         "src/pkg/consumer.py",
     )
 
@@ -494,9 +466,7 @@ def test_project_index_walks_each_generated_module_a_bounded_number_of_times(
     second_findings = RuleRegistry([rule]).analyse(units, _ctx())
 
     assert len(first_findings) == len(units)
-    assert [finding.to_dict() for finding in first_findings] == [
-        finding.to_dict() for finding in second_findings
-    ]
+    assert [finding.to_dict() for finding in first_findings] == [finding.to_dict() for finding in second_findings]
     assert set(module_walk_counts) == unit_tree_ids
     assert max(module_walk_counts.values()) <= _MAX_MODULE_WALKS_ACROSS_TWO_ANALYSES
 
@@ -505,10 +475,7 @@ def test_project_conditional_rebind_keeps_the_import_reachable() -> None:
     """A branch the user may skip cannot prove the imported producer is unused."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "if use_local:\n"
-        "    _helper = None\n"
-        "REGISTRY = {'helper': _helper}\n",
+        "from pkg.helpers import _helper\nif use_local:\n    _helper = None\nREGISTRY = {'helper': _helper}\n",
         "src/pkg/consumer.py",
     )
 
@@ -519,12 +486,7 @@ def test_project_global_declaration_keeps_the_module_import_visible() -> None:
     """A ``global`` store rebinds the module name instead of shadowing it locally."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def swap():\n"
-        "    global _helper\n"
-        "    callback = _helper\n"
-        "    _helper = None\n"
-        "    return callback\n",
+        "from pkg.helpers import _helper\ndef swap():\n    global _helper\n    callback = _helper\n    _helper = None\n    return callback\n",
         "src/pkg/consumer.py",
     )
 
@@ -535,12 +497,7 @@ def test_project_global_store_before_a_later_load_hides_the_import() -> None:
     """A ``global`` store runs before a load in the same body, so that load reads it."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def swap():\n"
-        "    global _helper\n"
-        "    _helper = None\n"
-        "    callback = _helper\n"
-        "    return callback\n",
+        "from pkg.helpers import _helper\ndef swap():\n    global _helper\n    _helper = None\n    callback = _helper\n    return callback\n",
         "src/pkg/consumer.py",
     )
 
@@ -585,11 +542,7 @@ def test_project_global_store_does_not_reach_a_module_level_load() -> None:
     """Module code runs at import time, before any call performs the ``global`` store."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def swap():\n"
-        "    global _helper\n"
-        "    _helper = None\n"
-        "CALLBACK = _helper\n",
+        "from pkg.helpers import _helper\ndef swap():\n    global _helper\n    _helper = None\nCALLBACK = _helper\n",
         "src/pkg/consumer.py",
     )
 
@@ -600,12 +553,7 @@ def test_project_nonlocal_store_does_not_reach_an_enclosing_load() -> None:
     """The enclosing load cannot be ordered against a call that may never happen."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "def outer():\n"
-        "    from pkg.helpers import _helper\n"
-        "    def inner():\n"
-        "        nonlocal _helper\n"
-        "        _helper = None\n"
-        "    return _helper\n",
+        "def outer():\n    from pkg.helpers import _helper\n    def inner():\n        nonlocal _helper\n        _helper = None\n    return _helper\n",
         "src/pkg/consumer.py",
     )
 
@@ -616,12 +564,7 @@ def test_project_conditional_global_store_keeps_the_import_reachable() -> None:
     """A branch the user may skip cannot prove the import unreachable at the load."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def swap():\n"
-        "    global _helper\n"
-        "    if flag:\n"
-        "        _helper = None\n"
-        "    return _helper\n",
+        "from pkg.helpers import _helper\ndef swap():\n    global _helper\n    if flag:\n        _helper = None\n    return _helper\n",
         "src/pkg/consumer.py",
     )
 
@@ -632,11 +575,7 @@ def test_project_global_delete_before_a_later_load_hides_the_import() -> None:
     """``del`` through a ``global`` declaration invalidates the name for later loads."""
     producer = _unit("def _helper():\n    return 1\n", "src/pkg/helpers.py")
     consumer = _unit(
-        "from pkg.helpers import _helper\n"
-        "def swap():\n"
-        "    global _helper\n"
-        "    del _helper\n"
-        "    return _helper\n",
+        "from pkg.helpers import _helper\ndef swap():\n    global _helper\n    del _helper\n    return _helper\n",
         "src/pkg/consumer.py",
     )
 

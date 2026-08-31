@@ -195,18 +195,12 @@ def _field(label: str, name: str, value: str, placeholder: str = "") -> str:
 
 def _option(value: str, selected: str, label: str | None = None) -> str:
     is_selected = " selected" if value == selected else ""
-    return (
-        f'<option value="{_escape_attribute(value)}"{is_selected}>'
-        f"{_esc(label if label is not None else value)}</option>"
-    )
+    return f'<option value="{_escape_attribute(value)}"{is_selected}>{_esc(label if label is not None else value)}</option>'
 
 
 def _checkbox(name: str, label: str, value: str) -> str:
     checked = " checked" if value == "1" else ""
-    return (
-        f'<label class="check"><input type="checkbox" name="{_escape_attribute(name)}" '
-        f'value="1"{checked}><span>{_esc(label)}</span></label>'
-    )
+    return f'<label class="check"><input type="checkbox" name="{_escape_attribute(name)}" value="1"{checked}><span>{_esc(label)}</span></label>'
 
 
 def _json_script_payload(payload: dict[str, object]) -> str:

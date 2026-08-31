@@ -8,16 +8,8 @@ from click.testing import CliRunner
 
 from gruffpy.cli import main
 
-_FLAGGABLE_MODULE = (
-    "import os\n\n\ndef process(a, b, c, d, e, f, g, h):\n    result = a + b\n    return result\n"
-)
-_DIFF_TOUCHING_IGNORED = (
-    "diff --git a/skipme/bad.py b/skipme/bad.py\n"
-    "--- a/skipme/bad.py\n"
-    "+++ b/skipme/bad.py\n"
-    "@@ -1 +1,2 @@\n"
-    "+import sys\n"
-)
+_FLAGGABLE_MODULE = "import os\n\n\ndef process(a, b, c, d, e, f, g, h):\n    result = a + b\n    return result\n"
+_DIFF_TOUCHING_IGNORED = "diff --git a/skipme/bad.py b/skipme/bad.py\n--- a/skipme/bad.py\n+++ b/skipme/bad.py\n@@ -1 +1,2 @@\n+import sys\n"
 
 
 def _write(path: Path, text: str = "") -> None:
@@ -99,10 +91,7 @@ def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert any(
-        detail["path"] == "skipme/bad.py" and detail["source"] == "config"
-        for detail in payload["paths"]["details"]
-    )
+    assert any(detail["path"] == "skipme/bad.py" and detail["source"] == "config" for detail in payload["paths"]["details"])
 
 
 @pytest.mark.usefixtures("project")
@@ -129,9 +118,7 @@ def test_include_ignored_still_honours_config_paths_ignore() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_reports_config_match_and_non_match_as_json() -> None:
-    result = CliRunner().invoke(
-        main, ["check-ignore", "--format", "json", "skipme/bad.py", "src/kept.py"]
-    )
+    result = CliRunner().invoke(main, ["check-ignore", "--format", "json", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -172,9 +159,7 @@ def test_check_ignore_shares_engine_with_analyse() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_text_format_is_git_style_for_ignored_paths() -> None:
-    result = CliRunner().invoke(
-        main, ["check-ignore", "--format", "text", "skipme/bad.py", "src/kept.py"]
-    )
+    result = CliRunner().invoke(main, ["check-ignore", "--format", "text", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
     assert result.output == "skipme/bad.py\tconfig:skipme/**\n"

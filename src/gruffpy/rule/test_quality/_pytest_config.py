@@ -51,14 +51,8 @@ class PytestConfig:
             True when ``filterwarnings`` would turn a ``DeprecationWarning`` fatal.
         """
         return (
-            any(
-                line.startswith("error") and "DeprecationWarning" in line
-                for line in self.filterwarnings
-            )
-            or any(
-                line.startswith("error::") and "DeprecationWarning" in line
-                for line in self.filterwarnings
-            )
+            any(line.startswith("error") and "DeprecationWarning" in line for line in self.filterwarnings)
+            or any(line.startswith("error::") and "DeprecationWarning" in line for line in self.filterwarnings)
             or any(line.strip() == "error" for line in self.filterwarnings)
         )
 

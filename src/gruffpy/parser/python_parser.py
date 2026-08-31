@@ -42,10 +42,7 @@ class PythonFileParser:
 
         effective_budget = budget or DeepScanBudget()
         line_count = 0 if not source else source.count("\n") + 1
-        if effective_budget.enabled and (
-            line_count > effective_budget.max_lines
-            or len(source_bytes) > effective_budget.max_bytes
-        ):
+        if effective_budget.enabled and (line_count > effective_budget.max_lines or len(source_bytes) > effective_budget.max_bytes):
             return AnalysisUnit(
                 file=source_file,
                 source=source,
@@ -74,9 +71,7 @@ class PythonFileParser:
                 file=source_file,
                 source=source,
                 tree=None,
-                diagnostics=(
-                    ParseDiagnostic(message=str(exc.msg or "syntax error"), line=exc.lineno),
-                ),
+                diagnostics=(ParseDiagnostic(message=str(exc.msg or "syntax error"), line=exc.lineno),),
             )
         except ValueError as exc:
             return AnalysisUnit(

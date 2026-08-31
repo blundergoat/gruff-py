@@ -61,9 +61,7 @@ def test_rendered_rule_docs_include_catalog_details() -> None:
     assert "## Rule Details" in _RENDERED_DOCS
     assert "### `complexity.cyclomatic`" in _RENDERED_DOCS
     assert "Formula provenance: Radon-aligned decision-point counting." in _RENDERED_DOCS
-    threshold_metadata = (
-        "Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`"
-    )
+    threshold_metadata = "Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`"
     assert threshold_metadata in _RENDERED_DOCS
     assert "- Common false-positive shapes:" in _RENDERED_DOCS
     assert "A declarative builder dominated by one literal table" in _RENDERED_DOCS
@@ -78,8 +76,7 @@ def test_rendered_rule_docs_header_uses_runtime_totals() -> None:
     # Distinct declared pillars avoid the known rule-id-prefix counting error.
     runtime_pillar_count = len({definition.pillar for definition in _DEFAULT_DEFINITIONS})
     expected_header = (
-        f"gruff-py `{VERSION}` registers {len(_DEFAULT_DEFINITIONS)} rules across "
-        f"{runtime_pillar_count} pillars in `RuleRegistry.defaults()`."
+        f"gruff-py `{VERSION}` registers {len(_DEFAULT_DEFINITIONS)} rules across {runtime_pillar_count} pillars in `RuleRegistry.defaults()`."
     )
 
     assert _RENDERED_DOCS.splitlines()[2] == expected_header
@@ -131,9 +128,7 @@ def test_live_catalog_totals_are_generated_only(relative_doc_path: Path) -> None
     """
     live_catalog_total = _live_catalog_total_in(relative_doc_path)
     # A match means users could read a stale total instead of the generated catalog.
-    assert live_catalog_total is None, (
-        f"{relative_doc_path} contains a live catalog total: {live_catalog_total!r}"
-    )
+    assert live_catalog_total is None, f"{relative_doc_path} contains a live catalog total: {live_catalog_total!r}"
 
 
 def test_live_catalog_totals_detector_rejects_wrapped_fixture(tmp_path: Path) -> None:
@@ -146,9 +141,7 @@ def test_live_catalog_totals_detector_rejects_wrapped_fixture(tmp_path: Path) ->
         None; the detector must reject a total split across physical lines.
     """
     stale_architecture_path = tmp_path / "architecture.md"
-    stale_architecture_path.write_text(
-        "The runtime catalog has 125 rules across\n11 active pillars for reviewers.\n"
-    )
+    stale_architecture_path.write_text("The runtime catalog has 125 rules across\n11 active pillars for reviewers.\n")
 
     wrapped_live_total = _live_catalog_total_in(stale_architecture_path)
 

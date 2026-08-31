@@ -61,10 +61,7 @@ class MissingRaisesDocRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _missing_raises_doc_finding(unit, definition, node, style)
-            for node, style in _missing_raises_doc_nodes(unit.tree)
-        ]
+        return [_missing_raises_doc_finding(unit, definition, node, style) for node, style in _missing_raises_doc_nodes(unit.tree)]
 
 
 def _missing_raises_doc_nodes(tree: ast.AST) -> list[tuple[FunctionNode, DocstringStyle]]:
@@ -109,9 +106,7 @@ def _missing_raises_doc_finding(
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {symbol!r} raises exceptions and needs a Raises section in its docstring."
-        ),
+        message=(f"Function {symbol!r} raises exceptions and needs a Raises section in its docstring."),
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,
@@ -120,10 +115,7 @@ def _missing_raises_doc_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Add a Raises / :raises: section naming each exception type "
-            "and the condition that triggers it."
-        ),
+        remediation=("Add a Raises / :raises: section naming each exception type and the condition that triggers it."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"style": style.value},
     )

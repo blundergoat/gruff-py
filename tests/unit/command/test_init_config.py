@@ -256,12 +256,8 @@ def test_rendered_accepted_abbreviation_seed_matches_family_contract() -> None:
     lines = rendered.splitlines()
 
     assert document["allowlists"]["acceptedAbbreviations"] == list(_FAMILY_ACCEPTED_ABBREVIATIONS)
-    assert lines[accepted_key_index - 2] == (
-        "  # acceptedAbbreviations lets naming rules accept project vocabulary."
-    )
-    assert lines[accepted_key_index - 1] == (
-        "  # Configured values replace this seed; they do not merge with it."
-    )
+    assert lines[accepted_key_index - 2] == ("  # acceptedAbbreviations lets naming rules accept project vocabulary.")
+    assert lines[accepted_key_index - 1] == ("  # Configured values replace this seed; they do not merge with it.")
 
 
 def test_init_force_preserves_all_supported_semantics(tmp_path: Path) -> None:

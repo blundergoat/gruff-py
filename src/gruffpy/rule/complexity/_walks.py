@@ -29,11 +29,7 @@ def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
         yield from cast(tuple[FunctionLike, ...], cached)
         return
 
-    functions = tuple(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
-    )
+    functions = tuple(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda))
     setattr(tree, _FUNCTION_CACHE_ATTR, functions)
     yield from functions
 

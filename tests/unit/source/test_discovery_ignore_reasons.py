@@ -21,9 +21,7 @@ def test_classify_reports_config_source_and_matched_pattern(tmp_path: Path) -> N
 def test_classify_config_match_wins_even_with_include_ignored(tmp_path: Path) -> None:
     _write(tmp_path / "gen" / "out.py")
 
-    result = SourceDiscovery(tmp_path).classify(
-        "gen/out.py", include_ignored=True, configured_ignore_patterns=["gen/**"]
-    )
+    result = SourceDiscovery(tmp_path).classify("gen/out.py", include_ignored=True, configured_ignore_patterns=["gen/**"])
 
     assert result is not None
     assert result.source == "config"
@@ -57,9 +55,7 @@ def test_classify_returns_none_for_non_ignored_path(tmp_path: Path) -> None:
 
 
 def test_classify_works_on_hypothetical_path_not_on_disk(tmp_path: Path) -> None:
-    result = SourceDiscovery(tmp_path).classify(
-        "gen/missing.py", configured_ignore_patterns=["gen/**"]
-    )
+    result = SourceDiscovery(tmp_path).classify("gen/missing.py", configured_ignore_patterns=["gen/**"])
 
     assert result is not None
     assert result.source == "config"
@@ -68,15 +64,11 @@ def test_classify_works_on_hypothetical_path_not_on_disk(tmp_path: Path) -> None
 def test_discover_records_ignore_reason_for_explicit_config_match(tmp_path: Path) -> None:
     _write(tmp_path / "gen" / "out.py")
 
-    result = SourceDiscovery(tmp_path).discover(
-        ["gen/out.py"], configured_ignore_patterns=["gen/**"]
-    )
+    result = SourceDiscovery(tmp_path).discover(["gen/out.py"], configured_ignore_patterns=["gen/**"])
 
     assert result.files == ()
     assert result.ignored_paths == ("gen/out.py",)
-    assert result.ignored_path_reasons == (
-        IgnoredPath(path="gen/out.py", source="config", pattern="gen/**"),
-    )
+    assert result.ignored_path_reasons == (IgnoredPath(path="gen/out.py", source="config", pattern="gen/**"),)
 
 
 def test_explicit_ineligible_lockfile_is_not_reported_as_ignored(tmp_path: Path) -> None:
@@ -114,9 +106,7 @@ def test_vcs_internals_remain_blocked_for_explicit_file_and_include_ignored(
     result = SourceDiscovery(tmp_path).discover([".git/config.py"], include_ignored=True)
 
     assert result.files == ()
-    assert result.ignored_path_reasons == (
-        IgnoredPath(path=".git/config.py", source="default", pattern=".git"),
-    )
+    assert result.ignored_path_reasons == (IgnoredPath(path=".git/config.py", source="default", pattern=".git"),)
 
 
 def test_python_fallback_exceptions_apply_at_any_depth(tmp_path: Path) -> None:

@@ -80,9 +80,7 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     ),
     ids=("docs.missing-*", "security.*", "sensitive-data.*"),
 )
-def test_reviewer_verification_families_keep_default_posture(
-    expected: dict[str, Posture], prefix: str
-) -> None:
+def test_reviewer_verification_families_keep_default_posture(expected: dict[str, Posture], prefix: str) -> None:
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
 

@@ -77,9 +77,7 @@ class PhiPatternRule(SourceTextRule):
             findings.append(_build_phi_finding(definition, unit, ssn_match.start(), "ssn"))
         # Every labelled medical-record number remains visible for manual privacy review.
         for medical_record_match in _MRN_RE.finditer(unit.source):
-            findings.append(
-                _build_phi_finding(definition, unit, medical_record_match.start(), "mrn")
-            )
+            findings.append(_build_phi_finding(definition, unit, medical_record_match.start(), "mrn"))
         return findings
 
 
@@ -101,8 +99,7 @@ def _build_phi_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         remediation=(
-            "Move PHI out of the repository. Use deterministic placeholders for tests "
-            "and pull real values from a HIPAA-compliant store at runtime."
+            "Move PHI out of the repository. Use deterministic placeholders for tests and pull real values from a HIPAA-compliant store at runtime."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"preview": fixed_preview(), "kind": kind},

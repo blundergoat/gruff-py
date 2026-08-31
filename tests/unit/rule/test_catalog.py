@@ -68,10 +68,7 @@ def test_rule_id_matches_pillar_prefix_convention(definition: RuleDefinition) ->
 
 
 def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
-    catalog_classes = {
-        f"{type(entry.create()).__module__}.{type(entry.create()).__name__}"
-        for entry in BUILTIN_RULES
-    }
+    catalog_classes = {f"{type(entry.create()).__module__}.{type(entry.create()).__name__}" for entry in BUILTIN_RULES}
     concrete_classes = set(_concrete_rule_class_paths())
 
     assert concrete_classes == catalog_classes
@@ -105,9 +102,7 @@ def test_registry_analyse_is_deterministic_across_runs() -> None:
     file = SourceFile(absolute_path="/d.py", display_path="d.py", type="python")
     unit_a = AnalysisUnit(file=file, source=_DETERMINISM_FIXTURE, tree=tree_a)
     unit_b = AnalysisUnit(file=file, source=_DETERMINISM_FIXTURE, tree=tree_b)
-    ctx = RuleContext(
-        project_root="/", config=AnalysisConfig.from_registry(RuleRegistry.defaults())
-    )
+    ctx = RuleContext(project_root="/", config=AnalysisConfig.from_registry(RuleRegistry.defaults()))
     registry = RuleRegistry.defaults()
     a = registry.analyse([unit_a], ctx)
     b = registry.analyse([unit_b], ctx)
@@ -125,16 +120,8 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
 
 
 def test_medium_and_low_confidence_rules_publish_false_positive_guidance() -> None:
-    heuristic_definitions = [
-        definition
-        for definition in _ALL_DEFINITIONS
-        if definition.confidence in {Confidence.MEDIUM, Confidence.LOW}
-    ]
-    missing = [
-        definition.id
-        for definition in heuristic_definitions
-        if not documentation_for_rule(definition.id).false_positive_shapes
-    ]
+    heuristic_definitions = [definition for definition in _ALL_DEFINITIONS if definition.confidence in {Confidence.MEDIUM, Confidence.LOW}]
+    missing = [definition.id for definition in heuristic_definitions if not documentation_for_rule(definition.id).false_positive_shapes]
     incomplete = [
         definition.id
         for definition in heuristic_definitions
@@ -163,9 +150,7 @@ def test_non_metric_rule_has_no_formula_provenance(definition: RuleDefinition) -
 
 
 _SIZE_OR_COMPLEXITY_PILLARS = {Pillar.SIZE, Pillar.COMPLEXITY, Pillar.MAINTAINABILITY}
-_SIZE_AND_COMPLEXITY_DEFINITIONS = [
-    d for d in _ALL_DEFINITIONS if d.pillar in _SIZE_OR_COMPLEXITY_PILLARS
-]
+_SIZE_AND_COMPLEXITY_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.pillar in _SIZE_OR_COMPLEXITY_PILLARS]
 
 
 @pytest.mark.parametrize("definition", _SIZE_AND_COMPLEXITY_DEFINITIONS, ids=lambda d: d.id)
@@ -205,7 +190,5 @@ def _concrete_rule_class_paths() -> list[str]:
 
 
 def _looks_like_rule_class(cls: ast.ClassDef) -> bool:
-    methods = {
-        node.name for node in cls.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-    }
+    methods = {node.name for node in cls.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)}
     return "definition" in methods and bool({"analyse", "analyse_project"} & methods)

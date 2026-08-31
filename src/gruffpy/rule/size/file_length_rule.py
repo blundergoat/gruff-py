@@ -55,11 +55,7 @@ class FileLengthRule(Rule):
         """
         definition = self.definition()
         settings = context.settings_for(definition)
-        line_count = (
-            _fallback_substantive_line_count(unit.source)
-            if unit.is_deep_scan_bounded()
-            else _substantive_line_count(unit.source, unit.tree)
-        )
+        line_count = _fallback_substantive_line_count(unit.source) if unit.is_deep_scan_bounded() else _substantive_line_count(unit.source, unit.tree)
         threshold_match = settings.high_value_threshold_match(line_count)
         if threshold_match is None:
             return []
@@ -157,11 +153,7 @@ def _docstring_source_spans(
         if not body:
             continue
         first = body[0]
-        is_docstring = (
-            isinstance(first, ast.Expr)
-            and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)
-        )
+        is_docstring = isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str)
         if not is_docstring:
             continue
         end_line = first.end_lineno or first.lineno

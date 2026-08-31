@@ -54,12 +54,7 @@ def test_cls_does_not_fire_in_classmethod():
 
 
 def test_abstract_method_does_not_fire():
-    src = (
-        "from abc import ABC, abstractmethod\n"
-        "class A(ABC):\n"
-        "    @abstractmethod\n"
-        "    def m(self, x, y): ...\n"
-    )
+    src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self, x, y): ...\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -77,35 +72,19 @@ def test_pytest_fixture_does_not_fire():
 
 
 def test_rule_interface_method_does_not_fire():
-    src = (
-        "class Rule: ...\n"
-        "class R(Rule):\n"
-        "    def analyse(self, unit, context):\n"
-        "        return []\n"
-    )
+    src = "class Rule: ...\nclass R(Rule):\n    def analyse(self, unit, context):\n        return []\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_http_handler_override_does_not_fire():
-    src = (
-        "class BaseHTTPRequestHandler: ...\n"
-        "class H(BaseHTTPRequestHandler):\n"
-        "    def log_message(self, format, *args):\n"
-        "        return None\n"
-    )
+    src = "class BaseHTTPRequestHandler: ...\nclass H(BaseHTTPRequestHandler):\n    def log_message(self, format, *args):\n        return None\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_parameter_used_by_nested_closure_does_not_fire():
-    src = (
-        "def create(initial_state):\n"
-        "    class Handler:\n"
-        "        def get(self):\n"
-        "            return initial_state\n"
-        "    return Handler\n"
-    )
+    src = "def create(initial_state):\n    class Handler:\n        def get(self):\n            return initial_state\n    return Handler\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 

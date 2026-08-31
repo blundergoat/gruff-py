@@ -9,12 +9,7 @@ def test_skip_without_reason_emits():
 
 
 def test_skip_with_reason_kwarg_skipped():
-    src = (
-        "import pytest\n"
-        "@pytest.mark.skip(reason='flaky on Windows')\n"
-        "def test_foo():\n"
-        "    assert True\n"
-    )
+    src = "import pytest\n@pytest.mark.skip(reason='flaky on Windows')\ndef test_foo():\n    assert True\n"
     assert SkippedWithoutReasonRule().analyse(make_unit(src), default_ctx()) == []
 
 

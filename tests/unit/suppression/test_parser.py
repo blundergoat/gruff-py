@@ -14,9 +14,7 @@ def test_disable_same_line_suppression() -> None:
 
 
 def test_disable_next_targets_next_physical_line_only() -> None:
-    parsed = parse_suppressions(
-        "# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n"
-    )
+    parsed = parse_suppressions("# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n")
 
     assert parsed.disabled_on_line(1) == frozenset()
     assert parsed.disabled_on_line(2) == frozenset({"security.dangerous-function-call"})
@@ -53,13 +51,9 @@ def test_marker_prefilter_preserves_case_insensitive_syntax() -> None:
 
 
 def test_multiple_ids_and_whitespace_variants() -> None:
-    parsed = parse_suppressions(
-        "# gruff:   disable = size.file-length, security.dangerous-function-call \n"
-    )
+    parsed = parse_suppressions("# gruff:   disable = size.file-length, security.dangerous-function-call \n")
 
-    assert parsed.disabled_on_line(1) == frozenset(
-        {"size.file-length", "security.dangerous-function-call"}
-    )
+    assert parsed.disabled_on_line(1) == frozenset({"size.file-length", "security.dangerous-function-call"})
 
 
 def test_string_literals_are_not_parsed_as_suppression_comments() -> None:

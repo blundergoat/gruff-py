@@ -83,9 +83,7 @@ def test_accepted_abbreviations_rejects_non_string_entry(tmp_path: Path):
     ("['known-fixture']", "not-a-list", "{}", "null", "['']", "[known, 42]"),
     ids=("nonempty-list", "scalar", "empty-object", "null", "blank-entry", "mixed-list"),
 )
-def test_secret_previews_rejects_every_value_except_an_empty_list(
-    tmp_path: Path, configured_value: str
-):
+def test_secret_previews_rejects_every_value_except_an_empty_list(tmp_path: Path, configured_value: str):
     _yaml(tmp_path, f"allowlists:\n  secretPreviews: {configured_value}\n")
 
     with pytest.raises(ConfigError) as error:

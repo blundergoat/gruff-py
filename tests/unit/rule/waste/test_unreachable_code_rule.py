@@ -74,15 +74,7 @@ def test_only_first_unreachable_reported_per_block():
 
 
 def test_unreachable_in_branch_separate_from_other_branch():
-    src = (
-        "def f(x):\n"
-        "    if x:\n"
-        "        return 1\n"
-        "        a = 2\n"
-        "    else:\n"
-        "        return 3\n"
-        "        b = 4\n"
-    )
+    src = "def f(x):\n    if x:\n        return 1\n        a = 2\n    else:\n        return 3\n        b = 4\n"
     findings = UnreachableCodeRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 2
 

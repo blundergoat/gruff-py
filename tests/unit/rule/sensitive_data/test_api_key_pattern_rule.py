@@ -17,15 +17,7 @@ _GITLAB_TOKEN = "glpat-" + "abcDEF1234567890_abcDEF"
 _NPM_TOKEN = "npm_" + "abcDEF1234567890abcDEF1234567890"
 _GOOGLE_API_KEY = "AIza" + "SyA1b2C3d4E5" + "f6G7h8I9j0K1" + "l2M3n4O5p6Q"
 _GITHUB_FINE_GRAINED = "github_pat_" + "A" * 22 + "_" + "B" * 35
-_SLACK_WEBHOOK = (
-    "https://hooks.slack.com/services/"
-    + "T12345678"
-    + "/"
-    + "B12345678"
-    + "/"
-    + "abcdefghijklm"
-    + "nopqrstuvwxyz"
-)
+_SLACK_WEBHOOK = "https://hooks.slack.com/services/" + "T12345678" + "/" + "B12345678" + "/" + "abcdefghijklm" + "nopqrstuvwxyz"
 
 
 def test_stripe_live_key_emits():

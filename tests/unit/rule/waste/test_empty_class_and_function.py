@@ -64,12 +64,7 @@ def test_subclass_of_custom_error_does_not_fire():
     # Error/Exception/Warning is treated as exception-flavoured even when its own
     # definition isn't in this file (e.g. RuntimeError, or a project-defined
     # `class VoiceTurnError(Exception)`).
-    src = (
-        "class VoiceTurnError(Exception):\n"
-        "    pass\n"
-        "class VoiceTurnTimeoutError(VoiceTurnError):\n"
-        "    pass\n"
-    )
+    src = "class VoiceTurnError(Exception):\n    pass\nclass VoiceTurnTimeoutError(VoiceTurnError):\n    pass\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
     assert findings == []
 
@@ -118,12 +113,7 @@ def test_empty_function_ellipsis_fires():
 
 
 def test_abstract_method_does_not_fire():
-    src = (
-        "from abc import ABC, abstractmethod\n"
-        "class A(ABC):\n"
-        "    @abstractmethod\n"
-        "    def m(self): ...\n"
-    )
+    src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self): ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 

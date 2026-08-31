@@ -89,10 +89,7 @@ class FindingDisplayFilter:
         Returns:
             True when the finding should appear in reports.
         """
-        if (
-            self.min_severity is not None
-            and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]
-        ):
+        if self.min_severity is not None and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]:
             return False
         if self.include_pillars and finding.pillar not in self.include_pillars:
             return False

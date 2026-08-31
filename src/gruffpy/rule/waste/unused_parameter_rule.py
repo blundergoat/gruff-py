@@ -81,10 +81,7 @@ class UnusedParameterRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _unused_parameter_finding(unit, definition, candidate)
-            for candidate in _unused_parameters(unit.tree)
-        ]
+        return [_unused_parameter_finding(unit, definition, candidate) for candidate in _unused_parameters(unit.tree)]
 
 
 def _unused_parameters(tree: ast.AST) -> list[_UnusedParameter]:
@@ -140,10 +137,7 @@ def _unused_parameter_finding(
         confidence=definition.confidence,
         end_line=candidate.function.end_lineno,
         symbol=symbol,
-        remediation=(
-            f"Remove the parameter or rename it to ``_{arg_name}`` "
-            "to signal it is intentionally unused."
-        ),
+        remediation=(f"Remove the parameter or rename it to ``_{arg_name}`` to signal it is intentionally unused."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"parameter": arg_name},
     )
@@ -163,9 +157,7 @@ def _collect_referenced_names(body: list[ast.stmt]) -> set[str]:
     return names
 
 
-def _unreferenced_parameters(
-    fn: ast.FunctionDef | ast.AsyncFunctionDef, referenced: set[str]
-) -> list[tuple[str, int]]:
+def _unreferenced_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, referenced: set[str]) -> list[tuple[str, int]]:
     args = fn.args
     unused: list[tuple[str, int]] = []
     candidates = list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)

@@ -137,10 +137,7 @@ def _extends_production_class_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=node.name,
-        remediation=(
-            "Test via the public API, not by subclassing the SUT. If you need "
-            "test-only behaviour, compose rather than inherit."
-        ),
+        remediation=("Test via the public API, not by subclassing the SUT. If you need test-only behaviour, compose rather than inherit."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"base": base_name},
     )

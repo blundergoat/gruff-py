@@ -28,15 +28,7 @@ _CONDITIONAL_STATEMENTS: tuple[type[ast.AST], ...] = (
     ast.ExceptHandler,
 )
 _ScopeNode: TypeAlias = (
-    ast.Module
-    | ast.FunctionDef
-    | ast.AsyncFunctionDef
-    | ast.Lambda
-    | ast.ClassDef
-    | ast.ListComp
-    | ast.SetComp
-    | ast.DictComp
-    | ast.GeneratorExp
+    ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef | ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
 )
 
 
@@ -174,10 +166,7 @@ class _ModuleResolver:
             for module_suffix in _module_suffixes(file_path):
                 paths_by_module_suffix[module_suffix].add(file_path)
         # Sorted tuples make duplicate-module outcomes stable across discovery order.
-        self._absolute_paths = {
-            module_name: tuple(sorted(paths))
-            for module_name, paths in paths_by_module_suffix.items()
-        }
+        self._absolute_paths = {module_name: tuple(sorted(paths)) for module_name, paths in paths_by_module_suffix.items()}
 
     def resolve(
         self,
@@ -242,16 +231,12 @@ class _ModuleResolver:
         Returns:
             Exact file/package matches from the scanned set; empty when outside it.
         """
-        importing_parent_parts = list(
-            PurePosixPath(_normalized_path(importing_file_path)).parent.parts
-        )
+        importing_parent_parts = list(PurePosixPath(_normalized_path(importing_file_path)).parent.parts)
         parent_levels_to_remove = relative_level - 1
         # Too many dots leave the scanned package, so no user file can be proven.
         if parent_levels_to_remove > len(importing_parent_parts):
             return ()
-        retained_parent_parts = importing_parent_parts[
-            : len(importing_parent_parts) - parent_levels_to_remove
-        ]
+        retained_parent_parts = importing_parent_parts[: len(importing_parent_parts) - parent_levels_to_remove]
         # An empty module name targets the current package initializer directly.
         module_parts = [part for part in module_name.split(".") if part]
         target_parts = [*retained_parent_parts, *module_parts]
@@ -375,17 +360,13 @@ def _build_binding_events(
         if isinstance(node, ast.Import):
             # Each alias can bind a different module name in the user's scope.
             for binding in _bindings_for_import(node, resolver):
-                events_by_scope_and_name[(event_scope, binding.bound_name)].append(
-                    _BindingEvent(position=position, binding=binding)
-                )
+                events_by_scope_and_name[(event_scope, binding.bound_name)].append(_BindingEvent(position=position, binding=binding))
                 bound_names.add((event_scope, binding.bound_name))
         # From-import aliases may bind a function directly or a scanned child module.
         elif isinstance(node, ast.ImportFrom):
             # Each alias needs its own later-load and rebinding history.
             for binding in _bindings_for_from_import(unit, node, resolver, candidate_keys):
-                events_by_scope_and_name[(event_scope, binding.bound_name)].append(
-                    _BindingEvent(position=position, binding=binding)
-                )
+                events_by_scope_and_name[(event_scope, binding.bound_name)].append(_BindingEvent(position=position, binding=binding))
                 bound_names.add((event_scope, binding.bound_name))
 
         # Assignments, parameters, definitions, and pattern captures invalidate imports.
@@ -596,9 +577,7 @@ def _outer_evaluated_expressions(node: _ScopeNode) -> tuple[ast.expr, ...]:
             if argument.annotation is not None
         )
         optional_argument_annotations = tuple(
-            argument.annotation
-            for argument in (node.args.vararg, node.args.kwarg)
-            if argument is not None and argument.annotation is not None
+            argument.annotation for argument in (node.args.vararg, node.args.kwarg) if argument is not None and argument.annotation is not None
         )
         return tuple(
             expression
@@ -613,11 +592,7 @@ def _outer_evaluated_expressions(node: _ScopeNode) -> tuple[ast.expr, ...]:
             if expression is not None
         )
     if isinstance(node, ast.Lambda):
-        return tuple(
-            expression
-            for expression in (*node.args.defaults, *node.args.kw_defaults)
-            if expression is not None
-        )
+        return tuple(expression for expression in (*node.args.defaults, *node.args.kw_defaults) if expression is not None)
     if isinstance(node, ast.ClassDef):
         return (*node.decorator_list, *node.bases, *(keyword.value for keyword in node.keywords))
     if isinstance(node, ast.Module):
@@ -887,19 +862,14 @@ def _active_binding(
             # import is unreachable here. Keeping it would advise deleting a
             # producer the not-taken path still loads.
             prior_events = [
-                event
-                for event in binding_events
-                if event.position < load_position
-                and not (event.binding is None and event.is_conditional)
+                event for event in binding_events if event.position < load_position and not (event.binding is None and event.is_conditional)
             ]
             # Class bodies resolve earlier loads outward before a later class assignment.
             # A ``global``/``nonlocal`` name is never local either, so with no store
             # ordered before this load the value still comes from the declared scope.
             if not prior_events:
                 declared_here = name in externally_declared_names.get(current_scope_id, frozenset())
-                if declared_here or isinstance(
-                    scope_index.scope_nodes.get(current_scope_id), ast.ClassDef
-                ):
+                if declared_here or isinstance(scope_index.scope_nodes.get(current_scope_id), ast.ClassDef):
                     current_scope_id = scope_index.parent_by_scope.get(current_scope_id)
                     continue
                 # Function and comprehension locals apply across their complete scope.
@@ -929,11 +899,7 @@ def _record_loaded_candidate(
         None; relevant candidate keys are added to one evidence set.
     """
     # Only producer modules that define this candidate can affect its finding.
-    matching_keys = [
-        (module_path, function_name)
-        for module_path in binding.module_paths
-        if (module_path, function_name) in candidate_keys
-    ]
+    matching_keys = [(module_path, function_name) for module_path in binding.module_paths if (module_path, function_name) in candidate_keys]
     # Exactly one resolved module is sufficient positive liveness evidence.
     if len(binding.module_paths) == 1:
         live_keys.update(matching_keys)

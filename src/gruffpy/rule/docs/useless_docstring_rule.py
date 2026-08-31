@@ -140,10 +140,7 @@ class UselessDocstringRule(Rule):
         definition = self.definition()
         settings = context.settings_for(definition)
         min_words = _min_summary_words(settings.options.get("min_summary_words"))
-        return [
-            _useless_docstring_finding(unit, definition, candidate)
-            for candidate in _useless_docstrings(unit.tree, min_words=min_words)
-        ]
+        return [_useless_docstring_finding(unit, definition, candidate) for candidate in _useless_docstrings(unit.tree, min_words=min_words)]
 
 
 def _min_summary_words(value: object) -> dict[str, int]:
@@ -211,12 +208,7 @@ def _should_skip_useless_docstring_check(node: DocstringNode) -> bool:
         return False
     if isinstance(node, ast.ClassDef):
         return is_dunder(node.name)
-    return (
-        not is_public(node.name)
-        or is_dunder(node.name)
-        or is_overload_stub(node)
-        or is_property_setter_or_deleter(node)
-    )
+    return not is_public(node.name) or is_dunder(node.name) or is_overload_stub(node) or is_property_setter_or_deleter(node)
 
 
 def _useless_reason(
@@ -226,9 +218,7 @@ def _useless_reason(
     *,
     min_words: dict[str, int],
 ) -> str | None:
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_signature_restatement(
-        node, summary
-    ):
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_signature_restatement(node, summary):
         return "restates the signature without adding intent"
     content_word_count = len(_content_words(summary))
     if content_word_count < min_words[kind]:
@@ -261,9 +251,7 @@ def _useless_docstring_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"{candidate.kind.capitalize()} {candidate.symbol!r} docstring {candidate.reason}."
-        ),
+        message=(f"{candidate.kind.capitalize()} {candidate.symbol!r} docstring {candidate.reason}."),
         file_path=unit.file.display_path,
         line=_docstring_line(candidate.node),
         severity=definition.default_severity,
@@ -272,10 +260,7 @@ def _useless_docstring_finding(
         confidence=definition.confidence,
         end_line=_docstring_end_line(candidate.node),
         symbol=candidate.symbol,
-        remediation=(
-            "Write a concise open-source-facing docstring that explains purpose, "
-            "contract, and any non-obvious behavior."
-        ),
+        remediation=("Write a concise open-source-facing docstring that explains purpose, contract, and any non-obvious behavior."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"summary": candidate.summary, "kind": candidate.kind, "reason": candidate.reason},
     )
@@ -291,8 +276,4 @@ def _docstring_end_line(node: DocstringNode) -> int | None:
 
 def _content_words(summary: str) -> list[str]:
     """Return lowercased non-stop-word tokens from *summary*."""
-    return [
-        w.lower()
-        for w in _WORD_PATTERN.findall(summary)
-        if w.lower() not in _STOP_WORDS and len(w) > 1
-    ]
+    return [w.lower() for w in _WORD_PATTERN.findall(summary) if w.lower() not in _STOP_WORDS and len(w) > 1]

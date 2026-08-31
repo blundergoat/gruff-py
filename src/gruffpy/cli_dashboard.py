@@ -162,6 +162,4 @@ def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -
     loaded_analysis_config, _ = ConfigLoader(project, default_analysis_config).load(config_path)
     configured_dashboard_threshold = loaded_analysis_config.minimum_severity.get("dashboard")
     # No dashboard key means the form keeps its CLI default instead of showing empty input.
-    return (
-        configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None
-    )
+    return configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None

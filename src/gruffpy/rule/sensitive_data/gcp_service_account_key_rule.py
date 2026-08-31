@@ -74,9 +74,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
 
         private_key_material = _private_key_value(unit.source) or _pem_block(unit.source)
         # Missing or placeholder key material keeps examples out of the user's security findings.
-        if private_key_material is None or _looks_like_placeholder_key(
-            private_key_material, unit.source
-        ):
+        if private_key_material is None or _looks_like_placeholder_key(private_key_material, unit.source):
             return []
 
         definition = self.definition()

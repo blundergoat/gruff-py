@@ -16,9 +16,7 @@ _FIXTURE_NAME_MARKERS: tuple[str, ...] = (
     "scenario",
     "scenarios",
 )
-_GUARD_SKIP_CALLS: frozenset[str] = frozenset(
-    {"pytest.skip", "skip", "self.skipTest", "unittest.skip"}
-)
+_GUARD_SKIP_CALLS: frozenset[str] = frozenset({"pytest.skip", "skip", "self.skipTest", "unittest.skip"})
 
 
 def is_fixture_loop(
@@ -39,9 +37,7 @@ def is_fixture_loop(
         return False
     if _contains_branch(node.body):
         return False
-    if not _is_fixture_iterable(
-        node.iter, _literal_collection_bindings(fn), _target_names(node.target)
-    ):
+    if not _is_fixture_iterable(node.iter, _literal_collection_bindings(fn), _target_names(node.target)):
         return False
     assertions = _assertions_in(node.body)
     return not assertions or all(assertion.msg is not None for assertion in assertions)
@@ -72,11 +68,7 @@ def _literal_collection_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> 
 
 def _literal_collection_targets(statement: ast.stmt) -> set[str]:
     if isinstance(statement, ast.Assign) and _is_literal_collection(statement.value):
-        return {
-            target.id
-            for target in statement.targets
-            if isinstance(target, ast.Name) and _is_fixtureish_name(target.id)
-        }
+        return {target.id for target in statement.targets if isinstance(target, ast.Name) and _is_fixtureish_name(target.id)}
     if (
         isinstance(statement, ast.AnnAssign)
         and statement.value is not None
@@ -141,20 +133,11 @@ def _is_fixtureish_name(name: str) -> bool:
 
 
 def _contains_branch(statements: list[ast.stmt]) -> bool:
-    return any(
-        isinstance(node, ast.If | ast.Match)
-        for statement in statements
-        for node in ast.walk(statement)
-    )
+    return any(isinstance(node, ast.If | ast.Match) for statement in statements for node in ast.walk(statement))
 
 
 def _assertions_in(statements: list[ast.stmt]) -> list[ast.Assert]:
-    return [
-        node
-        for statement in statements
-        for node in ast.walk(statement)
-        if isinstance(node, ast.Assert)
-    ]
+    return [node for statement in statements for node in ast.walk(statement) if isinstance(node, ast.Assert)]
 
 
 def _is_guard_statement(statement: ast.stmt) -> bool:

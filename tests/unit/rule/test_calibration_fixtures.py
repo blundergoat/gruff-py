@@ -37,9 +37,7 @@ def _fixture_cases(expectation: str) -> list[object]:
 def _matching_findings(rule_id: str, fixture_path: Path) -> list:
     registry = RuleRegistry.defaults()
     rule = registry.get(rule_id)
-    assert not isinstance(rule, ProjectRuleProtocol), (
-        f"{rule_id} is a project rule; extend the calibration harness before adding fixtures."
-    )
+    assert not isinstance(rule, ProjectRuleProtocol), f"{rule_id} is a project rule; extend the calibration harness before adding fixtures."
     findings = rule.analyse(_unit_from_fixture(fixture_path), _context(registry))
     return [finding for finding in findings if finding.rule_id == rule_id]
 

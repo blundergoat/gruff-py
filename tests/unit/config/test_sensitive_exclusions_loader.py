@@ -108,8 +108,7 @@ def test_two_distinct_entries_keep_their_written_order(tmp_path: Path) -> None:
 def test_written_path_is_normalised_to_the_display_path_findings_carry(tmp_path: Path) -> None:
     config = _load(
         tmp_path,
-        "sensitiveExclusions:\n"
-        + _entry(rule=_AWS_RULE, path='"./secrets/aws.env"', reason='"Synthetic AWS key."'),
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"./secrets/aws.env"', reason='"Synthetic AWS key."'),
     )
 
     assert config.sensitive_exclusions[0].path == "secrets/aws.env"
@@ -146,26 +145,22 @@ def test_toml_entries_load_with_the_same_shape(tmp_path: Path) -> None:
         ),
         (
             "blank-reason",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"   "'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"   "'),
             ("sensitiveExclusions[0].reason", "reason"),
         ),
         (
             "wildcard-rule",
-            "sensitiveExclusions:\n"
-            + _entry(rule='"*"', path="secrets/aws.env", reason='"Synthetic fixture."'),
+            "sensitiveExclusions:\n" + _entry(rule='"*"', path="secrets/aws.env", reason='"Synthetic fixture."'),
             ("sensitiveExclusions[0].rule", "metacharacter"),
         ),
         (
             "pillar-selector-rule",
-            "sensitiveExclusions:\n"
-            + _entry(rule="sensitive-data", path="secrets/aws.env", reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule="sensitive-data", path="secrets/aws.env", reason='"Synthetic."'),
             ("sensitiveExclusions[0].rule", "selector"),
         ),
         (
             "glob-selector-rule",
-            "sensitiveExclusions:\n"
-            + _entry(rule='"sensitive-data.*"', path="secrets/aws.env", reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule='"sensitive-data.*"', path="secrets/aws.env", reason='"Synthetic."'),
             ("sensitiveExclusions[0].rule", "metacharacter"),
         ),
         (
@@ -180,32 +175,27 @@ def test_toml_entries_load_with_the_same_shape(tmp_path: Path) -> None:
         ),
         (
             "non-sensitive-rule",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_NON_SENSITIVE_RULE, path="secrets/aws.env", reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_NON_SENSITIVE_RULE, path="secrets/aws.env", reason='"Synthetic."'),
             ("sensitiveExclusions[0].rule", "sensitive-data"),
         ),
         (
             "absolute-path",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path='"/etc/secrets/aws.env"', reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"/etc/secrets/aws.env"', reason='"Synthetic."'),
             ("sensitiveExclusions[0].path", "absolute"),
         ),
         (
             "windows-absolute-path",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path='"C:\\\\secrets\\\\aws.env"', reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"C:\\\\secrets\\\\aws.env"', reason='"Synthetic."'),
             ("sensitiveExclusions[0].path", "absolute"),
         ),
         (
             "parent-escape-path",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path='"../secrets/aws.env"', reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"../secrets/aws.env"', reason='"Synthetic."'),
             ("sensitiveExclusions[0].path", "traverses"),
         ),
         (
             "glob-path",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path='"secrets/*.env"', reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"secrets/*.env"', reason='"Synthetic."'),
             ("sensitiveExclusions[0].path", "glob"),
         ),
         (
@@ -232,8 +222,7 @@ def test_toml_entries_load_with_the_same_shape(tmp_path: Path) -> None:
         ),
         (
             "value-matching",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path="secrets/aws.env", value='"AKIA"', reason='"Synthetic."'),
+            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", value='"AKIA"', reason='"Synthetic."'),
             ("sensitiveExclusions[0]", "value"),
         ),
         (

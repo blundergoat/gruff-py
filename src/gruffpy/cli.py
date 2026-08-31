@@ -192,9 +192,7 @@ class _AnalysisCliRequest:
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     cast(ClickDecorator, click.pass_context),
-    _option(
-        "-v", "--verbose", count=True, help="Increase message verbosity. Use -v, -vv, or -vvv."
-    ),
+    _option("-v", "--verbose", count=True, help="Increase message verbosity. Use -v, -vv, or -vvv."),
     _option("-n", "--no-interaction", is_flag=True, help="Do not ask any interactive question."),
     _option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output."),
     cast(
@@ -274,7 +272,7 @@ def analyse(**kwargs: Any) -> None:
         _render_report(
             report,
             request.output,
-            project_root=str(Path.cwd()),
+            project_root=str(_project_root_from_targets(request.paths)),
             report_editor_link=request.report_editor_link,
             report_interactive=request.should_render_interactive,
         )
@@ -301,9 +299,7 @@ def dashboard(**kwargs: Any) -> None:
         raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
     if not 0 <= request.port <= 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
-    public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(
-        request.host, request.has_acknowledged_public_bind
-    )
+    public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(request.host, request.has_acknowledged_public_bind)
     _maybe_prompt_to_init_config(
         request.config_path,
         request.should_skip_config,
@@ -528,9 +524,7 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
     resolved_shell = shell or _detect_shell()
     completion_class = get_completion_class(resolved_shell)
     if completion_class is None:
-        raise click.ClickException(
-            f'Unsupported shell "{resolved_shell}". Supported shells: bash, fish, zsh.'
-        )
+        raise click.ClickException(f'Unsupported shell "{resolved_shell}". Supported shells: bash, fish, zsh.')
     source = completion_class(_root_group(ctx), {}, TOOL_NAME, "_GRUFF_PY_COMPLETE").source()
     _write_stdout(source)
     if not source.endswith("\n"):
@@ -724,6 +718,73 @@ def _write_config_file(path: Path, content: str) -> None:
         raise click.ClickException(f"Unable to write {path.name}: {exc}") from exc
 
 
+def _is_same_or_descendant(candidate: Path, ancestor: Path) -> bool:
+    """Report whether one directory is another or sits inside it.
+
+    Comparison is by whole path segment, so a sibling folder such as /work/apidocs is never mistaken for something inside /work/api.
+
+    Args:
+        candidate: Directory being tested.
+        ancestor: Directory that may contain it.
+
+    Returns:
+        True when candidate is the ancestor or sits inside it.
+    """
+    return candidate == ancestor or ancestor in candidate.parents
+
+
+def _project_root_from_targets(paths: Sequence[str]) -> Path:
+    """Pick the directory that every reported path is written relative to.
+
+    Run ``gruff-py analyse .`` inside a project and the answer is that directory.
+    Run ``gruff-py analyse /srv/checkout`` from a home directory, as CI and scripted scans do, and the answer is /srv/checkout,
+    so findings still read ``gruffpy/cli.py`` rather than an absolute path.
+
+    Args:
+        paths: Scan targets as typed on the command line; empty means no target was named, so the launch directory is the project.
+
+    Returns:
+        Directory to treat as the project root; never empty.
+
+    Raises:
+        click.ClickException: When targets sit under different filesystem roots, such as ``analyse /srv/api /opt/tools``,
+            leaving no single project to report against.
+    """
+    working_directory = Path.cwd()
+
+    # No target was named, so the directory the command ran from is the project.
+    if not paths:
+        return working_directory
+
+    common: Path | None = None
+    # Each target narrows the answer: the root must be a directory that contains all of them.
+    for raw_path in paths:
+        absolute = Path(raw_path)
+        # A relative target like ``src/`` is meant relative to where the command was typed.
+        if not absolute.is_absolute():
+            absolute = working_directory / absolute
+        absolute = Path(os.path.normpath(absolute))
+        # Naming one file means the project is the folder holding it, not the file itself.
+        directory = absolute if absolute.is_dir() else absolute.parent
+
+        # The first target sets the starting answer; later ones can only widen it.
+        if common is None:
+            common = directory
+            continue
+        while not _is_same_or_descendant(directory, common):
+            parent = common.parent
+            # Walking up hit the filesystem root, so these targets live in unrelated projects.
+            if parent == common:
+                raise click.ClickException("scan targets do not share a filesystem root")
+            common = parent
+
+    # Targets sit inside the launch directory, so it stays the root.
+    # Moving the root down to a target's own folder would re-anchor config discovery, ignore patterns, and baseline paths.
+    if common is None or _is_same_or_descendant(common, working_directory):
+        return working_directory
+    return common
+
+
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
@@ -732,6 +793,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_rules=_split_repeated_csv(request.include_rule),
         exclude_rules=_split_repeated_csv(request.exclude_rule),
     )
+    project_root = _project_root_from_targets(request.paths)
     try:
         report = run_analysis(
             AnalysisRunRequest(
@@ -740,11 +802,9 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 no_config=request.should_skip_config,
                 output=request.output,
                 fail_threshold=request.fail_on,
-                config_severity_command=(
-                    "" if request.was_fail_on_set_on_cli else request.command_name
-                ),
+                config_severity_command=("" if request.was_fail_on_set_on_cli else request.command_name),
                 include_ignored=request.should_include_ignored,
-                project_root=Path.cwd(),
+                project_root=project_root,
                 display_filter=display_filter,
                 baseline=BaselineOptions(
                     apply_path=request.baseline_path,
@@ -874,11 +934,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         **definition.threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
-        **(
-            {"falsePositiveShapes": false_positive_shapes_payload}
-            if documentation.false_positive_shapes
-            else {}
-        ),
+        **({"falsePositiveShapes": false_positive_shapes_payload} if documentation.false_positive_shapes else {}),
         "documentation": documentation_payload,
     }
 
@@ -895,15 +951,10 @@ def _format_rule_table(definitions: list[RuleDefinition]) -> str:
         )
         for d in definitions
     ]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
-    ]
+    widths = [max(len(headers[index]), *(len(row[index]) for row in rows)) for index in range(len(headers))]
     lines = ["  ".join(header.ljust(widths[index]) for index, header in enumerate(headers))]
     lines.append("  ".join("-" * width for width in widths))
-    lines.extend(
-        "  ".join(value.ljust(widths[index]) for index, value in enumerate(row)) for row in rows
-    )
+    lines.extend("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)) for row in rows)
     return "\n".join(lines) + "\n"
 
 
@@ -984,10 +1035,7 @@ def _command_rows_json(rows: list[tuple[str, str]]) -> str:
 
 
 def _command_rows_xml(rows: list[tuple[str, str]]) -> str:
-    commands = "".join(
-        f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>'
-        for name, help_text in rows
-    )
+    commands = "".join(f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>' for name, help_text in rows)
     return f"<commands>{commands}</commands>\n"
 
 
@@ -1013,9 +1061,7 @@ def _detect_shell() -> str:
 
 
 def _xml_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
-    )
+    return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 if __name__ == "__main__":

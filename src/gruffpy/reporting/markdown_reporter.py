@@ -39,26 +39,18 @@ class MarkdownReporter:
         lines = [
             "# gruff-py report",
             "",
-            (
-                f"**Grade:** {score.composite.letter if score is not None else 'n/a'} "
-                f"({_score_value(score)})"
-            ),
+            (f"**Grade:** {score.composite.letter if score is not None else 'n/a'} ({_score_value(score)})"),
             f"**Scoring mode:** {scoring_mode}",
         ]
 
         # No runner caveat means Markdown must not invent a full scan-context claim.
         if report.partial_context_caveat is not None:
             lines.append(f"**Scan context:** {_md(report.partial_context_caveat)}")
-        lines.append(
-            f"**Findings:** {counts['total']} total, {counts['error']} error, "
-            f"{counts['warning']} warning, {counts['advisory']} advisory"
-        )
+        lines.append(f"**Findings:** {counts['total']} total, {counts['error']} error, {counts['warning']} warning, {counts['advisory']} advisory")
 
         # Active filters remain visible so users know why some findings are hidden.
         if report.filters is not None and report.filters.is_active():
-            lines.append(
-                f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`"
-            )
+            lines.append(f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`")
 
         if report.diagnostics:
             lines.extend(["", "## Diagnostics", ""])
@@ -120,10 +112,7 @@ def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
 def _pillar_row(pillar: PillarScore) -> str:
     grade = pillar.grade.letter if pillar.grade is not None else "n/a"
     score = f"{pillar.grade.score:.2f}" if pillar.grade is not None else "n/a"
-    return (
-        f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(score)} | "
-        f"{pillar.findings} | {pillar.advisories} | {pillar.warnings} | {pillar.errors} |"
-    )
+    return f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(score)} | {pillar.findings} | {pillar.advisories} | {pillar.warnings} | {pillar.errors} |"
 
 
 def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> None:
@@ -147,10 +136,7 @@ def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> N
 def _finding_line(finding: Finding) -> str:
     location = finding.file_path if finding.line is None else f"{finding.file_path}:{finding.line}"
     symbol = "" if finding.symbol is None else f" `{_md(finding.symbol)}`"
-    return (
-        f"- **{finding.severity.value}** `{_md(finding.rule_id)}` "
-        f"{_md(location)}{symbol} - {_md(finding.message)}"
-    )
+    return f"- **{finding.severity.value}** `{_md(finding.rule_id)}` {_md(location)}{symbol} - {_md(finding.message)}"
 
 
 def _md(value: str) -> str:

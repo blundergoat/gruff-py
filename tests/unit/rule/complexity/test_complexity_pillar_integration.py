@@ -186,9 +186,7 @@ def sample(a, b):
 
 
 def _complexity_findings_with_metadata_ctx() -> list:
-    findings = RuleRegistry.defaults().analyse(
-        [_make_unit(_METADATA_FIXTURE_SRC)], _ctx_for_complexity_metadata()
-    )
+    findings = RuleRegistry.defaults().analyse([_make_unit(_METADATA_FIXTURE_SRC)], _ctx_for_complexity_metadata())
     return [f for f in findings if f.rule_id in COMPLEXITY_RULE_IDS]
 
 
@@ -208,21 +206,13 @@ def test_complexity_findings_carry_error_threshold_type():
 
 
 def test_above_threshold_complexity_findings_carry_above_direction():
-    complexity_findings = [
-        f
-        for f in _complexity_findings_with_metadata_ctx()
-        if f.rule_id != "complexity.maintainability-index"
-    ]
+    complexity_findings = [f for f in _complexity_findings_with_metadata_ctx() if f.rule_id != "complexity.maintainability-index"]
     assert all(f.metadata["threshold"] == 0 for f in complexity_findings)
     assert all(f.metadata["thresholdDirection"] == "above" for f in complexity_findings)
 
 
 def test_maintainability_index_finding_carries_below_direction():
-    mi_findings = [
-        f
-        for f in _complexity_findings_with_metadata_ctx()
-        if f.rule_id == "complexity.maintainability-index"
-    ]
+    mi_findings = [f for f in _complexity_findings_with_metadata_ctx() if f.rule_id == "complexity.maintainability-index"]
     assert all(f.metadata["threshold"] == 101 for f in mi_findings)
     assert all(f.metadata["thresholdDirection"] == "below" for f in mi_findings)
 
@@ -237,17 +227,13 @@ _COMPLEXITY_RULES_FOR_SHALLOW = (
 def test_shallow_function_no_complexity_findings():
     unit = _make_unit(COMPLEXITY_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
-    shallow_complexity_findings = [
-        f for f in findings if f.symbol == "shallow" and f.rule_id in _COMPLEXITY_RULES_FOR_SHALLOW
-    ]
+    shallow_complexity_findings = [f for f in findings if f.symbol == "shallow" and f.rule_id in _COMPLEXITY_RULES_FOR_SHALLOW]
     assert shallow_complexity_findings == []
 
 
 def test_maintainability_index_uses_maintainability_pillar():
     # Build a function with low MI -> finding pillar = maintainability
-    body = "\n".join(
-        f"    if a{i} + b{i} == c{i} - d{i}:\n        x = a{i} * b{i}" for i in range(40)
-    )
+    body = "\n".join(f"    if a{i} + b{i} == c{i} - d{i}:\n        x = a{i} * b{i}" for i in range(40))
     src = f"def f():\n{body}\n    return x\n"
     findings = RuleRegistry.defaults().analyse([_make_unit(src)], _default_ctx())
     mi_findings = [f for f in findings if f.rule_id == "complexity.maintainability-index"]

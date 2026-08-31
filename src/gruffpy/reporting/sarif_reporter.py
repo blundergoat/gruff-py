@@ -31,10 +31,7 @@ class SarifReporter:
         Returns:
             Pretty-printed SARIF JSON, trailing newline included.
         """
-        rules: dict[str, dict[str, Any]] = {
-            rule.definition().id: _rule_metadata(rule.definition())
-            for rule in RuleRegistry.defaults().all()
-        }
+        rules: dict[str, dict[str, Any]] = {rule.definition().id: _rule_metadata(rule.definition()) for rule in RuleRegistry.defaults().all()}
         for finding in report.findings:
             rules.setdefault(finding.rule_id, _fallback_rule_metadata(finding))
 
@@ -48,20 +45,14 @@ class SarifReporter:
                     "rules": [rules[rule_id] for rule_id in rule_ids],
                 }
             },
-            "results": [
-                _result(finding, rule_indexes[finding.rule_id]) for finding in report.findings
-            ],
+            "results": [_result(finding, rule_indexes[finding.rule_id]) for finding in report.findings],
             "properties": _run_properties(report),
         }
         if report.diagnostics:
             run["invocations"] = [
                 {
-                    "executionSuccessful": all(
-                        diagnostic.invalidates_run is False for diagnostic in report.diagnostics
-                    ),
-                    "toolExecutionNotifications": [
-                        _diagnostic_notification(diagnostic) for diagnostic in report.diagnostics
-                    ],
+                    "executionSuccessful": all(diagnostic.invalidates_run is False for diagnostic in report.diagnostics),
+                    "toolExecutionNotifications": [_diagnostic_notification(diagnostic) for diagnostic in report.diagnostics],
                 }
             ]
         payload = {
@@ -102,11 +93,7 @@ def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
             "confidence": definition.confidence.value,
             "defaultEnabled": definition.default_enabled,
             "documentation": documentation.to_payload(),
-            **(
-                {"secondaryPillars": [pillar.value for pillar in definition.secondary_pillars]}
-                if definition.secondary_pillars
-                else {}
-            ),
+            **({"secondaryPillars": [pillar.value for pillar in definition.secondary_pillars]} if definition.secondary_pillars else {}),
             **definition.threshold_payload(),
             **({"options": dict(definition.default_options)} if definition.default_options else {}),
         },
@@ -126,11 +113,7 @@ def _fallback_rule_metadata(finding: Finding) -> dict[str, Any]:
             "defaultSeverity": finding.severity.value,
             "confidence": finding.confidence.value,
             "defaultEnabled": True,
-            **(
-                {"secondaryPillars": [pillar.value for pillar in finding.secondary_pillars]}
-                if finding.secondary_pillars
-                else {}
-            ),
+            **({"secondaryPillars": [pillar.value for pillar in finding.secondary_pillars]} if finding.secondary_pillars else {}),
         },
     }
 

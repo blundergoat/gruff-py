@@ -83,12 +83,8 @@ class DashboardState:
             fail_on=_valid_fail_on(query.get("failOn", self.fail_on)),
             config=query.get("config", self.config),
             no_config=_query_bool(query.get("noConfig", self.to_query()["noConfig"])),
-            include_ignored=_query_bool(
-                query.get("includeIgnored", self.to_query()["includeIgnored"])
-            ),
-            report_interactive=_query_bool(
-                query.get("reportInteractive", self.to_query()["reportInteractive"])
-            ),
+            include_ignored=_query_bool(query.get("includeIgnored", self.to_query()["includeIgnored"])),
+            report_interactive=_query_bool(query.get("reportInteractive", self.to_query()["reportInteractive"])),
             deep_scan_budget=query.get("deepScanBudget", self.deep_scan_budget),
         )
 

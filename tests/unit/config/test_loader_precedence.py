@@ -163,10 +163,7 @@ def test_unknown_option_yaml_or_toml_warns_and_keeps_valid_sibling(
     assert len(loader.warnings) == 1
     assert unknown_option_key in loader.warnings[0]
     assert options["min_fields"] == _CUSTOM_MIN_FIELDS
-    assert (
-        options["allow_bullets"]
-        is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
-    )
+    assert options["allow_bullets"] is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
     assert "allowBullet" not in options
 
 
@@ -238,9 +235,7 @@ def test_gruff_py_yaml_wins_over_pyproject_toml(tmp_path: Path):
     # Both files exist. YAML overrides size.file-length warning to 250;
     # pyproject sets it to 400. YAML must win.
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_YAML_WINNING_THRESHOLD}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_YAML_WINNING_THRESHOLD}\n    severity: error\n"
     )
     (tmp_path / "pyproject.toml").write_text(
         "[tool.gruff-py]\n"
@@ -257,14 +252,10 @@ def test_gruff_py_yaml_wins_over_pyproject_toml(tmp_path: Path):
 
 def test_gruff_py_yaml_wins_over_legacy_gruff_yaml(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_YAML_WINNING_THRESHOLD}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_YAML_WINNING_THRESHOLD}\n    severity: error\n"
     )
     (tmp_path / ".gruff.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_PYPROJECT_LOSING_THRESHOLD}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_PYPROJECT_LOSING_THRESHOLD}\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
@@ -274,9 +265,7 @@ def test_gruff_py_yaml_wins_over_legacy_gruff_yaml(tmp_path: Path):
 
 def test_legacy_gruff_yaml_is_discovered(tmp_path: Path):
     (tmp_path / ".gruff.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_LEGACY_YAML_THRESHOLD}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_LEGACY_YAML_THRESHOLD}\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
@@ -295,9 +284,7 @@ def test_pyproject_used_when_only_pyproject_exists(tmp_path: Path):
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
     assert source == tmp_path / "pyproject.toml"
-    assert (
-        config.rules["size.file-length"].severity_threshold.threshold == _PYPROJECT_ONLY_THRESHOLD
-    )
+    assert config.rules["size.file-length"].severity_threshold.threshold == _PYPROJECT_ONLY_THRESHOLD
 
 
 def test_legacy_pyproject_table_is_supported(tmp_path: Path):
@@ -311,9 +298,7 @@ def test_legacy_pyproject_table_is_supported(tmp_path: Path):
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
     assert source == tmp_path / "pyproject.toml"
-    assert (
-        config.rules["size.file-length"].severity_threshold.threshold == _LEGACY_PYPROJECT_THRESHOLD
-    )
+    assert config.rules["size.file-length"].severity_threshold.threshold == _LEGACY_PYPROJECT_THRESHOLD
 
 
 def test_modern_pyproject_table_wins_over_legacy_table(tmp_path: Path):
@@ -328,21 +313,16 @@ def test_modern_pyproject_table_wins_over_legacy_table(tmp_path: Path):
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
     assert source == tmp_path / "pyproject.toml"
-    assert (
-        config.rules["size.file-length"].severity_threshold.threshold == _MODERN_PYPROJECT_THRESHOLD
-    )
+    assert config.rules["size.file-length"].severity_threshold.threshold == _MODERN_PYPROJECT_THRESHOLD
 
 
 def test_explicit_yaml_path_overrides_discovery(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  size.file-length:\n    threshold: 100\n    severity: error\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: 100\n    severity: error\n"
     )
     explicit = tmp_path / "custom.yaml"
     explicit.write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_EXPLICIT_YAML_THRESHOLD}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_EXPLICIT_YAML_THRESHOLD}\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load(explicit)
@@ -370,9 +350,7 @@ _LOW_THRESHOLD_BOUNDARY = 60
 
 def _settings_with_high_threshold_override(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  size.file-length:\n    threshold: {_HIGH_THRESHOLD_BOUNDARY}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: {_HIGH_THRESHOLD_BOUNDARY}\n    severity: error\n"
     )
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
     return config.rule_settings("size.file-length")
@@ -400,8 +378,7 @@ def test_severity_threshold_override_matches_just_above_boundary(tmp_path: Path)
 
 def test_threshold_and_warning_severity_supported(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  size.file-length:\n    threshold: 500\n    severity: warning\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: 500\n    severity: warning\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
 
@@ -437,9 +414,7 @@ def test_low_value_threshold_override_matches_just_below_boundary(tmp_path: Path
 
 
 def test_threshold_requires_severity(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: 900\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    threshold: 900\n")
     loader = ConfigLoader(tmp_path, _defaults())
 
     with pytest.raises(ConfigError, match='severity" must be "warning" or "error"'):
@@ -447,9 +422,7 @@ def test_threshold_requires_severity(tmp_path: Path):
 
 
 def test_severity_requires_threshold_warns_by_default_and_raises_under_strict(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    severity: error\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    severity: error\n")
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert any('severity" requires "threshold"' in warning for warning in loader.warnings)
@@ -463,14 +436,11 @@ def test_threshold_on_named_threshold_rule_warns_by_default_and_raises_under_str
     tmp_path: Path,
 ):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  test-quality.eager-test:\n    threshold: 5\n    severity: error\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.eager-test:\n    threshold: 5\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
-    assert any(
-        "only supported for severity-threshold rubrics" in warning for warning in loader.warnings
-    )
+    assert any("only supported for severity-threshold rubrics" in warning for warning in loader.warnings)
     assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
 
     with pytest.raises(ConfigError, match="only supported for severity-threshold rubrics"):
@@ -503,14 +473,11 @@ def test_threshold_with_legacy_tier_block_warns_and_keeps_explicit_threshold(tmp
 
 def test_unknown_named_threshold_warns_by_default_and_raises_under_strict(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  test-quality.eager-test:\n    thresholds:\n      warning: 5\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.eager-test:\n    thresholds:\n      warning: 5\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
-    assert any(
-        'Unknown threshold "rules.test-quality.eager-test' in warning for warning in loader.warnings
-    )
+    assert any('Unknown threshold "rules.test-quality.eager-test' in warning for warning in loader.warnings)
     assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
 
     with pytest.raises(ConfigError, match='Unknown threshold "rules.test-quality.eager-test'):
@@ -543,9 +510,7 @@ def test_toml_tool_section_must_be_table(tmp_path: Path):
 
 
 def test_yaml_paths_ignore_applied(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - build/\n    - .venv/\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - build/\n    - .venv/\n")
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert config.ignored_path_patterns == ("build/", ".venv/")
@@ -553,13 +518,7 @@ def test_yaml_paths_ignore_applied(tmp_path: Path):
 
 def test_yaml_selection_applied(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "selection:\n"
-        "  pillars:\n"
-        "    - size\n"
-        "    - complexity\n"
-        "  excludeRules:\n"
-        "    - size.file-length\n"
+        "schemaVersion: gruff-py.config.v0.1\nselection:\n  pillars:\n    - size\n    - complexity\n  excludeRules:\n    - size.file-length\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
@@ -584,9 +543,7 @@ def test_yaml_selection_rejects_unknown_values(
     value: str,
     message: str,
 ):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        f"schemaVersion: gruff-py.config.v0.1\nselection:\n  {key}:\n    - {value}\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text(f"schemaVersion: gruff-py.config.v0.1\nselection:\n  {key}:\n    - {value}\n")
     loader = ConfigLoader(tmp_path, _defaults())
 
     with pytest.raises(ConfigError, match=message):
@@ -594,9 +551,7 @@ def test_yaml_selection_rejects_unknown_values(
 
 
 def test_removed_npath_rule_pin_warns_by_default_and_raises_under_strict(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    enabled: true\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    enabled: true\n")
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert any('Unknown rule id "complexity.npath"' in warning for warning in loader.warnings)
@@ -607,9 +562,7 @@ def test_removed_npath_rule_pin_warns_by_default_and_raises_under_strict(tmp_pat
 
 
 def test_rule_enabled_must_be_boolean(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        'schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    enabled: "false"\n'
-    )
+    (tmp_path / ".gruff-py.yaml").write_text('schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    enabled: "false"\n')
     loader = ConfigLoader(tmp_path, _defaults())
 
     with pytest.raises(ConfigError, match="enabled"):

@@ -99,10 +99,7 @@ class ApiKeyPatternRule(SourceTextRule):
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
-                    remediation=(
-                        "Rotate the key and load credentials from a secret manager "
-                        "or environment variable at runtime."
-                    ),
+                    remediation=("Rotate the key and load credentials from a secret manager or environment variable at runtime."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"preview": fixed_preview(), "vendor": vendor},
                 ),

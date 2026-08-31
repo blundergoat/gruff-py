@@ -16,12 +16,7 @@ _DEAD_FUNCTION_MODULE = (
     "    return payload\n"
 )
 _REEXPORT_INIT = "from pkg.render import render_current, render_legacy\n"
-_CALLER_MODULE = (
-    "from pkg.render import render_current\n\n"
-    "def run(payload):\n"
-    "    return render_current(payload)\n\n"
-    "result = run({})\n"
-)
+_CALLER_MODULE = "from pkg.render import render_current\n\ndef run(payload):\n    return render_current(payload)\n\nresult = run({})\n"
 
 
 def _unit(source: str, display_path: str) -> AnalysisUnit:
@@ -66,8 +61,7 @@ def test_called_symbol_is_clean():
         _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
         _unit(_REEXPORT_INIT, "pkg/__init__.py"),
         _unit(
-            "from pkg.render import render_current, render_legacy\n\n"
-            "result = render_legacy(render_current({}))\n",
+            "from pkg.render import render_current, render_legacy\n\nresult = render_legacy(render_current({}))\n",
             "pkg/app.py",
         ),
     ]
@@ -116,8 +110,7 @@ def test_class_used_only_as_base_is_clean():
     units = [
         _unit("class BasePort:\n    pass\n", "pkg/ports.py"),
         _unit(
-            "from pkg.ports import BasePort\n\nclass FilePort(BasePort):\n    pass\n\n"
-            "port = FilePort()\n",
+            "from pkg.ports import BasePort\n\nclass FilePort(BasePort):\n    pass\n\nport = FilePort()\n",
             "pkg/app.py",
         ),
     ]
@@ -179,8 +172,7 @@ def test_test_files_produce_no_candidates_but_count_as_users():
     units = [
         _unit("def fixture_target():\n    return 1\n", "pkg/util.py"),
         _unit(
-            "from pkg.util import fixture_target\n\n"
-            "def test_it():\n    assert fixture_target() == 1\n",
+            "from pkg.util import fixture_target\n\ndef test_it():\n    assert fixture_target() == 1\n",
             "tests/test_util.py",
         ),
         _unit("def helper_only_in_tests():\n    return 2\n", "tests/support.py"),

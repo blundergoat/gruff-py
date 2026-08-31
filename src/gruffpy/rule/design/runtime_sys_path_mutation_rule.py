@@ -103,12 +103,7 @@ def _sys_path_mutation_method(node: ast.Call) -> str | None:
     if not (isinstance(callee, ast.Attribute) and callee.attr in _MUTATING_METHODS):
         return None
     receiver = callee.value
-    if not (
-        isinstance(receiver, ast.Attribute)
-        and receiver.attr == "path"
-        and isinstance(receiver.value, ast.Name)
-        and receiver.value.id == "sys"
-    ):
+    if not (isinstance(receiver, ast.Attribute) and receiver.attr == "path" and isinstance(receiver.value, ast.Name) and receiver.value.id == "sys"):
         return None
     return callee.attr
 
@@ -136,12 +131,8 @@ def _is_main_guard(test: ast.expr) -> bool:
     if not isinstance(test.ops[0], ast.Eq):
         return False
     operands = [test.left, *test.comparators]
-    has_dunder_name = any(
-        isinstance(operand, ast.Name) and operand.id == "__name__" for operand in operands
-    )
-    has_main_literal = any(
-        isinstance(operand, ast.Constant) and operand.value == "__main__" for operand in operands
-    )
+    has_dunder_name = any(isinstance(operand, ast.Name) and operand.id == "__name__" for operand in operands)
+    has_main_literal = any(isinstance(operand, ast.Constant) and operand.value == "__main__" for operand in operands)
     return has_dunder_name and has_main_literal
 
 

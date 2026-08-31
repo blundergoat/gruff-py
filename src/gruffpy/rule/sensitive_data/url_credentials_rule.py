@@ -81,10 +81,7 @@ class UrlCredentialsRule(SourceTextRule):
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
-                    remediation=(
-                        "Remove inline URL credentials; pass authentication via headers, "
-                        "environment variables, or a secret store instead."
-                    ),
+                    remediation=("Remove inline URL credentials; pass authentication via headers, environment variables, or a secret store instead."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"preview": redacted_marker, "category": "url-credentials"},
                 ),

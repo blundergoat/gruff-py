@@ -389,9 +389,7 @@ _GLOBAL_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _ignored_path_option("--infection-report", "Path to a full Infection JSON report to ingest."),
     _ignored_flag_option("--infection-run", "Run Infection before ingesting --infection-report."),
-    _ignored_string_option(
-        "--infection-bin", "Infection executable for --infection-run.", "infection"
-    ),
+    _ignored_string_option("--infection-bin", "Infection executable for --infection-run.", "infection"),
     _ignored_path_option("--infection-config", "Path to infection.json5 for --infection-run."),
     _ignored_string_option(
         "--infection-test-framework-options",
@@ -406,10 +404,7 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "diff_mode",
         default="",
-        help=(
-            "Filter findings to changed regions. Use working-tree, staged, unstaged, "
-            "a base ref, or - for unified diff on stdin."
-        ),
+        help=("Filter findings to changed regions. Use working-tree, staged, unstaged, a base ref, or - for unified diff on stdin."),
     ),
     _option("--since", default="", help="Git base ref for changed-region filtering."),
     _option(
@@ -579,10 +574,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -620,11 +612,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=False,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Diff-only dashboard scans: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDiff-only dashboard scans: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--no-config",
@@ -654,11 +642,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Dashboard scan timeouts: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDashboard scan timeouts: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--port",
@@ -671,9 +655,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--allow-public",
         is_flag=True,
         default=False,
-        help=(
-            "Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."
-        ),
+        help=("Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."),
     ),
     _option(
         "--host",
@@ -785,10 +767,7 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _option(
         "--output",
@@ -866,10 +845,7 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -953,10 +929,7 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--force",
         is_flag=True,
         default=False,
-        help=(
-            "Regenerate a valid .gruff-py.yaml while preserving all supported settings; "
-            "comments and formatting may change."
-        ),
+        help=("Regenerate a valid .gruff-py.yaml while preserving all supported settings; comments and formatting may change."),
     ),
     _command(),
 )

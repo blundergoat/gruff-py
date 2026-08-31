@@ -69,13 +69,8 @@ def analysis_payload(report: AnalysisReport) -> dict[str, Any]:
         "run": _machine_run(report),
         "summary": _machine_summary(report, summary_findings, details),
         "score": _machine_score(report.score, report.machine_context.project_root),
-        "diagnostics": [
-            _machine_diagnostic(item, report.machine_context.project_root)
-            for item in report.diagnostics
-        ],
-        "findings": [
-            _machine_finding(item, report.machine_context.project_root) for item in report.findings
-        ],
+        "diagnostics": [_machine_diagnostic(item, report.machine_context.project_root) for item in report.diagnostics],
+        "findings": [_machine_finding(item, report.machine_context.project_root) for item in report.findings],
         "paths": {
             "analysedFiles": report.files_parsed,
             "details": details,
@@ -85,10 +80,7 @@ def analysis_payload(report: AnalysisReport) -> dict[str, Any]:
                 report.machine_context.project_root,
             ),
         },
-        "suppressions": [
-            _machine_suppression(item, report.machine_context.project_root)
-            for item in report.suppressions
-        ],
+        "suppressions": [_machine_suppression(item, report.machine_context.project_root) for item in report.suppressions],
     }
     _add_optional_sections(payload, report)
     return payload
@@ -224,9 +216,7 @@ def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "type": diagnostic.type,
         "message": diagnostic.message,
-        "invalidatesRun": (
-            True if diagnostic.invalidates_run is None else diagnostic.invalidates_run
-        ),
+        "invalidatesRun": (True if diagnostic.invalidates_run is None else diagnostic.invalidates_run),
     }
     source_path = diagnostic.file_path or diagnostic.path
     if source_path:
@@ -270,10 +260,7 @@ def _skip_reason(detail: IgnoredPath) -> str:
     if detail.source == IGNORE_SOURCE_GENERATED:
         return "generated"
     if detail.source != IGNORE_SOURCE_DEFAULT or detail.pattern not in _DEFAULT_SKIP_REASONS:
-        raise ValueError(
-            f"ignored path {detail.path!r} has no canonical reason for "
-            f"{detail.source!r}/{detail.pattern!r}"
-        )
+        raise ValueError(f"ignored path {detail.path!r} has no canonical reason for {detail.source!r}/{detail.pattern!r}")
     return _DEFAULT_SKIP_REASONS[detail.pattern]
 
 

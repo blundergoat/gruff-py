@@ -29,10 +29,7 @@ from gruffpy.config.exceptions import ConfigError
     "config_path",
     type=click.Path(path_type=Path),
     default=None,
-    help=(
-        "Path to the YAML config to migrate (.yaml or .yml). Defaults to the "
-        "discovered project config."
-    ),
+    help=("Path to the YAML config to migrate (.yaml or .yml). Defaults to the discovered project config."),
 )
 def migrate_config(dry_run: bool, config_path: Path | None) -> None:
     """Rewrite legacy config keys to the current schema, printing a diff summary.

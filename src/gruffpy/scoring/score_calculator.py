@@ -110,10 +110,7 @@ class ScoreCalculator:
         scores: list[PillarScore] = []
         for pillar_name in pillar_names:
             pillar_findings = [f for f in findings if f.pillar.value == pillar_name]
-            penalty = (
-                self._finding_penalty(pillar_findings, finding_penalties)
-                * PILLAR_PENALTY_MULTIPLIER
-            )
+            penalty = self._finding_penalty(pillar_findings, finding_penalties) * PILLAR_PENALTY_MULTIPLIER
             counts = self._severity_counts(pillar_findings)
             scores.append(
                 PillarScore(
@@ -141,15 +138,9 @@ class ScoreCalculator:
         scores: list[FileScore] = []
         for file_path, file_findings in by_file.items():
             counts = self._severity_counts(file_findings)
-            penalty = (
-                self._finding_penalty(file_findings, finding_penalties) * FILE_PENALTY_MULTIPLIER
-            )
-            max_cyclomatic = self._max_metadata_int(
-                file_findings, "complexity.cyclomatic", "complexity"
-            )
-            max_cognitive = self._max_metadata_int(
-                file_findings, "complexity.cognitive", "complexity"
-            )
+            penalty = self._finding_penalty(file_findings, finding_penalties) * FILE_PENALTY_MULTIPLIER
+            max_cyclomatic = self._max_metadata_int(file_findings, "complexity.cyclomatic", "complexity")
+            max_cognitive = self._max_metadata_int(file_findings, "complexity.cognitive", "complexity")
             scores.append(
                 FileScore(
                     file_path=file_path,
@@ -194,9 +185,7 @@ class ScoreCalculator:
         findings: list[Finding],
         finding_penalties: dict[int, float],
     ) -> float:
-        return sum(
-            finding_penalties.get(id(finding), _base_penalty(finding)) for finding in findings
-        )
+        return sum(finding_penalties.get(id(finding), _base_penalty(finding)) for finding in findings)
 
     @staticmethod
     def _severity_counts(findings: list[Finding]) -> dict[Severity, int]:
@@ -235,11 +224,7 @@ def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
     penalties = {id(finding): _base_penalty(finding) for finding in findings}
     groups: dict[tuple[str, str], list[Finding]] = {}
     for finding in findings:
-        if (
-            finding.rule_id not in CORRELATED_COMPLEXITY_RULES
-            or finding.symbol is None
-            or finding.line is None
-        ):
+        if finding.rule_id not in CORRELATED_COMPLEXITY_RULES or finding.symbol is None or finding.line is None:
             continue
         # Key on the qualified symbol only, not the line: size.function-length reports
         # the decorator line while complexity rules report the def line, so a line in

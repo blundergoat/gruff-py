@@ -46,9 +46,7 @@ from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.suppression.sensitive_exclusion_filter import partition_sensitive_exclusions
 from gruffpy.version import VERSION
 
-_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
-    "partial project scan: project-wide rules may need full-project context"
-)
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = "partial project scan: project-wide rules may need full-project context"
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,9 +367,7 @@ def _collect_findings(
     findings = registry.analyse(units, context)
     findings = apply_suppressions(findings, suppressions_by_file)
     # Findings without a source line sort at the file start so repeated CLI runs remain stable.
-    findings.sort(
-        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
-    )
+    findings.sort(key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message))
     return findings
 
 
@@ -436,10 +432,7 @@ def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
     if options.generate_path is not None and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message=(
-                "--baseline-path and --generate-baseline/--generate-baseline-path "
-                "are mutually exclusive."
-            ),
+            message=("--baseline-path and --generate-baseline/--generate-baseline-path are mutually exclusive."),
         )
     if options.disabled and options.apply_path is not None:
         return RunDiagnostic(
@@ -489,17 +482,13 @@ def _apply_baseline_if_present(
         )
     # For example, invalid baseline JSON becomes a diagnostic and leaves current findings intact.
     except BaselineError as exc:
-        diagnostics.append(
-            RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path))
-        )
+        diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path)))
         return None
     findings[:] = result.findings
     return result.report
 
 
-def _resolve_baseline_selection(
-    project_root: Path, explicit_path: Path | None
-) -> tuple[Path | None, str]:
+def _resolve_baseline_selection(project_root: Path, explicit_path: Path | None) -> tuple[Path | None, str]:
     """Choose the explicit or default baseline path a user asked the scan to apply."""
     if explicit_path is not None:
         return explicit_path, "explicit"
@@ -571,10 +560,7 @@ def _parse_sources(
 
 def _missing_path_diagnostics(missing_paths: tuple[str, ...]) -> list[RunDiagnostic]:
     """Turn requested paths that do not exist into diagnostics users can act on."""
-    return [
-        RunDiagnostic(type="missing-path", message="path not found", path=missing)
-        for missing in missing_paths
-    ]
+    return [RunDiagnostic(type="missing-path", message="path not found", path=missing) for missing in missing_paths]
 
 
 def _parse_suppressions(
@@ -657,19 +643,13 @@ def _apply_deep_scan_budget_override(
         )
     parts = value.split(":")
     if len(parts) != 2:
-        raise ConfigError(
-            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
-        )
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.")
     try:
         max_lines, max_bytes = (int(part) for part in parts)
     except ValueError as exc:
-        raise ConfigError(
-            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
-        ) from exc
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.") from exc
     if max_lines <= 0 or max_bytes <= 0:
-        raise ConfigError(
-            "--deep-scan-budget must be two positive integers as LINES:BYTES, or off."
-        )
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.")
     return config.with_deep_scan_budget(
         DeepScanBudget(
             enabled=True,
