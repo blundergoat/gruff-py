@@ -1,9 +1,9 @@
 """Agent-hook contract projection for ``gruff.hook.v1``.
 
-The hook contract is intentionally separate from ``gruff.analysis.v2`` so
-existing analysis/report consumers keep their current payloads. Hook mode runs
-the normal analyser, then projects findings into the cross-analyser shape an
-agent PostToolUse hook can render without per-language logic.
+The hook contract is intentionally separate from the canonical analysis
+envelope. Hook mode runs the normal analyser, then projects findings into the
+cross-analyser shape an agent PostToolUse hook can render without per-language
+logic.
 """
 
 from __future__ import annotations
@@ -142,8 +142,8 @@ def hook_payload(
     """Project an analysis report into the `gruff.hook.v1` payload.
 
     Args:
-        report: Native `gruff.analysis.v2` report produced by the normal
-            analyzer runner.
+        report: Native analysis report produced by the normal analyser runner
+            before the v3 machine adapter projects it.
         paths: Requested hook path arguments, used to map explicit
             `--changed-ranges` onto files.
         changed_ranges: Raw explicit changed-range string from the hook CLI.

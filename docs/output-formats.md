@@ -20,60 +20,76 @@ uv run gruff-py analyse src tests --format text --fail-on warning
 
 ## JSON
 
-Use `json` for automation. JSON reports use `gruff.analysis.v2`.
+Use `json` for automation. Analysis reports use `gruff.analysis.v3`:
 
 ```sh
 uv run gruff-py analyse src tests --format json --fail-on none > gruff-py.json
 ```
 
-The top-level shape is `schemaVersion`, `tool`, `run`, `summary`,
-`ignoredPaths`, `ignoredPathDetails`, `missingPaths`, `diagnostics`,
-`suppressions`, `findings`, and `score`. Changed-region runs add
-`suppressedCount` and `diff`; a full scan emits neither. `suppressions` carries
-one `{index, rule, paths, symbol, reason, suppressed}` audit row per configured
-`sensitiveExclusions` entry, including entries that matched nothing, and is `[]`
-when the project configures none — see
-[Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions). The output is stable enough for automation, but the project is
-pre-1.0 — the strongest compatibility promises are the schema strings and the
-finding identity fields below.
+Version 3 is the coordinated family machine contract. Paths are
+project-relative POSIX paths, `run.projectRoot` is `.`, and unavailable
+optional fields are omitted rather than emitted as `null`. The shared
+top-level sections are `schemaVersion`, `tool`, `run`, `summary`,
+`score`, `diagnostics`, `findings`, `paths`, and `suppressions`.
+`baseline`, `diff`, `displayFilter`, and `extensions` appear only when
+their feature is active.
+
+### Migrating v2 consumers
+
+Version 3 is a hard break with no v2 writer or compatibility flag:
+
+| v2 | v3 |
+|---|---|
+| top-level `ignoredPaths`, `ignoredPathDetails`, and `missingPaths` | `paths.ignoredPaths`, `paths.details`, and `paths.missingPaths` |
+| nullable `column`, `endLine`, or `symbol` | omit the unavailable key |
+| flat or separately graded composite | `score.composite.{score,grade}` |
+| `score.topOffenders[].filePath` | `score.topOffenders[].file` |
+| `run.partialContextCaveat` | `run.extensions.py.run.partialContextCaveat` |
+| top-level `suppressedCount` and `diff.suppressedCount` | `summary.suppressedFindings` and `diff.filteredFindings` |
+| top-level Python mutation, review, or trend data | `extensions.py.topLevel.{mutation,review,trend}` |
+| independent compact summary fields | the `gruff.summary.v3` analysis projection |
+
+The adapter preserves every native fingerprint, `stableIdentity`, score,
+grade, baseline result, and exit-code decision.
 
 ### Finding identity
 
-Every finding payload exposes two identity fields:
+Every finding carries one `file` path and two identity fields:
 
-- `fingerprint` — line-precise 16-character SHA-256 prefix derived from
-  `[ruleId, file, line, endLine, column, symbol]`. Baseline matching
-  (`BaselineFilter` and `gruff-baseline.json`) and SARIF
-  `partialFingerprints.gruffFingerprint` consume this one.
-- `stableIdentity` — line-insensitive 16-character SHA-256 prefix derived from
-  `[ruleId, file, symbol]`, falling back to `[ruleId, file, message]` when
-  `symbol` is `null`. Use it for external diff tooling that needs to match the
-  same logical finding across line shifts without re-baselining a moved
-  violation.
+- `fingerprint` — the existing line-precise 16-character SHA-256 prefix used
+  by baselines and SARIF `gruffFingerprint`.
+- `stableIdentity` — the existing line-insensitive 16-character SHA-256
+  prefix for external diff tooling.
 
-Both digests use the same PHP-compatible canonical-JSON encoding, so cross-port
-consumers see identical values for identical inputs.
+`column`, `endLine`, and `symbol` appear only when known.
+`metadata.locationPrecision` is `scanner-pinpointed` when a column is known
+and `line-only` otherwise. The envelope changes no identity input or matching
+behavior.
 
-When a requested path is narrower than the project root and at least one
-project-wide rule is enabled, JSON additively records
-`run.partialContextCaveat`. Text, Markdown, and HTML present the same caveat as
-**scan context**. Changed-region scans (`--diff`, `--since`) classify as partial
-the same way because discovery narrows to changed files. When the caveat is
-absent, human reports do not infer or display a full scan-context claim because
-no project-wide rule may have required one.
+### Paths, run context, and suppressions
 
-Native `score.scope` and hotspot `scope` remain the existing **scoring mode**:
-`full-project` for normal scoring or `diff` when changed-region filtering shapes
-the score. They do not describe discovery coverage. The caveat and labels do
-not change findings, scores, fingerprints, filters, or exit codes, and no
-`scanScope` field is emitted.
+`paths.details` records each excluded path with `path`, canonical `reason`,
+`source`, and `pattern` when a pattern caused the skip.
+`paths.ignoredPaths` is the exact ordered path projection of those details.
+
+When a requested path is narrower than the project root and a project-wide rule
+is active, machine JSON records the existing caveat at
+`run.extensions.py.run.partialContextCaveat`. Human reports continue to label
+it as scan context. Native `score.scope` and hotspot `scope` remain scoring
+mode, not discovery coverage.
+
+Every analysis and summary document includes `suppressions`, with one
+`{index, rule, paths, symbol?, reason, suppressed}` row per configured
+`sensitiveExclusions` entry, including entries that matched nothing. The array
+is empty when no exclusion is configured. See
+[Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions).
 
 ## Changed-Region Scoping (native diff mode)
 
 `analyse` can scope a run to just-changed code so an agent hook surfaces only the
 findings tied to the lines it edited, instead of pre-existing debt elsewhere in the
-same file. gruff-py is the reference implementation for this contract; the other
-gruff ports are being aligned to the shape below.
+same file. All five ports now share the v3 changed-region accounting locations
+described below.
 
 The native (delegated) invocation a hook sends:
 
@@ -99,42 +115,37 @@ Native mode is available when `analyse --help` advertises all three flags
 
 ### Suppressed-count accounting
 
-In changed-region mode every finding a full scan would produce is either
-**surfaced** in `findings[]` or **suppressed** as out-of-scope. The suppressed
-total is reported in two places that are always equal:
+In changed-region mode, every finding collected by the unfiltered run is either
+surfaced or counted as removed by region filtering. The count is published at
+both `summary.suppressedFindings` and `diff.filteredFindings`; the values are
+equal. With no display filter,
+`len(findings) + summary.suppressedFindings` equals the full-file finding
+count.
 
-- top-level `suppressedCount`, and
-- `diff.suppressedCount`.
+Display filters apply after analysis and region filtering. They can reduce
+`findings[]`, while `summary.findings`, `score`, and
+`summary.exitCode` continue to describe the full analysed set;
+`displayFilter.hiddenFindings` records the display-only difference.
 
-So `len(findings) + suppressedCount` equals the full-file finding count — nothing
-is dropped silently. `suppressedCount` reflects the full rule set the run collected;
-display filters (`--include-rule`, `--exclude-rule`, `--min-severity`) narrow
-`findings[]` only, so the native trio above — with no display filter — is where that
-identity is exact. Display filters do not change score or exit-code calculation; text output
-discloses hidden findings, while JSON `summary.findings` remains aligned with displayed findings.
-The `diff` section also carries `enabled`, `source`,
-`changedFiles`, and a `caveat` that project-wide rules may need full context. Both
-the top-level `suppressedCount` and the `diff` section appear **only** when
-changed-region scoping is active; a full scan emits neither.
+The `diff` section also carries `enabled`, mode, changed files, and any
+changed-region caveat. A full scan omits `diff`,
+`summary.suppressedFindings`, and `diff.filteredFindings`.
 
 CI workflows that still want whole-file aggregate findings for pull-request
 diffs should run a full scan or a companion hunk-scope scan. Full scans emit all
 file-wide findings; hunk scope keeps findings whose reported span intersects the
 changed lines.
 
-Findings keep the normative flat shape (`file`, `line`, `endLine`, `column`,
-`symbol`, `severity` ∈ `advisory | warning | error`, `ruleId`, `message`,
-`fingerprint`, …). Config-ignored files are reported at the top level under
-`ignoredPaths` (string paths) plus `ignoredPathDetails`, in every invocation mode.
-
-> Cross-port note: gruff-py and gruff-php expose `ignoredPaths` at the **top
-> level**; gruff-rs, gruff-ts, and gruff-go nest it under `paths`. gruff-py is left
-> unchanged here on purpose — the workspace contract owner tracks convergence.
+Findings use the normative flat shape with one `file` key and optional
+location and symbol keys omitted when unavailable. Ignore evidence lives under
+`paths`: `paths.ignoredPaths` is the string projection of
+`paths.details`, and `paths.missingPaths` lists unresolved requested paths.
+All five ports now share these v3 locations.
 
 ## Hook JSON
 
-`gruff-py hook --format json` emits the agent-hook contract rather than the
-native `gruff.analysis.v2` report:
+`gruff-py hook --format json` emits the separate agent-hook contract rather
+than the native `gruff.analysis.v3` report:
 
 ```json
 {
@@ -179,9 +190,9 @@ uv run gruff-py analyse src/ --format html --report-editor-link vscode > gruff-p
 `--report-interactive` adds browser-side finding filters; `--report-editor-link`
 accepts `vscode` or `phpstorm` and turns file references into editor links.
 
-HTML metadata labels `full-project`/`diff` as **scoring mode** and adds a
-separate escaped **scan context** section only when the run carries
-`run.partialContextCaveat`.
+HTML metadata labels `full-project` or `diff` as scoring mode and adds a
+separate escaped scan-context section only when the run carries
+`run.extensions.py.run.partialContextCaveat`.
 
 ## Markdown
 
@@ -208,11 +219,11 @@ Use `sarif` for GitHub code scanning or other SARIF consumers:
 uv run gruff-py analyse src tests --format sarif --fail-on none > gruff-py.sarif
 ```
 
-SARIF is a renderer over the native `gruff.analysis.v2` model, not a replacement
-schema. It preserves native rule ids, fingerprints, severity, paths, locations,
-metadata, scoring, and fail-on behaviour. Fingerprints are emitted as
-`partialFingerprints.gruffFingerprint`, and run properties carry
-`gruffSchemaVersion` with the native schema string plus score and grade when
+SARIF is a renderer over the native `gruff.analysis.v3` model, not a
+replacement schema. It preserves native rule ids, fingerprints, severity,
+paths, locations, metadata, scoring, and fail-on behavior. Fingerprints are
+emitted as `partialFingerprints.gruffFingerprint`, and run properties carry
+`gruffSchemaVersion` with the native v3 schema plus score and grade when
 available. The driver is named `gruff-py`, uses the project version as
 `semanticVersion`, and emits registry rule metadata sorted by stable rule id.
 Artifact URIs use `/` separators with leading `./` removed.
@@ -228,12 +239,17 @@ Upload it with GitHub's SARIF upload action; see
 
 ## Summary
 
-`summary` has its own compact text/JSON contract, covering file counts,
-per-pillar counts, top rules, and top file offenders:
+`summary --format json` emits the exact findings-free projection of the
+corresponding analysis document. Only the top-level `findings` array is
+removed and the schema changes to `gruff.summary.v3`:
 
 ```sh
 uv run gruff-py summary src tests --format json --top 5
 ```
+
+Counts, scores, diagnostics, paths, suppressions, baseline, diff, and extensions
+therefore keep their analysis values. `--top` and `--group-by` affect text
+summary only.
 
 To read a noisy run rule-by-rule, see [Triage](triage.md).
 
@@ -247,10 +263,11 @@ uv run gruff-py analyse src/ --include-pillar security
 uv run gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
 ```
 
-They change which findings are rendered and are recorded under `run.filters`.
-They do not change the score or the exit code. Text output reports how many
-findings were hidden; in JSON, `summary.findings` follows displayed findings
-while `score` and `summary.exitCode` reflect the full analysed set.
+Display filters change only which findings are rendered and are recorded under
+`run.filters`. They do not change analysis, score, or exit-code calculation.
+Text reports disclose the hidden count; JSON keeps full-run counts in
+`summary.findings` and reports the presentation delta in
+`displayFilter.hiddenFindings`.
 
 ## Exit Codes
 

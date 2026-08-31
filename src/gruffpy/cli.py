@@ -45,7 +45,7 @@ from gruffpy.cli_options import (
     was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
-from gruffpy.cli_summary import summary_payload, summary_text
+from gruffpy.cli_summary import summary_text
 from gruffpy.command.check_ignore_verdict import (
     check_ignore_exit_code,
     classify_paths,
@@ -433,13 +433,7 @@ def summary(**kwargs: Any) -> None:
     analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
-        _write_stdout(
-            json.dumps(
-                summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
-                indent=4,
-            )
-        )
-        _write_stdout("\n")
+        _write_stdout(JsonReporter().render_summary(analysis_report))
     else:
         _write_stdout(summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
     sys.exit(analysis_report.exit_code)
@@ -783,12 +777,11 @@ def _echo_config_warnings(report: AnalysisReport) -> None:
 
 
 def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
-    """Build a synthetic ``gruff.analysis.v2`` report for a config-load failure.
+    """Build a synthetic native analysis report for a config-load failure.
 
-    Reserved for ``--format json`` callers: machine-readable consumers need a
-    parseable failure payload (``diagnostics: [{"type": "config-error", ...}]``,
-    ``exitCode: 2``) instead of stderr prose. Human-targeted formats keep the
-    stderr + exit 1 path via ``click.ClickException``.
+    The JSON reporter sends this report through the v3 machine adapter so
+    machine-readable callers receive a parseable diagnostic and exit code 2
+    instead of stderr prose. Human formats retain the Click exception path.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
     return AnalysisReport(

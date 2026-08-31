@@ -37,14 +37,15 @@ class ScoreReport:
     explanation: str
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the full score report to its ``gruff.analysis.v2`` payload shape.
+        """Serialize the native score container used by report renderers.
 
-        Composite grade, scope, explanation string, all pillar scores, the
-        top-offender table, and the cyclomatic-complexity distribution
-        buckets each appear under their schema-specified camelCase keys.
+        The container retains native grade objects, scoring scope, explanation,
+        pillar rows, offender rows, and complexity buckets. The v3 machine
+        adapter projects the canonical composite and offender shapes without
+        recalculating a value.
 
         Returns:
-            JSON-ready dict matching the cross-implementation schema.
+            JSON-ready native score data.
         """
         return {
             "composite": self.composite.to_dict(),

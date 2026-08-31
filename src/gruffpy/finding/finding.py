@@ -89,14 +89,15 @@ class Finding:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the finding to its ``gruff.analysis.v2`` JSON shape.
+        """Serialize the native finding dictionary used by internal report paths.
 
-        Keys are camelCased to match the shared schema; the ``fingerprint``
-        is computed on the fly to avoid serialising stale values when
-        callers mutate metadata.
+        The v3 machine adapter owns path normalization, optional-field
+        omission, and `locationPrecision`; this helper preserves the report
+        model's nullable values. The fingerprint is computed on demand so
+        callers never serialize a stale identity.
 
         Returns:
-            JSON-ready dict with every public field plus computed fingerprint.
+            JSON-ready native finding fields plus computed identities.
         """
         return {
             "ruleId": self.rule_id,

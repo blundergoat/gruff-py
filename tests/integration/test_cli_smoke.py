@@ -202,7 +202,7 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert [finding["symbol"] for finding in payload["findings"]] == ["new_bad"]
-    assert payload["suppressedCount"] >= 1
+    assert payload["summary"]["suppressedFindings"] >= 1
 
 
 def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
@@ -253,7 +253,7 @@ def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
     full_payload = json.loads(full_scan.output)
     assert full_scan.exit_code == 1, full_scan.output
     assert "diff" not in full_payload
-    assert "changed" in {finding["symbol"] for finding in full_payload["findings"]}
+    assert "changed" in {finding.get("symbol") for finding in full_payload["findings"]}
 
 
 def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
@@ -291,8 +291,8 @@ def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert payload["findings"] == []
-    assert payload["suppressedCount"] >= 1
-    assert payload["diff"]["suppressedCount"] == payload["suppressedCount"]
+    assert payload["summary"]["suppressedFindings"] >= 1
+    assert payload["diff"]["filteredFindings"] == payload["summary"]["suppressedFindings"]
 
 
 def test_analyse_changed_scope_symbol_anchors_file_length_findings(
@@ -331,8 +331,8 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     full_payload = json.loads(full.output)
 
     assert [finding["ruleId"] for finding in far_payload["findings"]] == []
-    assert far_payload["suppressedCount"] >= 1
-    assert far_payload["diff"]["suppressedCount"] == far_payload["suppressedCount"]
+    assert far_payload["summary"]["suppressedFindings"] >= 1
+    assert far_payload["diff"]["filteredFindings"] == far_payload["summary"]["suppressedFindings"]
 
     anchor_file_length = [
         finding for finding in anchor_payload["findings"] if finding["ruleId"] == "size.file-length"
@@ -345,7 +345,7 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     assert anchor_file_length[0]["line"] == 1
     assert anchor_file_length[0]["metadata"]["lines"] == 1010
     assert anchor_file_length[0]["metadata"]["threshold"] == 1000
-    assert "suppressedCount" not in full_payload
+    assert "suppressedFindings" not in full_payload["summary"]
     assert "diff" not in full_payload
 
 
@@ -390,7 +390,7 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     ]
     assert hunk.exit_code == 0, hunk.output
     assert hunk_payload["findings"] == []
-    assert hunk_payload["suppressedCount"] >= 1
+    assert hunk_payload["summary"]["suppressedFindings"] >= 1
 
 
 def test_analyse_changed_scope_symbol_accounts_for_every_finding(
@@ -399,7 +399,7 @@ def test_analyse_changed_scope_symbol_accounts_for_every_finding(
 ) -> None:
     # The agent hook trusts native changed-region results and does not filter again by line.
 
-    # Without display filters, each full-scan finding is surfaced or counted in suppressedCount.
+    # Without display filters, each full-scan finding is surfaced or counted as diff-filtered.
     # Both counters must be present and equal for the terminal user's selected symbol.
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -429,13 +429,15 @@ def test_analyse_changed_scope_symbol_accounts_for_every_finding(
     scoped_payload = json.loads(scoped.output)
 
     total = len(full_payload["findings"])
-    assert {"alpha", "beta", "gamma"} <= {f["symbol"] for f in full_payload["findings"]}
+    assert {"alpha", "beta", "gamma"} <= {
+        finding.get("symbol") for finding in full_payload["findings"]
+    }
     # A full scan carries neither changed-region counter.
-    assert "suppressedCount" not in full_payload
+    assert "suppressedFindings" not in full_payload["summary"]
     assert "diff" not in full_payload
 
-    surfaced_symbols = {finding["symbol"] for finding in scoped_payload["findings"]}
-    suppressed = scoped_payload["suppressedCount"]
+    surfaced_symbols = {finding.get("symbol") for finding in scoped_payload["findings"]}
+    suppressed = scoped_payload["summary"]["suppressedFindings"]
     # Widening surfaces the edited symbol (its def-line finding) and nothing else.
     assert "beta" in surfaced_symbols
     assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
@@ -443,9 +445,9 @@ def test_analyse_changed_scope_symbol_accounts_for_every_finding(
     # No finding is dropped silently: surfaced + suppressed accounts for all of N.
     assert len(scoped_payload["findings"]) + suppressed == total
     assert suppressed >= 1
-    # Both counters are present and equal, so a refactor cannot drop the one the hook reads.
-    assert "suppressedCount" in scoped_payload
-    assert scoped_payload["diff"]["suppressedCount"] == suppressed
+    # Both canonical counters are present and equal.
+    assert "suppressedFindings" in scoped_payload["summary"]
+    assert scoped_payload["diff"]["filteredFindings"] == suppressed
 
 
 def test_analyse_agent_command_ignores_default_baseline_when_disabled(
@@ -535,7 +537,7 @@ def test_analyse_diff_stdin_filters_to_changed_file(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert {finding["file"] for finding in payload["findings"]} == {"src/new.py"}
-    assert payload["diff"]["source"] == "stdin"
+    assert payload["diff"]["mode"] == "stdin"
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is unavailable")
@@ -583,7 +585,7 @@ def test_analyse_git_changed_region_modes_gate_retained_findings(
     payload = json.loads(result.output)
     assert result.exit_code == 1, result.output
     assert [finding["symbol"] for finding in payload["findings"]] == ["changed"]
-    assert payload["diff"]["source"] == expected_source
+    assert payload["diff"]["mode"] == expected_source
     assert payload["diff"]["changedFiles"] == ["src/sample.py"]
 
 
@@ -1197,9 +1199,10 @@ def test_cli_analyse_generate_baseline_writes_default_file(
     assert baseline_payload["schemaVersion"] == "gruff-py.baseline.v1"
     assert len(baseline_payload["findings"]) == len(generated_payload["findings"])
     assert generated_payload["baseline"] == {
+        "applied": False,
+        "entries": len(generated_payload["findings"]),
         "path": "gruff-baseline.json",
         "generated": True,
-        "totalEntries": len(generated_payload["findings"]),
         "suppressedFindings": 0,
         "staleEvaluation": "generated",
         "staleEntries": 0,
@@ -1317,7 +1320,7 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(
 
     assert result.exit_code == 2
     payload = json.loads(result.stdout)
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["findings"] == []
     assert len(payload["diagnostics"]) == 1
     diagnostic = payload["diagnostics"][0]
@@ -1359,7 +1362,7 @@ def test_cli_summary_group_by_rule_text_replaces_top_rules_block(
     assert "Grouped by rule (showing" in result.output
 
 
-def test_cli_summary_group_by_rule_json_adds_grouped_rules_field(
+def test_cli_summary_group_by_rule_json_keeps_canonical_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1374,16 +1377,12 @@ def test_cli_summary_group_by_rule_json_adds_grouped_rules_field(
 
     assert result.exit_code in (0, 1), result.output
     payload = json.loads(result.output)
-    assert "groupedRules" in payload
-    assert "topRules" in payload  # back-compat: preserved
-    grouped = payload["groupedRules"]
-    assert set(grouped.keys()) == {"shown", "total", "rows"}
-    if grouped["rows"]:
-        row = grouped["rows"][0]
-        assert set(row.keys()) == {"ruleId", "count", "severity", "confidence"}
+    assert payload["schemaVersion"] == "gruff.summary.v3"
+    assert "groupedRules" not in payload
+    assert "topRules" not in payload
 
 
-def test_cli_summary_group_by_rule_json_sorts_by_count_desc_then_rule_id_asc(
+def test_cli_summary_group_by_rule_does_not_change_json_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1395,19 +1394,17 @@ def test_cli_summary_group_by_rule_json_sorts_by_count_desc_then_rule_id_asc(
     (src / "b.py").write_text("y = 2\n")
     (src / "c.py").write_text("z = 3\n")
 
-    result = CliRunner().invoke(
+    grouped = CliRunner().invoke(
         main,
         ["summary", "--format", "json", "--no-config", "--group-by", "rule", "src"],
     )
+    plain = CliRunner().invoke(
+        main,
+        ["summary", "--format", "json", "--no-config", "src"],
+    )
 
-    payload = json.loads(result.output)
-    rows = payload["groupedRules"]["rows"]
-    counts = [row["count"] for row in rows]
-    assert counts == sorted(counts, reverse=True)
-    # Tie-break: rule_id ASC for any two adjacent equal counts
-    for i in range(len(rows) - 1):
-        if rows[i]["count"] == rows[i + 1]["count"]:
-            assert rows[i]["ruleId"] < rows[i + 1]["ruleId"]
+    assert grouped.exit_code == plain.exit_code, grouped.output
+    assert json.loads(grouped.output) == json.loads(plain.output)
 
 
 def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(
@@ -1495,14 +1492,14 @@ def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.exit_code == 0, result.output
     assert result.output == ""
     payload = json.loads(output.read_text())
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["run"]["format"] == "json"
 
 
-def test_cli_summary_json_is_compact_digest(
+def test_cli_summary_json_is_exact_analysis_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """JSON summary emits the v2 schema with pillar rows carrying numeric penalties.
+    """JSON summary changes the schema id and removes only ``findings``.
 
     Args:
         tmp_path: Working directory for the invocation.
@@ -1513,38 +1510,32 @@ def test_cli_summary_json_is_compact_digest(
     src.mkdir()
     (src / "ok.py").write_text("x = 1\n")
 
-    result = CliRunner().invoke(
+    summary_result = CliRunner().invoke(
         main,
         ["summary", "--format", "json", "--no-config", "src"],
     )
+    analysis_result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "src",
+        ],
+    )
 
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["schemaVersion"] == "gruff.summary.v2"
-    assert {"summary", "pillars", "topRules", "topFiles"} <= payload.keys()
-    summary = payload["summary"]
-    elapsed = summary["elapsedSeconds"]
-    assert summary["paths"] == ["src"]
-    assert isinstance(elapsed, int | float) and elapsed >= 0
-    assert "Next steps" not in result.output
-    assert isinstance(payload["pillars"], list)
-    assert payload["pillars"], "pillars list should not be empty"
-    expected_keys = {
-        "pillar",
-        "grade",
-        "score",
-        "applicable",
-        "findings",
-        "advisory",
-        "warning",
-        "error",
-        "penalty",
-    }
-    assert all(expected_keys <= pillar.keys() for pillar in payload["pillars"])
-    for pillar in payload["pillars"]:
-        assert isinstance(pillar["penalty"], int | float), (
-            f"penalty should be numeric, got {type(pillar['penalty']).__name__}"
-        )
+    assert summary_result.exit_code == 0, summary_result.output
+    assert analysis_result.exit_code == 0, analysis_result.output
+    summary_payload = json.loads(summary_result.output)
+    expected = json.loads(analysis_result.output)
+    expected["schemaVersion"] = "gruff.summary.v3"
+    del expected["findings"]
+    assert summary_payload == expected
+    assert "Next steps" not in summary_result.output
 
 
 def test_cli_summary_text_includes_path_and_elapsed(
@@ -1700,7 +1691,7 @@ def test_cli_analyse_emits_schema_version_and_tool_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["tool"]["name"] == "gruff-py"
 
 
@@ -1708,8 +1699,8 @@ def test_cli_analyse_summary_counts_at_least_two_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
-    assert payload["summary"]["filesDiscovered"] >= 2
-    assert payload["summary"]["filesParsed"] >= 2
+    assert payload["summary"]["discoveredFiles"] >= 2
+    assert payload["summary"]["parsedFiles"] >= 2
 
 
 def test_cli_analyse_emits_file_length_finding_with_full_classification(
@@ -1772,7 +1763,7 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
     run = payload["runs"][0]
     assert payload["version"] == "2.1.0"
     assert run["tool"]["driver"]["name"] == "gruff-py"
-    assert run["properties"]["gruffSchemaVersion"] == "gruff.analysis.v2"
+    assert run["properties"]["gruffSchemaVersion"] == "gruff.analysis.v3"
 
 
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:
@@ -1911,7 +1902,7 @@ def test_analyse_partial_unused_private_function_suppresses_module_only(
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert [finding["symbol"] for finding in payload["findings"]] == ["Service._method_helper"]
-    assert payload["run"]["partialContextCaveat"] == (
+    assert payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
 
@@ -1971,10 +1962,10 @@ def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
     assert full.exit_code == 0, full.output
     narrow_payload = json.loads(narrow.output)
     full_payload = json.loads(full.output)
-    assert narrow_payload["run"]["partialContextCaveat"] == (
+    assert narrow_payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
-    assert "partialContextCaveat" not in full_payload["run"]
+    assert "extensions" not in full_payload["run"]
 
 
 def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
@@ -2003,7 +1994,7 @@ def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
-        assert "partialContextCaveat" not in payload["run"], full_project_path
+        assert "extensions" not in payload["run"], full_project_path
 
 
 def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
@@ -2035,7 +2026,7 @@ def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["run"]["partialContextCaveat"] == (
+    assert payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
     assert payload["diff"]["enabled"] is True
@@ -2133,8 +2124,8 @@ def test_cli_bounded_deep_scan_retains_text_rules_and_nonfatal_exit(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["summary"]["filesDiscovered"] == 1
-    assert payload["summary"]["filesParsed"] == 1
+    assert payload["summary"]["discoveredFiles"] == 1
+    assert payload["summary"]["parsedFiles"] == 1
     diagnostic = payload["diagnostics"][0]
     assert diagnostic["type"] == "bounded-deep-scan"
     assert diagnostic["invalidatesRun"] is False
@@ -2309,7 +2300,7 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
     assert "Exit code: 1" in result.output
 
 
-def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
+def test_analyse_json_display_filter_keeps_full_run_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2340,8 +2331,9 @@ def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
     payload = json.loads(result.output)
     assert "hiddenByDisplayFilter" not in payload
     assert payload["findings"] == []
-    assert payload["summary"]["findings"]["total"] == 0
+    assert payload["summary"]["findings"]["total"] == 1
     assert payload["summary"]["exitCode"] == 1
+    assert payload["displayFilter"]["hiddenFindings"] == 1
     assert sum(pillar["findings"] for pillar in payload["score"]["pillars"]) == 1
 
 
@@ -2404,9 +2396,7 @@ def test_cli_rejects_configured_secret_preview_before_analysis(
                 'Config key "allowlists.secretPreviews" only accepts an empty list; '
                 "remove all configured entries because secret previews no longer suppress findings."
             ),
-            "file": None,
-            "line": None,
-            "path": None,
+            "invalidatesRun": True,
         }
     ]
     assert aws_key not in result.output
@@ -2597,7 +2587,7 @@ def test_cli_analyse_json_carries_additive_config_warnings(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    warnings = payload["run"]["configWarnings"]
+    warnings = payload["run"]["extensions"]["py"]["run"]["configWarnings"]
     assert len(warnings) == 2
     assert all("thresholds" in warning for warning in warnings)
     # Warnings are not diagnostics: the exit code stays finding-driven.

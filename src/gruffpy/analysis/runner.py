@@ -24,7 +24,7 @@ from gruffpy.analysis.changed_region import (
     parse_explicit_ranges,
     parse_unified_diff,
 )
-from gruffpy.analysis.report import AnalysisReport, ReportExtensions
+from gruffpy.analysis.report import AnalysisReport, MachineReportContext, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.suppression_summary import SuppressionSummary
 from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
@@ -66,6 +66,7 @@ class _ReportAssembly:
     discovery_result: SourceDiscoveryResult
     files_parsed: int
     diagnostics: list[RunDiagnostic]
+    summary_findings: list[Finding]
     display_findings: list[Finding]
     exit_code: int
     score: ScoreReport
@@ -87,7 +88,6 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     Returns:
         Fully-populated report ready to be handed to a reporter.
     """
-    baseline_options = request.baseline if request.baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics, config_warnings = _load_analysis_config(
         project_root=request.project_root,
@@ -140,7 +140,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
-        options=baseline_options,
+        options=request.baseline if request.baseline is not None else BaselineOptions(),
         scan_scope=scan_scope,
     )
     changed_filter_result = filter_findings_for_changed_regions(
@@ -166,6 +166,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             discovery_result=discovery_result,
             files_parsed=files_parsed,
             diagnostics=diagnostics,
+            summary_findings=findings,
             display_findings=display_findings,
             exit_code=exit_code,
             score=score,
@@ -208,6 +209,11 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
         config_warnings=assembly.config_warnings,
         suppressions=assembly.suppressions,
+        machine_context=MachineReportContext(
+            project_root=str(assembly.request.project_root),
+            include_ignored=assembly.request.include_ignored,
+            summary_findings=tuple(assembly.summary_findings),
+        ),
     )
 
 

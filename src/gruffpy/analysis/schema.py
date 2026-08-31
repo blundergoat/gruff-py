@@ -19,10 +19,13 @@ bumps it, per the cross-impl CONTRACT.md compatibility policy):
   array is always present and is empty when nothing is configured; the shape is
   the family reference gruff-rs already ships. Consumers reading ``findings``
   are unaffected.
+- ``gruff.analysis.v3`` is the intentional hard break to one canonical family
+  envelope. ``gruff.summary.v3`` is exactly that document with ``findings``
+  removed and the schema identifier changed.
 """
 
-ANALYSIS_SCHEMA_VERSION = "gruff.analysis.v2"
+ANALYSIS_SCHEMA_VERSION = "gruff.analysis.v3"
 BASELINE_SCHEMA_VERSION = "gruff-py.baseline.v1"
 HOTSPOT_SCHEMA_VERSION = "gruff-py.hotspot.v1"
-SUMMARY_SCHEMA_VERSION = "gruff.summary.v2"
+SUMMARY_SCHEMA_VERSION = "gruff.summary.v3"
 CONFIG_SCHEMA_VERSION = "gruff-py.config.v0.1"

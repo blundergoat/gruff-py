@@ -34,10 +34,13 @@ class SuppressionSummary:
     suppressed: int
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the audit row to its ``gruff.analysis.v2`` JSON shape.
+        """Serialize the native suppression audit row.
+
+        The v3 machine adapter normalizes paths and omits an unavailable
+        symbol.
 
         Returns:
-            JSON-ready dict with the family's ``suppressions[]`` keys.
+            JSON-ready native suppression fields.
         """
         return {
             "index": self.index,

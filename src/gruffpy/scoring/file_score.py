@@ -37,13 +37,14 @@ class FileScore:
     mutation_score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the file score to its ``gruff.analysis.v2`` payload shape.
+        """Serialize the native per-file score row.
 
-        ``penalty`` is rounded to two decimals so JSON comparisons across
-        the PHP/Python implementations stay stable.
+        `penalty` is rounded to two decimals so PHP and Python comparisons
+        remain stable. The v3 machine adapter normalizes the offender path and
+        optional fields.
 
         Returns:
-            JSON-ready dict with file path, grade, severity counts, and metric maxima.
+            JSON-ready native score fields and metric maxima.
         """
         return {
             "file": self.file_path,

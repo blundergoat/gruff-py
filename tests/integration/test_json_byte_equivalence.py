@@ -12,6 +12,7 @@ from gruffpy.finding.severity import Severity
 from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.reporting.json_reporter import JsonReporter
 from gruffpy.scoring.score_calculator import ScoreCalculator
+from gruffpy.source.discovery import IgnoredPath
 
 
 @pytest.mark.skipif(
@@ -61,6 +62,9 @@ def _fixture_report() -> AnalysisReport:
         files_discovered=1,
         files_parsed=1,
         ignored_paths=("vendor/package.py",),
+        ignored_path_details=(
+            IgnoredPath(path="vendor/package.py", source="config", pattern="vendor/**"),
+        ),
         missing_paths=("missing.py",),
         diagnostics=(),
         findings=findings,

@@ -65,7 +65,7 @@ def test_control_ignored_file_is_flaggable_without_config() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert len(payload["findings"]) > 0
-    assert payload["ignoredPathDetails"] == []
+    assert payload["paths"]["details"] == []
 
 
 @pytest.mark.usefixtures("project")
@@ -78,8 +78,13 @@ def test_analyse_explicit_ignored_arg_yields_no_findings_with_reason() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert payload["ignoredPathDetails"] == [
-        {"path": "skipme/bad.py", "source": "config", "pattern": "skipme/**"}
+    assert payload["paths"]["details"] == [
+        {
+            "path": "skipme/bad.py",
+            "reason": "config-ignore",
+            "source": "config",
+            "pattern": "skipme/**",
+        }
     ]
 
 
@@ -96,7 +101,7 @@ def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> 
     assert payload["findings"] == []
     assert any(
         detail["path"] == "skipme/bad.py" and detail["source"] == "config"
-        for detail in payload["ignoredPathDetails"]
+        for detail in payload["paths"]["details"]
     )
 
 
@@ -119,7 +124,7 @@ def test_include_ignored_still_honours_config_paths_ignore() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert any(detail["source"] == "config" for detail in payload["ignoredPathDetails"])
+    assert any(detail["source"] == "config" for detail in payload["paths"]["details"])
 
 
 @pytest.mark.usefixtures("project")
@@ -162,7 +167,7 @@ def test_check_ignore_shares_engine_with_analyse() -> None:
     analyse_payload = json.loads(analyse.output)
     assert check_verdict["ignored"] is True
     assert check_verdict["pattern"] == "skipme/**"
-    assert analyse_payload["ignoredPathDetails"][0]["pattern"] == "skipme/**"
+    assert analyse_payload["paths"]["details"][0]["pattern"] == "skipme/**"
 
 
 @pytest.mark.usefixtures("project")

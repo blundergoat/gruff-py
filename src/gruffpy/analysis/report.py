@@ -1,10 +1,10 @@
-"""Native analysis-run value objects projected as the ``gruff.analysis.v2`` schema.
+"""Native analysis-run value objects projected as the ``gruff.analysis.v3`` schema.
 
 Defines :class:`AnalysisReport` - the frozen outcome of one analysis run, carrying
 requested paths, file counts, findings, score, diagnostics, ignored paths, and exit
 code - and :class:`ReportExtensions` for the optional mutation, diff, trend, baseline,
 and review sections. Every reporter (JSON, SARIF, text) consumes this object, and its
-JSON projection is the cross-implementation ``gruff.analysis.v2`` contract, so the
+JSON projection is the cross-implementation ``gruff.analysis.v3`` contract, so the
 field names here are a compatibility surface.
 """
 
@@ -12,13 +12,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
-from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
 from gruffpy.analysis.suppression_summary import SuppressionSummary
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.source.discovery import IgnoredPath
-from gruffpy.version import TOOL_NAME
 
 _SEVERITY_RANK: dict[Severity, int] = {
     Severity.ADVISORY: 0,
@@ -47,8 +45,23 @@ class ReportExtensions:
 
 
 @dataclass(frozen=True, slots=True)
+class MachineReportContext:
+    """Serializer-only state that must not change native analysis behavior.
+
+    Attributes:
+        project_root: Absolute root used to make every machine path portable.
+        include_ignored: Whether discovery crossed default and Git ignore boundaries.
+        summary_findings: Full findings before presentation-only filtering, when different.
+    """
+
+    project_root: str = "."
+    include_ignored: bool = False
+    summary_findings: tuple[Finding, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisReport:
-    """Native analysis report value object for ``gruff.analysis.v2``.
+    """Native analysis report value object for ``gruff.analysis.v3``.
 
     Attributes:
         tool_version: gruff-py version that produced the report.
@@ -69,15 +82,16 @@ class AnalysisReport:
         extensions: Optional report extension sections.
         filters: Optional finding-display filter metadata.
         hidden_by_display_filter: Findings hidden by display filters. Native-only;
-            omitted from ``gruff.analysis.v2`` JSON unless the schema is explicitly extended.
+            represented by the canonical ``displayFilter`` section in machine JSON.
         partial_context_caveat: Optional run-level caveat for partial project-rule context.
         suppressed_count: Optional count of changed-region out-of-scope findings.
         suppressions: One audit row per configured ``sensitiveExclusions`` entry, including
             entries that matched nothing. Serialized as the family ``suppressions`` array.
         config_warnings: Non-fatal config-loader warnings (unknown rule-level
-            keys downgraded by the default non-strict policy). Serialized as
-            the additive ``run.configWarnings`` array only when non-empty;
+            keys downgraded by the default non-strict policy). Serialized under
+            ``run.extensions.py.run.configWarnings`` only when non-empty;
             deliberately not diagnostics so they never flip the exit code.
+        machine_context: Serializer-only root, include-ignore flag, and pre-display findings.
     """
 
     tool_version: str
@@ -102,6 +116,7 @@ class AnalysisReport:
     ignored_path_details: tuple[IgnoredPath, ...] = ()
     config_warnings: tuple[str, ...] = ()
     suppressions: tuple[SuppressionSummary, ...] = ()
+    machine_context: MachineReportContext = field(default_factory=MachineReportContext)
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.
@@ -168,74 +183,21 @@ class AnalysisReport:
         return any(f.severity == severity for f in self.findings)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize the report to the native JSON-compatible payload.
+        """Serialize the report to the canonical JSON-compatible payload.
 
         Returns:
-            Dictionary shaped according to ``gruff.analysis.v2``.
+            Dictionary shaped according to ``gruff.analysis.v3``.
         """
-        report: dict[str, Any] = {
-            "schemaVersion": ANALYSIS_SCHEMA_VERSION,
-            "tool": {"name": TOOL_NAME, "version": self.tool_version},
-            "run": _run_payload(self),
-            "summary": _summary_payload(self),
-            "ignoredPaths": list(self.ignored_paths),
-            "ignoredPathDetails": [detail.to_dict() for detail in self.ignored_path_details],
-            "missingPaths": list(self.missing_paths),
-            "diagnostics": [d.to_dict() for d in self.diagnostics],
-            "suppressions": [summary.to_dict() for summary in self.suppressions],
-            "findings": [f.to_dict() for f in self.findings],
-        }
-        if self.suppressed_count is not None:
-            report["suppressedCount"] = self.suppressed_count
-        report.update(_optional_payloads(self))
-        return report
+        from gruffpy.analysis.machine_contract import analysis_payload
 
+        return analysis_payload(self)
 
-def _run_payload(report: AnalysisReport) -> dict[str, Any]:
-    payload = {
-        "format": report.format,
-        "failOn": report.fail_on,
-        "config": report.config_path,
-        "paths": list(report.requested_paths),
-        "filters": report.filters.to_dict() if report.filters is not None else None,
-    }
-    if report.partial_context_caveat is not None:
-        payload["partialContextCaveat"] = report.partial_context_caveat
-    if report.config_warnings:
-        payload["configWarnings"] = list(report.config_warnings)
-    return payload
+    def to_summary_dict(self) -> dict[str, Any]:
+        """Return the sole supported findings-free projection of this report.
 
+        Returns:
+            Analysis v3 with only ``findings`` removed and its schema identifier changed.
+        """
+        from gruffpy.analysis.machine_contract import summary_payload
 
-def _summary_payload(report: AnalysisReport) -> dict[str, Any]:
-    return {
-        "filesDiscovered": report.files_discovered,
-        "filesParsed": report.files_parsed,
-        "ignoredPaths": len(report.ignored_paths),
-        "missingPaths": len(report.missing_paths),
-        "parseErrors": report.parse_error_count(),
-        "findings": report.finding_counts(),
-        "exitCode": report.exit_code,
-    }
-
-
-def _optional_payloads(report: AnalysisReport) -> dict[str, Any]:
-    optional_sections = {
-        "mutation": report.extensions.mutation,
-        "score": report.score,
-        "diff": report.extensions.diff,
-        "trend": report.extensions.trend,
-        "baseline": report.extensions.baseline,
-        "review": report.extensions.review,
-    }
-    return {
-        key: _to_report_value(value)
-        for key, value in optional_sections.items()
-        if value is not None
-    }
-
-
-def _to_report_value(value: Any) -> Any:
-    to_dict = getattr(value, "to_dict", None)
-    if callable(to_dict):
-        return to_dict()
-    return value
+        return summary_payload(self)

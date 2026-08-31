@@ -103,7 +103,6 @@ def test_exact_rule_and_path_removes_only_that_scope(corpus: Path) -> None:
             "index": 0,
             "rule": _AWS_RULE,
             "paths": ["secrets/aws.env"],
-            "symbol": None,
             "reason": ("Synthetic AWS key used by the redaction corpus; not a live credential."),
             "suppressed": 2,
         }

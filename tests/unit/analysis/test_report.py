@@ -12,6 +12,7 @@ def _finding(
     severity: Severity = Severity.WARNING,
     confidence: Confidence = Confidence.HIGH,
     line: int = 1,
+    column: int | None = None,
 ) -> Finding:
     return Finding(
         rule_id=rule_id,
@@ -22,6 +23,7 @@ def _finding(
         pillar=Pillar.COMPLEXITY,
         tier=RuleTier.V01,
         confidence=confidence,
+        column=column,
     )
 
 
@@ -45,6 +47,25 @@ def test_finding_counts_by_rule_returns_empty_list_when_no_findings():
     rows = _report(()).finding_counts_by_rule()
 
     assert rows == []
+
+
+def test_machine_contract_pins_line_only_and_scanner_column_locations() -> None:
+    payload = _report(
+        (
+            _finding(rule_id="line.only", line=0),
+            _finding(rule_id="scanner.pinpointed", line=7, column=4),
+        )
+    ).to_dict()
+
+    line_only, pinpointed = payload["findings"]
+    assert line_only["file"] == "src/x.py"
+    assert line_only["line"] == 1
+    assert line_only["metadata"]["locationPrecision"] == "line-only"
+    assert "column" not in line_only
+    assert "symbol" not in line_only
+    assert "filePath" not in line_only
+    assert pinpointed["column"] == 4
+    assert pinpointed["metadata"]["locationPrecision"] == "scanner-pinpointed"
 
 
 def test_finding_counts_by_rule_sorts_by_count_desc_then_rule_id_asc():

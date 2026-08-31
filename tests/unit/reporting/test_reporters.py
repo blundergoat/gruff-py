@@ -186,17 +186,16 @@ def _report_with_partial_context(
     )
 
 
-def test_native_json_keeps_existing_scope_shape_for_partial_context() -> None:
-    """Keep native automation fields frozen while human labels become clearer."""
+def test_native_json_scopes_partial_context_under_python_run_extensions() -> None:
+    """Keep port-specific caveats outside the shared run field namespace."""
     native_payload = json.loads(JsonReporter().render(_report_with_partial_context()))
 
     assert native_payload["run"] == {
-        "format": "json",
         "failOn": "none",
-        "config": None,
-        "paths": ["src"],
-        "filters": None,
-        "partialContextCaveat": _PARTIAL_PROJECT_CONTEXT_CAVEAT,
+        "format": "json",
+        "inputs": ["src"],
+        "projectRoot": ".",
+        "extensions": {"py": {"run": {"partialContextCaveat": _PARTIAL_PROJECT_CONTEXT_CAVEAT}}},
     }
     assert native_payload["score"]["scope"] == "full-project"
     assert "scanScope" not in json.dumps(native_payload)
@@ -467,9 +466,9 @@ def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
 
 
 def _assert_sarif_shared_contract(payload: dict[str, Any]) -> None:
-    assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff.analysis.v2"
+    assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff.analysis.v3"
     assert payload["runs"][0]["properties"]["score"] == _report().score.composite.score
-    assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff.analysis.v2"
+    assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff.analysis.v3"
 
 
 def _unknown_rule_payload() -> dict[str, Any]:
