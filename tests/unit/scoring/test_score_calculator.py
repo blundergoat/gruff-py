@@ -3,7 +3,8 @@ from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
 from gruffpy.finding.rule_tier import RuleTier
 from gruffpy.finding.severity import Severity
-from gruffpy.scoring.score_calculator import ScoreCalculator
+from gruffpy.rule.catalog import catalog_definitions
+from gruffpy.scoring.score_calculator import STATIC_PILLARS, ScoreCalculator
 
 CORRELATED_STACK_FINDINGS = 4
 
@@ -27,6 +28,8 @@ def _finding(
     lines: int | None = None,
     symbol: str | None = "run",
     line: int | None = 1,
+    severity: Severity = Severity.WARNING,
+    confidence: Confidence = Confidence.HIGH,
 ) -> Finding:
     metadata = {}
     if lines is not None:
@@ -36,21 +39,71 @@ def _finding(
         message=f"{rule_id} hit",
         file_path="x.py",
         line=line,
-        severity=Severity.WARNING,
+        severity=severity,
         pillar=pillar,
         tier=RuleTier.V01,
-        confidence=Confidence.HIGH,
+        confidence=confidence,
         symbol=symbol,
         metadata=metadata,
     )
 
 
-def test_score_report_static_pillars_include_design_not_modernisation():
+def test_static_pillars_covers_every_catalog_pillar():
+    """Guard: a new rule may not introduce a pillar STATIC_PILLARS does not name.
+
+    An unnamed pillar joins the composite average only on runs where it has
+    findings, so the divisor changes between runs and fixing the last finding
+    in that pillar can lower the composite.
+    """
+    catalog_pillars = {definition.pillar.value for definition in catalog_definitions()}
+    catalog_pillars.update(secondary.value for definition in catalog_definitions() for secondary in definition.secondary_pillars)
+
+    assert catalog_pillars - set(STATIC_PILLARS) == set()
+
+
+def test_score_report_grades_every_static_pillar_with_no_findings():
     report = ScoreCalculator().calculate([])
     pillars = [score.pillar for score in report.pillars]
 
-    assert "design" in pillars
-    assert "modernisation" not in pillars
+    assert pillars == list(STATIC_PILLARS)
+    assert {"design", "modernisation", "correctness"} <= set(pillars)
+
+
+def test_fixing_the_last_finding_in_a_pillar_cannot_lower_the_composite():
+    """The divisor must not shrink when a pillar stops having findings.
+
+    Before the fix this scored 80.18 (B) with a divisor of 11 and 79.00 (C)
+    with a divisor of 10 - the user lost a grade band for fixing two findings.
+    """
+    noise = [
+        _finding(f"{pillar}.noise", pillar=Pillar(pillar), confidence=Confidence.MEDIUM, severity=Severity.ADVISORY)
+        for pillar in STATIC_PILLARS
+        if pillar != "modernisation"
+        for _ in range(7)
+    ]
+    modernisation = [_finding("modernisation.f-string-candidate", pillar=Pillar.MODERNISATION, severity=Severity.ADVISORY) for _ in range(2)]
+
+    before = ScoreCalculator().calculate(noise + modernisation)
+    after = ScoreCalculator().calculate(noise)
+
+    assert len(after.pillars) == len(before.pillars)
+    assert after.composite.score >= before.composite.score
+
+
+def test_fixing_the_last_correctness_finding_cannot_lower_the_composite():
+    noise = [
+        _finding(f"{pillar}.noise", pillar=Pillar(pillar), confidence=Confidence.MEDIUM, severity=Severity.ADVISORY)
+        for pillar in STATIC_PILLARS
+        if pillar != "correctness"
+        for _ in range(7)
+    ]
+    correctness = [_finding("correctness.unsafe-numeric-coercion", pillar=Pillar.CORRECTNESS, severity=Severity.ADVISORY) for _ in range(2)]
+
+    before = ScoreCalculator().calculate(noise + correctness)
+    after = ScoreCalculator().calculate(noise)
+
+    assert len(after.pillars) == len(before.pillars)
+    assert after.composite.score >= before.composite.score
 
 
 def test_file_score_max_lines_uses_function_length_findings():
@@ -80,7 +133,8 @@ def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
     # With the god-method composite retired, no synthetic design finding is
     # injected: the design pillar takes zero penalty and the real size/complexity
     # findings absorb the whole clustered weight, leaving the composite unchanged.
-    assert report.composite.score == 98.4
+    # 16 penalty points spread over the 12 scored pillars: (1200 - 16) / 12.
+    assert report.composite.score == 98.67
     pillar_penalties = {pillar.pillar: pillar.penalty for pillar in report.pillars}
     assert pillar_penalties["size"] == 4.0
     assert pillar_penalties["complexity"] == 12.0

@@ -12,6 +12,12 @@ from gruffpy.scoring.grade import Grade
 from gruffpy.scoring.pillar_score import PillarScore
 from gruffpy.scoring.score_report import ScoreReport
 
+# Every pillar a built-in rule can emit. The composite averages this whole set, so the divisor is
+# the same on every run of the same rule set. Listing fewer let a pillar join the average only when
+# it had findings and drop out when its last one was fixed, which lowered the composite for fixing
+# a finding whenever that pillar scored above the mean of the others.
+# `test_static_pillars_covers_every_catalog_pillar` fails if a new rule introduces a pillar missing
+# here. Order is presentation only.
 STATIC_PILLARS: tuple[str, ...] = (
     "size",
     "complexity",
@@ -23,6 +29,8 @@ STATIC_PILLARS: tuple[str, ...] = (
     "security",
     "sensitive-data",
     "test-quality",
+    "correctness",
+    "modernisation",
 )
 
 SEVERITY_WEIGHTS: dict[Severity, float] = {

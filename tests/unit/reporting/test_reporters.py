@@ -217,7 +217,9 @@ def test_text_reporter_keeps_family_contract_block_byte_for_value() -> None:
     rendered_text = TextReporter().render(_report())
 
     assert rendered_text.startswith("gruff-py 0.1.0-test analyse\n")
-    assert ("  Composite: A (95.20 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n") in rendered_text
+    # FAMILY-CONTRACT section 1 freezes the line shape, not the number. The one error finding
+    # costs security 48 points and the other 11 scored pillars stay at 100: (1152 / 12).
+    assert ("  Composite: A (96.00 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n") in rendered_text
     assert ("  [error] security.dangerous-function-call\n    src/app.py:12\n    Dangerous call to eval().\n") in rendered_text
 
 
