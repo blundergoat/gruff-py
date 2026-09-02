@@ -112,7 +112,23 @@ def _report(
     )
 
 
-def test_bounded_deep_scan_is_visible_in_every_analysis_renderer() -> None:
+_ANALYSIS_RENDERERS = {
+    "github": GithubAnnotationsReporter,
+    "hotspot": HotspotReporter,
+    "html": HtmlReporter,
+    "json": JsonReporter,
+    "markdown": MarkdownReporter,
+    "sarif": SarifReporter,
+    "text": TextReporter,
+}
+
+
+def _bounded_deep_scan_report() -> AnalysisReport:
+    """Build a report whose only diagnostic is a nonfatal bounded deep scan.
+
+    Returns:
+        A report carrying one bounded-deep-scan diagnostic for ``src/large.py``.
+    """
     diagnostic = RunDiagnostic(
         type="bounded-deep-scan",
         message=("path=src/large.py; lines=20001; bytes=2000001; maxLines=20000; maxBytes=2000000; override=config"),
@@ -120,24 +136,28 @@ def test_bounded_deep_scan_is_visible_in_every_analysis_renderer() -> None:
         line=1,
         invalidates_run=False,
     )
-    report = _report(diagnostics=(diagnostic,))
-    rendered = {
-        "json": JsonReporter().render(report),
-        "text": TextReporter().render(report),
-        "html": HtmlReporter().render(report),
-        "markdown": MarkdownReporter().render(report),
-        "github": GithubAnnotationsReporter().render(report),
-        "hotspot": HotspotReporter().render(report),
-        "sarif": SarifReporter().render(report),
-    }
+    return _report(diagnostics=(diagnostic,))
 
-    for output in rendered.values():
-        assert "bounded-deep-scan" in output.casefold()
-        assert "override=config" in output
 
-    assert "::notice file=src/large.py,title=bounded-deep-scan,line=1::" in rendered["github"]
-    sarif = json.loads(rendered["sarif"])
-    invocation = sarif["runs"][0]["invocations"][0]
+@pytest.mark.parametrize("renderer_name", sorted(_ANALYSIS_RENDERERS), ids=sorted(_ANALYSIS_RENDERERS))
+def test_bounded_deep_scan_is_visible_in_every_analysis_renderer(renderer_name: str) -> None:
+    """No surface may degrade a file silently, so every renderer states the budget note.
+
+    Args:
+        renderer_name: Key of the renderer under test in ``_ANALYSIS_RENDERERS``.
+    """
+    output = _ANALYSIS_RENDERERS[renderer_name]().render(_bounded_deep_scan_report())
+
+    assert "bounded-deep-scan" in output.casefold()
+    assert "override=config" in output
+
+
+def test_bounded_deep_scan_annotates_github_and_notes_sarif() -> None:
+    """The two machine surfaces carry the note in their own shape rather than as prose."""
+    report = _bounded_deep_scan_report()
+
+    assert "::notice file=src/large.py,title=bounded-deep-scan,line=1::" in GithubAnnotationsReporter().render(report)
+    invocation = json.loads(SarifReporter().render(report))["runs"][0]["invocations"][0]
     assert invocation["executionSuccessful"] is True
     assert invocation["toolExecutionNotifications"][0]["level"] == "note"
 

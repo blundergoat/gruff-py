@@ -135,115 +135,120 @@ def test_toml_entries_load_with_the_same_shape(tmp_path: Path) -> None:
     )
 
 
+# The case table is a module constant so the test itself stays readable at a glance.
+_REJECTION_CASES = [
+    (
+        "missing-reason",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env"),
+        ("sensitiveExclusions[0].reason", "reason"),
+    ),
+    (
+        "blank-reason",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"   "'),
+        ("sensitiveExclusions[0].reason", "reason"),
+    ),
+    (
+        "wildcard-rule",
+        "sensitiveExclusions:\n" + _entry(rule='"*"', path="secrets/aws.env", reason='"Synthetic fixture."'),
+        ("sensitiveExclusions[0].rule", "metacharacter"),
+    ),
+    (
+        "pillar-selector-rule",
+        "sensitiveExclusions:\n" + _entry(rule="sensitive-data", path="secrets/aws.env", reason='"Synthetic."'),
+        ("sensitiveExclusions[0].rule", "selector"),
+    ),
+    (
+        "glob-selector-rule",
+        "sensitiveExclusions:\n" + _entry(rule='"sensitive-data.*"', path="secrets/aws.env", reason='"Synthetic."'),
+        ("sensitiveExclusions[0].rule", "metacharacter"),
+    ),
+    (
+        "unknown-rule",
+        "sensitiveExclusions:\n"
+        + _entry(
+            rule="sensitive-data.not-a-real-rule",
+            path="secrets/aws.env",
+            reason='"Synthetic."',
+        ),
+        ("sensitiveExclusions[0].rule", "unknown rule id"),
+    ),
+    (
+        "non-sensitive-rule",
+        "sensitiveExclusions:\n" + _entry(rule=_NON_SENSITIVE_RULE, path="secrets/aws.env", reason='"Synthetic."'),
+        ("sensitiveExclusions[0].rule", "sensitive-data"),
+    ),
+    (
+        "absolute-path",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"/etc/secrets/aws.env"', reason='"Synthetic."'),
+        ("sensitiveExclusions[0].path", "absolute"),
+    ),
+    (
+        "windows-absolute-path",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"C:\\\\secrets\\\\aws.env"', reason='"Synthetic."'),
+        ("sensitiveExclusions[0].path", "absolute"),
+    ),
+    (
+        "parent-escape-path",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"../secrets/aws.env"', reason='"Synthetic."'),
+        ("sensitiveExclusions[0].path", "traverses"),
+    ),
+    (
+        "glob-path",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"secrets/*.env"', reason='"Synthetic."'),
+        ("sensitiveExclusions[0].path", "glob"),
+    ),
+    (
+        "message-contains-matching",
+        "sensitiveExclusions:\n"
+        + _entry(
+            rule=_AWS_RULE,
+            path="secrets/aws.env",
+            message_contains='"AKIA"',
+            reason='"Synthetic."',
+        ),
+        ("sensitiveExclusions[0]", "message_contains"),
+    ),
+    (
+        "camel-case-message-matching",
+        "sensitiveExclusions:\n"
+        + _entry(
+            rule=_AWS_RULE,
+            path="secrets/aws.env",
+            messageContains='"AKIA"',
+            reason='"Synthetic."',
+        ),
+        ("sensitiveExclusions[0]", "messageContains"),
+    ),
+    (
+        "value-matching",
+        "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", value='"AKIA"', reason='"Synthetic."'),
+        ("sensitiveExclusions[0]", "value"),
+    ),
+    (
+        "preview-matching",
+        "sensitiveExclusions:\n"
+        + _entry(
+            rule=_AWS_RULE,
+            path="secrets/aws.env",
+            preview='"[redacted:aws-access-key]"',
+            reason='"Synthetic."',
+        ),
+        ("sensitiveExclusions[0]", "preview"),
+    ),
+    (
+        "duplicate-scope",
+        "sensitiveExclusions:\n"
+        + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"First rationale."')
+        + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"Second rationale."'),
+        ("sensitiveExclusions[1]", "duplicate"),
+    ),
+]
+
+
 @pytest.mark.parametrize(
     ("case_id", "body", "mentions"),
-    [
-        (
-            "missing-reason",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env"),
-            ("sensitiveExclusions[0].reason", "reason"),
-        ),
-        (
-            "blank-reason",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"   "'),
-            ("sensitiveExclusions[0].reason", "reason"),
-        ),
-        (
-            "wildcard-rule",
-            "sensitiveExclusions:\n" + _entry(rule='"*"', path="secrets/aws.env", reason='"Synthetic fixture."'),
-            ("sensitiveExclusions[0].rule", "metacharacter"),
-        ),
-        (
-            "pillar-selector-rule",
-            "sensitiveExclusions:\n" + _entry(rule="sensitive-data", path="secrets/aws.env", reason='"Synthetic."'),
-            ("sensitiveExclusions[0].rule", "selector"),
-        ),
-        (
-            "glob-selector-rule",
-            "sensitiveExclusions:\n" + _entry(rule='"sensitive-data.*"', path="secrets/aws.env", reason='"Synthetic."'),
-            ("sensitiveExclusions[0].rule", "metacharacter"),
-        ),
-        (
-            "unknown-rule",
-            "sensitiveExclusions:\n"
-            + _entry(
-                rule="sensitive-data.not-a-real-rule",
-                path="secrets/aws.env",
-                reason='"Synthetic."',
-            ),
-            ("sensitiveExclusions[0].rule", "unknown rule id"),
-        ),
-        (
-            "non-sensitive-rule",
-            "sensitiveExclusions:\n" + _entry(rule=_NON_SENSITIVE_RULE, path="secrets/aws.env", reason='"Synthetic."'),
-            ("sensitiveExclusions[0].rule", "sensitive-data"),
-        ),
-        (
-            "absolute-path",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"/etc/secrets/aws.env"', reason='"Synthetic."'),
-            ("sensitiveExclusions[0].path", "absolute"),
-        ),
-        (
-            "windows-absolute-path",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"C:\\\\secrets\\\\aws.env"', reason='"Synthetic."'),
-            ("sensitiveExclusions[0].path", "absolute"),
-        ),
-        (
-            "parent-escape-path",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"../secrets/aws.env"', reason='"Synthetic."'),
-            ("sensitiveExclusions[0].path", "traverses"),
-        ),
-        (
-            "glob-path",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path='"secrets/*.env"', reason='"Synthetic."'),
-            ("sensitiveExclusions[0].path", "glob"),
-        ),
-        (
-            "message-contains-matching",
-            "sensitiveExclusions:\n"
-            + _entry(
-                rule=_AWS_RULE,
-                path="secrets/aws.env",
-                message_contains='"AKIA"',
-                reason='"Synthetic."',
-            ),
-            ("sensitiveExclusions[0]", "message_contains"),
-        ),
-        (
-            "camel-case-message-matching",
-            "sensitiveExclusions:\n"
-            + _entry(
-                rule=_AWS_RULE,
-                path="secrets/aws.env",
-                messageContains='"AKIA"',
-                reason='"Synthetic."',
-            ),
-            ("sensitiveExclusions[0]", "messageContains"),
-        ),
-        (
-            "value-matching",
-            "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env", value='"AKIA"', reason='"Synthetic."'),
-            ("sensitiveExclusions[0]", "value"),
-        ),
-        (
-            "preview-matching",
-            "sensitiveExclusions:\n"
-            + _entry(
-                rule=_AWS_RULE,
-                path="secrets/aws.env",
-                preview='"[redacted:aws-access-key]"',
-                reason='"Synthetic."',
-            ),
-            ("sensitiveExclusions[0]", "preview"),
-        ),
-        (
-            "duplicate-scope",
-            "sensitiveExclusions:\n"
-            + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"First rationale."')
-            + _entry(rule=_AWS_RULE, path="secrets/aws.env", reason='"Second rationale."'),
-            ("sensitiveExclusions[1]", "duplicate"),
-        ),
-    ],
+    _REJECTION_CASES,
+    ids=[case[0] for case in _REJECTION_CASES],
 )
 def test_rejected_entry_names_its_index_and_offending_key(
     tmp_path: Path,
@@ -251,7 +256,14 @@ def test_rejected_entry_names_its_index_and_offending_key(
     body: str,
     mentions: tuple[str, ...],
 ) -> None:
-    """Every contract rejection stops the run with a diagnostic the user can act on."""
+    """Every contract rejection stops the run with a diagnostic the user can act on.
+
+    Args:
+        tmp_path: Project root the malformed config is written into.
+        case_id: Name of the rejection case, reported when the assertion fails.
+        body: Config text expected to be refused.
+        mentions: Substrings the diagnostic must contain, naming the entry and the offending key.
+    """
     _yaml(tmp_path, body)
 
     with pytest.raises(ConfigError) as excinfo:
@@ -276,7 +288,11 @@ def test_entry_must_be_a_table(tmp_path: Path) -> None:
 
 
 def test_rejection_is_fatal_even_in_the_default_non_strict_scan(tmp_path: Path) -> None:
-    """Unknown rule keys only warn, but an unreviewable suppression always stops the scan."""
+    """Unknown rule keys only warn, but an unreviewable suppression always stops the scan.
+
+    Args:
+        tmp_path: Project root carrying a suppression entry with no rationale.
+    """
     _yaml(
         tmp_path,
         "sensitiveExclusions:\n" + _entry(rule=_AWS_RULE, path="secrets/aws.env"),

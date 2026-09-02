@@ -31,7 +31,14 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 
 
 @click.command("hook", help="Run gruff-py analysis for an agent hook.")
-@click.option("--format", "hook_format", type=click.Choice(["json"]), default="json")
+# The flag stays accepted and Choice-validated; the callback never used its value.
+@click.option(
+    "--format",
+    "hook_format",
+    type=click.Choice(["json"]),
+    default="json",
+    expose_value=False,
+)
 @click.option("--capabilities", is_flag=True, default=False, help="Emit hook capabilities JSON.")
 @click.option(
     "--changed-ranges",
@@ -73,7 +80,6 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 @click.argument("paths", nargs=-1)
 # gruff: disable-next=docs.missing-param-doc -- option help= text documents each flag.
 def hook(
-    hook_format: str,
     capabilities: bool,
     changed_ranges: str,
     diff_ref: str,
@@ -86,7 +92,47 @@ def hook(
     paths: tuple[str, ...],
 ) -> None:
     """Run the additive ``gruff.hook.v1`` agent-hook contract."""
-    del hook_format  # --format currently only accepts "json"; reserved for future formats.
+    _execute_hook(
+        capabilities=capabilities,
+        changed_ranges=changed_ranges,
+        diff_ref=diff_ref,
+        hook_baseline_path=hook_baseline_path,
+        config_path=config_path,
+        no_config=no_config,
+        deep_scan_budget=deep_scan_budget,
+        include_ignored=include_ignored,
+        exclude_rule=exclude_rule,
+        paths=paths,
+    )
+
+
+def _execute_hook(
+    *,
+    capabilities: bool,
+    changed_ranges: str,
+    diff_ref: str,
+    hook_baseline_path: Path | None,
+    config_path: Path | None,
+    no_config: bool,
+    deep_scan_budget: str,
+    include_ignored: bool,
+    exclude_rule: tuple[str, ...],
+    paths: tuple[str, ...],
+) -> None:
+    """Run one hook invocation and exit, so the decorated command stays a thin entry point.
+
+    Args:
+        capabilities: When True, emit the capabilities payload and exit before any analysis.
+        changed_ranges: Explicit changed line ranges such as ``3-3,8-10``; empty for none.
+        diff_ref: Git ref for new-only comparison; empty when no ``--diff`` was given.
+        hook_baseline_path: Hook or analysis JSON supplying base identities, or None.
+        config_path: Explicit config file, or None to discover the project default.
+        no_config: Whether config discovery is disabled.
+        include_ignored: Whether default-ignored and gitignored paths are scanned.
+        deep_scan_budget: Raw ``--deep-scan-budget`` text, or empty when unset.
+        exclude_rule: Execution-level rule ids to skip, comma-separated or repeated.
+        paths: Requested hook paths; empty means the current directory.
+    """
     # Lazy import avoids a cli <-> cli_hook import cycle at module load.
     from gruffpy.cli import _write_stdout
 

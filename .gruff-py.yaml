@@ -212,7 +212,14 @@ selection:
 # Write each entry by hand with rule, path, and reason; symbol is optional.
 # No preview or matched value is ever turned into an entry automatically,
 # and every entry reports how many findings it suppressed.
-sensitiveExclusions: []
+sensitiveExclusions:
+  # npm records one integrity digest per resolved package. They are base64 SHA-512 checksums of
+  # published tarballs, high-entropy by construction and carrying no secret. The lockfile is excluded
+  # here rather than by lowering the entropy threshold, which would weaken the detector for real
+  # source. A rule-level lockfile guard is a family question and stays in backlog.md.
+  - rule: sensitive-data.high-entropy-string
+    path: package-lock.json
+    reason: npm integrity digests over published tarballs; checksums, not credentials.
 rules:
   # Cognitive complexity
   complexity.cognitive:
@@ -343,12 +350,19 @@ rules:
   naming.boolean-prefix:
     enabled: true
     options:
+      # `_fallback_applies_at` is an idiomatic subject-verb English predicate, the calibration class
+      # backlog.md records for this rule (search: `predicate-verb vocabulary in gruff-py`): the closed
+      # auxiliary-verb list cannot express it, and Python's own stdlib names booleans this way. It is
+      # accepted here rather than renamed because gruff-spec's M15 review evidence pins
+      # `def _fallback_applies_at(` as a live semantic anchor, and renaming to satisfy a style
+      # advisory would break immutable evidence. Extending the vocabulary is the backlog item.
       acceptedBooleanNames:
       - all
       - apply
       - check
       - dev
       - enabled
+      - fallback_applies_at
       - force
       - fresh
       - harness

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from gruffpy.config.analysis_config import DeepScanBudget
+from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
 from gruffpy.source.source_file import SourceFile
 
@@ -39,20 +40,38 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(tmp_path: Path, monkeyp
     assert unit.diagnostics[0].message == "field 'value' is required for Constant"
 
 
-def test_python_source_over_either_bound_degrades_before_ast(
-    tmp_path: Path,
-) -> None:
+def _bounded_python_unit(tmp_path: Path) -> AnalysisUnit:
+    """Parse a source that crosses the line bound, so the budget degrades it before the AST.
+
+    Args:
+        tmp_path: Directory the oversized source is written into.
+
+    Returns:
+        The parsed unit, bounded by a one-line CLI budget.
+    """
     source_path = tmp_path / "large.py"
     source_path.write_text("value = 1\nvalue = 2\n", encoding="utf-8")
-
-    unit = PythonFileParser().parse(
+    return PythonFileParser().parse(
         SourceFile(absolute_path=str(source_path), display_path="large.py"),
         DeepScanBudget(enabled=True, max_lines=1, max_bytes=10_000, override="cli"),
     )
 
+
+def test_python_source_over_either_bound_degrades_before_ast(
+    tmp_path: Path,
+) -> None:
+    unit = _bounded_python_unit(tmp_path)
+
     assert unit.tree is None
     assert unit.has_parse_errors() is False
     assert unit.is_deep_scan_bounded() is True
+
+
+def test_bounded_python_source_reports_a_nonfatal_budget_diagnostic(
+    tmp_path: Path,
+) -> None:
+    unit = _bounded_python_unit(tmp_path)
+
     assert unit.diagnostics[0].type == "bounded-deep-scan"
     assert unit.diagnostics[0].non_fatal is True
     assert (

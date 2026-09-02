@@ -41,7 +41,7 @@ def _write_corpus(project_root: Path) -> None:
     (secrets / "clean.env").write_text("LOG_LEVEL=debug\n")
 
 
-def _analyse(project_root: Path, *, use_config: bool) -> dict[str, Any]:
+def _analyse(*, use_config: bool) -> dict[str, Any]:
     """Run ``analyse --format json`` over the corpus and return the parsed report."""
     arguments = ["analyse", "--format", "json", "--fail-on", "none"]
     if not use_config:
@@ -64,15 +64,27 @@ def _write_config(project_root: Path, entries: str) -> None:
 
 @pytest.fixture
 def corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Build the synthetic corpus in a temp project and make it the working directory."""
+    """Build the synthetic corpus in a temp project and make it the working directory.
+
+    Args:
+        tmp_path: Empty directory used as the project root for one test.
+        monkeypatch: Fixture used to make that directory the process working directory.
+
+    Returns:
+        The project root the corpus was written into.
+    """
     monkeypatch.chdir(tmp_path)
     _write_corpus(tmp_path)
     return tmp_path
 
 
 def test_exact_rule_and_path_removes_only_that_scope(corpus: Path) -> None:
-    """Case ``exact-rule-and-path``: every occurrence in the named file goes, nothing else."""
-    baseline = _analyse(corpus, use_config=False)
+    """Case ``exact-rule-and-path``: every occurrence in the named file goes, nothing else.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
+    baseline = _analyse(use_config=False)
     _write_config(
         corpus,
         "sensitiveExclusions:\n"
@@ -81,7 +93,7 @@ def test_exact_rule_and_path_removes_only_that_scope(corpus: Path) -> None:
         "    reason: Synthetic AWS key used by the redaction corpus; not a live credential.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     removed = _finding_scopes(baseline) - _finding_scopes(configured)
     assert removed == {scope for scope in _finding_scopes(baseline) if scope[0] == _AWS_RULE and scope[1] == "secrets/aws.env"}
@@ -98,13 +110,17 @@ def test_exact_rule_and_path_removes_only_that_scope(corpus: Path) -> None:
 
 
 def test_same_rule_in_another_file_and_other_rules_keep_reporting(corpus: Path) -> None:
-    """The sibling file and the second sensitive rule in the excluded file both survive."""
+    """The sibling file and the second sensitive rule in the excluded file both survive.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws.env\n    reason: Synthetic AWS key used by the redaction corpus.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     surviving = {(finding["ruleId"], finding["file"]) for finding in configured["findings"]}
     assert (_AWS_RULE, "secrets/aws-sibling.env") in surviving
@@ -113,22 +129,30 @@ def test_same_rule_in_another_file_and_other_rules_keep_reporting(corpus: Path) 
 
 
 def test_scope_matching_nothing_reports_zero_without_failing(corpus: Path) -> None:
-    """Case ``scope-matching-nothing``: fixing the underlying problem never breaks a build."""
-    baseline = _analyse(corpus, use_config=False)
+    """Case ``scope-matching-nothing``: fixing the underlying problem never breaks a build.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
+    baseline = _analyse(use_config=False)
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/clean.env\n    reason: Retained while the fixture is being removed.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     assert _finding_scopes(configured) == _finding_scopes(baseline)
     assert configured["suppressions"][0]["suppressed"] == 0
 
 
 def test_symbol_narrows_the_scope_to_nothing_on_this_pillar(corpus: Path) -> None:
-    """Case ``symbol-narrows-scope``: these findings carry no symbol, so nothing matches."""
-    baseline = _analyse(corpus, use_config=False)
+    """Case ``symbol-narrows-scope``: these findings carry no symbol, so nothing matches.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
+    baseline = _analyse(use_config=False)
     _write_config(
         corpus,
         "sensitiveExclusions:\n"
@@ -138,7 +162,7 @@ def test_symbol_narrows_the_scope_to_nothing_on_this_pillar(corpus: Path) -> Non
         "    reason: Narrowed to one symbol while the fixture is refactored.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     assert _finding_scopes(configured) == _finding_scopes(baseline)
     assert configured["suppressions"][0]["symbol"] == "SyntheticFixtureSymbol"
@@ -146,8 +170,12 @@ def test_symbol_narrows_the_scope_to_nothing_on_this_pillar(corpus: Path) -> Non
 
 
 def test_two_distinct_entries_each_report_their_own_count(corpus: Path) -> None:
-    """Case ``two-distinct-entries``: independent scopes keep independent counts."""
-    baseline = _analyse(corpus, use_config=False)
+    """Case ``two-distinct-entries``: independent scopes keep independent counts.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
+    baseline = _analyse(use_config=False)
     _write_config(
         corpus,
         "sensitiveExclusions:\n"
@@ -159,7 +187,7 @@ def test_two_distinct_entries_each_report_their_own_count(corpus: Path) -> None:
         "    reason: Synthetic JWT in the redaction corpus.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     removed = _finding_scopes(baseline) - _finding_scopes(configured)
     assert removed == {
@@ -169,14 +197,18 @@ def test_two_distinct_entries_each_report_their_own_count(corpus: Path) -> None:
 
 
 def test_same_rule_other_file_survives_when_only_the_sibling_is_excluded(corpus: Path) -> None:
-    """Case ``same-rule-other-file-survives``: excluding one file leaves the other reporting."""
-    baseline = _analyse(corpus, use_config=False)
+    """Case ``same-rule-other-file-survives``: excluding one file leaves the other reporting.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
+    baseline = _analyse(use_config=False)
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws-sibling.env\n    reason: Only the sibling fixture is accepted.\n",
     )
 
-    configured = _analyse(corpus, use_config=True)
+    configured = _analyse(use_config=True)
 
     removed = _finding_scopes(baseline) - _finding_scopes(configured)
     assert removed == {scope for scope in _finding_scopes(baseline) if scope[0] == _AWS_RULE and scope[1] == "secrets/aws-sibling.env"}
@@ -184,7 +216,11 @@ def test_same_rule_other_file_survives_when_only_the_sibling_is_excluded(corpus:
 
 
 def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None:
-    """A suppressed finding stops gating the build, exactly like the inline directive channel."""
+    """A suppressed finding stops gating the build, exactly like the inline directive channel.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     unconfigured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "error", "--no-config", "secrets"])
     assert unconfigured.exit_code == 1, unconfigured.output
 
@@ -209,7 +245,11 @@ def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None
 
 
 def test_text_output_states_the_suppressed_total_and_its_rationale(corpus: Path) -> None:
-    """Terminal users see the family total, so a configured suppression is never invisible."""
+    """Terminal users see the family total, so a configured suppression is never invisible.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws.env\n    reason: Synthetic AWS key used by the redaction corpus.\n",
@@ -223,7 +263,11 @@ def test_text_output_states_the_suppressed_total_and_its_rationale(corpus: Path)
 
 
 def test_summary_text_states_the_same_suppressed_total_as_analyse(corpus: Path) -> None:
-    """Section 13a: ``summary`` filters, so it publishes the count ``analyse`` publishes."""
+    """Section 13a: ``summary`` filters, so it publishes the count ``analyse`` publishes.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws.env\n    reason: Synthetic AWS key used by the redaction corpus.\n",
@@ -241,7 +285,11 @@ def test_summary_text_states_the_same_suppressed_total_as_analyse(corpus: Path) 
 
 
 def test_no_reported_field_carries_matched_value_material(corpus: Path) -> None:
-    """Section 5 forbids value material anywhere in the report, audit rows included."""
+    """Section 5 forbids value material anywhere in the report, audit rows included.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws.env\n    reason: Synthetic AWS key used by the redaction corpus.\n",
@@ -254,7 +302,11 @@ def test_no_reported_field_carries_matched_value_material(corpus: Path) -> None:
 
 
 def test_rejected_entry_stops_the_json_run_with_a_config_error(corpus: Path) -> None:
-    """A machine consumer gets a parseable config-error payload and exit 2."""
+    """A machine consumer gets a parseable config-error payload and exit 2.
+
+    Args:
+        corpus: Synthetic secrets corpus, already the working directory.
+    """
     _write_config(
         corpus,
         f"sensitiveExclusions:\n  - rule: {_AWS_RULE}\n    path: secrets/aws.env\n    message_contains: AKIA\n    reason: Synthetic fixture.\n",

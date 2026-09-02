@@ -49,22 +49,45 @@ def test_finding_counts_by_rule_returns_empty_list_when_no_findings():
     assert rows == []
 
 
-def test_machine_contract_pins_line_only_and_scanner_column_locations() -> None:
+_SCANNER_COLUMN = 4
+
+
+def _location_findings() -> tuple[dict, dict]:
+    """Serialise one line-only and one scanner-pinpointed finding through the machine contract.
+
+    Returns:
+        The two serialised findings, line-only first.
+    """
     payload = _report(
         (
             _finding(rule_id="line.only", line=0),
-            _finding(rule_id="scanner.pinpointed", line=7, column=4),
+            _finding(rule_id="scanner.pinpointed", line=7, column=_SCANNER_COLUMN),
         )
     ).to_dict()
-
     line_only, pinpointed = payload["findings"]
+    return line_only, pinpointed
+
+
+def test_machine_contract_pins_a_line_only_location() -> None:
+    line_only, _ = _location_findings()
+
     assert line_only["file"] == "src/x.py"
     assert line_only["line"] == 1
     assert line_only["metadata"]["locationPrecision"] == "line-only"
+
+
+def test_machine_contract_omits_the_keys_a_line_only_finding_cannot_fill() -> None:
+    line_only, _ = _location_findings()
+
     assert "column" not in line_only
     assert "symbol" not in line_only
     assert "filePath" not in line_only
-    assert pinpointed["column"] == 4
+
+
+def test_machine_contract_pins_a_scanner_column_location() -> None:
+    _, pinpointed = _location_findings()
+
+    assert pinpointed["column"] == _SCANNER_COLUMN
     assert pinpointed["metadata"]["locationPrecision"] == "scanner-pinpointed"
 
 

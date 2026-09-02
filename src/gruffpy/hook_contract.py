@@ -316,6 +316,9 @@ def stable_identities_from_git_base(
         no_config: Whether config discovery is disabled.
         include_ignored: Whether default-ignored and gitignored paths are
             included in the base analysis.
+        deep_scan_budget: Raw ``--deep-scan-budget`` text forwarded to the base
+            analysis, so the base and working trees are bounded identically; empty
+            when the hook passed no override.
 
     Returns:
         Hook stable identities present in the requested base tree.

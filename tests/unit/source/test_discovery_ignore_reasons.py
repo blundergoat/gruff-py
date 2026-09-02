@@ -10,6 +10,17 @@ def _write(path: Path, text: str = "") -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _write_hidden_sources(parent: Path, directory_names: tuple[str, ...]) -> None:
+    """Place one Python file inside each named directory, so discovery has something to skip.
+
+    Args:
+        parent: Directory the named directories are created under.
+        directory_names: Directory names the fallback policy is expected to ignore.
+    """
+    for name in directory_names:
+        _write(parent / name / "hidden.py")
+
+
 def test_classify_reports_config_source_and_matched_pattern(tmp_path: Path) -> None:
     _write(tmp_path / "gen" / "out.py")
 
@@ -122,8 +133,7 @@ def test_python_fallback_exceptions_apply_at_any_depth(tmp_path: Path) -> None:
         "htmlcov",
         "venv",
     )
-    for name in ignored_names:
-        _write(tmp_path / "nested" / name / "hidden.py")
+    _write_hidden_sources(tmp_path / "nested", ignored_names)
     _write(tmp_path / "cache" / "visible.py")
     _write(tmp_path / "generated" / "visible.py")
     _write(tmp_path / ".goat-flow" / "visible.py")

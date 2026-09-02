@@ -51,17 +51,26 @@ def _live_catalog_total_in(relative_doc_path: Path) -> str | None:
     return live_total_match.group(0)
 
 
-def test_rendered_rule_docs_include_catalog_details() -> None:
-    """Keep the generated catalog useful for users choosing and fixing rules.
+def test_rendered_rule_docs_carry_the_catalog_structure() -> None:
+    """Keep the generated catalog navigable for a user looking a rule up.
 
     Returns:
-        None; missing catalog guidance raises an assertion for the reviewer.
+        None; a missing heading raises an assertion for the reviewer.
     """
     assert _RENDERED_DOCS.startswith("# Rules\n\n")
     assert "## Rule Details" in _RENDERED_DOCS
     assert "### `complexity.cyclomatic`" in _RENDERED_DOCS
-    assert "Formula provenance: Radon-aligned decision-point counting." in _RENDERED_DOCS
+
+
+def test_rendered_rule_docs_explain_how_a_rule_measures_and_misfires() -> None:
+    """Keep the generated catalog useful for a user judging and fixing a finding.
+
+    Returns:
+        None; missing provenance or false-positive guidance raises an assertion.
+    """
     threshold_metadata = "Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`"
+
+    assert "Formula provenance: Radon-aligned decision-point counting." in _RENDERED_DOCS
     assert threshold_metadata in _RENDERED_DOCS
     assert "- Common false-positive shapes:" in _RENDERED_DOCS
     assert "A declarative builder dominated by one literal table" in _RENDERED_DOCS

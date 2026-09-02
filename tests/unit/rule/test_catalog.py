@@ -120,6 +120,16 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
 
 
 def test_medium_and_low_confidence_rules_publish_false_positive_guidance() -> None:
+    """Every heuristic rule must tell a user where it misfires and what to do instead.
+
+    A medium or low confidence rule will be wrong sometimes, so shipping one without
+    ``falsePositiveShapes`` leaves a user with a finding they cannot judge. The two passes below
+    separate the two ways that fails: a rule carrying no shapes at all, and a rule carrying a shape
+    whose text or mitigation is blank, which reads as guidance but answers nothing.
+
+    Returns:
+        None; either list being non-empty raises an assertion naming the offending rule ids.
+    """
     heuristic_definitions = [definition for definition in _ALL_DEFINITIONS if definition.confidence in {Confidence.MEDIUM, Confidence.LOW}]
     missing = [definition.id for definition in heuristic_definitions if not documentation_for_rule(definition.id).false_positive_shapes]
     incomplete = [

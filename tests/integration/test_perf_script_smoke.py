@@ -96,21 +96,59 @@ def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
     assert {"cold-start", "analyse-src-text"}.issubset(workload_names)
 
 
-def test_perf_script_payload_binds_runtime_source_and_host(
+_GIT_COMMIT_LENGTH = 40
+_DIGEST_LENGTH = 64
+
+
+def _section(payload: dict[str, object], *keys: str) -> dict[str, object]:
+    """Read one nested section of the perf payload, so a shape change fails here rather than later.
+
+    Args:
+        payload: Parsed perf-script payload.
+        keys: Section names to walk, outermost first.
+
+    Returns:
+        The addressed section.
+    """
+    section: object = payload
+    for key in keys:
+        assert isinstance(section, dict), keys
+        section = section[key]
+    assert isinstance(section, dict), keys
+    return section
+
+
+def test_perf_script_payload_describes_its_host(
     quick_run_payload: dict[str, object],
 ) -> None:
-    host = quick_run_payload["host"]
-    source = quick_run_payload["source"]
-    runtime_source = source["runtimeSource"]
+    """A timing record is only comparable when the machine that produced it is recorded.
+
+    Args:
+        quick_run_payload: Parsed payload from one quick perf run.
+    """
+    host = _section(quick_run_payload, "host")
 
     assert host["platform"]
     assert host["uname"]
     assert host["cpu"]
-    assert len(source["gitCommit"]) == 40
+
+
+def test_perf_script_payload_binds_its_runtime_source(
+    quick_run_payload: dict[str, object],
+) -> None:
+    """A timing record must name the exact source revision it measured.
+
+    Args:
+        quick_run_payload: Parsed payload from one quick perf run.
+    """
+    source = _section(quick_run_payload, "source")
+    runtime_source = _section(source, "runtimeSource")
+
+    assert len(source["gitCommit"]) == _GIT_COMMIT_LENGTH
     assert isinstance(source["gitDirty"], bool)
     assert runtime_source["includedPaths"] == ["src/gruffpy", "pyproject.toml", "uv.lock"]
     assert runtime_source["fileCount"] > 0
-    assert len(runtime_source["digest"]) == 64
+    assert len(runtime_source["digest"]) == _DIGEST_LENGTH
 
 
 def test_perf_script_workloads_have_well_formed_timing_record(

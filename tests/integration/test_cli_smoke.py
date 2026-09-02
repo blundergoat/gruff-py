@@ -380,54 +380,99 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     assert hunk_payload["summary"]["suppressedFindings"] >= 1
 
 
+_CHANGED_SCOPE_BASE = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+_BETA_DEFINITION_LINE = 5
+
+
+def _three_symbol_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a module whose alpha, beta, and gamma functions each carry documentation debt.
+
+    Definition lines are alpha:1, beta:5, gamma:9, so a change on line 6 sits inside beta's body.
+
+    Args:
+        tmp_path: Directory used as the project root.
+        monkeypatch: Fixture used to make that directory the working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("def alpha():\n    return 1\n\n\ndef beta():\n    return 2\n\n\ndef gamma():\n    return 3\n")
+
+
+def _scan(*arguments: str) -> dict:
+    """Run one analyse invocation and return its parsed report.
+
+    Args:
+        arguments: Extra arguments appended to the shared changed-scope base command.
+
+    Returns:
+        The parsed JSON report.
+    """
+    result = CliRunner().invoke(main, [*_CHANGED_SCOPE_BASE, *arguments])
+    assert result.exit_code == 0, result.output
+    payload: dict = json.loads(result.output)
+    return payload
+
+
+def test_analyse_full_scan_carries_no_changed_region_counters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run the user did not scope reports every symbol and no diff accounting.
+
+    Args:
+        tmp_path: Project root for this run.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+
+    full_payload = _scan("src/sample.py")
+
+    assert {"alpha", "beta", "gamma"} <= {finding.get("symbol") for finding in full_payload["findings"]}
+    assert "suppressedFindings" not in full_payload["summary"]
+    assert "diff" not in full_payload
+
+
+def test_analyse_changed_scope_symbol_surfaces_only_the_edited_symbol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Symbol scope widens a line edit to its whole declaration and leaves siblings alone.
+
+    Args:
+        tmp_path: Project root for this run.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+
+    scoped_payload = _scan("--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py")
+
+    surfaced_symbols = {finding.get("symbol") for finding in scoped_payload["findings"]}
+    assert "beta" in surfaced_symbols
+    assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
+    assert any(finding["line"] == _BETA_DEFINITION_LINE for finding in scoped_payload["findings"])
+
+
 def test_analyse_changed_scope_symbol_accounts_for_every_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The agent hook trusts native changed-region results and does not filter again by line.
+    """No finding is dropped silently: surfaced plus suppressed accounts for the full-scan total.
 
-    # Without display filters, each full-scan finding is surfaced or counted as diff-filtered.
-    # Both counters must be present and equal for the terminal user's selected symbol.
-    monkeypatch.chdir(tmp_path)
-    src = tmp_path / "src"
-    src.mkdir()
-    # Three undocumented functions produce findings across the alpha/beta/gamma symbols.
+    The totals are read from the runs rather than hard-coded, so the check survives catalogue growth.
 
-    # Module-docstring and README debt may also appear; definition lines are alpha:1, beta:5,
-    # gamma:9). N is read from the run, not hard-coded, so it survives catalogue growth.
-    (src / "sample.py").write_text("def alpha():\n    return 1\n\n\ndef beta():\n    return 2\n\n\ndef gamma():\n    return 3\n")
-    base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+    Args:
+        tmp_path: Project root for both runs.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+    total = len(_scan("src/sample.py")["findings"])
 
-    full = CliRunner().invoke(main, [*base, "src/sample.py"])
-    # Edit beta's body (line 6); symbol scope widens it to the whole beta declaration,
-    # surfacing beta's signature-line (5) finding from a change on line 6.
-    scoped = CliRunner().invoke(
-        main,
-        [*base, "--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py"],
-    )
+    scoped_payload = _scan("--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py")
 
-    assert full.exit_code == 0, full.output
-    assert scoped.exit_code == 0, scoped.output
-    full_payload = json.loads(full.output)
-    scoped_payload = json.loads(scoped.output)
-
-    total = len(full_payload["findings"])
-    assert {"alpha", "beta", "gamma"} <= {finding.get("symbol") for finding in full_payload["findings"]}
-    # A full scan carries neither changed-region counter.
-    assert "suppressedFindings" not in full_payload["summary"]
-    assert "diff" not in full_payload
-
-    surfaced_symbols = {finding.get("symbol") for finding in scoped_payload["findings"]}
     suppressed = scoped_payload["summary"]["suppressedFindings"]
-    # Widening surfaces the edited symbol (its def-line finding) and nothing else.
-    assert "beta" in surfaced_symbols
-    assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
-    assert any(finding["line"] == 5 for finding in scoped_payload["findings"])
-    # No finding is dropped silently: surfaced + suppressed accounts for all of N.
     assert len(scoped_payload["findings"]) + suppressed == total
     assert suppressed >= 1
-    # Both canonical counters are present and equal.
-    assert "suppressedFindings" in scoped_payload["summary"]
     assert scoped_payload["diff"]["filteredFindings"] == suppressed
 
 
@@ -615,14 +660,27 @@ _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
 _REQUIRED_RULE_DOCUMENTATION_KEYS = frozenset({"rationale", "fixGuidance", "confidenceRationale"})
 
 
-def test_cli_list_rules_json_lists_rule_metadata():
+def _list_rules_payload() -> dict:
+    """Run ``list-rules --format json`` and return its parsed catalogue.
+
+    Returns:
+        The parsed catalogue payload.
+    """
     result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
     assert result.exit_code == 0, result.output
+    payload: dict = json.loads(result.output)
+    return payload
 
-    payload = json.loads(result.output)
-    rule = payload["rules"][0]
+
+def test_cli_list_rules_json_lists_rule_metadata():
+    rule = _list_rules_payload()["rules"][0]
+
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
+
+
+def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
+    payload = _list_rules_payload()
 
     heuristic_rule = next(candidate for candidate in payload["rules"] if candidate["id"] == "complexity.halstead-volume")
     assert heuristic_rule["falsePositiveShapes"]

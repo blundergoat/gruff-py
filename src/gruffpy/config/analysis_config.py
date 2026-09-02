@@ -34,7 +34,14 @@ DEEP_SCAN_DEFAULT_MAX_BYTES = 2_000_000
 
 @dataclass(frozen=True, slots=True)
 class DeepScanBudget:
-    """Carry the effective paired bound for expensive Python source analysis."""
+    """Carry the effective paired bound for expensive Python source analysis.
+
+    Attributes:
+        enabled: Whether the guard runs at all; False leaves every source fully parsed.
+        max_lines: Line count above which deep analysis is skipped for a source.
+        max_bytes: Byte count above which deep analysis is skipped for a source.
+        override: Layer that supplied the effective bounds: ``default``, ``config``, or ``cli``.
+    """
 
     enabled: bool = True
     max_lines: int = DEEP_SCAN_DEFAULT_MAX_LINES
