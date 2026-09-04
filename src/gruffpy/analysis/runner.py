@@ -77,6 +77,22 @@ class _ReportAssembly:
     suppressions: tuple[SuppressionSummary, ...]
 
 
+def _evaluated_file_count(units: list[AnalysisUnit]) -> int:
+    """Count the Python files this run evaluated - the ratified scoring denominator.
+
+    Deliberately narrower than ``files_parsed``, which also counts the text inputs the raw-text
+    rules read: a README is scanned but carries no Python to score, so including it would divide
+    real findings by files no Python rule ever evaluated.
+
+    Args:
+        units: Parsed analysis units for the run, including any that failed to parse.
+
+    Returns:
+        Python files that parsed successfully; zero means nothing was evaluated.
+    """
+    return sum(1 for unit in units if not unit.has_parse_errors() and unit.file.is_python())
+
+
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
 
@@ -148,7 +164,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         request.changed_scope,
     )
     findings = changed_filter_result.findings
-    score = ScoreCalculator().calculate(findings, diff_active=changed.active)
+    score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
     display_findings = request.display_filter.filter_findings(findings)

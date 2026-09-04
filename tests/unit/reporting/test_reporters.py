@@ -107,7 +107,7 @@ def _report(
         diagnostics=diagnostics,
         findings=selected,
         exit_code=0,
-        score=ScoreCalculator().calculate(list(selected)),
+        score=ScoreCalculator().calculate(list(selected), 10),
         filters=filters,
     )
 
@@ -237,10 +237,13 @@ def test_text_reporter_keeps_family_contract_block_byte_for_value() -> None:
     rendered_text = TextReporter().render(_report())
 
     assert rendered_text.startswith("gruff-py 0.1.0-test analyse\n")
-    # FAMILY-CONTRACT section 1 freezes the line shape, not the number. The one error finding
-    # costs security 48 points and the other 11 scored pillars stay at 100: (1152 / 12).
-    assert ("  Composite: A (96.00 / 100)\n  Findings: 1 total · 1 error · 0 warning · 0 advisory\n") in rendered_text
-    assert ("  [error] security.dangerous-function-call\n    src/app.py:12\n    Dangerous call to eval().\n") in rendered_text
+    # FAMILY-CONTRACT section 1 freezes the line shape, not the number. The one high-confidence
+    # error weighs 12 over ten evaluated files, so the ratified curve scores security 53.85 and the
+    # other 11 scored pillars stay at 100: (1153.85 / 12).
+    assert ("Composite: A (96.15 / 100)\nFindings: 1 total · 1 error · 0 warning · 0 advisory\n") in rendered_text
+    # FAMILY-CONTRACT section 1 made the rs/ts dash-line the family canon at this break, so the
+    # three-line block gruff-py used to emit is now one line per finding.
+    assert ("- [error] src/app.py:12 security.dangerous-function-call - Dangerous call to eval().\n") in rendered_text
 
 
 @pytest.mark.parametrize("scoring_mode", ("full-project", "diff"), ids=("full", "diff"))
@@ -253,7 +256,7 @@ def test_text_reporter_distinguishes_scan_context_from_scoring_mode(
         scoring_mode: Existing score mode shown as full-project or diff.
     """
     rendered_text = TextReporter().render(_report_with_partial_context(scoring_mode))
-    detailed_finding_position = rendered_text.index("    Dangerous call to eval().")
+    detailed_finding_position = rendered_text.index("security.dangerous-function-call - Dangerous call to eval().")
     scoring_mode_position = rendered_text.index(f"  Scoring mode: {scoring_mode}")
     scan_context_position = rendered_text.index("Scan context")
 

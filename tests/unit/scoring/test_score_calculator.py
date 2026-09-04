@@ -62,7 +62,7 @@ def test_static_pillars_covers_every_catalog_pillar():
 
 
 def test_score_report_grades_every_static_pillar_with_no_findings():
-    report = ScoreCalculator().calculate([])
+    report = ScoreCalculator().calculate([], 10)
     pillars = [score.pillar for score in report.pillars]
 
     assert pillars == list(STATIC_PILLARS)
@@ -83,8 +83,8 @@ def test_fixing_the_last_finding_in_a_pillar_cannot_lower_the_composite():
     ]
     modernisation = [_finding("modernisation.f-string-candidate", pillar=Pillar.MODERNISATION, severity=Severity.ADVISORY) for _ in range(2)]
 
-    before = ScoreCalculator().calculate(noise + modernisation)
-    after = ScoreCalculator().calculate(noise)
+    before = ScoreCalculator().calculate(noise + modernisation, 10)
+    after = ScoreCalculator().calculate(noise, 10)
 
     assert len(after.pillars) == len(before.pillars)
     assert after.composite.score >= before.composite.score
@@ -99,8 +99,8 @@ def test_fixing_the_last_correctness_finding_cannot_lower_the_composite():
     ]
     correctness = [_finding("correctness.unsafe-numeric-coercion", pillar=Pillar.CORRECTNESS, severity=Severity.ADVISORY) for _ in range(2)]
 
-    before = ScoreCalculator().calculate(noise + correctness)
-    after = ScoreCalculator().calculate(noise)
+    before = ScoreCalculator().calculate(noise + correctness, 10)
+    after = ScoreCalculator().calculate(noise, 10)
 
     assert len(after.pillars) == len(before.pillars)
     assert after.composite.score >= before.composite.score
@@ -113,31 +113,32 @@ def test_file_score_max_lines_uses_function_length_findings():
         _finding("size.parameter-count", pillar=Pillar.SIZE, lines=999),
     ]
 
-    report = ScoreCalculator().calculate(findings)
+    report = ScoreCalculator().calculate(findings, 10)
 
     assert report.top_offenders[0].max_lines == expected_max_lines
 
 
 def test_correlated_size_complexity_stack_is_downweighted_for_file_score():
-    report = ScoreCalculator().calculate(_correlated_stack())
+    report = ScoreCalculator().calculate(_correlated_stack(), 10)
 
     offender = report.top_offenders[0]
     assert offender.findings == CORRELATED_STACK_FINDINGS
-    assert offender.penalty == 20.0
-    assert offender.grade.score == 80.0
+    assert offender.penalty == 4.0
+    assert offender.grade.score == 51.22
 
 
 def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
-    report = ScoreCalculator().calculate(_correlated_stack())
+    report = ScoreCalculator().calculate(_correlated_stack(), 10)
 
     # With the god-method composite retired, no synthetic design finding is
-    # injected: the design pillar takes zero penalty and the real size/complexity
-    # findings absorb the whole clustered weight, leaving the composite unchanged.
-    # 16 penalty points spread over the 12 scored pillars: (1200 - 16) / 12.
-    assert report.composite.score == 98.67
+    # injected: the design pillar takes zero weight and the real size/complexity
+    # findings absorb the whole clustered weight. Over ten evaluated files the
+    # ratified curve scores size 75.00 and complexity 62.50, and the other ten
+    # pillars 100.00, so the composite is 1137.50 / 12.
+    assert report.composite.score == 94.79
     pillar_penalties = {pillar.pillar: pillar.penalty for pillar in report.pillars}
-    assert pillar_penalties["size"] == 4.0
-    assert pillar_penalties["complexity"] == 12.0
+    assert pillar_penalties["size"] == 1.0
+    assert pillar_penalties["complexity"] == 3.0
     assert pillar_penalties["design"] == 0.0
 
 
@@ -147,11 +148,11 @@ def test_correlated_downweighting_requires_same_symbol():
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="right", line=1),
     ]
 
-    report = ScoreCalculator().calculate(findings)
+    report = ScoreCalculator().calculate(findings, 10)
 
     offender = report.top_offenders[0]
-    assert offender.penalty == 40.0
-    assert offender.grade.score == 60.0
+    assert offender.penalty == 8.0
+    assert offender.grade.score == 50.62
 
 
 def test_correlated_downweighting_groups_decorated_function_across_lines():
@@ -163,8 +164,8 @@ def test_correlated_downweighting_groups_decorated_function_across_lines():
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="run", line=2),
     ]
 
-    report = ScoreCalculator().calculate(findings)
+    report = ScoreCalculator().calculate(findings, 10)
 
     offender = report.top_offenders[0]
-    assert offender.penalty == 20.0
-    assert offender.grade.score == 80.0
+    assert offender.penalty == 4.0
+    assert offender.grade.score == 51.22

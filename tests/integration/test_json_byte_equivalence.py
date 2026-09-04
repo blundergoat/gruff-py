@@ -67,7 +67,7 @@ def _fixture_report() -> AnalysisReport:
         diagnostics=(),
         findings=findings,
         exit_code=0,
-        score=ScoreCalculator().calculate(list(findings)),
+        score=ScoreCalculator().calculate(list(findings), 10),
         filters=FindingDisplayFilter(include_rules=("security.dangerous-function-call",)),
     )
 

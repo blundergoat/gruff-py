@@ -280,7 +280,12 @@ def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, An
 def _machine_score(score: ScoreReport | None, root: str) -> dict[str, Any]:
     if score is None:
         return {
-            "composite": {"grade": "N/A", "score": 0.0},
+            # No scoring ran, so there is no number to report; a 0.0 would read as a failing grade.
+            "composite": {"grade": None, "score": None},
+            "clusters": [],
+            "ruleAttribution": [],
+            "evaluatedFiles": None,
+            "scoredPillars": [],
             "pillars": [],
             "topOffenders": [],
             "coverage": {
@@ -290,9 +295,13 @@ def _machine_score(score: ScoreReport | None, root: str) -> dict[str, Any]:
         }
     return {
         "composite": {
-            "grade": score.composite.letter,
-            "score": score.composite.score,
+            "grade": None if score.composite is None else score.composite.letter,
+            "score": None if score.composite is None else score.composite.score,
         },
+        "clusters": [dict(cluster) for cluster in score.clusters],
+        "ruleAttribution": [dict(row) for row in score.rule_attribution],
+        "evaluatedFiles": score.evaluated_files,
+        "scoredPillars": list(score.scored_pillars),
         "pillars": [_machine_pillar_score(item) for item in score.pillars],
         "topOffenders": [_machine_file_score(item, root) for item in score.top_offenders],
         "complexityDistribution": dict(score.complexity_distribution),
@@ -310,10 +319,9 @@ def _machine_pillar_score(score: Any) -> dict[str, Any]:
         "warning": score.warnings,
         "error": score.errors,
         "applicable": score.applicable,
+        "grade": None if score.grade is None else score.grade.letter,
+        "score": None if score.grade is None else score.grade.score,
     }
-    if score.grade is not None:
-        payload["grade"] = score.grade.letter
-        payload["score"] = score.grade.score
     return payload
 
 
@@ -324,8 +332,8 @@ def _machine_file_score(score: Any, root: str) -> dict[str, Any]:
         "advisory": score.advisories,
         "warning": score.warnings,
         "error": score.errors,
-        "grade": score.grade.letter,
-        "score": score.grade.score,
+        "grade": None if score.grade is None else score.grade.letter,
+        "score": None if score.grade is None else score.grade.score,
         "penalty": round(score.penalty, 2),
     }
     optional = {

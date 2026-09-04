@@ -39,7 +39,7 @@ class MarkdownReporter:
         lines = [
             "# gruff-py report",
             "",
-            (f"**Grade:** {score.composite.letter if score is not None else 'n/a'} ({_score_value(score)})"),
+            (f"**Grade:** {'n/a' if score is None or score.composite is None else score.composite.letter} ({_score_value(score)})"),
             f"**Scoring mode:** {scoring_mode}",
         ]
 

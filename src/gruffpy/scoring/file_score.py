@@ -12,7 +12,7 @@ class FileScore:
 
     Attributes:
         file_path: Display path for the scored file.
-        grade: Letter grade assigned to the file.
+        grade: Letter grade assigned to the file, ``None`` when the run evaluated nothing.
         findings: Total findings for the file.
         advisories: Advisory findings for the file.
         warnings: Warning findings for the file.
@@ -25,7 +25,7 @@ class FileScore:
     """
 
     file_path: str
-    grade: Grade
+    grade: Grade | None
     findings: int
     advisories: int
     warnings: int
@@ -48,7 +48,7 @@ class FileScore:
         """
         return {
             "file": self.file_path,
-            "grade": self.grade.to_dict(),
+            "grade": None if self.grade is None else self.grade.to_dict(),
             "findings": self.findings,
             "advisories": self.advisories,
             "warnings": self.warnings,

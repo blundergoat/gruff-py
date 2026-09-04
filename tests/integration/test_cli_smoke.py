@@ -2216,7 +2216,10 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
     )
 
     assert result.exit_code == 1, result.output
-    assert "Findings: 0 shown (1 hidden by display filters; score and exit code reflect all findings)" in result.output
+    # The canonical tally is fixed byte-for-byte by FAMILY-CONTRACT section 1, so the display-filter
+    # disclosure moved to its own line inside the Score block rather than qualifying that tally.
+    assert "Findings: 0 total · 0 error · 0 warning · 0 advisory" in result.output
+    assert "  Display filters hid 1 findings; score and exit code reflect all findings." in result.output
     assert "Exit code: 1" in result.output
 
 

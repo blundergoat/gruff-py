@@ -103,8 +103,14 @@ def summary_text(
     summary = payload["summary"]
     counts = report.finding_counts()
     paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
+    # FAMILY-CONTRACT section 1: masthead, then the two-line composite block, then the scan card.
+    # `summary` and `analyse` lead with the same three lines so a reader moving between the two views
+    # never has to hunt for the grade in a different place.
+    composite = None if report.score is None else report.score.composite
     lines = [
         f"{TOOL_NAME} {report.tool_version} summary",
+        ("Composite: n/a (nothing evaluated)" if composite is None else f"Composite: {composite.letter} ({composite.score:.2f} / 100)"),
+        f"Findings: {counts['total']} total · {counts['error']} error · {counts['warning']} warning · {counts['advisory']} advisory",
         f"Path: {paths_display}",
         (
             f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
@@ -112,9 +118,6 @@ def summary_text(
             f"{summary['parseErrors']} parse errors"
         ),
     ]
-    if report.score is not None:
-        lines.append(f"Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)")
-    lines.append(f"Findings: {counts['total']} total · {counts['error']} error · {counts['warning']} warning · {counts['advisory']} advisory")
     lines.extend(
         [
             f"Elapsed: {summary['elapsedSeconds']:.3f}s",

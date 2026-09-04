@@ -55,8 +55,11 @@ class HtmlReporter:
             Complete single-file HTML document (no external assets).
         """
         score = report.score
-        grade = score.composite.letter if score is not None else "n/a"
-        numeric_score = f"{score.composite.score:.2f} / 100" if score is not None else "n/a"
+        # Two different absences: scoring never ran, or it ran and found nothing to evaluate. The
+        # second must not render a number, because that is how an empty scan used to read as perfect.
+        composite = None if score is None else score.composite
+        grade = "n/a" if composite is None else composite.letter
+        numeric_score = ("n/a" if score is None else "not evaluated") if composite is None else f"{composite.score:.2f} / 100"
         counts = report.finding_counts()
         title = f"gruff-py inspection report - {grade}"
         script = f'<script type="module">{_INTERACTIVE_SCRIPT}</script>\n' if self.interactive else ""
@@ -241,7 +244,7 @@ class HtmlReporter:
         )
 
     def _offender_row(self, file_score: FileScore) -> str:
-        grade = file_score.grade.letter.lower()
+        grade = "na" if file_score.grade is None else file_score.grade.letter.lower()
         return (
             "<tr>"
             f'<td class="file-path">{self._location_markup(file_score.file_path, None)}</td>'
@@ -249,7 +252,7 @@ class HtmlReporter:
             f'<td class="num">{_esc(_optional_int(file_score.max_cognitive))}</td>'
             f'<td class="num">{_esc(_optional_int(file_score.max_lines))}</td>'
             f'<td class="num">{file_score.findings}</td>'
-            f'<td class="num"><span class="grade-pill {grade}">{_esc(file_score.grade.letter)}</span></td>'
+            f'<td class="num"><span class="grade-pill {grade}">{_esc("n/a" if file_score.grade is None else file_score.grade.letter)}</span></td>'
             "</tr>"
         )
 

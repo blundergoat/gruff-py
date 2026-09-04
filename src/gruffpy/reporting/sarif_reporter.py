@@ -174,7 +174,7 @@ def _run_properties(report: AnalysisReport) -> dict[str, Any]:
     properties: dict[str, Any] = {
         "gruffSchemaVersion": ANALYSIS_SCHEMA_VERSION,
     }
-    if report.score is not None:
+    if report.score is not None and report.score.composite is not None:
         properties["score"] = report.score.composite.score
         properties["grade"] = report.score.composite.letter
     return properties
