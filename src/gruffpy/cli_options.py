@@ -443,6 +443,18 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "generate_baseline_path",
         "Write current findings to this baseline JSON file (implies generation).",
     ),
+    _path_option(
+        "--migrate-baseline",
+        "migrate_baseline_path",
+        "Carry a 0.5 baseline's reviews into --generate-baseline-path; the original file is left untouched.",
+    ),
+    _option(
+        "--force",
+        "force_baseline_overwrite",
+        is_flag=True,
+        default=False,
+        help="Overwrite a 0.5 baseline at the default path; without it a generate that would destroy the retreat path is refused.",
+    ),
     _option(
         "--no-baseline",
         is_flag=True,

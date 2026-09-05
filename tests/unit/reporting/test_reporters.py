@@ -12,6 +12,7 @@ import pytest
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
+from gruffpy.finding.baseline_identity import finding_identities
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -448,6 +449,13 @@ def _assert_sarif_driver_metadata(
     assert rule_ids == sorted(rule_ids)
 
 
+def _baseline_identity(finding: Finding) -> str:
+    """Return the durable identity a SARIF result must publish for one finding, ranking it as the run would."""
+    named = finding_identities([finding])[0]
+    assert named is not None
+    return named.identity
+
+
 def _assert_sarif_result_contract(result: dict[str, Any], rule_ids: list[str]) -> None:
     assert result["ruleId"] == "security.dangerous-function-call"
     assert result["ruleIndex"] == rule_ids.index("security.dangerous-function-call")
@@ -455,7 +463,8 @@ def _assert_sarif_result_contract(result: dict[str, Any], rule_ids: list[str]) -
     assert result["message"]["text"] == "Dangerous call to eval()."
     assert result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "src/app.py"
     assert result["locations"][0]["physicalLocation"]["region"]["startLine"] == 12
-    assert result["partialFingerprints"]["gruffFingerprint"] == _report().findings[0].fingerprint()
+    # Code scanning groups alerts by the ratified durable identity, the same name baseline matching reads.
+    assert result["partialFingerprints"]["gruffFingerprint"] == _baseline_identity(_report().findings[0])
     assert result["properties"]["metadata"]["target"] == "eval"
 
 
@@ -608,8 +617,6 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
             "sinkLabel": "sql-execution",
         },
     )
-    fingerprint = finding.fingerprint()
-
     payload = json.loads(SarifReporter().render(_report((finding,))))
     run = payload["runs"][0]
     rules = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}
@@ -622,7 +629,7 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     }
     assert result["properties"]["metadata"]["securitySeverity"] == "high"
     assert result["properties"]["metadata"]["sourceLabel"] == "quoted-placeholder"
-    assert result["partialFingerprints"]["gruffFingerprint"] == fingerprint
+    assert result["partialFingerprints"]["gruffFingerprint"] == _baseline_identity(finding)
 
 
 def test_dependency_security_findings_do_not_leak_raw_references_in_reporters() -> None:

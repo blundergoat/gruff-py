@@ -1201,14 +1201,19 @@ def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monke
     generated_payload = _generate_default_baseline(tmp_path)
     baseline_payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
 
-    assert baseline_payload["schemaVersion"] == "gruff-py.baseline.v1"
-    assert len(baseline_payload["findings"]) == len(generated_payload["findings"])
+    assert baseline_payload["schemaVersion"] == "gruff.baseline.v3"
+    assert baseline_payload["toolLanguage"] == "py"
+    # One row per identity, so a file with two occurrences of one finding stores one row with a count of two.
+    assert sum(row["count"] for row in baseline_payload["occurrences"]) == len(generated_payload["findings"])
     assert generated_payload["baseline"] == {
         "applied": False,
-        "entries": len(generated_payload["findings"]),
+        "entries": len(baseline_payload["occurrences"]),
         "path": "gruff-baseline.json",
         "generated": True,
+        "newFindings": 0,
+        "resolvedFindings": 0,
         "suppressedFindings": 0,
+        "unchangedFindings": 0,
         "staleEvaluation": "generated",
         "staleEntries": 0,
         "source": "default",

@@ -180,6 +180,8 @@ class _AnalysisCliRequest:
     exclude_rule: tuple[str, ...]
     baseline_path: Path | None
     generate_baseline_path: Path | None
+    migrate_baseline_path: Path | None
+    force_baseline_overwrite: bool
     should_skip_baseline: bool
     diff_mode: str
     diff_patch: str
@@ -589,6 +591,8 @@ def _analysis_request(
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
         baseline_path=cast(Path | None, kwargs.get("baseline_path")),
         generate_baseline_path=_resolve_generate_baseline_path(kwargs),
+        migrate_baseline_path=cast(Path | None, kwargs.get("migrate_baseline_path")),
+        force_baseline_overwrite=cast(bool, kwargs.get("force_baseline_overwrite", False)),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
         diff_mode=cast(str, kwargs.get("diff_mode", "")),
         diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
@@ -632,6 +636,8 @@ def _summary_analysis_request(
         exclude_rule=(),
         baseline_path=None,
         generate_baseline_path=None,
+        migrate_baseline_path=None,
+        force_baseline_overwrite=False,
         should_skip_baseline=True,
         diff_mode="",
         diff_patch="",
@@ -810,6 +816,8 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                     apply_path=request.baseline_path,
                     generate_path=request.generate_baseline_path,
                     disabled=request.should_skip_baseline,
+                    migrate_path=request.migrate_baseline_path,
+                    force_overwrite=request.force_baseline_overwrite,
                 ),
                 diff_mode=request.diff_mode,
                 diff_patch=request.diff_patch,

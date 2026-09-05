@@ -33,6 +33,8 @@ class Finding:
         remediation: Optional remediation guidance.
         secondary_pillars: Additional pillars affected by the finding.
         metadata: Rule-specific JSON-compatible metadata.
+        baseline_identity: The ratified durable identity this run computed, or ``None`` when the finding is
+            sensitive, or when a direct API caller built it outside the analysis pipeline. Never serialized.
     """
 
     rule_id: str
@@ -49,6 +51,7 @@ class Finding:
     remediation: str | None = None
     secondary_pillars: tuple[Pillar, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+    baseline_identity: str | None = None
 
     def fingerprint(self) -> str:
         """Compute the stable 16-char identifier used for baselines and dedup.

@@ -368,11 +368,14 @@ def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
         "applied": not value.generated,
         "entries": value.total_entries,
         "generated": value.generated,
+        "newFindings": value.new_count + value.collision_count + value.not_eligible_count,
+        "resolvedFindings": value.absent_count,
         "source": value.source,
-        "stale": [_machine_baseline_entry(item, root) for item in value.stale_entries],
+        "stale": [_machine_baseline_entry(item) for item in value.stale_entries],
         "staleEntries": len(value.stale_entries),
         "staleEvaluation": value.stale_evaluation,
         "suppressedFindings": value.suppressed_findings,
+        "unchangedFindings": value.unchanged_count,
     }
     path = _machine_relative_path(value.path, root)
     if path is not None:
@@ -380,17 +383,13 @@ def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
     return payload
 
 
-def _machine_baseline_entry(value: Any, root: str) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "fingerprint": value.fingerprint,
-        "ruleId": value.rule_id,
-        "file": _machine_path(value.file_path, root),
-        "message": value.message,
-    }
-    if value.line is not None:
-        payload["line"] = value.line
-    if value.symbol:
-        payload["symbol"] = value.symbol
+def _machine_baseline_entry(value: Any) -> dict[str, Any]:
+    """Render one resolved row: the identity, how many occurrences went away, and the descriptive fields it carried."""
+    payload: dict[str, Any] = {"identity": value.identity, "count": value.count}
+    # A row's rule, path, and subject exist for the reader, so an absent one is omitted rather than written empty.
+    for key, text in (("ruleId", value.rule_id), ("path", value.path), ("subject", value.subject)):
+        if text:
+            payload[key] = text
     return payload
 
 

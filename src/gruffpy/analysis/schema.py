@@ -22,10 +22,16 @@ bumps it, per the cross-impl CONTRACT.md compatibility policy):
 - ``gruff.analysis.v3`` is the intentional hard break to one canonical family
   envelope. ``gruff.summary.v3`` is exactly that document with ``findings``
   removed and the schema identifier changed.
+- ``gruff.baseline.v3`` replaces ``gruff-py.baseline.v1`` with the family baseline:
+  one line-free identity and a count per reviewed occurrence, no positional or
+  re-classifiable field, and sensitive findings counted rather than stored. A 0.5
+  baseline is refused on read and carried forward by ``--migrate-baseline``.
 """
 
 ANALYSIS_SCHEMA_VERSION = "gruff.analysis.v3"
-BASELINE_SCHEMA_VERSION = "gruff-py.baseline.v1"
+BASELINE_SCHEMA_VERSION = "gruff.baseline.v3"
+LEGACY_BASELINE_SCHEMA_VERSIONS = frozenset({"gruff-py.baseline.v1", "gruff.baseline.v1"})
+"""The 0.5 baselines a migration accepts as input; reading one for suppression fails closed and names the migration command."""
 HOTSPOT_SCHEMA_VERSION = "gruff-py.hotspot.v1"
 SUMMARY_SCHEMA_VERSION = "gruff.summary.v3"
 CONFIG_SCHEMA_VERSION = "gruff-py.config.v0.1"

@@ -4,17 +4,21 @@ The pipeline turns a user's paths and options into deterministic findings, diagn
 and exit status. Reporters receive one complete result without reapplying config or suppression.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import (
+    BaselineCollision,
     BaselineError,
     BaselineOptions,
     BaselineReport,
     apply_baseline,
     default_baseline_path,
     generate_baseline,
+    migrate_baseline,
+    require_overwritable_default_path,
 )
 from gruffpy.analysis.changed_region import (
     ChangedRegionSet,
@@ -30,6 +34,7 @@ from gruffpy.analysis.suppression_summary import SuppressionSummary
 from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
+from gruffpy.finding.baseline_identity import declaration_position_from_spans, declaration_spans, finding_identities
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -150,12 +155,16 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
     # exactly like the inline directive channel, and every drop is counted for the report.
     findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
+    # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
+    # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
+    findings = _with_baseline_identities(findings, units)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
         options=request.baseline if request.baseline is not None else BaselineOptions(),
         scan_scope=scan_scope,
+        units=units,
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
@@ -387,6 +396,23 @@ def _collect_findings(
     return findings
 
 
+def _with_baseline_identities(findings: list[Finding], units: list[AnalysisUnit]) -> list[Finding]:
+    """Attach each ordinary finding's durable identity, which SARIF publishes as its code-scanning fingerprint.
+
+    Args:
+        findings: This run's findings, before any baseline filtering.
+        units: Parsed units, so a declaration is ranked by its own span rather than by the finding's line.
+
+    Returns:
+        The same findings in the same order; a sensitive finding keeps ``None``, because it has no durable name.
+    """
+    resolver = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
+    identities = finding_identities(findings, resolver)
+    return [
+        finding if named is None else replace(finding, baseline_identity=named.identity) for finding, named in zip(findings, identities, strict=True)
+    ]
+
+
 def _handle_baseline(
     *,
     project_root: Path,
@@ -394,18 +420,28 @@ def _handle_baseline(
     diagnostics: list[RunDiagnostic],
     options: BaselineOptions,
     scan_scope: str,
+    units: list[AnalysisUnit],
 ) -> BaselineReport | None:
-    """Apply the user's baseline choice and append actionable diagnostics when it cannot run."""
+    """Apply the user's baseline choice and append actionable diagnostics when it cannot run.
+
+    The parsed units come along so every finding is named by the declaration it sits on: that is what keeps two
+    findings inside one function on one identity while a second same-named function takes its own.
+    """
     conflict = _baseline_option_conflict(options)
     if conflict is not None:
         diagnostics.append(conflict)
         return None
+    declaration_position = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
+    # The user asked to capture the current state, so write a baseline rather than compare against one; generation wins.
     if options.generate_path is not None:
         return _generate_baseline_safely(
             project_root=project_root,
             findings=findings,
             diagnostics=diagnostics,
             path=options.generate_path,
+            migrate_path=options.migrate_path,
+            force_overwrite=options.force_overwrite,
+            declaration_position=declaration_position,
         )
     if options.disabled:
         return None
@@ -415,6 +451,7 @@ def _handle_baseline(
         diagnostics=diagnostics,
         explicit_path=options.apply_path,
         scan_scope=scan_scope,
+        declaration_position=declaration_position,
     )
 
 
@@ -456,6 +493,13 @@ def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
             message="--no-baseline cannot be combined with --baseline-path.",
             path=str(options.apply_path),
         )
+    # Migration writes a second file rather than converting one, so it needs the destination the user chose for it.
+    if options.migrate_path is not None and options.generate_path is None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message="--migrate-baseline requires --generate-baseline-path <new path>; the 0.5 file is never converted in place.",
+            path=str(options.migrate_path),
+        )
     return None
 
 
@@ -465,12 +509,25 @@ def _generate_baseline_safely(
     findings: list[Finding],
     diagnostics: list[RunDiagnostic],
     path: Path,
+    migrate_path: Path | None,
+    force_overwrite: bool,
+    declaration_position: Callable[[Finding], int],
 ) -> BaselineReport | None:
-    """Generate a requested baseline, converting file failures into user-facing diagnostics."""
+    """Write the requested baseline, from this run alone or carried across from a 0.5 file, reporting failures in-band."""
     try:
-        return generate_baseline(project_root=project_root, path=path, findings=findings)
-    # For example, an unwritable baseline path should explain the filesystem failure without
-    # a traceback.
+        # A generate at the shared default path never destroys a 0.5 baseline by accident; --force is the way to mean it.
+        require_overwritable_default_path(project_root, path, force_overwrite)
+        # A migration re-identifies the 0.5 reviews from this scan and writes them beside the original, which is untouched.
+        if migrate_path is not None:
+            return migrate_baseline(
+                project_root=project_root,
+                input_path=migrate_path,
+                output_path=path,
+                findings=findings,
+                declaration_position=declaration_position,
+            )
+        return generate_baseline(project_root=project_root, path=path, findings=findings, declaration_position=declaration_position)
+    # For example, an unwritable path, or a migration output that is its own input, explains itself without a traceback.
     except BaselineError as exc:
         diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(path)))
         return None
@@ -483,6 +540,7 @@ def _apply_baseline_if_present(
     diagnostics: list[RunDiagnostic],
     explicit_path: Path | None,
     scan_scope: str,
+    declaration_position: Callable[[Finding], int],
 ) -> BaselineReport | None:
     """Apply an available baseline while keeping malformed or unreadable files visible to users."""
     selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
@@ -495,13 +553,34 @@ def _apply_baseline_if_present(
             findings=findings,
             source=source,
             scan_scope=scan_scope,
+            declaration_position=declaration_position,
         )
-    # For example, invalid baseline JSON becomes a diagnostic and leaves current findings intact.
+    # For example, invalid JSON, a 0.5 layout, or another port's file becomes a diagnostic and leaves findings intact.
     except BaselineError as exc:
         diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path)))
         return None
+    diagnostics.extend(_collision_diagnostics(result.collisions))
     findings[:] = result.findings
     return result.report
+
+
+def _collision_diagnostics(collisions: tuple[BaselineCollision, ...]) -> list[RunDiagnostic]:
+    """Name every identity that covered two declarations, so a user sees which ones could not be told apart.
+
+    Neither finding is suppressed: hiding either would let one review cover a finding nobody read.
+    """
+    return [
+        RunDiagnostic(
+            type="baseline-collision",
+            message=(
+                f"collision: identity {collision.identity} covers {len(collision.subjects)} declarations of "
+                f"{', '.join(collision.subjects)} for rule {collision.rule_id} in {collision.path}; none is suppressed"
+            ),
+            file_path=collision.path,
+            invalidates_run=False,
+        )
+        for collision in collisions
+    ]
 
 
 def _resolve_baseline_selection(project_root: Path, explicit_path: Path | None) -> tuple[Path | None, str]:

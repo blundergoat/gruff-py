@@ -6,6 +6,7 @@ from typing import Any
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
+from gruffpy.finding.baseline_identity import finding_identities
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.rule.catalog import documentation_for_rule
@@ -134,7 +135,7 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
     if finding.metadata:
         properties["metadata"] = dict(finding.metadata)
 
-    return {
+    result: dict[str, Any] = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index,
         "level": _level(finding.severity),
@@ -144,9 +145,33 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
                 "physicalLocation": _physical_location(finding),
             }
         ],
-        "partialFingerprints": {"gruffFingerprint": finding.fingerprint()},
-        "properties": properties,
     }
+    fingerprints = _partial_fingerprints(finding)
+    # A sensitive finding carries no fingerprints at all, so no secret gets a durable name in code scanning.
+    if fingerprints is not None:
+        result["partialFingerprints"] = fingerprints
+    result["properties"] = properties
+    return result
+
+
+def _partial_fingerprints(finding: Finding) -> dict[str, str] | None:
+    """Return the fingerprints GitHub code scanning groups alerts by, or ``None`` when the result must carry none.
+
+    ``gruffFingerprint`` is the ratified durable identity and nothing else, so an alert survives a line move while a
+    second declaration of one name opens its own alert.
+
+    Args:
+        finding: Finding being rendered as a SARIF result.
+
+    Returns:
+        The ``partialFingerprints`` object, or ``None`` for a sensitive finding, which has no durable name at all.
+    """
+    # The pipeline names every finding before the baseline filters any; a direct API caller's finding is named here,
+    # ranked by its own line, so an ordinary result is never published without a fingerprint.
+    if finding.baseline_identity is not None:
+        return {"gruffFingerprint": finding.baseline_identity}
+    named = finding_identities([finding])[0]
+    return None if named is None else {"gruffFingerprint": named.identity}
 
 
 def _physical_location(finding: Finding) -> dict[str, Any]:
