@@ -15,7 +15,7 @@ def test_akia_emits():
     src = f"AWS_KEY = '{_AKIA_KEY}'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
-    assert findings[0].metadata["preview"] == "[redacted]"
+    assert findings[0].metadata["preview"] == "[redacted:aws-access-key]"
 
 
 def test_asia_session_token_emits():

@@ -26,7 +26,7 @@ def test_gcp_service_account_key_emits_with_redacted_preview():
     assert finding.line == 2
     assert finding.metadata == {
         "category": "service-account-key",
-        "preview": "[redacted]",
+        "preview": "[redacted:gcp-service-account]",
         "provider": "gcp",
     }
     _assert_gcp_raw_values_redacted(finding.message, str(finding.metadata))

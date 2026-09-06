@@ -17,8 +17,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
-    fixed_preview,
     iter_matches,
 )
 
@@ -94,7 +94,7 @@ class PrivateKeyRule(SourceTextRule):
                         "store the new one in a secret manager, and reference it at runtime."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": fixed_preview()},
+                    metadata={"preview": category_preview("private-key")},
                 ),
             )
         return findings

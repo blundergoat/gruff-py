@@ -55,14 +55,6 @@ def test_empty_accepted_abbreviations_list_clears_defaults(tmp_path: Path):
     assert config.accepted_abbreviations == ()
 
 
-def test_default_secret_previews_survive_unrelated_allowlists_section(tmp_path: Path):
-    _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: ['ctx']\n")
-
-    config, _ = ConfigLoader(tmp_path, _defaults()).load()
-
-    assert config.allowed_secret_previews == _defaults().allowed_secret_previews
-
-
 def test_accepted_abbreviations_rejects_non_list_value(tmp_path: Path):
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: not-a-list\n")
 

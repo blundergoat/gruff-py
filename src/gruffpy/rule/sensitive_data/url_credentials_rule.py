@@ -16,7 +16,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
-    fixed_preview,
+    connection_string_preview,
     is_likely_placeholder_secret,
     iter_matches,
 )
@@ -70,7 +70,8 @@ class UrlCredentialsRule(SourceTextRule):
             # rotate.
             if embedded_password is None or is_likely_placeholder_secret(embedded_password):
                 continue
-            redacted_marker = fixed_preview()
+            # This rule's pattern matches only http and https, and the matched text starts with whichever it was.
+            redacted_marker = connection_string_preview(credential_match.raw.split("://", 1)[0])
             findings.append(
                 Finding(
                     rule_id=definition.id,

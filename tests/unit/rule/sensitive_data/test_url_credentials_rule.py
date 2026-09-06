@@ -20,7 +20,7 @@ def test_https_url_with_embedded_password_emits_redacted_preview():
     assert finding.rule_id == "sensitive-data.url-credentials"
     assert finding.metadata == {
         "category": "url-credentials",
-        "preview": "[redacted]",
+        "preview": "[redacted:connection-string:https]",
     }
     _assert_url_raw_values_redacted(finding.message, str(finding.metadata))
 

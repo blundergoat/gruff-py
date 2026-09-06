@@ -70,8 +70,6 @@ class AnalysisConfig:
         rule_selection: Include and exclude selectors applied before analysis.
         ignored_path_patterns: Configured path globs excluded during discovery.
         accepted_abbreviations: Project-approved abbreviations for naming rules.
-        allowed_secret_previews: Retained legacy field; supported configs leave it empty and
-            analysis ignores it.
         sensitive_exclusions: Reviewed scopes in which one sensitive-data rule stays quiet,
             sourced from the ``sensitiveExclusions:`` config block.
         sensitive_data_rule_ids: Registered rule ids inside the sensitive-data pillar.
@@ -109,7 +107,6 @@ class AnalysisConfig:
         "ui",
         "url",
     )
-    allowed_secret_previews: tuple[str, ...] = ()
     sensitive_exclusions: tuple[SensitiveExclusion, ...] = ()
     sensitive_data_rule_ids: frozenset[str] = frozenset()
     dead_code_allowlist: DeadCodeAllowlist = field(default_factory=DeadCodeAllowlist)
@@ -269,21 +266,6 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the allowlist updated.
         """
         return replace(self, accepted_abbreviations=abbrevs)
-
-    def with_allowed_secret_previews(self, previews: tuple[str, ...]) -> "AnalysisConfig":
-        """Return a copy carrying the legacy secret-preview field.
-
-        The loader accepts only an empty list and analysis ignores this field, so users cannot
-        hide sensitive-data findings with preview text.
-
-        Args:
-            previews: Legacy values; an empty tuple means the retired setting has no effect for
-                the user.
-
-        Returns:
-            New ``AnalysisConfig`` carrying the legacy field.
-        """
-        return replace(self, allowed_secret_previews=previews)
 
     def with_sensitive_exclusions(self, exclusions: tuple[SensitiveExclusion, ...]) -> "AnalysisConfig":
         """Return a new config whose reviewed sensitive-data suppressions are *exclusions*.

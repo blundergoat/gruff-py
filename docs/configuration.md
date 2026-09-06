@@ -200,8 +200,9 @@ the guard. The CLI value wins over config.
 | Key | Type | Meaning |
 |---|---|---|
 | `acceptedAbbreviations` | list of strings | Complete abbreviation list accepted by naming rules; a configured list replaces, rather than extends, the family seed |
-| `secretPreviews` | list of strings | **Retired.** Only an empty list is still accepted. A non-empty value is a fatal configuration error: a secret preview never suppressed a finding safely, because the suppression key was derived from the matched value itself. Use `sensitiveExclusions` instead, which names an exact rule and path and requires a written reason. |
 | `deadCode` | table | Dead-code allowlist with `symbols`, `decorators`, and `paths` keys (each a list of strings) that suppress dead-code findings |
+
+The 0.5 key `allowlists.secretPreviews` is removed: FAMILY-CONTRACT.md section 5 makes every sensitive-data marker unconditional and zero-payload, so the key authorised nothing. A configuration carrying it, even as an empty list, is refused with that explanation; `gruff-py migrate-config` deletes it.
 
 `selection`:
 

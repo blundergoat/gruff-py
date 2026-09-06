@@ -18,8 +18,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
-    fixed_preview,
     iter_matches,
 )
 
@@ -96,7 +96,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
                 ),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
-                    "preview": fixed_preview(),
+                    "preview": category_preview("gcp-service-account"),
                     "provider": "gcp",
                     "category": "service-account-key",
                 },

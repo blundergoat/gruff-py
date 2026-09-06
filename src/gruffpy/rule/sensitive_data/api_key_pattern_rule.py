@@ -15,8 +15,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
-    fixed_preview,
     is_likely_placeholder_secret,
     iter_matches,
 )
@@ -38,6 +38,18 @@ _VENDOR_PATTERNS: dict[str, str] = {
 }
 
 _PATTERN = compile_pattern("|".join(f"(?P<{name}>{pat})" for name, pat in _VENDOR_PATTERNS.items()))
+
+# Which vendors map onto a category FAMILY-CONTRACT.md section 5 ratifies. A vendor with no ratified
+# category (openai, square, twilio) keeps the bare marker rather than inventing one the family cannot read.
+_MARKER_CATEGORIES: dict[str, str] = {
+    "stripe": "stripe-live-key",
+    "github": "github-token",
+    "gitlab": "gitlab-token",
+    "slack": "slack-token",
+    "anthropic": "anthropic-api-key",
+    "npm": "npm-token",
+    "google": "google-api-key",
+}
 
 
 class ApiKeyPatternRule(SourceTextRule):
@@ -101,7 +113,7 @@ class ApiKeyPatternRule(SourceTextRule):
                     confidence=definition.confidence,
                     remediation=("Rotate the key and load credentials from a secret manager or environment variable at runtime."),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": fixed_preview(), "vendor": vendor},
+                    metadata={"preview": category_preview(_MARKER_CATEGORIES.get(vendor)), "vendor": vendor},
                 ),
             )
         return findings

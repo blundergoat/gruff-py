@@ -9,6 +9,7 @@ Proves that:
 """
 
 import json
+import re
 from dataclasses import replace
 
 from gruffpy.parser.analysis_unit import ParseDiagnostic
@@ -16,7 +17,13 @@ from gruffpy.rule.registry import RuleRegistry
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"
-_FIXED_PREVIEW = "[redacted]"
+# Section 5's grammar is closed: the bare marker, one of the seventeen ratified categories, or a
+# connection marker naming only its already-public scheme. Anything else is matched text in a marker.
+_MARKER_GRAMMAR = re.compile(
+    r"^\[redacted(?::(?:private-key|jwt|aws-access-key|github-token|slack-token|stripe-live-key"
+    r"|google-api-key|anthropic-api-key|npm-token|gitlab-token|gcp-service-account|email|phone"
+    r"|payment-card|ssn|medicare|mrn|connection-string:[a-z][a-z0-9+.-]*))?\]$"
+)
 _STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
 _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
 _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
@@ -62,7 +69,8 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
     fired = {finding.rule_id for finding in sensitive_findings}
     missing = _EXPECTED_RULE_IDS - fired
     assert not missing, f"Missing fires: {sorted(missing)}"
-    assert {finding.metadata.get("preview") for finding in sensitive_findings} == {_FIXED_PREVIEW}
+    markers = {str(finding.metadata.get("preview")) for finding in sensitive_findings}
+    assert [marker for marker in markers if _MARKER_GRAMMAR.match(marker) is None] == []
 
 
 def test_aws_key_fires_on_json_file_via_text_seam():
@@ -100,16 +108,17 @@ def test_redaction_in_json_output_never_leaks_raw_secret():
     assert len(aws_findings) == 1
     payload = json.dumps(aws_findings[0].to_dict())
     assert _AWS_KEY not in payload
-    assert _FIXED_PREVIEW in payload
+    assert "[redacted:aws-access-key]" in payload
     assert not any(secret_detail in payload for secret_detail in ("AKIA", "CDEF", "20 chars"))
 
 
-def test_every_secret_uses_the_fixed_zero_payload_preview():
-    """Users see a classification marker without secret-derived characters or length."""
+def test_every_secret_uses_a_zero_payload_marker_from_the_ratified_grammar():
+    """Users see the class the detector knew, never characters or length from the matched value."""
     src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
-    assert aws.metadata["preview"] == _FIXED_PREVIEW
+    assert aws.metadata["preview"] == "[redacted:aws-access-key]"
+    assert _MARKER_GRAMMAR.match(aws.metadata["preview"]) is not None
 
 
 def test_npm_integrity_style_hashes_suppressed():

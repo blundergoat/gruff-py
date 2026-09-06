@@ -17,7 +17,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
-    fixed_preview,
+    connection_string_preview,
     iter_matches,
 )
 
@@ -122,10 +122,27 @@ class DatabaseUrlPasswordRule(SourceTextRule):
                         "variables or a secret manager and assemble the URL at runtime."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": fixed_preview()},
+                    metadata={"preview": connection_string_preview(_extract_scheme(database_url_match.raw))},
                 ),
             )
         return findings
+
+
+def _extract_scheme(url: str) -> str:
+    """Return the scheme of a ``scheme://user:password@host`` URL.
+
+    The scheme is the only part of a connection string the URL already publishes in plain text, so it
+    is the only part a marker may name.
+
+    Args:
+        url: Matched URL text; one of the schemes this rule's own pattern accepts.
+
+    Returns:
+        The scheme, or an empty string when the URL carries no scheme boundary.
+    """
+    scheme, separator, _ = url.partition("://")
+    # A URL without a scheme boundary cannot have been matched by this rule's pattern.
+    return scheme if separator else ""
 
 
 def _extract_password(url: str) -> str | None:

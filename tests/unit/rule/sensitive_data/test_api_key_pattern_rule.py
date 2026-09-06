@@ -107,7 +107,7 @@ def test_provider_metadata_and_message_do_not_leak_raw_key():
     assert _GOOGLE_API_KEY not in finding.message
     assert _GOOGLE_API_KEY not in str(finding.metadata)
     assert finding.metadata == {
-        "preview": "[redacted]",
+        "preview": "[redacted:google-api-key]",
         "vendor": "google",
     }
 

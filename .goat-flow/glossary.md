@@ -52,7 +52,7 @@ A stable 16-character SHA-256-derived identifier. It is intended to match `gruff
 
 ### Gruff Config
 
-Project configuration that tunes discovery, allowlists, rule selection, and per-rule thresholds/severity/options. Shared keys are `paths.ignore`, `allowlists.acceptedAbbreviations`, `allowlists.secretPreviews`, `selection`, and `rules.<id>`.
+Project configuration that tunes discovery, allowlists, rule selection, and per-rule thresholds/severity/options. Shared keys are `paths.ignore`, `allowlists.acceptedAbbreviations`, `selection`, and `rules.<id>`.
 
 ### Hotspot Output
 

@@ -17,7 +17,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
-from gruffpy.rule.sensitive_data._secret_scanner_helper import fixed_preview
+from gruffpy.rule.sensitive_data._secret_scanner_helper import category_preview
 
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _MRN_RE = re.compile(r"\bMRN[:\s]+(\d{6,10})\b", re.IGNORECASE)
@@ -102,5 +102,5 @@ def _build_phi_finding(
             "Move PHI out of the repository. Use deterministic placeholders for tests and pull real values from a HIPAA-compliant store at runtime."
         ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"preview": fixed_preview(), "kind": kind},
+        metadata={"preview": category_preview(kind), "kind": kind},
     )

@@ -27,7 +27,7 @@ def test_real_email_in_test_file_emits():
     src = f"user_email = {_REAL_EMAIL!r}\n"
     findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
     assert len(findings) == 1
-    assert findings[0].metadata["preview"] == "[redacted]"
+    assert findings[0].metadata["preview"] == "[redacted:email]"
 
 
 def test_example_email_skipped():

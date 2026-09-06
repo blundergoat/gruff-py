@@ -17,7 +17,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
-from gruffpy.rule.sensitive_data._secret_scanner_helper import fixed_preview
+from gruffpy.rule.sensitive_data._secret_scanner_helper import category_preview
 
 _EMAIL_RE = re.compile(r"(?<!\\)\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
 _PHONE_RE = re.compile(r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b")
@@ -272,5 +272,5 @@ def _build_pii_finding(
             "Replace with documented placeholders (`user@example.com`, `user@app.test`, `+1-555-...`) so test failures don't expose third-party PII."
         ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"preview": fixed_preview(), "kind": kind},
+        metadata={"preview": category_preview(kind), "kind": kind},
     )
