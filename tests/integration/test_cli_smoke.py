@@ -493,7 +493,9 @@ def test_analyse_agent_command_ignores_default_baseline_when_disabled(
             "--fail-on",
             "none",
             "--no-config",
+            # The canonical spelling carries its destination, so the scanned path follows it rather than being read as one.
             "--generate-baseline",
+            "gruff-baseline.json",
             "src/sample.py",
         ],
     )
@@ -1254,7 +1256,7 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(tmp_path: Path, m
             "--fail-on",
             "none",
             "--no-config",
-            "--baseline-path",
+            "--baseline",
             "gruff-baseline.json",
             "--generate-baseline",
         ],
@@ -1275,7 +1277,7 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(tmp_path:
 
     result = CliRunner().invoke(main, ["summary", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert result.stdout == ""
     assert "missing required 'schemaVersion'" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
@@ -1292,7 +1294,7 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(tmp_path: P
 
     result = CliRunner().invoke(main, ["analyse", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert result.stdout == ""
     assert "schemaVersion 'gruff-py.config.v0.99'" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
@@ -2214,7 +2216,7 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
             "advisory",
             "--no-config",
             "--no-baseline",
-            "--exclude-rule",
+            "--hide-rule",
             "docs.missing-readme",
             "src",
         ],
@@ -2247,7 +2249,7 @@ def test_analyse_json_display_filter_keeps_full_run_summary(
             "advisory",
             "--no-config",
             "--no-baseline",
-            "--exclude-rule",
+            "--hide-rule",
             "docs.missing-readme",
             "src",
         ],
@@ -2281,7 +2283,7 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
             "--fail-on",
             "none",
             "--no-config",
-            "--include-pillar",
+            "--show-pillar",
             "size,documentation",
             "src",
         ],
@@ -2314,8 +2316,9 @@ def test_cli_rejects_configured_secret_preview_before_analysis(tmp_path: Path, m
         {
             "type": "config-error",
             "message": (
-                'Config key "allowlists.secretPreviews" only accepts an empty list; '
-                "remove all configured entries because secret previews no longer suppress findings."
+                'Config key "allowlists.secretPreviews" is removed in 0.6.0: FAMILY-CONTRACT.md section 5 '
+                "makes category markers unconditional, so the key authorises nothing; delete it from the "
+                "configuration."
             ),
             "invalidatesRun": True,
         }
@@ -2352,7 +2355,7 @@ def test_cli_fail_on_none_exits_0_even_with_errors(tmp_path: Path, monkeypatch: 
     assert result.exit_code == 0, result.output
 
 
-def test_cli_minimum_severity_config_applies_when_no_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_fail_on_config_applies_when_no_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2360,7 +2363,7 @@ def test_cli_minimum_severity_config_applies_when_no_flag(tmp_path: Path, monkey
     # error-tier findings.
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
     (src / "warn.py").write_text(warning_lines)
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
 
@@ -2368,13 +2371,13 @@ def test_cli_minimum_severity_config_applies_when_no_flag(tmp_path: Path, monkey
     assert result.exit_code == 0, result.output
 
 
-def test_cli_fail_on_flag_wins_over_minimum_severity_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_fail_on_flag_wins_over_fail_on_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
     (src / "warn.py").write_text(warning_lines)
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
 
     # Config says "error", but --fail-on warning explicitly overrides; warning
     # findings now trigger exit 1.
@@ -2386,7 +2389,7 @@ def test_cli_fail_on_flag_wins_over_minimum_severity_config(tmp_path: Path, monk
     assert result.exit_code == 1, result.output
 
 
-def test_cli_minimum_severity_analyse_binary_default_is_advisory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_fail_on_analyse_binary_default_is_advisory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2484,7 +2487,7 @@ def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(tmp_path: Path, mon
 
     result = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
     assert "Traceback" not in result.stderr
 
@@ -2517,20 +2520,26 @@ def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(tmp_path: Path, monk
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
-    apply_result = CliRunner().invoke(main, ["migrate-config"])
+    original = (tmp_path / ".gruff-py.yaml").read_text()
+
+    apply_result = CliRunner().invoke(main, ["migrate-config", "--output", "migrated.yaml"])
 
     assert apply_result.exit_code == 0, apply_result.output
     assert "Wrote" in apply_result.stdout
-    migrated = yaml.safe_load((tmp_path / ".gruff-py.yaml").read_text())
+    migrated = yaml.safe_load((tmp_path / "migrated.yaml").read_text())
     assert migrated["rules"]["complexity.cognitive"]["threshold"] == 30
     assert migrated["rules"]["complexity.cognitive"]["severity"] == "error"
+    # Migration is out of place: the file a user may want back is only ever read.
+    assert (tmp_path / ".gruff-py.yaml").read_text() == original
 
 
 def test_cli_analyse_strict_config_passes_after_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
-    migrate = CliRunner().invoke(main, ["migrate-config"])
+    migrate = CliRunner().invoke(main, ["migrate-config", "--output", "migrated.yaml"])
     assert migrate.exit_code == 0, migrate.output
+    # The migrated file is what the next run must load, so it takes the place of the 0.5 one here.
+    (tmp_path / ".gruff-py.yaml").write_text((tmp_path / "migrated.yaml").read_text())
 
     rerun = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
 

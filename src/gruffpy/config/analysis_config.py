@@ -13,6 +13,7 @@ from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.config.sensitive_exclusions import SensitiveExclusion
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.pillar import Pillar
+from gruffpy.finding.severity import Severity
 
 if TYPE_CHECKING:
     from gruffpy.rule.registry import RuleRegistry
@@ -60,6 +61,8 @@ class AnalysisConfig:
     Attributes:
         rules: Per-rule settings keyed by rule id.
         minimum_python_version: Minimum Python version assumed by modernisation rules.
+        display_floor: Lowest severity the report shows, from the scalar
+            ``minimumSeverity`` key; ``None`` shows every severity.
         minimum_severity: Per-command ``--fail-on`` defaults sourced from the
             ``minimumSeverity:`` config block. Keys are gateable subcommand names
             (``analyse``, ``report``, ``dashboard``); the validator rejects any
@@ -83,6 +86,7 @@ class AnalysisConfig:
     rules: dict[str, RuleSettings] = field(default_factory=dict)
     minimum_python_version: tuple[int, int] = (3, 11)
     minimum_severity: dict[str, FailThreshold] = field(default_factory=dict)
+    display_floor: Severity | None = None
     rule_selection: RuleSelection = field(default_factory=RuleSelection)
     ignored_path_patterns: tuple[str, ...] = ()
     # This exact family seed keeps fresh configs consistent across implementations.
@@ -214,6 +218,21 @@ class AnalysisConfig:
             New ``AnalysisConfig`` with the per-command defaults updated.
         """
         return replace(self, minimum_severity=dict(minimum_severity))
+
+    def with_display_floor(self, display_floor: Severity) -> "AnalysisConfig":
+        """Return a new config whose report shows only findings at or above *display_floor*.
+
+        This is the configuration form of the family's ``--min-severity``. It
+        decides what a report shows and never an exit code, a score, or a
+        baseline; ``failOn`` is what gates a build.
+
+        Args:
+            display_floor: Lowest severity the report shows.
+
+        Returns:
+            New ``AnalysisConfig`` carrying the floor.
+        """
+        return replace(self, display_floor=display_floor)
 
     def with_rule_selection(self, selection: RuleSelection) -> "AnalysisConfig":
         """Return a new config with the rule include/exclude selection swapped.

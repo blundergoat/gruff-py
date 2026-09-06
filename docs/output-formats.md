@@ -149,7 +149,7 @@ than the native `gruff.analysis.v3` report:
 
 ```json
 {
-  "contractVersion": "gruff.hook.v1",
+  "contractVersion": "gruff.hook.v2",
   "analyzer": { "name": "gruff-py", "version": "0.5.0" },
   "findings": [],
   "suppressed": { "count": 0 },
@@ -166,7 +166,7 @@ invalid config exit `2` and still render a hook JSON payload when config loading
 is the failure.
 
 `gruff-py hook --capabilities --format json` advertises the same
-`gruff.hook.v1` contract, supported flags, and `flagOrder`.
+`gruff.hook.v2` contract, supported flags, and `flagOrder`.
 
 `hook --exclude-rule <rule-id>` is execution-level and removes matching rules
 from the hook payload. It accepts comma-separated and repeated values.

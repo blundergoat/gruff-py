@@ -176,7 +176,8 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
-    display_findings = request.display_filter.filter_findings(findings)
+    display_filter = request.display_filter.with_configured_floor(config.display_floor)
+    display_findings = display_filter.filter_findings(findings)
     hidden_by_display_filter = len(findings) - len(display_findings)
     partial_context_caveat = _partial_project_context_caveat(registry, config, scan_scope)
 
@@ -259,8 +260,7 @@ def _resolve_threshold_and_exclusions(
         configured = config.minimum_severity.get(request.config_severity_command)
         if configured is not None:
             fail_threshold = configured
-    if request.execution_exclude_rules:
-        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
+    config = _with_execution_selectors(config, request)
     return config, fail_threshold
 
 
@@ -277,14 +277,44 @@ def _partial_project_context_caveat(
     return None
 
 
-def _with_execution_exclude_rules(
-    config: AnalysisConfig,
-    exclude_rules: tuple[str, ...],
-) -> AnalysisConfig:
-    """Merge command-only rule exclusions into the config used for this user request."""
+def _with_execution_selectors(config: AnalysisConfig, request: AnalysisRunRequest) -> AnalysisConfig:
+    """Merge the command's execution selectors into the config this run executes.
+
+    These choose which rules run, so the score and any generated baseline move
+    with them. The presentation filters live on the display filter and never
+    reach here, which is what keeps the two ideas apart.
+
+    Args:
+        config: Config resolved from the project file.
+        request: The user's run request, carrying any selectors they typed.
+
+    Returns:
+        The config narrowed to what the user asked to run.
+    """
     selection = config.rule_selection
-    merged = tuple(dict.fromkeys((*selection.exclude_rules, *exclude_rules)))
-    return config.with_rule_selection(replace(selection, exclude_rules=merged))
+    excluded = tuple(dict.fromkeys((*selection.exclude_rules, *request.execution_exclude_rules)))
+    included = tuple(dict.fromkeys((*selection.rules, *request.execution_include_rules)))
+    included_pillars = tuple(dict.fromkeys((*selection.pillars, *request.execution_include_pillars)))
+    excluded_pillars = tuple(dict.fromkeys((*selection.exclude_pillars, *request.execution_exclude_pillars)))
+
+    # An unrestricted run keeps the configured selection rather than rebuilding an identical one.
+    if (excluded, included, included_pillars, excluded_pillars) == (
+        selection.exclude_rules,
+        selection.rules,
+        selection.pillars,
+        selection.exclude_pillars,
+    ):
+        return config
+
+    return config.with_rule_selection(
+        replace(
+            selection,
+            exclude_rules=excluded,
+            rules=included,
+            pillars=included_pillars,
+            exclude_pillars=excluded_pillars,
+        )
+    )
 
 
 def _discover_and_parse_sources(

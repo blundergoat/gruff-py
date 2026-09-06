@@ -15,7 +15,7 @@ uv run gruff-py hook src/foo.py \
   --changed-ranges "12-40,88-90"
 ```
 
-`hook` emits `contractVersion: "gruff.hook.v1"` and exits `0` whenever
+`hook` emits `contractVersion: "gruff.hook.v2"` and exits `0` whenever
 analysis ran, even when findings exist. The payload carries `scope` on every
 finding, normalized threshold metadata (`measured`, `threshold`, `unit`,
 `direction`), non-null `remediation`, `suppressed.count`, `ignored.paths`, and

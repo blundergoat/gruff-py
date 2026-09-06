@@ -155,6 +155,8 @@ def _migrate_document(
         if key != "schemaVersion":
             migrated[key] = value
 
+    changes.extend(_migrate_zero_six_keys(migrated))
+
     rules = migrated.get("rules")
     if isinstance(rules, dict):
         for rule_id, section in rules.items():
@@ -165,6 +167,43 @@ def _migrate_document(
                 continue
             changes.extend(_migrate_rule_section(rule_id, section, defaults.rules[rule_id]))
     return migrated, changes, notes
+
+
+def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
+    """Apply the two key moves 0.6.0 made, both of which the loader now refuses outright.
+
+    The per-command exit gate left ``minimumSeverity`` for ``failOn``; the same
+    key as a single severity is the 0.6 display floor and stays where it is.
+    ``allowlists.secretPreviews`` was removed because FAMILY-CONTRACT.md
+    section 5 makes category markers unconditional, and the key authorises
+    nothing.
+
+    Args:
+        migrated: The working document, edited in place.
+
+    Returns:
+        One readable line per rewrite; empty when the document was already
+        current.
+    """
+    changes: list[str] = []
+
+    gate = migrated.get("minimumSeverity")
+    # Only the per-command mapping is the old gate; a bare severity is the 0.6 display floor and keeps its name.
+    if isinstance(gate, dict):
+        migrated["failOn"] = migrated.pop("minimumSeverity")
+        changes.append("minimumSeverity: renamed to failOn, the key that gates the exit code in 0.6")
+
+    allowlists = migrated.get("allowlists")
+    # Presence is the test, not content: an empty list reads as configured redaction just as a populated one does.
+    if isinstance(allowlists, dict) and "secretPreviews" in allowlists:
+        allowlists.pop("secretPreviews")
+        changes.append("allowlists.secretPreviews: removed; section 5 makes category markers unconditional")
+
+        # A block whose last key just went is a mapping with nothing in it, which the loader reads as neither shape.
+        if not allowlists:
+            migrated.pop("allowlists")
+
+    return changes
 
 
 def _migrate_rule_section(

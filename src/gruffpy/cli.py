@@ -18,7 +18,7 @@ from click.shell_completion import get_completion_class
 
 import gruffpy.cli_dashboard as dashboard_cli
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
-from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
+from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
@@ -190,6 +190,12 @@ class _AnalysisCliRequest:
     changed_scope: str
     strict_config: bool = False
     deep_scan_budget: str = ""
+    show_rule: tuple[str, ...] = ()
+    hide_rule: tuple[str, ...] = ()
+    show_pillar: tuple[str, ...] = ()
+    hide_pillar: tuple[str, ...] = ()
+    min_confidence: str | None = None
+    fail_on_new: bool = False
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
@@ -573,6 +579,7 @@ def _analysis_request(
     output_key: str,
     command_name: str,
 ) -> _AnalysisCliRequest:
+    _warn_superseded_spellings(kwargs)
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         config_path=cast(Path | None, kwargs["config_path"]),
@@ -589,12 +596,18 @@ def _analysis_request(
         exclude_pillar=cast(tuple[str, ...], kwargs["exclude_pillar"]),
         include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
-        baseline_path=cast(Path | None, kwargs.get("baseline_path")),
+        show_rule=cast(tuple[str, ...], kwargs.get("show_rule", ())),
+        hide_rule=cast(tuple[str, ...], kwargs.get("hide_rule", ())),
+        show_pillar=cast(tuple[str, ...], kwargs.get("show_pillar", ())),
+        hide_pillar=cast(tuple[str, ...], kwargs.get("hide_pillar", ())),
+        min_confidence=cast("str | None", kwargs.get("min_confidence")),
+        fail_on_new=bool(kwargs.get("fail_on_new", False)),
+        baseline_path=_first_present_path(kwargs, ("baseline", "baseline_path")),
         generate_baseline_path=_resolve_generate_baseline_path(kwargs),
         migrate_baseline_path=cast(Path | None, kwargs.get("migrate_baseline_path")),
         force_baseline_overwrite=cast(bool, kwargs.get("force_baseline_overwrite", False)),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
-        diff_mode=cast(str, kwargs.get("diff_mode", "")),
+        diff_mode=_resolved_diff_mode(kwargs),
         diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
         since=cast(str, kwargs.get("since", "")),
         changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
@@ -604,13 +617,83 @@ def _analysis_request(
     )
 
 
-def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
-    explicit = cast(Path | None, kwargs.get("generate_baseline_path"))
-    if explicit is not None:
-        return explicit
-    if cast(bool, kwargs.get("generate_baseline", False)):
-        return Path(DEFAULT_BASELINE_FILENAME)
+def _resolved_diff_mode(kwargs: Mapping[str, Any]) -> str:
+    """Return the diff selector this run compares against, taking the family spelling first.
+
+    ``--diff`` names the mode; ``--diff-base`` and its superseded spelling
+    ``--diff-vs`` name the ref, and a named ref is what the run actually
+    compares against.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+
+    Returns:
+        The ref or mode to compare against; empty when the user named none.
+    """
+    for name in ("diff_base", "diff_vs"):
+        value = kwargs.get(name)
+        if isinstance(value, str) and value:
+            return value
+    return cast(str, kwargs.get("diff_mode", ""))
+
+
+def _first_present_path(kwargs: Mapping[str, Any], names: tuple[str, ...]) -> Path | None:
+    """Return the first path the user actually gave, in canonical-spelling-first order.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+        names: Option names to try, the family spelling first.
+
+    Returns:
+        The path the user named, or None when they named none of them.
+    """
+    for name in names:
+        value = kwargs.get(name)
+        if value is not None:
+            return cast("Path | None", value)
     return None
+
+
+def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
+    """Print one line per superseded spelling the user typed, naming the family name that replaces it.
+
+    The run continues: behaviour is identical under the family spelling, so
+    refusing would break a working command line for a rename. The warning is
+    what tells the user the old name is going away.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+    """
+    for name, replacement in (("baseline_path", "--baseline"), ("diff_vs", "--diff-base"), ("generate_baseline_path", "--generate-baseline")):
+        value = kwargs.get(name)
+        # An option the user left alone is None for a path and "" for a string, and neither is a spelling they typed.
+        if value in (None, ""):
+            continue
+        typed = "--" + name.replace("_", "-")
+        click.echo(
+            f"{typed} is superseded by {replacement} and behaves identically; the old spelling is going away.",
+            err=True,
+        )
+
+
+def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
+    """Return where a generated baseline is written, or None when the user asked for none.
+
+    ``--generate-baseline`` carries the destination, and given no value it falls
+    back to the conventional file name, which is the shape the ratified CLI
+    contract gives the flag in every port. The superseded
+    ``--generate-baseline-path`` still works and warns.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+
+    Returns:
+        The destination path, or None when neither spelling was used.
+    """
+    canonical = cast(Path | None, kwargs.get("generate_baseline"))
+    if canonical is not None:
+        return canonical
+    return cast(Path | None, kwargs.get("generate_baseline_path"))
 
 
 def _summary_analysis_request(
@@ -792,12 +875,14 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
+    # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
+    # only the presentation ones reach the display filter.
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
-        include_pillars=_parse_pillar_values("--include-pillar", request.include_pillar),
-        exclude_pillars=_parse_pillar_values("--exclude-pillar", request.exclude_pillar),
-        include_rules=_split_repeated_csv(request.include_rule),
-        exclude_rules=_split_repeated_csv(request.exclude_rule),
+        include_pillars=_parse_pillar_values("--show-pillar", request.show_pillar),
+        exclude_pillars=_parse_pillar_values("--hide-pillar", request.hide_pillar),
+        include_rules=_split_repeated_csv(request.show_rule),
+        exclude_rules=_split_repeated_csv(request.hide_rule),
     )
     project_root = _project_root_from_targets(request.paths)
     try:
@@ -824,6 +909,10 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 since=request.since,
                 changed_ranges=request.changed_ranges,
                 changed_scope=request.changed_scope,
+                execution_include_rules=_split_repeated_csv(request.include_rule),
+                execution_exclude_rules=_split_repeated_csv(request.exclude_rule),
+                execution_include_pillars=tuple(pillar.value for pillar in _parse_pillar_values("--include-pillar", request.include_pillar)),
+                execution_exclude_pillars=tuple(pillar.value for pillar in _parse_pillar_values("--exclude-pillar", request.exclude_pillar)),
                 strict_config=request.strict_config,
                 deep_scan_budget=request.deep_scan_budget,
             )
@@ -831,7 +920,10 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
             return _config_error_report(request, exc)
-        raise click.ClickException(str(exc)) from exc
+        # Section 7 reserves exit 1 for a completed run whose findings reached the gate, so a run that never
+        # happened has to be distinguishable from one that did; Click's own default for this is 1.
+        click.echo(str(exc), err=True)
+        raise SystemExit(2) from exc
     _echo_config_warnings(report)
     return report
 

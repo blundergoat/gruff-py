@@ -1,6 +1,6 @@
 """Reporter-side filter that applies ``--min-severity`` / pillar selection."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -30,6 +30,25 @@ class FindingDisplayFilter:
     exclude_pillars: tuple[Pillar, ...] = ()
     include_rules: tuple[str, ...] = ()
     exclude_rules: tuple[str, ...] = ()
+
+    def with_configured_floor(self, configured_floor: Severity | None) -> "FindingDisplayFilter":
+        """Return a copy carrying the project's floor, unless the user already named one on the command line.
+
+        The flag wins because it is the more specific instruction: a project
+        floor is a default, and typing ``--min-severity`` is the user overriding
+        that default for one run.
+
+        Args:
+            configured_floor: Floor from the project's ``minimumSeverity`` key,
+                or None when it set none.
+
+        Returns:
+            This filter when a flag already set the floor, otherwise a copy
+            carrying the configured one.
+        """
+        if self.min_severity is not None or configured_floor is None:
+            return self
+        return replace(self, min_severity=configured_floor)
 
     def filter_findings(self, findings: list[Finding] | tuple[Finding, ...]) -> list[Finding]:
         """Return only the findings that satisfy every active selector.

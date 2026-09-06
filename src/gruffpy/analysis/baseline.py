@@ -327,8 +327,13 @@ class BaselineStore:
                 f'Baseline schema "{schema}" is a 0.5 baseline. Migrate it to a separate file with '
                 f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline-path <new path>`; the original is preserved."
             )
+        # Any other schemaVersion is a pre-0.6 document, and every one of them takes the same route forward.
         if schema != BASELINE_SCHEMA_VERSION:
-            raise BaselineError(f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}".')
+            raise BaselineError(
+                f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}"; carry an older file\'s reviews forward '
+                f"with `gruff-py analyse --migrate-baseline {display_path} --generate-baseline-path <new path>`, "
+                "which leaves the original untouched."
+            )
 
         tool_language = payload.get("toolLanguage")
         # A baseline names its writer, so another port's file is refused instead of reporting every row resolved.

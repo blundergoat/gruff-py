@@ -13,6 +13,7 @@ import click
 
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME
 from gruffpy.cli_state import state as _state
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.severity import Severity
@@ -419,8 +420,8 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help="Changed-region scope: symbol or hunk.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -434,14 +435,16 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--generate-baseline",
         "generate_baseline",
-        is_flag=True,
-        default=False,
-        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}".',
+        is_flag=False,
+        flag_value=DEFAULT_BASELINE_FILENAME,
+        default=None,
+        type=click.Path(path_type=Path),
+        help=f'Write current findings to this baseline JSON file, or to "{DEFAULT_BASELINE_FILENAME}" when given no path.',
     ),
     _path_option(
         "--generate-baseline-path",
         "generate_baseline_path",
-        "Write current findings to this baseline JSON file (implies generation).",
+        "Superseded spelling of --generate-baseline; identical behaviour, and it warns.",
     ),
     _path_option(
         "--migrate-baseline",
@@ -474,8 +477,8 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -505,28 +508,77 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values (score/exit unchanged).",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--hide-rule",
+        multiple=True,
+        help="Hide these comma-separated rule IDs from the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--show-rule",
+        multiple=True,
+        help="Show only these comma-separated rule IDs in the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--hide-pillar",
+        multiple=True,
+        help="Hide these comma-separated pillars from the report.",
+    ),
+    _option(
+        "--show-pillar",
+        multiple=True,
+        help="Show only these comma-separated pillars in the report.",
     ),
     _option(
         "--min-severity",
         type=click.Choice([s.value for s in Severity]),
         default=None,
         help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--min-confidence",
+        type=click.Choice([c.value for c in Confidence]),
+        default=None,
+        help="Lowest confidence that reaches the exit gate: low, medium, or high. Never filters the report.",
+    ),
+    _option(
+        "--fail-on-new",
+        is_flag=True,
+        default=False,
+        help="Exit 1 when any finding is new against the applied baseline, whatever its severity.",
+    ),
+    _ignored_string_option(
+        "--scan-timeout",
+        "Parsed and accepted for cross-port compatibility; gruff-py enforces no scan deadline on analyse.",
+        "",
+    ),
+    _option(
+        "--diff-base",
+        default="",
+        help="The ref a diff is taken against. Canonical spelling of --diff-vs.",
+    ),
+    _option(
+        "--baseline",
+        "baseline",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Apply this baseline v3 file. Canonical spelling of --baseline-path.",
     ),
     _option(
         "--include-ignored",

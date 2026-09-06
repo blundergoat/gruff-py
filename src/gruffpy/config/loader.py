@@ -35,6 +35,7 @@ VALID_TOP_LEVEL_KEYS = frozenset(
         "schemaVersion",
         "minimumPythonVersion",
         "minimumSeverity",
+        "failOn",
         "outputVolumeHintThreshold",
         "deepScanBudget",
         "paths",
@@ -59,6 +60,8 @@ NON_GATING_COMMANDS = frozenset(
 )
 VALID_MINIMUM_SEVERITY_VALUES = frozenset(f.value for f in FailThreshold)
 VALID_PATHS_KEYS = frozenset({"ignore"})
+# secretPreviews stays recognised so the loader can refuse it by name with the section 5 explanation, rather
+# than reporting it as an unknown key the user might think was a typo.
 VALID_ALLOWLISTS_KEYS = frozenset({"acceptedAbbreviations", "secretPreviews", "deadCode"})
 VALID_DEAD_CODE_ALLOWLIST_KEYS = frozenset({"symbols", "decorators", "paths"})
 VALID_SELECTION_KEYS = frozenset(
@@ -79,8 +82,15 @@ LEGACY_TOML_TABLE = f"[tool.{LEGACY_TOML_TOOL_KEY}]"
 DEFAULT_YAML_CONFIG_NAME = ".gruff-py.yaml"
 LEGACY_YAML_CONFIG_NAME = ".gruff.yaml"
 LEGACY_SECRET_PREVIEWS_ERROR = (
-    'Config key "allowlists.secretPreviews" only accepts an empty list; '
-    "remove all configured entries because secret previews no longer suppress findings."
+    'Config key "allowlists.secretPreviews" is removed in 0.6.0: FAMILY-CONTRACT.md section 5 makes category '
+    "markers unconditional, so the key authorises nothing; delete it from the configuration."
+)
+
+DISPLAY_FLOOR_VALUES = frozenset(severity.value for severity in Severity)
+
+LEGACY_MINIMUM_SEVERITY_ERROR = (
+    'Config key "minimumSeverity" is the display floor in 0.6.0 and takes one severity, not a per-command map; '
+    'move the per-command exit gate to "failOn", which is the key that gates the exit code.'
 )
 
 
@@ -213,7 +223,9 @@ class ConfigLoader:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
         ConfigLoader._validate_schema_version(section, source)
         if "minimumSeverity" in section:
-            ConfigLoader._validate_minimum_severity(section["minimumSeverity"], source)
+            ConfigLoader._validate_display_floor(section["minimumSeverity"], source)
+        if "failOn" in section:
+            ConfigLoader._validate_minimum_severity(section["failOn"], source)
         if "outputVolumeHintThreshold" in section:
             ConfigLoader._validate_output_volume_hint_threshold(section["outputVolumeHintThreshold"], source)
         if "deepScanBudget" in section:
@@ -239,22 +251,35 @@ class ConfigLoader:
             )
 
     @staticmethod
+    def _validate_display_floor(value: Any, source: str) -> None:
+        """Validate the display floor, refusing the per-command map that used to mean the exit gate.
+
+        The map form is the whole reason this check exists: it is valid YAML that
+        used to gate a build, and reading it as a display floor would change what
+        a committed file does without changing what it says.
+        """
+        if isinstance(value, dict):
+            raise ConfigError(f"{source}: {LEGACY_MINIMUM_SEVERITY_ERROR}")
+        if not isinstance(value, str) or value not in DISPLAY_FLOOR_VALUES:
+            raise ConfigError(f"{source} minimumSeverity {value!r} is not a severity: want {sorted(DISPLAY_FLOOR_VALUES)}.")
+
+    @staticmethod
     def _validate_minimum_severity(block: Any, source: str) -> None:
         """Validate per-command failure thresholds before a scan can report the wrong exit code."""
         if not isinstance(block, dict):
-            raise ConfigError(f"{source} minimumSeverity must be a mapping of command name to severity.")
+            raise ConfigError(f"{source} failOn must be a mapping of command name to severity.")
         errors: list[str] = []
         for key, value in block.items():
             if key in NON_GATING_COMMANDS:
-                errors.append(f"minimumSeverity.{key!r} is a non-gating subcommand; only {sorted(GATEABLE_COMMANDS)} accept a per-command default.")
+                errors.append(f"failOn.{key!r} is a non-gating subcommand; only {sorted(GATEABLE_COMMANDS)} accept a per-command default.")
             elif key not in GATEABLE_COMMANDS:
-                errors.append(f"Unknown minimumSeverity key {key!r}; allowed: {sorted(GATEABLE_COMMANDS)}.")
+                errors.append(f"Unknown failOn key {key!r}; allowed: {sorted(GATEABLE_COMMANDS)}.")
             elif not isinstance(value, str):
-                errors.append(f"minimumSeverity.{key} must be a string; got {type(value).__name__}.")
+                errors.append(f"failOn.{key} must be a string; got {type(value).__name__}.")
             elif value not in VALID_MINIMUM_SEVERITY_VALUES:
-                errors.append(f"minimumSeverity.{key} has invalid value {value!r}; allowed: {sorted(VALID_MINIMUM_SEVERITY_VALUES)}.")
+                errors.append(f"failOn.{key} has invalid value {value!r}; allowed: {sorted(VALID_MINIMUM_SEVERITY_VALUES)}.")
         if errors:
-            raise ConfigError(f"{source} has minimumSeverity errors: {'; '.join(errors)}")
+            raise ConfigError(f"{source} has failOn errors: {'; '.join(errors)}")
 
     @staticmethod
     def _validate_output_volume_hint_threshold(value: Any, source: str) -> None:
@@ -289,8 +314,11 @@ class ConfigLoader:
         if "minimumPythonVersion" in section:
             config = config.with_minimum_python_version(_parse_python_version(section["minimumPythonVersion"]))
 
+        if "failOn" in section:
+            config = config.with_minimum_severity({key: FailThreshold(value) for key, value in section["failOn"].items()})
+
         if "minimumSeverity" in section:
-            config = config.with_minimum_severity({key: FailThreshold(value) for key, value in section["minimumSeverity"].items()})
+            config = config.with_display_floor(Severity(section["minimumSeverity"]))
 
         if "outputVolumeHintThreshold" in section:
             config = config.with_output_volume_hint_threshold(section["outputVolumeHintThreshold"])
@@ -353,9 +381,8 @@ class ConfigLoader:
         if not isinstance(accepted_abbreviations, list) or not all(isinstance(abbreviation, str) for abbreviation in accepted_abbreviations):
             raise ConfigError("[tool.gruff-py.allowlists].acceptedAbbreviations must be a list of strings.")
 
-        # A user may leave the retired key as [], but a configured preview must fail before
-        # analysis because preview text cannot authorize a finding.
-        if "secretPreviews" in allowlists and allowlists["secretPreviews"] != []:
+        # Presence is the test, not content: an empty list reads as configured redaction just as a populated one does.
+        if "secretPreviews" in allowlists:
             raise ConfigError(LEGACY_SECRET_PREVIEWS_ERROR)
 
     @staticmethod
@@ -363,8 +390,6 @@ class ConfigLoader:
         """Copy validated allowlists into the immutable config used by the user's scan."""
         if "acceptedAbbreviations" in allowlists:
             config = config.with_accepted_abbreviations(tuple(allowlists["acceptedAbbreviations"]))
-        if "secretPreviews" in allowlists:
-            config = config.with_allowed_secret_previews(tuple(allowlists["secretPreviews"]))
         if "deadCode" in allowlists:
             config = config.with_dead_code_allowlist(_parse_dead_code_allowlist(allowlists["deadCode"]))
         return config

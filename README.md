@@ -96,7 +96,7 @@ Open `http://127.0.0.1:8765/` for the dashboard.
 | `report [paths...]` | Render an HTML or JSON report to stdout or `--output`. |
 | `list-rules [rule-id]` | Print rule metadata as text or JSON; pass a rule id for explain mode. |
 | `check-ignore [paths...]` | Report whether each path is ignored, and why (exit codes mirror `git check-ignore`). |
-| `hook [paths...]` | Run analysis for a coding-agent hook; emits `gruff.hook.v1` JSON. |
+| `hook [paths...]` | Run analysis for a coding-agent hook; emits `gruff.hook.v2` JSON. |
 | `migrate-config` | Rewrite legacy config keys to the current schema; `--dry-run` prints the diff. |
 | `dashboard [paths...]` | Serve the local browser dashboard. |
 | `completion [shell]` | Print a shell completion script. |
@@ -244,7 +244,7 @@ Default scans are local source inspections. `gruff-py` parses Python source and 
 
 ## Stability Contract
 
-Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, `gruff.hook.v1`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](CHANGELOG.md).
+Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, `gruff.hook.v2`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## How It Compares
 

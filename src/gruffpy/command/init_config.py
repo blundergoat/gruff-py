@@ -187,7 +187,7 @@ def _scaffold_document(
     minimum_severity = {command: severity.value for command, severity in config.minimum_severity.items()}
     document: dict[str, Any] = {
         "schemaVersion": CONFIG_SCHEMA_VERSION,
-        "minimumSeverity": minimum_severity,
+        "failOn": minimum_severity,
         "minimumPythonVersion": f"{major}.{minor}",
         "outputVolumeHintThreshold": config.output_volume_hint_threshold,
         "paths": {"ignore": list(config.ignored_path_patterns)},
@@ -208,11 +208,10 @@ def _render_allowlists_section(config: AnalysisConfig) -> str:
         config: Resolved allowlists; empty lists mean no user exceptions are active.
 
     Returns:
-        YAML section that preserves active allowlists while keeping ``secretPreviews`` inert.
+        YAML section that preserves active allowlists; sensitive-data markers are unconditional and configure nothing.
     """
     allowlists = {
         "acceptedAbbreviations": list(config.accepted_abbreviations),
-        "secretPreviews": [],
         "deadCode": {
             "symbols": list(config.dead_code_allowlist.symbols),
             "decorators": list(config.dead_code_allowlist.decorators),

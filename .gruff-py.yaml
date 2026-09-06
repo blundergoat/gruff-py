@@ -4,7 +4,7 @@
 # After reviewing findings, `gruff-py analyse . --generate-baseline` records known debt.
 # See docs/configuration.md for the full key reference.
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   analyse: advisory
   report: none
   dashboard: none
@@ -41,7 +41,6 @@ allowlists:
   - tx
   - ui
   - url
-  secretPreviews: []
   deadCode:
     symbols: []
     # Click command functions are consumed by the decorator-registration

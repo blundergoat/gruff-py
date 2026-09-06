@@ -95,10 +95,10 @@ def _dashboard_request(
     )
 
 
-def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
+def test_dashboard_initial_state_uses_config_fail_on_when_no_cli_flag(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -109,7 +109,7 @@ def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
 def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_key(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -120,7 +120,7 @@ def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_
 def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(
         project_root=tmp_path,
         fail_on="warning",
@@ -135,7 +135,7 @@ def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
 def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path, should_skip_config=True)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -146,7 +146,7 @@ def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
 def test_dashboard_initial_state_surfaces_config_errors_at_startup(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  dashboard: error\n")
+    (tmp_path / ".gruff-py.yaml").write_text("failOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     with pytest.raises(ConfigError, match="schemaVersion"):
@@ -169,7 +169,7 @@ def test_dashboard_initial_state_resolves_relative_config_under_project_root(tmp
     """
     project = tmp_path / "project"
     project.mkdir()
-    (project / "custom.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n")
+    (project / "custom.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)

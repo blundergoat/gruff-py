@@ -1,7 +1,7 @@
 """Verify the allowlist settings users can load from YAML and TOML.
 
-The suite protects naming-seed replacement and the retired ``secretPreviews`` key. Invalid preview
-values must produce one value-independent diagnostic before a scan begins.
+The suite protects naming-seed replacement and the removal of ``secretPreviews``. Section 5 makes category
+markers unconditional, so any configuration naming the key is refused before a scan begins.
 """
 
 from pathlib import Path
@@ -31,13 +31,12 @@ def _toml(tmp_path: Path, body: str) -> Path:
 
 
 def test_default_accepted_abbreviations_survive_unrelated_allowlists_section(tmp_path: Path):
-    _yaml(tmp_path, "allowlists:\n  secretPreviews: []\n")
+    _yaml(tmp_path, "allowlists:\n  deadCode:\n    symbols: []\n")
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
 
     assert config.accepted_abbreviations == _defaults().accepted_abbreviations
     assert "id" in config.accepted_abbreviations
-    assert config.allowed_secret_previews == ()
 
 
 def test_explicit_accepted_abbreviations_replace_defaults(tmp_path: Path):
@@ -93,12 +92,18 @@ def test_secret_previews_rejects_every_value_except_an_empty_list(tmp_path: Path
     assert "known-fixture" not in str(error.value)
 
 
-def test_toml_secret_previews_accepts_only_an_empty_array(tmp_path: Path):
+def test_toml_secret_previews_is_refused_even_when_empty(tmp_path: Path):
+    """An empty list reads as configured redaction just as a populated one does, so presence is what is refused.
+
+    Args:
+        tmp_path: Temporary project the configuration is written into.
+    """
     _toml(tmp_path, "\n[tool.gruff-py.allowlists]\nsecretPreviews = []\n")
 
-    config, _ = ConfigLoader(tmp_path, _defaults()).load()
+    with pytest.raises(ConfigError) as error:
+        ConfigLoader(tmp_path, _defaults()).load()
 
-    assert config.allowed_secret_previews == ()
+    assert str(error.value) == LEGACY_SECRET_PREVIEWS_ERROR
 
 
 def test_toml_secret_previews_rejects_a_configured_preview(tmp_path: Path):
