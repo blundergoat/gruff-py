@@ -222,9 +222,11 @@ Narrow path scans that leave project-wide rules enabled include a partial-contex
 caveat in JSON run metadata and text output because conclusions can differ from
 a full-project scan.
 
-Display filters such as `--min-severity`, `--include-pillar`, and `--exclude-rule` reduce rendered
-`analyse` output without changing which rules execute, the score, or the exit code. Text output
-discloses when findings are hidden by these filters.
+`--exclude-rule`, `--include-rule`, `--exclude-pillar`, and `--include-pillar` are execution-level:
+the excluded rules do not run, so the score and the exit code move with them. Display filters such as
+`--min-severity`, `--hide-rule`, and `--show-rule` reduce rendered `analyse` output without changing
+which rules execute, the score, or the exit code. Text output discloses when findings are hidden by
+these filters.
 
 ## Dashboard
 

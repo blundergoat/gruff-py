@@ -296,7 +296,9 @@ directive does, and it is never invisible. Every entry publishes one row in the 
 ```
 
 `symbol` appears only on an entry that scopes itself to one, so a row without it omits the key
-rather than publishing `null`.
+rather than publishing `null`. That is the `gruff.analysis.v3` and `gruff.summary.v3` row; the hook
+payload publishes a different shape, described in
+[Output Formats → Hook JSON](output-formats.md#hook-json).
 
 `analyse --format text` and `summary` print the same total under a `Sensitive exclusions` heading;
 `summary --format json` carries the same `suppressions` array with the same per-entry
@@ -629,8 +631,15 @@ that run.
 
 ## Display Filters Are Not Config Selection
 
-CLI options such as `--min-severity`, `--include-pillar`, and `--exclude-rule`
-filter what gets rendered. They do not change scoring or the `--fail-on` exit
-calculation.
+Two groups of CLI options look alike and are not. `--exclude-rule`,
+`--include-rule`, `--exclude-pillar`, and `--include-pillar` are
+execution-level: the excluded rules do not run, so the score and the exit code
+move with them. They are the one-run form of config `selection`, and a baseline
+generated under them records only the rules that ran.
 
-Use config `selection` when you want to change which rules run.
+Display filters — `--min-severity`, `--hide-rule`, `--show-rule`,
+`--hide-pillar`, and `--show-pillar` — filter what gets rendered. They do not
+change scoring or the `--fail-on` exit calculation.
+
+Use config `selection` when you want to change which rules run for every run
+rather than one.

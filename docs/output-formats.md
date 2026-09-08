@@ -161,12 +161,30 @@ than the native `gruff.analysis.v3` report:
   },
   "findings": [],
   "suppressed": { "count": 0 },
-  "suppressions": [],
+  "suppressions": [
+    {
+      "rule": "sensitive-data.aws-access-key",
+      "path": "tests/fixtures/aws-sample.env",
+      "symbol": null,
+      "reason": "Synthetic key used by the loader fixture; not a live credential.",
+      "suppressed": 0
+    }
+  ],
   "ignored": { "paths": [] },
   "diagnostics": [],
   "config": { "schemaOk": true, "error": null }
 }
 ```
+
+The hook `suppressions` row is not the analysis row. `analyse` and `summary`
+publish `index`, `rule`, `paths` as an array, `reason`, `suppressed`, and
+`symbol` only on an entry that scopes itself to one (see
+[Configuration → Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions)).
+The hook row carries `rule`, a single `path` string, `symbol` — always present,
+`null` when the entry names no symbol — `reason`, and `suppressed`. It has no
+`index`; rows follow configuration order. `suppressed` is `0` for an entry that
+matched nothing in this run, so a row means the exclusion is configured, not
+that it silenced anything.
 
 Hook findings use the contract's normative names: `file`, `scope`, non-null
 `remediation`, `stableIdentity`, optional `fingerprint`, and threshold metadata
@@ -267,14 +285,32 @@ summary only.
 
 To read a noisy run rule-by-rule, see [Triage](triage.md).
 
+## Rule And Pillar Selection
+
+`--exclude-rule`, `--include-rule`, `--exclude-pillar`, and `--include-pillar`
+are execution-level: the excluded rules do not run, so the score and the exit
+code move with them.
+
+```sh
+uv run gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
+uv run gruff-py analyse src/ --include-pillar security
+```
+
+Because the rules never ran, these selectors leave no `run.filters` entry and no
+`displayFilter` block. `summary.findings` and `score.composite` describe the
+narrowed run, and a baseline generated under them records only the rules that
+ran. They are the one-run form of config `selection` (see
+[Configuration → Display Filters Are Not Config Selection](configuration.md#display-filters-are-not-config-selection)).
+
 ## Display Filters
 
-Display filters apply after analysis and scoring:
+Display filters apply after analysis and scoring. They are `--min-severity`,
+`--hide-rule`, `--show-rule`, `--hide-pillar`, and `--show-pillar`:
 
 ```sh
 uv run gruff-py analyse src/ --min-severity warning
-uv run gruff-py analyse src/ --include-pillar security
-uv run gruff-py analyse src/ --exclude-rule docs.missing-function-docstring
+uv run gruff-py analyse src/ --show-pillar security
+uv run gruff-py analyse src/ --hide-rule docs.missing-function-docstring
 ```
 
 Display filters change only which findings are rendered and are recorded under

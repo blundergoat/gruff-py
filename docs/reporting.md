@@ -8,7 +8,8 @@ by task; the table below names where its content now lives.
 | Every `--format` value, and what each is for | [Output Formats](output-formats.md) |
 | JSON shape, finding identity, schema strings | [Output Formats → JSON](output-formats.md#json) |
 | SARIF renderer contract and validation | [Output Formats → SARIF](output-formats.md#sarif) |
-| Display filters (`--min-severity`, `--include-pillar`, `--exclude-rule`) | [Output Formats → Display Filters](output-formats.md#display-filters) |
+| Display filters (`--min-severity`, `--hide-rule`, `--show-rule`) | [Output Formats → Display Filters](output-formats.md#display-filters) |
+| Rule and pillar selection (`--exclude-rule`, `--include-pillar`) | [Output Formats → Rule And Pillar Selection](output-formats.md#rule-and-pillar-selection) |
 | Changed-region scoping and `summary.suppressedFindings` | [Output Formats → Changed-Region Scoping](output-formats.md#changed-region-scoping-native-diff-mode) |
 | GitHub Actions workflow, SARIF upload, baselines | [CI Integration](ci-integration.md) |
 | `--fail-on`, `failOn:`, and exit codes | [Configuration → Severity Gate](configuration.md#severity-gate) |

@@ -26,6 +26,15 @@ finding, normalized threshold metadata (`measured`, `threshold`, `unit`,
 `direction`), non-null `remediation`, `suppressed.count`, `ignored.paths`, and
 `config.schemaOk` / `config.error` for config failures.
 
+`suppressions` carries one row per configured `sensitiveExclusions` entry, in
+configuration order: `rule`, a single `path` string, `symbol` (always present,
+`null` when the entry names no symbol), `reason`, and `suppressed`. This is not
+the analysis row shape — `analyse` and `summary` publish `index` and a `paths`
+array, and omit `symbol` entirely when the entry names none — so a consumer
+written against `gruff.analysis.v3` cannot read hook rows unchanged.
+`suppressed` is `0` for an entry that matched nothing, so a row means the
+exclusion is configured, not that it silenced anything.
+
 `--changed-ranges` scopes `hook` at the finding's own reported span: a finding is
 returned when its `line..endLine` intersects a changed range, and whole-file or
 class-level aggregate findings are reported only when newly introduced versus a
