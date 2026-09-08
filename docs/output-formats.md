@@ -49,17 +49,18 @@ Version 3 is a hard break with no v2 writer or compatibility flag:
 | top-level Python mutation, review, or trend data | `extensions.py.topLevel.{mutation,review,trend}` |
 | independent compact summary fields | the `gruff.summary.v3` analysis projection |
 
-The adapter preserves every native fingerprint, `stableIdentity`, score,
-grade, baseline result, and exit-code decision.
+The v3 machine adapter preserves every native fingerprint, `stableIdentity`,
+score, grade, baseline result, and exit-code decision.
 
 ### Finding identity
 
 Every finding carries one `file` path and two identity fields:
 
-- `fingerprint` — the existing line-precise 16-character SHA-256 prefix used
-  by baselines and SARIF `gruffFingerprint`.
-- `stableIdentity` — the existing line-insensitive 16-character SHA-256
-  prefix for external diff tooling.
+- `fingerprint` — the line-precise 16-character SHA-256 prefix. Neither
+  baselines nor SARIF read it any more; both use the line-free baseline
+  identity.
+- `stableIdentity` — the line-insensitive 16-character SHA-256 prefix for
+  external diff tooling.
 
 `column`, `endLine`, and `symbol` appear only when known.
 `metadata.locationPrecision` is `scanner-pinpointed` when a column is known
@@ -151,9 +152,18 @@ than the native `gruff.analysis.v3` report:
 {
   "contractVersion": "gruff.hook.v2",
   "analyzer": { "name": "gruff-py", "version": "0.5.0" },
+  "run": {
+    "mode": "full",
+    "scope": "file",
+    "paths": ["src"],
+    "analysedFiles": 1,
+    "baseline": { "applied": false, "schemaVersion": null, "path": null }
+  },
   "findings": [],
   "suppressed": { "count": 0 },
+  "suppressions": [],
   "ignored": { "paths": [] },
+  "diagnostics": [],
   "config": { "schemaOk": true, "error": null }
 }
 ```
@@ -161,9 +171,11 @@ than the native `gruff.analysis.v3` report:
 Hook findings use the contract's normative names: `file`, `scope`, non-null
 `remediation`, `stableIdentity`, optional `fingerprint`, and threshold metadata
 with `measured`, `threshold`, `unit`, and `direction`. `hook` exits `0` after a
-successful analysis even when findings are present; operational failures such as
-invalid config exit `2` and still render a hook JSON payload when config loading
-is the failure.
+successful analysis even when findings are present, because its own `--fail-on`
+defaults to `none`; `--fail-on <severity>`, `--fail-on-new`, and
+`--fail-on-diagnostics` are the explicit consumer requests that exit `1`
+instead. Operational failures such as invalid config exit `2` and still render a
+hook JSON payload when config loading is the failure.
 
 `gruff-py hook --capabilities --format json` advertises the same
 `gruff.hook.v2` contract, supported flags, and `flagOrder`.
@@ -221,8 +233,10 @@ uv run gruff-py analyse src tests --format sarif --fail-on none > gruff-py.sarif
 
 SARIF is a renderer over the native `gruff.analysis.v3` model, not a
 replacement schema. It preserves native rule ids, fingerprints, severity,
-paths, locations, metadata, scoring, and fail-on behavior. Fingerprints are
-emitted as `partialFingerprints.gruffFingerprint`, and run properties carry
+paths, locations, metadata, scoring, and fail-on behavior. The durable baseline
+identity is emitted as `partialFingerprints.gruffFingerprint`; a sensitive
+finding carries no `partialFingerprints` object at all, so no secret is given a
+durable name in code scanning. Run properties carry
 `gruffSchemaVersion` with the native v3 schema plus score and grade when
 available. The driver is named `gruff-py`, uses the project version as
 `semanticVersion`, and emits registry rule metadata sorted by stable rule id.
@@ -276,6 +290,6 @@ Text reports disclose the hidden count; JSON keeps full-run counts in
 errors are fatal diagnostics and exit `2` even with `--fail-on none`, so
 `none` makes findings report-only rather than making every diagnostic
 successful. The default is `advisory` for `analyse` and `none` for `report`
-and `dashboard`; override via the CLI flag or via `minimumSeverity:` in
+and `dashboard`; override via the CLI flag or via `failOn:` in
 `.gruff-py.yaml` (see
 [Configuration → Severity Gate](configuration.md#severity-gate)).

@@ -35,11 +35,9 @@ Grouped by rule (showing 8 of 8):
 
 Columns are count, rule id, default severity, default confidence. Rows sort by count descending, then rule id ascending. `--top N` caps the number of rows (default 10).
 
-JSON output additively gains a `groupedRules` field with `{shown, total, rows}`. Each row carries `ruleId`, `count`, `severity`, `confidence`. The existing `topRules` field stays unchanged for back-compat:
-
-```bash
-gruff-py summary --format json --group-by=rule src/ | jq '.groupedRules.rows[0]'
-```
+`--group-by=rule` changes the text summary only. `summary --format json` emits the
+`gruff.summary.v3` document — the analysis envelope with only its top-level `findings` array
+removed — and carries no `groupedRules` or `topRules` field.
 
 ## Recommended workflow
 

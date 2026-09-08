@@ -14,7 +14,7 @@ gruff-py exists to govern **AI-generated code so a human reviewer can sign off o
 
 gruff-py is heuristic static analysis: it complements `ruff`, `mypy`, `pytest`, security scanners, and human review — it does not replace them.
 
-See [docs/mission.md](docs/mission.md) for the full statement.
+See [docs/mission.md](https://github.com/blundergoat/gruff-py/blob/main/docs/mission.md) for the full statement.
 
 ## Status At A Glance
 
@@ -25,14 +25,14 @@ See [docs/mission.md](docs/mission.md) for the full statement.
 | Package | `gruff-py` |
 | Import package | `gruffpy` with `py.typed` |
 | Binary | `gruff-py` |
-| Rule catalogue | Generated from `RuleRegistry.defaults()`; see [Rules](docs/rules.md) |
+| Rule catalogue | Generated from `RuleRegistry.defaults()`; see [Rules](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md) |
 | Primary config | `.gruff-py.yaml`; `[tool.gruff-py]` in `pyproject.toml` is also supported |
-| Analysis schema | `gruff.analysis.v2` |
-| Baseline schema | `gruff-py.baseline.v1`; legacy `gruff.baseline.v1` can be read |
-| Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `minimumSeverity:` in `.gruff-py.yaml` / `pyproject.toml` |
+| Analysis schema | `gruff.analysis.v3` |
+| Baseline schema | `gruff.baseline.v3`; `gruff-py.baseline.v1` and `gruff.baseline.v1` fail closed with a migration command |
+| Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `failOn:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
-Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v2` schema string; baseline, hotspot, and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/output-formats.md`](docs/output-formats.md#finding-identity) for the input set.
+Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v3` schema string; hotspot and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/output-formats.md`](https://github.com/blundergoat/gruff-py/blob/main/docs/output-formats.md#finding-identity) for the input set.
 
 ## Requirements
 
@@ -78,7 +78,7 @@ uv run gruff-py analyse src/ --fail-on warning
 uv run gruff-py analyse src/ --format sarif --fail-on none > gruff.sarif
 
 # Generate a fresh-start baseline.
-uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
+uv run gruff-py analyse src/ --generate-baseline --fail-on none
 
 # Start the local dashboard.
 uv run gruff-py dashboard src/ --report-interactive
@@ -111,7 +111,7 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 | Format | Use it for |
 | --- | --- |
 | `text` | Human terminal output. |
-| `json` | Full `gruff.analysis.v2` report. |
+| `json` | Full `gruff.analysis.v3` report. |
 | `html` | Self-contained inspection report. |
 | `markdown` | Pull-request or issue comment summary. |
 | `github` | GitHub Actions workflow annotations. |
@@ -133,8 +133,8 @@ Global options mirror the broader gruff CLI surface: `--silent`, `--quiet`, `--v
 diagnostics.
 
 `analyse` defaults to `--fail-on advisory`. Set
-`minimumSeverity.analyse` in `.gruff-py.yaml` to change the default
-per-project (see [docs/configuration.md](docs/configuration.md#severity-gate)).
+`failOn.analyse` in `.gruff-py.yaml` to change the default
+per-project (see [docs/configuration.md](https://github.com/blundergoat/gruff-py/blob/main/docs/configuration.md#severity-gate)).
 
 ## CI Usage
 
@@ -180,11 +180,11 @@ rules:
     severity: error
 ```
 
-See [Configuration](docs/configuration.md) for the full shape.
+See [Configuration](https://github.com/blundergoat/gruff-py/blob/main/docs/configuration.md) for the full shape.
 
 ## Rules And Pillars
 
-[`docs/rules.md`](docs/rules.md) is the generated source for current rule IDs,
+[`docs/rules.md`](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md) is the generated source for current rule IDs,
 declared pillars, defaults, and catalog totals. Its header and pillar table come
 from `RuleRegistry.defaults()` rather than hand-maintained README values.
 
@@ -194,21 +194,23 @@ Verify the committed catalog without rewriting it:
 uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 ```
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.5.0`. See [Rules](docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.5.0`. See [Rules](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 
-Baselines suppress reviewed findings by fingerprint:
+Baselines suppress reviewed findings by a line-free identity and a count, so an unrelated edit
+that shifts line numbers does not re-open reviewed debt:
 
 ```bash
-uv run gruff-py analyse src/ --generate-baseline-path gruff-baseline.json --fail-on none
-uv run gruff-py analyse src/ --baseline-path gruff-baseline.json --fail-on warning
+uv run gruff-py analyse src/ --generate-baseline --fail-on none
+uv run gruff-py analyse src/ --baseline gruff-baseline.json --fail-on warning
 uv run gruff-py analyse src/ --no-baseline --fail-on none
 ```
 
 Changed-code scans are changed-region aware: a finding is kept when its location
-or enclosing function/class overlaps the changed hunk. JSON output includes
-`suppressedCount` for findings excluded as out of scope.
+or enclosing function/class overlaps the changed hunk. JSON output reports the
+findings excluded as out of scope at `summary.suppressedFindings` and
+`diff.filteredFindings`.
 
 ```bash
 uv run gruff-py analyse --format json --changed-ranges "3-3,8-10" src/foo.py
@@ -234,7 +236,7 @@ The dashboard serves a local browser UI for repeated scans. It has no
 authentication and is intended for local development. Non-loopback hosts are
 refused unless you pass `--allow-public`; that acknowledgment warns that remote
 users can scan any directory readable by the server process. See
-[Dashboard](docs/dashboard.md) for supported controls and safety notes.
+[Dashboard](https://github.com/blundergoat/gruff-py/blob/main/docs/dashboard.md) for supported controls and safety notes.
 
 In polyglot repositories, remember that `gruff-go`, `gruff-php`, and `gruff-py` all default to port `8765`; use `--port` when running multiple dashboards at the same time.
 
@@ -244,7 +246,7 @@ Default scans are local source inspections. `gruff-py` parses Python source and 
 
 ## Stability Contract
 
-Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v2`, `gruff-py.baseline.v1`, `gruff-py.hotspot.v1`, `gruff.hook.v2`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](CHANGELOG.md).
+Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v3`, `gruff.baseline.v3`, `gruff-py.hotspot.v1`, `gruff.hook.v2`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md), and [`UPGRADING.md`](https://github.com/blundergoat/gruff-py/blob/main/UPGRADING.md) states what each move breaks and how to go back.
 
 ## How It Compares
 
@@ -271,22 +273,24 @@ make check
 
 ## Documentation
 
-- [Mission](docs/mission.md)
-- [Changelog](CHANGELOG.md)
-- [Configuration](docs/configuration.md)
-- [Rules](docs/rules.md)
-- [Output formats](docs/output-formats.md)
-- [Coding-agent hook](docs/agent-hook.md)
-- [CI integration](docs/ci-integration.md)
-- [Triage a noisy run](docs/triage.md)
-- [Explain a rule](docs/explain.md)
-- [Reports](docs/reporting.md)
-- [Dashboard](docs/dashboard.md)
-- [Release checklist](docs/releasing.md)
-- [Contributing](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security](SECURITY.md)
-- [Support](SUPPORT.md)
+- [Mission](https://github.com/blundergoat/gruff-py/blob/main/docs/mission.md)
+- [Documentation index](https://github.com/blundergoat/gruff-py/blob/main/docs/README.md)
+- [Upgrading](https://github.com/blundergoat/gruff-py/blob/main/UPGRADING.md)
+- [Changelog](https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md)
+- [Configuration](https://github.com/blundergoat/gruff-py/blob/main/docs/configuration.md)
+- [Rules](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md)
+- [Output formats](https://github.com/blundergoat/gruff-py/blob/main/docs/output-formats.md)
+- [Coding-agent hook](https://github.com/blundergoat/gruff-py/blob/main/docs/agent-hook.md)
+- [CI integration](https://github.com/blundergoat/gruff-py/blob/main/docs/ci-integration.md)
+- [Triage a noisy run](https://github.com/blundergoat/gruff-py/blob/main/docs/triage.md)
+- [Explain a rule](https://github.com/blundergoat/gruff-py/blob/main/docs/explain.md)
+- [Reports](https://github.com/blundergoat/gruff-py/blob/main/docs/reporting.md)
+- [Dashboard](https://github.com/blundergoat/gruff-py/blob/main/docs/dashboard.md)
+- [Release checklist](https://github.com/blundergoat/gruff-py/blob/main/docs/releasing.md)
+- [Contributing](https://github.com/blundergoat/gruff-py/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/blundergoat/gruff-py/blob/main/CODE_OF_CONDUCT.md)
+- [Security](https://github.com/blundergoat/gruff-py/blob/main/SECURITY.md)
+- [Support](https://github.com/blundergoat/gruff-py/blob/main/SUPPORT.md)
 
 ## Author
 
@@ -294,4 +298,4 @@ Built by [Matthew Hansen](https://www.blundergoat.com/about).
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](https://github.com/blundergoat/gruff-py/blob/main/LICENSE.md)

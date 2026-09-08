@@ -41,7 +41,7 @@ Use `--no-config` to skip all config files.
 ```yaml
 schemaVersion: gruff-py.config.v0.1
 
-minimumSeverity:
+failOn:
   analyse: advisory
   report: none
   dashboard: none
@@ -106,7 +106,7 @@ enabled = true
 maxLines = 20000
 maxBytes = 2000000
 
-[tool.gruff-py.minimumSeverity]
+[tool.gruff-py.failOn]
 analyse = "advisory"
 report = "none"
 dashboard = "none"
@@ -151,7 +151,8 @@ Top-level keys:
 | Key | Type | Meaning |
 |---|---|---|
 | `schemaVersion` | string | Config schema literal; must equal `gruff-py.config.v0.1` |
-| `minimumSeverity` | table | Per-command `--fail-on` defaults (see [Severity Gate](#severity-gate)) |
+| `failOn` | table | Per-command `--fail-on` defaults (see [Severity Gate](#severity-gate)) |
+| `minimumSeverity` | string | Display floor: lowest severity the report shows, and the project default for `--min-severity` (see [Severity Gate](#severity-gate)) |
 | `minimumPythonVersion` | string | Minimum Python version, currently at least `3.11` |
 | `deepScanBudget` | table | Paired line/byte limits for deep Python analysis; either exceeded bound degrades the file |
 | `paths` | table | Path ignore configuration |
@@ -161,7 +162,7 @@ Top-level keys:
 | `rules` | table | Per-rule settings |
 | `outputVolumeHintThreshold` | integer | Finding count at which `analyse --format text` appends a pointer to `summary --group-by=rule` (default `50`; `0` disables) |
 
-`minimumSeverity`:
+`failOn`:
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -291,13 +292,16 @@ directive does, and it is never invisible. Every entry publishes one row in the 
 
 ```json
 {"index": 0, "rule": "sensitive-data.aws-access-key", "paths": ["tests/fixtures/aws-sample.env"],
- "symbol": null, "reason": "Synthetic key used by the loader fixture; not a live credential.",
- "suppressed": 2}
+ "reason": "Synthetic key used by the loader fixture; not a live credential.", "suppressed": 2}
 ```
 
+`symbol` appears only on an entry that scopes itself to one, so a row without it omits the key
+rather than publishing `null`.
+
 `analyse --format text` and `summary` print the same total under a `Sensitive exclusions` heading;
-`summary --format json` filters without publishing a count until `gruff.summary.v2` gains a
-suppression surface. No reported
+`summary --format json` carries the same `suppressions` array with the same per-entry
+`suppressed` count, because it is the analysis document with only the top-level `findings` array
+removed. No reported
 field carries matched value material: `reason` and `path` come from your configuration, and nothing
 in the audit row is derived from the value a rule matched.
 
@@ -469,11 +473,11 @@ accepted within the same function.
 
 ## Severity Gate
 
-`minimumSeverity` sets per-command defaults for the `--fail-on` flag. The
-resolved threshold is the first match of:
+`failOn` sets per-command defaults for the `--fail-on` flag. The resolved
+threshold is the first match of:
 
 1. `--fail-on <value>` passed on the command line.
-2. `minimumSeverity.<command>` from the loaded config.
+2. `failOn.<command>` from the loaded config.
 3. The built-in default for that subcommand (`analyse: advisory`; `report` and
    `dashboard`: `none`).
 
@@ -484,6 +488,12 @@ without failing the run.
 Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
 Adding `summary: advisory` or any other key is a hard error; silent acceptance
 would be a CI footgun.
+
+`minimumSeverity` is a different key: one severity (`advisory`, `warning`, or
+`error` - not `none`) that sets the project default for the `--min-severity`
+display filter, so it changes which findings are printed and never the exit
+code. A per-command map under `minimumSeverity` is refused, and the error
+names `failOn`.
 
 See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
 for the rationale, the rejected alternatives, and the cross-port invariant.
@@ -556,8 +566,11 @@ explicit file):
   tier is dropped, honouring the single-threshold contract); a warning-only
   tier maps to `severity: warning`.
 - A missing or stale `schemaVersion` is pinned to the current value.
-- `paths.ignore`, `allowlists`, `selection`, `minimumSeverity`, per-rule
-  `enabled` and `options` (including `conventionalModuleNames`), and valid
+- A per-command `minimumSeverity` map is renamed to `failOn`, the key
+  that gates the exit code; a bare `minimumSeverity` severity is the display
+  floor and keeps its name.
+- `paths.ignore`, `allowlists`, `selection`, per-rule `enabled` and
+  `options` (including `conventionalModuleNames`), and valid
   `thresholds` knobs pass through unchanged.
 
 The command prints one line per change plus a unified diff; `--dry-run`
@@ -599,11 +612,16 @@ the current findings, generate a baseline:
 gruff-py analyse . --generate-baseline --fail-on none
 ```
 
-This writes `gruff-baseline.json` using `gruff-py.baseline.v1` and leaves the
+This writes `gruff-baseline.json` using `gruff.baseline.v3` and leaves the
 current run's findings visible. Future `analyse` and `report` runs apply that
-default baseline automatically, suppressing findings whose fingerprint, rule
-id, and file still match. Use `--baseline-path <path>` for an explicit baseline,
-or `--no-baseline` to audit without any baseline.
+default baseline automatically, suppressing findings whose line-free identity
+still matches within the count the row accepts. Use `--baseline <path>` on
+`analyse` for an explicit baseline — `report` accepts only the
+`--baseline-path <path>` spelling — or `--no-baseline` to audit without any
+baseline. A `gruff-py.baseline.v1` or `gruff.baseline.v1` file fails closed with
+exit `2` and names
+`gruff-py analyse --migrate-baseline <old> --generate-baseline-path <new path>`,
+which carries the reviews forward and preserves the original.
 
 Generate and apply baselines with the same paths, config, and ignore flags you
 plan to use in CI; the baseline only records findings from the files scanned in
