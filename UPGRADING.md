@@ -29,6 +29,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 11. **the agent-hook contract moves from `gruff.hook.v1` to `gruff.hook.v2`** — The payload's `contractVersion` changes and the envelope gains two required keys, `run` and `suppressions`. `run` carries the audit data a consumer needs to trust the verdict — mode, scope, the operands as given, `analysedFiles`, and the applied baseline — and `suppressions` carries one row per configured sensitive exclusion with the count it suppressed in this run, `0` when the entry matched nothing, and `[]` when none are configured. The exits are ratified as three and no others: `0` when nothing reached the gate, `1` when something did under an explicit consumer request (`--fail-on`, `--fail-on-new`, or `--fail-on-diagnostics`), and `2` when the run could not happen. Update any consumer that validates the payload's key set; one that reads only the keys it needs is unaffected. The contract is `gruff-spec/contracts/core/hook.v2.json`, ratified 2026-09-06.
 
+12. **`list-rules --format json` publishes every threshold as a named knob map** — A single-threshold rule's value moves from the scalar `threshold` to `thresholds`, as `{"maxLines": 100}` where gruff-go already names the knob and `{"threshold": 10}` where no port does; named-knob rules keep their map, and a rule with no threshold publishes neither key. Update any consumer that read `rules[].threshold`; `list-rules <rule_id> --format json` changes the same way. SARIF rule properties and `.gruff-py.yaml` keys are unchanged.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

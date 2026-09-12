@@ -1031,7 +1031,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "defaultSeverity": definition.default_severity.value,
         "confidence": definition.confidence.value,
         "defaultEnabled": definition.default_enabled,
-        **definition.threshold_payload(),
+        **definition.listing_threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
         **({"falsePositiveShapes": false_positive_shapes_payload} if documentation.false_positive_shapes else {}),

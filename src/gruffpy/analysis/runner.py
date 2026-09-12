@@ -139,25 +139,14 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     diagnostics.extend(parse_diagnostics)
 
     scan_scope = _resolve_scan_scope(request, changed)
-    context = RuleContext(
-        project_root=str(request.project_root),
-        config=config,
-        scan_scope=scan_scope,
-    )
-    suppressions_by_file = _parse_suppressions(units, registry)
-    diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
-    findings = _collect_findings(
+    findings, suppressions = _name_findings(
         registry=registry,
         units=units,
-        context=context,
-        suppressions_by_file=suppressions_by_file,
+        config=config,
+        project_root=request.project_root,
+        scan_scope=scan_scope,
+        diagnostics=diagnostics,
     )
-    # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
-    # exactly like the inline directive channel, and every drop is counted for the report.
-    findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
-    # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
-    # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
-    findings = _with_baseline_identities(findings, units)
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
@@ -203,6 +192,50 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             suppressions=suppressions,
         )
     )
+
+
+def _name_findings(
+    *,
+    registry: RuleRegistry,
+    units: list[AnalysisUnit],
+    config: AnalysisConfig,
+    project_root: Path,
+    scan_scope: str,
+    diagnostics: list[RunDiagnostic],
+) -> tuple[list[Finding], tuple[SuppressionSummary, ...]]:
+    """Run the rules over the parsed units and name every finding before anything filters it.
+
+    Args:
+        registry: Rule registry whose enabled rules run.
+        units: Parsed source units in scan order.
+        config: Effective analysis configuration, including sensitive-data exclusions.
+        project_root: Project root the rule context reports paths against.
+        scan_scope: Resolved scope label the rule context carries.
+        diagnostics: Run diagnostics; inline-suppression diagnostics are appended in place.
+
+    Returns:
+        The findings that survive inline and reviewed suppression, each carrying its baseline
+        identity, and the audit summary of every reviewed sensitive-data exclusion applied.
+    """
+    context = RuleContext(
+        project_root=str(project_root),
+        config=config,
+        scan_scope=scan_scope,
+    )
+    suppressions_by_file = _parse_suppressions(units, registry)
+    diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
+    findings = _collect_findings(
+        registry=registry,
+        units=units,
+        context=context,
+        suppressions_by_file=suppressions_by_file,
+    )
+    # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
+    # exactly like the inline directive channel, and every drop is counted for the report.
+    findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
+    # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
+    # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
+    return _with_baseline_identities(findings, units), suppressions
 
 
 def _build_report(assembly: _ReportAssembly) -> AnalysisReport:

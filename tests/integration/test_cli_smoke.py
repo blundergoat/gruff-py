@@ -689,6 +689,30 @@ def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
     assert "falsePositiveShapes" not in heuristic_rule["documentation"]
 
 
+def test_cli_list_rules_json_publishes_thresholds_as_named_knob_maps():
+    rules = {rule["id"]: rule for rule in _list_rules_payload()["rules"]}
+
+    # A rubric whose rule id has a gruff-go knob name borrows it.
+    assert rules["complexity.cognitive"]["thresholds"] == {"maxComplexity": 30}
+    assert rules["size.function-length"]["thresholds"] == {"maxLines": 100}
+    # A rubric with no knob name anywhere in the family publishes the one-key map.
+    assert rules["docs.todo-density"]["thresholds"] == {"threshold": 10}
+    # A named-knob rule publishes its map unchanged.
+    assert rules["test-quality.eager-test"]["thresholds"] == {"maxAssertions": 5}
+    # A rule with no threshold omits the key, and no rule publishes the retired scalar.
+    assert "thresholds" not in rules["security.ssrf"]
+    assert [rule_id for rule_id, rule in rules.items() if "threshold" in rule] == []
+
+
+def test_cli_list_rules_explain_json_publishes_the_same_threshold_map():
+    result = CliRunner().invoke(main, ["list-rules", "size.function-length", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["thresholds"] == {"maxLines": 100}
+    assert "threshold" not in payload
+
+
 def test_cli_list_rules_accepts_text_alias():
     result = CliRunner().invoke(main, ["list-rules", "--format", "text"])
 
