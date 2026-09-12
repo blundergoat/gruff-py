@@ -660,6 +660,24 @@ _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
     }
 )
 _REQUIRED_RULE_DOCUMENTATION_KEYS = frozenset({"rationale", "fixGuidance", "confidenceRationale"})
+# The baseline container a generate run publishes; every key is present on every run, movement or not.
+_GENERATED_BASELINE_KEYS = frozenset(
+    {
+        "applied",
+        "entries",
+        "path",
+        "generated",
+        "newFindings",
+        "resolvedFindings",
+        "suppressedFindings",
+        "unchangedFindings",
+        "staleEvaluation",
+        "staleEntries",
+        "source",
+        "stale",
+    }
+)
+_MOVEMENT_COUNTERS = ("newFindings", "resolvedFindings", "suppressedFindings", "unchangedFindings", "staleEntries")
 
 
 def _list_rules_payload() -> dict:
@@ -1231,20 +1249,18 @@ def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monke
     assert baseline_payload["toolLanguage"] == "py"
     # One row per identity, so a file with two occurrences of one finding stores one row with a count of two.
     assert sum(row["count"] for row in baseline_payload["occurrences"]) == len(generated_payload["findings"])
-    assert generated_payload["baseline"] == {
-        "applied": False,
-        "entries": len(baseline_payload["occurrences"]),
-        "path": "gruff-baseline.json",
-        "generated": True,
-        "newFindings": 0,
-        "resolvedFindings": 0,
-        "suppressedFindings": 0,
-        "unchangedFindings": 0,
-        "staleEvaluation": "generated",
-        "staleEntries": 0,
-        "source": "default",
-        "stale": [],
-    }
+    baseline = generated_payload["baseline"]
+    assert set(baseline) == _GENERATED_BASELINE_KEYS
+    # A generate run records the file it wrote and applies nothing from it.
+    assert baseline["applied"] is False
+    assert baseline["generated"] is True
+    assert baseline["path"] == "gruff-baseline.json"
+    assert baseline["source"] == "default"
+    assert baseline["entries"] == len(baseline_payload["occurrences"])
+    # Nothing moved, so every movement counter is zero and the stale evaluation names the generate.
+    assert {counter: baseline[counter] for counter in _MOVEMENT_COUNTERS} == dict.fromkeys(_MOVEMENT_COUNTERS, 0)
+    assert baseline["staleEvaluation"] == "generated"
+    assert baseline["stale"] == []
 
 
 def test_cli_analyse_auto_applies_default_baseline_when_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

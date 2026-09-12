@@ -37,6 +37,13 @@ from gruffpy.finding.severity import Severity
         ("ts", "docs.missing-readme", "src/widget.rs", "process#1", "caa4bb2431af313d"),
         ("rs", "docs.missing-readme", "src/gadget.rs", "process#1", "8f717ea2d0f8af15"),
     ],
+    ids=[
+        "rs-symbol-first-ordinal",
+        "rs-symbol-second-ordinal",
+        "rs-message-subject",
+        "ts-same-inputs-other-language",
+        "rs-same-symbol-other-path",
+    ],
 )
 def test_identity_matches_the_family_oracle(tool_language: str, rule_id: str, path: str, subject: str, expected: str) -> None:
     assert compute_identity_for(tool_language, rule_id, path, subject) == expected
@@ -222,7 +229,11 @@ def test_migration_refuses_a_hard_linked_output(tmp_path: Path) -> None:
 
 
 def test_a_baseline_only_ever_removes_reviewed_findings(tmp_path: Path) -> None:
-    """The ratified invariant: a baseline may remove reviewed ordinary findings from score and exit, and nothing else."""
+    """The ratified invariant: a baseline may remove reviewed ordinary findings from score and exit, and nothing else.
+
+    Args:
+        tmp_path: Scratch project root the baseline is generated into and applied from.
+    """
     reviewed = _finding()
     fresh = _finding(symbol="other", line=400)
     secret = _finding(rule_id="sensitive-data.aws-access-key", pillar=Pillar.SENSITIVE_DATA, symbol=None, message="Possible AWS key")
@@ -238,7 +249,11 @@ def test_a_baseline_only_ever_removes_reviewed_findings(tmp_path: Path) -> None:
 
 
 def test_default_path_protection_keeps_the_retreat_copy(tmp_path: Path) -> None:
-    """The four ratified cases: refuse over a 0.5 file, --force overrides, v3 over v3 is fine, empty project writes."""
+    """The four ratified cases: refuse over a 0.5 file, --force overrides, v3 over v3 is fine, empty project writes.
+
+    Args:
+        tmp_path: Scratch project root whose default baseline path the protection guards.
+    """
     default_path = tmp_path / "gruff-baseline.json"
     legacy_bytes = json.dumps({"schemaVersion": "gruff-py.baseline.v1", "findings": []}).encode("utf-8")
 
@@ -262,6 +277,9 @@ def test_a_written_baseline_carries_no_sentinel(tmp_path: Path) -> None:
     """Proof C2's artifact half: a generated baseline holds no sensitive material in any form.
 
     A file a team commits and shares must not leak the secret it was counting, in raw, partial, hashed or encoded form.
+
+    Args:
+        tmp_path: Scratch project root the baseline is written into and read back from.
     """
     # A synthetic AWS-shaped literal, not a live credential; it exists to be searched for.
     sentinel = "AKIA" + "IOSFODNN7EXAMPLE"
@@ -274,8 +292,9 @@ def test_a_written_baseline_carries_no_sentinel(tmp_path: Path) -> None:
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[secret])
     written = (tmp_path / "gruff-baseline.json").read_text(encoding="utf-8")
 
-    for name, form in _sentinel_forms(sentinel).items():
-        assert form not in written, f"the written baseline carries the {name} form of the sentinel"
+    # Every form is checked at once so a failure names each one that leaked rather than the first.
+    leaked_forms = [name for name, form in _sentinel_forms(sentinel).items() if form in written]
+    assert leaked_forms == [], f"the written baseline carries these forms of the sentinel: {leaked_forms}"
     # What it does carry is a count, which is what makes the secret auditable without naming it.
     assert '"sensitive-data.aws-access-key": 1' in written
 

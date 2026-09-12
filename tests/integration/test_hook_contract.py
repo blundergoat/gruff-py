@@ -18,6 +18,22 @@ from gruffpy.version import VERSION
 
 _GIT = shutil.which("git")
 _SEVERITIES = {"advisory", "warning", "error"}
+# The capability set gruff.hook.v2 advertises. Every flag is on because the port implements every
+# optional part of the contract; a consumer reads this map before choosing which flags to pass.
+_ADVERTISED_SUPPORTS = {
+    "baseline": True,
+    "baselineV3": True,
+    "changedRanges": True,
+    "confidenceGate": True,
+    "deepScanBudget": True,
+    "diagnostics": True,
+    "diff": True,
+    "ignoreReport": True,
+    "metadata": True,
+    "newOnly": True,
+    "scopeField": True,
+    "stableIdentity": True,
+}
 _SCOPES = {"line", "symbol", "file", "project"}
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODEX_HOOK_TIMEOUT_SECONDS = 90
@@ -51,20 +67,7 @@ def test_hook_capabilities_advertise_contract() -> None:
     payload = json.loads(result.output)
     assert payload["contractVersion"] == "gruff.hook.v2"
     assert payload["analyzer"] == {"name": "gruff-py", "version": VERSION}
-    assert payload["supports"] == {
-        "baseline": True,
-        "baselineV3": True,
-        "changedRanges": True,
-        "confidenceGate": True,
-        "deepScanBudget": True,
-        "diagnostics": True,
-        "diff": True,
-        "ignoreReport": True,
-        "metadata": True,
-        "newOnly": True,
-        "scopeField": True,
-        "stableIdentity": True,
-    }
+    assert payload["supports"] == _ADVERTISED_SUPPORTS
     assert payload["flags"] == {
         "baseline": "--baseline",
         "changedRanges": "--changed-ranges",
