@@ -491,6 +491,12 @@ Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
 Adding `summary: advisory` or any other key is a hard error; silent acceptance
 would be a CI footgun.
 
+Across the Gruff family only `analyse` and `report` are accepted by every port, so a
+polyglot repository that shares one `failOn` block should write only those two keys.
+`dashboard` is accepted by gruff-go, gruff-php and gruff-py, and `summary` by gruff-go
+and gruff-ts; each other port refuses the key with exit 2 rather than ignoring it,
+because it ships no gate for that command.
+
 `minimumSeverity` is a different key: one severity (`advisory`, `warning`, or
 `error` - not `none`) that sets the project default for the `--min-severity`
 display filter, so it changes which findings are printed and never the exit
