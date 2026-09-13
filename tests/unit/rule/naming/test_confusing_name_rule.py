@@ -24,9 +24,7 @@ def _ctx(options: dict | None = None) -> RuleContext:
     rule = ConfusingNameRule()
     return RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(enabled=True, options=options or {})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True, options=options or {})}),
     )
 
 

@@ -65,10 +65,7 @@ class ExceptionTypeOnlyRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _exception_type_only_finding(unit, definition, fn, node)
-            for fn, node in _type_only_exception_assertions(unit)
-        ]
+        return [_exception_type_only_finding(unit, definition, fn, node) for fn, node in _type_only_exception_assertions(unit)]
 
 
 def _type_only_exception_assertions(
@@ -109,10 +106,7 @@ def _exception_type_only_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Narrow the exception type or add `match='expected substring'` "
-            "to bind the assertion to the message."
-        ),
+        remediation=("Narrow the exception type or add `match='expected substring'` to bind the assertion to the message."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

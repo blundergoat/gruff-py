@@ -81,10 +81,7 @@ class HalsteadVolumeRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Reduce operator/operand vocabulary; "
-                        "extract subexpressions into named helpers."
-                    ),
+                    remediation=("Reduce operator/operand vocabulary; extract subexpressions into named helpers."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "halsteadVolume": round(volume, 2),

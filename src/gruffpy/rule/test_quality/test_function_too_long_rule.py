@@ -75,9 +75,7 @@ class TestFunctionTooLongRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Test {symbol!r} is {lines} lines, above the "
-                        f"{threshold_match.severity.value} threshold of "
-                        f"{threshold_match.threshold}."
+                        f"Test {symbol!r} is {lines} lines, above the {threshold_match.severity.value} threshold of {threshold_match.threshold}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
@@ -87,9 +85,7 @@ class TestFunctionTooLongRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Split the test into focused cases or extract setup into a fixture."
-                    ),
+                    remediation=("Split the test into focused cases or extract setup into a fixture."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "lines": lines,

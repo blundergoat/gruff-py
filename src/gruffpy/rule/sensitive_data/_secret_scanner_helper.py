@@ -3,8 +3,8 @@
 - Regex compilation utilities (case-sensitive by default; sensitive-data
   patterns rely on character classes that should NOT be loosened).
 - Shannon entropy over byte/character distributions.
-- Preview redaction in the canonical ``first 4 + ... + last 4 (redacted, N chars)``
-  shape so findings never leak the raw secret.
+- Fixed zero-payload preview markers so findings never expose secret-derived
+  characters or lengths.
 - Line resolution: map a string offset into a 1-based line number.
 """
 
@@ -13,10 +13,6 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-# Strings shorter than this are too small to redact meaningfully and too
-# common in benign text (IDs, short tokens). Sensitive-data rules typically
-# specify their own min lengths via the regex.
-MIN_REDACTABLE_LEN = 8
 _PLACEHOLDER_MARKERS = frozenset(
     {
         "changeme",
@@ -35,6 +31,9 @@ _PLACEHOLDER_MARKERS = frozenset(
 @dataclass(frozen=True, slots=True)
 class SecretMatch:
     """One match of a sensitive-data pattern inside a source file.
+
+    Rules use this location to show users which line needs review while keeping the matched value
+    inside the scanner until a zero-payload finding is built.
 
     Attributes:
         raw: Matched secret text before redaction.
@@ -111,23 +110,77 @@ def shannon_entropy(text: str) -> float:
     return -sum((c / length) * math.log2(c / length) for c in counts.values())
 
 
-def redact_preview(secret: str) -> str:
-    """Return a redacted preview of *secret* safe for logs and findings.
+# The seventeen marker categories FAMILY-CONTRACT.md section 5 ratifies. A detector name outside this set
+# degrades to the bare marker rather than inventing a category the rest of the family cannot read.
+RATIFIED_MARKER_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "private-key",
+        "jwt",
+        "aws-access-key",
+        "github-token",
+        "slack-token",
+        "stripe-live-key",
+        "google-api-key",
+        "anthropic-api-key",
+        "npm-token",
+        "gitlab-token",
+        "gcp-service-account",
+        "email",
+        "phone",
+        "payment-card",
+        "ssn",
+        "medicare",
+        "mrn",
+    }
+)
 
-    Shape: ``first4...last4 (redacted, N chars)``. Shorter secrets get a
-    single asterisk per character so the structure is still recognisable
-    without leaking content.
+_SCHEME_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*$")
 
-    Args:
-        secret: Raw secret-like value that must not be exposed directly.
+
+def fixed_preview() -> str:
+    """Return the bare marker, used when a detector classified nothing more specific.
+
+    Generic-assignment and entropy matches always use this: they name no class the user can act on.
 
     Returns:
-        Redacted preview preserving only length and limited edge context.
+        Classification-only marker with no value-derived characters or length.
     """
-    length = len(secret)
-    if length < MIN_REDACTABLE_LEN:
-        return f"{'*' * length} (redacted, {length} chars)"
-    return f"{secret[:4]}...{secret[-4:]} (redacted, {length} chars)"
+    return "[redacted]"
+
+
+def category_preview(category: str | None) -> str:
+    """Return the most specific marker for a classified match, unconditionally.
+
+    Section 5 removed the configuration that once gated this, because every marker is zero-payload by
+    construction, so gating one bought no confidentiality.
+
+    Args:
+        category: Ratified category the detector classified; ``None`` or an unratified name yields the
+            bare marker.
+
+    Returns:
+        ``[redacted:<category>]`` for a ratified category, ``[redacted]`` otherwise.
+    """
+    # An unratified name would put this port outside the closed family grammar, so it degrades instead.
+    if category is None or category not in RATIFIED_MARKER_CATEGORIES:
+        return fixed_preview()
+    return f"[redacted:{category}]"
+
+
+def connection_string_preview(scheme: str) -> str:
+    """Return the connection marker naming only the scheme, which the URL already publishes in plain text.
+
+    Args:
+        scheme: Scheme captured by the detector's own pattern; never user-supplied free text.
+
+    Returns:
+        ``[redacted:connection-string:<scheme>]``, or the bare marker when the scheme is malformed.
+    """
+    normalised = scheme.lower()
+    # A scheme outside the grammar's shape would leak whatever the pattern happened to capture.
+    if _SCHEME_SHAPE.match(normalised) is None:
+        return fixed_preview()
+    return f"[redacted:connection-string:{normalised}]"
 
 
 def is_likely_placeholder_secret(secret: str) -> bool:

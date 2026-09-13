@@ -18,9 +18,9 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
     iter_matches,
-    redact_preview,
 )
 
 _TYPE_PATTERN = compile_pattern(r'"type"\s*:\s*"service_account"')
@@ -34,7 +34,11 @@ _MIN_REAL_KEY_BODY_LEN = 100
 
 
 class GcpServiceAccountKeyRule(SourceTextRule):
-    """Detect committed Google Cloud service-account key JSON."""
+    """Detect committed Google Cloud service-account key JSON.
+
+    Users see the service-account marker's line when a scan finds real private-key material, while
+    the report withholds every key-derived character and directs them to rotate the credential.
+    """
 
     ID = "sensitive-data.gcp-service-account-key"
 
@@ -63,15 +67,19 @@ class GcpServiceAccountKeyRule(SourceTextRule):
         Returns:
             One finding per service-account type marker when key material is present.
         """
+        # Files without the service-account marker cannot represent this user-facing credential
+        # type.
         if "service_account" not in unit.source:
             return []
 
-        private_key_value = _private_key_value(unit.source) or _pem_block(unit.source)
-        if private_key_value is None or _looks_like_placeholder_key(private_key_value, unit.source):
+        private_key_material = _private_key_value(unit.source) or _pem_block(unit.source)
+        # Missing or placeholder key material keeps examples out of the user's security findings.
+        if private_key_material is None or _looks_like_placeholder_key(private_key_material, unit.source):
             return []
 
         definition = self.definition()
-        preview = redact_preview(private_key_value)
+        # Every service-account marker gets its own source location when one file embeds multiple
+        # keys.
         return [
             Finding(
                 rule_id=definition.id,
@@ -88,7 +96,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
                 ),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
-                    "preview": preview,
+                    "preview": category_preview("gcp-service-account"),
                     "provider": "gcp",
                     "category": "service-account-key",
                 },
@@ -98,7 +106,9 @@ class GcpServiceAccountKeyRule(SourceTextRule):
 
 
 def _private_key_value(source: str) -> str | None:
+    """Return private-key material used only to classify a service-account finding."""
     match = _PRIVATE_KEY_FIELD_RE.search(source)
+    # A JSON private_key field is the clearest evidence users need to review.
     if match is not None:
         return match.group(1)
     pem_match = _PEM_BLOCK_RE.search(source)
@@ -106,7 +116,9 @@ def _private_key_value(source: str) -> str | None:
 
 
 def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> bool:
+    """Return whether the candidate is too short to represent a real user credential."""
     key_text = private_key_value or _pem_block(source)
+    # No key text means there is no placeholder body to suppress at this helper boundary.
     if key_text is None:
         return False
     body = _PEM_ARMOR_RE.sub("", key_text)
@@ -115,5 +127,6 @@ def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> b
 
 
 def _pem_block(source: str) -> str | None:
+    """Return a PEM block when JSON-shaped input carries the key outside a field match."""
     match = _PEM_BLOCK_RE.search(source)
     return None if match is None else match.group(0)

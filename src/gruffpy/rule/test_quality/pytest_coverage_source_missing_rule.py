@@ -77,8 +77,7 @@ class PytestCoverageSourceMissingRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 remediation=(
-                    'Add `source = ["<package>"]` to `[tool.coverage.run]` so coverage '
-                    "measures every module, even those not imported by the suite."
+                    'Add `source = ["<package>"]` to `[tool.coverage.run]` so coverage measures every module, even those not imported by the suite.'
                 ),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={"projectRoot": context.project_root},

@@ -61,9 +61,7 @@ _FREE_TEXT_TOKENS: frozenset[str] = frozenset(
         "utterance",
     }
 )
-_TEXT_CHAIN_METHODS: frozenset[str] = frozenset(
-    {"lower", "casefold", "strip", "lstrip", "rstrip", "upper"}
-)
+_TEXT_CHAIN_METHODS: frozenset[str] = frozenset({"lower", "casefold", "strip", "lstrip", "rstrip", "upper"})
 _COLLECTION_WRAPPERS: frozenset[str] = frozenset({"frozenset", "list", "set", "tuple"})
 # Head types whose ``k in value`` is membership, not substring containment. A
 # parameter annotated as one of these never holds the free-text string the scan
@@ -146,11 +144,7 @@ class SubstringVocabularyMatchRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for function in (
-            node
-            for node in ast.walk(unit.tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ):
+        for function in (node for node in ast.walk(unit.tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
             findings.extend(_scan_function(definition, unit, function, vocabularies))
         return findings
 
@@ -169,11 +163,7 @@ def _module_string_vocabularies(tree: ast.Module) -> dict[str, list[str]]:
 
 
 def _single_assign_target(node: ast.stmt) -> str | None:
-    if (
-        isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
-    ):
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
         return node.targets[0].id
     return None
 
@@ -261,11 +251,7 @@ def _parameter_text_sources(
             sources[target] = root
         else:
             clobbered.add(target)
-    return {
-        name: source
-        for name, source in sources.items()
-        if (assigned_counts.get(name, 0) <= 1 or name in parameters) and name not in clobbered
-    }
+    return {name: source for name, source in sources.items() if (assigned_counts.get(name, 0) <= 1 or name in parameters) and name not in clobbered}
 
 
 def _case_chain_root(value: ast.expr) -> str | None:
@@ -300,9 +286,7 @@ def _any_scan_site(call: ast.Call) -> tuple[str, str, ast.AST] | None:
     if len(generator.generators) != 1:
         return None
     comprehension = generator.generators[0]
-    if not (
-        isinstance(comprehension.target, ast.Name) and isinstance(comprehension.iter, ast.Name)
-    ):
+    if not (isinstance(comprehension.target, ast.Name) and isinstance(comprehension.iter, ast.Name)):
         return None
     text_name = _containment_text(generator.elt, comprehension.target.id)
     if text_name is None:

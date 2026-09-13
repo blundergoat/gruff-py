@@ -32,6 +32,7 @@ class DashboardState:
         no_config: Whether config loading is disabled.
         include_ignored: Whether ignored files are included in scans.
         report_interactive: Whether generated HTML reports keep interactive controls.
+        deep_scan_budget: Atomic deep-scan override, or empty to use config/defaults.
     """
 
     project: str
@@ -41,6 +42,7 @@ class DashboardState:
     no_config: bool = False
     include_ignored: bool = False
     report_interactive: bool = False
+    deep_scan_budget: str = ""
 
     def to_query(self) -> dict[str, str]:
         """Serialise the state to the dashboard URL query-string shape.
@@ -59,6 +61,7 @@ class DashboardState:
             "noConfig": "1" if self.no_config else "0",
             "includeIgnored": "1" if self.include_ignored else "0",
             "reportInteractive": "1" if self.report_interactive else "0",
+            "deepScanBudget": self.deep_scan_budget,
         }
 
     def merge_query(self, query: dict[str, str]) -> "DashboardState":
@@ -80,12 +83,9 @@ class DashboardState:
             fail_on=_valid_fail_on(query.get("failOn", self.fail_on)),
             config=query.get("config", self.config),
             no_config=_query_bool(query.get("noConfig", self.to_query()["noConfig"])),
-            include_ignored=_query_bool(
-                query.get("includeIgnored", self.to_query()["includeIgnored"])
-            ),
-            report_interactive=_query_bool(
-                query.get("reportInteractive", self.to_query()["reportInteractive"])
-            ),
+            include_ignored=_query_bool(query.get("includeIgnored", self.to_query()["includeIgnored"])),
+            report_interactive=_query_bool(query.get("reportInteractive", self.to_query()["reportInteractive"])),
+            deep_scan_budget=query.get("deepScanBudget", self.deep_scan_budget),
         )
 
 
@@ -205,6 +205,7 @@ def _scan_html(
                 project_root=scan_root,
                 display_filter=FindingDisplayFilter(),
                 baseline=BaselineOptions(disabled=True),
+                deep_scan_budget=state.deep_scan_budget,
             )
         )
         html_text = HtmlReporter(
@@ -278,6 +279,8 @@ def _display_command_for(state: DashboardState, paths: list[str]) -> list[str]:
         command.append("--include-ignored")
     if state.report_interactive:
         command.append("--report-interactive")
+    if state.deep_scan_budget:
+        command.extend(["--deep-scan-budget", state.deep_scan_budget])
     command.append("--")
     command.extend(paths)
     return command

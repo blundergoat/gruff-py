@@ -18,9 +18,7 @@ def test_same_line_suppression_hides_only_matching_rule() -> None:
 
 
 def test_disable_next_targets_only_next_physical_line() -> None:
-    parsed = parse_suppressions(
-        "# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n"
-    )
+    parsed = parse_suppressions("# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n")
     hidden = _finding("security.dangerous-function-call", line=2)
     visible = _finding("security.dangerous-function-call", line=3)
 

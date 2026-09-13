@@ -37,6 +37,7 @@ class _DashboardCliRequest:
     should_skip_config: bool
     should_include_ignored: bool
     should_render_interactive: bool
+    deep_scan_budget: str = ""
     # False keeps existing callers fail-closed until a user explicitly opts in.
     has_acknowledged_public_bind: bool = False
 
@@ -136,6 +137,7 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
         no_config=request.should_skip_config,
         include_ignored=request.should_include_ignored,
         report_interactive=request.should_render_interactive,
+        deep_scan_budget=request.deep_scan_budget,
     )
 
 
@@ -160,6 +162,4 @@ def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -
     loaded_analysis_config, _ = ConfigLoader(project, default_analysis_config).load(config_path)
     configured_dashboard_threshold = loaded_analysis_config.minimum_severity.get("dashboard")
     # No dashboard key means the form keeps its CLI default instead of showing empty input.
-    return (
-        configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None
-    )
+    return configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None

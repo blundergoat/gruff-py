@@ -89,10 +89,7 @@ class ConfusingNameRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Class name {node.name!r} is vague; "
-                            "use a domain-specific suffix (e.g. ``UserService``)."
-                        ),
+                        message=(f"Class name {node.name!r} is vague; use a domain-specific suffix (e.g. ``UserService``)."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,

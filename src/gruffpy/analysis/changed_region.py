@@ -91,9 +91,7 @@ class ChangedRegionSet:
         key = _normalise_path(file_path)
         if key in self.whole_files:
             return True
-        return any(
-            line_range.has_overlap(start, end) for line_range in self.ranges_by_file.get(key, ())
-        )
+        return any(line_range.has_overlap(start, end) for line_range in self.ranges_by_file.get(key, ()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,9 +386,7 @@ def filter_findings_for_changed_regions(
     if scope == "hunk":
         return _filter_hunk_findings(findings, changed)
 
-    declarations_by_file = {
-        unit.file.display_path: _declaration_ranges(unit) for unit in units if unit.tree is not None
-    }
+    declarations_by_file = {unit.file.display_path: _declaration_ranges(unit) for unit in units if unit.tree is not None}
     kept: list[Finding] = []
     suppressed = 0
     for finding in findings:
@@ -431,9 +427,7 @@ def _is_finding_in_symbol_scope(
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
     declaration = _enclosing_declaration(finding, declarations)
-    return declaration is not None and changed.has_changed_range(
-        finding.file_path, declaration.start, declaration.end
-    )
+    return declaration is not None and changed.has_changed_range(finding.file_path, declaration.start, declaration.end)
 
 
 def _is_finding_anchor_changed(
@@ -456,10 +450,7 @@ def _declaration_anchor_line(
     if finding.symbol is None or finding.end_line is None or finding.line is None:
         return None
     for declaration in declarations:
-        if (
-            _symbol_matches(finding.symbol, declaration.symbol)
-            and finding.line <= declaration.start <= finding.end_line
-        ):
+        if _symbol_matches(finding.symbol, declaration.symbol) and finding.line <= declaration.start <= finding.end_line:
             return declaration.start
     return None
 
@@ -467,11 +458,7 @@ def _declaration_anchor_line(
 def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) -> bool:
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
-    end_line = (
-        finding.end_line
-        if finding.end_line is not None and finding.end_line >= finding.line
-        else finding.line
-    )
+    end_line = finding.end_line if finding.end_line is not None and finding.end_line >= finding.line else finding.line
     return changed.has_changed_range(finding.file_path, finding.line, end_line)
 
 
@@ -498,9 +485,7 @@ def _qualified_name(node: ast.AST) -> str | None:
     current = getattr(node, "parent", None)
     while current is not None:
         parent_name = getattr(current, "name", None)
-        if isinstance(parent_name, str) and isinstance(
-            current, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
-        ):
+        if isinstance(parent_name, str) and isinstance(current, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             parents.append(parent_name)
         current = getattr(current, "parent", None)
     return ".".join([*reversed(parents), name])
@@ -513,9 +498,7 @@ def _enclosing_declaration(
     if finding.line is None:
         return None
     for declaration in declarations:
-        if declaration.start <= finding.line <= declaration.end and _symbol_matches(
-            finding.symbol, declaration.symbol
-        ):
+        if declaration.start <= finding.line <= declaration.end and _symbol_matches(finding.symbol, declaration.symbol):
             return declaration
     for declaration in declarations:
         if declaration.start <= finding.line <= declaration.end:
@@ -553,9 +536,7 @@ def _parse_positive_line(raw_line: str, original: str) -> int:
     try:
         value = int(raw_line)
     except ValueError as exc:
-        raise ValueError(
-            f"invalid changed range {original!r}: line numbers must be integers"
-        ) from exc
+        raise ValueError(f"invalid changed range {original!r}: line numbers must be integers") from exc
     if value < 1:
         raise ValueError(f"invalid changed range {original!r}: line numbers must be >= 1")
     return value

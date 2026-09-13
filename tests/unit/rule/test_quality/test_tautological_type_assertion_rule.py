@@ -13,11 +13,6 @@ def test_isinstance_type_same_expression_emits():
 
 
 def test_same_method_call_on_different_receivers_is_not_tautological():
-    src = (
-        "def test_value():\n"
-        "    a = make_a()\n"
-        "    b = make_b()\n"
-        "    assert a.fingerprint() == b.fingerprint()\n"
-    )
+    src = "def test_value():\n    a = make_a()\n    b = make_b()\n    assert a.fingerprint() == b.fingerprint()\n"
 
     assert TautologicalTypeAssertionRule().analyse(make_unit(src), default_ctx()) == []

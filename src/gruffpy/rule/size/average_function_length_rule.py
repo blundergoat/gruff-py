@@ -84,9 +84,7 @@ def _classes_with_long_average(
 
 
 def _methods_for(node: ast.ClassDef) -> list[MethodNode]:
-    return [
-        child for child in node.body if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
-    ]
+    return [child for child in node.body if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)]
 
 
 def _average_lines(methods: list[MethodNode]) -> float:
@@ -122,10 +120,7 @@ def _average_function_length_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Shorten the typical method or split responsibilities; "
-            "tall averages usually signal a god class."
-        ),
+        remediation=("Shorten the typical method or split responsibilities; tall averages usually signal a god class."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "averageLines": rounded_avg,

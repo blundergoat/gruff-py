@@ -14,6 +14,8 @@ startup messages and validation a terminal user sees.
 
 import json
 import os
+import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -64,9 +66,7 @@ def test_cli_help_lists_analyse_command():
     """Guard the root help contract across visible commands and global options."""
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert result.output.startswith(
-        f"gruff-py {VERSION}\n\nUsage:\n  command [options] [arguments]"
-    )
+    assert result.output.startswith(f"gruff-py {VERSION}\n\nUsage:\n  command [options] [arguments]")
     assert "Available commands:" in result.output
     classification = {
         "missing_commands": [c for c in _EXPECTED_ROOT_COMMANDS if c not in result.output],
@@ -105,8 +105,9 @@ def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
 def test_optional_diff_args_resolves_sys_argv_for_real_entrypoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Console-script / python -m calls reach CliGroup.main with args=None; Click would
-    # then read sys.argv itself, skipping normalisation. The helper must resolve
+    # Console-script / python -m calls reach CliGroup.main with args=None.
+
+    # Click would then read sys.argv itself, skipping normalisation. The helper must resolve
     # sys.argv so a bare --diff still becomes --diff=working-tree outside CliRunner.
     monkeypatch.setattr(sys, "argv", ["gruff-py", "analyse", "--diff"])
     assert _normalise_optional_diff_args(None) == ["analyse", "--diff=working-tree"]
@@ -124,6 +125,7 @@ _EXPECTED_ANALYSE_LOCAL_OPTIONS = (
     "--baseline-path",
     "--generate-baseline",
     "--generate-baseline-path",
+    "--deep-scan-budget",
 )
 
 
@@ -162,10 +164,7 @@ def test_cli_dashboard_help_labels_accepted_compatibility_options_honestly() -> 
 
     assert result.exit_code == 0, result.output
     assert f"--diff Diff-only dashboard scans: {_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
-    assert (
-        "--scan-timeout INTEGER Dashboard scan timeouts: "
-        f"{_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
-    )
+    assert f"--scan-timeout INTEGER Dashboard scan timeouts: {_DASHBOARD_COMPAT_HELP_PHRASE}." in searchable_help
     assert result.output.count(_DASHBOARD_COMPAT_HELP_PHRASE) == 2
 
 
@@ -176,9 +175,7 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text(
-        "def old_bad():\n    eval('old')\n\n\ndef new_bad():\n    eval('new')\n"
-    )
+    (src / "sample.py").write_text("def old_bad():\n    eval('old')\n\n\ndef new_bad():\n    eval('new')\n")
 
     result = CliRunner().invoke(
         main,
@@ -200,7 +197,7 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert [finding["symbol"] for finding in payload["findings"]] == ["new_bad"]
-    assert payload["suppressedCount"] >= 1
+    assert payload["summary"]["suppressedFindings"] >= 1
 
 
 def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
@@ -251,7 +248,7 @@ def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
     full_payload = json.loads(full_scan.output)
     assert full_scan.exit_code == 1, full_scan.output
     assert "diff" not in full_payload
-    assert "changed" in {finding["symbol"] for finding in full_payload["findings"]}
+    assert "changed" in {finding.get("symbol") for finding in full_payload["findings"]}
 
 
 def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
@@ -289,8 +286,8 @@ def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert payload["findings"] == []
-    assert payload["suppressedCount"] >= 1
-    assert payload["diff"]["suppressedCount"] == payload["suppressedCount"]
+    assert payload["summary"]["suppressedFindings"] >= 1
+    assert payload["diff"]["filteredFindings"] == payload["summary"]["suppressedFindings"]
 
 
 def test_analyse_changed_scope_symbol_anchors_file_length_findings(
@@ -329,21 +326,17 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     full_payload = json.loads(full.output)
 
     assert [finding["ruleId"] for finding in far_payload["findings"]] == []
-    assert far_payload["suppressedCount"] >= 1
-    assert far_payload["diff"]["suppressedCount"] == far_payload["suppressedCount"]
+    assert far_payload["summary"]["suppressedFindings"] >= 1
+    assert far_payload["diff"]["filteredFindings"] == far_payload["summary"]["suppressedFindings"]
 
-    anchor_file_length = [
-        finding for finding in anchor_payload["findings"] if finding["ruleId"] == "size.file-length"
-    ]
-    full_file_length = [
-        finding for finding in full_payload["findings"] if finding["ruleId"] == "size.file-length"
-    ]
+    anchor_file_length = [finding for finding in anchor_payload["findings"] if finding["ruleId"] == "size.file-length"]
+    full_file_length = [finding for finding in full_payload["findings"] if finding["ruleId"] == "size.file-length"]
     assert len(anchor_file_length) == 1
     assert len(full_file_length) == 1
     assert anchor_file_length[0]["line"] == 1
     assert anchor_file_length[0]["metadata"]["lines"] == 1010
     assert anchor_file_length[0]["metadata"]["threshold"] == 1000
-    assert "suppressedCount" not in full_payload
+    assert "suppressedFindings" not in full_payload["summary"]
     assert "diff" not in full_payload
 
 
@@ -383,67 +376,106 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     symbol_payload = json.loads(symbol.output)
     hunk_payload = json.loads(hunk.output)
     assert symbol.exit_code == 1, symbol.output
-    assert [finding["ruleId"] for finding in symbol_payload["findings"]] == [
-        "security.shell-injection"
-    ]
+    assert [finding["ruleId"] for finding in symbol_payload["findings"]] == ["security.shell-injection"]
     assert hunk.exit_code == 0, hunk.output
     assert hunk_payload["findings"] == []
-    assert hunk_payload["suppressedCount"] >= 1
+    assert hunk_payload["summary"]["suppressedFindings"] >= 1
+
+
+_CHANGED_SCOPE_BASE = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+_BETA_DEFINITION_LINE = 5
+
+
+def _three_symbol_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a module whose alpha, beta, and gamma functions each carry documentation debt.
+
+    Definition lines are alpha:1, beta:5, gamma:9, so a change on line 6 sits inside beta's body.
+
+    Args:
+        tmp_path: Directory used as the project root.
+        monkeypatch: Fixture used to make that directory the working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text("def alpha():\n    return 1\n\n\ndef beta():\n    return 2\n\n\ndef gamma():\n    return 3\n")
+
+
+def _scan(*arguments: str) -> dict:
+    """Run one analyse invocation and return its parsed report.
+
+    Args:
+        arguments: Extra arguments appended to the shared changed-scope base command.
+
+    Returns:
+        The parsed JSON report.
+    """
+    result = CliRunner().invoke(main, [*_CHANGED_SCOPE_BASE, *arguments])
+    assert result.exit_code == 0, result.output
+    payload: dict = json.loads(result.output)
+    return payload
+
+
+def test_analyse_full_scan_carries_no_changed_region_counters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run the user did not scope reports every symbol and no diff accounting.
+
+    Args:
+        tmp_path: Project root for this run.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+
+    full_payload = _scan("src/sample.py")
+
+    assert {"alpha", "beta", "gamma"} <= {finding.get("symbol") for finding in full_payload["findings"]}
+    assert "suppressedFindings" not in full_payload["summary"]
+    assert "diff" not in full_payload
+
+
+def test_analyse_changed_scope_symbol_surfaces_only_the_edited_symbol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Symbol scope widens a line edit to its whole declaration and leaves siblings alone.
+
+    Args:
+        tmp_path: Project root for this run.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+
+    scoped_payload = _scan("--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py")
+
+    surfaced_symbols = {finding.get("symbol") for finding in scoped_payload["findings"]}
+    assert "beta" in surfaced_symbols
+    assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
+    assert any(finding["line"] == _BETA_DEFINITION_LINE for finding in scoped_payload["findings"])
 
 
 def test_analyse_changed_scope_symbol_accounts_for_every_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Native changed-region contract the agent hook trusts (it does not re-filter by
-    # line): with the full rule set the hook runs, every finding a full scan produces
-    # is either surfaced or counted in suppressedCount, and both counters are present
-    # and equal. No display filter here (e.g. --include-rule): a display filter narrows
-    # `findings[]` only, not `suppressedCount`, so it is not part of this invariant.
-    monkeypatch.chdir(tmp_path)
-    src = tmp_path / "src"
-    src.mkdir()
-    # Three undocumented functions -> findings across the alpha/beta/gamma symbols
-    # (plus module-docstring/readme debt), reported at the def lines (alpha:1, beta:5,
-    # gamma:9). N is read from the run, not hard-coded, so it survives catalogue growth.
-    (src / "sample.py").write_text(
-        "def alpha():\n    return 1\n\n\n"
-        "def beta():\n    return 2\n\n\n"
-        "def gamma():\n    return 3\n"
-    )
-    base = ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"]
+    """No finding is dropped silently: surfaced plus suppressed accounts for the full-scan total.
 
-    full = CliRunner().invoke(main, [*base, "src/sample.py"])
-    # Edit beta's body (line 6); symbol scope widens it to the whole beta declaration,
-    # surfacing beta's signature-line (5) finding from a change on line 6.
-    scoped = CliRunner().invoke(
-        main,
-        [*base, "--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py"],
-    )
+    The totals are read from the runs rather than hard-coded, so the check survives catalogue growth.
 
-    assert full.exit_code == 0, full.output
-    assert scoped.exit_code == 0, scoped.output
-    full_payload = json.loads(full.output)
-    scoped_payload = json.loads(scoped.output)
+    Args:
+        tmp_path: Project root for both runs.
+        monkeypatch: Fixture used to enter that root.
+    """
+    _three_symbol_project(tmp_path, monkeypatch)
+    total = len(_scan("src/sample.py")["findings"])
 
-    total = len(full_payload["findings"])
-    assert {"alpha", "beta", "gamma"} <= {f["symbol"] for f in full_payload["findings"]}
-    # A full scan carries neither changed-region counter.
-    assert "suppressedCount" not in full_payload
-    assert "diff" not in full_payload
+    scoped_payload = _scan("--changed-ranges", "6-6", "--changed-scope", "symbol", "src/sample.py")
 
-    surfaced_symbols = {finding["symbol"] for finding in scoped_payload["findings"]}
-    suppressed = scoped_payload["suppressedCount"]
-    # Widening surfaces the edited symbol (its def-line finding) and nothing else.
-    assert "beta" in surfaced_symbols
-    assert surfaced_symbols.isdisjoint({"alpha", "gamma"})
-    assert any(finding["line"] == 5 for finding in scoped_payload["findings"])
-    # No finding is dropped silently: surfaced + suppressed accounts for all of N.
+    suppressed = scoped_payload["summary"]["suppressedFindings"]
     assert len(scoped_payload["findings"]) + suppressed == total
     assert suppressed >= 1
-    # Both counters are present and equal, so a refactor cannot drop the one the hook reads.
-    assert "suppressedCount" in scoped_payload
-    assert scoped_payload["diff"]["suppressedCount"] == suppressed
+    assert scoped_payload["diff"]["filteredFindings"] == suppressed
 
 
 def test_analyse_agent_command_ignores_default_baseline_when_disabled(
@@ -463,7 +495,9 @@ def test_analyse_agent_command_ignores_default_baseline_when_disabled(
             "--fail-on",
             "none",
             "--no-config",
+            # The canonical spelling carries its destination, so the scanned path follows it rather than being read as one.
             "--generate-baseline",
+            "gruff-baseline.json",
             "src/sample.py",
         ],
     )
@@ -504,13 +538,7 @@ def test_analyse_diff_stdin_filters_to_changed_file(
     src.mkdir()
     (src / "old.py").write_text("def old_bad():\n    eval('old')\n")
     (src / "new.py").write_text("def new_bad():\n    eval('new')\n")
-    patch = (
-        "diff --git a/src/new.py b/src/new.py\n"
-        "--- a/src/new.py\n"
-        "+++ b/src/new.py\n"
-        "@@ -2,0 +2,1 @@\n"
-        "+    eval('new')\n"
-    )
+    patch = "diff --git a/src/new.py b/src/new.py\n--- a/src/new.py\n+++ b/src/new.py\n@@ -2,0 +2,1 @@\n+    eval('new')\n"
 
     result = CliRunner().invoke(
         main,
@@ -533,7 +561,7 @@ def test_analyse_diff_stdin_filters_to_changed_file(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert {finding["file"] for finding in payload["findings"]} == {"src/new.py"}
-    assert payload["diff"]["source"] == "stdin"
+    assert payload["diff"]["mode"] == "stdin"
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is unavailable")
@@ -581,7 +609,7 @@ def test_analyse_git_changed_region_modes_gate_retained_findings(
     payload = json.loads(result.output)
     assert result.exit_code == 1, result.output
     assert [finding["symbol"] for finding in payload["findings"]] == ["changed"]
-    assert payload["diff"]["source"] == expected_source
+    assert payload["diff"]["mode"] == expected_source
     assert payload["diff"]["changedFiles"] == ["src/sample.py"]
 
 
@@ -634,16 +662,75 @@ _REQUIRED_RULE_PAYLOAD_KEYS = frozenset(
     }
 )
 _REQUIRED_RULE_DOCUMENTATION_KEYS = frozenset({"rationale", "fixGuidance", "confidenceRationale"})
+# The baseline container a generate run publishes; every key is present on every run, movement or not.
+_GENERATED_BASELINE_KEYS = frozenset(
+    {
+        "applied",
+        "entries",
+        "path",
+        "generated",
+        "newFindings",
+        "resolvedFindings",
+        "suppressedFindings",
+        "unchangedFindings",
+        "staleEvaluation",
+        "staleEntries",
+        "source",
+        "stale",
+    }
+)
+_MOVEMENT_COUNTERS = ("newFindings", "resolvedFindings", "suppressedFindings", "unchangedFindings", "staleEntries")
+
+
+def _list_rules_payload() -> dict:
+    """Run ``list-rules --format json`` and return its parsed catalogue.
+
+    Returns:
+        The parsed catalogue payload.
+    """
+    result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload: dict = json.loads(result.output)
+    return payload
 
 
 def test_cli_list_rules_json_lists_rule_metadata():
-    result = CliRunner().invoke(main, ["list-rules", "--format", "json"])
-    assert result.exit_code == 0, result.output
+    rule = _list_rules_payload()["rules"][0]
 
-    payload = json.loads(result.output)
-    rule = payload["rules"][0]
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
     assert set(rule["documentation"]) >= _REQUIRED_RULE_DOCUMENTATION_KEYS
+
+
+def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
+    payload = _list_rules_payload()
+
+    heuristic_rule = next(candidate for candidate in payload["rules"] if candidate["id"] == "complexity.halstead-volume")
+    assert heuristic_rule["falsePositiveShapes"]
+    assert "falsePositiveShapes" not in heuristic_rule["documentation"]
+
+
+def test_cli_list_rules_json_publishes_thresholds_as_named_knob_maps():
+    rules = {rule["id"]: rule for rule in _list_rules_payload()["rules"]}
+
+    # A rubric whose rule id has a gruff-go knob name borrows it.
+    assert rules["complexity.cognitive"]["thresholds"] == {"maxComplexity": 30}
+    assert rules["size.function-length"]["thresholds"] == {"maxLines": 100}
+    # A rubric with no knob name anywhere in the family publishes the one-key map.
+    assert rules["docs.todo-density"]["thresholds"] == {"threshold": 10}
+    # A named-knob rule publishes its map unchanged.
+    assert rules["test-quality.eager-test"]["thresholds"] == {"maxAssertions": 5}
+    # A rule with no threshold omits the key, and no rule publishes the retired scalar.
+    assert "thresholds" not in rules["security.ssrf"]
+    assert [rule_id for rule_id, rule in rules.items() if "threshold" in rule] == []
+
+
+def test_cli_list_rules_explain_json_publishes_the_same_threshold_map():
+    result = CliRunner().invoke(main, ["list-rules", "size.function-length", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["thresholds"] == {"maxLines": 100}
+    assert "threshold" not in payload
 
 
 def test_cli_list_rules_accepts_text_alias():
@@ -700,6 +787,7 @@ def test_cli_list_rules_explain_json_emits_structured_payload():
     assert payload["relatedRules"] == ["naming.abbreviation", "naming.identifier-quality"]
     assert "optionDescriptions" in payload["documentation"]
     assert "acceptedShortNames" in payload["documentation"]["optionDescriptions"]
+    assert payload["documentation"]["falsePositiveShapes"]
 
 
 def test_cli_list_rules_explain_unknown_id_exits_one_with_suggestion():
@@ -772,9 +860,7 @@ def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.Mon
     assert "- tests/fixtures/**" in config_text
 
 
-def test_cli_init_refuses_to_overwrite_existing_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_init_refuses_to_overwrite_existing_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
     existing.write_text("# do not clobber\n")
@@ -786,9 +872,7 @@ def test_cli_init_refuses_to_overwrite_existing_config(
     assert existing.read_text() == "# do not clobber\n"
 
 
-def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -937,9 +1021,7 @@ def test_cli_dashboard_keeps_loopback_hosts_available_without_acknowledgment(
     dashboard_server_factory.assert_called_once()
 
 
-def test_cli_dashboard_rejects_invalid_project_root_before_prompting(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_dashboard_rejects_invalid_project_root_before_prompting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure a bad ``--project`` surfaces as a directory error before any prompt.
 
     Args:
@@ -977,9 +1059,7 @@ def test_cli_dashboard_rejects_invalid_port_before_prompting(
     dashboard_server_factory.assert_not_called()
 
 
-def test_cli_init_force_regenerates_existing_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_init_force_regenerates_existing_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Canonically rewrite valid target YAML without changing loaded settings.
 
     Args:
@@ -988,11 +1068,7 @@ def test_cli_init_force_regenerates_existing_config(
     """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    existing.write_text(
-        "# comments may be canonicalised\n"
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "minimumPythonVersion: '3.12'\n"
-    )
+    existing.write_text("# comments may be canonicalised\nschemaVersion: gruff-py.config.v0.1\nminimumPythonVersion: '3.12'\n")
     defaults = AnalysisConfig.from_registry(RuleRegistry.defaults())
     before, _ = ConfigLoader(tmp_path, defaults, strict=True).load()
 
@@ -1004,9 +1080,7 @@ def test_cli_init_force_regenerates_existing_config(
     assert after == before
 
 
-def test_cli_init_force_preserves_existing_ignore_list(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_init_force_preserves_existing_ignore_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the user's exact ignore semantics without adding starter entries.
 
     Args:
@@ -1015,13 +1089,7 @@ def test_cli_init_force_preserves_existing_ignore_list(
     """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
-    existing.write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "paths:\n"
-        "  ignore:\n"
-        "    - generated/**\n"
-        "    - .codex/\n"
-    )
+    existing.write_text("schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - generated/**\n    - .codex/\n")
 
     result = CliRunner().invoke(main, ["init", "--force"])
 
@@ -1030,9 +1098,7 @@ def test_cli_init_force_preserves_existing_ignore_list(
     assert document["paths"]["ignore"] == ["generated/**", ".codex/"]
 
 
-def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_init_force_refuses_to_wipe_malformed_ignore_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail closed when existing target YAML cannot be loaded strictly.
 
     Args:
@@ -1175,31 +1241,31 @@ def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
     return cast("dict[str, Any]", json.loads(result.output))
 
 
-def test_cli_analyse_generate_baseline_writes_default_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
     generated_payload = _generate_default_baseline(tmp_path)
     baseline_payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
 
-    assert baseline_payload["schemaVersion"] == "gruff-py.baseline.v1"
-    assert len(baseline_payload["findings"]) == len(generated_payload["findings"])
-    assert generated_payload["baseline"] == {
-        "path": "gruff-baseline.json",
-        "generated": True,
-        "totalEntries": len(generated_payload["findings"]),
-        "suppressedFindings": 0,
-        "staleEvaluation": "generated",
-        "staleEntries": 0,
-        "source": "default",
-        "stale": [],
-    }
+    assert baseline_payload["schemaVersion"] == "gruff.baseline.v3"
+    assert baseline_payload["toolLanguage"] == "py"
+    # One row per identity, so a file with two occurrences of one finding stores one row with a count of two.
+    assert sum(row["count"] for row in baseline_payload["occurrences"]) == len(generated_payload["findings"])
+    baseline = generated_payload["baseline"]
+    assert set(baseline) == _GENERATED_BASELINE_KEYS
+    # A generate run records the file it wrote and applies nothing from it.
+    assert baseline["applied"] is False
+    assert baseline["generated"] is True
+    assert baseline["path"] == "gruff-baseline.json"
+    assert baseline["source"] == "default"
+    assert baseline["entries"] == len(baseline_payload["occurrences"])
+    # Nothing moved, so every movement counter is zero and the stale evaluation names the generate.
+    assert {counter: baseline[counter] for counter in _MOVEMENT_COUNTERS} == dict.fromkeys(_MOVEMENT_COUNTERS, 0)
+    assert baseline["staleEvaluation"] == "generated"
+    assert baseline["stale"] == []
 
 
-def test_cli_analyse_auto_applies_default_baseline_when_present(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_auto_applies_default_baseline_when_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     generated_payload = _generate_default_baseline(tmp_path)
 
@@ -1216,9 +1282,66 @@ def test_cli_analyse_auto_applies_default_baseline_when_present(
     assert applied_payload["baseline"]["suppressedFindings"] == len(generated_payload["findings"])
 
 
-def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_generated_baseline_applies_in_a_copied_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a committed baseline's project-level reviews when the project is checked out somewhere else.
+
+    ``docs.missing-readme`` was stored at an absolute path, so a copy of the project reported it again.
+
+    Args:
+        tmp_path: Parent of the original project and its copy.
+        monkeypatch: Moves the working directory into each checkout in turn.
+    """
+    original = tmp_path / "original"
+    (original / "src").mkdir(parents=True)
+    (original / "src" / "sample.py").write_text("def undocumented(value):\n    return value\n")
+    monkeypatch.chdir(original)
+    generated = CliRunner().invoke(main, ["analyse", ".", "--format", "json", "--fail-on", "none", "--no-config", "--generate-baseline"])
+    checkout = tmp_path / "checkout"
+    shutil.copytree(original, checkout)
+    monkeypatch.chdir(checkout)
+
+    applied = CliRunner().invoke(main, ["analyse", ".", "--format", "json", "--fail-on", "none", "--no-config", "--baseline", "gruff-baseline.json"])
+
+    stored_paths = [row["path"] for row in json.loads((checkout / "gruff-baseline.json").read_text())["occurrences"]]
+    applied_payload = json.loads(applied.output)
+    assert (generated.exit_code, applied.exit_code) == (0, 0), generated.output + applied.output
+    assert "README.md" in stored_paths
+    assert all(not Path(stored).is_absolute() for stored in stored_paths)
+    assert applied_payload["findings"] == []
+    assert applied_payload["baseline"]["newFindings"] == 0
+
+
+def test_cli_printed_baseline_commands_use_canonical_spellings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Copy the refusal's migration command and then the migration's tip, and meet no superseded-spelling warning.
+
+    gruff-py warned about ``--baseline-path`` and ``--generate-baseline-path`` while printing both itself.
+
+    Args:
+        tmp_path: Project holding a 0.5 baseline.
+        monkeypatch: Moves the working directory into the project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("def undocumented(value):\n    return value\n")
+    (tmp_path / "legacy.json").write_text(json.dumps({"schemaVersion": "gruff-py.baseline.v1", "findings": []}))
+    scan_args = ["sample.py", "--no-config", "--format", "text", "--fail-on", "none"]
+    refused = CliRunner().invoke(main, ["analyse", *scan_args, "--baseline", "legacy.json"])
+    printed_command = re.search(r"`gruff-py (analyse [^`]+)`", refused.output)
+    migration_args = shlex.split(printed_command.group(1).replace("<new path>", "migrated.json")) if printed_command else []
+    migrated = CliRunner().invoke(main, [*migration_args, *scan_args])
+    printed_tip = re.search(r"rerun with `([^`]+)`", migrated.output)
+    tip_args = shlex.split(printed_tip.group(1)) if printed_tip else []
+
+    applied = CliRunner().invoke(main, ["analyse", *scan_args, *tip_args])
+
+    assert refused.exit_code == 2, refused.output
+    assert migration_args[:2] == ["analyse", "--migrate-baseline"], refused.output
+    assert migrated.exit_code == 0, migrated.output
+    assert tip_args == ["--baseline", "migrated.json"], migrated.output
+    assert applied.exit_code == 0, applied.output
+    assert [result.output for result in (migrated, applied) if "superseded" in result.output] == []
+
+
+def test_cli_analyse_baseline_option_conflicts_are_diagnostics(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1234,7 +1357,7 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
             "--fail-on",
             "none",
             "--no-config",
-            "--baseline-path",
+            "--baseline",
             "gruff-baseline.json",
             "--generate-baseline",
         ],
@@ -1246,9 +1369,7 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(
     assert "mutually exclusive" in payload["diagnostics"][0]["message"]
 
 
-def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1257,7 +1378,7 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
 
     result = CliRunner().invoke(main, ["summary", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert result.stdout == ""
     assert "missing required 'schemaVersion'" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
@@ -1265,9 +1386,7 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(
     assert "Traceback" not in result.stderr
 
 
-def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1276,7 +1395,7 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
 
     result = CliRunner().invoke(main, ["analyse", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert result.stdout == ""
     assert "schemaVersion 'gruff-py.config.v0.99'" in result.stderr
     assert "gruff-py migrate-config" in result.stderr
@@ -1284,9 +1403,7 @@ def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(
     assert "Traceback" not in result.stderr
 
 
-def test_cli_analyse_json_emits_structured_config_error_diagnostic(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_json_emits_structured_config_error_diagnostic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`analyse --format json` against a bad config returns a parseable
     payload with a config-error diagnostic + exit 2, not stderr prose.
 
@@ -1306,7 +1423,7 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(
 
     assert result.exit_code == 2
     payload = json.loads(result.stdout)
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["findings"] == []
     assert len(payload["diagnostics"]) == 1
     diagnostic = payload["diagnostics"][0]
@@ -1315,9 +1432,7 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(
     assert "Traceback" not in result.stderr
 
 
-def test_cli_summary_default_group_by_keeps_top_rules_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1330,16 +1445,12 @@ def test_cli_summary_default_group_by_keeps_top_rules_block(
     assert "Grouped by rule" not in result.output
 
 
-def test_cli_summary_group_by_rule_text_replaces_top_rules_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_group_by_rule_text_replaces_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     # Two rule violations: long function name (naming) and missing docstring (docs).
-    (src / "bad.py").write_text(
-        "def x_a_b_c_d_e_f_g_h_i_j_k_l_m_n_o_p_q_r_s_t_u_v_w_x_y_z_aa_bb_cc():\n    return 1\n"
-    )
+    (src / "bad.py").write_text("def x_a_b_c_d_e_f_g_h_i_j_k_l_m_n_o_p_q_r_s_t_u_v_w_x_y_z_aa_bb_cc():\n    return 1\n")
 
     result = CliRunner().invoke(main, ["summary", "--no-config", "--group-by", "rule", "src"])
 
@@ -1348,9 +1459,7 @@ def test_cli_summary_group_by_rule_text_replaces_top_rules_block(
     assert "Grouped by rule (showing" in result.output
 
 
-def test_cli_summary_group_by_rule_json_adds_grouped_rules_field(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_group_by_rule_json_keeps_canonical_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1363,18 +1472,12 @@ def test_cli_summary_group_by_rule_json_adds_grouped_rules_field(
 
     assert result.exit_code in (0, 1), result.output
     payload = json.loads(result.output)
-    assert "groupedRules" in payload
-    assert "topRules" in payload  # back-compat: preserved
-    grouped = payload["groupedRules"]
-    assert set(grouped.keys()) == {"shown", "total", "rows"}
-    if grouped["rows"]:
-        row = grouped["rows"][0]
-        assert set(row.keys()) == {"ruleId", "count", "severity", "confidence"}
+    assert payload["schemaVersion"] == "gruff.summary.v3"
+    assert "groupedRules" not in payload
+    assert "topRules" not in payload
 
 
-def test_cli_summary_group_by_rule_json_sorts_by_count_desc_then_rule_id_asc(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_group_by_rule_does_not_change_json_projection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1384,31 +1487,25 @@ def test_cli_summary_group_by_rule_json_sorts_by_count_desc_then_rule_id_asc(
     (src / "b.py").write_text("y = 2\n")
     (src / "c.py").write_text("z = 3\n")
 
-    result = CliRunner().invoke(
+    grouped = CliRunner().invoke(
         main,
         ["summary", "--format", "json", "--no-config", "--group-by", "rule", "src"],
     )
+    plain = CliRunner().invoke(
+        main,
+        ["summary", "--format", "json", "--no-config", "src"],
+    )
 
-    payload = json.loads(result.output)
-    rows = payload["groupedRules"]["rows"]
-    counts = [row["count"] for row in rows]
-    assert counts == sorted(counts, reverse=True)
-    # Tie-break: rule_id ASC for any two adjacent equal counts
-    for i in range(len(rows) - 1):
-        if rows[i]["count"] == rows[i + 1]["count"]:
-            assert rows[i]["ruleId"] < rows[i + 1]["ruleId"]
+    assert grouped.exit_code == plain.exit_code, grouped.output
+    assert json.loads(grouped.output) == json.loads(plain.output)
 
 
-def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "a.py").write_text("x = 1\n")  # one module-docstring violation
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
 
@@ -1417,16 +1514,12 @@ def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(
     assert "summary --group-by=rule" in result.output
 
 
-def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "a.py").write_text("x = 1\n")
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1000\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1000\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
 
@@ -1434,16 +1527,12 @@ def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(
     assert "Hint:" not in result.output
 
 
-def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "a.py").write_text("x = 1\n")
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 0\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 0\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "text", "--fail-on", "none", "src"])
 
@@ -1451,16 +1540,12 @@ def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(
     assert "Hint:" not in result.output
 
 
-def test_cli_analyse_json_does_not_emit_volume_hint(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_json_does_not_emit_volume_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "a.py").write_text("x = 1\n")
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\noutputVolumeHintThreshold: 1\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "src"])
 
@@ -1484,14 +1569,12 @@ def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.exit_code == 0, result.output
     assert result.output == ""
     payload = json.loads(output.read_text())
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["run"]["format"] == "json"
 
 
-def test_cli_summary_json_is_compact_digest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """JSON summary emits the v2 schema with pillar rows carrying numeric penalties.
+def test_cli_summary_json_is_exact_analysis_projection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """JSON summary changes the schema id and removes only ``findings``.
 
     Args:
         tmp_path: Working directory for the invocation.
@@ -1502,43 +1585,35 @@ def test_cli_summary_json_is_compact_digest(
     src.mkdir()
     (src / "ok.py").write_text("x = 1\n")
 
-    result = CliRunner().invoke(
+    summary_result = CliRunner().invoke(
         main,
         ["summary", "--format", "json", "--no-config", "src"],
     )
+    analysis_result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "src",
+        ],
+    )
 
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["schemaVersion"] == "gruff.summary.v2"
-    assert {"summary", "pillars", "topRules", "topFiles"} <= payload.keys()
-    summary = payload["summary"]
-    elapsed = summary["elapsedSeconds"]
-    assert summary["paths"] == ["src"]
-    assert isinstance(elapsed, int | float) and elapsed >= 0
-    assert "Next steps" not in result.output
-    assert isinstance(payload["pillars"], list)
-    assert payload["pillars"], "pillars list should not be empty"
-    expected_keys = {
-        "pillar",
-        "grade",
-        "score",
-        "applicable",
-        "findings",
-        "advisory",
-        "warning",
-        "error",
-        "penalty",
-    }
-    assert all(expected_keys <= pillar.keys() for pillar in payload["pillars"])
-    for pillar in payload["pillars"]:
-        assert isinstance(pillar["penalty"], int | float), (
-            f"penalty should be numeric, got {type(pillar['penalty']).__name__}"
-        )
+    assert summary_result.exit_code == 0, summary_result.output
+    assert analysis_result.exit_code == 0, analysis_result.output
+    summary_payload = json.loads(summary_result.output)
+    expected = json.loads(analysis_result.output)
+    expected["schemaVersion"] = "gruff.summary.v3"
+    del expected["findings"]
+    assert summary_payload == expected
+    assert "Next steps" not in summary_result.output
 
 
-def test_cli_summary_text_includes_path_and_elapsed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_text_includes_path_and_elapsed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Text summary renders Path/Elapsed/Baseline lines and fixed-width pillar columns.
 
     Args:
@@ -1558,11 +1633,7 @@ def test_cli_summary_text_includes_path_and_elapsed(
     assert "Baseline:" in result.output
     assert "gruff-py analyse src --generate-baseline" in result.output
     assert "\nPillars\n" in result.output
-    pillar_lines = [
-        line
-        for line in result.output.splitlines()
-        if line.startswith("  ") and "findings=" in line and "advisory=" in line
-    ]
+    pillar_lines = [line for line in result.output.splitlines() if line.startswith("  ") and "findings=" in line and "advisory=" in line]
     assert pillar_lines, "expected at least one canonical pillar row"
     for line in pillar_lines:
         assert line.index("findings=") == 27, line
@@ -1571,16 +1642,14 @@ def test_cli_summary_text_includes_path_and_elapsed(
         assert line.index("error=") == 71, line
 
 
-def test_cli_summary_text_hints_when_paths_were_ignored(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_summary_text_hints_when_paths_were_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     (src / "ok.py").write_text("x = 1\n")
-    generated = tmp_path / "generated"
-    generated.mkdir()
-    (generated / "ignored.py").write_text("x = 2\n")
+    cache = tmp_path / ".pytest_cache"
+    cache.mkdir()
+    (cache / "ignored.py").write_text("x = 2\n")
 
     result = CliRunner().invoke(main, ["summary", "--no-config", "."])
 
@@ -1590,18 +1659,39 @@ def test_cli_summary_text_hints_when_paths_were_ignored(
     assert "configured paths.ignore still applies" in result.output
 
 
-def test_cli_metric_calibration_json_is_developer_dump(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("command", ("report", "summary"))
+def test_report_and_summary_publish_bounded_deep_scan_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "large.py").write_text("value = 1\nvalue = 2\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            command,
+            "--format",
+            "json",
+            "--no-config",
+            "--deep-scan-budget",
+            "1:10000",
+            "large.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "bounded-deep-scan"
+    assert payload["diagnostics"][0]["invalidatesRun"] is False
+
+
+def test_cli_metric_calibration_json_is_developer_dump(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text(
-        "def sample(value):\n"
-        "    if value > 0 and value < 10:\n"
-        "        return value + 1\n"
-        "    return value - 1\n"
-    )
+    (src / "sample.py").write_text("def sample(value):\n    if value > 0 and value < 10:\n        return value + 1\n    return value - 1\n")
 
     result = CliRunner().invoke(
         main,
@@ -1620,9 +1710,7 @@ def test_cli_metric_calibration_json_is_developer_dump(
     assert payload["top"]["cyclomatic"][0]["symbol"] == "sample"
 
 
-def test_cli_quiet_suppresses_success_output(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_quiet_suppresses_success_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1657,25 +1745,19 @@ def _analyse_short_and_long_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     return json.loads(result.output)
 
 
-def test_cli_analyse_emits_schema_version_and_tool_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_emits_schema_version_and_tool_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
-    assert payload["schemaVersion"] == "gruff.analysis.v2"
+    assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["tool"]["name"] == "gruff-py"
 
 
-def test_cli_analyse_summary_counts_at_least_two_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_summary_counts_at_least_two_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
-    assert payload["summary"]["filesDiscovered"] >= 2
-    assert payload["summary"]["filesParsed"] >= 2
+    assert payload["summary"]["discoveredFiles"] >= 2
+    assert payload["summary"]["parsedFiles"] >= 2
 
 
-def test_cli_analyse_emits_file_length_finding_with_full_classification(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_emits_file_length_finding_with_full_classification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     file_length = [f for f in payload["findings"] if f["ruleId"] == "size.file-length"]
     assert len(file_length) == 1
@@ -1690,9 +1772,7 @@ def test_cli_analyse_emits_file_length_finding_with_full_classification(
     )
 
 
-def test_cli_analyse_sarif_format_is_parseable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_sarif_format_is_parseable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1733,25 +1813,21 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
     run = payload["runs"][0]
     assert payload["version"] == "2.1.0"
     assert run["tool"]["driver"]["name"] == "gruff-py"
-    assert run["properties"]["gruffSchemaVersion"] == "gruff.analysis.v2"
+    assert run["properties"]["gruffSchemaVersion"] == "gruff.analysis.v3"
 
 
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:
     run = _sarif_fixture_payload()["runs"][0]
     driver_rules = run["tool"]["driver"]["rules"]
     missing_fp = [r for r in run["results"] if not r["partialFingerprints"]["gruffFingerprint"]]
-    mismatched_rule_index = [
-        r for r in run["results"] if driver_rules[r["ruleIndex"]]["id"] != r["ruleId"]
-    ]
+    mismatched_rule_index = [r for r in run["results"] if driver_rules[r["ruleIndex"]]["id"] != r["ruleId"]]
     assert missing_fp == [], f"results missing gruffFingerprint: {missing_fp}"
     assert mismatched_rule_index == [], f"ruleIndex/ruleId mismatches: {mismatched_rule_index}"
 
 
 def test_cli_analyse_sarif_fixture_artifact_uris_are_normalised() -> None:
     run = _sarif_fixture_payload()["runs"][0]
-    uris = [
-        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in run["results"]
-    ]
+    uris = [r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in run["results"]]
     bad = [uri for uri in uris if uri.startswith("./") or "\\" in uri]
     assert bad == [], f"un-normalised artifact URIs: {bad}"
 
@@ -1872,7 +1948,7 @@ def test_analyse_partial_unused_private_function_suppresses_module_only(
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert [finding["symbol"] for finding in payload["findings"]] == ["Service._method_helper"]
-    assert payload["run"]["partialContextCaveat"] == (
+    assert payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
 
@@ -1892,11 +1968,7 @@ def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
     )
 
     assert result.exit_code == 0, result.output
-    assert (
-        "Scan context\n"
-        "  Caveat: partial project scan: project-wide rules may need full-project context"
-        in result.output
-    )
+    assert "Scan context\n  Caveat: partial project scan: project-wide rules may need full-project context" in result.output
     assert "  Scoring mode: full-project" in result.output
     assert "  Scope: full-project" not in result.output
 
@@ -1932,10 +2004,10 @@ def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
     assert full.exit_code == 0, full.output
     narrow_payload = json.loads(narrow.output)
     full_payload = json.loads(full.output)
-    assert narrow_payload["run"]["partialContextCaveat"] == (
+    assert narrow_payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
-    assert "partialContextCaveat" not in full_payload["run"]
+    assert "extensions" not in full_payload["run"]
 
 
 def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
@@ -1964,7 +2036,7 @@ def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
-        assert "partialContextCaveat" not in payload["run"], full_project_path
+        assert "extensions" not in payload["run"], full_project_path
 
 
 def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
@@ -1996,7 +2068,7 @@ def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["run"]["partialContextCaveat"] == (
+    assert payload["run"]["extensions"]["py"]["run"]["partialContextCaveat"] == (
         "partial project scan: project-wide rules may need full-project context"
     )
     assert payload["diff"]["enabled"] is True
@@ -2064,9 +2136,107 @@ def test_cli_parse_error_keeps_redacted_source_text_finding(
     assert aws_key not in result.output
 
 
-def test_cli_analyse_docs_messages_describe_intent_not_absence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_cli_bounded_deep_scan_retains_text_rules_and_nonfatal_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    lines = [f"AWS_KEY = {aws_key!r}", "result = eval('payload')"]
+    lines.extend(f"value_{index} = {index}" for index in range(1_000))
+    (src / "large.py").write_text("\n".join(lines) + "\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--deep-scan-budget",
+            "1:1000000",
+            "src/large.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["summary"]["discoveredFiles"] == 1
+    assert payload["summary"]["parsedFiles"] == 1
+    diagnostic = payload["diagnostics"][0]
+    assert diagnostic["type"] == "bounded-deep-scan"
+    assert diagnostic["invalidatesRun"] is False
+    assert "maxLines=1; maxBytes=1000000; override=cli" in diagnostic["message"]
+    rule_ids = {finding["ruleId"] for finding in payload["findings"]}
+    assert "sensitive-data.aws-access-key" in rule_ids
+    assert "size.file-length" in rule_ids
+    assert "security.dangerous-function-call" not in rule_ids
+    assert aws_key not in result.output
+
+
+@pytest.mark.parametrize("override", ("100:100000", "off"))
+def test_cli_deep_scan_budget_overrides_config_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    override: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("result = eval('payload')\n")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\ndeepScanBudget:\n  enabled: true\n  maxLines: 1\n  maxBytes: 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-baseline",
+            "--deep-scan-budget",
+            override,
+            "sample.py",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert not any(item["type"] == "bounded-deep-scan" for item in payload["diagnostics"])
+    assert "security.dangerous-function-call" in {finding["ruleId"] for finding in payload["findings"]}
+
+
+def test_cli_rejects_partial_deep_scan_budget_override_as_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--no-config",
+            "--deep-scan-budget",
+            "100",
+            "sample.py",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["diagnostics"][0]["type"] == "config-error"
+    assert "LINES:BYTES, or off" in payload["diagnostics"][0]["message"]
+
+
+def test_cli_analyse_docs_messages_describe_intent_not_absence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2080,9 +2250,7 @@ def test_cli_analyse_docs_messages_describe_intent_not_absence(
     assert "has no docstring" not in result.output
 
 
-def test_cli_analyse_html_format_renders_html(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_html_format_renders_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2137,9 +2305,7 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "ok.py").write_text(
-        '"""This module provides descriptive fixture coverage for filter disclosure tests."""\n'
-    )
+    (src / "ok.py").write_text('"""This module provides descriptive fixture coverage for filter disclosure tests."""\n')
 
     result = CliRunner().invoke(
         main,
@@ -2151,30 +2317,28 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
             "advisory",
             "--no-config",
             "--no-baseline",
-            "--exclude-rule",
+            "--hide-rule",
             "docs.missing-readme",
             "src",
         ],
     )
 
     assert result.exit_code == 1, result.output
-    assert (
-        "Findings: 0 shown (1 hidden by display filters; score and exit code reflect all findings)"
-        in result.output
-    )
+    # The canonical tally is fixed byte-for-byte by FAMILY-CONTRACT section 1, so the display-filter
+    # disclosure moved to its own line inside the Score block rather than qualifying that tally.
+    assert "Findings: 0 total · 0 error · 0 warning · 0 advisory" in result.output
+    assert "  Display filters hid 1 findings; score and exit code reflect all findings." in result.output
     assert "Exit code: 1" in result.output
 
 
-def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
+def test_analyse_json_display_filter_keeps_full_run_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "ok.py").write_text(
-        '"""This module provides descriptive fixture coverage for filter disclosure tests."""\n'
-    )
+    (src / "ok.py").write_text('"""This module provides descriptive fixture coverage for filter disclosure tests."""\n')
 
     result = CliRunner().invoke(
         main,
@@ -2186,7 +2350,7 @@ def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
             "advisory",
             "--no-config",
             "--no-baseline",
-            "--exclude-rule",
+            "--hide-rule",
             "docs.missing-readme",
             "src",
         ],
@@ -2196,9 +2360,33 @@ def test_analyse_json_filter_shape_unchanged_and_summary_stays_display_filtered(
     payload = json.loads(result.output)
     assert "hiddenByDisplayFilter" not in payload
     assert payload["findings"] == []
-    assert payload["summary"]["findings"]["total"] == 0
+    assert payload["summary"]["findings"]["total"] == 1
     assert payload["summary"]["exitCode"] == 1
+    assert payload["displayFilter"]["hiddenFindings"] == 1
     assert sum(pillar["findings"] for pillar in payload["score"]["pillars"]) == 1
+
+
+def test_configured_display_floor_reports_the_same_delta_as_the_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publish ``displayFilter`` for a ``minimumSeverity:`` floor, which hid findings with nothing in the envelope saying so.
+
+    Args:
+        tmp_path: Project whose only finding is an advisory the error floor hides.
+        monkeypatch: Moves the working directory into the project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "ok.py").write_text('"""This module provides descriptive fixture coverage for filter disclosure tests."""\n')
+    (tmp_path / "floor.yaml").write_text('schemaVersion: "gruff-py.config.v0.1"\nminimumSeverity: error\n')
+    run_args = ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-baseline"]
+
+    configured = CliRunner().invoke(main, [*run_args, "--config", "floor.yaml"])
+    flagged = CliRunner().invoke(main, [*run_args, "--no-config", "--min-severity", "error"])
+
+    configured_payload, flagged_payload = json.loads(configured.output), json.loads(flagged.output)
+    assert (configured.exit_code, flagged.exit_code) == (0, 0), configured.output + flagged.output
+    assert configured_payload["findings"] == flagged_payload["findings"] == []
+    assert configured_payload["displayFilter"] == flagged_payload["displayFilter"]
+    assert configured_payload["displayFilter"]["hiddenFindings"] == configured_payload["summary"]["findings"]["total"]
 
 
 def test_cli_analyse_accepts_comma_separated_pillar_filters(
@@ -2219,7 +2407,7 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
             "--fail-on",
             "none",
             "--no-config",
-            "--include-pillar",
+            "--show-pillar",
             "size,documentation",
             "src",
         ],
@@ -2230,42 +2418,40 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
     assert payload["run"]["filters"]["includePillars"] == ["size", "documentation"]
 
 
-def test_cli_applies_configured_secret_preview_allowlist(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_rejects_configured_secret_preview_before_analysis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     aws_key = "AKIA" + "1234567890ABCDEF"
-    aws_preview = "AKIA...CDEF (redacted, 20 chars)"
+    configured_preview = "AKIA...CDEF (redacted, 20 chars)"
     stripe_key = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
     (src / "secrets.py").write_text(f"AWS_KEY = '{aws_key}'\nSTRIPE = '{stripe_key}'\n")
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"allowlists:\n  secretPreviews:\n    - '{aws_preview}'\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text(f"schemaVersion: gruff-py.config.v0.1\nallowlists:\n  secretPreviews:\n    - '{configured_preview}'\n")
 
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "error", "src"],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
     payload = json.loads(result.output)
-    rule_ids = [finding["ruleId"] for finding in payload["findings"]]
-    previews = [
-        finding["metadata"].get("preview")
-        for finding in payload["findings"]
-        if isinstance(finding.get("metadata"), dict)
+    assert payload["findings"] == []
+    assert payload["diagnostics"] == [
+        {
+            "type": "config-error",
+            "message": (
+                'Config key "allowlists.secretPreviews" is removed in 0.6.0: FAMILY-CONTRACT.md section 5 '
+                "makes category markers unconditional, so the key authorises nothing; delete it from the "
+                "configuration."
+            ),
+            "invalidatesRun": True,
+        }
     ]
-    assert "sensitive-data.aws-access-key" not in rule_ids
-    assert "sensitive-data.api-key-pattern" in rule_ids
-    assert aws_preview not in previews
+    assert aws_key not in result.output
+    assert configured_preview not in result.output
 
 
-def test_cli_fail_on_error_exits_1_when_errors_present(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_fail_on_error_exits_1_when_errors_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2279,9 +2465,7 @@ def test_cli_fail_on_error_exits_1_when_errors_present(
     assert result.exit_code == 1
 
 
-def test_cli_fail_on_none_exits_0_even_with_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_fail_on_none_exits_0_even_with_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2295,9 +2479,7 @@ def test_cli_fail_on_none_exits_0_even_with_errors(
     assert result.exit_code == 0, result.output
 
 
-def test_cli_minimum_severity_config_applies_when_no_flag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_fail_on_config_applies_when_no_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2305,9 +2487,7 @@ def test_cli_minimum_severity_config_applies_when_no_flag(
     # error-tier findings.
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
     (src / "warn.py").write_text(warning_lines)
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
 
     result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
 
@@ -2315,17 +2495,13 @@ def test_cli_minimum_severity_config_applies_when_no_flag(
     assert result.exit_code == 0, result.output
 
 
-def test_cli_fail_on_flag_wins_over_minimum_severity_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_fail_on_flag_wins_over_fail_on_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
     (src / "warn.py").write_text(warning_lines)
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
 
     # Config says "error", but --fail-on warning explicitly overrides; warning
     # findings now trigger exit 1.
@@ -2337,9 +2513,7 @@ def test_cli_fail_on_flag_wins_over_minimum_severity_config(
     assert result.exit_code == 1, result.output
 
 
-def test_cli_minimum_severity_analyse_binary_default_is_advisory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_fail_on_analyse_binary_default_is_advisory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2352,22 +2526,10 @@ def test_cli_minimum_severity_analyse_binary_default_is_advisory(
     assert result.exit_code == 1, result.output
 
 
-_LEGACY_THRESHOLD_YAML = (
-    "schemaVersion: gruff-py.config.v0.1\n"
-    "rules:\n"
-    "  complexity.cognitive:\n"
-    "    thresholds:\n"
-    "      warning: 15\n"
-    "      error: 30\n"
-)
+_LEGACY_THRESHOLD_YAML = "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.cognitive:\n    thresholds:\n      warning: 15\n      error: 30\n"
 
 _UNKNOWN_OPTION_YAML = (
-    "schemaVersion: gruff-py.config.v0.1\n"
-    "rules:\n"
-    "  docs.dataclass-attributes:\n"
-    "    options:\n"
-    "      min_fields: 6\n"
-    "      allowBullet: false\n"
+    "schemaVersion: gruff-py.config.v0.1\nrules:\n  docs.dataclass-attributes:\n    options:\n      min_fields: 6\n      allowBullet: false\n"
 )
 
 
@@ -2375,9 +2537,7 @@ def _write_clean_legacy_project(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("# demo\n")
     src = tmp_path / "src"
     src.mkdir()
-    (src / "ok.py").write_text(
-        '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
-    )
+    (src / "ok.py").write_text('"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n')
     (tmp_path / ".gruff-py.yaml").write_text(_LEGACY_THRESHOLD_YAML)
 
 
@@ -2390,15 +2550,11 @@ def _write_clean_unknown_option_project(project_root: Path) -> None:
     (project_root / "README.md").write_text("# demo\n")
     source_root = project_root / "src"
     source_root.mkdir()
-    (source_root / "ok.py").write_text(
-        '"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n'
-    )
+    (source_root / "ok.py").write_text('"""Demo module holding the greeting constant for smoke tests."""\n\nGREETING = "hello"\n')
     (project_root / ".gruff-py.yaml").write_text(_UNKNOWN_OPTION_YAML)
 
 
-def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2429,17 +2585,12 @@ def test_cli_analyse_warns_on_unknown_option_and_proceeds(
     assert result.exit_code == 0, result.output
     assert "Config warnings" in result.stdout
     assert 'Unknown option "rules.docs.dataclass-attributes.options.allowBullet".' in result.stderr
-    assert (
-        "Option ignored; registered defaults and valid sibling options still apply."
-        in result.stderr
-    )
+    assert "Option ignored; registered defaults and valid sibling options still apply." in result.stderr
     assert "options.allow_bullets" in result.stderr
     assert "Traceback" not in result.stderr
 
 
-def test_cli_analyse_json_carries_additive_config_warnings(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_json_carries_additive_config_warnings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2447,29 +2598,25 @@ def test_cli_analyse_json_carries_additive_config_warnings(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    warnings = payload["run"]["configWarnings"]
+    warnings = payload["run"]["extensions"]["py"]["run"]["configWarnings"]
     assert len(warnings) == 2
     assert all("thresholds" in warning for warning in warnings)
     # Warnings are not diagnostics: the exit code stays finding-driven.
     assert payload["diagnostics"] == []
 
 
-def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
     result = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 2
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in result.stderr
     assert "Traceback" not in result.stderr
 
 
-def test_cli_analyse_strict_config_json_reports_config_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_strict_config_json_reports_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2480,9 +2627,7 @@ def test_cli_analyse_strict_config_json_reports_config_error(
     assert payload["diagnostics"][0]["type"] == "config-error"
 
 
-def test_cli_migrate_config_dry_run_prints_diff_without_writing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_migrate_config_dry_run_prints_diff_without_writing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
     config_file = tmp_path / ".gruff-py.yaml"
@@ -2495,28 +2640,30 @@ def test_cli_migrate_config_dry_run_prints_diff_without_writing(
     assert config_file.read_text() == original
 
 
-def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
-    apply_result = CliRunner().invoke(main, ["migrate-config"])
+    original = (tmp_path / ".gruff-py.yaml").read_text()
+
+    apply_result = CliRunner().invoke(main, ["migrate-config", "--output", "migrated.yaml"])
 
     assert apply_result.exit_code == 0, apply_result.output
     assert "Wrote" in apply_result.stdout
-    migrated = yaml.safe_load((tmp_path / ".gruff-py.yaml").read_text())
+    migrated = yaml.safe_load((tmp_path / "migrated.yaml").read_text())
     assert migrated["rules"]["complexity.cognitive"]["threshold"] == 30
     assert migrated["rules"]["complexity.cognitive"]["severity"] == "error"
+    # Migration is out of place: the file a user may want back is only ever read.
+    assert (tmp_path / ".gruff-py.yaml").read_text() == original
 
 
-def test_cli_analyse_strict_config_passes_after_migration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cli_analyse_strict_config_passes_after_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
-    migrate = CliRunner().invoke(main, ["migrate-config"])
+    migrate = CliRunner().invoke(main, ["migrate-config", "--output", "migrated.yaml"])
     assert migrate.exit_code == 0, migrate.output
+    # The migrated file is what the next run must load, so it takes the place of the 0.5 one here.
+    (tmp_path / ".gruff-py.yaml").write_text((tmp_path / "migrated.yaml").read_text())
 
     rerun = CliRunner().invoke(main, ["analyse", "--strict-config", "src"])
 

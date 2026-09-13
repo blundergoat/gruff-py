@@ -38,8 +38,12 @@ class AnalysisRunRequest:
         diff_patch: Unified diff text read from stdin for ``--diff -``.
         changed_scope: ``symbol`` or ``hunk`` filtering.
         execution_exclude_rules: Rule ids excluded before analysis execution.
+        execution_include_rules: Rule ids the run narrows to before execution; empty runs every configured rule.
+        execution_include_pillars: Pillars the run narrows to before execution; empty runs every configured pillar.
+        execution_exclude_pillars: Pillars excluded before analysis execution.
         strict_config: When true, unknown rule-level config keys raise instead
             of downgrading to warnings.
+        deep_scan_budget: Atomic CLI override in ``LINES:BYTES`` or ``off`` form.
     """
 
     paths: tuple[str, ...]
@@ -58,4 +62,8 @@ class AnalysisRunRequest:
     diff_patch: str = ""
     changed_scope: str = "symbol"
     execution_exclude_rules: tuple[str, ...] = ()
+    execution_include_rules: tuple[str, ...] = ()
+    execution_include_pillars: tuple[str, ...] = ()
+    execution_exclude_pillars: tuple[str, ...] = ()
     strict_config: bool = False
+    deep_scan_budget: str = ""

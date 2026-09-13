@@ -18,7 +18,7 @@ from click.shell_completion import get_completion_class
 
 import gruffpy.cli_dashboard as dashboard_cli
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
-from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME, BaselineOptions
+from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
@@ -45,7 +45,7 @@ from gruffpy.cli_options import (
     was_fail_on_set_on_cli,
 )
 from gruffpy.cli_state import CliState, state as _state
-from gruffpy.cli_summary import summary_payload, summary_text
+from gruffpy.cli_summary import summary_text
 from gruffpy.command.check_ignore_verdict import (
     check_ignore_exit_code,
     classify_paths,
@@ -180,6 +180,8 @@ class _AnalysisCliRequest:
     exclude_rule: tuple[str, ...]
     baseline_path: Path | None
     generate_baseline_path: Path | None
+    migrate_baseline_path: Path | None
+    force_baseline_overwrite: bool
     should_skip_baseline: bool
     diff_mode: str
     diff_patch: str
@@ -187,13 +189,18 @@ class _AnalysisCliRequest:
     changed_ranges: str
     changed_scope: str
     strict_config: bool = False
+    deep_scan_budget: str = ""
+    show_rule: tuple[str, ...] = ()
+    hide_rule: tuple[str, ...] = ()
+    show_pillar: tuple[str, ...] = ()
+    hide_pillar: tuple[str, ...] = ()
+    min_confidence: str | None = None
+    fail_on_new: bool = False
 
 
 _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     cast(ClickDecorator, click.pass_context),
-    _option(
-        "-v", "--verbose", count=True, help="Increase message verbosity. Use -v, -vv, or -vvv."
-    ),
+    _option("-v", "--verbose", count=True, help="Increase message verbosity. Use -v, -vv, or -vvv."),
     _option("-n", "--no-interaction", is_flag=True, help="Do not ask any interactive question."),
     _option("--ansi/--no-ansi", default=None, help="Force or disable ANSI output."),
     cast(
@@ -273,7 +280,7 @@ def analyse(**kwargs: Any) -> None:
         _render_report(
             report,
             request.output,
-            project_root=str(Path.cwd()),
+            project_root=str(_project_root_from_targets(request.paths)),
             report_editor_link=request.report_editor_link,
             report_interactive=request.should_render_interactive,
         )
@@ -300,9 +307,7 @@ def dashboard(**kwargs: Any) -> None:
         raise click.ClickException(f"Project root is not a directory: {dashboard_project_root}")
     if not 0 <= request.port <= 65535:
         raise click.ClickException("--port must be between 0 and 65535.")
-    public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(
-        request.host, request.has_acknowledged_public_bind
-    )
+    public_bind_warning = dashboard_cli.remote_dashboard_bind_warning(request.host, request.has_acknowledged_public_bind)
     _maybe_prompt_to_init_config(
         request.config_path,
         request.should_skip_config,
@@ -432,13 +437,7 @@ def summary(**kwargs: Any) -> None:
     analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
     if summary_format == "json":
-        _write_stdout(
-            json.dumps(
-                summary_payload(analysis_report, top, elapsed_seconds, group_by=group_by),
-                indent=4,
-            )
-        )
-        _write_stdout("\n")
+        _write_stdout(JsonReporter().render_summary(analysis_report))
     else:
         _write_stdout(summary_text(analysis_report, top, elapsed_seconds, group_by=group_by))
     sys.exit(analysis_report.exit_code)
@@ -533,9 +532,7 @@ def completion(ctx: click.Context, shell: str | None, debug: bool) -> None:
     resolved_shell = shell or _detect_shell()
     completion_class = get_completion_class(resolved_shell)
     if completion_class is None:
-        raise click.ClickException(
-            f'Unsupported shell "{resolved_shell}". Supported shells: bash, fish, zsh.'
-        )
+        raise click.ClickException(f'Unsupported shell "{resolved_shell}". Supported shells: bash, fish, zsh.')
     source = completion_class(_root_group(ctx), {}, TOOL_NAME, "_GRUFF_PY_COMPLETE").source()
     _write_stdout(source)
     if not source.endswith("\n"):
@@ -582,6 +579,7 @@ def _analysis_request(
     output_key: str,
     command_name: str,
 ) -> _AnalysisCliRequest:
+    _warn_superseded_spellings(kwargs)
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         config_path=cast(Path | None, kwargs["config_path"]),
@@ -598,25 +596,104 @@ def _analysis_request(
         exclude_pillar=cast(tuple[str, ...], kwargs["exclude_pillar"]),
         include_rule=cast(tuple[str, ...], kwargs["include_rule"]),
         exclude_rule=cast(tuple[str, ...], kwargs["exclude_rule"]),
-        baseline_path=cast(Path | None, kwargs.get("baseline_path")),
+        show_rule=cast(tuple[str, ...], kwargs.get("show_rule", ())),
+        hide_rule=cast(tuple[str, ...], kwargs.get("hide_rule", ())),
+        show_pillar=cast(tuple[str, ...], kwargs.get("show_pillar", ())),
+        hide_pillar=cast(tuple[str, ...], kwargs.get("hide_pillar", ())),
+        min_confidence=cast("str | None", kwargs.get("min_confidence")),
+        fail_on_new=bool(kwargs.get("fail_on_new", False)),
+        baseline_path=_first_present_path(kwargs, ("baseline", "baseline_path")),
         generate_baseline_path=_resolve_generate_baseline_path(kwargs),
+        migrate_baseline_path=cast(Path | None, kwargs.get("migrate_baseline_path")),
+        force_baseline_overwrite=cast(bool, kwargs.get("force_baseline_overwrite", False)),
         should_skip_baseline=cast(bool, kwargs.get("no_baseline", False)),
-        diff_mode=cast(str, kwargs.get("diff_mode", "")),
+        diff_mode=_resolved_diff_mode(kwargs),
         diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
         since=cast(str, kwargs.get("since", "")),
         changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
         changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
         strict_config=cast(bool, kwargs.get("strict_config", False)),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
-def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
-    explicit = cast(Path | None, kwargs.get("generate_baseline_path"))
-    if explicit is not None:
-        return explicit
-    if cast(bool, kwargs.get("generate_baseline", False)):
-        return Path(DEFAULT_BASELINE_FILENAME)
+def _resolved_diff_mode(kwargs: Mapping[str, Any]) -> str:
+    """Return the diff selector this run compares against, taking the family spelling first.
+
+    ``--diff`` names the mode; ``--diff-base`` and its superseded spelling
+    ``--diff-vs`` name the ref, and a named ref is what the run actually
+    compares against.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+
+    Returns:
+        The ref or mode to compare against; empty when the user named none.
+    """
+    for name in ("diff_base", "diff_vs"):
+        value = kwargs.get(name)
+        if isinstance(value, str) and value:
+            return value
+    return cast(str, kwargs.get("diff_mode", ""))
+
+
+def _first_present_path(kwargs: Mapping[str, Any], names: tuple[str, ...]) -> Path | None:
+    """Return the first path the user actually gave, in canonical-spelling-first order.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+        names: Option names to try, the family spelling first.
+
+    Returns:
+        The path the user named, or None when they named none of them.
+    """
+    for name in names:
+        value = kwargs.get(name)
+        if value is not None:
+            return cast("Path | None", value)
     return None
+
+
+def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
+    """Print one line per superseded spelling the user typed, naming the family name that replaces it.
+
+    The run continues: behaviour is identical under the family spelling, so
+    refusing would break a working command line for a rename. The warning is
+    what tells the user the old name is going away.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+    """
+    for name, replacement in (("baseline_path", "--baseline"), ("diff_vs", "--diff-base"), ("generate_baseline_path", "--generate-baseline")):
+        value = kwargs.get(name)
+        # An option the user left alone is None for a path and "" for a string, and neither is a spelling they typed.
+        if value in (None, ""):
+            continue
+        typed = "--" + name.replace("_", "-")
+        click.echo(
+            f"{typed} is superseded by {replacement} and behaves identically; the old spelling is going away.",
+            err=True,
+        )
+
+
+def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
+    """Return where a generated baseline is written, or None when the user asked for none.
+
+    ``--generate-baseline`` carries the destination, and given no value it falls
+    back to the conventional file name, which is the shape the ratified CLI
+    contract gives the flag in every port. The superseded
+    ``--generate-baseline-path`` still works and warns.
+
+    Args:
+        kwargs: Parsed Click options for this invocation.
+
+    Returns:
+        The destination path, or None when neither spelling was used.
+    """
+    canonical = cast(Path | None, kwargs.get("generate_baseline"))
+    if canonical is not None:
+        return canonical
+    return cast(Path | None, kwargs.get("generate_baseline_path"))
 
 
 def _summary_analysis_request(
@@ -642,6 +719,8 @@ def _summary_analysis_request(
         exclude_rule=(),
         baseline_path=None,
         generate_baseline_path=None,
+        migrate_baseline_path=None,
+        force_baseline_overwrite=False,
         should_skip_baseline=True,
         diff_mode="",
         diff_patch="",
@@ -649,6 +728,7 @@ def _summary_analysis_request(
         changed_ranges="",
         changed_scope="symbol",
         strict_config=cast(bool, kwargs.get("strict_config", False)),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
@@ -673,6 +753,7 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> dashboard_cli._DashboardCli
         should_include_ignored=cast(bool, kwargs["include_ignored"]),
         should_render_interactive=cast(bool, kwargs["report_interactive"]),
         has_acknowledged_public_bind=cast(bool, kwargs["allow_public"]),
+        deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
     )
 
 
@@ -726,14 +807,84 @@ def _write_config_file(path: Path, content: str) -> None:
         raise click.ClickException(f"Unable to write {path.name}: {exc}") from exc
 
 
+def _is_same_or_descendant(candidate: Path, ancestor: Path) -> bool:
+    """Report whether one directory is another or sits inside it.
+
+    Comparison is by whole path segment, so a sibling folder such as /work/apidocs is never mistaken for something inside /work/api.
+
+    Args:
+        candidate: Directory being tested.
+        ancestor: Directory that may contain it.
+
+    Returns:
+        True when candidate is the ancestor or sits inside it.
+    """
+    return candidate == ancestor or ancestor in candidate.parents
+
+
+def _project_root_from_targets(paths: Sequence[str]) -> Path:
+    """Pick the directory that every reported path is written relative to.
+
+    Run ``gruff-py analyse .`` inside a project and the answer is that directory.
+    Run ``gruff-py analyse /srv/checkout`` from a home directory, as CI and scripted scans do, and the answer is /srv/checkout,
+    so findings still read ``gruffpy/cli.py`` rather than an absolute path.
+
+    Args:
+        paths: Scan targets as typed on the command line; empty means no target was named, so the launch directory is the project.
+
+    Returns:
+        Directory to treat as the project root; never empty.
+
+    Raises:
+        click.ClickException: When targets sit under different filesystem roots, such as ``analyse /srv/api /opt/tools``,
+            leaving no single project to report against.
+    """
+    working_directory = Path.cwd()
+
+    # No target was named, so the directory the command ran from is the project.
+    if not paths:
+        return working_directory
+
+    common: Path | None = None
+    # Each target narrows the answer: the root must be a directory that contains all of them.
+    for raw_path in paths:
+        absolute = Path(raw_path)
+        # A relative target like ``src/`` is meant relative to where the command was typed.
+        if not absolute.is_absolute():
+            absolute = working_directory / absolute
+        absolute = Path(os.path.normpath(absolute))
+        # Naming one file means the project is the folder holding it, not the file itself.
+        directory = absolute if absolute.is_dir() else absolute.parent
+
+        # The first target sets the starting answer; later ones can only widen it.
+        if common is None:
+            common = directory
+            continue
+        while not _is_same_or_descendant(directory, common):
+            parent = common.parent
+            # Walking up hit the filesystem root, so these targets live in unrelated projects.
+            if parent == common:
+                raise click.ClickException("scan targets do not share a filesystem root")
+            common = parent
+
+    # Targets sit inside the launch directory, so it stays the root.
+    # Moving the root down to a target's own folder would re-anchor config discovery, ignore patterns, and baseline paths.
+    if common is None or _is_same_or_descendant(common, working_directory):
+        return working_directory
+    return common
+
+
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
+    # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
+    # only the presentation ones reach the display filter.
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
-        include_pillars=_parse_pillar_values("--include-pillar", request.include_pillar),
-        exclude_pillars=_parse_pillar_values("--exclude-pillar", request.exclude_pillar),
-        include_rules=_split_repeated_csv(request.include_rule),
-        exclude_rules=_split_repeated_csv(request.exclude_rule),
+        include_pillars=_parse_pillar_values("--show-pillar", request.show_pillar),
+        exclude_pillars=_parse_pillar_values("--hide-pillar", request.hide_pillar),
+        include_rules=_split_repeated_csv(request.show_rule),
+        exclude_rules=_split_repeated_csv(request.hide_rule),
     )
+    project_root = _project_root_from_targets(request.paths)
     try:
         report = run_analysis(
             AnalysisRunRequest(
@@ -742,29 +893,37 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 no_config=request.should_skip_config,
                 output=request.output,
                 fail_threshold=request.fail_on,
-                config_severity_command=(
-                    "" if request.was_fail_on_set_on_cli else request.command_name
-                ),
+                config_severity_command=("" if request.was_fail_on_set_on_cli else request.command_name),
                 include_ignored=request.should_include_ignored,
-                project_root=Path.cwd(),
+                project_root=project_root,
                 display_filter=display_filter,
                 baseline=BaselineOptions(
                     apply_path=request.baseline_path,
                     generate_path=request.generate_baseline_path,
                     disabled=request.should_skip_baseline,
+                    migrate_path=request.migrate_baseline_path,
+                    force_overwrite=request.force_baseline_overwrite,
                 ),
                 diff_mode=request.diff_mode,
                 diff_patch=request.diff_patch,
                 since=request.since,
                 changed_ranges=request.changed_ranges,
                 changed_scope=request.changed_scope,
+                execution_include_rules=_split_repeated_csv(request.include_rule),
+                execution_exclude_rules=_split_repeated_csv(request.exclude_rule),
+                execution_include_pillars=tuple(pillar.value for pillar in _parse_pillar_values("--include-pillar", request.include_pillar)),
+                execution_exclude_pillars=tuple(pillar.value for pillar in _parse_pillar_values("--exclude-pillar", request.exclude_pillar)),
                 strict_config=request.strict_config,
+                deep_scan_budget=request.deep_scan_budget,
             )
         )
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
             return _config_error_report(request, exc)
-        raise click.ClickException(str(exc)) from exc
+        # Section 7 reserves exit 1 for a completed run whose findings reached the gate, so a run that never
+        # happened has to be distinguishable from one that did; Click's own default for this is 1.
+        click.echo(str(exc), err=True)
+        raise SystemExit(2) from exc
     _echo_config_warnings(report)
     return report
 
@@ -778,12 +937,11 @@ def _echo_config_warnings(report: AnalysisReport) -> None:
 
 
 def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
-    """Build a synthetic ``gruff.analysis.v2`` report for a config-load failure.
+    """Build a synthetic native analysis report for a config-load failure.
 
-    Reserved for ``--format json`` callers: machine-readable consumers need a
-    parseable failure payload (``diagnostics: [{"type": "config-error", ...}]``,
-    ``exitCode: 2``) instead of stderr prose. Human-targeted formats keep the
-    stderr + exit 1 path via ``click.ClickException``.
+    The JSON reporter sends this report through the v3 machine adapter so
+    machine-readable callers receive a parseable diagnostic and exit code 2
+    instead of stderr prose. Human formats retain the Click exception path.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
     return AnalysisReport(
@@ -843,8 +1001,28 @@ def _init_success_message(config_path: Path) -> str:
     )
 
 
+_LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS = frozenset(
+    {
+        "correctness.substring-vocabulary-match",
+        "correctness.unsafe-numeric-coercion",
+        "dead-code.exported-but-unreferenced",
+        "dead-code.unused-private-function",
+        "design.runtime-sys-path-mutation",
+        "naming.abbreviation",
+        "security.unsanitized-markdown-interpolation",
+        "security.weak-crypto",
+        "test-quality.static-analysis-redundant-test",
+    }
+)
+
+
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
     documentation = documentation_for_rule(definition.id)
+    documentation_payload = documentation.to_payload()
+    false_positive_shapes_payload = documentation_payload.get("falsePositiveShapes", [])
+    # The full catalogue keeps its 0.5 nested envelope; M04's canonical mirror is top-level.
+    if definition.id not in _LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS:
+        documentation_payload.pop("falsePositiveShapes", None)
     return {
         "id": definition.id,
         "name": definition.name,
@@ -853,10 +1031,11 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
         "defaultSeverity": definition.default_severity.value,
         "confidence": definition.confidence.value,
         "defaultEnabled": definition.default_enabled,
-        **definition.threshold_payload(),
+        **definition.listing_threshold_payload(),
         "options": dict(definition.default_options),
         "description": definition.get_description(),
-        "documentation": documentation.to_payload(),
+        **({"falsePositiveShapes": false_positive_shapes_payload} if documentation.false_positive_shapes else {}),
+        "documentation": documentation_payload,
     }
 
 
@@ -872,15 +1051,10 @@ def _format_rule_table(definitions: list[RuleDefinition]) -> str:
         )
         for d in definitions
     ]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
-    ]
+    widths = [max(len(headers[index]), *(len(row[index]) for row in rows)) for index in range(len(headers))]
     lines = ["  ".join(header.ljust(widths[index]) for index, header in enumerate(headers))]
     lines.append("  ".join("-" * width for width in widths))
-    lines.extend(
-        "  ".join(value.ljust(widths[index]) for index, value in enumerate(row)) for row in rows
-    )
+    lines.extend("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)) for row in rows)
     return "\n".join(lines) + "\n"
 
 
@@ -961,10 +1135,7 @@ def _command_rows_json(rows: list[tuple[str, str]]) -> str:
 
 
 def _command_rows_xml(rows: list[tuple[str, str]]) -> str:
-    commands = "".join(
-        f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>'
-        for name, help_text in rows
-    )
+    commands = "".join(f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>' for name, help_text in rows)
     return f"<commands>{commands}</commands>\n"
 
 
@@ -990,9 +1161,7 @@ def _detect_shell() -> str:
 
 
 def _xml_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
-    )
+    return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 if __name__ == "__main__":

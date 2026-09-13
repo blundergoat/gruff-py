@@ -4,7 +4,9 @@ import json
 from typing import Any
 
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
+from gruffpy.finding.baseline_identity import finding_identities
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.rule.catalog import documentation_for_rule
@@ -30,36 +32,51 @@ class SarifReporter:
         Returns:
             Pretty-printed SARIF JSON, trailing newline included.
         """
-        rules: dict[str, dict[str, Any]] = {
-            rule.definition().id: _rule_metadata(rule.definition())
-            for rule in RuleRegistry.defaults().all()
-        }
+        rules: dict[str, dict[str, Any]] = {rule.definition().id: _rule_metadata(rule.definition()) for rule in RuleRegistry.defaults().all()}
         for finding in report.findings:
             rules.setdefault(finding.rule_id, _fallback_rule_metadata(finding))
 
         rule_ids = sorted(rules)
         rule_indexes = {rule_id: index for index, rule_id in enumerate(rule_ids)}
+        run: dict[str, Any] = {
+            "tool": {
+                "driver": {
+                    "name": TOOL_NAME,
+                    "semanticVersion": report.tool_version,
+                    "rules": [rules[rule_id] for rule_id in rule_ids],
+                }
+            },
+            "results": [_result(finding, rule_indexes[finding.rule_id]) for finding in report.findings],
+            "properties": _run_properties(report),
+        }
+        if report.diagnostics:
+            run["invocations"] = [
+                {
+                    "executionSuccessful": all(diagnostic.invalidates_run is False for diagnostic in report.diagnostics),
+                    "toolExecutionNotifications": [_diagnostic_notification(diagnostic) for diagnostic in report.diagnostics],
+                }
+            ]
         payload = {
             "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
             "version": "2.1.0",
-            "runs": [
-                {
-                    "tool": {
-                        "driver": {
-                            "name": TOOL_NAME,
-                            "semanticVersion": report.tool_version,
-                            "rules": [rules[rule_id] for rule_id in rule_ids],
-                        }
-                    },
-                    "results": [
-                        _result(finding, rule_indexes[finding.rule_id])
-                        for finding in report.findings
-                    ],
-                    "properties": _run_properties(report),
-                }
-            ],
+            "runs": [run],
         }
         return json.dumps(payload, indent=4) + "\n"
+
+
+def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
+    notification: dict[str, Any] = {
+        "descriptor": {"id": diagnostic.type},
+        "level": "note" if diagnostic.invalidates_run is False else "error",
+        "message": {"text": diagnostic.message},
+    }
+    path = diagnostic.file_path or diagnostic.path
+    if path is not None:
+        physical_location: dict[str, Any] = {"artifactLocation": {"uri": _uri(path)}}
+        if diagnostic.line is not None:
+            physical_location["region"] = {"startLine": diagnostic.line}
+        notification["locations"] = [{"physicalLocation": physical_location}]
+    return notification
 
 
 def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
@@ -77,11 +94,7 @@ def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
             "confidence": definition.confidence.value,
             "defaultEnabled": definition.default_enabled,
             "documentation": documentation.to_payload(),
-            **(
-                {"secondaryPillars": [pillar.value for pillar in definition.secondary_pillars]}
-                if definition.secondary_pillars
-                else {}
-            ),
+            **({"secondaryPillars": [pillar.value for pillar in definition.secondary_pillars]} if definition.secondary_pillars else {}),
             **definition.threshold_payload(),
             **({"options": dict(definition.default_options)} if definition.default_options else {}),
         },
@@ -101,11 +114,7 @@ def _fallback_rule_metadata(finding: Finding) -> dict[str, Any]:
             "defaultSeverity": finding.severity.value,
             "confidence": finding.confidence.value,
             "defaultEnabled": True,
-            **(
-                {"secondaryPillars": [pillar.value for pillar in finding.secondary_pillars]}
-                if finding.secondary_pillars
-                else {}
-            ),
+            **({"secondaryPillars": [pillar.value for pillar in finding.secondary_pillars]} if finding.secondary_pillars else {}),
         },
     }
 
@@ -126,7 +135,7 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
     if finding.metadata:
         properties["metadata"] = dict(finding.metadata)
 
-    return {
+    result: dict[str, Any] = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index,
         "level": _level(finding.severity),
@@ -136,9 +145,33 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
                 "physicalLocation": _physical_location(finding),
             }
         ],
-        "partialFingerprints": {"gruffFingerprint": finding.fingerprint()},
-        "properties": properties,
     }
+    fingerprints = _partial_fingerprints(finding)
+    # A sensitive finding carries no fingerprints at all, so no secret gets a durable name in code scanning.
+    if fingerprints is not None:
+        result["partialFingerprints"] = fingerprints
+    result["properties"] = properties
+    return result
+
+
+def _partial_fingerprints(finding: Finding) -> dict[str, str] | None:
+    """Return the fingerprints GitHub code scanning groups alerts by, or ``None`` when the result must carry none.
+
+    ``gruffFingerprint`` is the ratified durable identity and nothing else, so an alert survives a line move while a
+    second declaration of one name opens its own alert.
+
+    Args:
+        finding: Finding being rendered as a SARIF result.
+
+    Returns:
+        The ``partialFingerprints`` object, or ``None`` for a sensitive finding, which has no durable name at all.
+    """
+    # The pipeline names every finding before the baseline filters any; a direct API caller's finding is named here,
+    # ranked by its own line, so an ordinary result is never published without a fingerprint.
+    if finding.baseline_identity is not None:
+        return {"gruffFingerprint": finding.baseline_identity}
+    named = finding_identities([finding])[0]
+    return None if named is None else {"gruffFingerprint": named.identity}
 
 
 def _physical_location(finding: Finding) -> dict[str, Any]:
@@ -166,7 +199,7 @@ def _run_properties(report: AnalysisReport) -> dict[str, Any]:
     properties: dict[str, Any] = {
         "gruffSchemaVersion": ANALYSIS_SCHEMA_VERSION,
     }
-    if report.score is not None:
+    if report.score is not None and report.score.composite is not None:
         properties["score"] = report.score.composite.score
         properties["grade"] = report.score.composite.letter
     return properties

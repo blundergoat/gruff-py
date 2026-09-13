@@ -56,10 +56,7 @@ def test_init_self_assignments_counted():
 def test_class_body_and_init_dedupe_by_name():
     # 5 class-body annotated + 5 self.a0..a4 reassignments + 10 more self.b0..b9
     body = "\n".join(f"    a{i}: int = {i}" for i in range(5))
-    init = "\n".join(
-        [f"        self.a{i} = {i}" for i in range(5)]
-        + [f"        self.b{i} = {i}" for i in range(10)]
-    )
+    init = "\n".join([f"        self.a{i} = {i}" for i in range(5)] + [f"        self.b{i} = {i}" for i in range(10)])
     source = f"class C:\n{body}\n    def __init__(self):\n{init}\n"
     findings = AttributeCountRule().analyse(_make_unit(source), _ctx())
     # 5 (a0..a4) + 10 (b0..b9) = 15 -> at threshold, no finding
@@ -109,7 +106,5 @@ def test_pydantic_basemodel_is_exempt():
 
 def test_unittest_testcase_is_exempt():
     init_body = "\n".join(f"        self.a{i} = {i}" for i in range(20))
-    source = (
-        f"import unittest\nclass MyTest(unittest.TestCase):\n    def __init__(self):\n{init_body}\n"
-    )
+    source = f"import unittest\nclass MyTest(unittest.TestCase):\n    def __init__(self):\n{init_body}\n"
     assert AttributeCountRule().analyse(_make_unit(source), _ctx()) == []

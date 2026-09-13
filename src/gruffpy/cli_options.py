@@ -13,6 +13,7 @@ import click
 
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME
 from gruffpy.cli_state import state as _state
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.severity import Severity
@@ -389,9 +390,7 @@ _GLOBAL_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _ignored_path_option("--infection-report", "Path to a full Infection JSON report to ingest."),
     _ignored_flag_option("--infection-run", "Run Infection before ingesting --infection-report."),
-    _ignored_string_option(
-        "--infection-bin", "Infection executable for --infection-run.", "infection"
-    ),
+    _ignored_string_option("--infection-bin", "Infection executable for --infection-run.", "infection"),
     _ignored_path_option("--infection-config", "Path to infection.json5 for --infection-run."),
     _ignored_string_option(
         "--infection-test-framework-options",
@@ -406,10 +405,7 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "diff_mode",
         default="",
-        help=(
-            "Filter findings to changed regions. Use working-tree, staged, unstaged, "
-            "a base ref, or - for unified diff on stdin."
-        ),
+        help=("Filter findings to changed regions. Use working-tree, staged, unstaged, a base ref, or - for unified diff on stdin."),
     ),
     _option("--since", default="", help="Git base ref for changed-region filtering."),
     _option(
@@ -424,8 +420,8 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help="Changed-region scope: symbol or hunk.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -434,19 +430,33 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _path_option(
         "--baseline-path",
         "baseline_path",
-        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
+        "Superseded spelling of --baseline; identical behaviour, and it warns.",
     ),
     _option(
         "--generate-baseline",
         "generate_baseline",
-        is_flag=True,
-        default=False,
-        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}".',
+        is_flag=False,
+        flag_value=DEFAULT_BASELINE_FILENAME,
+        default=None,
+        type=click.Path(path_type=Path),
+        help=f'Write current findings to this baseline JSON file, or to "{DEFAULT_BASELINE_FILENAME}" when given no path.',
     ),
     _path_option(
         "--generate-baseline-path",
         "generate_baseline_path",
-        "Write current findings to this baseline JSON file (implies generation).",
+        "Superseded spelling of --generate-baseline; identical behaviour, and it warns.",
+    ),
+    _path_option(
+        "--migrate-baseline",
+        "migrate_baseline_path",
+        "Carry a 0.5 baseline's reviews into --generate-baseline; the original file is left untouched.",
+    ),
+    _option(
+        "--force",
+        "force_baseline_overwrite",
+        is_flag=True,
+        default=False,
+        help="Overwrite a 0.5 baseline at the default path; without it a generate that would destroy the retreat path is refused.",
     ),
     _option(
         "--no-baseline",
@@ -467,8 +477,8 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -491,30 +501,84 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_ANALYSIS_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values (score/exit unchanged).",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--hide-rule",
+        multiple=True,
+        help="Hide these comma-separated rule IDs from the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--show-rule",
+        multiple=True,
+        help="Show only these comma-separated rule IDs in the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--hide-pillar",
+        multiple=True,
+        help="Hide these comma-separated pillars from the report.",
+    ),
+    _option(
+        "--show-pillar",
+        multiple=True,
+        help="Show only these comma-separated pillars in the report.",
     ),
     _option(
         "--min-severity",
         type=click.Choice([s.value for s in Severity]),
         default=None,
         help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--min-confidence",
+        type=click.Choice([c.value for c in Confidence]),
+        default=None,
+        help="Lowest confidence that reaches the exit gate: low, medium, or high. Never filters the report.",
+    ),
+    _option(
+        "--fail-on-new",
+        is_flag=True,
+        default=False,
+        help="Exit 1 when any finding is new against the applied baseline, whatever its severity.",
+    ),
+    _ignored_string_option(
+        "--scan-timeout",
+        "Parsed and accepted for cross-port compatibility; gruff-py enforces no scan deadline on analyse.",
+        "",
+    ),
+    _option(
+        "--diff-base",
+        default="",
+        help="The ref a diff is taken against. Canonical spelling of --diff-vs.",
+    ),
+    _option(
+        "--baseline",
+        "baseline",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Apply this baseline v3 file. Canonical spelling of --baseline-path.",
     ),
     _option(
         "--include-ignored",
@@ -574,10 +638,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -585,6 +646,11 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--report-interactive",
         is_flag=True,
@@ -610,11 +676,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=False,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Diff-only dashboard scans: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDiff-only dashboard scans: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--no-config",
@@ -644,11 +706,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Dashboard scan timeouts: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDashboard scan timeouts: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--port",
@@ -661,9 +719,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--allow-public",
         is_flag=True,
         default=False,
-        help=(
-            "Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."
-        ),
+        help=("Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."),
     ),
     _option(
         "--host",
@@ -700,24 +756,29 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_REPORT_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values.",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--min-severity",
@@ -770,10 +831,7 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _option(
         "--output",
@@ -795,6 +853,11 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--include-ignored",
         is_flag=True,
@@ -846,10 +909,7 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -933,10 +993,7 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--force",
         is_flag=True,
         default=False,
-        help=(
-            "Regenerate a valid .gruff-py.yaml while preserving all supported settings; "
-            "comments and formatting may change."
-        ),
+        help=("Regenerate a valid .gruff-py.yaml while preserving all supported settings; comments and formatting may change."),
     ),
     _command(),
 )

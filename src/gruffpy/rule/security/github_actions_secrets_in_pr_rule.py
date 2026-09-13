@@ -73,8 +73,7 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"PR-triggered workflow references secret `{secret}` - PR workflows "
-                        "can expose secrets to untrusted fork contributions."
+                        f"PR-triggered workflow references secret `{secret}` - PR workflows can expose secrets to untrusted fork contributions."
                     ),
                     file_path=unit.file.display_path,
                     line=source_line(unit.source, match.start()),

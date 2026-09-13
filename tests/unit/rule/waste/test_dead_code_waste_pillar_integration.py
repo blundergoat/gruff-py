@@ -100,11 +100,7 @@ def _ctx() -> RuleContext:
         rules[d.id] = RuleSettings(
             enabled=True,
             thresholds=dict(d.default_thresholds),
-            severity_threshold=(
-                SeverityThreshold(d.default_threshold, d.default_severity)
-                if d.default_threshold is not None
-                else None
-            ),
+            severity_threshold=(SeverityThreshold(d.default_threshold, d.default_severity) if d.default_threshold is not None else None),
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
@@ -144,7 +140,5 @@ def test_dynamism_fixture_emits_only_acceptable_findings():
         ("dead-code.unused-private-function", "_setup"),
         ("waste.unused-parameter", "_setup"),
     }
-    unexpected = [
-        (f.rule_id, f.symbol) for f in suspect if (f.rule_id, f.symbol) not in expected_on_setup
-    ]
+    unexpected = [(f.rule_id, f.symbol) for f in suspect if (f.rule_id, f.symbol) not in expected_on_setup]
     assert unexpected == [], f"unexpected findings: {unexpected}"

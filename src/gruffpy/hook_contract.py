@@ -1,15 +1,16 @@
-"""Agent-hook contract projection for ``gruff.hook.v1``.
+"""Agent-hook contract projection for ``gruff.hook.v2``.
 
-The hook contract is intentionally separate from ``gruff.analysis.v2`` so
-existing analysis/report consumers keep their current payloads. Hook mode runs
-the normal analyser, then projects findings into the cross-analyser shape an
-agent PostToolUse hook can render without per-language logic.
+The hook contract is intentionally separate from the canonical analysis
+envelope. Hook mode runs the normal analyser, then projects findings into the
+cross-analyser shape an agent PostToolUse hook can render without per-language
+logic.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -20,9 +21,12 @@ from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.changed_region import ChangedRegionSet, parse_explicit_ranges
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
+from gruffpy.analysis.suppression_summary import SuppressionSummary
 from gruffpy.command.init_config import existing_config_source
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.finding.baseline_identity import finding_identities
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.output_format import OutputFormat
@@ -31,7 +35,13 @@ from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.rule.catalog import documentation_for_rule
 from gruffpy.version import TOOL_NAME, VERSION
 
-HOOK_CONTRACT_VERSION = "gruff.hook.v1"
+HOOK_CONTRACT_VERSION = "gruff.hook.v2"
+
+BASELINE_SCHEMA_VERSION = "gruff.baseline.v3"
+
+_ASCII_DIGITS = re.compile(r"[0-9]+")
+
+_CONFIG_ERROR_REMEDIATION = "Fix the reported problem in the project configuration, or pass --no-config to run without it."
 
 _SEVERITY_SORT_RANK = {
     Severity.ERROR: 0,
@@ -90,20 +100,26 @@ def capabilities_payload() -> dict[str, Any]:
         "contractVersion": HOOK_CONTRACT_VERSION,
         "analyzer": {"name": TOOL_NAME, "version": VERSION},
         "supports": {
-            "changedRanges": True,
-            "diff": True,
             "baseline": True,
-            "scopeField": True,
-            "metadata": True,
-            "stableIdentity": True,
+            "baselineV3": True,
+            "changedRanges": True,
+            "confidenceGate": True,
+            "deepScanBudget": True,
+            "diagnostics": True,
+            "diff": True,
             "ignoreReport": True,
+            "metadata": True,
             "newOnly": True,
+            "scopeField": True,
+            "stableIdentity": True,
         },
         "flags": {
-            "changedRanges": "--changed-ranges",
-            "diff": "--diff",
             "baseline": "--baseline",
-            "excludeRule": "--exclude-rule",
+            "changedRanges": "--changed-ranges",
+            "deepScanBudget": "--deep-scan-budget",
+            "diff": "--diff",
+            "failOnDiagnostics": "--fail-on-diagnostics",
+            "minConfidence": "--min-confidence",
         },
         "flagOrder": "any",
     }
@@ -118,15 +134,86 @@ def config_error_payload(exc: ConfigError) -> dict[str, Any]:
 
     Returns:
         JSON-serializable hook payload with no findings, `schemaOk: false`, and
-        the analyzer's config error message in-band.
+        the analyzer's config error as an object carrying its remediation.
+    """
+    payload = fatal_payload("config", str(exc))
+    payload["config"] = {
+        "schemaOk": False,
+        "error": {"message": str(exc), "remediation": _CONFIG_ERROR_REMEDIATION},
+    }
+    return payload
+
+
+def fatal_payload(diagnostic_type: str, message: str) -> dict[str, Any]:
+    """Return the empty payload that accompanies a run which could not happen.
+
+    Every field the contract requires is present and empty, so a consumer parses
+    one shape whether the run succeeded or not and reads the reason from the
+    fatal diagnostic rather than scraping stderr.
+
+    Args:
+        diagnostic_type: Stable machine-readable kind, such as `config`,
+            `baseline`, or `changed-region`.
+        message: One sentence saying what stopped the run.
+
+    Returns:
+        JSON-serializable hook payload carrying one fatal diagnostic.
     """
     return {
         "contractVersion": HOOK_CONTRACT_VERSION,
         "analyzer": {"name": TOOL_NAME, "version": VERSION},
+        "run": _run_payload(mode="full", scope="file", paths=(), analysed_files=0, baseline_path=None),
         "findings": [],
         "suppressed": {"count": 0},
+        "suppressions": [],
         "ignored": {"paths": []},
-        "config": {"schemaOk": False, "error": str(exc)},
+        "diagnostics": [
+            {
+                "type": diagnostic_type,
+                "severity": "fatal",
+                "message": message,
+                "file": None,
+                "line": None,
+                "path": None,
+            }
+        ],
+        "config": {"schemaOk": True, "error": None},
+    }
+
+
+def _run_payload(
+    *,
+    mode: str,
+    scope: str,
+    paths: tuple[str, ...],
+    analysed_files: int,
+    baseline_path: str | None,
+) -> dict[str, Any]:
+    """Build the audit block a consumer reads before trusting a verdict.
+
+    Without it a clean payload is ambiguous, because a run that analysed nothing
+    and a run that found nothing look identical on the wire.
+
+    Args:
+        mode: Which region selector chose the work: changed-ranges, diff, since, or full.
+        scope: How wide each changed line was taken to be: symbol, hunk, or file.
+        paths: The operands as the caller gave them.
+        analysed_files: How many files were actually analysed; zero is reported, never hidden.
+        baseline_path: Project-relative baseline that classified the run, or None.
+
+    Returns:
+        The `run` block of the hook payload.
+    """
+    return {
+        "mode": mode,
+        "scope": scope,
+        "paths": list(paths),
+        "analysedFiles": analysed_files,
+        "baseline": {
+            "applied": baseline_path is not None,
+            "schemaVersion": BASELINE_SCHEMA_VERSION if baseline_path is not None else None,
+            "path": baseline_path,
+        },
     }
 
 
@@ -136,27 +223,39 @@ def hook_payload(
     paths: tuple[str, ...],
     changed_ranges: str = "",
     base_stable_identities: frozenset[str] | None = None,
+    mode: str = "full",
+    baseline_path: str | None = None,
+    baseline_statuses: dict[int, str] | None = None,
+    suppressions: tuple[SuppressionSummary, ...] = (),
 ) -> dict[str, Any]:
-    """Project an analysis report into the `gruff.hook.v1` payload.
+    """Project an analysis report into the `gruff.hook.v2` payload.
 
     Args:
-        report: Native `gruff.analysis.v2` report produced by the normal
-            analyzer runner.
+        report: Native analysis report produced by the normal analyser runner
+            before the v3 machine adapter projects it.
         paths: Requested hook path arguments, used to map explicit
             `--changed-ranges` onto files.
         changed_ranges: Raw explicit changed-range string from the hook CLI.
         base_stable_identities: Hook stable identities from a baseline or git
             base tree when a new-only comparison is active.
+        mode: Which region selector chose the work, for the run audit block.
+        baseline_path: Project-relative baseline that classified the run, or None.
+        baseline_statuses: Baseline status per finding, keyed by `id(finding)`;
+            empty when no baseline was applied.
+        suppressions: One section 13a audit row per configured sensitive
+            exclusion, zero matches included.
 
     Returns:
-        JSON-serializable hook contract payload with filtered findings,
-        suppressed count, ignored paths, and config status.
+        JSON-serializable hook contract payload with filtered findings, the run
+        audit block, the exclusion audit, ignored paths, and config status.
     """
     filtered = _filter_findings_for_hook(
         report.findings,
         paths=paths,
         changed_ranges=changed_ranges,
         base_stable_identities=base_stable_identities,
+        # An applied baseline is a prior base too: it is what lets a whole-file finding be attributed to this edit.
+        has_prior_base=base_stable_identities is not None or baseline_path is not None,
     )
     findings = sorted(
         filtered.findings,
@@ -167,14 +266,54 @@ def hook_payload(
             finding.rule_id,
         ),
     )
+    identities = finding_identities(findings)
+    statuses = baseline_statuses or {}
     return {
         "contractVersion": HOOK_CONTRACT_VERSION,
         "analyzer": {"name": TOOL_NAME, "version": report.tool_version},
-        "findings": [_finding_payload(finding) for finding in findings],
+        "run": _run_payload(
+            mode=mode,
+            scope="file" if mode == "full" else "symbol",
+            paths=paths,
+            analysed_files=report.files_parsed,
+            baseline_path=baseline_path,
+        ),
+        "findings": [_finding_payload(finding, identities[index], statuses.get(id(finding))) for index, finding in enumerate(findings)],
         "suppressed": {"count": filtered.suppressed_count},
+        "suppressions": [_suppression_payload(summary) for summary in suppressions],
         "ignored": {"paths": [detail.to_dict() for detail in report.ignored_path_details]},
+        "diagnostics": [_diagnostic_payload(diagnostic) for diagnostic in report.diagnostics],
         "config": {"schemaOk": True, "error": None},
     }
+
+
+def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
+    """Project one configured sensitive exclusion into its section 13a audit row."""
+    return {
+        "rule": summary.rule,
+        # Section 13a gives each entry exactly one path; the native audit carries it in the family's list shape.
+        "path": summary.paths[0] if summary.paths else "",
+        "symbol": summary.symbol,
+        "reason": summary.reason,
+        "suppressed": summary.suppressed,
+    }
+
+
+def _diagnostic_payload(diagnostic: RunDiagnostic) -> dict[str, Any]:
+    """Project one run diagnostic into the v2 shape, where every entry says what it means for the run.
+
+    v1 left a consumer to infer severity from the diagnostic type, so a budget
+    note and a run that could not happen looked alike.
+
+    Args:
+        diagnostic: One diagnostic the run produced.
+
+    Returns:
+        The JSON row, carrying an explicit severity beside the v1 fields.
+    """
+    payload: dict[str, Any] = dict(diagnostic.to_dict())
+    payload["severity"] = "warning" if diagnostic.invalidates_run is False else "fatal"
+    return payload
 
 
 def _filter_findings_for_hook(
@@ -183,6 +322,7 @@ def _filter_findings_for_hook(
     paths: tuple[str, ...],
     changed_ranges: str = "",
     base_stable_identities: frozenset[str] | None = None,
+    has_prior_base: bool = False,
 ) -> _HookFilterResult:
     """Apply hook changed-region and new-only semantics to full-scan findings."""
     changed = _changed_region_set(findings, paths, changed_ranges)
@@ -195,7 +335,9 @@ def _filter_findings_for_hook(
 
         if changed.active:
             if scope in {"file", "project"}:
-                if base_stable_identities is None or stable_identity in base_stable_identities:
+                # Without a prior base the hook cannot attribute a whole-file issue to this edit, and a base that
+                # already knew about it says the edit did not introduce it.
+                if not has_prior_base or (base_stable_identities is not None and stable_identity in base_stable_identities):
                     suppressed_count += 1
                     continue
             elif not _is_finding_intersecting_changed_region(finding, changed):
@@ -245,54 +387,6 @@ def _hook_stable_identity(finding: Finding, scope: str | None = None) -> str:
     return _stable_hash(payload)
 
 
-def stable_identities_from_baseline(path: Path) -> frozenset[str]:
-    """Read stable identities from a hook, analysis, or baseline JSON file.
-
-    Args:
-        path: JSON file passed to `gruff-py hook --baseline`.
-
-    Returns:
-        Stable identities found in the file. Each row contributes both its
-        verbatim `stableIdentity` (when present) and a hook identity rebuilt
-        from its fields. A hook JSON row's verbatim identity already matches
-        runtime; an analysis JSON row's verbatim identity uses the analysis
-        scheme (`ruleId/file/message`) that diverges from the hook's
-        file/project scope identity, so the rebuilt identity is what actually
-        suppresses analysis-baseline file/project findings.
-
-    Raises:
-        ValueError: If the file cannot be read, is not valid JSON, or does not
-            contain the expected top-level findings/entries array.
-    """
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise ValueError(f"Unable to read baseline file: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid baseline JSON: {exc.msg}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("Baseline root must be a JSON object.")
-    # A present-but-empty "findings": [] is a valid clean baseline, so test for
-    # the key explicitly instead of `or` (which treats the empty list as absent
-    # and would reject a baseline captured when the code had no findings).
-    rows = payload.get("findings")
-    if rows is None:
-        rows = payload.get("entries")
-    if not isinstance(rows, list):
-        raise ValueError('Baseline must include a "findings" array.')
-    identities = set()
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        identity = row.get("stableIdentity")
-        if isinstance(identity, str) and identity:
-            identities.add(identity)
-        reconstructed = _stable_identity_from_row(row)
-        if reconstructed is not None:
-            identities.add(reconstructed)
-    return frozenset(identities)
-
-
 def stable_identities_from_git_base(
     *,
     project_root: Path,
@@ -301,6 +395,7 @@ def stable_identities_from_git_base(
     config_path: Path | None,
     no_config: bool,
     include_ignored: bool,
+    deep_scan_budget: str = "",
 ) -> frozenset[str]:
     """Analyze the git base tree and return hook stable identities.
 
@@ -312,6 +407,9 @@ def stable_identities_from_git_base(
         no_config: Whether config discovery is disabled.
         include_ignored: Whether default-ignored and gitignored paths are
             included in the base analysis.
+        deep_scan_budget: Raw ``--deep-scan-budget`` text forwarded to the base
+            analysis, so the base and working trees are bounded identically; empty
+            when the hook passed no override.
 
     Returns:
         Hook stable identities present in the requested base tree.
@@ -334,12 +432,10 @@ def stable_identities_from_git_base(
                 project_root=base_root,
                 display_filter=FindingDisplayFilter(),
                 baseline=BaselineOptions(disabled=True),
+                deep_scan_budget=deep_scan_budget,
             )
         )
-        return frozenset(
-            _hook_stable_identity(finding, _scope_for_finding(finding))
-            for finding in report.findings
-        )
+        return frozenset(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in report.findings)
 
 
 def render_json(payload: dict[str, Any]) -> str:
@@ -354,23 +450,68 @@ def render_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=4) + "\n"
 
 
-def _finding_payload(finding: Finding) -> dict[str, Any]:
+def _finding_payload(finding: Finding, identity: Any = None, baseline_status: str | None = None) -> dict[str, Any]:
+    """Project one finding into the v2 shape, carrying the four fields v1 never published.
+
+    Args:
+        finding: The finding to reshape.
+        identity: This finding's ratified family identity, or None where the
+            family refuses to name it, which is every sensitive finding.
+        baseline_status: What an applied baseline made of it; None when none was.
+
+    Returns:
+        JSON-serializable hook finding entry.
+    """
     scope = _scope_for_finding(finding)
     return {
         "ruleId": finding.rule_id,
         "pillar": finding.pillar.value,
         "severity": finding.severity.value,
+        "confidence": finding.confidence.value,
         "scope": scope,
         "file": finding.file_path,
         "line": finding.line,
-        "endLine": finding.end_line,
+        "endLine": _end_line_for(finding),
         "symbol": finding.symbol,
+        "symbolOrdinal": _symbol_ordinal_from(identity),
         "message": finding.message,
         "remediation": _remediation_for(finding),
+        "baselineStatus": baseline_status,
         "metadata": _metadata_for(finding),
-        "stableIdentity": _hook_stable_identity(finding, scope),
+        "stableIdentity": identity.identity if identity is not None else None,
         "fingerprint": finding.fingerprint(),
     }
+
+
+def _end_line_for(finding: Finding) -> int | None:
+    """Return the span end every v2 finding carries, repeating the start line when the rule reported no span.
+
+    A consumer locating a finding cannot treat an absent end as a single line by
+    guessing, so the contract makes the field required and the single-line case
+    explicit.
+    """
+    if finding.line is None:
+        return None
+    if finding.end_line is not None and finding.end_line >= finding.line:
+        return finding.end_line
+    return finding.line
+
+
+def _symbol_ordinal_from(identity: Any) -> int:
+    """Return the declaration ordinal the ratified identity hashed, so a consumer can recompute it.
+
+    A finding naming no symbol reports 0, which is what the identity contract
+    says a symbol-less subject carries.
+    """
+    if identity is None:
+        return 0
+    subject = identity.subject
+    marker = subject.rfind("#")
+    if marker < 0:
+        return 0
+    tail = subject[marker + 1 :]
+    # `str.isdigit` accepts non-ASCII digits, which `int` would then read as a number this module never wrote.
+    return int(tail) if _ASCII_DIGITS.fullmatch(tail) else 0
 
 
 def _remediation_for(finding: Finding) -> str:
@@ -430,55 +571,14 @@ def _changed_region_set(
         *(path.replace("\\", "/").strip("/") for path in paths),
         *(finding.file_path for finding in findings),
     }
-    return parse_explicit_ranges(
-        tuple(sorted(path for path in source_paths if path)), changed_ranges
-    )
+    return parse_explicit_ranges(tuple(sorted(path for path in source_paths if path)), changed_ranges)
 
 
 def _is_finding_intersecting_changed_region(finding: Finding, changed: ChangedRegionSet) -> bool:
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
-    end_line = (
-        finding.end_line
-        if finding.end_line is not None and finding.end_line >= finding.line
-        else finding.line
-    )
+    end_line = finding.end_line if finding.end_line is not None and finding.end_line >= finding.line else finding.line
     return changed.has_changed_range(finding.file_path, finding.line, end_line)
-
-
-def _stable_identity_from_row(row: dict[str, Any]) -> str | None:
-    """Rebuild a finding's hook stable identity from a baseline row.
-
-    Mirrors `_hook_stable_identity`: a symbol wins, otherwise scope decides
-    between the scope-keyed (file/project) and message-keyed (line) payloads.
-    Analysis JSON rows omit `scope`, so it is rebuilt from the same signals as
-    `_scope_for_finding`, producing the identity the hook computes at runtime.
-    """
-    rule_id = row.get("ruleId")
-    file_path = row.get("file", row.get("filePath"))
-    if not isinstance(rule_id, str) or not isinstance(file_path, str):
-        return None
-    symbol = row.get("symbol")
-    if isinstance(symbol, str) and symbol:
-        return _stable_hash({"ruleId": rule_id, "file": file_path, "symbol": symbol})
-    scope = _row_scope(row, rule_id)
-    if scope in {"file", "project"}:
-        payload: dict[str, Any] = {"ruleId": rule_id, "file": file_path, "scope": scope}
-    else:
-        payload = {"ruleId": rule_id, "file": file_path, "message": row.get("message", "")}
-    return _stable_hash(payload)
-
-
-def _row_scope(row: dict[str, Any], rule_id: str) -> str:
-    """Return a baseline row's hook scope, rebuilding it when the row omits one."""
-    scope = row.get("scope")
-    if scope in {"file", "project", "symbol", "line"}:
-        return str(scope)
-    if row.get("line") is None:
-        return "project"
-    if rule_id in _FILE_SCOPE_RULE_IDS:
-        return "file"
-    return "line"
 
 
 def _stable_hash(payload: dict[str, Any]) -> str:

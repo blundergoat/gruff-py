@@ -11,9 +11,7 @@ def test_requirement_vcs_dependency_fires_without_leaking_repository_url() -> No
     """Git dependencies fire while messages/metadata omit the repository URL."""
     src = "-e git+https://github.com/acme/widget.git@main#egg=widget\n"
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "requirements.txt"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "requirements.txt"), default_ctx())
 
     assert len(findings) == 1
     finding = findings[0]
@@ -35,9 +33,7 @@ dependencies = [
 ]
 """
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert len(findings) == 1
     assert findings[0].metadata["dependencyName"] == "widget"
@@ -47,9 +43,7 @@ def test_non_git_url_dependency_skipped() -> None:
     """Plain HTTP(S) direct references are left to the direct-URL rule."""
     src = "widget @ https://downloads.example.test/widget-1.0.0.tar.gz\n"
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "requirements.txt"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "requirements.txt"), default_ctx())
 
     assert findings == []
 

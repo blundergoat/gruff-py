@@ -94,7 +94,7 @@ filterwarnings = ["error::DeprecationWarning"]
 source = ["src/gruffpy"]
 
 [tool.ruff]
-line-length = 100
+line-length = 150
 target-version = "py311"
 extend-exclude = ["build", "dist", ".venv", ".tox"]
 
@@ -132,7 +132,6 @@ ignore = []
 
 [tool.gruff-py.allowlists]
 acceptedAbbreviations = []
-secretPreviews = []
 
 # Per-rule overrides go in [tool.gruff-py.rules."<rule-id>"]:
 # [tool.gruff-py.rules."size.file-length"]

@@ -87,11 +87,7 @@ def test_aug_assign_counted_as_operator():
     src = "def f(x):\n    x += 1\n    return x\n"
     metrics = halstead_for(_first_fn(src))
     # x += 1 -> one AddAssign operator
-    assert "AddAssign" in {
-        type(node.op).__name__ + "Assign"
-        for node in ast.walk(ast.parse(src))
-        if isinstance(node, ast.AugAssign)
-    }
+    assert "AddAssign" in {type(node.op).__name__ + "Assign" for node in ast.walk(ast.parse(src)) if isinstance(node, ast.AugAssign)}
     assert metrics.total_operators == 1
 
 
@@ -105,10 +101,7 @@ def test_nested_function_not_included():
 def test_huge_function_emits_finding():
     # Force vocabulary and length high with both BinOps and Compares.
     # Volume well over the error threshold -> finding.
-    pairs = "\n".join(
-        f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}"
-        for i in range(60)
-    )
+    pairs = "\n".join(f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}" for i in range(60))
     src = f"def f():\n{pairs}\n"
     findings = HalsteadVolumeRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1

@@ -80,9 +80,7 @@ class Payload:
     rule = DataclassAttributesRule()
     ctx = RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(options={"min_fields": 4})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(options={"min_fields": 4})}),
     )
 
     assert rule.analyse(make_unit(src), ctx) == []
@@ -107,9 +105,7 @@ class Payload:
     rule = DataclassAttributesRule()
     ctx = RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(options={"require_all_fields": True})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(options={"require_all_fields": True})}),
     )
 
     findings = rule.analyse(make_unit(src), ctx)

@@ -3,7 +3,9 @@
 Project-scoped: every unit emits the same finding when the README is absent;
 the registry's deduplication collapses them to one. Net behaviour is "at most
 one missing-readme finding per run" without per-instance run-state that would
-leak across reused registries.
+leak across reused registries. The finding names ``README.md`` relative to the
+project root: an absolute path entered its baseline identity, so a baseline
+generated in one checkout brought the finding back in a copy.
 """
 
 from pathlib import Path
@@ -65,16 +67,14 @@ class MissingReadmeRule(Rule):
             Finding(
                 rule_id=definition.id,
                 message="Project root has no README (README.md, README.rst, or README).",
-                file_path=str(Path(root) / "README.md"),
+                # Project-relative like every other finding path, so a committed baseline matches in any checkout.
+                file_path="README.md",
                 line=None,
                 severity=definition.default_severity,
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                remediation=(
-                    "Add a README.md at the project root describing the project's purpose, "
-                    "install instructions, and a usage example."
-                ),
+                remediation=("Add a README.md at the project root describing the project's purpose, install instructions, and a usage example."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={"projectRoot": root},
             ),

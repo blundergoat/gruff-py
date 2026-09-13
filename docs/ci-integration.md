@@ -37,7 +37,7 @@ every CI job inherits the same gate without repeating the flag:
 
 ```yaml
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   analyse: warning
   report: none
 ```
@@ -59,7 +59,8 @@ Future scans auto-apply `gruff-baseline.json` when present. Use
 ## Diff Flags
 
 Changed-region scans keep findings whose location or enclosing declaration
-overlaps the changed hunk and add `suppressedCount` to JSON output:
+overlaps the changed hunk and publish the excluded count at
+`summary.suppressedFindings` and `diff.filteredFindings`:
 
 ```sh
 uv run gruff-py analyse src/foo.py --format json --changed-ranges "3-3,8-10" --no-baseline
@@ -82,15 +83,19 @@ hook that passes the agent's changed files never surfaces findings for paths the
 project has deliberately excluded. `--include-ignored` opts back into
 default-ignored and `.gitignore`d paths only; it never overrides `paths.ignore`.
 
-Skipped paths are reported with a reason. Alongside the back-compatible string
-`ignoredPaths`, JSON output carries an additive `ignoredPathDetails` array — one
-object per skipped path with its `source` (`config` | `gitignore` | `default` |
-`generated`) and the matched `pattern` (for `config` matches):
+Skipped paths are reported with a reason. JSON output carries a
+`paths.details` array — one object per skipped path with a canonical `reason`,
+its `source` (`config` | `gitignore` | `default` | `generated`) and the matched
+`pattern` (for `config` matches). `paths.ignoredPaths` is the ordered path
+projection of the same rows:
 
 ```jsonc
-"ignoredPathDetails": [
-  { "path": "generated/out.py", "source": "config", "pattern": "generated/**" }
-]
+"paths": {
+  "details": [
+    { "path": "generated/out.py", "reason": "config-ignore", "source": "config", "pattern": "generated/**" }
+  ],
+  "ignoredPaths": ["generated/out.py"]
+}
 ```
 
 To ask whether gruff would ignore specific paths *without* running analysis — for

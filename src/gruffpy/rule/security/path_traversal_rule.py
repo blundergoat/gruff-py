@@ -46,9 +46,7 @@ from gruffpy.rule.security._security_taint_helper import TaintAnalyser
 _FRAMEWORK_GATE: frozenset[str] = frozenset({"flask", "django", "fastapi"})
 _SHUTIL_SOURCE_LEAVES: frozenset[str] = frozenset({"copyfile", "copy", "copy2", "move", "rename"})
 _OS_REMOVE_LEAVES: frozenset[str] = frozenset({"remove", "unlink"})
-_PATH_READ_WRITE_LEAVES: frozenset[str] = frozenset(
-    {"read_text", "read_bytes", "write_text", "write_bytes", "open"}
-)
+_PATH_READ_WRITE_LEAVES: frozenset[str] = frozenset({"read_text", "read_bytes", "write_text", "write_bytes", "open"})
 _PATH_CONSTRUCTORS: frozenset[str] = frozenset({"Path", "PurePath", "PosixPath", "PurePosixPath"})
 _PATH_TRAVERSAL_SANITISERS: frozenset[str] = frozenset({"secure_filename", "basename"})
 _SOURCE_NEEDLES: tuple[str, ...] = (

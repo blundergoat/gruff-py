@@ -199,11 +199,7 @@ def _mismatch_candidate(unit: AnalysisUnit) -> _MismatchCandidate | None:
 
 
 def _is_skipped_filename(filename: str) -> bool:
-    return (
-        filename.startswith("_")
-        or not filename.endswith(".py")
-        or _is_test_module_filename(filename)
-    )
+    return filename.startswith("_") or not filename.endswith(".py") or _is_test_module_filename(filename)
 
 
 def _is_test_module_filename(filename: str) -> bool:
@@ -220,12 +216,7 @@ def _is_test_module_filename(filename: str) -> bool:
 
 
 def _public_function_count(tree: ast.Module) -> int:
-    return sum(
-        1
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and not node.name.startswith("_")
-    )
+    return sum(1 for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"))
 
 
 def _is_envelope_class(cls: ast.ClassDef) -> bool:
@@ -251,11 +242,7 @@ def _rightmost_name(node: ast.expr) -> str | None:
 
 
 def _single_public_class(tree: ast.Module) -> ast.ClassDef | None:
-    public_classes = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and not node.name.startswith("_")
-    ]
+    public_classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and not node.name.startswith("_")]
     if len(public_classes) != 1:
         return None
     return public_classes[0]
@@ -266,9 +253,7 @@ def _is_accepted_mismatch_candidate(
     settings: RuleSettings,
     display_path: str,
 ) -> bool:
-    conventional_module_names = _conventional_module_names(
-        settings.options.get("conventionalModuleNames")
-    )
+    conventional_module_names = _conventional_module_names(settings.options.get("conventionalModuleNames"))
     return _is_class_name_matching_import_path(
         candidate.class_token_variants,
         display_path,

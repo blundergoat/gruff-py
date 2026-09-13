@@ -1,19 +1,19 @@
+"""Verify shared sensitive-data matching, entropy, and preview behavior.
+
+These tests protect line resolution and the fixed marker shown in user output while raw match text
+remains available only to rules for classification and placeholder checks.
+"""
+
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
+    fixed_preview,
     iter_matches,
-    redact_preview,
     shannon_entropy,
 )
 
 
-def test_redact_long_secret():
-    s = "AKIAIOSFODNN7EXAMPLE"
-    assert redact_preview(s) == "AKIA...MPLE (redacted, 20 chars)"
-
-
-def test_redact_short_secret():
-    s = "abc"
-    assert redact_preview(s) == "*** (redacted, 3 chars)"
+def test_fixed_preview_contains_no_secret_derived_payload():
+    assert fixed_preview() == "[redacted]"
 
 
 def test_entropy_zero_on_empty():

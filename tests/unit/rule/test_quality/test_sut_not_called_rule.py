@@ -8,12 +8,7 @@ def test_test_with_sut_call_skipped():
 
 
 def test_test_with_only_mocks_emits():
-    src = (
-        "from unittest.mock import Mock\n"
-        "def test_foo():\n"
-        "    mock = Mock()\n"
-        "    mock.assert_called()\n"
-    )
+    src = "from unittest.mock import Mock\ndef test_foo():\n    mock = Mock()\n    mock.assert_called()\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
@@ -25,12 +20,7 @@ def test_test_with_only_assertions_emits():
 
 
 def test_test_with_pytest_raises_and_sut():
-    src = (
-        "import pytest\n"
-        "def test_foo():\n"
-        "    with pytest.raises(ValueError):\n"
-        "        my_function(-1)\n"
-    )
+    src = "import pytest\ndef test_foo():\n    with pytest.raises(ValueError):\n        my_function(-1)\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -50,23 +40,14 @@ def test_constant_contract_test_reading_imported_name_skipped():
 def test_model_fields_inspection_skipped():
     # Reading `.model_fields` on a pydantic model is exercising the schema
     # declaration, even though no method is called.
-    src = (
-        "from x import ReferralDetails\n"
-        "def test_legacy_fields_removed():\n"
-        "    assert 'specialist_name' not in ReferralDetails.model_fields\n"
-    )
+    src = "from x import ReferralDetails\ndef test_legacy_fields_removed():\n    assert 'specialist_name' not in ReferralDetails.model_fields\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_annotations_access_skipped_regardless_of_receiver():
     # `__annotations__` access is a schema-inspection accessor; it counts
     # as a SUT touch no matter where the receiver came from.
-    src = (
-        "def test_annotation_shape():\n"
-        "    class Local:\n"
-        "        x: int\n"
-        "    assert Local.__annotations__['x'] is int\n"
-    )
+    src = "def test_annotation_shape():\n    class Local:\n        x: int\n    assert Local.__annotations__['x'] is int\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 

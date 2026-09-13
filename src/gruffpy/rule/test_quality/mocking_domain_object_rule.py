@@ -79,9 +79,7 @@ class MockingDomainObjectRule(Rule):
                 target_type = _spec_target(node)
                 if target_type is None:
                     continue
-                if not any(
-                    target_type == ns or target_type.startswith(ns + ".") for ns in namespaces
-                ):
+                if not any(target_type == ns or target_type.startswith(ns + ".") for ns in namespaces):
                     continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)

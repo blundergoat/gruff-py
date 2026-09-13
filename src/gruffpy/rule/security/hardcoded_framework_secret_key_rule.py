@@ -125,10 +125,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            "Module-scope `SECRET_KEY` is assigned a string literal - read "
-            "it from the environment instead."
-        ),
+        message=("Module-scope `SECRET_KEY` is assigned a string literal - read it from the environment instead."),
         file_path=unit.file.display_path,
         line=assign.lineno,
         severity=definition.default_severity,

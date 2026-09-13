@@ -241,6 +241,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
 - Formula provenance: Radon-inspired Halstead volume with documented Python AST deltas. The dogfood rubric uses one configured threshold, `>400` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed p50=4.75, p90=38.04, p99=96.0, max=283.39.
+- Common false-positive shapes:
+  - A declarative builder dominated by one literal table can have high token volume despite having little control-flow complexity.
+    Mitigation: Extract the table to data or tune this rule's `threshold` and `severity` when the volume is an accepted project convention.
 - Bad example: Code that triggers `complexity.halstead-volume` leaves halstead volume unaddressed.
 - Good example: Code that satisfies `complexity.halstead-volume` makes halstead volume explicit or simpler.
 
@@ -259,6 +262,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `below`
 - Formula provenance: gruff per-function maintainability heuristic based on Halstead volume, cyclomatic complexity, and raw function lines. The dogfood rubric uses one configured threshold, `<70` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed min=78.78, p50=100, p90=100, p99=100. Radon 6.0.1 ranks maintainability index 20-100 as A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command.
+- Common false-positive shapes:
+  - A long but linear wiring, data-setup, or generated function can score poorly even when its branching is simple.
+    Mitigation: Split the function or tune this rule's `threshold` and `severity` after confirming that logical length, rather than complexity, drives the score.
 - Bad example: Code that triggers `complexity.maintainability-index` leaves maintainability index unaddressed.
 - Good example: Code that satisfies `complexity.maintainability-index` makes maintainability index explicit or simpler.
 
@@ -290,6 +296,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: Substring containment over free text matches inside words - a vocabulary holding "fee"/"form"/"file" routed "coffee", "information", and "profile" to wrong deterministic answers in production copy-routing.
 - Fix guidance: Tokenise the text and test set membership, or compile a word-boundary regex alternation; both keep the vocabulary but stop mid-word hits.
 - Confidence rationale: Medium confidence: the scan shape is exact, but substring intent is legitimate for marker/identifier checks, so the rule fires only on parameter-derived targets whose name carries a free-text token (message, text, query, prompt, ...) and skips phrase-only vocabularies.
+- Common false-positive shapes:
+  - Free-text-named values where substring matching is the documented intent (profanity stems, language-agnostic fragments).
+    Mitigation: Suppress with `# gruff: disable=correctness.substring-vocabulary-match` and the reason, or rename the value to reflect its fragment semantics.
 - Bad example: `any(term in message_lower for term in ROUTING_TERMS)`
 - Good example: `tokens = set(re.findall(r"\w+", message.lower())); any(term in tokens for term in ROUTING_TERMS)`
 
@@ -304,6 +313,9 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: isnumeric()/isdigit() accept characters int() rejects (superscript "²", fraction "½", Roman numeral "Ⅻ"), so guard-then-convert still crashes on real Unicode input; unchecked int(float(...)) raises on NaN and infinity.
 - Fix guidance: Convert inside try/except ValueError (and OverflowError for floats), or gate float conversions with math.isfinite().
 - Confidence rationale: High confidence: exact AST shapes (guard and conversion on the same name; float() assignment feeding int()) with try/except and isfinite escapes honoured, and the float variant confined to untyped/object/Any signatures.
+- Common false-positive shapes:
+  - Input pre-validated upstream to ASCII digits before the guarded conversion.
+    Mitigation: Suppress with `# gruff: disable=correctness.unsafe-numeric-coercion` and a reason, or switch the guard to a try/except so the intent is explicit.
 - Bad example: `if x.isnumeric():
     count = int(x)`
 - Good example: `try:
@@ -323,6 +335,9 @@ except ValueError:
 - Fix guidance: Delete the symbol and its re-exports, or declare the consumer: allowlists.deadCode.symbols for one-offs, entryPointPatterns for registration conventions.
 - Confidence rationale: Medium confidence: the reference model is name-based rather than import-resolved (same-name symbols collapse, erring toward false negatives), and the rule only runs on full-project scans - partial scans suppress it entirely per the ADR-025 scope-honesty contract.
 - Options: `entryPointPatterns` = `[]`
+- Common false-positive shapes:
+  - Library/package public API consumed only by external projects, or symbols loaded via entry points and plugin registries the scan cannot see.
+    Mitigation: Add the convention to options.entryPointPatterns (fnmatch over the symbol name) or the symbol to allowlists.deadCode.symbols; for whole public-API modules, use allowlists.deadCode.paths.
 - Bad example: `def render_legacy(...)` in __all__ and re-exported by __init__.py, with zero call sites in the project.
 - Good example: Any load of the name anywhere - call, decorator, base class, getattr string.
 
@@ -337,6 +352,9 @@ except ValueError:
 - Rationale: `dead-code.unused-private-attribute` protects the dead-code pillar by flagging unused private attribute before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unused private attribute directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A private attribute read through `getattr`, serialization, or framework reflection has no parser-visible load.
+    Mitigation: Keep an explicit read when practical, or suppress `dead-code.unused-private-attribute` with a reason at the reviewed declaration.
 - Bad example: Code that triggers `dead-code.unused-private-attribute` leaves unused private attribute unaddressed.
 - Good example: Code that satisfies `dead-code.unused-private-attribute` makes unused private attribute explicit or simpler.
 
@@ -351,6 +369,9 @@ except ValueError:
 - Rationale: A private function with no local caller may still be live through another module's callback registry. Full-project scans therefore require a real load after an unambiguously resolved import; narrow scans omit module-level deletion advice because external callers are outside the evidence boundary.
 - Fix guidance: Delete a genuinely unused function or add the real caller. For framework, plugin, or string-based loading that static imports cannot prove, use allowlists.deadCode.symbols, decorators, or paths with the project's documented reason.
 - Confidence rationale: Medium confidence when full-project import coverage is complete; LOW when a real load maps to duplicate scanned module paths. Private methods retain class-local evidence in every scan scope.
+- Common false-positive shapes:
+  - A framework or plugin loads the private function dynamically through a string, entry point, or unscanned external package.
+    Mitigation: Add the exact symbol, framework decorator, or path to allowlists.deadCode rather than adding a fake static caller.
 - Bad example: `def _legacy_handler(): ...` with no local call and no loaded import anywhere in a full-project scan.
 - Good example: `from handlers import _format_failed; REGISTRY['failed'] = _format_failed` in another scanned module.
 
@@ -362,12 +383,14 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: sys.path mutation at import time or inside library functions makes imports depend on execution order; insert(0, ...) shadows every later top-level import for the whole process, so one colliding filename in that directory breaks the host application.
-- Fix guidance: Package the code (editable install, src layout) or set PYTHONPATH in the runner; keep unavoidable mutations inside the script's `if __name__ == "__main__":` block.
-- Confidence rationale: High confidence: the receiver must be the literal sys.path attribute chain, and __main__ blocks, tests/ paths, and conftest.py are structurally exempt.
-- Bad example: `sys.path.insert(0, str(Path(__file__).parent))` at module level.
-- Good example: `if __name__ == "__main__":
-    sys.path.insert(0, ...)` inside the launching script only.
+- Rationale: sys.path mutation at import time or inside library functions makes imports depend on execution order; insert(0, ...) shadows every later top-level import for the whole process, so one colliding filename in that directory breaks the host application. A standalone script is its own host process, so a mutation at its top level is not reported; one inside a function still is.
+- Fix guidance: Package the code (editable install, src layout) or set PYTHONPATH in the runner. A file that is really a standalone script may change sys.path at its top level once it has an `if __name__ == "__main__":` guard or a shebang, or lives under scripts/, bin/ or tools/.
+- Confidence rationale: High confidence: the receiver must be the literal sys.path attribute chain, and the top level of a standalone script (a __main__ guard, a shebang, or a scripts/, bin/ or tools/ directory), tests/ paths, and conftest.py are structurally exempt; a mutation inside a function or in a guard's else branch can run on import and still reports.
+- Common false-positive shapes:
+  - Configuration files that a documentation or build tool executes, such as a Sphinx docs/conf.py, bootstrapping their import path at top level without a __main__ guard or shebang.
+    Mitigation: Suppress with `# gruff: disable=design.runtime-sys-path-mutation` plus the reason.
+- Bad example: `sys.path.insert(0, str(Path(__file__).parent))` at the top of an importable library module.
+- Good example: `pip install -e .`, so `from app import heuristics` resolves without touching sys.path.
 
 ### `design.single-implementor-protocol`
 
@@ -381,6 +404,9 @@ except ValueError:
 - Fix guidance: Depend on the concrete class, add another real implementor, or keep a clear external abstraction reference through an annotation or value-position check.
 - Confidence rationale: Medium confidence: project-scoped AST evidence counts implementors plus annotation and value-position abstraction references.
 - Options: `additionalExcludedPaths` = `[]`, `externalProtocolBases` = `['Sized', 'Iterable', 'Iterator', 'Collection', 'Container', 'Sequence', 'Mapping', 'MutableMapping', 'Callable', 'ContextManager', 'AsyncContextManager']`
+- Common false-positive shapes:
+  - A public Protocol or ABC can have downstream implementations or consumers outside the scanned project while only one local implementation is visible.
+    Mitigation: Keep the abstraction when it is an external contract; exclude the reviewed path with `options.additionalExcludedPaths` or suppress the finding with that reason.
 - Bad example: `class Renderer(Protocol): ...` with only `class HtmlRenderer(Renderer): ...` and no other `Renderer` usage.
 - Good example: `Renderer` used in a factory annotation, registry value, `isinstance`, or `issubclass` check outside the implementor.
 
@@ -396,6 +422,9 @@ except ValueError:
 - Fix guidance: Extract the branching logic, or add a substantive docstring or nearby rationale comment explaining why the complexity remains.
 - Confidence rationale: Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments.
 - Options: `cognitive_warning` = `15`, `cyclomatic_warning` = `10`, `private_cognitive_warning` = `20`, `private_cyclomatic_warning` = `15`
+- Common false-positive shapes:
+  - A complex function's rationale can live in an architecture record or issue rather than in the nearby docstring or branch comment this rule inspects.
+    Mitigation: Add a substantive local rationale, or tune the public/private cyclomatic and cognitive warning options to the project's documented policy.
 - Bad example: A public parser function with many `if` branches and no docstring.
 - Good example: A complex compatibility router with a docstring naming the legacy protocol.
 
@@ -411,6 +440,9 @@ except ValueError:
 - Fix guidance: Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields.
 - Confidence rationale: Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold.
 - Options: `allow_bullets` = `True`, `min_fields` = `3`, `require_all_fields` = `False`
+- Common false-positive shapes:
+  - Dataclass fields documented by an inherited schema or external generator are not visible in the class's local docstring.
+    Mitigation: Add a local Attributes section, or tune `options.min_fields`, `options.require_all_fields`, and `options.allow_bullets` to match the docs policy.
 - Bad example: `@dataclass class Report: findings: tuple[str, ...]; exit_code: int`
 - Good example: `Attributes:` section documenting `findings` and `exit_code`.
 
@@ -423,8 +455,11 @@ except ValueError:
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: Suppression comments age badly unless they explain the local compatibility, framework, or test boundary that made the suppression acceptable.
-- Fix guidance: Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker.
-- Confidence rationale: High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens.
+- Fix guidance: Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker; an issue reference such as `mypy#4125` counts as a reason.
+- Confidence rationale: High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens, and skips a file whose header says it is generated.
+- Common false-positive shapes:
+  - The reason can sit in a full-line comment directly above the suppressed line, as Django's `from django.conf import SettingsReference  # NOQA` under its backwards-compatibility note, while the rule reads only the directive's own comment.
+    Mitigation: Move or copy the reason onto the directive's line after `-`, `--`, or a second `#`.
 - Bad example: `import plugin  # noqa`
 - Good example: `import plugin  # noqa: F401 - re-exported public API`
 
@@ -468,6 +503,9 @@ except ValueError:
 - Rationale: `docs.missing-module-docstring` protects the documentation pillar by flagging missing module docstring before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing module docstring directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A generated or deliberately single-purpose production module can be documented by its package reference instead of a module docstring.
+    Mitigation: Add the local module summary, exclude generated paths from analysis, or suppress the rule for the reviewed module with a reason.
 - Bad example: Code that triggers `docs.missing-module-docstring` leaves missing module docstring unaddressed.
 - Good example: Code that satisfies `docs.missing-module-docstring` makes missing module docstring explicit or simpler.
 
@@ -482,6 +520,9 @@ except ValueError:
 - Rationale: `docs.missing-param-doc` protects the documentation pillar by flagging missing parameter documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing parameter documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - An override can inherit its parameter contract from a documented interface even though its local docstring has no Args or Parameters section.
+    Mitigation: Repeat the parameter contract locally, or suppress the rule on the reviewed override when inherited documentation is the project convention.
 - Bad example: Code that triggers `docs.missing-param-doc` leaves missing parameter documentation unaddressed.
 - Good example: Code that satisfies `docs.missing-param-doc` makes missing parameter documentation explicit or simpler.
 
@@ -496,6 +537,9 @@ except ValueError:
 - Rationale: `docs.missing-raises-doc` protects the documentation pillar by flagging missing raises documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing raises documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
+- Common false-positive shapes:
+  - A wrapper can re-raise an exception whose contract is documented on the interface it implements rather than in its local docstring.
+    Mitigation: Add a local Raises section, or suppress the rule on the reviewed wrapper when the inherited exception contract is authoritative.
 - Bad example: Code that triggers `docs.missing-raises-doc` leaves missing raises documentation unaddressed.
 - Good example: Code that satisfies `docs.missing-raises-doc` makes missing raises documentation explicit or simpler.
 
@@ -510,6 +554,9 @@ except ValueError:
 - Rationale: `docs.missing-readme` protects the documentation pillar by flagging missing readme before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing readme directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A package can use `docs/index.md` or another generated landing page as its maintained entry point instead of a root README.
+    Mitigation: Add a root README that points to the maintained documentation, or disable this rule for the project after documenting the alternate entry point.
 - Bad example: Code that triggers `docs.missing-readme` leaves missing readme unaddressed.
 - Good example: Code that satisfies `docs.missing-readme` makes missing readme explicit or simpler.
 
@@ -524,6 +571,9 @@ except ValueError:
 - Rationale: `docs.missing-return-doc` protects the documentation pillar by flagging missing return documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing return documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - An override can inherit its return contract from a documented Protocol or base class while omitting a local Returns section.
+    Mitigation: Repeat the return contract locally, or suppress the rule on the reviewed override when inherited documentation is authoritative.
 - Bad example: Code that triggers `docs.missing-return-doc` leaves missing return documentation unaddressed.
 - Good example: Code that satisfies `docs.missing-return-doc` makes missing return documentation explicit or simpler.
 
@@ -555,6 +605,9 @@ except ValueError:
 - Config threshold: `threshold` = `10`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
+- Common false-positive shapes:
+  - A planning or migration module can intentionally carry several tracked TODO markers while the work remains bounded and owned.
+    Mitigation: Move the work to the issue tracker or tune this rule's `threshold` and `severity` for the reviewed planning surface.
 - Bad example: Code that triggers `docs.todo-density` leaves todo density unaddressed.
 - Good example: Code that satisfies `docs.todo-density` makes todo density explicit or simpler.
 
@@ -570,6 +623,9 @@ except ValueError:
 - Fix guidance: Address the reported useless docstring directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `min_summary_words` = `{'module': 6, 'class': 4, 'function': 4}`
+- Common false-positive shapes:
+  - A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.
+    Mitigation: Add the missing behavior or constraint to the summary, or tune `options.min_summary_words` for the project's documentation convention.
 - Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
 - Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
 
@@ -584,6 +640,9 @@ except ValueError:
 - Rationale: `modernisation.f-string-candidate` protects the modernisation pillar by flagging f-string candidate before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported f-string candidate directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A literal `.format()` call can be retained deliberately to mirror a documented format template or keep a complex formatting expression easier to compare.
+    Mitigation: Use an f-string when it improves clarity, or suppress this advisory with the reason the format-template spelling is part of the reviewed code.
 - Bad example: Code that triggers `modernisation.f-string-candidate` leaves f-string candidate unaddressed.
 - Good example: Code that satisfies `modernisation.f-string-candidate` makes f-string candidate explicit or simpler.
 
@@ -598,6 +657,9 @@ except ValueError:
 - Rationale: A curated blocklist catches shorthand that makes unfamiliar code harder to verify, while recognizing that abbreviations can be clear vocabulary inside a specific project or framework.
 - Fix guidance: Rename unclear shorthand to the full domain term. When a token is intentional project vocabulary, document its meaning and add the exact token to allowlists.acceptedAbbreviations; a configured list replaces the universal seed rather than extending it.
 - Confidence rationale: Medium confidence: matches come from a narrow curated token list, but tokens such as ctx, cfg, req, and idx can be idiomatic project vocabulary.
+- Common false-positive shapes:
+  - A blocked token such as ctx, cfg, req, or idx is established project vocabulary with one documented meaning.
+    Mitigation: Add the exact token to allowlists.acceptedAbbreviations with its project meaning; retain any universal seed values the project uses because configured values replace the seed.
 - Bad example: `def load_cfg(ctx): ...` uses shorthand without documenting what the configuration or context represents.
 - Good example: Use `context`, `config`, `request`, and `index`, or document exact project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`.
 
@@ -613,6 +675,9 @@ except ValueError:
 - Fix guidance: Rename a scalar Boolean declaration with an is_/has_/can_-style predicate, or list an exact external boundary name under acceptedBooleanNames.
 - Confidence rationale: Medium confidence: exact bool, optional-bool, and Annotated scalar syntax is matched structurally, including bounded quoted annotations; containers, callables, mixed unions, and arbitrary generics stay quiet.
 - Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
+- Common false-positive shapes:
+  - An externally constrained Boolean name can belong to a protocol, CLI, DTO, or schema that the structural override exemptions do not recognize.
+    Mitigation: Add the exact contract name to `options.acceptedBooleanNames` instead of renaming the external surface.
 - Bad example: `def status() -> bool: ...` hides the Boolean result in a noun.
 - Good example: `def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` is outside this scalar rule.
 
@@ -628,6 +693,9 @@ except ValueError:
 - Fix guidance: Address the reported confusing class name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `confusingNames` = `['Handler', 'Processor', 'Manager', 'Util', 'Utils', 'Helper', 'Helpers', 'Data', 'Info', 'Service', 'Stuff', 'Thing', 'Object', 'Item']`
+- Common false-positive shapes:
+  - A deliberately short class name can gain its missing domain context from the enclosing module or package.
+    Mitigation: Rename the class with explicit domain context, or remove that suffix from `options.confusingNames` when the package naming convention supplies it.
 - Bad example: Code that triggers `naming.confusing-name` leaves confusing class name unaddressed.
 - Good example: Code that satisfies `naming.confusing-name` makes confusing class name explicit or simpler.
 
@@ -643,6 +711,9 @@ except ValueError:
 - Fix guidance: Address the reported generic function name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `genericFunctions` = `['process', 'handle', 'do', 'run', 'execute', 'perform', 'apply', 'manage', 'operate']`
+- Common false-positive shapes:
+  - A framework hook or protocol can require a generic function name such as `run` or `handle` even when the implementation has one clear responsibility.
+    Mitigation: Remove the required hook name from `options.genericFunctions` or suppress the finding at the reviewed implementation.
 - Bad example: Code that triggers `naming.generic-function` leaves generic function name unaddressed.
 - Good example: Code that satisfies `naming.generic-function` makes generic function name explicit or simpler.
 
@@ -686,6 +757,9 @@ except ValueError:
 - Fix guidance: Address the reported module name mismatch directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `conventionalModuleNames` = `['constants', 'exceptions', 'helpers', 'protocols', 'types']`
+- Common false-positive shapes:
+  - A feature-oriented module can intentionally contain one public class plus supporting functions without being named after that class.
+    Mitigation: Add the module name to `options.conventionalModuleNames`, reorganize the module, or suppress the reviewed exception.
 - Bad example: Code that triggers `naming.module-name-mismatch` leaves module name mismatch unaddressed.
 - Good example: Code that satisfies `naming.module-name-mismatch` makes module name mismatch explicit or simpler.
 
@@ -701,6 +775,9 @@ except ValueError:
 - Fix guidance: Address the reported short variable name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
 - Options: `acceptedShortNames` = `['i', 'j', 'k', 'n', 'm', 'x', 'y', 'z', 'e', '_', 'f']`
+- Common false-positive shapes:
+  - A one-character domain or mathematical symbol can be conventional even when it is not one of the built-in loop, axis, or exception names.
+    Mitigation: Add the exact symbol to `options.acceptedShortNames` with the project's convention, or rename it where the short form is not load-bearing.
 - Bad example: Code that triggers `naming.short-variable` leaves short variable name unaddressed.
 - Good example: Code that satisfies `naming.short-variable` makes short variable name explicit or simpler.
 
@@ -715,6 +792,9 @@ except ValueError:
 - Rationale: `naming.test-naming-consistency` protects the naming pillar by flagging test naming consistency before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test naming consistency directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A compatibility or migration test file can intentionally preserve both unittest-style camelCase names and pytest-style snake_case names.
+    Mitigation: Finish the rename when compatibility permits, or suppress the file-level advisory with the migration reason.
 - Bad example: Code that triggers `naming.test-naming-consistency` leaves test naming consistency unaddressed.
 - Good example: Code that satisfies `naming.test-naming-consistency` makes test naming consistency explicit or simpler.
 
@@ -819,6 +899,9 @@ except ValueError:
 - Fix guidance: Address the reported django mark_safe on dynamic content directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-79']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'medium'`
+- Common false-positive shapes:
+  - A dynamic value can already be safe by an upstream validation or trusted-type contract that is not a wrapping escape call in the inspected expression.
+    Mitigation: Pass the value through an explicit escaping helper or `format_html`, or suppress the reviewed sink with the upstream safety reason.
 - Bad example: Code that triggers `security.django-mark-safe` leaves django mark_safe on dynamic content unaddressed.
 - Good example: Code that satisfies `security.django-mark-safe` makes django mark_safe on dynamic content explicit or simpler.
 
@@ -848,6 +931,9 @@ except ValueError:
 - Rationale: `security.error-suppression` protects the security pillar by flagging wide error suppression before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported wide error suppression directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A best-effort cleanup or telemetry path can deliberately suppress every exception because failure must not replace the primary result.
+    Mitigation: Catch the narrow expected exceptions, or suppress this rule at the reviewed boundary with the reason the fallback is intentionally fail-open.
 - Bad example: Code that triggers `security.error-suppression` leaves wide error suppression unaddressed.
 - Good example: Code that satisfies `security.error-suppression` makes wide error suppression explicit or simpler.
 
@@ -862,6 +948,9 @@ except ValueError:
 - Rationale: `security.extract-compact-user-input` protects the security pillar by flagging splat-unpacked user input before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported splat-unpacked user input directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A request mapping splat can contain only allowlisted keys after validation performed outside the expression this rule sees.
+    Mitigation: Copy validated keys into an explicit dictionary before `**` expansion, or suppress the reviewed call with the validation contract.
 - Bad example: Code that triggers `security.extract-compact-user-input` leaves splat-unpacked user input unaddressed.
 - Good example: Code that satisfies `security.extract-compact-user-input` makes splat-unpacked user input explicit or simpler.
 
@@ -937,6 +1026,9 @@ except ValueError:
 - Fix guidance: Address the reported repository secret in a pr-triggered workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-200', 'CWE-522']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Common false-positive shapes:
+  - A secret reference in a pull-request workflow can sit behind a trusted-actor condition that the workflow text scan does not evaluate.
+    Mitigation: Move the secret-bearing job to a trusted workflow or suppress the reviewed reference only after verifying the actor gate cannot be influenced by the pull request.
 - Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pr-triggered workflow unaddressed.
 - Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pr-triggered workflow explicit or simpler.
 
@@ -967,6 +1059,9 @@ except ValueError:
 - Fix guidance: Address the reported hardcoded bind to all interfaces directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-668']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Common false-positive shapes:
+  - A containerized service can deliberately bind to all interfaces while an external network policy prevents public exposure.
+    Mitigation: Read the bind address from deployment configuration, or suppress the reviewed literal with the network-boundary reason.
 - Bad example: Code that triggers `security.hardcoded-bind-all-interfaces` leaves hardcoded bind to all interfaces unaddressed.
 - Good example: Code that satisfies `security.hardcoded-bind-all-interfaces` makes hardcoded bind to all interfaces explicit or simpler.
 
@@ -996,6 +1091,9 @@ except ValueError:
 - Rationale: `security.header-injection` protects the security pillar by flagging header injection before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported header injection directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A dynamic Flask header name can be selected from an internal allowlist or enum before the assignment, which this local AST check cannot prove.
+    Mitigation: Map the validated choice to literal header assignments, or suppress the reviewed sink with the allowlist evidence.
 - Bad example: Code that triggers `security.header-injection` leaves header injection unaddressed.
 - Good example: Code that satisfies `security.header-injection` makes header injection explicit or simpler.
 
@@ -1010,6 +1108,9 @@ except ValueError:
 - Rationale: `security.insecure-random` protects the security pillar by flagging insecure random source before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported insecure random source directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A non-secret simulation value or opaque identifier can use `random` inside a function whose token- or password-like name suggests a security context.
+    Mitigation: Use `secrets` when unpredictability matters; otherwise rename the non-security value or suppress the reviewed call with its purpose.
 - Bad example: Code that triggers `security.insecure-random` leaves insecure random source unaddressed.
 - Good example: Code that satisfies `security.insecure-random` makes insecure random source explicit or simpler.
 
@@ -1025,6 +1126,9 @@ except ValueError:
 - Fix guidance: Address the reported insecure temporary file directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-377', 'CWE-379']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
+- Common false-positive shapes:
+  - A fixed temporary path can be process-private inside an isolated sandbox even though that exclusivity is not visible at the call site.
+    Mitigation: Use `mkstemp` or `NamedTemporaryFile`, or suppress the reviewed path with evidence of the containing permission and lifecycle controls.
 - Bad example: Code that triggers `security.insecure-temp-file` leaves insecure temporary file unaddressed.
 - Good example: Code that satisfies `security.insecure-temp-file` makes insecure temporary file explicit or simpler.
 
@@ -1128,6 +1232,9 @@ except ValueError:
 - Fix guidance: Use driver parameters; validate dynamic SQL structure separately.
 - Confidence rationale: Medium confidence: keyword, constant, and SQLAlchemy gates.
 - Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
+- Common false-positive shapes:
+  - A SQL identifier selected from a strict allowlist cannot be bound as a DB-API value, but its interpolation still looks like user-controlled query structure.
+    Mitigation: Map the choice to predeclared literal statements and bind all values, or suppress the reviewed identifier interpolation with its allowlist evidence.
 - Bad example: `cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`
 - Good example: `cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`
 
@@ -1187,6 +1294,11 @@ except ValueError:
 - Fix guidance: Use an exact helper from the matching labelSanitizers or urlSanitizers list. Labels must remove `]`, `(`, and `)`; URLs may use the default urllib.parse.quote/quote_plus calls without a delimiter-preserving `safe` argument.
 - Confidence rationale: Medium confidence: exact configured call targets, same-function assignments, one-hop aliases, and conservative branch/rebinding joins replace the former any-call proxy.
 - Options: `labelSanitizers` = `[]`, `urlSanitizers` = `['urllib.parse.quote', 'urllib.parse.quote_plus']`
+- Common false-positive shapes:
+  - Link slots interpolating values already constrained upstream (enum names, validated slugs) without a wrapping call.
+    Mitigation: Wrap the value in the sanitising helper anyway (cheap and self-documenting), or suppress with `# gruff: disable=security.unsanitized-markdown-interpolation` plus the constraint.
+  - A label wrapped in html.escape(...) or markupsafe.escape(...) still reports under the strict default. This is deliberate: HTML escaping leaves `]`, `(`, and `)` unchanged, so `evil](https://bad.example)` still injects a Markdown link.
+    Mitigation: After verifying that the project's renderer makes HTML escaping sufficient, add the exact helper to labelSanitizers; otherwise use a Markdown-aware label sanitizer.
 - Bad example: `f"[{title}]({url})"` with `title`/`url` from parameters.
 - Good example: `f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with markdown_label listed under labelSanitizers.
 
@@ -1201,6 +1313,9 @@ except ValueError:
 - Rationale: `security.variable-import` protects the security pillar by flagging variable import before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported variable import directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A dynamic module name can come from a closed plugin registry or internal allowlist that the import expression does not expose.
+    Mitigation: Map allowed names to explicit imports, or suppress the reviewed import with the registry boundary that prevents user control.
 - Bad example: Code that triggers `security.variable-import` leaves variable import unaddressed.
 - Good example: Code that satisfies `security.variable-import` makes variable import explicit or simpler.
 
@@ -1216,6 +1331,11 @@ except ValueError:
 - Fix guidance: Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and SHA-256 or better for signatures and tokens. When the digest is genuinely non-security, pass the standard-library keyword `usedforsecurity=False` rather than suppressing the rule.
 - Confidence rationale: High confidence: the call target must resolve to a literal weak algorithm, and a security-context smell in the surrounding names or arguments is required before reporting.
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
+- Common false-positive shapes:
+  - A cache key, ETag, or content digest whose surrounding names (token, signature, password) read as security material even though the value is not a secret.
+    Mitigation: Pass `usedforsecurity=False`, which is the standard library's own non-security marker and suppresses the MD5/SHA1 finding without touching rule config.
+  - A literal `usedforsecurity=False` on MD5 or SHA1 suppresses the finding even when the hashed value looks like a password. This is deliberate: the keyword is the caller's explicit non-security declaration, and only a literal False qualifies - True, 0, None, and dynamic flags all keep the finding.
+    Mitigation: Fast password hashing is covered separately: SHA-256 and SHA-512 on password material still report regardless of the keyword, because no non-security reading of that call exists. Review `usedforsecurity=False` on MD5 in code review rather than expecting this rule to reject it.
 - Bad example: `hashlib.md5(session_token.encode()).hexdigest()`
 - Good example: `hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` for a non-security digest, or a KDF for password material.
 
@@ -1301,6 +1421,9 @@ except ValueError:
 - Rationale: `sensitive-data.hardcoded-env-value` protects the sensitive-data pillar by flagging hardcoded env-file secret before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported hardcoded env-file secret directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A non-secret value can use a key containing PASS, TOKEN, or SECRET while its length and entropy resemble a credential.
+    Mitigation: Rename the non-secret key or move the value to runtime configuration so the env-file assignment no longer resembles committed secret material.
 - Bad example: Code that triggers `sensitive-data.hardcoded-env-value` leaves hardcoded env-file secret unaddressed.
 - Good example: Code that satisfies `sensitive-data.hardcoded-env-value` makes hardcoded env-file secret explicit or simpler.
 
@@ -1310,11 +1433,15 @@ except ValueError:
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `low`
+- Confidence: `medium`
 - Default enabled: yes
 - Rationale: `sensitive-data.high-entropy-string` protects the sensitive-data pillar by flagging high-entropy string before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported high-entropy string directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Named thresholds: `entropy` = `4.2`, `minLength` = `32`
+- Common false-positive shapes:
+  - A legitimate random-looking test vector, checksum, or opaque constant outside the built-in identifier and path exclusions can exceed the entropy boundary.
+    Mitigation: Replace fixtures with a recognizable placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and path.
 - Bad example: Code that triggers `sensitive-data.high-entropy-string` leaves high-entropy string unaddressed.
 - Good example: Code that satisfies `sensitive-data.high-entropy-string` makes high-entropy string explicit or simpler.
 
@@ -1343,6 +1470,9 @@ except ValueError:
 - Rationale: `sensitive-data.phi-pattern` protects the sensitive-data pillar by flagging phi pattern before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported phi pattern directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A structurally valid synthetic SSN or labelled MRN outside the placeholder set can look like real health data.
+    Mitigation: Use a recognized placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.
 - Bad example: Code that triggers `sensitive-data.phi-pattern` leaves phi pattern unaddressed.
 - Good example: Code that satisfies `sensitive-data.phi-pattern` makes phi pattern explicit or simpler.
 
@@ -1357,6 +1487,9 @@ except ValueError:
 - Rationale: Test fixtures should use placeholders, not realistic third-party PII.
 - Fix guidance: Use reserved domains such as `example.com`, `.test`, `.local`, `.invalid`, `.localhost`, or `.example`; use `555` phone placeholders and keep epoch or reset timestamps named with timestamp context.
 - Confidence rationale: Medium confidence: raw test text scan with explicit escapes.
+- Common false-positive shapes:
+  - An intentionally synthetic but realistic email address or phone number outside the reserved-domain and 555 placeholder forms can look like real fixture PII.
+    Mitigation: Use `example` domains or 555-style numbers, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.
 - Bad example: `email = "jane.doe@gmail.com"` or `phone = "4158675309"`
 - Good example: `email = "admin@app.test"` or `phone = "+1-415-555-0100"`
 
@@ -1384,7 +1517,10 @@ except ValueError:
 - Default enabled: yes
 - Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
 - Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
-- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords.
+- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`.
+- Common false-positive shapes:
+  - A URL parser's test table can spell sample userinfo with a short dummy password, such as the rows in requests' `tests/test_utils.py` whose user is `u` and password `p`; short tokens stay reported until the family ratifies a placeholder vocabulary.
+    Mitigation: List the reviewed test file under `sensitiveExclusions` with its reason; a sensitive-data finding cannot be suppressed inline.
 - Bad example: `REMOTE = "https://deploy:<password>@api.example.test"`
 - Good example: `REMOTE = "https://api.example.test"` plus a runtime Authorization header.
 
@@ -1518,6 +1654,9 @@ except ValueError:
 - Rationale: `test-quality.conditional-logic` protects the test-quality pillar by flagging conditional logic in test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported conditional logic in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A property, state-machine, or compatibility test can intentionally exercise several outcome branches in one named scenario.
+    Mitigation: Parametrize or split the branches for separate failures, or suppress the reviewed test when one scenario must retain the control flow.
 - Bad example: Code that triggers `test-quality.conditional-logic` leaves conditional logic in test unaddressed.
 - Good example: Code that satisfies `test-quality.conditional-logic` makes conditional logic in test explicit or simpler.
 
@@ -1533,6 +1672,9 @@ except ValueError:
 - Fix guidance: Address the reported eager test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `maxAssertions` = `5`
+- Common false-positive shapes:
+  - One outcome can require many field-level assertions, so assertion count alone can make a focused contract test look eager.
+    Mitigation: Compare a structured expected value or tune `thresholds.maxAssertions` after confirming all assertions describe the same behavior.
 - Bad example: Code that triggers `test-quality.eager-test` leaves eager test unaddressed.
 - Good example: Code that satisfies `test-quality.eager-test` makes eager test explicit or simpler.
 
@@ -1561,6 +1703,9 @@ except ValueError:
 - Rationale: `test-quality.exception-type-only` protects the test-quality pillar by flagging exception type-only assertion before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported exception type-only assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A boundary can intentionally promise only that any wide exception escapes, with no stable message suitable for `match=`.
+    Mitigation: Prefer a narrow exception or stable message match; otherwise suppress the reviewed assertion with the type-only contract.
 - Bad example: Code that triggers `test-quality.exception-type-only` leaves exception type-only assertion unaddressed.
 - Good example: Code that satisfies `test-quality.exception-type-only` makes exception type-only assertion explicit or simpler.
 
@@ -1576,6 +1721,9 @@ except ValueError:
 - Fix guidance: Address the reported excessive mocking directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `maxMocks` = `4`
+- Common false-positive shapes:
+  - A coordinator test can legitimately isolate several collaborators because orchestration is the production responsibility under test.
+    Mitigation: Use a higher-level test or tune `thresholds.maxMocks` for suites whose reviewed subject is an orchestrator.
 - Bad example: Code that triggers `test-quality.excessive-mocking` leaves excessive mocking unaddressed.
 - Good example: Code that satisfies `test-quality.excessive-mocking` makes excessive mocking explicit or simpler.
 
@@ -1605,6 +1753,9 @@ except ValueError:
 - Rationale: `test-quality.global-state-mutation` protects the test-quality pillar by flagging global state mutation in test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported global state mutation in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A test can restore a `global` binding in a fixture or `finally` block, but this rule reports the declaration without evaluating cleanup.
+    Mitigation: Use `monkeypatch` or a fixture-owned state boundary, or suppress the reviewed test with the cleanup guarantee.
 - Bad example: Code that triggers `test-quality.global-state-mutation` leaves global state mutation in test unaddressed.
 - Good example: Code that satisfies `test-quality.global-state-mutation` makes global state mutation in test explicit or simpler.
 
@@ -1619,6 +1770,9 @@ except ValueError:
 - Rationale: `test-quality.loop-assertion-without-message` protects the test-quality pillar by flagging loop assertion without message before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported loop assertion without message directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - The compared item can already have a stable, descriptive repr that identifies the failing iteration without a custom assertion message.
+    Mitigation: Add an iteration-specific message or parametrize the cases; otherwise suppress the reviewed loop when failure output is already unambiguous.
 - Bad example: Code that triggers `test-quality.loop-assertion-without-message` leaves loop assertion without message unaddressed.
 - Good example: Code that satisfies `test-quality.loop-assertion-without-message` makes loop assertion without message explicit or simpler.
 
@@ -1630,11 +1784,15 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `test-quality.loop-in-test` protects the test-quality pillar by flagging loop in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported loop in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `test-quality.loop-in-test` leaves loop in test unaddressed.
-- Good example: Code that satisfies `test-quality.loop-in-test` makes loop in test explicit or simpler.
+- Rationale: A loop in a test body runs every case under one pass or fail, so a failure does not say which iteration broke and the cases cannot be selected or rerun on their own.
+- Fix guidance: Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.
+- Confidence rationale: Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a fixture sweep, and a loop can legitimately be the behaviour under test.
+- Common false-positive shapes:
+  - A state-machine, fuzz, or property test can require a loop whose branches make the built-in fixture-loop exemption inapplicable.
+    Mitigation: Parametrize finite cases, or suppress the reviewed test when iteration is itself the behavior under test.
+- Bad example: `def test_parse(): for text in ['1', '2']: assert parse(text)`
+- Good example: `@pytest.mark.parametrize('text', ['1', '2'])
+def test_parse(text): assert parse(text)`
 
 ### `test-quality.magic-number-assertion`
 
@@ -1648,6 +1806,9 @@ except ValueError:
 - Fix guidance: Address the reported magic-number assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `allowed_numbers` = `[-1, 0, 1, 2, 3, 200, 201, 204, 301, 302, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]`
+- Common false-positive shapes:
+  - A bare literal can be an established domain constant such as a protocol version or exit code even when it is outside the built-in small-count and HTTP sets.
+    Mitigation: Assert against a named constant or add the exact value to `options.allowed_numbers`.
 - Bad example: Code that triggers `test-quality.magic-number-assertion` leaves magic-number assertion unaddressed.
 - Good example: Code that satisfies `test-quality.magic-number-assertion` makes magic-number assertion explicit or simpler.
 
@@ -1662,6 +1823,9 @@ except ValueError:
 - Rationale: `test-quality.mock-only-test` protects the test-quality pillar by flagging mock-only test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported mock-only test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - An interaction can be the complete contract, such as proving an event was dispatched or a boundary received a mapped payload.
+    Mitigation: Keep an explicit mock expectation and suppress the reviewed test, or add an assertion on an observable result when the contract is not purely interaction-based.
 - Bad example: Code that triggers `test-quality.mock-only-test` leaves mock-only test unaddressed.
 - Good example: Code that satisfies `test-quality.mock-only-test` makes mock-only test explicit or simpler.
 
@@ -1676,6 +1840,9 @@ except ValueError:
 - Rationale: `test-quality.mock-without-expectation` protects the test-quality pillar by flagging mock without expectation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported mock without expectation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A deliberate null-object double can be passed only to satisfy a constructor signature, with no expectation because no interaction is the contract.
+    Mitigation: Use a small fake or add an explicit `assert_not_called` expectation so the intent is visible to the rule and reviewer.
 - Bad example: Code that triggers `test-quality.mock-without-expectation` leaves mock without expectation unaddressed.
 - Good example: Code that satisfies `test-quality.mock-without-expectation` makes mock without expectation explicit or simpler.
 
@@ -1691,6 +1858,9 @@ except ValueError:
 - Fix guidance: Address the reported mocking domain object directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `domain_namespaces` = `[]`
+- Common false-positive shapes:
+  - A configured domain namespace can also contain ports or interfaces that are appropriate mock boundaries.
+    Mitigation: Narrow `options.domain_namespaces` to concrete domain-object packages or use a small fake for the reviewed port.
 - Bad example: Code that triggers `test-quality.mocking-domain-object` leaves mocking domain object unaddressed.
 - Good example: Code that satisfies `test-quality.mocking-domain-object` makes mocking domain object explicit or simpler.
 
@@ -1706,6 +1876,9 @@ except ValueError:
 - Fix guidance: Address the reported multiple aaa cycles directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
 - Named thresholds: `maxCycles` = `2`
+- Common false-positive shapes:
+  - One workflow or state-transition test can deliberately assert after each step, making several call-separated assertion blocks one scenario.
+    Mitigation: Split the transitions or tune `thresholds.maxCycles` after confirming the test is one reviewed workflow.
 - Bad example: Code that triggers `test-quality.multiple-aaa-cycles` leaves multiple aaa cycles unaddressed.
 - Good example: Code that satisfies `test-quality.multiple-aaa-cycles` makes multiple aaa cycles explicit or simpler.
 
@@ -1717,11 +1890,16 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `test-quality.mystery-guest` protects the test-quality pillar by flagging mystery guest in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported mystery guest in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Bad example: Code that triggers `test-quality.mystery-guest` leaves mystery guest in test unaddressed.
-- Good example: Code that satisfies `test-quality.mystery-guest` makes mystery guest in test explicit or simpler.
+- Rationale: A test that performs network, filesystem, mail, or FTP I/O when it runs depends on state outside the test, so it is slow, non-hermetic, and can fail for a reason the test body does not show.
+- Fix guidance: Mock the I/O boundary or serve the dependency from a fixture. Open files under a `tmp_path` or `tmpdir` fixture, which the rule already treats as hermetic.
+- Confidence rationale: Medium confidence: the rule matches calls that perform I/O when they run - module helpers such as `requests.get`, socket, FTP and SMTP entry points, and request methods on a client the test built - and skips constructors, parameters that shadow a module name, and assertion calls, but it cannot tell whether a URL points at a local fixture server.
+- Common false-positive shapes:
+  - A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call the rule treats as network I/O even though the fixture keeps it hermetic.
+    Mitigation: Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.
+- Bad example: `def test_health(): assert requests.get('https://api.example.test/health').ok`
+- Good example: `def test_write(tmp_path):
+    with open(tmp_path / 'out.txt', 'w') as handle:
+        handle.write('x')`
 
 ### `test-quality.naming-consistency`
 
@@ -1734,6 +1912,9 @@ except ValueError:
 - Rationale: `test-quality.naming-consistency` protects the test-quality pillar by flagging test-naming consistency before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test-naming consistency directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A compatibility or staged migration suite can intentionally mix pytest function names with unittest-style function or class names.
+    Mitigation: Complete the rename when compatibility permits, or suppress the file-level advisory with the migration reason.
 - Bad example: Code that triggers `test-quality.naming-consistency` leaves test-naming consistency unaddressed.
 - Good example: Code that satisfies `test-quality.naming-consistency` makes test-naming consistency explicit or simpler.
 
@@ -1748,6 +1929,11 @@ except ValueError:
 - Rationale: Collected tests without assertions are easy to mistake for coverage.
 - Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
 - Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
+- Common false-positive shapes:
+  - A test can assert through a matcher that raises on a mismatch without an `assert` name, such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`.
+    Mitigation: Call the matcher through an `assert_*` helper, or suppress the reviewed test with `# gruff: disable=test-quality.no-assertions` and the matcher that asserts.
+  - A smoke test can pass by not raising, such as requests' `test_can_access_urllib3_attribute`, whose whole body is one attribute access.
+    Mitigation: Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.
 - Bad example: `def test_saves_user(): service.save(user)`
 - Good example: `def test_saves_user(): service.save(user); assert_user_saved(user)`
 
@@ -1763,6 +1949,9 @@ except ValueError:
 - Fix guidance: Address the reported parametrize without `ids` directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `maxCasesWithoutIds` = `2`
+- Common false-positive shapes:
+  - Simple enum, integer, or named-object cases can already have short stable repr values, so generated pytest case names remain readable without `ids=`.
+    Mitigation: Add explicit IDs or tune `thresholds.maxCasesWithoutIds` after checking the actual report names.
 - Bad example: Code that triggers `test-quality.parametrize-annotation` leaves parametrize without `ids` unaddressed.
 - Good example: Code that satisfies `test-quality.parametrize-annotation` makes parametrize without `ids` explicit or simpler.
 
@@ -1777,6 +1966,9 @@ except ValueError:
 - Rationale: `test-quality.private-reflection` protects the test-quality pillar by flagging private reflection in test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported private reflection in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.
+    Mitigation: Prefer public behavior, or suppress the reviewed access with the compatibility contract it protects.
 - Bad example: Code that triggers `test-quality.private-reflection` leaves private reflection in test unaddressed.
 - Good example: Code that satisfies `test-quality.private-reflection` makes private reflection in test explicit or simpler.
 
@@ -1791,6 +1983,9 @@ except ValueError:
 - Rationale: `test-quality.pytest-coverage-source-missing` protects the test-quality pillar by flagging coverage source missing before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported coverage source missing directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - Coverage source can be supplied by CI arguments, `.coveragerc`, or environment settings that the pyproject-only check does not read.
+    Mitigation: Declare `[tool.coverage.run]` source, or suppress the project finding after checking the external coverage command.
 - Bad example: Code that triggers `test-quality.pytest-coverage-source-missing` leaves coverage source missing unaddressed.
 - Good example: Code that satisfies `test-quality.pytest-coverage-source-missing` makes coverage source missing explicit or simpler.
 
@@ -1805,6 +2000,9 @@ except ValueError:
 - Rationale: `test-quality.pytest-deprecations-not-fatal` protects the test-quality pillar by flagging pytest deprecations not fatal before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported pytest deprecations not fatal directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - CI can turn deprecations into errors through command-line warning flags or environment settings that the pyproject-only check does not read.
+    Mitigation: Declare the error filter in `[tool.pytest.ini_options].filterwarnings`, or suppress the project finding after verifying the external gate.
 - Bad example: Code that triggers `test-quality.pytest-deprecations-not-fatal` leaves pytest deprecations not fatal unaddressed.
 - Good example: Code that satisfies `test-quality.pytest-deprecations-not-fatal` makes pytest deprecations not fatal explicit or simpler.
 
@@ -1819,6 +2017,9 @@ except ValueError:
 - Rationale: `test-quality.pytest-strict-config-missing` protects the test-quality pillar by flagging pytest strict-config missing before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported pytest strict-config missing directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - CI can pass pytest strict flags on the command line while pyproject omits them, or a plugin compatibility shim can require permissive markers.
+    Mitigation: Add both flags to `[tool.pytest.ini_options].addopts`, or suppress the finding with the verified external gate or compatibility reason.
 - Bad example: Code that triggers `test-quality.pytest-strict-config-missing` leaves pytest strict-config missing unaddressed.
 - Good example: Code that satisfies `test-quality.pytest-strict-config-missing` makes pytest strict-config missing explicit or simpler.
 
@@ -1834,6 +2035,9 @@ except ValueError:
 - Fix guidance: Address the reported repeated structure without parametrize directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `minGroupSize` = `3`
+- Common false-positive shapes:
+  - Three named scenarios can share one AST shape while their separate names and failures are the contract, especially when only literal values differ.
+    Mitigation: Parametrize the cases or tune `thresholds.minGroupSize`; suppress the group when separate scenario identities are intentionally retained.
 - Bad example: Code that triggers `test-quality.repeated-structure-missing-parametrize` leaves repeated structure without parametrize unaddressed.
 - Good example: Code that satisfies `test-quality.repeated-structure-missing-parametrize` makes repeated structure without parametrize explicit or simpler.
 
@@ -1849,6 +2053,9 @@ except ValueError:
 - Fix guidance: Address the reported setup bloat directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `maxSetupLines` = `30`
+- Common false-positive shapes:
+  - A costly domain fixture can be longer than its deliberately small focused tests without representing accidental shared state.
+    Mitigation: Extract factories or tune `thresholds.maxSetupLines` after confirming the shared setup is the reviewed suite boundary.
 - Bad example: Code that triggers `test-quality.setup-bloat` leaves setup bloat unaddressed.
 - Good example: Code that satisfies `test-quality.setup-bloat` makes setup bloat explicit or simpler.
 
@@ -1891,6 +2098,9 @@ except ValueError:
 - Rationale: A test that asserts a class or member is declared restates a fact the parser already proves; the assertion adds no behavioural coverage beyond what static analysis gives for free.
 - Fix guidance: Remove only the redundant assertion, or replace it with behavioural evidence - call the member and assert on the result.
 - Confidence rationale: High confidence: the rule fires only on literal references to a class declared in the same parsed file and skips every dynamic, imported, instance-bound, or private shape.
+- Common false-positive shapes:
+  - Public API or compatibility contract where runtime existence is the behaviour under test.
+    Mitigation: Keep the test when the runtime contract is intentional; gruff reports this as a candidate, not a deletion command.
 - Bad example: `def test_has_render(): assert hasattr(ShapeService, 'render')`
 - Good example: `def test_render(): assert ShapeService().render() == 'shape'`
 
@@ -1905,6 +2115,9 @@ except ValueError:
 - Rationale: `test-quality.sut-not-called` protects the test-quality pillar by flagging system under test never called before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported system under test never called directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A contract test can validate module constants or metadata using only builtins and test helpers, with no callable system under test.
+    Mitigation: Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.
 - Bad example: Code that triggers `test-quality.sut-not-called` leaves system under test never called unaddressed.
 - Good example: Code that satisfies `test-quality.sut-not-called` makes system under test never called explicit or simpler.
 
@@ -1919,6 +2132,9 @@ except ValueError:
 - Rationale: `test-quality.tautological-type-assertion` protects the test-quality pillar by flagging tautological type assertion before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported tautological type assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - The same call expression evaluated twice can return different runtime types, even though the structural comparison treats both expressions as identical.
+    Mitigation: Evaluate the call once and assert the specific expected type, or suppress the reviewed dynamic-factory case.
 - Bad example: Code that triggers `test-quality.tautological-type-assertion` leaves tautological type assertion unaddressed.
 - Good example: Code that satisfies `test-quality.tautological-type-assertion` makes tautological type assertion explicit or simpler.
 
@@ -1951,6 +2167,9 @@ except ValueError:
 - Fix guidance: Address the reported test longer than sut directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Options: `ratio` = `2.0`
+- Common false-positive shapes:
+  - A table-driven contract test can need many scenarios around one short same-file function, so line ratio overstates duplication.
+    Mitigation: Split or extract setup, or tune `options.ratio` after reviewing the scenario coverage.
 - Bad example: Code that triggers `test-quality.test-longer-than-sut` leaves test longer than sut unaddressed.
 - Good example: Code that satisfies `test-quality.test-longer-than-sut` makes test longer than sut explicit or simpler.
 
@@ -1979,6 +2198,9 @@ except ValueError:
 - Rationale: `test-quality.trivial-snapshot` protects the test-quality pillar by flagging trivial snapshot assertion before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported trivial snapshot assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A canonical encoding or compatibility fixture can intentionally pin every element of a large literal collection.
+    Mitigation: Assert salient invariants, or suppress the reviewed snapshot with the exact compatibility contract it protects.
 - Bad example: Code that triggers `test-quality.trivial-snapshot` leaves trivial snapshot assertion unaddressed.
 - Good example: Code that satisfies `test-quality.trivial-snapshot` makes trivial snapshot assertion explicit or simpler.
 
@@ -2007,6 +2229,9 @@ except ValueError:
 - Rationale: Tombstoned source comments make reviewers ask whether dead code still matters.
 - Fix guidance: Delete commented-out source code or turn it into prose documentation; docstring examples are ignored because only tokenizer comment tokens are scanned.
 - Confidence rationale: Low confidence: source-comment tokens pass a cheap code-like prefilter and parser confirmation, but prose can still resemble Python.
+- Common false-positive shapes:
+  - Explanatory prose can itself be valid Python after the code-like prefilter, such as a comment written as an assignment or call.
+    Mitigation: Rewrite it as prose that does not parse as a statement, or suppress the reviewed comment with its documentation purpose.
 - Bad example: `# old_value = compute()`
 - Good example: `# Recompute only after the cache expires.`
 
@@ -2049,6 +2274,9 @@ except ValueError:
 - Rationale: `waste.one-line-function` protects the dead-code pillar by flagging one-line function wrapper before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported one-line function wrapper directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.
+    Mitigation: Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.
 - Bad example: Code that triggers `waste.one-line-function` leaves one-line function wrapper unaddressed.
 - Good example: Code that satisfies `waste.one-line-function` makes one-line function wrapper explicit or simpler.
 
@@ -2105,6 +2333,9 @@ except ValueError:
 - Rationale: `waste.unused-parameter` protects the dead-code pillar by flagging unused parameter before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unused parameter directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - An unrecognized callback or protocol can require a parameter that is consumed indirectly through `locals()` or reflection.
+    Mitigation: Prefix the name with `_` to declare it intentionally unused, or suppress the reviewed signature when the external protocol fixes the name.
 - Bad example: Code that triggers `waste.unused-parameter` leaves unused parameter unaddressed.
 - Good example: Code that satisfies `waste.unused-parameter` makes unused parameter explicit or simpler.
 

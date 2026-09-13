@@ -18,6 +18,22 @@ from gruffpy.version import VERSION
 
 _GIT = shutil.which("git")
 _SEVERITIES = {"advisory", "warning", "error"}
+# The capability set gruff.hook.v2 advertises. Every flag is on because the port implements every
+# optional part of the contract; a consumer reads this map before choosing which flags to pass.
+_ADVERTISED_SUPPORTS = {
+    "baseline": True,
+    "baselineV3": True,
+    "changedRanges": True,
+    "confidenceGate": True,
+    "deepScanBudget": True,
+    "diagnostics": True,
+    "diff": True,
+    "ignoreReport": True,
+    "metadata": True,
+    "newOnly": True,
+    "scopeField": True,
+    "stableIdentity": True,
+}
 _SCOPES = {"line", "symbol", "file", "project"}
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODEX_HOOK_TIMEOUT_SECONDS = 90
@@ -49,23 +65,16 @@ def test_hook_capabilities_advertise_contract() -> None:
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["contractVersion"] == "gruff.hook.v1"
+    assert payload["contractVersion"] == "gruff.hook.v2"
     assert payload["analyzer"] == {"name": "gruff-py", "version": VERSION}
-    assert payload["supports"] == {
-        "changedRanges": True,
-        "diff": True,
-        "baseline": True,
-        "scopeField": True,
-        "metadata": True,
-        "stableIdentity": True,
-        "ignoreReport": True,
-        "newOnly": True,
-    }
+    assert payload["supports"] == _ADVERTISED_SUPPORTS
     assert payload["flags"] == {
-        "changedRanges": "--changed-ranges",
-        "diff": "--diff",
         "baseline": "--baseline",
-        "excludeRule": "--exclude-rule",
+        "changedRanges": "--changed-ranges",
+        "deepScanBudget": "--deep-scan-budget",
+        "diff": "--diff",
+        "failOnDiagnostics": "--fail-on-diagnostics",
+        "minConfidence": "--min-confidence",
     }
     assert payload["flagOrder"] == "any"
 
@@ -133,13 +142,9 @@ def test_hook_stable_identity_survives_line_shift_and_measured_value_change(
 
     line_file = src / "line.py"
     line_file.write_text('value = eval("1")\n')
-    before_shift = _finding_by_rule(
-        _hook("--no-config", "src/line.py"), "security.dangerous-function-call"
-    )
+    before_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
     line_file.write_text("# inserted\n" + line_file.read_text())
-    after_shift = _finding_by_rule(
-        _hook("--no-config", "src/line.py"), "security.dangerous-function-call"
-    )
+    after_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
 
     assert before_shift["stableIdentity"] == after_shift["stableIdentity"]
     assert before_shift["fingerprint"] != after_shift["fingerprint"]
@@ -165,7 +170,7 @@ def test_hook_baseline_new_only_uses_stable_identity(
     baseline_path = tmp_path / "hook-baseline.json"
 
     _write_long_file(sample, total_lines=1010)
-    baseline_path.write_text(json.dumps(_hook("--no-config", "src/sample.py")))
+    _generate_baseline(baseline_path)
     _write_long_file(sample, total_lines=1020)
     grown = _hook("--no-config", "--baseline", str(baseline_path), "src/sample.py")
     grown_with_changed_range = _hook(
@@ -181,7 +186,7 @@ def test_hook_baseline_new_only_uses_stable_identity(
     assert grown_with_changed_range["suppressed"]["count"] >= 1
 
     _write_long_file(sample, total_lines=900)
-    baseline_path.write_text(json.dumps(_hook("--no-config", "src/sample.py")))
+    _generate_baseline(baseline_path)
     _write_long_file(sample, total_lines=1010)
     newly_crossed = _hook("--no-config", "--baseline", str(baseline_path), "src/sample.py")
     newly_crossed_with_changed_range = _hook(
@@ -208,11 +213,11 @@ def test_hook_baseline_with_no_findings_is_accepted(
     clean_baseline.write_text(
         json.dumps(
             {
-                "contractVersion": "gruff.hook.v1",
-                "findings": [],
-                "suppressed": {"count": 0},
-                "ignored": {"paths": []},
-                "config": {"schemaOk": True, "error": None},
+                "schemaVersion": "gruff.baseline.v3",
+                "toolLanguage": "py",
+                "generatedAt": "2026-09-06T00:00:00+00:00",
+                "occurrences": [],
+                "sensitive": {"counted": 0},
             }
         )
     )
@@ -225,10 +230,16 @@ def test_hook_baseline_with_no_findings_is_accepted(
     assert "security.dangerous-function-call" in _rule_ids(payload)
 
 
-def test_hook_baseline_accepts_analysis_format_json_for_file_scope(
+def test_hook_baseline_refuses_a_document_that_is_not_a_v3_baseline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """An analysis report is not a baseline: reading one would suppress findings under rules nobody ratified.
+
+    Args:
+        tmp_path: Temporary project the scan runs in.
+        monkeypatch: Fixture used to make that project the working directory.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -251,16 +262,12 @@ def test_hook_baseline_accepts_analysis_format_json_for_file_scope(
     assert analysis.exit_code == 0, analysis.output
     baseline_path = tmp_path / "analysis-baseline.json"
     baseline_path.write_text(analysis.output)
-    suppressed = _hook("--no-config", "--baseline", str(baseline_path), "src/sample.py")
 
-    # The analysis report carries stableIdentity but no hook scope field, so its
-    # file-scope identity (ruleId/file/message) diverges from the hook's
-    # (ruleId/file/scope) - the hook must rebuild the identity from row fields.
-    analysis_payload = json.loads(analysis.output)
-    file_rows = [f for f in analysis_payload["findings"] if f["ruleId"] == "size.file-length"]
-    assert len(file_rows) == 1
-    assert "scope" not in file_rows[0]
-    assert "size.file-length" not in _rule_ids(suppressed)
+    result = _invoke_hook("--no-config", "--baseline", str(baseline_path), "src/sample.py")
+
+    assert result.exit_code == 2, result.output
+    assert "--migrate-baseline" in result.output
+    assert '"severity": "fatal"' in result.output
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is required for hook --diff conformance")
@@ -388,6 +395,29 @@ def test_hook_exclude_rule_accepts_repeated_and_csv_values(
     )
 
 
+def test_hook_publishes_nonfatal_bounded_deep_scan_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    aws_key = "AKIA" + "1234567890ABCDEF"
+    (tmp_path / "large.py").write_text(f"AWS_KEY = {aws_key!r}\nresult = eval('payload')\n")
+
+    payload = _hook(
+        "--no-config",
+        "--deep-scan-budget",
+        "1:10000",
+        "large.py",
+    )
+
+    assert payload["diagnostics"][0]["type"] == "bounded-deep-scan"
+    assert payload["diagnostics"][0]["invalidatesRun"] is False
+    assert "override=cli" in payload["diagnostics"][0]["message"]
+    assert "sensitive-data.aws-access-key" in _rule_ids(payload)
+    assert "security.dangerous-function-call" not in _rule_ids(payload)
+    assert aws_key not in json.dumps(payload)
+
+
 def test_hook_reports_ignored_paths_and_config_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -398,14 +428,10 @@ def test_hook_reports_ignored_paths_and_config_errors(
     (src / "ignored.py").write_text('value = eval("1")\n')
     (src / "sample.py").write_text('value = eval("1")\n')
     config = tmp_path / ".gruff-py.yaml"
-    config.write_text(
-        "schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - src/ignored.py\n"
-    )
+    config.write_text("schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - src/ignored.py\n")
 
     ignored = _hook("src/ignored.py")
-    assert ignored["ignored"]["paths"] == [
-        {"path": "src/ignored.py", "source": "config", "pattern": "src/ignored.py"}
-    ]
+    assert ignored["ignored"]["paths"] == [{"path": "src/ignored.py", "source": "config", "pattern": "src/ignored.py"}]
     assert ignored["findings"] == []
 
     config.write_text("paths:\n  ignore: []\n")
@@ -413,9 +439,24 @@ def test_hook_reports_ignored_paths_and_config_errors(
     payload = json.loads(result.output)
     assert result.exit_code == 2, result.output
     assert payload["config"]["schemaOk"] is False
-    assert "schemaVersion" in payload["config"]["error"]
-    assert "gruff-py migrate-config" in payload["config"]["error"]
-    assert "init --force" not in payload["config"]["error"]
+    # v2 carries the error as an object, because a configuration a consumer cannot fix is a dead end.
+    assert "schemaVersion" in payload["config"]["error"]["message"]
+    assert "gruff-py migrate-config" in payload["config"]["error"]["message"]
+    assert "init --force" not in payload["config"]["error"]["message"]
+    assert payload["config"]["error"]["remediation"]
+
+
+def _generate_baseline(baseline_path: Path) -> None:
+    """Write the ratified baseline v3 file the hook applies, the same file a user gets from analyse.
+
+    Args:
+        baseline_path: Destination for the generated baseline.
+    """
+    result = CliRunner().invoke(
+        main,
+        ["analyse", "--no-config", "--no-baseline", "--generate-baseline-path", str(baseline_path), "src"],
+    )
+    assert baseline_path.exists(), result.output
 
 
 def _hook(*args: str) -> dict[str, Any]:

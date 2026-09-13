@@ -1,13 +1,8 @@
-"""``sensitive-data.api-key-pattern`` - vendor API key shapes.
+"""Detect vendor API key shapes for ``sensitive-data.api-key-pattern``.
 
-Recognises Stripe (``sk_live_*``/``rk_live_*``), GitHub (``ghp_*``/``gho_*``/
-``ghu_*``/``ghs_*``/``ghr_*``/``github_pat_*``), GitLab (``glpat-*``), npm
-(``npm_*``), Slack (``xoxb-*``/``xoxp-*``/``xoxa-*``/``xoxs-*`` and Slack
-webhook URLs), OpenAI (``sk-...``/``sk-proj-*``), Anthropic (``sk-ant-*``),
-Google API keys (``AIza*``), Square (``EAAA*``), and Twilio (``SK*``).
-The vendor map is module-private and not currently configurable; the
-patterns are tuned for low false positives on real API tokens rather
-than for project-specific extension.
+Users see one finding when a scan finds a key shaped like Stripe, GitHub, GitLab, npm, Slack,
+OpenAI, Anthropic, Google, Square, or Twilio credentials. The private vendor map favors precise
+hosted-service patterns, and every finding uses a fixed marker instead of key-derived preview text.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -20,10 +15,10 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
     is_likely_placeholder_secret,
     iter_matches,
-    redact_preview,
 )
 
 # Per-vendor patterns. The combined regex below alternates them so a single
@@ -44,18 +39,33 @@ _VENDOR_PATTERNS: dict[str, str] = {
 
 _PATTERN = compile_pattern("|".join(f"(?P<{name}>{pat})" for name, pat in _VENDOR_PATTERNS.items()))
 
+# Which vendors map onto a category FAMILY-CONTRACT.md section 5 ratifies. A vendor with no ratified
+# category (openai, square, twilio) keeps the bare marker rather than inventing one the family cannot read.
+_MARKER_CATEGORIES: dict[str, str] = {
+    "stripe": "stripe-live-key",
+    "github": "github-token",
+    "gitlab": "gitlab-token",
+    "slack": "slack-token",
+    "anthropic": "anthropic-api-key",
+    "npm": "npm-token",
+    "google": "google-api-key",
+}
+
 
 class ApiKeyPatternRule(SourceTextRule):
-    """Detect vendor API key literals from common hosted-service providers."""
+    """Detect API key literals from common hosted-service providers.
+
+    Users encounter this rule during source scans and can use the vendor label to find the right
+    rotation workflow without exposing any part of the credential in output.
+    """
 
     ID = "sensitive-data.api-key-pattern"
 
     def definition(self) -> RuleDefinition:
         """Describe the API-key-pattern rule as a high-confidence warning.
 
-        High confidence because each vendor pattern is specific enough that
-        false positives are rare; severity is warning (not error) because
-        revoking a leaked key is straightforward.
+        Precise vendor shapes give users high-confidence findings; warning severity leaves
+        rotation priority to the review workflow.
 
         Returns:
             Definition for the API-key-pattern rule under the sensitive-data
@@ -73,9 +83,8 @@ class ApiKeyPatternRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Scan the raw source text for vendor-specific API key shapes.
 
-        Operates on ``unit.source`` directly (this is a ``SourceTextRule``)
-        so it sees content inside strings, comments, and docstrings. Each
-        match is tagged with the identified vendor for metadata.
+        Users receive a vendor and source line for each non-placeholder match, including keys in
+        strings, comments, and docs; the preview remains a fixed marker.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -86,35 +95,37 @@ class ApiKeyPatternRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in iter_matches(_PATTERN, unit.source):
-            if is_likely_placeholder_secret(match.raw):
+        # Each provider-shaped token becomes an independently actionable item in the user's report.
+        for api_key_match in iter_matches(_PATTERN, unit.source):
+            # Documentation placeholders stay silent so examples do not clutter real secret review.
+            if is_likely_placeholder_secret(api_key_match.raw):
                 continue
-            vendor = _identify_vendor(match.raw)
+            vendor = _identify_vendor(api_key_match.raw)
             findings.append(
                 Finding(
                     rule_id=definition.id,
                     message=f"{_display_vendor(vendor)}-shaped API key literal in source.",
                     file_path=unit.file.display_path,
-                    line=match.line,
+                    line=api_key_match.line,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
-                    remediation=(
-                        "Rotate the key and load credentials from a secret manager "
-                        "or environment variable at runtime."
-                    ),
+                    remediation=("Rotate the key and load credentials from a secret manager or environment variable at runtime."),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": redact_preview(match.raw), "vendor": vendor},
+                    metadata={"preview": category_preview(_MARKER_CATEGORIES.get(vendor)), "vendor": vendor},
                 ),
             )
         return findings
 
 
-def _identify_vendor(token: str) -> str:
-    for name, pattern in _VENDOR_PATTERNS.items():
-        if compile_pattern(f"^{pattern}$").match(token):
-            return "slack" if name == "slack_webhook" else name
+def _identify_vendor(api_key: str) -> str:
+    """Return the provider label users see for a matched API key shape."""
+    # Provider order follows the pattern map so the report label stays deterministic.
+    for vendor_name, vendor_pattern in _VENDOR_PATTERNS.items():
+        # A full-pattern match prevents a key fragment from being assigned to the wrong provider.
+        if compile_pattern(f"^{vendor_pattern}$").match(api_key):
+            return "slack" if vendor_name == "slack_webhook" else vendor_name
     return "unknown"
 
 
@@ -131,6 +142,7 @@ def contains_provider_api_key(text: str) -> bool:
 
 
 def _display_vendor(vendor: str) -> str:
+    """Return the provider spelling used in the finding message shown to users."""
     return {
         "github": "GitHub",
         "gitlab": "GitLab",

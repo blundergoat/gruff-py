@@ -76,8 +76,7 @@ class PytestDeprecationsNotFatalRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 remediation=(
-                    'Add `filterwarnings = ["error::DeprecationWarning"]` to '
-                    "`[tool.pytest.ini_options]` so deprecated APIs fail the suite."
+                    'Add `filterwarnings = ["error::DeprecationWarning"]` to `[tool.pytest.ini_options]` so deprecated APIs fail the suite.'
                 ),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={"projectRoot": context.project_root},

@@ -24,9 +24,7 @@ from gruffpy.rule.security._security_node_helper import (
     module_string_constants,
 )
 
-_VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset(
-    {"importlib.import_module", "__import__", "import_module"}
-)
+_VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset({"importlib.import_module", "__import__", "import_module"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("import_module", "__import__")
 
 
@@ -97,10 +95,7 @@ class VariableImportRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Validate the module name against an explicit allowlist before "
-                        "passing it to ``importlib.import_module``."
-                    ),
+                    remediation=("Validate the module name against an explicit allowlist before passing it to ``importlib.import_module``."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),

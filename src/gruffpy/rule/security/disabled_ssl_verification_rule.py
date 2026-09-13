@@ -26,14 +26,9 @@ from gruffpy.rule.security._security_node_helper import (
     is_false_constant,
 )
 
-_REQUESTS_METHODS: frozenset[str] = frozenset(
-    {"get", "post", "put", "delete", "patch", "head", "options", "request"}
-)
+_REQUESTS_METHODS: frozenset[str] = frozenset({"get", "post", "put", "delete", "patch", "head", "options", "request"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("verify", "_create_unverified_context", "disable_warnings")
-_TLS_REMEDIATION = (
-    "Use a properly verified TLS context. If you need a custom trust "
-    "store, configure CA bundles instead of disabling verification."
-)
+_TLS_REMEDIATION = "Use a properly verified TLS context. If you need a custom trust store, configure CA bundles instead of disabling verification."
 
 
 class DisabledSslVerificationRule(Rule):

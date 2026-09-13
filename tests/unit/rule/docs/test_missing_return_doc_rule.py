@@ -3,14 +3,7 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_documented_returns_emits_nothing():
-    src = (
-        "def f() -> int:\n"
-        '    """Get a thing.\n\n'
-        "    Returns:\n"
-        "        int: the thing.\n"
-        '    """\n'
-        "    return 1\n"
-    )
+    src = 'def f() -> int:\n    """Get a thing.\n\n    Returns:\n        int: the thing.\n    """\n    return 1\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
 
 

@@ -60,14 +60,7 @@ def test_for_inside_if_depth_two():
 
 
 def test_try_except_increments_depth():
-    src = (
-        "def f():\n"
-        "    try:\n"
-        "        if x:\n"
-        "            pass\n"
-        "    except ValueError:\n"
-        "        pass\n"
-    )
+    src = "def f():\n    try:\n        if x:\n            pass\n    except ValueError:\n        pass\n"
     # try at depth 1; if inside try at depth 2
     assert nesting_depth_for(_first_fn(src)) == 2
 
@@ -100,13 +93,7 @@ def test_deeply_nested_emits_error():
 
 
 def test_extremely_nested_emits_error():
-    src = (
-        "def f():\n"
-        + "\n".join("    " * i + f"if x{i}:" for i in range(1, 9))
-        + "\n        "
-        + "    " * 7
-        + "return 1\n"
-    )
+    src = "def f():\n" + "\n".join("    " * i + f"if x{i}:" for i in range(1, 9)) + "\n        " + "    " * 7 + "return 1\n"
     findings = NestingDepthRule().analyse(_make_unit(src), _ctx())
     assert findings[0].severity == Severity.ERROR
 

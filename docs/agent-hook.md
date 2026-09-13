@@ -15,11 +15,25 @@ uv run gruff-py hook src/foo.py \
   --changed-ranges "12-40,88-90"
 ```
 
-`hook` emits `contractVersion: "gruff.hook.v1"` and exits `0` whenever
-analysis ran, even when findings exist. The payload carries `scope` on every
+`hook` emits `contractVersion: "gruff.hook.v2"` and exits `0` whenever analysis
+ran and nothing reached the gate, because the hook's own `--fail-on` defaults to
+`none` and keeps findings advisory. Three explicit consumer requests raise that
+exit to `1`: `--fail-on <severity>` for a finding at or above that severity and
+`--min-confidence`, `--fail-on-new` for a published finding that is new against
+the applied baseline, and `--fail-on-diagnostics` for any diagnostic at all.
+Exit `2` means the analysis could not run. The payload carries `scope` on every
 finding, normalized threshold metadata (`measured`, `threshold`, `unit`,
 `direction`), non-null `remediation`, `suppressed.count`, `ignored.paths`, and
 `config.schemaOk` / `config.error` for config failures.
+
+`suppressions` carries one row per configured `sensitiveExclusions` entry, in
+configuration order: `rule`, a single `path` string, `symbol` (always present,
+`null` when the entry names no symbol), `reason`, and `suppressed`. This is not
+the analysis row shape — `analyse` and `summary` publish `index` and a `paths`
+array, and omit `symbol` entirely when the entry names none — so a consumer
+written against `gruff.analysis.v3` cannot read hook rows unchanged.
+`suppressed` is `0` for an entry that matched nothing, so a row means the
+exclusion is configured, not that it silenced anything.
 
 `--changed-ranges` scopes `hook` at the finding's own reported span: a finding is
 returned when its `line..endLine` intersects a changed range, and whole-file or
@@ -82,8 +96,9 @@ lines. Under `symbol`, whole-file and class-level aggregate findings are
 attributed to their anchor line or header (for example file line 1 or the class
 declaration), so an edit elsewhere in the file or class suppresses inherited
 aggregate debt. JSON
-changed-region runs include `suppressedCount` and a `diff` payload so hooks can
-show how much same-file debt was left visible but non-blocking.
+changed-region runs publish the excluded count at `summary.suppressedFindings` and
+`diff.filteredFindings` so hooks can show how much same-file debt was left visible
+but non-blocking.
 
 For CI workflows that must preserve whole-file aggregate signal on pull-request
 diffs, run a full scan or a companion `--changed-scope hunk` scan. Full scans
@@ -110,7 +125,7 @@ as the default local hook policy.
 
 `paths.ignore` is authoritative for directory scans, explicit file operands, and
 diff/changed-region scans. A matching path emits no findings and appears in JSON
-`ignoredPathDetails` with the source and matched pattern.
+`paths.details` with the source and matched pattern.
 
 Hooks can check scope without running analysis:
 

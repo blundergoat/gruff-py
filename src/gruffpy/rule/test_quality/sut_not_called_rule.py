@@ -61,15 +61,11 @@ _MOCK_LEAVES: frozenset[str] = frozenset(
         "reset_mock",
     }
 )
-_BUILTIN_LEAVES: frozenset[str] = frozenset(
-    {"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"}
-)
+_BUILTIN_LEAVES: frozenset[str] = frozenset({"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"})
 # Schema-inspection accessors: a test that reads any of these IS exercising
 # the schema declaration, even when there's no callable SUT (e.g. a contract
 # test asserting on ``MyModel.model_fields``).
-_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset(
-    {"model_fields", "__annotations__", "__fields__", "model_config"}
-)
+_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset({"model_fields", "__annotations__", "__fields__", "model_config"})
 
 
 class SutNotCalledRule(Rule):
@@ -127,10 +123,7 @@ class SutNotCalledRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} never calls a non-framework, non-mock function "
-                        f"- is the SUT exercised?"
-                    ),
+                    message=(f"Test {symbol!r} never calls a non-framework, non-mock function - is the SUT exercised?"),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -139,10 +132,7 @@ class SutNotCalledRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Make sure the test actually calls into the function or class "
-                        "it claims to verify."
-                    ),
+                    remediation=("Make sure the test actually calls into the function or class it claims to verify."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),
@@ -203,9 +193,7 @@ def _is_schema_inspection_access(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr in _SCHEMA_INSPECTION_ATTRS
 
 
-_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset(
-    {"pytest", "unittest", "mock", "unittest.mock"}
-)
+_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset({"pytest", "unittest", "mock", "unittest.mock"})
 
 
 def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:

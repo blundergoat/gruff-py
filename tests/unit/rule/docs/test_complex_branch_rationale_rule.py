@@ -7,9 +7,7 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 def _complex_function(name: str = "route_payload", comment: str = "") -> str:
     comment_line = f"    {comment}\n" if comment else ""
-    branches = "".join(
-        f"    if value == {index}:\n        total += {index}\n" for index in range(11)
-    )
+    branches = "".join(f"    if value == {index}:\n        total += {index}\n" for index in range(11))
     return f"def {name}(value):\n    total = 0\n{comment_line}{branches}    return total\n"
 
 
@@ -29,9 +27,7 @@ def test_substantive_docstring_skips_complex_function():
         "    The branch table mirrors the published wire contract while the "
         "downstream parser migrates.\n"
         '    """\n'
-        "    total = 0\n"
-        + "".join(f"    if value == {index}:\n        total += {index}\n" for index in range(11))
-        + "    return total\n"
+        "    total = 0\n" + "".join(f"    if value == {index}:\n        total += {index}\n" for index in range(11)) + "    return total\n"
     )
 
     assert ComplexBranchRationaleRule().analyse(make_unit(src), default_ctx()) == []

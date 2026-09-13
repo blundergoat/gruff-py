@@ -21,6 +21,7 @@ from gruffpy.command.init_config import (
 from gruffpy.config.analysis_config import (
     MINIMUM_SEVERITY_BINARY_DEFAULTS,
     AnalysisConfig,
+    DeepScanBudget,
 )
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
@@ -53,12 +54,11 @@ _USER_CHOSEN_TARGET_MODE = 0o640
 _FULLY_CUSTOMISED_YAML = (
     "schemaVersion: gruff-py.config.v0.1\n"
     "minimumPythonVersion: '3.12'\n"
-    "minimumSeverity:\n  analyse: error\n  report: warning\n  dashboard: advisory\n"
+    "failOn:\n  analyse: error\n  report: warning\n  dashboard: advisory\n"
     "outputVolumeHintThreshold: 7\n"
     "paths:\n  ignore:\n    - custom/**\n"
     "allowlists:\n"
     "  acceptedAbbreviations:\n    - biz\n"
-    "  secretPreviews:\n    - safe-preview\n"
     "  deadCode:\n"
     "    symbols:\n    - retained_symbol\n"
     "    decorators:\n    - retained_decorator\n"
@@ -131,6 +131,7 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
         AnalysisConfig.from_registry(RuleRegistry.defaults())
         .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
         .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
+        .with_deep_scan_budget(DeepScanBudget(override="config"))
     )
     loader = ConfigLoader(tmp_path, defaults)
     loaded, source = loader.load()
@@ -148,6 +149,13 @@ def test_render_default_config_yaml_lists_every_registered_rule() -> None:
 def test_render_default_config_yaml_prefills_starter_ignore_patterns() -> None:
     document = yaml.safe_load(render_default_config_yaml())
     assert document["paths"]["ignore"] == list(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
+
+
+def test_render_default_config_yaml_omits_the_removed_secret_previews_key() -> None:
+    """Section 5 removed the key, so a generated file offering it would fail to load on the port that wrote it."""
+    document = yaml.safe_load(render_default_config_yaml())
+
+    assert "secretPreviews" not in document["allowlists"]
 
 
 def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> None:
@@ -231,7 +239,7 @@ def test_existing_config_source_reports_unreadable_pyproject(tmp_path: Path) -> 
 def test_init_default_render_emits_canonical_three_key_block_when_no_user_input() -> None:
     """Without a prior config, the renderer writes all three binary defaults."""
     document = yaml.safe_load(render_default_config_yaml())
-    assert document["minimumSeverity"] == {
+    assert document["failOn"] == {
         "analyse": "advisory",
         "report": "none",
         "dashboard": "none",
@@ -247,12 +255,8 @@ def test_rendered_accepted_abbreviation_seed_matches_family_contract() -> None:
     lines = rendered.splitlines()
 
     assert document["allowlists"]["acceptedAbbreviations"] == list(_FAMILY_ACCEPTED_ABBREVIATIONS)
-    assert lines[accepted_key_index - 2] == (
-        "  # acceptedAbbreviations lets naming rules accept project vocabulary."
-    )
-    assert lines[accepted_key_index - 1] == (
-        "  # Configured values replace this seed; they do not merge with it."
-    )
+    assert lines[accepted_key_index - 2] == ("  # acceptedAbbreviations lets naming rules accept project vocabulary.")
+    assert lines[accepted_key_index - 1] == ("  # Configured values replace this seed; they do not merge with it.")
 
 
 def test_init_force_preserves_all_supported_semantics(tmp_path: Path) -> None:

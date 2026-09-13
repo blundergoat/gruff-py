@@ -1,4 +1,5 @@
 import ast
+from dataclasses import replace
 
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
@@ -16,12 +17,7 @@ _DEAD_FUNCTION_MODULE = (
     "    return payload\n"
 )
 _REEXPORT_INIT = "from pkg.render import render_current, render_legacy\n"
-_CALLER_MODULE = (
-    "from pkg.render import render_current\n\n"
-    "def run(payload):\n"
-    "    return render_current(payload)\n\n"
-    "result = run({})\n"
-)
+_CALLER_MODULE = "from pkg.render import render_current\n\ndef run(payload):\n    return render_current(payload)\n\nresult = run({})\n"
 
 
 def _unit(source: str, display_path: str) -> AnalysisUnit:
@@ -66,13 +62,25 @@ def test_called_symbol_is_clean():
         _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
         _unit(_REEXPORT_INIT, "pkg/__init__.py"),
         _unit(
-            "from pkg.render import render_current, render_legacy\n\n"
-            "result = render_legacy(render_current({}))\n",
+            "from pkg.render import render_current, render_legacy\n\nresult = render_legacy(render_current({}))\n",
             "pkg/app.py",
         ),
     ]
     findings = _analyse(units)
     assert [finding.symbol for finding in findings] == []
+
+
+def test_reference_from_an_ignored_file_counts_but_the_file_never_reports():
+    """Count a call in a reference-only tree while reporting only symbols still unreferenced everywhere."""
+    units = [
+        _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
+        _unit(_REEXPORT_INIT, "pkg/__init__.py"),
+        _unit(_CALLER_MODULE, "pkg/app.py"),
+    ]
+    ignored_test = ast.parse("from pkg.render import render_legacy\n\ndef test_legacy():\n    assert render_legacy({}) == {}\n")
+    ignored_dead_helper = ast.parse("def unused_fixture_builder():\n    return {}\n")
+    context = replace(_ctx(), reference_trees=(ignored_test, ignored_dead_helper))
+    assert _analyse(units, context) == []
 
 
 def test_partial_scope_suppresses_entirely():
@@ -116,8 +124,7 @@ def test_class_used_only_as_base_is_clean():
     units = [
         _unit("class BasePort:\n    pass\n", "pkg/ports.py"),
         _unit(
-            "from pkg.ports import BasePort\n\nclass FilePort(BasePort):\n    pass\n\n"
-            "port = FilePort()\n",
+            "from pkg.ports import BasePort\n\nclass FilePort(BasePort):\n    pass\n\nport = FilePort()\n",
             "pkg/app.py",
         ),
     ]
@@ -179,8 +186,7 @@ def test_test_files_produce_no_candidates_but_count_as_users():
     units = [
         _unit("def fixture_target():\n    return 1\n", "pkg/util.py"),
         _unit(
-            "from pkg.util import fixture_target\n\n"
-            "def test_it():\n    assert fixture_target() == 1\n",
+            "from pkg.util import fixture_target\n\ndef test_it():\n    assert fixture_target() == 1\n",
             "tests/test_util.py",
         ),
         _unit("def helper_only_in_tests():\n    return 2\n", "tests/support.py"),

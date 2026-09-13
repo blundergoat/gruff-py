@@ -1,9 +1,13 @@
 """``sensitive-data.high-entropy-string`` - generic Shannon-entropy detector.
 
-Walks the file looking for substrings of at least 20 base64-alphabet characters
-whose Shannon entropy exceeds 4.5 bits/char. Suppresses common false-positive
-shapes: paths, PascalCase identifiers, and hex content shorter than 40 chars
-(those are usually checksums or short hashes, not secrets).
+Walks the file looking for substrings of at least ``minLength`` base64-alphabet
+characters whose Shannon entropy reaches ``entropy`` bits/char. Both are rule
+thresholds with the ratified family defaults of 32 characters and 4.2 bits
+(FAMILY-CONTRACT, search: ``sensitive-data.high-entropy-string`` — RATIFIED).
+Suppresses common false-positive shapes: paths, PascalCase identifiers, and hex
+content shorter than 40 chars (those are usually checksums or short hashes, not
+secrets). A candidate never spans ``=``, so a ``KEY=value`` assignment is judged
+as its key and its value rather than as one string.
 """
 
 import re
@@ -18,29 +22,33 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
-    redact_preview,
+    fixed_preview,
     shannon_entropy,
 )
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_api_key
 
-_CANDIDATE_RE = re.compile(r"[A-Za-z0-9+/=_-]{20,}")
-_ENTROPY_THRESHOLD = 4.5
+# ``=`` is outside the class: joined, ``AWS_DEFAULT_REGION=ap-southeast-2`` measured 33 characters at 4.62 bits,
+# while neither half is a candidate. Base64 padding only trims the candidate, and a padded 46-character secret
+# still reports.
+_CANDIDATE_CHARACTERS = "[A-Za-z0-9+/_-]"
 _PASCAL_CASE_RE = re.compile(r"^(?:[A-Z][a-z]+){2,}$")
 _HEX_RE = re.compile(r"^[A-Fa-f0-9]+$")
-_MIN_LENGTH = 20
 
 
 class HighEntropyStringRule(SourceTextRule):
-    """Detect long base64-alphabet substrings whose Shannon entropy exceeds the secret threshold."""
+    """Detect long base64-alphabet strings above the secret entropy threshold.
+
+    Users see a review finding for unknown random-looking literals after common benign shapes and
+    provider keys are removed, with no candidate-derived text included in the preview.
+    """
 
     ID = "sensitive-data.high-entropy-string"
 
     def definition(self) -> RuleDefinition:
-        """Describe the high-entropy-string rule as a low-confidence warning.
+        """Describe the high-entropy-string rule under the ratified family contract.
 
-        Low confidence because base64-like strings have many legitimate uses
-        (hashes, IDs, encoded payloads); reviewers should expect to triage
-        these and add benign previews to ``allowlists.secretPreviews``.
+        Warning severity, medium confidence and enabled by default, with ``minLength`` 32 and
+        ``entropy`` 4.2 as configurable thresholds, the values all five ports publish for this id.
 
         Returns:
             Definition for the high-entropy-string rule under the
@@ -52,33 +60,40 @@ class HighEntropyStringRule(SourceTextRule):
             pillar=Pillar.SENSITIVE_DATA,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
-            confidence=Confidence.LOW,
+            confidence=Confidence.MEDIUM,
+            default_thresholds={"minLength": 32, "entropy": 4.2},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag 20+ char base64-alphabet runs whose Shannon entropy exceeds 4.5 bits/char.
+        """Flag base64-alphabet runs at least ``minLength`` long whose entropy reaches ``entropy`` bits/char.
 
-        Benign-shape suppressions filter out filesystem paths (multiple
-        ``/``), PascalCase identifiers, short hex (< 40 chars - probably
-        a checksum), and snake_case names without digits.
+        Users see random-looking literals after paths, identifiers, and short checksums are
+        removed as common benign shapes.
 
         Args:
             unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused - no thresholds).
+            context: Rule execution context supplying the ``minLength`` and ``entropy`` thresholds.
 
         Returns:
             One finding per high-entropy substring that passes the
             benign-shape filter.
         """
         definition = self.definition()
+        settings = context.settings_for(definition)
+        # A zero-length candidate is no string at all, so a configured minLength below 1 still needs one character.
+        min_length = max(1, int(settings.numeric_threshold("minLength")))
+        entropy_threshold = settings.numeric_threshold("entropy")
         findings: list[Finding] = []
-        for match in _CANDIDATE_RE.finditer(unit.source):
-            candidate = match.group(0)
-            if _is_benign_literal(candidate):
+        # Each random-looking literal is assessed independently so users can triage its source line.
+        for candidate_match in re.finditer(f"{_CANDIDATE_CHARACTERS}{{{min_length},}}", unit.source):
+            secret_candidate = candidate_match.group(0)
+            # Known benign shapes stay out of the report before the entropy threshold is applied.
+            if _is_benign_literal(secret_candidate):
                 continue
-            if shannon_entropy(candidate) < _ENTROPY_THRESHOLD:
+            # Lower-entropy text lacks enough secret signal to justify a user-facing warning.
+            if shannon_entropy(secret_candidate) < entropy_threshold:
                 continue
-            line = unit.source.count("\n", 0, match.start()) + 1
+            line = unit.source.count("\n", 0, candidate_match.start()) + 1
             findings.append(
                 Finding(
                     rule_id=definition.id,
@@ -91,24 +106,21 @@ class HighEntropyStringRule(SourceTextRule):
                     confidence=definition.confidence,
                     remediation=(
                         "If this is genuinely a secret, rotate it and move it out of "
-                        "the repository. If it's a benign identifier, add the preview to "
-                        "`allowlists.secretPreviews` to suppress future findings."
+                        "the repository. If it is benign, confirm that judgment during review; "
+                        "secret-derived preview allowlisting is not supported."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={
-                        "preview": redact_preview(candidate),
-                        "entropy": round(shannon_entropy(candidate), 2),
-                        "length": len(candidate),
-                    },
+                    # The rule's own thresholds already explain why this fired. The candidate's
+                    # entropy and character count are statistics computed from the matched value
+                    # and are forbidden in serialized output by FAMILY-CONTRACT section 5.
+                    metadata={"preview": fixed_preview()},
                 ),
             )
         return findings
 
 
 def _is_benign_literal(candidate: str) -> bool:
-    """Best-effort screen against common false-positive shapes."""
-    if len(candidate) < _MIN_LENGTH:
-        return True
+    """Best-effort screen against common false-positive shapes; the candidate already meets ``minLength``."""
     if "\\" in candidate or candidate.count("/") >= 2:
         # Filesystem paths have multiple separators; one `/` is fine
         # (base64 alphabet includes `/`).

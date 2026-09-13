@@ -6,15 +6,7 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_documented_raises_emits_nothing():
-    src = (
-        "def f(x):\n"
-        '    """Do.\n\n'
-        "    Raises:\n"
-        "        ValueError: when x is negative.\n"
-        '    """\n'
-        "    if x < 0:\n"
-        "        raise ValueError\n"
-    )
+    src = 'def f(x):\n    """Do.\n\n    Raises:\n        ValueError: when x is negative.\n    """\n    if x < 0:\n        raise ValueError\n'
     assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
 
 

@@ -93,10 +93,7 @@ class InsecureRandomRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"`{target}` used for a security-smelling value - "
-                        f"`random` is not cryptographically secure."
-                    ),
+                    message=(f"`{target}` used for a security-smelling value - `random` is not cryptographically secure."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,
@@ -104,10 +101,7 @@ class InsecureRandomRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Use the ``secrets`` module: ``secrets.token_hex(32)``, "
-                        "``secrets.choice(...)``, ``secrets.randbelow(...)``."
-                    ),
+                    remediation=("Use the ``secrets`` module: ``secrets.token_hex(32)``, ``secrets.choice(...)``, ``secrets.randbelow(...)``."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),

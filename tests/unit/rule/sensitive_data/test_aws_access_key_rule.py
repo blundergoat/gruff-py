@@ -1,3 +1,9 @@
+"""Exercise AWS access-key findings across Python and plain-text sources.
+
+The suite protects ``AKIA`` and ``ASIA`` detection, documentation placeholders, source locations,
+and the fixed preview users see instead of credential-derived text.
+"""
+
 from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
@@ -9,7 +15,7 @@ def test_akia_emits():
     src = f"AWS_KEY = '{_AKIA_KEY}'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
-    assert "AKIA...CDEF" in findings[0].metadata["preview"]
+    assert findings[0].metadata["preview"] == "[redacted:aws-access-key]"
 
 
 def test_asia_session_token_emits():
@@ -37,9 +43,7 @@ def test_too_short_skipped():
 
 def test_finding_in_json_text_file():
     src = f'{{"awsKey": "{_AKIA_KEY}"}}\n'
-    findings = AwsAccessKeyRule().analyse(
-        make_unit(src, "config.json", source_type="text"), default_ctx()
-    )
+    findings = AwsAccessKeyRule().analyse(make_unit(src, "config.json", source_type="text"), default_ctx())
     assert len(findings) == 1
 
 

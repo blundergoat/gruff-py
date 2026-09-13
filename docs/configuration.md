@@ -41,12 +41,17 @@ Use `--no-config` to skip all config files.
 ```yaml
 schemaVersion: gruff-py.config.v0.1
 
-minimumSeverity:
+failOn:
   analyse: advisory
   report: none
   dashboard: none
 
 minimumPythonVersion: "3.11"
+
+deepScanBudget:
+  enabled: true
+  maxLines: 20000
+  maxBytes: 2000000
 
 paths:
   ignore:
@@ -62,12 +67,15 @@ allowlists:
   acceptedAbbreviations:
     - API
     - URL
-  secretPreviews:
-    - "example-token-prefix"
 
 selection:
   excludeRules:
     - docs.missing-module-docstring
+
+sensitiveExclusions:
+  - rule: sensitive-data.aws-access-key
+    path: tests/fixtures/aws-sample.env
+    reason: Synthetic key used by the loader fixture; not a live credential.
 
 rules:
   size.file-length:
@@ -93,7 +101,12 @@ rules:
 schemaVersion = "gruff-py.config.v0.1"
 minimumPythonVersion = "3.11"
 
-[tool.gruff-py.minimumSeverity]
+[tool.gruff-py.deepScanBudget]
+enabled = true
+maxLines = 20000
+maxBytes = 2000000
+
+[tool.gruff-py.failOn]
 analyse = "advisory"
 report = "none"
 dashboard = "none"
@@ -111,10 +124,14 @@ ignore = [
 
 [tool.gruff-py.allowlists]
 acceptedAbbreviations = ["API", "URL"]
-secretPreviews = ["example-token-prefix"]
 
 [tool.gruff-py.selection]
 excludeRules = ["docs.missing-module-docstring"]
+
+[[tool.gruff-py.sensitiveExclusions]]
+rule = "sensitive-data.aws-access-key"
+path = "tests/fixtures/aws-sample.env"
+reason = "Synthetic key used by the loader fixture; not a live credential."
 
 [tool.gruff-py.rules."size.file-length"]
 threshold = 900
@@ -134,15 +151,18 @@ Top-level keys:
 | Key | Type | Meaning |
 |---|---|---|
 | `schemaVersion` | string | Config schema literal; must equal `gruff-py.config.v0.1` |
-| `minimumSeverity` | table | Per-command `--fail-on` defaults (see [Severity Gate](#severity-gate)) |
+| `failOn` | table | Per-command `--fail-on` defaults (see [Severity Gate](#severity-gate)) |
+| `minimumSeverity` | string | Display floor: lowest severity the report shows, and the project default for `--min-severity` (see [Severity Gate](#severity-gate)) |
 | `minimumPythonVersion` | string | Minimum Python version, currently at least `3.11` |
+| `deepScanBudget` | table | Paired line/byte limits for deep Python analysis; either exceeded bound degrades the file |
 | `paths` | table | Path ignore configuration |
 | `allowlists` | table | Naming and secret-preview allowlists |
 | `selection` | table | Rule and pillar selection |
+| `sensitiveExclusions` | list of tables | Reviewed scopes where one sensitive-data rule stays quiet (see [Sensitive Data Exclusions](#sensitive-data-exclusions)) |
 | `rules` | table | Per-rule settings |
 | `outputVolumeHintThreshold` | integer | Finding count at which `analyse --format text` appends a pointer to `summary --group-by=rule` (default `50`; `0` disables) |
 
-`minimumSeverity`:
+`failOn`:
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -151,6 +171,24 @@ Top-level keys:
 | `dashboard` | string | Default `--fail-on` seeded into the dashboard form |
 
 Keys for non-gating subcommands (`summary`, `list-rules`, `metric-calibration`, `init`, `list`, `help`, `completion`) are rejected by the loader.
+
+`deepScanBudget`:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `enabled` | boolean | Enables the budget (default `true`); set false to disable it |
+| `maxLines` | positive integer | Maximum physical source lines before degradation (default `20000`) |
+| `maxBytes` | positive integer | Maximum source bytes before degradation (default `2000000`) |
+
+The budget applies only after `.py` source classification. Exceeding either
+bound keeps the file analysed and continues raw-text size, sensitive-data, and
+configuration checks, but omits masking, suppression-directive parsing, AST
+walking, and other deep Python analysis. A non-fatal `bounded-deep-scan`
+diagnostic names the path, both measured counts, both effective limits, and
+whether they came from `default`, `config`, or `cli`. Use
+`--deep-scan-budget LINES:BYTES` on `analyse`, `report`, `summary`, `dashboard`,
+or `hook` to atomically override both limits; `--deep-scan-budget off` disables
+the guard. The CLI value wins over config.
 
 `paths`:
 
@@ -163,8 +201,9 @@ Keys for non-gating subcommands (`summary`, `list-rules`, `metric-calibration`, 
 | Key | Type | Meaning |
 |---|---|---|
 | `acceptedAbbreviations` | list of strings | Complete abbreviation list accepted by naming rules; a configured list replaces, rather than extends, the family seed |
-| `secretPreviews` | list of strings | Known safe secret previews |
 | `deadCode` | table | Dead-code allowlist with `symbols`, `decorators`, and `paths` keys (each a list of strings) that suppress dead-code findings |
+
+The 0.5 key `allowlists.secretPreviews` is removed: FAMILY-CONTRACT.md section 5 makes every sensitive-data marker unconditional and zero-payload, so the key authorised nothing. A configuration carrying it, even as an empty list, is refused with that explanation; `gruff-py migrate-config` deletes it.
 
 `selection`:
 
@@ -190,11 +229,83 @@ Use `threshold` plus `severity` for metric rules that have warning/error
 defaults. Keep `thresholds` for named tuning values. Do not combine
 `threshold` and `thresholds` in the same rule entry.
 
-Unknown top-level keys and structural configuration errors are rejected: the
-default text output prints an error to stderr and exits `1`, while
-`--format json` emits a `config-error` diagnostic object and exits `2`.
+Unknown top-level keys and structural configuration errors are rejected and
+exit `2`: the default text output prints an error to stderr, while
+`--format json` emits a `config-error` diagnostic object.
 Unknown rule IDs and per-rule keys follow the warning policy in
 [Unknown Rule And Option Keys](#unknown-rule-and-option-keys-warn-by-default---strict-config-to-fail).
+
+## Sensitive Data Exclusions
+
+`sensitiveExclusions` is the only configuration that silences a `sensitive-data.*` finding. It is
+deliberately separate from `selection`, so no message- or value-matching key can ever apply to the
+sensitive-data pillar.
+
+```yaml
+sensitiveExclusions:
+  - rule: sensitive-data.aws-access-key
+    path: tests/fixtures/aws-sample.env
+    symbol: Fixtures.aws_sample          # optional
+    reason: Synthetic key used by the loader fixture; not a live credential.
+```
+
+```toml
+[[tool.gruff-py.sensitiveExclusions]]
+rule = "sensitive-data.aws-access-key"
+path = "tests/fixtures/aws-sample.env"
+reason = "Synthetic key used by the loader fixture; not a live credential."
+```
+
+You write every entry by hand. No preview, message excerpt, or matched value is ever turned into
+an entry automatically, and no `analyse` flag generates this section.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `rule` | string | Exactly one rule id, inside the sensitive-data pillar |
+| `path` | string | Exactly one project-relative path, as findings report it |
+| `symbol` | string | Optional qualified symbol that narrows the scope further |
+| `reason` | string | Non-empty rationale a reviewer can judge |
+
+A finding is suppressed only when its rule id, its project-relative path, and - when the entry
+names one - its symbol all match exactly. The same rule in another file and another rule in the
+same file both keep reporting. No sensitive-data rule stamps a symbol today, so an entry carrying
+`symbol` correctly matches nothing.
+
+An entry that matches nothing is not an error. It reports `suppressed: 0`, so removing the
+underlying secret never breaks a build.
+
+Every one of these is a fatal configuration error naming the entry index and the key to fix:
+
+- `rule` missing, empty, or carrying a wildcard, glob, or regular-expression metacharacter;
+- `rule` naming a pillar or tier selector rather than one exact rule id;
+- `rule` naming an unknown rule id, or a known rule id outside the sensitive-data pillar;
+- `path` missing, empty, absolute, containing `..`, or carrying a glob metacharacter;
+- any key outside `rule`, `path`, `symbol`, and `reason` - `message_contains`, `value`, and
+  `preview` included;
+- `reason` missing, empty, or whitespace-only;
+- a second entry with the same `rule`, `path`, and `symbol`, because two entries claiming one
+  scope would split the audit count.
+
+A suppressed finding leaves the score and the exit code exactly as an inline `# gruff: disable=`
+directive does, and it is never invisible. Every entry publishes one row in the report's
+`suppressions` array:
+
+```json
+{"index": 0, "rule": "sensitive-data.aws-access-key", "paths": ["tests/fixtures/aws-sample.env"],
+ "reason": "Synthetic key used by the loader fixture; not a live credential.", "suppressed": 2}
+```
+
+`symbol` appears only on an entry that scopes itself to one, so a row without it omits the key
+rather than publishing `null`. That is the `gruff.analysis.v3` and `gruff.summary.v3` row; the hook
+payload publishes a different shape, described in
+[Output Formats → Hook JSON](output-formats.md#hook-json).
+
+`analyse --format text` and `summary` print the same total under a `Sensitive exclusions` heading;
+`summary --format json` carries the same `suppressions` array with the same per-entry
+`suppressed` count, because it is the analysis document with only the top-level `findings` array
+removed. No reported
+field carries matched value material: `reason` and `path` come from your configuration, and nothing
+in the audit row is derived from the value a rule matched.
 
 ## Accepted Abbreviation Vocabulary
 
@@ -208,6 +319,15 @@ from the visible list produced by `gruff-py init`, retain the seed entries the
 project uses, and append reviewed project vocabulary. Configuring only `ctx`
 would also remove seed entries such as `id`, `url`, and `db` from the resolved
 allowlist.
+
+In gruff-py the list is subtracted from `naming.abbreviation`'s curated
+blocklist (`attr`, `cfg`, `ctx`, `defn`, `func`, `idx`, `lst`, `mgr`, `msg`,
+`params`, `pkg`, `pwd`, `req`, `res`, `tmp`, `tok`, `usr`, `var`), and no other
+rule reads it. None of the sixteen seeded words is on that blocklist, so the
+seed changes no gruff-py finding today. It is there so one configuration file
+carries the same vocabulary to every Gruff port; the other four apply it
+through their own naming rules. An entry changes gruff-py's results only when
+it names a blocklisted token.
 
 Prefer a rename when the short token is temporary, ambiguous, or means
 different things in different modules. The allowlist is a project vocabulary
@@ -364,11 +484,11 @@ accepted within the same function.
 
 ## Severity Gate
 
-`minimumSeverity` sets per-command defaults for the `--fail-on` flag. The
-resolved threshold is the first match of:
+`failOn` sets per-command defaults for the `--fail-on` flag. The resolved
+threshold is the first match of:
 
 1. `--fail-on <value>` passed on the command line.
-2. `minimumSeverity.<command>` from the loaded config.
+2. `failOn.<command>` from the loaded config.
 3. The built-in default for that subcommand (`analyse: advisory`; `report` and
    `dashboard`: `none`).
 
@@ -379,6 +499,20 @@ without failing the run.
 Keys must be the gateable subcommand names (`analyse`, `report`, `dashboard`).
 Adding `summary: advisory` or any other key is a hard error; silent acceptance
 would be a CI footgun.
+
+Across the Gruff family only `analyse` and `report` are accepted by every port, so a
+polyglot repository that shares one `failOn` block should write only those two keys.
+`dashboard` is accepted by gruff-go, gruff-php and gruff-py, and `summary` by gruff-go
+and gruff-ts; each other port refuses the key with exit 2 rather than ignoring it,
+because it ships no gate for that command.
+
+`minimumSeverity` is a different key: one severity (`advisory`, `warning`, or
+`error` - not `none`) that sets the project default for the `--min-severity`
+display filter, so it changes which findings are printed and never the exit
+code. Like the flag, the configured floor is recorded in JSON output: the
+`displayFilter` block reports how many findings it hid, and `summary.findings`
+keeps the full-run counts. A per-command map under `minimumSeverity` is
+refused, and the error names `failOn`.
 
 See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
 for the rationale, the rejected alternatives, and the cross-port invariant.
@@ -451,8 +585,11 @@ explicit file):
   tier is dropped, honouring the single-threshold contract); a warning-only
   tier maps to `severity: warning`.
 - A missing or stale `schemaVersion` is pinned to the current value.
-- `paths.ignore`, `allowlists`, `selection`, `minimumSeverity`, per-rule
-  `enabled` and `options` (including `conventionalModuleNames`), and valid
+- A per-command `minimumSeverity` map is renamed to `failOn`, the key
+  that gates the exit code; a bare `minimumSeverity` severity is the display
+  floor and keeps its name.
+- `paths.ignore`, `allowlists`, `selection`, per-rule `enabled` and
+  `options` (including `conventionalModuleNames`), and valid
   `thresholds` knobs pass through unchanged.
 
 The command prints one line per change plus a unified diff; `--dry-run`
@@ -463,26 +600,27 @@ hand-edit instructions instead.
 
 ## Ignored Paths
 
-Source discovery applies three layers of exclusions, in order:
+Source discovery applies four layers of exclusions, in order:
 
-1. **Default-ignored directories.** gruff-py skips dependency, build, cache,
-   generated, and VCS directories: `.git`, `.venv`, `node_modules`, `vendor`,
-   `dist`, `build`, `htmlcov`, `__pycache__`, and common tool caches. It also
-   skips lockfiles that commonly contain high-entropy hashes, such as
-   `uv.lock`, `poetry.lock`, `package-lock.json`, `composer.lock`,
-   `Cargo.lock`, and `go.sum`.
-2. **`.gitignore` exclusions.** Any path the project's `.gitignore` files
+1. **Configured `paths.ignore` patterns.** Project-relative globs are
+   authoritative for directory walks, explicit file operands, and changed-region
+   scans.
+2. **VCS internals.** `.git`, `.hg`, and `.svn` are always blocked, including
+   with `--include-ignored` or an explicit file operand.
+3. **`.gitignore` exclusions.** Any path the project's `.gitignore` files
    (root plus nested) exclude is skipped by default. Nested `.gitignore`
    files override their parents; negation patterns (`!keep.py`) are honored.
    `.git/info/exclude` and the user's global gitignore are not consulted.
-3. **Configured `paths.ignore` patterns.** Project-relative globs declared
-   in your config layer on top of the previous two.
+4. **No-gitignore fallback.** When no `.gitignore` exists from the project root
+   through a candidate's parent, gruff-py skips `.fleet`, `.idea`, `.vscode`,
+   `build`, `coverage`, `dist`, `node_modules`, and `vendor`, plus Python's
+   `.mypy_cache`, `.pyre`, `.pytest_cache`, `.pytype`, `.ruff_cache`, `.tox`,
+   `.venv`, `__pycache__`, `htmlcov`, and `venv` exceptions, at any depth.
 
-`--include-ignored` bypasses layers 1 and 2 (default-ignored directories
-**and** `.gitignore`). It does not bypass layer 3 - `paths.ignore` is your
-explicit, intentional exclusion list and remains active.
-
-Projects without a `.gitignore` are scanned as before.
+`--include-ignored` bypasses layers 3 and 4 only. An explicit supported file
+also bypasses those two layers. Lockfile names do not exclude a file: eligible
+forms such as `package-lock.json` are scanned, while `.lock` files remain outside
+the existing extension set.
 
 ## Baselines
 
@@ -493,11 +631,16 @@ the current findings, generate a baseline:
 gruff-py analyse . --generate-baseline --fail-on none
 ```
 
-This writes `gruff-baseline.json` using `gruff-py.baseline.v1` and leaves the
+This writes `gruff-baseline.json` using `gruff.baseline.v3` and leaves the
 current run's findings visible. Future `analyse` and `report` runs apply that
-default baseline automatically, suppressing findings whose fingerprint, rule
-id, and file still match. Use `--baseline-path <path>` for an explicit baseline,
-or `--no-baseline` to audit without any baseline.
+default baseline automatically, suppressing findings whose line-free identity
+still matches within the count the row accepts. Use `--baseline <path>` on
+`analyse` for an explicit baseline — `report` accepts only the
+`--baseline-path <path>` spelling — or `--no-baseline` to audit without any
+baseline. A `gruff-py.baseline.v1` or `gruff.baseline.v1` file fails closed with
+exit `2` and names
+`gruff-py analyse --migrate-baseline <old> --generate-baseline-path <new path>`,
+which carries the reviews forward and preserves the original.
 
 Generate and apply baselines with the same paths, config, and ignore flags you
 plan to use in CI; the baseline only records findings from the files scanned in
@@ -505,8 +648,15 @@ that run.
 
 ## Display Filters Are Not Config Selection
 
-CLI options such as `--min-severity`, `--include-pillar`, and `--exclude-rule`
-filter what gets rendered. They do not change scoring or the `--fail-on` exit
-calculation.
+Two groups of CLI options look alike and are not. `--exclude-rule`,
+`--include-rule`, `--exclude-pillar`, and `--include-pillar` are
+execution-level: the excluded rules do not run, so the score and the exit code
+move with them. They are the one-run form of config `selection`, and a baseline
+generated under them records only the rules that ran.
 
-Use config `selection` when you want to change which rules run.
+Display filters — `--min-severity`, `--hide-rule`, `--show-rule`,
+`--hide-pillar`, and `--show-pillar` — filter what gets rendered. They do not
+change scoring or the `--fail-on` exit calculation.
+
+Use config `selection` when you want to change which rules run for every run
+rather than one.

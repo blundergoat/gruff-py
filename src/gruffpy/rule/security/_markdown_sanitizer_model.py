@@ -274,11 +274,7 @@ def is_quote_call_delimiter_safe(call: ast.Call) -> bool:
     if any(keyword_argument.arg is None for keyword_argument in call.keywords):
         return False
     positional_safe = call.args[1] if len(call.args) > 1 else None
-    keyword_safe_values = [
-        keyword_argument.value
-        for keyword_argument in call.keywords
-        if keyword_argument.arg == "safe"
-    ]
+    keyword_safe_values = [keyword_argument.value for keyword_argument in call.keywords if keyword_argument.arg == "safe"]
     # Duplicate or positional-plus-keyword safe values are invalid and cannot prove safety.
     if len(keyword_safe_values) > 1 or (positional_safe is not None and keyword_safe_values):
         return False
@@ -418,9 +414,7 @@ def _merge_value_maps(value_maps: list[dict[str, _TrackedValue]]) -> dict[str, _
             continue
         # Every path must carry a safe proof before the merged display is trusted.
         if all(branch_value is not None and branch_value.is_safe for branch_value in branch_values):
-            safe_values = [
-                branch_value for branch_value in branch_values if branch_value is not None
-            ]
+            safe_values = [branch_value for branch_value in branch_values if branch_value is not None]
             merged_values[value_name] = _TrackedValue(
                 is_safe=True,
                 alias_hops=max(value.alias_hops for value in safe_values),

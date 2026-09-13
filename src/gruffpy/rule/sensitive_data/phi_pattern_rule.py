@@ -17,7 +17,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
-from gruffpy.rule.sensitive_data._secret_scanner_helper import redact_preview
+from gruffpy.rule.sensitive_data._secret_scanner_helper import category_preview
 
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _MRN_RE = re.compile(r"\bMRN[:\s]+(\d{6,10})\b", re.IGNORECASE)
@@ -26,17 +26,19 @@ _SSN_PLACEHOLDERS: frozenset[str] = frozenset({"000-00-0000", "123-45-6789", "99
 
 
 class PhiPatternRule(SourceTextRule):
-    """Detect US-shaped protected health info: SSN literals and ``MRN: <digits>`` patterns."""
+    """Detect US-shaped protected health information in source.
+
+    Users see findings for realistic SSN literals and ``MRN: <digits>`` patterns so they can replace
+    exposed data, while common documentation placeholders remain outside the report.
+    """
 
     ID = "sensitive-data.phi-pattern"
 
     def definition(self) -> RuleDefinition:
         """Describe the PHI-pattern rule as a medium-confidence ERROR.
 
-        ERROR severity because PHI in source is a HIPAA exposure risk;
-        medium confidence because the patterns (``NNN-NN-NNNN`` SSN,
-        ``MRN: <digits>``) are narrow but not exhaustive - the rule
-        surfaces shapes for review rather than promising compliance.
+        Users receive an error for the privacy risk, but medium confidence makes clear that the
+        narrow SSN and MRN shapes require review and do not promise compliance.
 
         Returns:
             Definition for the PHI-pattern rule under the sensitive-data
@@ -66,24 +68,26 @@ class PhiPatternRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in _SSN_RE.finditer(unit.source):
-            value = match.group(0)
-            if value in _SSN_PLACEHOLDERS:
+        # Each SSN-shaped occurrence gets an independent source location in the user's report.
+        for ssn_match in _SSN_RE.finditer(unit.source):
+            social_security_number = ssn_match.group(0)
+            # Standard documentation values stay silent because they do not identify a real person.
+            if social_security_number in _SSN_PLACEHOLDERS:
                 continue
-            findings.append(_build_finding(definition, unit, match.start(), value, "ssn"))
-        for match in _MRN_RE.finditer(unit.source):
-            value = match.group(1)
-            findings.append(_build_finding(definition, unit, match.start(), value, "mrn"))
+            findings.append(_build_phi_finding(definition, unit, ssn_match.start(), "ssn"))
+        # Every labelled medical-record number remains visible for manual privacy review.
+        for medical_record_match in _MRN_RE.finditer(unit.source):
+            findings.append(_build_phi_finding(definition, unit, medical_record_match.start(), "mrn"))
         return findings
 
 
-def _build_finding(
+def _build_phi_finding(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     offset: int,
-    value: str,
     kind: str,
 ) -> Finding:
+    """Build the fixed-preview PHI finding shown at the matched user source line."""
     line = unit.source.count("\n", 0, offset) + 1
     return Finding(
         rule_id=definition.id,
@@ -95,9 +99,8 @@ def _build_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         remediation=(
-            "Move PHI out of the repository. Use deterministic placeholders for tests "
-            "and pull real values from a HIPAA-compliant store at runtime."
+            "Move PHI out of the repository. Use deterministic placeholders for tests and pull real values from a HIPAA-compliant store at runtime."
         ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"preview": redact_preview(value), "kind": kind},
+        metadata={"preview": category_preview(kind), "kind": kind},
     )

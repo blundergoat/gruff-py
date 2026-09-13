@@ -57,12 +57,7 @@ def test_requests_verify_dynamic_alias_skipped():
 
 
 def test_requests_verify_reassigned_alias_skipped():
-    src = (
-        "import requests\n"
-        "verify = False\n"
-        "verify = config.verify_tls\n"
-        "requests.get('https://x', verify=verify)\n"
-    )
+    src = "import requests\nverify = False\nverify = config.verify_tls\nrequests.get('https://x', verify=verify)\n"
     assert DisabledSslVerificationRule().analyse(make_unit(src), default_ctx()) == []
 
 
