@@ -320,6 +320,15 @@ project uses, and append reviewed project vocabulary. Configuring only `ctx`
 would also remove seed entries such as `id`, `url`, and `db` from the resolved
 allowlist.
 
+In gruff-py the list is subtracted from `naming.abbreviation`'s curated
+blocklist (`attr`, `cfg`, `ctx`, `defn`, `func`, `idx`, `lst`, `mgr`, `msg`,
+`params`, `pkg`, `pwd`, `req`, `res`, `tmp`, `tok`, `usr`, `var`), and no other
+rule reads it. None of the sixteen seeded words is on that blocklist, so the
+seed changes no gruff-py finding today. It is there so one configuration file
+carries the same vocabulary to every Gruff port; the other four apply it
+through their own naming rules. An entry changes gruff-py's results only when
+it names a blocklisted token.
+
 Prefer a rename when the short token is temporary, ambiguous, or means
 different things in different modules. The allowlist is a project vocabulary
 contract, not a general exemption for short names.
@@ -500,8 +509,10 @@ because it ships no gate for that command.
 `minimumSeverity` is a different key: one severity (`advisory`, `warning`, or
 `error` - not `none`) that sets the project default for the `--min-severity`
 display filter, so it changes which findings are printed and never the exit
-code. A per-command map under `minimumSeverity` is refused, and the error
-names `failOn`.
+code. Like the flag, the configured floor is recorded in JSON output: the
+`displayFilter` block reports how many findings it hid, and `summary.findings`
+keeps the full-run counts. A per-command map under `minimumSeverity` is
+refused, and the error names `failOn`.
 
 See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
 for the rationale, the rejected alternatives, and the cross-port invariant.

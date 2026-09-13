@@ -31,6 +31,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 12. **`list-rules --format json` publishes every threshold as a named knob map** — A single-threshold rule's value moves from the scalar `threshold` to `thresholds`, as `{"maxLines": 100}` where gruff-go already names the knob and `{"threshold": 10}` where no port does; named-knob rules keep their map, and a rule with no threshold publishes neither key. Update any consumer that read `rules[].threshold`; `list-rules <rule_id> --format json` changes the same way. SARIF rule properties and `.gruff-py.yaml` keys are unchanged.
 
+13. **`sensitive-data.high-entropy-string` adopts the family contract** — The rule reports at medium confidence instead of low, and its two bars become configurable thresholds with the family defaults: `minLength` `32` (was a hardcoded `20`) and `entropy` `4.2` bits per character (was `4.5`). Tokens of 20 to 31 characters stop reporting, tokens between 4.2 and 4.5 bits start, and each finding weighs more in the score. To keep the `0.5` bar, set both under `rules.sensitive-data.high-entropy-string.thresholds` with `minLength: 20` and `entropy: 4.5`. The contract is the one FAMILY-CONTRACT.md records as ratified on 2026-09-02.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

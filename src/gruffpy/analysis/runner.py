@@ -4,6 +4,7 @@ The pipeline turns a user's paths and options into deterministic findings, diagn
 and exit status. Reporters receive one complete result without reapplying config or suppression.
 """
 
+import ast
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -39,7 +40,9 @@ from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
+from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.rule.context import RuleContext
+from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
@@ -73,6 +76,7 @@ class _ReportAssembly:
     display_findings: list[Finding]
     exit_code: int
     score: ScoreReport
+    display_filter: FindingDisplayFilter
     hidden_by_display_filter: int
     partial_context_caveat: str | None
     baseline_report: BaselineReport | None
@@ -146,6 +150,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         project_root=request.project_root,
         scan_scope=scan_scope,
         diagnostics=diagnostics,
+        reference_trees=_reference_only_trees(request, config, registry, scan_scope, discovery_result),
     )
     baseline_report = _handle_baseline(
         project_root=request.project_root,
@@ -183,6 +188,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             display_findings=display_findings,
             exit_code=exit_code,
             score=score,
+            display_filter=display_filter,
             hidden_by_display_filter=hidden_by_display_filter,
             partial_context_caveat=partial_context_caveat,
             baseline_report=baseline_report,
@@ -202,6 +208,7 @@ def _name_findings(
     project_root: Path,
     scan_scope: str,
     diagnostics: list[RunDiagnostic],
+    reference_trees: tuple[ast.Module, ...] = (),
 ) -> tuple[list[Finding], tuple[SuppressionSummary, ...]]:
     """Run the rules over the parsed units and name every finding before anything filters it.
 
@@ -212,6 +219,8 @@ def _name_findings(
         project_root: Project root the rule context reports paths against.
         scan_scope: Resolved scope label the rule context carries.
         diagnostics: Run diagnostics; inline-suppression diagnostics are appended in place.
+        reference_trees: Modules the configured ignore globs keep out of the report, which project rules may
+            read references from; empty means none apply.
 
     Returns:
         The findings that survive inline and reviewed suppression, each carrying its baseline
@@ -221,6 +230,7 @@ def _name_findings(
         project_root=str(project_root),
         config=config,
         scan_scope=scan_scope,
+        reference_trees=reference_trees,
     )
     suppressions_by_file = _parse_suppressions(units, registry)
     diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
@@ -255,7 +265,8 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         exit_code=assembly.exit_code,
         config_path=assembly.config_loaded_from,
         score=assembly.score,
-        filters=assembly.request.display_filter,
+        # The effective filter, so a configured minimumSeverity floor is reported exactly as the flag is.
+        filters=assembly.display_filter,
         hidden_by_display_filter=assembly.hidden_by_display_filter,
         partial_context_caveat=assembly.partial_context_caveat,
         extensions=ReportExtensions(
@@ -518,6 +529,49 @@ def _handle_baseline(
     )
 
 
+def _reference_only_trees(
+    request: AnalysisRunRequest,
+    config: AnalysisConfig,
+    registry: RuleRegistry,
+    scan_scope: str,
+    discovery_result: SourceDiscoveryResult,
+) -> tuple[ast.Module, ...]:
+    """Parse the Python files that configured ``paths.ignore`` globs keep out of the report.
+
+    ``dead-code.exported-but-unreferenced`` counts references in them, so a symbol used only from an ignored
+    test tree is not reported as dead, while those files still produce no finding of their own. The existing
+    discovery runs a second time without the configured globs, so gitignore and default exclusions still apply.
+
+    Args:
+        request: Run request whose paths and ignore flag the second discovery repeats.
+        config: Effective configuration carrying the configured ignore globs.
+        registry: Rule registry used to confirm the rule that reads references is enabled.
+        scan_scope: Resolved scope; only a full-project run has whole-project references to add.
+        discovery_result: The run's own discovery, whose files are already analysed units.
+
+    Returns:
+        Parsed modules found only once the configured globs are dropped; empty when nothing applies.
+    """
+    enabled_rule_ids = {rule.definition().id for rule in registry.enabled_rules(config)}
+    # Only a full-project scan that ignores paths, with the reference-reading rule on, has references to add.
+    if scan_scope != "full-project" or not config.ignored_path_patterns or ExportedButUnreferencedRule.ID not in enabled_rule_ids:
+        return ()
+    analysed = {source_file.absolute_path for source_file in discovery_result.files}
+    unfiltered = SourceDiscovery(request.project_root).discover(list(request.paths), include_ignored=request.include_ignored)
+    trees: list[ast.Module] = []
+    # Every file the configured globs removed contributes references, and nothing else is parsed twice.
+    for source_file in unfiltered.files:
+        # Analysed files contribute through their units, and text files carry no Python references.
+        if source_file.absolute_path in analysed or not source_file.is_python():
+            continue
+        try:
+            trees.append(ast.parse(Path(source_file.absolute_path).read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+            # An unreadable ignored file cannot add references, and it never produces a finding either.
+            continue
+    return tuple(trees)
+
+
 def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
     """Classify the run as full-project or partial for caveats and baseline staleness.
 
@@ -548,19 +602,19 @@ def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
     if options.generate_path is not None and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message=("--baseline-path and --generate-baseline/--generate-baseline-path are mutually exclusive."),
+            message="--baseline and --generate-baseline are mutually exclusive.",
         )
     if options.disabled and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message="--no-baseline cannot be combined with --baseline-path.",
+            message="--no-baseline cannot be combined with --baseline.",
             path=str(options.apply_path),
         )
     # Migration writes a second file rather than converting one, so it needs the destination the user chose for it.
     if options.migrate_path is not None and options.generate_path is None:
         return RunDiagnostic(
             type="baseline-error",
-            message="--migrate-baseline requires --generate-baseline-path <new path>; the 0.5 file is never converted in place.",
+            message="--migrate-baseline requires --generate-baseline <new path>; the 0.5 file is never converted in place.",
             path=str(options.migrate_path),
         )
     return None

@@ -45,6 +45,11 @@ class LoopInTestRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            description=(
+                "Flags the first for, async for, or while loop in a collected test, unless it is a for loop with no "
+                "branch that sweeps a fixture table (a literal collection or file glob named like cases, files, "
+                "paths, samples, or scenarios) and every assertion inside it carries a message."
+            ),
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

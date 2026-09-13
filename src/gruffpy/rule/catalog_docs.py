@@ -35,6 +35,8 @@ from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPa
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
+from gruffpy.rule.test_quality.loop_in_test_rule import LoopInTestRule
+from gruffpy.rule.test_quality.mystery_guest_rule import MysteryGuestRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
 from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
     StaticAnalysisRedundantTestRule,
@@ -174,8 +176,8 @@ def custom_docs_for(
             return _naming_rule_docs(definition.id, config_keys)
         case PiiTestFixtureRule.ID:
             return _pii_test_fixture_docs(config_keys)
-        case NoAssertionsRule.ID:
-            return _no_assertions_docs(config_keys)
+        case NoAssertionsRule.ID | MysteryGuestRule.ID | LoopInTestRule.ID:
+            return _test_quality_rule_docs(definition.id, config_keys)
         case CommentedOutCodeRule.ID:
             return _commented_out_code_docs(config_keys)
         case SqlConcatenationRule.ID:
@@ -228,29 +230,34 @@ def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "sys.path mutation at import time or inside library functions makes "
             "imports depend on execution order; insert(0, ...) shadows every "
             "later top-level import for the whole process, so one colliding "
-            "filename in that directory breaks the host application."
+            "filename in that directory breaks the host application. A "
+            "standalone script is its own host process, so a mutation at its "
+            "top level is not reported; one inside a function still is."
         ),
         fix_guidance=(
             "Package the code (editable install, src layout) or set PYTHONPATH "
-            "in the runner; keep unavoidable mutations inside the script's "
-            '`if __name__ == "__main__":` block.'
+            "in the runner. A file that is really a standalone script may change "
+            'sys.path at its top level once it has an `if __name__ == "__main__":` '
+            "guard or a shebang, or lives under scripts/, bin/ or tools/."
         ),
-        bad_example="`sys.path.insert(0, str(Path(__file__).parent))` at module level.",
-        good_example=('`if __name__ == "__main__":\n    sys.path.insert(0, ...)` inside the launching script only.'),
+        bad_example="`sys.path.insert(0, str(Path(__file__).parent))` at the top of an importable library module.",
+        good_example="`pip install -e .`, so `from app import heuristics` resolves without touching sys.path.",
         confidence_rationale=(
             "High confidence: the receiver must be the literal sys.path "
-            "attribute chain, and __main__ blocks, tests/ paths, and "
-            "conftest.py are structurally exempt."
+            "attribute chain, and the top level of a standalone script (a "
+            "__main__ guard, a shebang, or a scripts/, bin/ or tools/ "
+            "directory), tests/ paths, and conftest.py are structurally exempt; "
+            "a mutation inside a function or in a guard's else branch can run "
+            "on import and still reports."
         ),
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
-                shape=("Build, packaging, or documentation tooling scripts that legitimately bootstrap their import path outside a __main__ block."),
-                mitigation=(
-                    "Move the mutation under the __main__ guard, or suppress "
-                    "with `# gruff: disable=design.runtime-sys-path-mutation` "
-                    "plus the reason."
+                shape=(
+                    "Configuration files that a documentation or build tool executes, such as a Sphinx docs/conf.py, "
+                    "bootstrapping their import path at top level without a __main__ guard or shebang."
                 ),
+                mitigation=("Suppress with `# gruff: disable=design.runtime-sys-path-mutation` plus the reason."),
             ),
         ),
     )
@@ -717,6 +724,24 @@ def _pii_test_fixture_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
+def _test_quality_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
+    """Dispatch one curated test-quality card without growing catalog branching.
+
+    Args:
+        rule_id: Matched test-quality rule id; empty or unknown ids are never routed here.
+        config_keys: Public settings shown in generated docs; empty means none.
+
+    Returns:
+        Curated documentation for the matched test-quality rule.
+    """
+    documentation_factory = {
+        LoopInTestRule.ID: _loop_in_test_docs,
+        MysteryGuestRule.ID: _mystery_guest_docs,
+        NoAssertionsRule.ID: _no_assertions_docs,
+    }[rule_id]
+    return documentation_factory(config_keys)
+
+
 def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     return RuleDocs(
         rationale="Collected tests without assertions are easy to mistake for coverage.",
@@ -728,6 +753,64 @@ def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         good_example="`def test_saves_user(): service.save(user); assert_user_saved(user)`",
         confidence_rationale=(
             "High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A test can assert through a matcher that raises on a mismatch without an `assert` name, "
+                    "such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`."
+                ),
+                mitigation=(
+                    "Call the matcher through an `assert_*` helper, or suppress the reviewed test with "
+                    "`# gruff: disable=test-quality.no-assertions` and the matcher that asserts."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A smoke test can pass by not raising, such as requests' `test_can_access_urllib3_attribute`, "
+                    "whose whole body is one attribute access."
+                ),
+                mitigation="Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.",
+            ),
+        ),
+    )
+
+
+def _mystery_guest_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "A test that performs network, filesystem, mail, or FTP I/O when it runs depends on state outside "
+            "the test, so it is slow, non-hermetic, and can fail for a reason the test body does not show."
+        ),
+        fix_guidance=(
+            "Mock the I/O boundary or serve the dependency from a fixture. Open files under a `tmp_path` or "
+            "`tmpdir` fixture, which the rule already treats as hermetic."
+        ),
+        bad_example="`def test_health(): assert requests.get('https://api.example.test/health').ok`",
+        good_example="`def test_write(tmp_path):\n    with open(tmp_path / 'out.txt', 'w') as handle:\n        handle.write('x')`",
+        confidence_rationale=(
+            "Medium confidence: the rule matches calls that perform I/O when they run - module helpers such as "
+            "`requests.get`, socket, FTP and SMTP entry points, and request methods on a client the test built - "
+            "and skips constructors, parameters that shadow a module name, and assertion calls, but it cannot "
+            "tell whether a URL points at a local fixture server."
+        ),
+        config_keys=config_keys,
+    )
+
+
+def _loop_in_test_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    return RuleDocs(
+        rationale=(
+            "A loop in a test body runs every case under one pass or fail, so a failure does not say which "
+            "iteration broke and the cases cannot be selected or rerun on their own."
+        ),
+        fix_guidance="Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.",
+        bad_example="`def test_parse(): for text in ['1', '2']: assert parse(text)`",
+        good_example="`@pytest.mark.parametrize('text', ['1', '2'])\ndef test_parse(text): assert parse(text)`",
+        confidence_rationale=(
+            "Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a "
+            "fixture sweep, and a loop can legitimately be the behaviour under test."
         ),
         config_keys=config_keys,
     )
@@ -767,11 +850,27 @@ def _ignore_directive_reason_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "Suppression comments age badly unless they explain the local "
             "compatibility, framework, or test boundary that made the suppression acceptable."
         ),
-        fix_guidance=("Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker."),
+        fix_guidance=(
+            "Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker; "
+            "an issue reference such as `mypy#4125` counts as a reason."
+        ),
         bad_example="`import plugin  # noqa`",
         good_example="`import plugin  # noqa: F401 - re-exported public API`",
-        confidence_rationale=("High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens."),
+        confidence_rationale=(
+            "High confidence: the rule only matches explicit suppression comment directives parsed from Python "
+            "comment tokens, and skips a file whose header says it is generated."
+        ),
         config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "The reason can sit in a full-line comment directly above the suppressed line, as Django's "
+                    "`from django.conf import SettingsReference  # NOQA` under its backwards-compatibility note, "
+                    "while the rule reads only the directive's own comment."
+                ),
+                mitigation="Move or copy the reason onto the directive's line after `-`, `--`, or a second `#`.",
+            ),
+        ),
     )
 
 
@@ -858,9 +957,22 @@ def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         bad_example='`REMOTE = "https://deploy:<password>@api.example.test"`',
         good_example='`REMOTE = "https://api.example.test"` plus a runtime Authorization header.',
         confidence_rationale=(
-            "High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords."
+            "High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common "
+            "placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`."
         ),
         config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A URL parser's test table can spell sample userinfo with a short dummy password, such as the "
+                    "rows in requests' `tests/test_utils.py` whose user is `u` and password `p`; short tokens stay "
+                    "reported until the family ratifies a placeholder vocabulary."
+                ),
+                mitigation=(
+                    "List the reviewed test file under `sensitiveExclusions` with its reason; a sensitive-data finding cannot be suppressed inline."
+                ),
+            ),
+        ),
     )
 
 

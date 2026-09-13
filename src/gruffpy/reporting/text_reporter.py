@@ -173,9 +173,9 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
         if baseline.source == "default":
             lines.append(f"  Tip: commit {baseline.path} and rerun `gruff-py analyse` to apply it.")
         else:
-            lines.append(f"  Tip: commit {baseline.path} and rerun with `--baseline-path {shlex.quote(baseline.path)}` to apply it.")
+            lines.append(f"  Tip: commit {baseline.path} and rerun with `--baseline {shlex.quote(baseline.path)}` to apply it.")
     elif baseline.stale_entries:
-        lines.append(f"  Tip: regenerate after review with `gruff-py analyse . --generate-baseline-path {shlex.quote(baseline.path)}`.")
+        lines.append(f"  Tip: regenerate after review with `gruff-py analyse . --generate-baseline {shlex.quote(baseline.path)}`.")
 
 
 def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> None:

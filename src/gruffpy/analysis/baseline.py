@@ -1,6 +1,6 @@
 """Reconcile a fresh scan against the debt a user already reviewed, so only genuinely new problems stop the run.
 
-This is the engine behind ``gruff-py analyse --baseline-path gruff-baseline.json``. A baseline row stores one
+This is the engine behind ``gruff-py analyse --baseline gruff-baseline.json``. A baseline row stores one
 line-free identity and a count and nothing positional, so everyday reformatting never re-flags accepted debt,
 while a second occurrence beyond the reviewed count is still reported as new.
 
@@ -325,13 +325,13 @@ class BaselineStore:
         if schema in LEGACY_BASELINE_SCHEMA_VERSIONS:
             raise BaselineError(
                 f'Baseline schema "{schema}" is a 0.5 baseline. Migrate it to a separate file with '
-                f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline-path <new path>`; the original is preserved."
+                f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline <new path>`; the original is preserved."
             )
         # Any other schemaVersion is a pre-0.6 document, and every one of them takes the same route forward.
         if schema != BASELINE_SCHEMA_VERSION:
             raise BaselineError(
                 f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}"; carry an older file\'s reviews forward '
-                f"with `gruff-py analyse --migrate-baseline {display_path} --generate-baseline-path <new path>`, "
+                f"with `gruff-py analyse --migrate-baseline {display_path} --generate-baseline <new path>`, "
                 "which leaves the original untouched."
             )
 
@@ -371,7 +371,7 @@ class BaselineStore:
         try:
             absolute_path.parent.mkdir(parents=True, exist_ok=True)
             _atomic_write_text(absolute_path, json.dumps(_document_payload(data), indent=4) + "\n")
-        # For example, a read-only checkout can stop --generate-baseline-path replacing the file.
+        # For example, a read-only checkout can stop --generate-baseline replacing the file.
         except OSError as exc:
             raise BaselineError(f"Unable to write baseline file: {_display_path(path)}") from exc
         return BaselineData(
@@ -455,7 +455,7 @@ class BaselineStore:
             raise BaselineError(f"Baseline file not found: {display_path}")
         try:
             payload = json.loads(absolute_path.read_text(encoding="utf-8"))
-        # For example, permissions can change after a user selects a file with --baseline-path.
+        # For example, permissions can change after a user selects a file with --baseline.
         except OSError as exc:
             raise BaselineError(f"Unable to read baseline file: {display_path}") from exc
         # For example, an editor may have saved the selected baseline in a non-UTF-8 encoding.
@@ -639,7 +639,7 @@ def require_overwritable_default_path(project_root: str | Path, path: str | Path
     raise BaselineError(
         f'{_display_path(path)} is a "{schema}" baseline, not "{BASELINE_SCHEMA_VERSION}"; generating over it would destroy '
         f"the retreat path. Migrate it with `gruff-py analyse --migrate-baseline {_display_path(path)} "
-        "--generate-baseline-path <new path>`, or pass --force to overwrite it."
+        "--generate-baseline <new path>`, or pass --force to overwrite it."
     )
 
 

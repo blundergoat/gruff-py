@@ -3,7 +3,13 @@
 Fires on lines of the shape ``KEY=value`` inside ``.env`` / ``.env.*`` files
 where the key name suggests a secret (``KEY``, ``SECRET``, ``TOKEN``, ``PASSWORD``,
 ``API_KEY``) and the value has high Shannon entropy. Empty values, placeholders,
-and quoted-string templates with substitution syntax are skipped.
+and quoted-string templates with substitution syntax are skipped. The value is
+read from its own line only, so ``KEY=`` with nothing after it stays quiet
+whatever the next line holds.
+
+``.env.example``, ``.env.sample``, ``.env.template`` and ``.env.dist`` exist to
+list secret-shaped keys with sample values, so a value there reports only when
+it is shaped like a generated credential rather than merely long.
 """
 
 import re
@@ -23,14 +29,37 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 )
 
 _SECRET_KEY_RE = re.compile(
-    r"^(?P<key>[A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|AUTH"
-    r"|CREDENTIAL|SIGNATURE|PRIVATE))\s*=\s*(?P<value>.+?)\s*$",
+    r"^(?P<key>[A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|AUTH|CREDENTIAL|SIGNATURE|PRIVATE))"
+    # Horizontal whitespace only: ``\s`` would carry an empty value across the line break into the next line.
+    r"[ \t]*=[ \t]*(?P<value>[^\r\n]*?)[ \t]*\r?$",
     re.MULTILINE,
 )
 _TASK_PLACEHOLDER = "".join(("TO", "DO"))
-_PLACEHOLDER_VALUES: frozenset[str] = frozenset({"changeme", "your_secret_here", _TASK_PLACEHOLDER, "REPLACE_ME", "xxx", "***", ""})
+# Compared case-folded, so ``REPLACE_ME``, ``replace_me`` and ``Replace_Me`` are one placeholder.
+_PLACEHOLDER_VALUES: frozenset[str] = frozenset(
+    {
+        "changeme",
+        "change_me",
+        "change-me",
+        "your_secret_here",
+        _TASK_PLACEHOLDER.casefold(),
+        "replace_me",
+        "replace-me",
+        "replaceme",
+        "example",
+        "placeholder",
+        "xxx",
+        "***",
+        "",
+    }
+)
+# ``your-key-here``, ``<api-token>`` and a repeated single character such as ``xxxxxxxx`` are placeholders.
+_PLACEHOLDER_PATTERN = re.compile(r"your[-_. a-z0-9]*|<[^<>]*>|(.)\1*", re.IGNORECASE)
 _ENTROPY_THRESHOLD = 3.0
 _MIN_VALUE_LENGTH = 12
+_TEMPLATE_SUFFIXES: frozenset[str] = frozenset({"example", "sample", "template", "dist"})
+# A generated credential carries one unbroken run of key characters; a template's sample value is words joined by separators.
+_CREDENTIAL_RUN = re.compile(r"[A-Za-z0-9+/]{20,}")
 
 
 class HardcodedEnvValueRule(SourceTextRule):
@@ -79,6 +108,7 @@ class HardcodedEnvValueRule(SourceTextRule):
         # noise.
         if not _is_env_file(unit.file.display_path):
             return []
+        is_template = _is_env_template(unit.file.display_path)
         definition = self.definition()
         findings: list[Finding] = []
         # Each secret-named assignment remains independently actionable in the user's report.
@@ -86,7 +116,10 @@ class HardcodedEnvValueRule(SourceTextRule):
             environment_key = secret_assignment.group("key")
             secret_value = secret_assignment.group("value").strip().strip("\"'")
             # Empty, short, and known placeholder values do not require credential rotation.
-            if secret_value in _PLACEHOLDER_VALUES or len(secret_value) < _MIN_VALUE_LENGTH:
+            if _is_placeholder(secret_value) or len(secret_value) < _MIN_VALUE_LENGTH:
+                continue
+            # A template's sample value needs a credential's shape, not only a credential's length.
+            if is_template and not _is_credential_shaped(secret_value):
                 continue
             # A runtime variable reference means the user did not commit the secret value itself.
             if secret_value.startswith("${") or secret_value.startswith("$"):
@@ -122,3 +155,43 @@ def _is_env_file(display_path: str) -> bool:
     """Return whether the user's discovered file uses an ``.env`` filename."""
     name = display_path.rsplit("/", 1)[-1]
     return name == ".env" or name.startswith(".env.")
+
+
+def _is_env_template(display_path: str) -> bool:
+    """Return whether an ``.env`` file is a committed template such as ``.env.example`` or ``.env.local.sample``.
+
+    Args:
+        display_path: Project-relative path of an ``.env`` file.
+
+    Returns:
+        True when the filename ends in ``.example``, ``.sample``, ``.template`` or ``.dist``.
+    """
+    name = display_path.rsplit("/", 1)[-1]
+    return name.startswith(".env.") and name.rsplit(".", 1)[-1] in _TEMPLATE_SUFFIXES
+
+
+def _is_placeholder(value: str) -> bool:
+    """Return whether an ``.env`` value is a stand-in for a secret rather than a secret.
+
+    Args:
+        value: Unquoted right-hand side of the assignment.
+
+    Returns:
+        True for an empty value, a known placeholder in any casing, ``your-...`` wording, an angle-bracketed
+        name, or one character repeated.
+    """
+    return value.casefold() in _PLACEHOLDER_VALUES or _PLACEHOLDER_PATTERN.fullmatch(value) is not None
+
+
+def _is_credential_shaped(value: str) -> bool:
+    """Return whether a template value looks generated rather than written as a sample.
+
+    Args:
+        value: Unquoted right-hand side of a template assignment.
+
+    Returns:
+        True when the value holds a run of at least 20 key characters that mixes letters and digits.
+    """
+    return any(
+        any(character.isalpha() for character in run) and any(character.isdigit() for character in run) for run in _CREDENTIAL_RUN.findall(value)
+    )

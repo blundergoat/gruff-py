@@ -12,7 +12,8 @@ honesty - the run-level partial-context caveat still renders).
 Reference model (name-based, conservative): any load of the name - calls,
 attribute access (``module.symbol``), decorator usage, base classes,
 annotations, ``getattr(x, "symbol")`` string literals - counts as use, in any
-file including tests. Aliased imports (``from m import foo as bar``) count as
+file including tests and files ``paths.ignore`` keeps out of the report, which
+contribute references but never produce a finding. Aliased imports (``from m import foo as bar``) count as
 use of ``foo`` (the alias indicates intent the model cannot follow). Same-name
 symbols in different modules collapse together, so collisions produce false
 negatives, never false positives.
@@ -101,7 +102,8 @@ class ExportedButUnreferencedRule:
         candidates = _export_candidates(parsed_units)
         if not candidates:
             return []
-        used_names = _used_names([tree for _, tree in parsed_units])
+        # Files that configured ignore globs keep out of the report still call the project's symbols.
+        used_names = _used_names([tree for _, tree in parsed_units] + list(context.reference_trees))
         findings: list[Finding] = []
         for candidate in candidates:
             if candidate.name in used_names:

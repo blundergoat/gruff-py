@@ -14,6 +14,8 @@ startup messages and validation a terminal user sees.
 
 import json
 import os
+import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -1280,6 +1282,65 @@ def test_cli_analyse_auto_applies_default_baseline_when_present(tmp_path: Path, 
     assert applied_payload["baseline"]["suppressedFindings"] == len(generated_payload["findings"])
 
 
+def test_cli_generated_baseline_applies_in_a_copied_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a committed baseline's project-level reviews when the project is checked out somewhere else.
+
+    ``docs.missing-readme`` was stored at an absolute path, so a copy of the project reported it again.
+
+    Args:
+        tmp_path: Parent of the original project and its copy.
+        monkeypatch: Moves the working directory into each checkout in turn.
+    """
+    original = tmp_path / "original"
+    (original / "src").mkdir(parents=True)
+    (original / "src" / "sample.py").write_text("def undocumented(value):\n    return value\n")
+    monkeypatch.chdir(original)
+    generated = CliRunner().invoke(main, ["analyse", ".", "--format", "json", "--fail-on", "none", "--no-config", "--generate-baseline"])
+    checkout = tmp_path / "checkout"
+    shutil.copytree(original, checkout)
+    monkeypatch.chdir(checkout)
+
+    applied = CliRunner().invoke(main, ["analyse", ".", "--format", "json", "--fail-on", "none", "--no-config", "--baseline", "gruff-baseline.json"])
+
+    stored_paths = [row["path"] for row in json.loads((checkout / "gruff-baseline.json").read_text())["occurrences"]]
+    applied_payload = json.loads(applied.output)
+    assert (generated.exit_code, applied.exit_code) == (0, 0), generated.output + applied.output
+    assert "README.md" in stored_paths
+    assert all(not Path(stored).is_absolute() for stored in stored_paths)
+    assert applied_payload["findings"] == []
+    assert applied_payload["baseline"]["newFindings"] == 0
+
+
+def test_cli_printed_baseline_commands_use_canonical_spellings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Copy the refusal's migration command and then the migration's tip, and meet no superseded-spelling warning.
+
+    gruff-py warned about ``--baseline-path`` and ``--generate-baseline-path`` while printing both itself.
+
+    Args:
+        tmp_path: Project holding a 0.5 baseline.
+        monkeypatch: Moves the working directory into the project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("def undocumented(value):\n    return value\n")
+    (tmp_path / "legacy.json").write_text(json.dumps({"schemaVersion": "gruff-py.baseline.v1", "findings": []}))
+    scan_args = ["sample.py", "--no-config", "--format", "text", "--fail-on", "none"]
+    refused = CliRunner().invoke(main, ["analyse", *scan_args, "--baseline", "legacy.json"])
+    printed_command = re.search(r"`gruff-py (analyse [^`]+)`", refused.output)
+    migration_args = shlex.split(printed_command.group(1).replace("<new path>", "migrated.json")) if printed_command else []
+    migrated = CliRunner().invoke(main, [*migration_args, *scan_args])
+    printed_tip = re.search(r"rerun with `([^`]+)`", migrated.output)
+    tip_args = shlex.split(printed_tip.group(1)) if printed_tip else []
+
+    applied = CliRunner().invoke(main, ["analyse", *scan_args, *tip_args])
+
+    assert refused.exit_code == 2, refused.output
+    assert migration_args[:2] == ["analyse", "--migrate-baseline"], refused.output
+    assert migrated.exit_code == 0, migrated.output
+    assert tip_args == ["--baseline", "migrated.json"], migrated.output
+    assert applied.exit_code == 0, applied.output
+    assert [result.output for result in (migrated, applied) if "superseded" in result.output] == []
+
+
 def test_cli_analyse_baseline_option_conflicts_are_diagnostics(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -2303,6 +2364,29 @@ def test_analyse_json_display_filter_keeps_full_run_summary(
     assert payload["summary"]["exitCode"] == 1
     assert payload["displayFilter"]["hiddenFindings"] == 1
     assert sum(pillar["findings"] for pillar in payload["score"]["pillars"]) == 1
+
+
+def test_configured_display_floor_reports_the_same_delta_as_the_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publish ``displayFilter`` for a ``minimumSeverity:`` floor, which hid findings with nothing in the envelope saying so.
+
+    Args:
+        tmp_path: Project whose only finding is an advisory the error floor hides.
+        monkeypatch: Moves the working directory into the project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "ok.py").write_text('"""This module provides descriptive fixture coverage for filter disclosure tests."""\n')
+    (tmp_path / "floor.yaml").write_text('schemaVersion: "gruff-py.config.v0.1"\nminimumSeverity: error\n')
+    run_args = ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-baseline"]
+
+    configured = CliRunner().invoke(main, [*run_args, "--config", "floor.yaml"])
+    flagged = CliRunner().invoke(main, [*run_args, "--no-config", "--min-severity", "error"])
+
+    configured_payload, flagged_payload = json.loads(configured.output), json.loads(flagged.output)
+    assert (configured.exit_code, flagged.exit_code) == (0, 0), configured.output + flagged.output
+    assert configured_payload["findings"] == flagged_payload["findings"] == []
+    assert configured_payload["displayFilter"] == flagged_payload["displayFilter"]
+    assert configured_payload["displayFilter"]["hiddenFindings"] == configured_payload["summary"]["findings"]["total"]
 
 
 def test_cli_analyse_accepts_comma_separated_pillar_filters(

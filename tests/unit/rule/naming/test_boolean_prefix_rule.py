@@ -601,6 +601,61 @@ def test_vague_boolean_names_still_fire(declaration_name: str) -> None:
     assert user_findings[0].metadata["identifier"] == declaration_name
 
 
+@pytest.mark.parametrize(
+    "declaration_name",
+    [
+        "_state_is_attributed_to_patient",
+        "_trailing_question_is_unanswered",
+        "_age_is_spoken",
+        "_sex_is_supported",
+        "_sentence_needs_wording_review",
+    ],
+    ids=["state-is-attributed", "question-is-unanswered", "age-is-spoken", "sex-is-supported", "sentence-needs-review"],
+)
+def test_auxiliary_marker_anywhere_in_the_name_does_not_fire(declaration_name: str) -> None:
+    """Accept the downstream brief's predicates, whose ``is`` or ``needs`` sits mid-name.
+
+    Args:
+        declaration_name: Predicate name whose auxiliary marker is not the first segment.
+    """
+    user_source = f"def {declaration_name}() -> bool:\n    return True\n"
+
+    assert BooleanPrefixRule().analyse(_unit(user_source), _ctx()) == []
+
+
+def _message_vocabulary(message: str, label: str) -> list[str]:
+    """Read one comma-separated vocabulary the finding message lists after *label*.
+
+    Args:
+        message: Rendered boolean-prefix finding message.
+        label: Text that opens the parenthesised list, such as ``a leading marker``.
+
+    Returns:
+        The listed entries in message order.
+    """
+    listed = message.split(f"{label} (", 1)[1].split(")", 1)[0]
+    return [entry.strip() for entry in listed.split(",")]
+
+
+def test_intent_free_name_still_fires_and_every_form_its_message_lists_is_accepted() -> None:
+    """Keep ``value() -> bool`` reported, and prove each vocabulary entry in its message clears a name."""
+    user_findings = BooleanPrefixRule().analyse(_unit("def value() -> bool:\n    return True\n"), _ctx())
+    assert len(user_findings) == 1
+    message = user_findings[0].message
+    listed_names = [
+        *(f"{marker}_value" for marker in _message_vocabulary(message, "a leading marker")),
+        *(f"value_{marker}_thing" for marker in _message_vocabulary(message, "one of these markers as a segment anywhere")),
+        *(f"value_{adjective}" for adjective in _message_vocabulary(message, "a final state adjective")),
+        *(f"value_{verb}" for verb in _message_vocabulary(message, "a final relationship verb")),
+        *(f"{prefix}value" for prefix in _message_vocabulary(message, "a prefix")),
+        *(f"value{suffix}" for suffix in _message_vocabulary(message, "a suffix")),
+    ]
+    user_source = "".join(f"def {name}() -> bool:\n    return True\n" for name in listed_names)
+
+    assert BooleanPrefixRule().analyse(_unit(user_source), _ctx()) == []
+    assert "acceptedBooleanNames" in message
+
+
 def test_unconfigured_accepted_boolean_name_still_fires() -> None:
     """Guide users until they explicitly preserve an external boundary name."""
     # A user may have a protocol name but has not yet declared that exception.

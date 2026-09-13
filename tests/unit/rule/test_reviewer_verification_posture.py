@@ -62,7 +62,7 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.database-url-password": (True, "error", "high"),
     "sensitive-data.gcp-service-account-key": (True, "error", "high"),
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
-    "sensitive-data.high-entropy-string": (True, "warning", "low"),
+    "sensitive-data.high-entropy-string": (True, "warning", "medium"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
     "sensitive-data.phi-pattern": (True, "error", "medium"),
     "sensitive-data.pii-test-fixture": (True, "warning", "medium"),

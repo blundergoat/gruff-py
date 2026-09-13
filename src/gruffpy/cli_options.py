@@ -430,7 +430,7 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _path_option(
         "--baseline-path",
         "baseline_path",
-        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
+        "Superseded spelling of --baseline; identical behaviour, and it warns.",
     ),
     _option(
         "--generate-baseline",
@@ -449,7 +449,7 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _path_option(
         "--migrate-baseline",
         "migrate_baseline_path",
-        "Carry a 0.5 baseline's reviews into --generate-baseline-path; the original file is left untouched.",
+        "Carry a 0.5 baseline's reviews into --generate-baseline; the original file is left untouched.",
     ),
     _option(
         "--force",
@@ -763,22 +763,22 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values.",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--min-severity",

@@ -2,8 +2,12 @@
 
 Detects ``http(s)://user:password@host`` URL literals. Database schemes remain
 owned by ``sensitive-data.database-url-password`` so the two rules do not
-duplicate the same finding.
+duplicate the same finding. A captured password holding template syntax or
+characters that show the capture ran past the userinfo is not a credential, and
+the same URL repeated on the next line is reported once.
 """
+
+import re
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -25,6 +29,11 @@ _PATTERN = compile_pattern(
     r"\bhttps?://(?P<user>[^:\s/@]+):(?P<password>[^@\s\"']+)@(?P<host>[^\s\"']+)",
     ignore_case=True,
 )
+# Braces are template placeholders; a backslash, a slash, or a second colon means the capture ran past the userinfo.
+_NON_CREDENTIAL_CHARACTERS: frozenset[str] = frozenset("{}\\/:")
+# A percent sign that does not open a two-digit escape is a printf-style placeholder, while ``%40`` stays a real
+# percent-encoded character of a password that must still be reported.
+_TEMPLATE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
 
 
 class UrlCredentialsRule(SourceTextRule):
@@ -63,12 +72,18 @@ class UrlCredentialsRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        previous_report: tuple[int, str] | None = None
         # Each credential-bearing URL remains independently actionable in the user's report.
         for credential_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(credential_match.raw)
-            # Unparseable or placeholder passwords do not represent a credential the user must
+            # Unparseable, templated, or placeholder passwords do not represent a credential the user must
             # rotate.
             if embedded_password is None or is_likely_placeholder_secret(embedded_password):
+                continue
+            repeats_previous_line = previous_report == (credential_match.line - 1, credential_match.raw)
+            previous_report = (credential_match.line, credential_match.raw)
+            # A URL repeated verbatim on the next line is one credential written twice, such as a wrapped table row.
+            if repeats_previous_line:
                 continue
             # This rule's pattern matches only http and https, and the matched text starts with whichever it was.
             redacted_marker = connection_string_preview(credential_match.raw.split("://", 1)[0])
@@ -91,11 +106,23 @@ class UrlCredentialsRule(SourceTextRule):
 
 
 def _extract_password(url: str) -> str | None:
-    """Return the password segment from an HTTP(S) URL userinfo block."""
+    """Return the password segment from an HTTP(S) URL userinfo block.
+
+    Args:
+        url: Matched credential-bearing URL text.
+
+    Returns:
+        The literal password, or ``None`` when the URL embeds no password or the captured segment is a
+        ``str.format``/f-string/printf template or ran past the userinfo into another component.
+    """
     before_host = url.split("@", 1)[0]
     userinfo = before_host.split("://", 1)[-1]
     credential_parts = userinfo.split(":", 1)
     # Without a password separator, the user has not embedded a credential in this URL.
     if len(credential_parts) != 2:
         return None
-    return credential_parts[1]
+    password = credential_parts[1]
+    # Template syntax and over-captured separators describe how a URL is built, not a secret it carries.
+    if any(character in _NON_CREDENTIAL_CHARACTERS for character in password) or _TEMPLATE_PERCENT.search(password):
+        return None
+    return password

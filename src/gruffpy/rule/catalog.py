@@ -551,7 +551,8 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "Split the transitions or tune `thresholds.maxCycles` after confirming the test is one reviewed workflow.",
     ),
     "test-quality.mystery-guest": (
-        "A test can call `open` on `tmp_path` or reach a local test server even though the target is fixture-owned and hermetic.",
+        "A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call "
+        "the rule treats as network I/O even though the fixture keeps it hermetic.",
         "Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.",
     ),
     "test-quality.naming-consistency": (

@@ -2,7 +2,8 @@
 
 Project-config rules consume :func:`read_pytest_config` to check whether the
 project pins strict-config flags, escalates deprecation warnings, and declares
-a coverage source. Results are cached per project root via a WeakValueDictionary
+a coverage source, and ``test-quality.no-assertions`` reads which files pytest
+collects. Results are cached per project root via a WeakValueDictionary
 so concurrent rules share the parse.
 """
 
@@ -20,12 +21,14 @@ class PytestConfig:
         addopts: Parsed ``tool.pytest.ini_options.addopts`` tokens.
         filterwarnings: Pytest warning-filter entries.
         coverage_source: Coverage source package entries.
+        python_files: Configured ``python_files`` collection globs; empty means pytest's defaults apply.
         is_present: Whether pytest configuration was found.
     """
 
     addopts: tuple[str, ...] = ()
     filterwarnings: tuple[str, ...] = ()
     coverage_source: tuple[str, ...] = ()
+    python_files: tuple[str, ...] = ()
     is_present: bool = False
 
     def has_strict_config(self) -> bool:
@@ -107,11 +110,13 @@ def _read(project_root: str) -> PytestConfig:
     addopts = _split_str(_table_value(pytest_section, "addopts"))
     filterwarnings = _string_list(_table_value(pytest_section, "filterwarnings"))
     coverage_source = _string_list(_table_value(coverage_section, "source"))
+    python_files = _split_str(_table_value(pytest_section, "python_files"))
 
     return PytestConfig(
         addopts=tuple(addopts),
         filterwarnings=tuple(filterwarnings),
         coverage_source=tuple(coverage_source),
+        python_files=tuple(python_files),
         is_present=pytest_section is not None,
     )
 

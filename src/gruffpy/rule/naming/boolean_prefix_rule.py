@@ -57,6 +57,10 @@ _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
         "will",
     }
 )
+# Auxiliary and modal markers ask a yes/no question as a whole segment in any position, so
+# ``_state_is_attributed_to_patient`` and ``_sentence_needs_wording_review`` already read as predicates.
+# Relationship verbs such as ``contains`` stay positional: mid-name they usually name an object.
+_BOOLEAN_AUXILIARY_MARKERS: frozenset[str] = frozenset({"are", "can", "did", "does", "has", "is", "must", "needs", "should", "was", "will"})
 # Relationship verbs express the user's Boolean answer only at the end of a name
 # (for example, ``input_affirms`` or ``source_contains``).
 _BOOLEAN_VERB_SUFFIXES: frozenset[str] = frozenset({"affirms", "contains", "declines", "matches"})
@@ -342,11 +346,7 @@ class BooleanPrefixRule(Rule):
         """
         return Finding(
             rule_id=rule_definition.id,
-            message=(
-                f"{declaration_kind.capitalize()} {declaration_name!r} returns / is bool "
-                "but lacks a boolean-intent "
-                f"prefix (is_, has_, can_, should_, was_, did_, will_, must_, needs_)."
-            ),
+            message=_boolean_intent_message(declaration_kind, declaration_name),
             file_path=unit.file.display_path,
             line=declaration_line,
             severity=rule_definition.default_severity,
@@ -437,8 +437,8 @@ def _has_boolean_prefix(
     # A tokenizer miss means the UI has no Boolean word to recognize.
     if not semantic_tokens:
         return False
-    # A distinct ``has`` token asks a clear yes/no question in any name position.
-    contains_distinct_has_predicate = "has" in semantic_tokens
+    # An auxiliary or modal token asks a clear yes/no question in any name position.
+    contains_auxiliary_marker = any(token in _BOOLEAN_AUXILIARY_MARKERS for token in semantic_tokens)
     return (
         lowercase_name in accepted_boolean_names
         or lowercase_name in _BOOLEAN_PREFIXES
@@ -446,9 +446,43 @@ def _has_boolean_prefix(
         or semantic_tokens[0] in _BOOLEAN_PREFIXES
         or semantic_tokens[-1] in _BOOLEAN_ADJECTIVES
         or semantic_tokens[-1] in _BOOLEAN_VERB_SUFFIXES
-        or contains_distinct_has_predicate
+        or contains_auxiliary_marker
         or lowercase_name.startswith(_BOOLEAN_PREFIX_PATTERNS)
         or lowercase_name.endswith(_BOOLEAN_SUFFIX_PATTERNS)
+    )
+
+
+def _joined(vocabulary: frozenset[str] | tuple[str, ...]) -> str:
+    """Render one accepted vocabulary for a user-facing message, sorted so reports stay stable.
+
+    Args:
+        vocabulary: A constant this module matches names against.
+
+    Returns:
+        Comma-separated entries in sorted order.
+    """
+    return ", ".join(sorted(vocabulary))
+
+
+def _boolean_intent_message(declaration_kind: str, declaration_name: str) -> str:
+    """Explain a finding with the vocabulary the matcher accepts, generated from its constants.
+
+    Args:
+        declaration_kind: ``function`` or ``attribute`` report label.
+        declaration_name: Name shown to the user.
+
+    Returns:
+        A message that names every accepted form, so it cannot drift from what the rule accepts.
+    """
+    return (
+        f"{declaration_kind.capitalize()} {declaration_name!r} returns / is bool but its name states no boolean intent. "
+        f"Accepted: a leading marker ({_joined(_BOOLEAN_PREFIXES)}); "
+        f"one of these markers as a segment anywhere ({_joined(_BOOLEAN_AUXILIARY_MARKERS)}); "
+        f"a final state adjective ({_joined(_BOOLEAN_ADJECTIVES)}); "
+        f"a final relationship verb ({_joined(_BOOLEAN_VERB_SUFFIXES)}); "
+        f"a prefix ({_joined(_BOOLEAN_PREFIX_PATTERNS)}); "
+        f"a suffix ({_joined(_BOOLEAN_SUFFIX_PATTERNS)}); "
+        "or a name listed in acceptedBooleanNames."
     )
 
 

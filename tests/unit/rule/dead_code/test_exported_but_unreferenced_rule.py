@@ -1,4 +1,5 @@
 import ast
+from dataclasses import replace
 
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
@@ -67,6 +68,19 @@ def test_called_symbol_is_clean():
     ]
     findings = _analyse(units)
     assert [finding.symbol for finding in findings] == []
+
+
+def test_reference_from_an_ignored_file_counts_but_the_file_never_reports():
+    """Count a call in a reference-only tree while reporting only symbols still unreferenced everywhere."""
+    units = [
+        _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
+        _unit(_REEXPORT_INIT, "pkg/__init__.py"),
+        _unit(_CALLER_MODULE, "pkg/app.py"),
+    ]
+    ignored_test = ast.parse("from pkg.render import render_legacy\n\ndef test_legacy():\n    assert render_legacy({}) == {}\n")
+    ignored_dead_helper = ast.parse("def unused_fixture_builder():\n    return {}\n")
+    context = replace(_ctx(), reference_trees=(ignored_test, ignored_dead_helper))
+    assert _analyse(units, context) == []
 
 
 def test_partial_scope_suppresses_entirely():

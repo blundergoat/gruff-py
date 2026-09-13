@@ -383,15 +383,14 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `high`
 - Default enabled: yes
-- Rationale: sys.path mutation at import time or inside library functions makes imports depend on execution order; insert(0, ...) shadows every later top-level import for the whole process, so one colliding filename in that directory breaks the host application.
-- Fix guidance: Package the code (editable install, src layout) or set PYTHONPATH in the runner; keep unavoidable mutations inside the script's `if __name__ == "__main__":` block.
-- Confidence rationale: High confidence: the receiver must be the literal sys.path attribute chain, and __main__ blocks, tests/ paths, and conftest.py are structurally exempt.
+- Rationale: sys.path mutation at import time or inside library functions makes imports depend on execution order; insert(0, ...) shadows every later top-level import for the whole process, so one colliding filename in that directory breaks the host application. A standalone script is its own host process, so a mutation at its top level is not reported; one inside a function still is.
+- Fix guidance: Package the code (editable install, src layout) or set PYTHONPATH in the runner. A file that is really a standalone script may change sys.path at its top level once it has an `if __name__ == "__main__":` guard or a shebang, or lives under scripts/, bin/ or tools/.
+- Confidence rationale: High confidence: the receiver must be the literal sys.path attribute chain, and the top level of a standalone script (a __main__ guard, a shebang, or a scripts/, bin/ or tools/ directory), tests/ paths, and conftest.py are structurally exempt; a mutation inside a function or in a guard's else branch can run on import and still reports.
 - Common false-positive shapes:
-  - Build, packaging, or documentation tooling scripts that legitimately bootstrap their import path outside a __main__ block.
-    Mitigation: Move the mutation under the __main__ guard, or suppress with `# gruff: disable=design.runtime-sys-path-mutation` plus the reason.
-- Bad example: `sys.path.insert(0, str(Path(__file__).parent))` at module level.
-- Good example: `if __name__ == "__main__":
-    sys.path.insert(0, ...)` inside the launching script only.
+  - Configuration files that a documentation or build tool executes, such as a Sphinx docs/conf.py, bootstrapping their import path at top level without a __main__ guard or shebang.
+    Mitigation: Suppress with `# gruff: disable=design.runtime-sys-path-mutation` plus the reason.
+- Bad example: `sys.path.insert(0, str(Path(__file__).parent))` at the top of an importable library module.
+- Good example: `pip install -e .`, so `from app import heuristics` resolves without touching sys.path.
 
 ### `design.single-implementor-protocol`
 
@@ -456,8 +455,11 @@ except ValueError:
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: Suppression comments age badly unless they explain the local compatibility, framework, or test boundary that made the suppression acceptable.
-- Fix guidance: Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker.
-- Confidence rationale: High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens.
+- Fix guidance: Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker; an issue reference such as `mypy#4125` counts as a reason.
+- Confidence rationale: High confidence: the rule only matches explicit suppression comment directives parsed from Python comment tokens, and skips a file whose header says it is generated.
+- Common false-positive shapes:
+  - The reason can sit in a full-line comment directly above the suppressed line, as Django's `from django.conf import SettingsReference  # NOQA` under its backwards-compatibility note, while the rule reads only the directive's own comment.
+    Mitigation: Move or copy the reason onto the directive's line after `-`, `--`, or a second `#`.
 - Bad example: `import plugin  # noqa`
 - Good example: `import plugin  # noqa: F401 - re-exported public API`
 
@@ -1431,11 +1433,12 @@ except ValueError:
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `low`
+- Confidence: `medium`
 - Default enabled: yes
 - Rationale: `sensitive-data.high-entropy-string` protects the sensitive-data pillar by flagging high-entropy string before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported high-entropy string directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Named thresholds: `entropy` = `4.2`, `minLength` = `32`
 - Common false-positive shapes:
   - A legitimate random-looking test vector, checksum, or opaque constant outside the built-in identifier and path exclusions can exceed the entropy boundary.
     Mitigation: Replace fixtures with a recognizable placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and path.
@@ -1514,7 +1517,10 @@ except ValueError:
 - Default enabled: yes
 - Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
 - Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
-- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords.
+- Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`.
+- Common false-positive shapes:
+  - A URL parser's test table can spell sample userinfo with a short dummy password, such as the rows in requests' `tests/test_utils.py` whose user is `u` and password `p`; short tokens stay reported until the family ratifies a placeholder vocabulary.
+    Mitigation: List the reviewed test file under `sensitiveExclusions` with its reason; a sensitive-data finding cannot be suppressed inline.
 - Bad example: `REMOTE = "https://deploy:<password>@api.example.test"`
 - Good example: `REMOTE = "https://api.example.test"` plus a runtime Authorization header.
 
@@ -1778,14 +1784,15 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `test-quality.loop-in-test` protects the test-quality pillar by flagging loop in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported loop in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: A loop in a test body runs every case under one pass or fail, so a failure does not say which iteration broke and the cases cannot be selected or rerun on their own.
+- Fix guidance: Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.
+- Confidence rationale: Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a fixture sweep, and a loop can legitimately be the behaviour under test.
 - Common false-positive shapes:
   - A state-machine, fuzz, or property test can require a loop whose branches make the built-in fixture-loop exemption inapplicable.
     Mitigation: Parametrize finite cases, or suppress the reviewed test when iteration is itself the behavior under test.
-- Bad example: Code that triggers `test-quality.loop-in-test` leaves loop in test unaddressed.
-- Good example: Code that satisfies `test-quality.loop-in-test` makes loop in test explicit or simpler.
+- Bad example: `def test_parse(): for text in ['1', '2']: assert parse(text)`
+- Good example: `@pytest.mark.parametrize('text', ['1', '2'])
+def test_parse(text): assert parse(text)`
 
 ### `test-quality.magic-number-assertion`
 
@@ -1883,14 +1890,16 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `test-quality.mystery-guest` protects the test-quality pillar by flagging mystery guest in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported mystery guest in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Rationale: A test that performs network, filesystem, mail, or FTP I/O when it runs depends on state outside the test, so it is slow, non-hermetic, and can fail for a reason the test body does not show.
+- Fix guidance: Mock the I/O boundary or serve the dependency from a fixture. Open files under a `tmp_path` or `tmpdir` fixture, which the rule already treats as hermetic.
+- Confidence rationale: Medium confidence: the rule matches calls that perform I/O when they run - module helpers such as `requests.get`, socket, FTP and SMTP entry points, and request methods on a client the test built - and skips constructors, parameters that shadow a module name, and assertion calls, but it cannot tell whether a URL points at a local fixture server.
 - Common false-positive shapes:
-  - A test can call `open` on `tmp_path` or reach a local test server even though the target is fixture-owned and hermetic.
+  - A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call the rule treats as network I/O even though the fixture keeps it hermetic.
     Mitigation: Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.
-- Bad example: Code that triggers `test-quality.mystery-guest` leaves mystery guest in test unaddressed.
-- Good example: Code that satisfies `test-quality.mystery-guest` makes mystery guest in test explicit or simpler.
+- Bad example: `def test_health(): assert requests.get('https://api.example.test/health').ok`
+- Good example: `def test_write(tmp_path):
+    with open(tmp_path / 'out.txt', 'w') as handle:
+        handle.write('x')`
 
 ### `test-quality.naming-consistency`
 
@@ -1920,6 +1929,11 @@ except ValueError:
 - Rationale: Collected tests without assertions are easy to mistake for coverage.
 - Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
 - Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
+- Common false-positive shapes:
+  - A test can assert through a matcher that raises on a mismatch without an `assert` name, such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`.
+    Mitigation: Call the matcher through an `assert_*` helper, or suppress the reviewed test with `# gruff: disable=test-quality.no-assertions` and the matcher that asserts.
+  - A smoke test can pass by not raising, such as requests' `test_can_access_urllib3_attribute`, whose whole body is one attribute access.
+    Mitigation: Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.
 - Bad example: `def test_saves_user(): service.save(user)`
 - Good example: `def test_saves_user(): service.save(user); assert_user_saved(user)`
 

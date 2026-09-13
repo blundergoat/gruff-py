@@ -36,7 +36,7 @@ A run-level problem such as an input error, parse error, config error, baseline 
 
 ### Display Filter
 
-A report-only filter such as `--min-severity`, include/exclude pillar, or include/exclude rule. Display filters change rendered output, not rule execution.
+A presentation filter that changes which findings are rendered and never rule execution, the score, or the exit code: `--min-severity` and its `minimumSeverity:` config default, `--show-rule`, `--hide-rule`, `--show-pillar`, and `--hide-pillar`. A run records it under `displayFilter`. `--include-rule`, `--exclude-rule`, `--include-pillar`, and `--exclude-pillar` are not display filters: they choose which rules run, so the score and the exit code move with them.
 
 ### Exit Codes
 
