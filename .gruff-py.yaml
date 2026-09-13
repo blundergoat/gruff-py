@@ -572,6 +572,9 @@ rules:
   # High-entropy string
   sensitive-data.high-entropy-string:
     enabled: true
+    thresholds:
+      minLength: 32
+      entropy: 4.2
   # JWT token
   sensitive-data.jwt-token:
     enabled: true
