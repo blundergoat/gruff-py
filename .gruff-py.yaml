@@ -23,6 +23,8 @@ paths:
   - .goat-flow/
   - tests/fixtures/**
 allowlists:
+  # The family's sixteen seeded words, none of which naming.abbreviation reports today, plus
+  # ctx: every ctx here is a click.Context parameter, the name Click's own documentation uses.
   acceptedAbbreviations:
   - age
   - app
@@ -412,6 +414,11 @@ rules:
   naming.module-name-mismatch:
     enabled: true
     options:
+      # This list replaces the rule's default, so it restates the five default names first.
+      # python_parser.py holds PythonFileParser and is imported under that name by three
+      # modules; the rule would ask for python_file_parser.py. It is the only entry that
+      # silences a finding today. The other six are role-named modules exempted by design and
+      # pinned by tests/unit/config/test_gruff_py_yaml_registry_coverage.py.
       conventionalModuleNames:
       - constants
       - exceptions

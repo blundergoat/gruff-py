@@ -26,6 +26,7 @@ from gruffpy.finding.baseline_identity import (
     BaselineIdentityError,
     FindingIdentity,
     finding_identities,
+    is_baseline_eligible,
 )
 from gruffpy.finding.finding import Finding
 
@@ -223,7 +224,8 @@ class BaselineReport:
         unchanged_count: Findings within the reviewed count, hidden from the failing set.
         absent_count: Reviewed occurrences no longer present, summed across the stale rows.
         collision_count: Findings whose identity could not separate two declarations; reported, never hidden.
-        not_eligible_count: Sensitive findings, which no row may hide.
+        not_eligible_count: Findings with no identity, which no row may hide: sensitive findings, and findings whose
+            symbol carries the ordinal separator.
         sensitive_counted: Sensitive findings a generated baseline counted rather than stored; 0 on an apply run.
     """
 
@@ -673,7 +675,7 @@ def _identities_or_error(
     """Name every eligible finding, reporting an unnameable one as a baseline failure rather than a traceback."""
     try:
         return finding_identities(findings, declaration_position)
-    # For example, a rule emitting a symbol that already contains "#" cannot be given an unambiguous ordinal.
+    # For example, a symbol-less finding whose message is empty has nothing left to be named by.
     except BaselineIdentityError as exc:
         raise BaselineError(str(exc)) from exc
 
@@ -706,7 +708,8 @@ def _classify(
     """Label every finding new, unchanged, collision, or notEligible, spending each reviewed count in file order."""
     statuses = ["new"] * len(findings)
     for index, named in enumerate(identities):
-        # Sensitive findings are labelled before any lookup, so no reviewed row can reach a secret.
+        # A finding with no identity is labelled before any lookup: a sensitive one, so no reviewed row can reach a
+        # secret, or one whose symbol carries the ordinal separator and so cannot be named unambiguously.
         if named is None:
             statuses[index] = "notEligible"
 
@@ -782,9 +785,11 @@ def _document_from_findings(
     sensitive_by_rule: dict[str, int] = {}
 
     for finding, named in zip(findings, identities, strict=True):
-        # A sensitive finding is counted by rule and stored nowhere, so no row can ever hide a secret.
+        # A sensitive finding is counted by rule and stored nowhere, so no row can ever hide a secret. A finding whose
+        # symbol carries the ordinal separator has no identity either, but it is not a secret and is not counted as one.
         if named is None:
-            sensitive_by_rule[finding.rule_id] = sensitive_by_rule.get(finding.rule_id, 0) + 1
+            if not is_baseline_eligible(finding):
+                sensitive_by_rule[finding.rule_id] = sensitive_by_rule.get(finding.rule_id, 0) + 1
             continue
         previous = rows.get(named.identity)
         count = 1 if previous is None else previous.count + 1

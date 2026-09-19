@@ -109,7 +109,7 @@ def _is_loopback_dashboard_host(dashboard_host: str) -> bool:
 def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) -> DashboardState:
     """Build the seed ``DashboardState`` with the precedence rule applied.
 
-    Precedence (ADR-019): CLI ``--fail-on`` flag > ``minimumSeverity.dashboard``
+    Precedence: CLI ``--fail-on`` flag > ``failOn.dashboard``
     in the loaded config > Click default. Config-load errors propagate so the
     user sees them at dashboard startup rather than on the first scan.
 

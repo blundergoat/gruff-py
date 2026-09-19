@@ -514,8 +514,10 @@ code. Like the flag, the configured floor is recorded in JSON output: the
 keeps the full-run counts. A per-command map under `minimumSeverity` is
 refused, and the error names `failOn`.
 
-See [ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md)
-for the rationale, the rejected alternatives, and the cross-port invariant.
+The split follows the family CLI contract decision `config-exit-gate-key`
+(`gruff-spec/contracts/core/cli.v1.json`), which superseded
+[ADR-019](../.goat-flow/learning-loop/decisions/ADR-019-per-command-minimum-severity.md);
+ADR-019 keeps the original per-command design and its rejected alternatives.
 
 ## Schema Version
 

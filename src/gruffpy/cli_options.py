@@ -28,7 +28,7 @@ def was_fail_on_set_on_cli() -> bool:
     """Return True when the user explicitly passed ``--fail-on`` on the command line.
 
     Distinguishes the user's deliberate choice from Click's default-value fill-in,
-    so the precedence rule (CLI flag > ``minimumSeverity.<cmd>`` > binary default)
+    so the precedence rule (CLI flag > ``failOn.<cmd>`` > binary default)
     only consults the configured override when no CLI value was supplied.
 
     Returns:
@@ -608,7 +608,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help=(
             "Finding severity that fails the run: advisory, warning, error, or none. "
             "Gates findings only; parse errors exit 2 even with --fail-on none. "
-            "Overridden by minimumSeverity.analyse in .gruff-py.yaml when --fail-on "
+            "Overridden by failOn.analyse in .gruff-py.yaml when --fail-on "
             "is not passed explicitly."
         ),
     ),

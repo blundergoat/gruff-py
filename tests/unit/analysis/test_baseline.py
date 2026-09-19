@@ -20,7 +20,7 @@ from gruffpy.analysis.baseline import (
     migrate_baseline,
     require_overwritable_default_path,
 )
-from gruffpy.finding.baseline_identity import compute_identity_for, normalise_measured_values
+from gruffpy.finding.baseline_identity import compute_identity_for, finding_identities, normalise_measured_values
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -140,6 +140,29 @@ def test_a_sensitive_finding_is_never_stored_and_never_hidden(tmp_path: Path) ->
     assert result.findings == [secret]
     assert result.report.not_eligible_count == 1
     assert result.report.unchanged_count == 0
+
+
+def test_a_symbol_carrying_the_ordinal_separator_has_no_identity() -> None:
+    ordinary, separated = finding_identities([_finding(), _finding(symbol="example#2", line=20)])
+
+    # The runner, the hook and SARIF all read this one function, so None here is "no identity" on every surface.
+    assert ordinary is not None
+    assert separated is None
+
+
+def test_a_symbol_carrying_the_ordinal_separator_is_never_stored_and_is_not_a_secret(tmp_path: Path) -> None:
+    separated = _finding(symbol="example#2", line=20)
+    generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding(), separated])
+    payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
+
+    assert [row["subject"] for row in payload["occurrences"]] == ["example#1"]
+    assert payload["sensitive"]["counts"] == {"total": 0, "byRule": {}}
+
+    result = apply_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding(), separated], source="explicit")
+
+    assert result.findings == [separated]
+    assert result.report.not_eligible_count == 1
+    assert result.report.unchanged_count == 1
 
 
 def test_a_baseline_written_by_another_port_is_refused(tmp_path: Path) -> None:

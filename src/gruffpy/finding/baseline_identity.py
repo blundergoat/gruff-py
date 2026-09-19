@@ -90,6 +90,21 @@ def is_baseline_eligible(finding: Finding) -> bool:
     return finding.pillar is not Pillar.SENSITIVE_DATA and not finding.rule_id.startswith(_SENSITIVE_RULE_PREFIX)
 
 
+def has_baseline_identity(finding: Finding) -> bool:
+    """Tell whether a finding can be named durably at all.
+
+    A sensitive finding never is, and neither is one whose symbol carries the ordinal separator, which could pose as
+    another symbol's ordinal. Such a finding is reported on every run and never stored, matched or fingerprinted.
+
+    Args:
+        finding: Any finding from the current scan.
+
+    Returns:
+        True when the finding is eligible and its symbol, if any, is free of the ordinal separator.
+    """
+    return is_baseline_eligible(finding) and _ORDINAL_SEPARATOR not in (finding.symbol or "")
+
+
 def normalise_measured_values(message: str) -> str:
     """Replace every measured value in a message with ``#``, per the identity amendment of 2026-09-05.
 
@@ -224,7 +239,8 @@ def finding_identities(
             which is what a direct API caller without a parsed tree gets.
 
     Returns:
-        One entry per input finding, aligned by index; ``None`` where the finding is sensitive and so has no identity.
+        One entry per input finding, aligned by index; ``None`` where the finding is sensitive or its symbol carries
+        the ordinal separator, and so has no identity.
 
     Raises:
         BaselineIdentityError: When an eligible finding cannot be named.
@@ -233,8 +249,9 @@ def finding_identities(
     ordinals = _symbol_ordinals(findings, position)
     identities: list[FindingIdentity | None] = []
     for index, finding in enumerate(findings):
-        # A sensitive finding is skipped before any hashing, so no secret ever reaches a stored identity.
-        if not is_baseline_eligible(finding):
+        # A sensitive finding is skipped before any hashing, so no secret ever reaches a stored identity; a symbol
+        # carrying the ordinal separator is skipped too, since no subject built from it could be unambiguous.
+        if not has_baseline_identity(finding):
             identities.append(None)
             continue
         subject = baseline_subject(finding, ordinals[index])
@@ -256,13 +273,13 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
     """
     positions_by_symbol: dict[tuple[str, str], set[int]] = {}
     for finding in findings:
-        if finding.symbol and is_baseline_eligible(finding):
+        if finding.symbol and has_baseline_identity(finding):
             positions_by_symbol.setdefault((finding.file_path, finding.symbol), set()).add(position(finding))
 
     ordinals: list[int] = []
     for finding in findings:
         # A symbol-less finding is named by its message, so it needs no ordinal and takes the sentinel zero.
-        if not finding.symbol or not is_baseline_eligible(finding):
+        if not finding.symbol or not has_baseline_identity(finding):
             ordinals.append(0)
             continue
         ranked = sorted(positions_by_symbol[(finding.file_path, finding.symbol)])

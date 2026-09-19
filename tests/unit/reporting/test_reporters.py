@@ -632,6 +632,17 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     assert result["partialFingerprints"]["gruffFingerprint"] == _baseline_identity(finding)
 
 
+def test_sarif_gives_a_symbol_carrying_the_ordinal_separator_no_fingerprint() -> None:
+    """A symbol containing ``#`` could pose as another symbol's ordinal, so its result is published unnamed."""
+    ordinary = _finding(symbol="example")
+    separated = _finding(symbol="example#2", line=20)
+    results = json.loads(SarifReporter().render(_report((ordinary, separated))))["runs"][0]["results"]
+    by_symbol = {result["properties"]["symbol"]: result for result in results}
+
+    assert by_symbol["example"]["partialFingerprints"]["gruffFingerprint"] == _baseline_identity(ordinary)
+    assert "partialFingerprints" not in by_symbol["example#2"]
+
+
 def test_dependency_security_findings_do_not_leak_raw_references_in_reporters() -> None:
     """Dependency posture findings redact raw URL, Git, and local path references."""
     findings = tuple(_dependency_security_findings())
