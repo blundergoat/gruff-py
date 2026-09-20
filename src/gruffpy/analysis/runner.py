@@ -22,6 +22,7 @@ from gruffpy.analysis.baseline import (
     require_overwritable_default_path,
 )
 from gruffpy.analysis.changed_region import (
+    CHANGED_REGION_DIAGNOSTIC_TYPE,
     ChangedRegionSet,
     changed_regions_from_git,
     filter_findings_for_changed_regions,
@@ -170,6 +171,10 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         request.changed_scope,
     )
     findings = changed_filter_result.findings
+    # A scope the run could not read leaves nothing scoped to report. Publishing the unscoped findings beside
+    # the diagnostic would read as a successful narrow scan at a scope the run never applied.
+    if any(diagnostic.type == CHANGED_REGION_DIAGNOSTIC_TYPE for diagnostic in diagnostics):
+        findings = []
     score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
@@ -372,7 +377,7 @@ def _discover_and_parse_sources(
     paths: tuple[str, ...],
     include_ignored: bool,
     config: AnalysisConfig,
-    changed_ranges: str,
+    changed_ranges: str | None,
     since: str,
     diff_mode: str,
     diff_patch: str,
@@ -401,7 +406,7 @@ def _discover_and_parse_sources(
         diff_patch=diff_patch,
         diagnostics=diagnostics,
     )
-    if changed.active and not changed_ranges:
+    if changed.active and changed_ranges is None:
         discovery_result = replace(
             discovery_result,
             files=filter_sources_for_changed_regions(discovery_result.files, changed),
@@ -418,7 +423,7 @@ def _resolve_changed_regions(
     project_root: Path,
     paths: tuple[str, ...],
     source_paths: tuple[str, ...],
-    changed_ranges: str,
+    changed_ranges: str | None,
     since: str,
     diff_mode: str,
     diff_patch: str,
@@ -426,7 +431,8 @@ def _resolve_changed_regions(
 ) -> ChangedRegionSet:
     """Resolve the user's explicit ranges, patch, or Git selector into changed source regions."""
     try:
-        if changed_ranges:
+        # A given-but-empty value reaches the parser, which refuses it: the caller scoped the run to nothing.
+        if changed_ranges is not None:
             return parse_explicit_ranges(source_paths, changed_ranges)
         if diff_mode == "-":
             return parse_unified_diff("stdin", diff_patch)
@@ -439,7 +445,7 @@ def _resolve_changed_regions(
     # For example, a malformed ``--changed-ranges`` value becomes a CLI diagnostic rather than
     # a traceback.
     except ValueError as exc:
-        diagnostics.append(RunDiagnostic(type="diff-error", message=str(exc)))
+        diagnostics.append(RunDiagnostic(type=CHANGED_REGION_DIAGNOSTIC_TYPE, message=str(exc)))
         return ChangedRegionSet(source="")
     return ChangedRegionSet(source="")
 
@@ -583,7 +589,7 @@ def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) 
     ``--diff`` and ``--since`` make the run partial before rules execute; explicit
     ``--changed-ranges`` filters later, so the user's requested paths decide.
     """
-    if changed.active and not request.changed_ranges:
+    if changed.active and request.changed_ranges is None:
         return "partial-scope"
     return _scan_scope(request.paths, request.project_root)
 

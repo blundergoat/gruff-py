@@ -410,7 +410,8 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _option("--since", default="", help="Git base ref for changed-region filtering."),
     _option(
         "--changed-ranges",
-        default="",
+        type=str,
+        default=None,
         help='Explicit changed line ranges such as "3-3,8-10".',
     ),
     _option(

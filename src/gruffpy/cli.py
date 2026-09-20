@@ -186,7 +186,7 @@ class _AnalysisCliRequest:
     diff_mode: str
     diff_patch: str
     since: str
-    changed_ranges: str
+    changed_ranges: str | None
     changed_scope: str
     strict_config: bool = False
     deep_scan_budget: str = ""
@@ -610,7 +610,7 @@ def _analysis_request(
         diff_mode=_resolved_diff_mode(kwargs),
         diff_patch=_read_diff_patch(cast(str, kwargs.get("diff_mode", ""))),
         since=cast(str, kwargs.get("since", "")),
-        changed_ranges=cast(str, kwargs.get("changed_ranges", "")),
+        changed_ranges=cast("str | None", kwargs.get("changed_ranges")),
         changed_scope=cast(str, kwargs.get("changed_scope", "symbol")),
         strict_config=cast(bool, kwargs.get("strict_config", False)),
         deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),
@@ -725,7 +725,7 @@ def _summary_analysis_request(
         diff_mode="",
         diff_patch="",
         since="",
-        changed_ranges="",
+        changed_ranges=None,
         changed_scope="symbol",
         strict_config=cast(bool, kwargs.get("strict_config", False)),
         deep_scan_budget=cast(str, kwargs.get("deep_scan_budget", "")),

@@ -200,6 +200,44 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     assert payload["summary"]["suppressedFindings"] >= 1
 
 
+@pytest.mark.parametrize(
+    "ranges",
+    ["=abc", ""],
+    ids=["unreadable", "empty"],
+)
+def test_analyse_refuses_a_changed_ranges_value_it_cannot_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ranges: str,
+) -> None:
+    """A range the run cannot scope to ends the run, rather than widening it to the whole tree."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('"""Module."""\n\n\ndef changed():\n    return 1\n')
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "analyse",
+            "--format",
+            "json",
+            "--fail-on",
+            "none",
+            "--no-config",
+            "--no-baseline",
+            "--changed-ranges",
+            ranges,
+            "src/sample.py",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 2, result.output
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["changed-region"]
+    assert payload["findings"] == []
+
+
 def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

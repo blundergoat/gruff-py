@@ -32,7 +32,8 @@ class AnalysisRunRequest:
         display_filter: Reporter-side filter for severity, pillar, and rule selection.
         baseline: Baseline apply/generate/disable selection.
         config_severity_command: Optional command name for config minimum-severity lookup.
-        changed_ranges: Explicit line ranges such as ``3-3,8-10``.
+        changed_ranges: Explicit line ranges such as ``3-3,8-10``; ``None`` when the flag was not given.
+            An empty string means the caller asked for a scoped run and named no range, which is refused.
         since: Git base ref for changed-region filtering.
         diff_mode: ``working-tree``, ``staged``, ``unstaged``, a base ref, or ``-``.
         diff_patch: Unified diff text read from stdin for ``--diff -``.
@@ -56,7 +57,7 @@ class AnalysisRunRequest:
     display_filter: FindingDisplayFilter
     baseline: BaselineOptions | None = None
     config_severity_command: str = ""
-    changed_ranges: str = ""
+    changed_ranges: str | None = None
     since: str = ""
     diff_mode: str = ""
     diff_patch: str = ""

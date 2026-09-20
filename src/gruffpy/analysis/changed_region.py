@@ -143,6 +143,12 @@ _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS = frozenset(
 )
 
 
+#: The one type every port publishes when it cannot read the changed-region scope it was asked to analyse,
+#: whether that scope came from ``--changed-ranges``, ``--diff`` or ``--since``, so a consumer reading a scoped
+#: run's failure need not know which analyser produced it (FAMILY-CONTRACT.md section 6).
+CHANGED_REGION_DIAGNOSTIC_TYPE = "changed-region"
+
+
 def parse_explicit_ranges(source_paths: tuple[str, ...], raw_ranges: str) -> ChangedRegionSet:
     """Build a changed-region set from ``1-3,8`` style ranges.
 
