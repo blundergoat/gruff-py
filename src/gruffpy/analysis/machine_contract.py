@@ -274,6 +274,9 @@ def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, An
     }
     if summary.symbol:
         payload["symbol"] = summary.symbol
+    # Only a built-in row names its source; a configured row is recognised by carrying none.
+    if summary.source is not None:
+        payload["source"] = summary.source
     return payload
 
 

@@ -213,14 +213,10 @@ selection:
 # Write each entry by hand with rule, path, and reason; symbol is optional.
 # No preview or matched value is ever turned into an entry automatically,
 # and every entry reports how many findings it suppressed.
-sensitiveExclusions:
-  # npm records one integrity digest per resolved package. They are base64 SHA-512 checksums of
-  # published tarballs, high-entropy by construction and carrying no secret. The lockfile is excluded
-  # here rather than by lowering the entropy threshold, which would weaken the detector for real
-  # source. A rule-level lockfile guard is a family question and stays in backlog.md.
-  - rule: sensitive-data.high-entropy-string
-    path: package-lock.json
-    reason: npm integrity digests over published tarballs; checksums, not credentials.
+# The npm lockfile entry this list used to carry is gone: 0.6.0 skips the entropy rule in every
+# package-manager lockfile by name, and reports the count as a built-in audit row, so no project
+# needs to write that exclusion by hand.
+sensitiveExclusions: []
 rules:
   # Cognitive complexity
   complexity.cognitive:

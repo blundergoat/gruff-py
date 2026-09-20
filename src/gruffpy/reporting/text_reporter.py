@@ -199,8 +199,13 @@ def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> Non
     # A run where no configured scope matched has no suppression total to reconcile.
     if total == 0:
         return
+    # A built-in row names the lockfile it skipped, because it has no configured entry to point at.
     details = "; ".join(
-        f"sensitiveExclusions[{summary.index}] {summary.rule}: {summary.suppressed} ({summary.reason})"
+        (
+            f"builtInLockfile[{summary.paths[0]}] {summary.rule}: {summary.suppressed} ({summary.reason})"
+            if summary.source == "built-in"
+            else f"sensitiveExclusions[{summary.index}] {summary.rule}: {summary.suppressed} ({summary.reason})"
+        )
         for summary in report.suppressions
         if summary.suppressed > 0
     )

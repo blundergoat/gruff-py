@@ -24,16 +24,17 @@ def test_asia_session_token_emits():
     assert len(findings) == 1
 
 
-def test_documentation_example_key_skipped():
-    src = "AWS_KEY = 'AKIAIOSFODNN7EXAMPLE'\n"
+def test_documentation_example_key_reports():
+    # The family reports AWS's documented example key in every port; the value is assembled at run time.
+    src = "AWS_KEY = '" + "AKIA" + "IOSFODNN7" + "EXAMPLE" + "'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
-    assert findings == []
+    assert [finding.line for finding in findings] == [1]
 
 
-def test_documentation_example_session_key_skipped():
-    src = "key = 'ASIAIOSFODNN7EXAMPLE'\n"
+def test_documentation_example_session_key_reports():
+    src = "key = '" + "ASIA" + "IOSFODNN7" + "EXAMPLE" + "'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
-    assert findings == []
+    assert [finding.line for finding in findings] == [1]
 
 
 def test_too_short_skipped():

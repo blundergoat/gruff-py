@@ -24,6 +24,8 @@ class SuppressionSummary:
         symbol: Optional qualified symbol that narrowed the scope, else ``None``.
         reason: The user's rationale, reproduced from configuration.
         suppressed: Findings this entry removed; ``0`` is a valid, non-failing result.
+        source: ``"built-in"`` on a row the family's lockfile skip produced, else ``None`` on a
+            configured entry's row.
     """
 
     index: int
@@ -32,6 +34,7 @@ class SuppressionSummary:
     symbol: str | None
     reason: str
     suppressed: int
+    source: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the native suppression audit row.
@@ -49,4 +52,5 @@ class SuppressionSummary:
             "symbol": self.symbol,
             "reason": self.reason,
             "suppressed": self.suppressed,
+            **({} if self.source is None else {"source": self.source}),
         }

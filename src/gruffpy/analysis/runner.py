@@ -51,7 +51,10 @@ from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
-from gruffpy.suppression.sensitive_exclusion_filter import partition_sensitive_exclusions
+from gruffpy.suppression.sensitive_exclusion_filter import (
+    apply_built_in_lockfile_skip,
+    partition_sensitive_exclusions,
+)
 from gruffpy.version import VERSION
 
 _PARTIAL_PROJECT_CONTEXT_CAVEAT = "partial project scan: project-wide rules may need full-project context"
@@ -243,6 +246,8 @@ def _name_findings(
     # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
     # exactly like the inline directive channel, and every drop is counted for the report.
     findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
+    # A configured entry claims its findings first, so its count stays what the user wrote it for.
+    findings, suppressions = apply_built_in_lockfile_skip(findings, suppressions)
     # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
     # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
     return _with_baseline_identities(findings, units), suppressions

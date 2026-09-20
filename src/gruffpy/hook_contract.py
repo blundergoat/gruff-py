@@ -288,7 +288,7 @@ def hook_payload(
 
 
 def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
-    """Project one configured sensitive exclusion into its section 13a audit row."""
+    """Project one sensitive exclusion, configured or built in, into its section 13a audit row."""
     return {
         "rule": summary.rule,
         # Section 13a gives each entry exactly one path; the native audit carries it in the family's list shape.
@@ -296,6 +296,8 @@ def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
         "symbol": summary.symbol,
         "reason": summary.reason,
         "suppressed": summary.suppressed,
+        # Only a built-in row names its source; a configured row is recognised by carrying none.
+        **({} if summary.source is None else {"source": summary.source}),
     }
 
 

@@ -2,8 +2,9 @@
 
 Pattern: ``AKIA`` + 16 uppercase alphanumeric chars. AWS access key IDs are
 20-character strings starting with ``AKIA`` (long-term keys) or ``ASIA``
-(session tokens). Both shapes fire, except documentation placeholders ending
-in ``EXAMPLE``.
+(session tokens). Both shapes fire, including the key AWS publishes in its own
+documentation: the family reports it in every port, because a key-shaped value
+ending in ``EXAMPLE`` is one alphanumeric run and nothing in it marks a placeholder.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -22,7 +23,6 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 )
 
 _PATTERN = compile_pattern(r"(?:AKIA|ASIA)[A-Z0-9]{16}")
-_DOCUMENTATION_SUFFIX = "EXAMPLE"
 
 
 class AwsAccessKeyRule(SourceTextRule):
@@ -54,25 +54,22 @@ class AwsAccessKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for ``AKIA``-/``ASIA``-prefixed access key IDs, excluding ``*EXAMPLE``.
+        """Scan raw source for ``AKIA``-/``ASIA``-prefixed access key IDs.
 
-        Users see each likely credential, while AWS documentation values ending in ``EXAMPLE``
-        stay out of the remediation list.
+        Users see each key-shaped literal, AWS's documented example key among them, so a reviewer
+        decides what is a placeholder rather than the suffix of the value deciding it.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per non-placeholder AWS access key literal.
+            One finding per AWS access key literal.
         """
         definition = self.definition()
         findings: list[Finding] = []
         # Every key-shaped occurrence remains separately visible so users can rotate each exposure.
         for access_key_match in iter_matches(_PATTERN, unit.source):
-            # AWS documentation examples ending in EXAMPLE stay out of the user's remediation list.
-            if access_key_match.raw.upper().endswith(_DOCUMENTATION_SUFFIX):
-                continue
             findings.append(
                 Finding(
                     rule_id=definition.id,
