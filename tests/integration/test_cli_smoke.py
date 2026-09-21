@@ -1511,6 +1511,30 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(tmp_path: Pat
     assert "Traceback" not in result.stderr
 
 
+def test_cli_analyse_json_config_error_leaves_out_a_target_named_from_a_sibling_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A config that cannot load, with `analyse ../proj` run from a sibling directory, still publishes its envelope.
+
+    The run never resolves a project root, so the envelope is rooted at the launch directory, where the target has
+    no project-relative form; the input is left out, as the config path already is, instead of raising.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the sibling directory.
+    """
+    (tmp_path / "proj").mkdir()
+    (tmp_path / "proj" / "a.py").write_text("x = 1\n")
+    (tmp_path / "sib").mkdir()
+    monkeypatch.chdir(tmp_path / "sib")
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "--config", "../missing.yaml", "../proj"])
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["run"]["inputs"] == []
+    assert "config" not in payload["run"]
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["config-error"]
+
+
 def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"

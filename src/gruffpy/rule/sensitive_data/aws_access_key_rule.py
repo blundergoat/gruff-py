@@ -23,6 +23,10 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 )
 
 _PATTERN = compile_pattern(r"(?:AKIA|ASIA)[A-Z0-9]{16}")
+# A masked key is one whose whole body is a run of X, written to show where a key goes (FAMILY-CONTRACT.md
+# section 5). Only the whole body counts: a real key may contain a run of X, and hiding it would hide a live
+# credential.
+_MASKED_BODY = "X" * 16
 
 
 class AwsAccessKeyRule(SourceTextRule):
@@ -70,6 +74,8 @@ class AwsAccessKeyRule(SourceTextRule):
         findings: list[Finding] = []
         # Every key-shaped occurrence remains separately visible so users can rotate each exposure.
         for access_key_match in iter_matches(_PATTERN, unit.source):
+            if access_key_match.raw[4:] == _MASKED_BODY:
+                continue
             findings.append(
                 Finding(
                     rule_id=definition.id,

@@ -106,7 +106,7 @@ def _machine_run(report: AnalysisReport) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "failOn": report.fail_on,
         "format": report.format,
-        "inputs": _machine_paths(report.requested_paths, root),
+        "inputs": _machine_inputs(report.requested_paths, root),
         "projectRoot": ".",
     }
     if report.config_path is not None:
@@ -456,6 +456,21 @@ def _machine_paths(values: Any, root: str) -> list[str]:
     for value in values:
         path = _machine_path(str(value), root)
         if path not in seen:
+            seen.add(path)
+            paths.append(path)
+    return paths
+
+
+def _machine_inputs(values: Any, root: str) -> list[str]:
+    # A run that could not start never resolved a project root, so its envelope is rooted at the launch directory,
+    # and a target named from a sibling directory, such as `analyse ../proj`, has no form under it. A host path may
+    # not be published, so the input is left out the way the config path beside it already is, instead of raising
+    # and losing the one envelope that says why the run could not start.
+    paths: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        path = _machine_relative_path(str(value), root)
+        if path is not None and path not in seen:
             seen.add(path)
             paths.append(path)
     return paths

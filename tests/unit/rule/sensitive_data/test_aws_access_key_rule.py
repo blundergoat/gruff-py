@@ -37,6 +37,15 @@ def test_documentation_example_session_key_reports():
     assert [finding.line for finding in findings] == [1]
 
 
+def test_a_body_that_is_entirely_x_is_read_as_masked():
+    # FAMILY-CONTRACT.md section 5 reads a body that is entirely X as naming no credential, while a real key that
+    # merely contains a run of X still reports, because hiding it would hide a live credential.
+    masked = "X" * 16
+    src = "long_key = '" + "AKIA" + masked + "'\nsession_key = '" + "ASIA" + masked + "'\npartly_masked = '" + "AKIA" + "IOSFODNN" + "X" * 8 + "'\n"
+    findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
+    assert [finding.line for finding in findings] == [3]
+
+
 def test_too_short_skipped():
     src = "key = 'AKIA123'\n"
     assert AwsAccessKeyRule().analyse(make_unit(src), default_ctx()) == []
