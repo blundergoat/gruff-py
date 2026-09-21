@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -87,7 +87,8 @@ _HOOK_COMMAND_DECORATORS: tuple[Callable[[Callable[..., Any]], Callable[..., Any
     click.option("--capabilities", is_flag=True, default=False, help="Emit hook capabilities JSON."),
     click.option(
         "--changed-ranges",
-        default="",
+        type=str,
+        default=None,
         help='Explicit changed line ranges such as "3-3,8-10".',
     ),
     click.option("--diff", "diff_ref", default="", help="Git ref for hook new-only comparison."),
@@ -166,7 +167,7 @@ def hook(**kwargs: Any) -> None:
         sys.exit(0)
 
     _execute_hook(
-        changed_ranges=str(kwargs["changed_ranges"]),
+        changed_ranges=cast("str | None", kwargs["changed_ranges"]),
         diff_ref=str(kwargs["diff_ref"]),
         hook_baseline_path=kwargs["hook_baseline_path"],
         config_path=kwargs["config_path"],
@@ -186,7 +187,7 @@ def hook(**kwargs: Any) -> None:
 
 def _execute_hook(
     *,
-    changed_ranges: str,
+    changed_ranges: str | None,
     diff_ref: str,
     hook_baseline_path: Path | None,
     config_path: Path | None,
@@ -200,7 +201,9 @@ def _execute_hook(
     """Run one hook invocation and exit, so the decorated command stays a thin entry point.
 
     Args:
-        changed_ranges: Explicit changed line ranges such as ``3-3,8-10``; empty for none.
+        changed_ranges: Explicit changed line ranges such as ``3-3,8-10``; None when the flag was not
+            given. An empty string means the caller asked to scope the run and named no range, which is
+            refused rather than read as no filter at all.
         diff_ref: Git ref for new-only comparison; empty when no ``--diff`` was given.
         hook_baseline_path: Ratified baseline v3 file to apply, or None.
         config_path: Explicit config file, or None to discover the project default.
@@ -298,18 +301,18 @@ def _report_with(report: AnalysisReport, findings: tuple[Finding, ...]) -> Analy
     return replace(report, findings=findings)
 
 
-def _run_mode(changed_ranges: str, diff_ref: str) -> str:
+def _run_mode(changed_ranges: str | None, diff_ref: str) -> str:
     """Name which region selector chose the work, so a consumer can tell a targeted run from a whole-tree one.
 
     Args:
-        changed_ranges: Raw ``--changed-ranges`` text, empty when unset.
+        changed_ranges: Raw ``--changed-ranges`` text, None when unset.
         diff_ref: Raw ``--diff`` ref, empty when unset.
 
     Returns:
         One of ``changed-ranges``, ``diff`` or ``full``.
     """
     # Explicit ranges are the narrowest selector and win when both are given.
-    if changed_ranges:
+    if changed_ranges is not None:
         return "changed-ranges"
     return "diff" if diff_ref else "full"
 

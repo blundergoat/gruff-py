@@ -238,6 +238,47 @@ def test_analyse_refuses_a_changed_ranges_value_it_cannot_scope(
     assert payload["findings"] == []
 
 
+@pytest.mark.parametrize(
+    "ranges",
+    ["=abc", ""],
+    ids=["unreadable", "empty"],
+)
+def test_hook_refuses_a_changed_ranges_value_it_cannot_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ranges: str,
+) -> None:
+    """The hook holds the same contract analyse does: an unusable scope ends the run.
+
+    Widening it instead would hand an agent a whole-tree finding list attributed to the
+    edit it just made, which is the worse failure of the two surfaces.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "sample.py").write_text('"""Module."""\n\n\ndef changed():\n    return 1\n')
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "hook",
+            "--format",
+            "json",
+            "--no-config",
+            "--changed-ranges",
+            ranges,
+            "src/sample.py",
+        ],
+    )
+
+    # The hook writes its reason to stderr and the v2 payload to stdout, so the two are read apart.
+    payload = json.loads(result.stdout)
+    assert result.exit_code == 2, result.output
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["changed-region"]
+    assert [diagnostic["severity"] for diagnostic in payload["diagnostics"]] == ["fatal"]
+    assert payload["findings"] == []
+
+
 def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

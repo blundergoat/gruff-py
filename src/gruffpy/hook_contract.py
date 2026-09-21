@@ -221,7 +221,7 @@ def hook_payload(
     report: AnalysisReport,
     *,
     paths: tuple[str, ...],
-    changed_ranges: str = "",
+    changed_ranges: str | None = None,
     base_stable_identities: frozenset[str] | None = None,
     mode: str = "full",
     baseline_path: str | None = None,
@@ -322,7 +322,7 @@ def _filter_findings_for_hook(
     findings: tuple[Finding, ...],
     *,
     paths: tuple[str, ...],
-    changed_ranges: str = "",
+    changed_ranges: str | None = None,
     base_stable_identities: frozenset[str] | None = None,
     has_prior_base: bool = False,
 ) -> _HookFilterResult:
@@ -565,9 +565,11 @@ def _first_present(metadata: dict[str, Any], keys: tuple[str, ...]) -> Any | Non
 def _changed_region_set(
     findings: tuple[Finding, ...],
     paths: tuple[str, ...],
-    changed_ranges: str,
+    changed_ranges: str | None,
 ) -> ChangedRegionSet:
-    if not changed_ranges:
+    # Only an absent flag means no filter. An empty value asks to scope the run and names no range, so it
+    # goes to the parser, which refuses it, rather than silently widening the scan to the whole tree.
+    if changed_ranges is None:
         return ChangedRegionSet(source="")
     source_paths = {
         *(path.replace("\\", "/").strip("/") for path in paths),
