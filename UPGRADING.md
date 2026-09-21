@@ -33,6 +33,10 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 13. **`sensitive-data.high-entropy-string` adopts the family contract** — The rule reports at medium confidence instead of low, and its two bars become configurable thresholds with the family defaults: `minLength` `32` (was a hardcoded `20`) and `entropy` `4.2` bits per character (was `4.5`). Tokens of 20 to 31 characters stop reporting, tokens between 4.2 and 4.5 bits start, and each finding weighs more in the score. To keep the `0.5` bar, set both under `rules.sensitive-data.high-entropy-string.thresholds` with `minLength: 20` and `entropy: 4.5`. The contract is the one FAMILY-CONTRACT.md records as ratified on 2026-09-02.
 
+14. **an empty `--changed-ranges` is refused instead of scanning everything** — `--changed-ranges=` asks for a scoped run and names no range, and it was read as "no filter": the run silently widened to the whole tree and exited `0`. It now exits `2` with one `changed-region` diagnostic and no findings, on analyse and on the hook. A caller that passes a computed range which can legitimately come back empty must skip the run rather than pass the empty value; the shipped `gruff-code-quality.sh` wrapper already does.
+
+15. **`sensitive-data.high-entropy-string` no longer reports in package-manager lockfiles** — Nine lockfile names are skipped for that rule alone, at any depth, and each skip is published as an audit row carrying `source: "built-in"`. A project that relied on those findings loses them; every other sensitive-data rule still reads the file, so a credential pasted into a lockfile is still reported.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed
