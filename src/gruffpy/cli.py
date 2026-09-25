@@ -922,6 +922,31 @@ def _targets_for_root(project_root: Path, paths: tuple[str, ...]) -> tuple[str, 
     return tuple(raw_path if Path(raw_path).is_absolute() else str(working_directory / raw_path) for raw_path in paths)
 
 
+def _path_for_root(project_root: Path, path: Path | None) -> Path | None:
+    """Rewrite a typed file path, such as ``--baseline``, so that read against the project root it names the same file.
+
+    The baseline store reads a relative path against the project root, so ``../../base.json`` typed two levels inside the
+    project named a file two levels above it: a read missed it, and a write landed outside the project.
+
+    Args:
+        project_root: Root chosen by ``_project_root_from_targets``.
+        path: The path as typed on the command line, or None when the flag was not given.
+
+    Returns:
+        The path unchanged when it is absent, absolute, or typed from the root, otherwise the same file relative to the
+        root, so the report never names a host path.
+    """
+    working_directory = Path.cwd()
+    # Inside the launch directory the root and the typed path already agree, so the path is passed on as typed.
+    if path is None or path.is_absolute() or project_root == working_directory:
+        return path
+    try:
+        return Path(os.path.relpath(working_directory / path, project_root))
+    except ValueError:
+        # Windows cannot relate paths on two drives; the absolute path still names the right file.
+        return working_directory / path
+
+
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
     # only the presentation ones reach the display filter.
@@ -958,10 +983,10 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 project_root=project_root,
                 display_filter=display_filter,
                 baseline=BaselineOptions(
-                    apply_path=request.baseline_path,
-                    generate_path=request.generate_baseline_path,
+                    apply_path=_path_for_root(project_root, request.baseline_path),
+                    generate_path=_path_for_root(project_root, request.generate_baseline_path),
                     disabled=request.should_skip_baseline,
-                    migrate_path=request.migrate_baseline_path,
+                    migrate_path=_path_for_root(project_root, request.migrate_baseline_path),
                     force_overwrite=request.force_baseline_overwrite,
                 ),
                 diff_mode=request.diff_mode,
@@ -1004,7 +1029,10 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
     instead of stderr prose. Human formats retain the Click exception path.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
-    return _refused_run_report(request, RunDiagnostic(type="config-error", message=str(exc), path=config_path_str))
+    # The loader names the absolute path it read, which a v3 envelope may not publish, so the machine message names the
+    # config file relative to the project root; stderr keeps the full path for the person reading it.
+    message = str(exc).replace(f"{_project_root_from_targets(request.paths)}{os.sep}", "")
+    return _refused_run_report(request, RunDiagnostic(type="config-error", message=message, path=config_path_str))
 
 
 def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic) -> AnalysisReport:

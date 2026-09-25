@@ -125,6 +125,9 @@ def _is_benign_literal(candidate: str) -> bool:
         # Filesystem paths have multiple separators; one `/` is fine
         # (base64 alphabet includes `/`).
         return True
+    if not _has_letter_and_digit(candidate):
+        # FAMILY-CONTRACT section 12: without a letter and a digit a literal is not credential-shaped.
+        return True
     if contains_provider_api_key(candidate):
         return True
     if _PASCAL_CASE_RE.match(candidate):
@@ -133,3 +136,19 @@ def _is_benign_literal(candidate: str) -> bool:
         return True
     # Snake_case identifier without numeric noise.
     return "_" in candidate and not any(c.isdigit() for c in candidate)
+
+
+def _has_letter_and_digit(candidate: str) -> bool:
+    """Report whether a literal carries at least one letter and at least one digit.
+
+    FAMILY-CONTRACT section 12 sets this floor for all five ports: a run of one character class, such as random-letter
+    test data or a MIME type, clears the entropy bar by construction, and a digit-free mix of cases is an identifier.
+
+    Args:
+        candidate: The literal being classified.
+
+    Returns:
+        True when the literal holds both a letter and a digit.
+    """
+    has_letter = any("a" <= character <= "z" or "A" <= character <= "Z" for character in candidate)
+    return has_letter and any("0" <= character <= "9" for character in candidate)

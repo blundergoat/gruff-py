@@ -73,6 +73,30 @@ def test_high_entropy_finding_publishes_no_value_derived_statistic():
     assert str(len(_HIGH_ENTROPY)) not in str(findings[0].metadata)
 
 
+@pytest.mark.parametrize(
+    ("token", "reports"),
+    [
+        ("vxezaawdsdwcvvuvryyabvkvbgdqlcqstgddkefmpdrjp", False),
+        ("VXEZAAWDSDWCVVUVRYYABVKVBGDQLCQSTGDDKEFMPDRJP", False),
+        ("VxEzAaWdSdWcVvUvRyYa" + "BvKvBgDqLcQsTgDdKeFmPdRjP", False),
+        ("k3j9x2m7q1w8e5r4" + "t6y0u9i8o7p6a5s4" + "d3f2g1h0zb", True),
+    ],
+    ids=["lowercase-only", "uppercase-only", "mixed-case-letters", "lowercase-and-digits"],
+)
+def test_high_entropy_needs_a_letter_and_a_digit(token: str, reports: bool) -> None:
+    """Hold FAMILY-CONTRACT section 12's floor: without a letter and a digit a literal is not credential-shaped.
+
+    gruff-go, gruff-php, gruff-rs and gruff-ts pin the same literals; the reported one is assembled from parts.
+
+    Args:
+        token: The literal under test.
+        reports: Whether the rule must report it.
+    """
+    findings = HighEntropyStringRule().analyse(make_unit(f"value = {token!r}\n"), default_ctx())
+
+    assert (len(findings) == 1) is reports
+
+
 def test_pascal_case_identifier_skipped():
     src = "name = 'SomeReallyLongPascalCaseIdentifier'\n"
     assert HighEntropyStringRule().analyse(make_unit(src), default_ctx()) == []

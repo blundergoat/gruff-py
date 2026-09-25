@@ -79,7 +79,6 @@ class PytestStrictConfigMissingRule(Rule):
                     'Add `addopts = "--strict-config --strict-markers"` to `[tool.pytest.ini_options]` so unknown options and markers fail fast.'
                 ),
                 secondary_pillars=definition.secondary_pillars,
-                metadata={"projectRoot": context.project_root},
             ),
         ]
 

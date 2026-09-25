@@ -1629,6 +1629,80 @@ def test_cli_machine_json_is_the_same_from_any_launch_directory(tmp_path: Path, 
     assert stable(tmp_path / "proj" / "sub", "..") == inside
 
 
+@pytest.mark.parametrize("output_format", ["json", "sarif"], ids=["json", "sarif"])
+def test_cli_machine_output_names_no_host_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output_format: str) -> None:
+    """Machine output never carries the absolute path of the project it scanned.
+
+    The project-level pytest and README rules published it as ``metadata.projectRoot``, so every JSON and SARIF report
+    on a project with a pyproject.toml and no README carried the host path.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into a sibling of the project.
+        output_format: The machine format under test.
+    """
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "pyproject.toml").write_text('[project]\nname = "proj"\n\n[tool.pytest.ini_options]\naddopts = ""\n')
+    (project / "test_sample.py").write_text("def test_sample():\n    assert 1 + 1 == 2\n")
+    (tmp_path / "sib").mkdir()
+    monkeypatch.chdir(tmp_path / "sib")
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--format", output_format, "--fail-on", "none", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert "test-quality.pytest-deprecations-not-fatal" in result.stdout
+    assert str(tmp_path) not in result.stdout
+
+
+def test_cli_config_error_envelope_names_no_host_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A config the run cannot load is reported in the envelope by its project-relative name, never its host path.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into a sibling of the project.
+    """
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "sample.py").write_text("x = 1\n")
+    (project / ".gruff-py.yaml").write_text('schemaVersion: "gruff-py.config.v0.1"\nminimumSeverity:\n  analyse: error\n')
+    (tmp_path / "sib").mkdir()
+    monkeypatch.chdir(tmp_path / "sib")
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", str(project)])
+
+    assert result.exit_code == 2, result.output
+    diagnostic = json.loads(result.stdout)["diagnostics"][0]
+    assert diagnostic["type"] == "config-error"
+    assert diagnostic["message"].startswith(".gruff-py.yaml: ")
+    assert str(tmp_path) not in result.stdout
+
+
+def test_cli_baseline_paths_are_read_from_the_launch_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A baseline path typed two levels inside the project names the file from there, for writing and for reading.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into a nested directory of the project.
+    """
+    project = tmp_path / "outer" / "proj"
+    (project / "a" / "b").mkdir(parents=True)
+    (project / "sample.py").write_text("def probe(rx):\n    return rx + rx\n")
+    monkeypatch.chdir(project / "a" / "b")
+    flags = ["--no-config", "--fail-on", "none"]
+
+    generated = CliRunner().invoke(main, ["analyse", *flags, "--generate-baseline", "../../base.json", "../.."])
+    applied = CliRunner().invoke(main, ["analyse", *flags, "--format", "json", "--baseline", "../../base.json", "../.."])
+
+    assert generated.exit_code == 0, generated.output
+    assert (project / "base.json").is_file()
+    assert not (tmp_path / "base.json").exists()
+    assert applied.exit_code == 0, applied.output
+    baseline = json.loads(applied.stdout)["baseline"]
+    assert baseline["applied"] is True
+    assert baseline["path"] == "base.json"
+
+
 def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
