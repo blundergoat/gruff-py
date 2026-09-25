@@ -1373,7 +1373,7 @@ except ValueError:
 - Name: AWS access key
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `sensitive-data.aws-access-key` protects the sensitive-data pillar by flagging aws access key before it becomes costly to review, maintain, or trust.
@@ -1387,7 +1387,7 @@ except ValueError:
 - Name: Database URL with password
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: Credentialed database URLs in source usually expose direct data access.
@@ -1401,7 +1401,7 @@ except ValueError:
 - Name: GCP service-account key
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: Google service-account JSON files combine an account identity with private-key material; committed copies usually grant fleet access.
@@ -1464,7 +1464,7 @@ except ValueError:
 - Name: PHI pattern
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
 - Rationale: `sensitive-data.phi-pattern` protects the sensitive-data pillar by flagging phi pattern before it becomes costly to review, maintain, or trust.
@@ -1498,7 +1498,7 @@ except ValueError:
 - Name: Private key
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: `sensitive-data.private-key` protects the sensitive-data pillar by flagging private key before it becomes costly to review, maintain, or trust.
@@ -1512,7 +1512,7 @@ except ValueError:
 - Name: URL embedded credentials
 - Pillar: `sensitive-data`
 - Tier: `v0.1`
-- Default severity: `error`
+- Default severity: `warning`
 - Confidence: `high`
 - Default enabled: yes
 - Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.

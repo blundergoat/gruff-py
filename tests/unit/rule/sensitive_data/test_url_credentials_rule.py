@@ -81,14 +81,14 @@ def test_templated_or_over_captured_password_is_not_a_credential(source: str) ->
     assert UrlCredentialsRule().analyse(make_unit(source), default_ctx()) == []
 
 
-def test_real_credentials_still_report_at_error_including_percent_escapes() -> None:
+def test_real_credentials_still_report_including_percent_escapes() -> None:
     """Keep reporting literal passwords, including one whose special character is percent-encoded."""
     plain = "http://admin:" + "S3cr3tPassw0rd" + "@db.internal"
     encoded = "https://deploy:" + "S3cr%40tValue42" + "@api.example.test"
     findings = UrlCredentialsRule().analyse(make_unit(f"PLAIN = {plain!r}\nENCODED = {encoded!r}\n"), default_ctx())
 
     assert [finding.line for finding in findings] == [1, 2]
-    assert {finding.severity.value for finding in findings} == {"error"}
+    assert {finding.severity.value for finding in findings} == {"warning"}
 
 
 def test_url_repeated_on_the_next_line_is_reported_once() -> None:

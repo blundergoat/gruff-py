@@ -53,7 +53,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
             name="GCP service-account key",
             pillar=Pillar.SENSITIVE_DATA,
             tier=RuleTier.V01,
-            default_severity=Severity.ERROR,
+            default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
         )
 

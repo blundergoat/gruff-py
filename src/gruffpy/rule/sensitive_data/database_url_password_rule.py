@@ -81,7 +81,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
             name="Database URL with password",
             pillar=Pillar.SENSITIVE_DATA,
             tier=RuleTier.V01,
-            default_severity=Severity.ERROR,
+            default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
         )
 

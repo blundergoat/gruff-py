@@ -221,7 +221,7 @@ def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None
     Args:
         corpus: Synthetic secrets corpus, already the working directory.
     """
-    unconfigured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "error", "--no-config", "secrets"])
+    unconfigured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "warning", "--no-config", "secrets"])
     assert unconfigured.exit_code == 1, unconfigured.output
 
     _write_config(
@@ -237,7 +237,7 @@ def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None
             )
         ),
     )
-    configured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "error", "secrets"])
+    configured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "warning", "secrets"])
 
     payload = json.loads(configured.stdout)
     assert [row["suppressed"] for row in payload["suppressions"]] == [2, 1, 1, 1]
