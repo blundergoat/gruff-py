@@ -822,6 +822,34 @@ def _is_same_or_descendant(candidate: Path, ancestor: Path) -> bool:
     return candidate == ancestor or ancestor in candidate.parents
 
 
+def _target_outside_launch_directory(paths: Sequence[str]) -> str | None:
+    """Name the first of several targets that sits outside the launch directory.
+
+    One such target is supported: ``gruff-py analyse /srv/checkout`` makes it the project root. Several are not,
+    because every reported path is written relative to one root, so ``../a`` and ``../b`` from a sibling directory
+    would leave paths the report cannot express. The caller refuses that run instead of raising mid-render.
+
+    Args:
+        paths: Scan targets as typed on the command line.
+
+    Returns:
+        The first target outside the launch directory when two or more were named, otherwise None.
+    """
+    # A single target, or none, always has a root the run can report against.
+    if len(paths) < 2:
+        return None
+    working_directory = Path.cwd()
+    for raw_path in paths:
+        absolute = Path(raw_path)
+        # A relative target is meant relative to where the command was typed.
+        if not absolute.is_absolute():
+            absolute = working_directory / absolute
+        # One target outside the launch directory leaves the targets with no shared root to report from.
+        if not _is_same_or_descendant(Path(os.path.normpath(absolute)), working_directory):
+            return raw_path
+    return None
+
+
 def _project_root_from_targets(paths: Sequence[str]) -> Path:
     """Pick the directory that every reported path is written relative to.
 
@@ -884,6 +912,18 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         include_rules=_split_repeated_csv(request.show_rule),
         exclude_rules=_split_repeated_csv(request.hide_rule),
     )
+    outside_target = _target_outside_launch_directory(request.paths)
+    # Several targets outside the launch directory have no root to report from, so a machine caller reads the refusal
+    # from the envelope rather than a traceback, and a human reads it on stderr with the same exit 2.
+    if outside_target is not None:
+        message = (
+            f"target {outside_target!r} is outside the launch directory; "
+            "gruff-py analyses several targets only from a directory that contains them all"
+        )
+        if request.output is OutputFormat.JSON:
+            return _refused_run_report(request, RunDiagnostic(type="target-error", message=message))
+        click.echo(message, err=True)
+        raise SystemExit(2)
     project_root = _project_root_from_targets(request.paths)
     try:
         report = run_analysis(
@@ -944,6 +984,20 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
     instead of stderr prose. Human formats retain the Click exception path.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
+    return _refused_run_report(request, RunDiagnostic(type="config-error", message=str(exc), path=config_path_str))
+
+
+def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic) -> AnalysisReport:
+    """Build a synthetic native analysis report for a run refused before it started.
+
+    Args:
+        request: The analysis request, for its paths, format, gate and config path.
+        diagnostic: The one run-invalidating diagnostic that explains the refusal.
+
+    Returns:
+        A report with no findings, nothing discovered, the diagnostic, and exit code 2.
+    """
+    config_path_str = str(request.config_path) if request.config_path is not None else None
     return AnalysisReport(
         tool_version=VERSION,
         requested_paths=request.paths,
@@ -953,7 +1007,7 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
         files_parsed=0,
         ignored_paths=(),
         missing_paths=(),
-        diagnostics=(RunDiagnostic(type="config-error", message=str(exc), path=config_path_str),),
+        diagnostics=(diagnostic,),
         findings=(),
         exit_code=2,
         config_path=config_path_str,

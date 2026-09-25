@@ -2,8 +2,8 @@
 
 ## Supported Versions
 
-`0.3.x` is the current supported release line. Security fixes target the latest
-`0.3.x` release and the `main` branch.
+`0.6.x` is the current supported release line. Security fixes target the latest
+`0.6.x` release and the `main` branch.
 
 ## Reporting A Vulnerability
 

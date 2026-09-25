@@ -11,7 +11,7 @@ gruff-py summary --group-by=rule tests/
 Output shape:
 
 ```
-gruff-py 0.5.0 summary
+gruff-py 0.6.0 summary
 Composite: A (99.07 / 100)
 Findings: 7 total · 0 error · 0 warning · 7 advisory
 Path: tests/

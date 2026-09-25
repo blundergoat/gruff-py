@@ -1535,6 +1535,35 @@ def test_cli_analyse_json_config_error_leaves_out_a_target_named_from_a_sibling_
     assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["config-error"]
 
 
+def test_cli_analyse_refuses_several_targets_outside_the_launch_directory_with_an_envelope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`analyse ../a ../b` from a sibling directory publishes one target-error diagnostic and no findings.
+
+    Two targets outside the launch directory leave no root every reported path can be written against, so the run is
+    refused with an envelope instead of raising while the report is rendered; one such target still analyses.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the sibling directory.
+    """
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "one.py").write_text("x = 1\n")
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "two.py").write_text("y = 2\n")
+    (tmp_path / "sib").mkdir()
+    monkeypatch.chdir(tmp_path / "sib")
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", "../a", "../b"])
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["target-error"]
+    assert payload["diagnostics"][0]["invalidatesRun"] is True
+    assert payload["findings"] == []
+
+    single = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", "--fail-on", "none", "../a"])
+    assert single.exit_code == 0, single.output
+
+
 def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
