@@ -210,7 +210,13 @@ def test_analyse_refuses_a_changed_ranges_value_it_cannot_scope(
     monkeypatch: pytest.MonkeyPatch,
     ranges: str,
 ) -> None:
-    """A range the run cannot scope to ends the run, rather than widening it to the whole tree."""
+    """A range the run cannot scope to ends the run, rather than widening it to the whole tree.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the temp directory.
+        ranges: The unusable ``--changed-ranges`` value under test.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -252,6 +258,11 @@ def test_hook_refuses_a_changed_ranges_value_it_cannot_scope(
 
     Widening it instead would hand an agent a whole-tree finding list attributed to the
     edit it just made, which is the worse failure of the two surfaces.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the temp directory.
+        ranges: The unusable ``--changed-ranges`` value under test.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -1539,7 +1550,7 @@ def test_cli_analyse_refuses_several_targets_outside_the_launch_directory_with_a
     """`analyse ../a ../b` from a sibling directory publishes one target-error diagnostic and no findings.
 
     Two targets outside the launch directory leave no root every reported path can be written against, so the run is
-    refused with an envelope instead of raising while the report is rendered; one such target still analyses.
+    refused with an envelope instead of raising while the report is rendered.
 
     Args:
         tmp_path: pytest-supplied per-test temp directory.
@@ -1560,8 +1571,62 @@ def test_cli_analyse_refuses_several_targets_outside_the_launch_directory_with_a
     assert payload["diagnostics"][0]["invalidatesRun"] is True
     assert payload["findings"] == []
 
+
+def test_cli_analyse_accepts_one_target_outside_the_launch_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`analyse ../a` from a sibling directory analyses that one target; only several such targets are refused.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into the sibling directory.
+    """
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "one.py").write_text("x = 1\n")
+    (tmp_path / "sib").mkdir()
+    monkeypatch.chdir(tmp_path / "sib")
+
     single = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", "--fail-on", "none", "../a"])
+
     assert single.exit_code == 0, single.output
+
+
+@pytest.mark.parametrize("command", ["analyse", "summary", "report"], ids=["analyse", "summary", "report"])
+def test_cli_machine_json_is_the_same_from_any_launch_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    """The same project gives the same JSON from inside it, from a sibling directory, and from one of its subdirectories.
+
+    Reading operands against the project root, `..` typed from `proj/sub` named the directory above the project, here
+    holding stray.py, so the run scanned it and raised on the first path outside the root.
+
+    Args:
+        tmp_path: pytest-supplied per-test temp directory.
+        monkeypatch: pytest fixture used to chdir into each launch directory.
+        command: The machine-output command under test.
+    """
+    (tmp_path / "proj" / "sub").mkdir(parents=True)
+    (tmp_path / "proj" / "sample.py").write_text("def sample(used, unused):\n    return used\n")
+    (tmp_path / "stray.py").write_text("def stray(unused):\n    pass\n")
+    (tmp_path / "sib").mkdir()
+
+    gate = [] if command == "summary" else ["--fail-on", "none"]
+
+    def stable(launch_directory: Path, target: str) -> str:
+        """Run the command from one launch directory and keep the sections the launch directory must not change.
+
+        Args:
+            launch_directory: Directory the command is launched from.
+            target: The project operand as typed from that directory.
+
+        Returns:
+            The compared sections as sorted JSON.
+        """
+        monkeypatch.chdir(launch_directory)
+        result = CliRunner().invoke(main, [command, "--no-config", "--format", "json", *gate, target])
+        assert result.exit_code == 0, f"{command} {target}: {result.output}"
+        payload = json.loads(result.stdout)
+        return json.dumps({key: payload.get(key) for key in ("findings", "score", "summary", "paths", "diagnostics")}, sort_keys=True)
+
+    inside = stable(tmp_path / "proj", ".")
+    assert stable(tmp_path / "sib", "../proj") == inside
+    assert stable(tmp_path / "proj" / "sub", "..") == inside
 
 
 def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

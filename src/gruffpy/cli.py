@@ -902,6 +902,26 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
     return common
 
 
+def _targets_for_root(project_root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Write each relative target as an absolute path from the launch directory when the project root is elsewhere.
+
+    Discovery reads operands against the project root, so ``..`` typed from ``proj/src`` names ``proj``, but read against the
+    root ``proj`` it named the directory above the project, which was then scanned and failed on its first path.
+
+    Args:
+        project_root: Root chosen by ``_project_root_from_targets``.
+        paths: Scan targets as typed on the command line.
+
+    Returns:
+        The targets unchanged when the root is the launch directory, otherwise each relative one anchored to it.
+    """
+    working_directory = Path.cwd()
+    # Inside the launch directory the root and the operands already agree, so they are passed on exactly as typed.
+    if project_root == working_directory:
+        return paths
+    return tuple(raw_path if Path(raw_path).is_absolute() else str(working_directory / raw_path) for raw_path in paths)
+
+
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
     # only the presentation ones reach the display filter.
@@ -928,7 +948,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     try:
         report = run_analysis(
             AnalysisRunRequest(
-                paths=request.paths,
+                paths=_targets_for_root(project_root, request.paths),
                 config_path=request.config_path,
                 no_config=request.should_skip_config,
                 output=request.output,
