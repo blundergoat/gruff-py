@@ -49,7 +49,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 ### Dead Code And Waste
 
-- `dead-code.exported-but-unreferenced`
+- `dead-code.exported-but-unreferenced` (default off)
 - `dead-code.unused-private-attribute`
 - `dead-code.unused-private-function`
 - `waste.commented-out-code`
@@ -330,7 +330,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: Export plumbing makes dead code look alive: a public function listed in __all__ and re-exported through __init__ has reference counters above zero while no call site exists anywhere. Audits that count exports as uses score such code clean.
 - Fix guidance: Delete the symbol and its re-exports, or declare the consumer: allowlists.deadCode.symbols for one-offs, entryPointPatterns for registration conventions.
 - Confidence rationale: Medium confidence: the reference model is name-based rather than import-resolved (same-name symbols collapse, erring toward false negatives), and the rule only runs on full-project scans - partial scans suppress it entirely per the ADR-025 scope-honesty contract.
@@ -1016,21 +1016,21 @@ except ValueError:
 
 ### `security.github-actions-secrets-in-pr`
 
-- Name: Repository secret in a PR-triggered workflow
+- Name: Repository secret in a pull_request_target workflow
 - Pillar: `security`
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `security.github-actions-secrets-in-pr` protects the security pillar by flagging repository secret in a pr-triggered workflow before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported repository secret in a pr-triggered workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
+- Rationale: `security.github-actions-secrets-in-pr` protects the security pillar by flagging repository secret in a pull_request_target workflow before it becomes costly to review, maintain, or trust.
+- Fix guidance: Address the reported repository secret in a pull_request_target workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-200', 'CWE-522']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
   - A secret reference in a pull-request workflow can sit behind a trusted-actor condition that the workflow text scan does not evaluate.
     Mitigation: Move the secret-bearing job to a trusted workflow or suppress the reviewed reference only after verifying the actor gate cannot be influenced by the pull request.
-- Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pr-triggered workflow unaddressed.
-- Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pr-triggered workflow explicit or simpler.
+- Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pull_request_target workflow unaddressed.
+- Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pull_request_target workflow explicit or simpler.
 
 ### `security.github-actions-unpinned-action`
 

@@ -67,6 +67,10 @@ class ExportedButUnreferencedRule:
         Medium confidence: the reference model is name-based rather than
         import-resolved, so it errs toward false negatives (any same-name
         use anywhere counts), and it only runs with full-project context.
+        Opt-in: a library's public API exists for callers outside the
+        repository, and packaging entry points, string registration and
+        framework hooks are references the scan cannot see, so on the family
+        corpus one sampled finding in twelve was real.
 
         Returns:
             Definition for the exported-but-unreferenced rule under the
@@ -79,6 +83,7 @@ class ExportedButUnreferencedRule:
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
             default_options={"entryPointPatterns": []},
         )
 

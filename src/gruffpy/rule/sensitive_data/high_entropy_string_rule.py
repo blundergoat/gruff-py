@@ -31,6 +31,7 @@ from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_a
 # while neither half is a candidate. Base64 padding only trims the candidate, and a padded 46-character secret
 # still reports.
 _CANDIDATE_CHARACTERS = "[A-Za-z0-9+/_-]"
+_PEM_ARMOUR_OPENING = re.compile(r"-----BEGIN ([A-Z0-9 ]+)-----")
 _PASCAL_CASE_RE = re.compile(r"^(?:[A-Z][a-z]+){2,}$")
 _HEX_RE = re.compile(r"^[A-Fa-f0-9]+$")
 
@@ -84,9 +85,13 @@ class HighEntropyStringRule(SourceTextRule):
         min_length = max(1, int(settings.numeric_threshold("minLength")))
         entropy_threshold = settings.numeric_threshold("entropy")
         findings: list[Finding] = []
+        armoured = _public_armour_spans(unit.source)
         # Each random-looking literal is assessed independently so users can triage its source line.
         for candidate_match in re.finditer(f"{_CANDIDATE_CHARACTERS}{{{min_length},}}", unit.source):
             secret_candidate = candidate_match.group(0)
+            # A public PEM block's base64 body is certificate or public-key material, never a secret.
+            if any(start <= candidate_match.start() < end for start, end in armoured):
+                continue
             # Known benign shapes stay out of the report before the entropy threshold is applied.
             if _is_benign_literal(secret_candidate):
                 continue
@@ -117,6 +122,31 @@ class HighEntropyStringRule(SourceTextRule):
                 ),
             )
         return findings
+
+
+def _public_armour_spans(source: str) -> list[tuple[int, int]]:
+    """Return the offset spans of complete PEM blocks whose label names no private key.
+
+    A certificate, public key, certificate request, PKCS7 bundle or CRL is public by construction, so its base64
+    body is never a secret; a private key's block stays scannable (FAMILY-CONTRACT section 12).
+
+    Args:
+        source: The file text being scanned.
+
+    Returns:
+        Half-open ``(start, end)`` offsets, from each opening marker to the end of its matching closing marker.
+    """
+    spans: list[tuple[int, int]] = []
+    for opening in _PEM_ARMOUR_OPENING.finditer(source):
+        label = opening.group(1)
+        if "PRIVATE" in label:
+            continue
+        closing = f"-----END {label}-----"
+        end = source.find(closing, opening.end())
+        # An opening line without its matching end marker is not a block, so nothing is exempted.
+        if end >= 0:
+            spans.append((opening.start(), end + len(closing)))
+    return spans
 
 
 def _is_benign_literal(candidate: str) -> bool:

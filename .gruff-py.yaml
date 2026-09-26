@@ -251,7 +251,7 @@ rules:
     enabled: true
   # Exported but unreferenced
   dead-code.exported-but-unreferenced:
-    enabled: true
+    enabled: false
     options:
       entryPointPatterns: []
   # Unused private attribute

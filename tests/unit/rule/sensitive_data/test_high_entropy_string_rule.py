@@ -97,6 +97,28 @@ def test_high_entropy_needs_a_letter_and_a_digit(token: str, reports: bool) -> N
     assert (len(findings) == 1) is reports
 
 
+@pytest.mark.parametrize(
+    ("label", "reports"),
+    [("CERTIFICATE", False), ("PUBLIC KEY", False), ("RSA PRIVATE KEY", True)],
+    ids=["certificate", "public-key", "private-key"],
+)
+def test_high_entropy_skips_public_pem_armour(label: str, reports: bool) -> None:
+    """Skip a public PEM block's base64 body, and keep scanning a private key's.
+
+    A certificate or public key is public by construction; the same body outside armour still reports.
+
+    Args:
+        label: The PEM label wrapping the body.
+        reports: Whether the body inside that armour must report.
+    """
+    body = "k3j9x2m7q1w8e5r4" + "t6y0u9i8o7p6a5s4" + "d3f2g1h0zb"
+    source = f'block = """-----BEGIN {label}-----\n{body}\n-----END {label}-----"""\n'
+
+    findings = HighEntropyStringRule().analyse(make_unit(source), default_ctx())
+
+    assert (len(findings) == 1) is reports
+
+
 def test_pascal_case_identifier_skipped():
     src = "name = 'SomeReallyLongPascalCaseIdentifier'\n"
     assert HighEntropyStringRule().analyse(make_unit(src), default_ctx()) == []

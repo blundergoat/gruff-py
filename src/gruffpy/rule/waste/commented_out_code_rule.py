@@ -30,6 +30,7 @@ import io
 import keyword
 import re
 import tokenize
+import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
 
@@ -299,6 +300,26 @@ def _is_prose(text: str) -> bool:
     )
 
 
+def _parse_quietly(text: str) -> ast.Module:
+    """Parse comment text as Python without letting CPython print a ``SyntaxWarning`` to the user's stderr.
+
+    Comment prose such as a regex with ``\\w`` holds escape sequences Python warns about when it compiles them.
+
+    Args:
+        text: Comment text, or a probe wrapped around it.
+
+    Returns:
+        The parsed module.
+
+    Raises:
+        SyntaxError: When the text is not Python.
+        ValueError: When the text holds a null byte.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SyntaxWarning)
+        return ast.parse(text)
+
+
 def _bare_expression(text: str) -> ast.expr | None:
     """Return the expression a stripped comment body consists of, the way a wrapped sentence ends.
 
@@ -309,7 +330,7 @@ def _bare_expression(text: str) -> ast.expr | None:
         The single expression, such as the call in ``extra()``; ``None`` for statements and unparseable text.
     """
     try:
-        module = ast.parse(f"{text}\n")
+        module = _parse_quietly(f"{text}\n")
     except (SyntaxError, ValueError):
         return None
     if len(module.body) == 1 and isinstance(module.body[0], ast.Expr):
@@ -394,7 +415,7 @@ def _is_valid_python(candidate: str) -> bool:
         )
     for wrap in probes:
         try:
-            ast.parse(wrap + "\n")
+            _parse_quietly(wrap + "\n")
         except (SyntaxError, ValueError):
             continue
         return True

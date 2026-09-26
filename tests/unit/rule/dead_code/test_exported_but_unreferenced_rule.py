@@ -233,7 +233,7 @@ def test_definition_is_advisory_medium_confidence_dead_code():
     assert definition.default_severity.value == "advisory"
     assert definition.confidence.value == "medium"
     assert definition.pillar.value == "dead-code"
-    assert definition.default_enabled is True
+    assert definition.default_enabled is False
     assert definition.default_options == {"entryPointPatterns": []}
 
 

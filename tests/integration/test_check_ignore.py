@@ -160,6 +160,8 @@ def test_check_ignore_shares_engine_with_analyse() -> None:
 def test_ignored_tests_still_count_as_references_for_dead_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a symbol used only from an ignored test tree out of dead-code findings, and report a truly unused one.
 
+    The rule is opt-in, so a default run reports nothing from it and the configured run enables it.
+
     Args:
         tmp_path: Pytest-provided project root.
         monkeypatch: Used to ``chdir`` into the project so the scan is full-project.
@@ -174,8 +176,16 @@ def test_ignored_tests_still_count_as_references_for_dead_code(tmp_path: Path, m
     )
     _write(tmp_path / "tests" / "test_api.py", "from pkg.api import used_only_by_tests\n\n\ndef test_one():\n    assert used_only_by_tests() == 1\n")
 
+    default_run = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline"])
+    _write(
+        tmp_path / ".gruff-py.yaml",
+        'schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - "tests/**"\n'
+        "rules:\n  dead-code.exported-but-unreferenced:\n    enabled: true\n",
+    )
     result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline"])
 
+    assert default_run.exit_code == 0, default_run.output
+    assert all(finding["ruleId"] != "dead-code.exported-but-unreferenced" for finding in json.loads(default_run.output)["findings"])
     assert result.exit_code == 0, result.output
     dead = [finding for finding in json.loads(result.output)["findings"] if finding["ruleId"] == "dead-code.exported-but-unreferenced"]
     assert [finding["symbol"] for finding in dead] == ["used_by_nobody"]

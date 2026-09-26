@@ -1,9 +1,9 @@
-"""``security.github-actions-secrets-in-pr`` - PR-triggered workflow references repo secrets.
+"""``security.github-actions-secrets-in-pr`` - pull_request_target workflow references repo secrets.
 
-Fires when a workflow triggered by ``pull_request`` or ``pull_request_target``
-references a repository secret other than the automatic ``GITHUB_TOKEN``. PR
-workflows can expose secrets to untrusted fork contributions, so secret-using
-jobs should stay out of PR-triggered workflows.
+Fires when a workflow whose ``on:`` key declares ``pull_request_target``
+references a repository secret other than the automatic ``GITHUB_TOKEN``. That
+trigger runs pull-request code with the repository's secrets, while a plain
+``pull_request`` run from a fork receives none.
 """
 
 import re
@@ -17,24 +17,23 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
-from gruffpy.rule.security._github_actions_helper import is_workflow_file, source_line
+from gruffpy.rule.security._github_actions_helper import declared_workflow_events, is_workflow_file, source_line
 from gruffpy.rule.security._security_metadata import finding_security_metadata
 
-_PR_TRIGGER_RE = re.compile(r"\bpull_request(?:_target)?\b")
 _SECRET_REF_RE = re.compile(r"\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
 class GithubActionsSecretsInPrRule(SourceTextRule):
-    """Flag PR-triggered workflows that reference a non-default repository secret."""
+    """Flag pull_request_target workflows that reference a non-default repository secret."""
 
     ID = "security.github-actions-secrets-in-pr"
 
     def definition(self) -> RuleDefinition:
         """Describe the secrets-in-pr rule as a medium-confidence warning.
 
-        Medium confidence because exposure depends on fork vs. same-repo PRs
-        and on how the secret is used; the gate (PR trigger + non-GITHUB_TOKEN
-        secret reference) keeps the noise bounded.
+        Medium confidence because exposure depends on how the secret is used;
+        the gate (a pull_request_target trigger in ``on:`` plus a
+        non-GITHUB_TOKEN secret reference) keeps the noise bounded.
 
         Returns:
             Definition for the github-actions-secrets-in-pr rule under the
@@ -42,7 +41,7 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
         """
         return RuleDefinition(
             id=self.ID,
-            name="Repository secret in a PR-triggered workflow",
+            name="Repository secret in a pull_request_target workflow",
             pillar=Pillar.SECURITY,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
@@ -50,18 +49,18 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag each non-``GITHUB_TOKEN`` secret reference in a PR-triggered workflow.
+        """Flag each non-``GITHUB_TOKEN`` secret reference in a pull_request_target workflow.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per referenced secret, when the workflow is PR-triggered.
+            One finding per referenced secret, when ``on:`` declares pull_request_target.
         """
         if not is_workflow_file(unit.file.display_path):
             return []
-        if _PR_TRIGGER_RE.search(unit.source) is None:
+        if "pull_request_target" not in declared_workflow_events(unit.source):
             return []
         definition = self.definition()
         findings: list[Finding] = []
@@ -73,7 +72,8 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"PR-triggered workflow references secret `{secret}` - PR workflows can expose secrets to untrusted fork contributions."
+                        f"pull_request_target workflow references secret `{secret}` - "
+                        "that trigger runs pull-request code with the repository's secrets."
                     ),
                     file_path=unit.file.display_path,
                     line=source_line(unit.source, match.start()),
@@ -82,8 +82,8 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     remediation=(
-                        "Move secret-using steps out of PR-triggered workflows, or gate them "
-                        "to same-repo branches; never expose secrets to fork pull requests."
+                        "Move secret-using steps out of pull_request_target workflows, or run untrusted "
+                        "pull-request code under pull_request, which receives no secrets from forks."
                     ),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={

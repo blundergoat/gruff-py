@@ -1,4 +1,5 @@
 import ast
+import warnings
 
 import pytest
 
@@ -310,3 +311,13 @@ def test_tokenizer_indentation_error_does_not_crash():
     src = "def f():\n    pass\n  bad = 1\n# z = frob()\n"
     findings = CommentedOutCodeRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+def test_regex_like_comment_prints_no_syntax_warning() -> None:
+    """Parse comment text quietly: a regex with an invalid escape must not reach the user's stderr."""
+    source = '# pattern = re.compile("\\w+")\nvalue = 1\n'
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        CommentedOutCodeRule().analyse(_unit(source), _ctx())
+
+    assert [warning for warning in caught if issubclass(warning.category, SyntaxWarning)] == []
