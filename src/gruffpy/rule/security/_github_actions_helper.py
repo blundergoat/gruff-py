@@ -63,19 +63,26 @@ def declared_workflow_events(source: str) -> set[str]:
             value = on_key.group(1).strip() if on_key else ""
             in_on_block = on_key is not None and value == ""
             event_indent = None
-            if on_key and value:
-                for item in value.lstrip("[{").rstrip("]}").split(","):
-                    event = item.split(":", 1)[0].strip().strip("\"'")
-                    if event:
-                        events.add(event)
+            events |= _flow_events(value)
             continue
         if not in_on_block:
             continue
         # The first nested line fixes the event level; deeper lines configure one event, such as its branches.
-        if event_indent is None:
-            event_indent = indent
-        if indent == event_indent:
-            match = _EVENT_KEY_RE.match(stripped)
-            if match:
-                events.add(match.group(1))
+        event_indent = indent if event_indent is None else event_indent
+        match = _EVENT_KEY_RE.match(stripped) if indent == event_indent else None
+        if match:
+            events.add(match.group(1))
     return events
+
+
+def _flow_events(value: str) -> set[str]:
+    """Return the events an ``on:`` scalar, ``[a, b]`` flow sequence or ``{a: x}`` flow mapping names.
+
+    Args:
+        value: The text after a top-level ``on:``; empty for the block forms and for any other key.
+
+    Returns:
+        The event names it lists.
+    """
+    names = (item.split(":", 1)[0].strip().strip("\"'") for item in value.lstrip("[{").rstrip("]}").split(","))
+    return {name for name in names if name}

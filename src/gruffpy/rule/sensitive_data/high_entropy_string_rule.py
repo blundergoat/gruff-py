@@ -32,6 +32,15 @@ from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_a
 # still reports.
 _CANDIDATE_CHARACTERS = "[A-Za-z0-9+/_-]"
 _PEM_ARMOUR_OPENING = re.compile(r"-----BEGIN ([A-Z0-9 ]+)-----")
+# Any opening or closing marker, so a block can end only at the next one.
+_PEM_ARMOUR_MARKER = re.compile(r"-----(BEGIN|END) ([A-Z0-9 ]+)-----")
+# A PEM body's lines break at real line breaks and at the escaped ones a string literal spells. Each line then loses
+# its concatenation operators, and its quotes, commas, brackets, comment stars and ASCII whitespace, before
+# _PEM_BODY_LINE judges what is left. The operator pattern looks around one character so it stays linear.
+_PEM_BODY_LINE_BREAKS = re.compile(r"\n|\\[nrt]")
+_PEM_BODY_OPERATORS = re.compile(r"(?<=[ \t\r\f\x0b])[+.]|[+.](?=[ \t\r\f\x0b])")
+_PEM_BODY_QUOTING = re.compile(r"[ \t\r\f\x0b\"'`,;()\[\]{}#*\\]")
+_PEM_BODY_LINE = re.compile(r"[A-Za-z0-9+/]+={0,2}|=[A-Za-z0-9+/]{4}|(?:Version|Comment|Hash|Charset|MessageID|Proc-Type|DEK-Info):.*")
 _PASCAL_CASE_RE = re.compile(r"^(?:[A-Z][a-z]+){2,}$")
 _HEX_RE = re.compile(r"^[A-Fa-f0-9]+$")
 
@@ -125,28 +134,47 @@ class HighEntropyStringRule(SourceTextRule):
 
 
 def _public_armour_spans(source: str) -> list[tuple[int, int]]:
-    """Return the offset spans of complete PEM blocks whose label names no private key.
+    """Return the offset spans of the PEM blocks whose label names no private key.
 
-    A certificate, public key, certificate request, PKCS7 bundle or CRL is public by construction, so its base64
-    body is never a secret; a private key's block stays scannable (FAMILY-CONTRACT section 12).
+    A certificate, public key, certificate request, PKCS7 bundle or CRL is public by construction, so its body is
+    never a secret. A block ends at the next marker, which must close the same label, and its body must be
+    PEM-shaped. Anything else means the markers are not a block, so nothing between them is exempted and a private
+    key there stays scannable (FAMILY-CONTRACT section 12).
 
     Args:
         source: The file text being scanned.
 
     Returns:
-        Half-open ``(start, end)`` offsets, from each opening marker to the end of its matching closing marker.
+        Half-open ``(start, end)`` offsets, from each opening marker to the end of its closing marker.
     """
     spans: list[tuple[int, int]] = []
     for opening in _PEM_ARMOUR_OPENING.finditer(source):
         label = opening.group(1)
         if "PRIVATE" in label:
             continue
-        closing = f"-----END {label}-----"
-        end = source.find(closing, opening.end())
-        # An opening line without its matching end marker is not a block, so nothing is exempted.
-        if end >= 0:
-            spans.append((opening.start(), end + len(closing)))
+        closing = _PEM_ARMOUR_MARKER.search(source, opening.end())
+        if closing is None or closing.group(1) != "END" or closing.group(2) != label:
+            continue
+        if _is_pem_shaped(source[opening.end() : closing.start()]):
+            spans.append((opening.start(), closing.end()))
     return spans
+
+
+def _is_pem_shaped(body: str) -> bool:
+    """Report whether every line between two markers is base64, a PGP checksum, an armour header or empty.
+
+    Args:
+        body: The text between an opening marker and its closing marker.
+
+    Returns:
+        False when any line, once its string quoting is stripped, is code, a placeholder or prose.
+    """
+    # Splitting at escaped line breaks too keeps a one-line block's header from vouching for the rest of the line.
+    for segment in _PEM_BODY_LINE_BREAKS.split(body):
+        line = _PEM_BODY_QUOTING.sub("", _PEM_BODY_OPERATORS.sub("", segment))
+        if line and _PEM_BODY_LINE.fullmatch(line) is None:
+            return False
+    return True
 
 
 def _is_benign_literal(candidate: str) -> bool:

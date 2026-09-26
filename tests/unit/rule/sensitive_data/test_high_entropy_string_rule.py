@@ -119,6 +119,50 @@ def test_high_entropy_skips_public_pem_armour(label: str, reports: bool) -> None
     assert (len(findings) == 1) is reports
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        'HEADER = "-----BEGIN CERTIFICATE-----"\nSECRET = "{body}"\nFOOTER = "-----END CERTIFICATE-----"\n',
+        'OUTER = "-----BEGIN CERTIFICATE-----"\nKEY = """-----BEGIN RSA PRIVATE KEY-----\n{body}\n'
+        '-----END RSA PRIVATE KEY-----"""\nEND = "-----END CERTIFICATE-----"\n',
+        'A = "-----BEGIN CERTIFICATE-----\\nComment: x\\n"; KEY = "{body}"; B = "-----END CERTIFICATE-----"\n',
+    ],
+    ids=["marker-constants", "private-key-inside-public-markers", "header-on-a-one-line-block"],
+)
+def test_high_entropy_reports_between_markers_that_are_not_a_block(template: str) -> None:
+    """Report a secret between public markers when the text between them is code, not a PEM body.
+
+    A block ends at the next marker and holds only base64, so marker constants and a nested private key are not one.
+
+    Args:
+        template: Source with a ``{body}`` placeholder for the secret.
+    """
+    body = "k3j9x2m7q1w8e5r4" + "t6y0u9i8o7p6a5s4" + "d3f2g1h0zb"
+
+    findings = HighEntropyStringRule().analyse(make_unit(template.format(body=body)), default_ctx())
+
+    assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        'KEY = "-----BEGIN PGP PUBLIC KEY BLOCK-----\\n\\n{body}\\n=AbCd\\n-----END PGP PUBLIC KEY BLOCK-----"\n',
+        '"""\n * -----BEGIN CERTIFICATE-----\n * {body}\n * -----END CERTIFICATE-----\n"""\n',
+    ],
+    ids=["one-line-pgp-block", "docblock"],
+)
+def test_high_entropy_skips_public_blocks_spelled_in_code(template: str) -> None:
+    """Skip a public block written on one line with its checksum, or behind docblock stars.
+
+    Args:
+        template: Source with a ``{body}`` placeholder for the block's base64 line.
+    """
+    body = "k3j9x2m7q1w8e5r4" + "t6y0u9i8o7p6a5s4" + "d3f2g1h0zb"
+
+    assert HighEntropyStringRule().analyse(make_unit(template.format(body=body)), default_ctx()) == []
+
+
 def test_pascal_case_identifier_skipped():
     src = "name = 'SomeReallyLongPascalCaseIdentifier'\n"
     assert HighEntropyStringRule().analyse(make_unit(src), default_ctx()) == []
