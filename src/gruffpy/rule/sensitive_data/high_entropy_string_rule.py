@@ -23,6 +23,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     fixed_preview,
+    is_documented_sample,
     shannon_entropy,
 )
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import contains_provider_api_key
@@ -101,8 +102,8 @@ class HighEntropyStringRule(SourceTextRule):
             # A public PEM block's base64 body is certificate or public-key material, never a secret.
             if any(start <= candidate_match.start() < end for start, end in armoured):
                 continue
-            # Known benign shapes stay out of the report before the entropy threshold is applied.
-            if _is_benign_literal(secret_candidate):
+            # Known benign shapes and vendor-documented samples stay out of the report before the entropy threshold is applied.
+            if _is_benign_literal(secret_candidate) or is_documented_sample(secret_candidate):
                 continue
             # Lower-entropy text lacks enough secret signal to justify a user-facing warning.
             if shannon_entropy(secret_candidate) < entropy_threshold:

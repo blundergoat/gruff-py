@@ -24,11 +24,12 @@ def test_asia_session_token_emits():
     assert len(findings) == 1
 
 
-def test_documentation_example_key_reports():
-    # The family reports AWS's documented example key in every port; the value is assembled at run time.
+def test_documentation_example_key_is_a_documented_sample():
+    # FAMILY-CONTRACT section 5, amended 2026-09-26 (M10 D33): AWS's documented example key is a vendor-documented
+    # sample, so no port reports it. The value is assembled at run time.
     src = "AWS_KEY = '" + "AKIA" + "IOSFODNN7" + "EXAMPLE" + "'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
-    assert [finding.line for finding in findings] == [1]
+    assert findings == []
 
 
 def test_documentation_example_session_key_reports():

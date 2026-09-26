@@ -9,6 +9,7 @@ import shlex
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.finding.finding import Finding
+from gruffpy.suppression.sensitive_exclusion_filter import BUILT_IN_TEST_PATH_REASON
 from gruffpy.version import TOOL_NAME
 
 
@@ -199,10 +200,10 @@ def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> Non
     # A run where no configured scope matched has no suppression total to reconcile.
     if total == 0:
         return
-    # A built-in row names the lockfile it skipped, because it has no configured entry to point at.
+    # A built-in row names the file it skipped and its class, test path or lockfile, because it has no configured entry to point at.
     details = "; ".join(
         (
-            f"builtInLockfile[{summary.paths[0]}] {summary.rule}: {summary.suppressed} ({summary.reason})"
+            f"{_built_in_label(summary.reason)}[{summary.paths[0]}] {summary.rule}: {summary.suppressed} ({summary.reason})"
             if summary.source == "built-in"
             else f"sensitiveExclusions[{summary.index}] {summary.rule}: {summary.suppressed} ({summary.reason})"
         )
@@ -298,3 +299,15 @@ def _append_findings(lines: list[str], findings: tuple[Finding, ...]) -> None:
         # `- [severity] file:line ruleId - message`. gruff-py emitted a three-line block, so the same
         # finding took three lines here and one line in two sibling ports.
         lines.append(f"- [{finding.severity.value}] {location} {finding.rule_id} - {finding.message}")
+
+
+def _built_in_label(reason: str) -> str:
+    """Return the label a user reads on a built-in audit row, e.g. ``builtInTestPath[tests/keys.py]``.
+
+    Args:
+        reason: The row's published reason, which tells the two built-in classes apart.
+
+    Returns:
+        ``builtInTestPath`` for the test-path class, else ``builtInLockfile``.
+    """
+    return "builtInTestPath" if reason == BUILT_IN_TEST_PATH_REASON else "builtInLockfile"

@@ -25,6 +25,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     fixed_preview,
+    is_documented_sample,
     shannon_entropy,
 )
 
@@ -115,8 +116,8 @@ class HardcodedEnvValueRule(SourceTextRule):
         for secret_assignment in _SECRET_KEY_RE.finditer(unit.source):
             environment_key = secret_assignment.group("key")
             secret_value = secret_assignment.group("value").strip().strip("\"'")
-            # Empty, short, and known placeholder values do not require credential rotation.
-            if _is_placeholder(secret_value) or len(secret_value) < _MIN_VALUE_LENGTH:
+            # Empty, short, placeholder and vendor-documented sample values do not require credential rotation.
+            if _is_placeholder(secret_value) or len(secret_value) < _MIN_VALUE_LENGTH or is_documented_sample(secret_value):
                 continue
             # A template's sample value needs a credential's shape, not only a credential's length.
             if is_template and not _is_credential_shaped(secret_value):

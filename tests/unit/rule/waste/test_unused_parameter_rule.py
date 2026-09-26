@@ -100,3 +100,21 @@ def test_multiple_unused_each_emits():
     src = "def f(x, y, z):\n    return 1\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert {f.metadata["parameter"] for f in findings} == {"x", "y", "z"}
+
+
+def test_protocol_dunder_parameters_are_not_reported() -> None:
+    """Skip parameters a Python protocol fixes, and keep reporting ``__init__`` and ordinary methods."""
+    source = (
+        "class Resource:\n"
+        "    def __new__(cls, name):\n"
+        "        return super().__new__(cls)\n"
+        "    def __init__(self, name, unused_option):\n"
+        "        self.name = name\n"
+        "    def __exit__(self, exc_type, exc, tb):\n"
+        "        return None\n"
+        "    def close(self, reason):\n"
+        "        return None\n"
+    )
+    findings = UnusedParameterRule().analyse(_unit(source), _ctx())
+
+    assert sorted(finding.metadata["parameter"] for finding in findings) == ["reason", "unused_option"]

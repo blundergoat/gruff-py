@@ -241,6 +241,11 @@ Unknown rule IDs and per-rule keys follow the warning policy in
 deliberately separate from `selection`, so no message- or value-matching key can ever apply to the
 sensitive-data pillar.
 
+Two built-in skips also hide sensitive-data findings, and count each one in `suppressions`: the
+entropy rule in package-manager lockfiles, and every sensitive-data rule except
+`sensitive-data.pii-test-fixture` in test, fixture and example files. A configured entry applies
+before either, so a finding it claims is counted under the entry.
+
 ```yaml
 sensitiveExclusions:
   - rule: sensitive-data.aws-access-key

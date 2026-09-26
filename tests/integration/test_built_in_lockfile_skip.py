@@ -53,6 +53,18 @@ def _analyse(project_root: Path) -> dict[str, Any]:
     return payload
 
 
+def _write_project(project_root: Path, contents_by_path: dict[str, str]) -> None:
+    """Write each file under *project_root*, creating its directories.
+
+    Args:
+        project_root: Empty directory used as the project root.
+        contents_by_path: File contents keyed by project-relative path.
+    """
+    for relative_path, contents in contents_by_path.items():
+        (project_root / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (project_root / relative_path).write_text(contents)
+
+
 def _rules_for(payload: dict[str, Any], file_path: str) -> list[str]:
     """Return the rule ids reported for one file path."""
     return [finding["ruleId"] for finding in payload["findings"] if finding["file"] == file_path]
@@ -110,3 +122,37 @@ def test_the_skip_is_counted_on_text(lockfile_project: Path, arguments: list[str
 
     assert result.exit_code == 0, result.output
     assert expected in result.stdout, f"{arguments[0]} text does not count the skip:\n{result.stdout}"
+
+
+def test_test_path_class_skips_sensitive_findings_and_counts_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip a key in test, fixture and example files, count it per rule and file, and keep production code reporting.
+
+    Args:
+        tmp_path: Empty directory used as the project root.
+        monkeypatch: Fixture used to make that directory the process working directory.
+    """
+    json_key = json.dumps({"accessKeyId": _SYNTHETIC_AWS_KEY}) + "\n"
+    _write_project(
+        tmp_path,
+        {
+            _LOCKFILE_NAME: json.dumps({"resolvedDigest": _SYNTHETIC_DIGEST}) + "\n",
+            "Tests/Fixtures/keys.json": json_key,
+            "examples/demo.json": json_key,
+            "src/test_login.py": f"ACCESS_KEY_ID = {_SYNTHETIC_AWS_KEY!r}\n",
+            "src/config.json": json_key,
+            "src/latest.json": json_key,
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+
+    payload = _analyse(tmp_path)
+
+    key_files = sorted(finding["file"] for finding in payload["findings"] if finding["ruleId"] == _AWS_RULE)
+    assert key_files == ["src/config.json", "src/latest.json"]
+    built_in = [(row["index"], row["paths"][0], row["rule"]) for row in payload["suppressions"] if row.get("source") == "built-in"]
+    assert built_in == [
+        (0, _LOCKFILE_NAME, _ENTROPY_RULE),
+        (1, "Tests/Fixtures/keys.json", _AWS_RULE),
+        (2, "examples/demo.json", _AWS_RULE),
+        (3, "src/test_login.py", _AWS_RULE),
+    ]

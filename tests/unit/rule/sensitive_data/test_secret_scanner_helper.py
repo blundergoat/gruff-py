@@ -41,8 +41,10 @@ def test_iter_matches_resolves_lines():
 def test_iter_matches_returns_raw_match_text():
     pattern = compile_pattern(r"AKIA[A-Z0-9]{16}")
     # Assembled at run time, so this file holds no key-shaped literal for a scan of the repository to report.
+    live_shaped_key = "AKIA" + "Q7R2M8N4" + "P6T9V1X3"
     documented_key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
-    source = f"key = {documented_key}\n"
+    source = f"key = {live_shaped_key}\nexample = {documented_key}\n"
     matches = list(iter_matches(pattern, source))
+    # The vendor-documented sample is not yielded at all (FAMILY-CONTRACT section 5).
     assert len(matches) == 1
-    assert matches[0].raw == documented_key
+    assert matches[0].raw == live_shaped_key

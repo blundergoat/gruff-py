@@ -163,6 +163,27 @@ def test_high_entropy_skips_public_blocks_spelled_in_code(template: str) -> None
     assert HighEntropyStringRule().analyse(make_unit(template.format(body=body)), default_ctx()) == []
 
 
+def test_documented_samples_are_not_reported() -> None:
+    """Skip AWS's example key and the jwt.io sample token, and keep reporting a live-shaped key and a longer token."""
+    from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
+    from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
+
+    example = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+    live = "AKIA" + "Q7R2M8N4" + "P6T9V1X3"
+    jwt = ".".join(
+        [
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ",
+            "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+        ]
+    )
+    source = f"EXAMPLE_KEY = {example!r}\nLIVE_KEY = {live!r}\nSAMPLE = {jwt!r}\nLONGER = {jwt + 'x'!r}\n"
+    unit = make_unit(source)
+
+    assert [finding.line for finding in AwsAccessKeyRule().analyse(unit, default_ctx())] == [2]
+    assert [finding.line for finding in JwtTokenRule().analyse(unit, default_ctx())] == [4]
+
+
 def test_pascal_case_identifier_skipped():
     src = "name = 'SomeReallyLongPascalCaseIdentifier'\n"
     assert HighEntropyStringRule().analyse(make_unit(src), default_ctx()) == []
