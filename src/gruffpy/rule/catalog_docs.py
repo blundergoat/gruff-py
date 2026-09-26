@@ -961,18 +961,6 @@ def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`."
         ),
         config_keys=config_keys,
-        false_positive_shapes=(
-            FalsePositiveShape(
-                shape=(
-                    "A URL parser's test table can spell sample userinfo with a short dummy password, such as the "
-                    "rows in requests' `tests/test_utils.py` whose user is `u` and password `p`; short tokens stay "
-                    "reported until the family ratifies a placeholder vocabulary."
-                ),
-                mitigation=(
-                    "List the reviewed test file under `sensitiveExclusions` with its reason; a sensitive-data finding cannot be suppressed inline."
-                ),
-            ),
-        ),
     )
 
 

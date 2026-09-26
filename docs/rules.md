@@ -1518,9 +1518,6 @@ except ValueError:
 - Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
 - Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
 - Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`.
-- Common false-positive shapes:
-  - A URL parser's test table can spell sample userinfo with a short dummy password, such as the rows in requests' `tests/test_utils.py` whose user is `u` and password `p`; short tokens stay reported until the family ratifies a placeholder vocabulary.
-    Mitigation: List the reviewed test file under `sensitiveExclusions` with its reason; a sensitive-data finding cannot be suppressed inline.
 - Bad example: `REMOTE = "https://deploy:<password>@api.example.test"`
 - Good example: `REMOTE = "https://api.example.test"` plus a runtime Authorization header.
 
