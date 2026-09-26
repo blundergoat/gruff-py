@@ -56,9 +56,9 @@ Smoke-test the built wheel in a clean environment before publishing.
 
 ## Compatibility Checks
 
-- Confirm `gruff.analysis.v2` has not changed unexpectedly.
+- Confirm `gruff.analysis.v3` has not changed unexpectedly.
 - Confirm `gruff-py.hotspot.v1` has not changed unexpectedly.
-- Confirm `gruff-py.baseline.v1` remains reserved for cross-implementation use.
+- Confirm `gruff.baseline.v3` has not changed unexpectedly, and that a `gruff-py.baseline.v1` or `gruff.baseline.v1` file still fails closed with the `--migrate-baseline` instruction.
 - Confirm fingerprint golden tests pass (`tests/unit/finding/test_fingerprint.py`).
 - Confirm `stableIdentity` shape tests pass (`tests/unit/finding/test_stable_identity.py`); the line-insensitive identity must stay byte-equivalent across ports.
 - Confirm report format names are documented and implemented.

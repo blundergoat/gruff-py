@@ -20,11 +20,7 @@ def apply_suppressions(
         Findings with matching suppressions removed. Unsuppressed ``Finding``
         objects are returned unchanged.
     """
-    return [
-        finding
-        for finding in findings
-        if not _is_suppressed(finding, suppressions_by_file.get(finding.file_path))
-    ]
+    return [finding for finding in findings if not _is_suppressed(finding, suppressions_by_file.get(finding.file_path))]
 
 
 def _is_suppressed(finding: Finding, suppressions: ParsedSuppressions | None) -> bool:

@@ -57,6 +57,10 @@ _BOOLEAN_PREFIXES: frozenset[str] = frozenset(
         "will",
     }
 )
+# Auxiliary and modal markers ask a yes/no question as a whole segment in any position, so
+# ``_state_is_attributed_to_patient`` and ``_sentence_needs_wording_review`` already read as predicates.
+# Relationship verbs such as ``contains`` stay positional: mid-name they usually name an object.
+_BOOLEAN_AUXILIARY_MARKERS: frozenset[str] = frozenset({"are", "can", "did", "does", "has", "is", "must", "needs", "should", "was", "will"})
 # Relationship verbs express the user's Boolean answer only at the end of a name
 # (for example, ``input_affirms`` or ``source_contains``).
 _BOOLEAN_VERB_SUFFIXES: frozenset[str] = frozenset({"affirms", "contains", "declines", "matches"})
@@ -342,11 +346,7 @@ class BooleanPrefixRule(Rule):
         """
         return Finding(
             rule_id=rule_definition.id,
-            message=(
-                f"{declaration_kind.capitalize()} {declaration_name!r} returns / is bool "
-                "but lacks a boolean-intent "
-                f"prefix (is_, has_, can_, should_, was_, did_, will_, must_, needs_)."
-            ),
+            message=_boolean_intent_message(declaration_kind, declaration_name),
             file_path=unit.file.display_path,
             line=declaration_line,
             severity=rule_definition.default_severity,
@@ -355,10 +355,7 @@ class BooleanPrefixRule(Rule):
             confidence=rule_definition.confidence,
             end_line=declaration_line,
             symbol=declaration_name,
-            remediation=(
-                f"Rename {declaration_name!r} with a boolean prefix "
-                f"(e.g. ``is_{_strip_lead(declaration_name)}``)."
-            ),
+            remediation=(f"Rename {declaration_name!r} with a boolean prefix (e.g. ``is_{_strip_lead(declaration_name)}``)."),
             secondary_pillars=rule_definition.secondary_pillars,
             metadata={
                 "identifier": declaration_name,
@@ -377,11 +374,7 @@ def _is_dunder(declaration_name: str) -> bool:
     Returns:
         ``True`` when the scan should preserve Python's special spelling.
     """
-    return (
-        declaration_name.startswith("__")
-        and declaration_name.endswith("__")
-        and len(declaration_name) > 4
-    )
+    return declaration_name.startswith("__") and declaration_name.endswith("__") and len(declaration_name) > 4
 
 
 def _has_override_decorator(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -395,10 +388,7 @@ def _has_override_decorator(function_node: ast.FunctionDef | ast.AsyncFunctionDe
         ``True`` when an ``@override`` spelling exempts the method.
     """
     # Each decorator spelling is reduced to its user-visible leaf name.
-    return any(
-        _decorator_name(decorator).split(".")[-1] == "override"
-        for decorator in function_node.decorator_list
-    )
+    return any(_decorator_name(decorator).split(".")[-1] == "override" for decorator in function_node.decorator_list)
 
 
 def _accepted_boolean_names(
@@ -447,8 +437,8 @@ def _has_boolean_prefix(
     # A tokenizer miss means the UI has no Boolean word to recognize.
     if not semantic_tokens:
         return False
-    # A distinct ``has`` token asks a clear yes/no question in any name position.
-    contains_distinct_has_predicate = "has" in semantic_tokens
+    # An auxiliary or modal token asks a clear yes/no question in any name position.
+    contains_auxiliary_marker = any(token in _BOOLEAN_AUXILIARY_MARKERS for token in semantic_tokens)
     return (
         lowercase_name in accepted_boolean_names
         or lowercase_name in _BOOLEAN_PREFIXES
@@ -456,9 +446,43 @@ def _has_boolean_prefix(
         or semantic_tokens[0] in _BOOLEAN_PREFIXES
         or semantic_tokens[-1] in _BOOLEAN_ADJECTIVES
         or semantic_tokens[-1] in _BOOLEAN_VERB_SUFFIXES
-        or contains_distinct_has_predicate
+        or contains_auxiliary_marker
         or lowercase_name.startswith(_BOOLEAN_PREFIX_PATTERNS)
         or lowercase_name.endswith(_BOOLEAN_SUFFIX_PATTERNS)
+    )
+
+
+def _joined(vocabulary: frozenset[str] | tuple[str, ...]) -> str:
+    """Render one accepted vocabulary for a user-facing message, sorted so reports stay stable.
+
+    Args:
+        vocabulary: A constant this module matches names against.
+
+    Returns:
+        Comma-separated entries in sorted order.
+    """
+    return ", ".join(sorted(vocabulary))
+
+
+def _boolean_intent_message(declaration_kind: str, declaration_name: str) -> str:
+    """Explain a finding with the vocabulary the matcher accepts, generated from its constants.
+
+    Args:
+        declaration_kind: ``function`` or ``attribute`` report label.
+        declaration_name: Name shown to the user.
+
+    Returns:
+        A message that names every accepted form, so it cannot drift from what the rule accepts.
+    """
+    return (
+        f"{declaration_kind.capitalize()} {declaration_name!r} returns / is bool but its name states no boolean intent. "
+        f"Accepted: a leading marker ({_joined(_BOOLEAN_PREFIXES)}); "
+        f"one of these markers as a segment anywhere ({_joined(_BOOLEAN_AUXILIARY_MARKERS)}); "
+        f"a final state adjective ({_joined(_BOOLEAN_ADJECTIVES)}); "
+        f"a final relationship verb ({_joined(_BOOLEAN_VERB_SUFFIXES)}); "
+        f"a prefix ({_joined(_BOOLEAN_PREFIX_PATTERNS)}); "
+        f"a suffix ({_joined(_BOOLEAN_SUFFIX_PATTERNS)}); "
+        "or a name listed in acceptedBooleanNames."
     )
 
 
@@ -574,11 +598,7 @@ def _annotation_target_name(annotation_target: ast.expr) -> str:
     if isinstance(annotation_target, ast.Name):
         return annotation_target.id
     # Only the explicit typing module receives dotted-wrapper equivalence.
-    if (
-        isinstance(annotation_target, ast.Attribute)
-        and isinstance(annotation_target.value, ast.Name)
-        and annotation_target.value.id == "typing"
-    ):
+    if isinstance(annotation_target, ast.Attribute) and isinstance(annotation_target.value, ast.Name) and annotation_target.value.id == "typing":
         return f"typing.{annotation_target.attr}"
     return ""
 
@@ -752,10 +772,7 @@ def _is_upper_snake_constant(
     if not _UPPER_SNAKE_PATTERN.fullmatch(attribute_name):
         return False
     # Module and class parents make the uppercase declaration user-visible state.
-    return any(
-        isinstance(parent_node, ast.Module | ast.ClassDef)
-        for parent_node in parent_chain(attribute_node)
-    )
+    return any(isinstance(parent_node, ast.Module | ast.ClassDef) for parent_node in parent_chain(attribute_node))
 
 
 def _is_schema_field(attribute_node: ast.AnnAssign) -> bool:
@@ -790,6 +807,4 @@ def _is_test_file(display_path: str) -> bool:
     if normalized_path.startswith("tests/") or "/tests/" in normalized_path:
         return True
     # A root-level pytest filename receives the same user-facing exemption.
-    return (
-        "/" not in normalized_path and file_name.startswith("test_") and file_name.endswith(".py")
-    )
+    return "/" not in normalized_path and file_name.startswith("test_") and file_name.endswith(".py")

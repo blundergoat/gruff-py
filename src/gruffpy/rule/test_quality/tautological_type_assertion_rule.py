@@ -80,9 +80,7 @@ class TautologicalTypeAssertionRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} asserts a tautological type relation - always true."
-                        ),
+                        message=(f"Test {symbol!r} asserts a tautological type relation - always true."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -91,9 +89,7 @@ class TautologicalTypeAssertionRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Assert on the expected behaviour, not the runtime type identity."
-                        ),
+                        remediation=("Assert on the expected behaviour, not the runtime type identity."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
                     ),
@@ -107,12 +103,7 @@ def _is_tautology(expr: ast.expr) -> bool:
         target = call_target_name(expr)
         if target == "isinstance" and len(expr.args) == 2:
             obj, ty = expr.args
-            if (
-                isinstance(ty, ast.Call)
-                and call_target_name(ty) == "type"
-                and len(ty.args) == 1
-                and _is_same_expr(obj, ty.args[0])
-            ):
+            if isinstance(ty, ast.Call) and call_target_name(ty) == "type" and len(ty.args) == 1 and _is_same_expr(obj, ty.args[0]):
                 return True
     # Match comparisons where both sides are the same type expression.
     return (
@@ -132,9 +123,5 @@ def _is_same_expr(a: ast.expr, b: ast.expr) -> bool:
     if isinstance(a, ast.Attribute) and isinstance(b, ast.Attribute):
         return a.attr == b.attr and _is_same_expr(a.value, b.value)
     if isinstance(a, ast.Call) and isinstance(b, ast.Call):
-        return (
-            _is_same_expr(a.func, b.func)
-            and len(a.args) == len(b.args)
-            and all(_is_same_expr(x, y) for x, y in zip(a.args, b.args, strict=False))
-        )
+        return _is_same_expr(a.func, b.func) and len(a.args) == len(b.args) and all(_is_same_expr(x, y) for x, y in zip(a.args, b.args, strict=False))
     return False

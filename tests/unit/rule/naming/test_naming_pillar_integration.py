@@ -89,11 +89,7 @@ def _default_ctx() -> RuleContext:
             enabled=True,
             thresholds=dict(d.default_thresholds),
             options=dict(d.default_options),
-            severity_threshold=(
-                SeverityThreshold(d.default_threshold, d.default_severity)
-                if d.default_threshold is not None
-                else None
-            ),
+            severity_threshold=(SeverityThreshold(d.default_threshold, d.default_severity) if d.default_threshold is not None else None),
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
@@ -130,13 +126,9 @@ def test_naming_rules_fire_on_fixture():
     """Expose every naming rule and the Boolean shape a user must act on."""
     findings = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), (
-        f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
-    )
+    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
     # The fixture has one scalar Boolean return whose shape explains the rename.
-    boolean_findings = [
-        finding for finding in findings if finding.rule_id == "naming.boolean-prefix"
-    ]
+    boolean_findings = [finding for finding in findings if finding.rule_id == "naming.boolean-prefix"]
     assert len(boolean_findings) == 1
     assert boolean_findings[0].metadata["annotationShape"] == "bool"
 

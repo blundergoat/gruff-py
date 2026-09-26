@@ -59,9 +59,7 @@ def test_sha256_on_password_emits_with_kdf_metadata():
 
 
 def test_sha512_in_password_function_emits():
-    src = (
-        "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
-    )
+    src = "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
@@ -97,22 +95,14 @@ def test_usedforsecurity_weak_hash_matrix(
         case_setup: Optional dynamic flag setup; empty means no setup is needed.
         expected_finding_count: Zero only for the literal-false opt-out.
     """
-    source = (
-        f"{hash_import}\n"
-        f"{case_setup}"
-        f"password_hash = {hash_call_target}(password{usedforsecurity_argument}).hexdigest()\n"
-    )
+    source = f"{hash_import}\n{case_setup}password_hash = {hash_call_target}(password{usedforsecurity_argument}).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
     assert len(findings) == expected_finding_count
 
 
 def test_usedforsecurity_false_keeps_fast_password_hash_finding() -> None:
     """Keep warning when a user stores a password with fast SHA-256."""
-    source = (
-        "import hashlib\n"
-        "password_hash = hashlib.sha256("
-        "password, usedforsecurity=False).hexdigest()\n"
-    )
+    source = "import hashlib\npassword_hash = hashlib.sha256(password, usedforsecurity=False).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
 
     assert len(findings) == 1

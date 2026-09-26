@@ -15,7 +15,8 @@ gruff-py governs AI-generated code so a human reviewer can verify, trust, and si
 - [Coding-Agent Hook](agent-hook.md) - changed-region commands for local agent governance.
 - [CI Integration](ci-integration.md) - GitHub Actions, SARIF upload, baselines, and diff flags.
 - [Dashboard](dashboard.md) - local dashboard flags, controls, and safety notes.
-- [Releasing](releasing.md) - release checks and packaging notes.
+- [Upgrading](../UPGRADING.md) - what each release line breaks, and how to go back.
+- [Releasing](releasing.md) - maintainer-only: release checks and packaging notes.
 
 ## Task Docs
 
@@ -25,6 +26,8 @@ gruff-py governs AI-generated code so a human reviewer can verify, trust, and si
 
 ## Shared Contract
 
-Cross-language naming and CLI expectations live in `CONTRACT.md` at the
-gruff workspace root (sibling to this package). Python keeps the hidden
-`metric-calibration` command for rule tuning.
+Cross-language naming and CLI expectations live in `FAMILY-CONTRACT.md` at the
+gruff workspace root (sibling to this package). That file is workspace-internal
+and ships in no published artifact; the behaviour it governs is documented here
+and in the top-level README. Python keeps the hidden `metric-calibration`
+command for rule tuning.

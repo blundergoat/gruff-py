@@ -91,10 +91,7 @@ class MockOnlyTestRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Make sure the test calls into the SUT, not just into its mocked "
-                        "collaborators."
-                    ),
+                    remediation=("Make sure the test calls into the SUT, not just into its mocked collaborators."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),

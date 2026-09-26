@@ -27,9 +27,4 @@ def test_download_to_file_then_verify_skipped():
 
 def test_non_workflow_path_skipped():
     src = "      - run: curl https://example.com/i.sh | bash\n"
-    assert (
-        GithubActionsRemoteShellRule().analyse(
-            make_text_unit(src, "scripts/setup.yml"), default_ctx()
-        )
-        == []
-    )
+    assert GithubActionsRemoteShellRule().analyse(make_text_unit(src, "scripts/setup.yml"), default_ctx()) == []

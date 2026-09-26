@@ -67,10 +67,7 @@ class MissingFunctionDocstringRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _missing_function_docstring_finding(unit, definition, node, parents)
-            for node, parents in _undocumented_functions(unit)
-        ]
+        return [_missing_function_docstring_finding(unit, definition, node, parents) for node, parents in _undocumented_functions(unit)]
 
 
 def _undocumented_functions(unit: AnalysisUnit) -> list[tuple[FunctionNode, list[ast.AST]]]:

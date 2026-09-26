@@ -18,9 +18,7 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import call_target_name
 from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
 
-_SETUP_NAMES: frozenset[str] = frozenset(
-    {"setUp", "setUpClass", "setup_method", "setup_class", "setup_function", "setup"}
-)
+_SETUP_NAMES: frozenset[str] = frozenset({"setUp", "setUpClass", "setup_method", "setup_class", "setup_function", "setup"})
 
 
 class SetupBloatRule(Rule):
@@ -82,9 +80,7 @@ class SetupBloatRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Setup {symbol!r} is {lines} lines, above the threshold of {threshold}."
-                    ),
+                    message=(f"Setup {symbol!r} is {lines} lines, above the threshold of {threshold}."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,
@@ -93,10 +89,7 @@ class SetupBloatRule(Rule):
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Shrink the shared setup - extract object factories, narrow what "
-                        "each test actually needs."
-                    ),
+                    remediation=("Shrink the shared setup - extract object factories, narrow what each test actually needs."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"lines": lines, "threshold": threshold},
                 ),
@@ -107,8 +100,4 @@ class SetupBloatRule(Rule):
 def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     if fn.name in _SETUP_NAMES:
         return True
-    return any(
-        (call_target_name(d) or "").split(".")[-1] == "fixture"
-        for d in fn.decorator_list
-        if isinstance(d, ast.Call)
-    )
+    return any((call_target_name(d) or "").split(".")[-1] == "fixture" for d in fn.decorator_list if isinstance(d, ast.Call))

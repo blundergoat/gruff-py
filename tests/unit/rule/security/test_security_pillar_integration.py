@@ -131,18 +131,11 @@ def process(items):
 def test_safe_equivalents_emit_no_security_findings():
     findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], default_ctx())
     security_findings = [f for f in findings if f.rule_id.startswith("security.")]
-    assert security_findings == [], (
-        f"Safe fixture should not trigger security rules: "
-        f"{[(f.rule_id, f.message) for f in security_findings]}"
-    )
+    assert security_findings == [], f"Safe fixture should not trigger security rules: {[(f.rule_id, f.message) for f in security_findings]}"
 
 
 def test_security_registry_has_expected_rule_count():
-    ids = {
-        rule.definition().id
-        for rule in RuleRegistry.defaults().all()
-        if rule.definition().id.startswith("security.")
-    }
+    ids = {rule.definition().id for rule in RuleRegistry.defaults().all() if rule.definition().id.startswith("security.")}
     assert len(ids) == 35
     assert _EXPECTED_RULE_IDS.issubset(ids)
     assert {

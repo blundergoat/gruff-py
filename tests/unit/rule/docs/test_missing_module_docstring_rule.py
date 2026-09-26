@@ -19,9 +19,7 @@ def test_module_without_docstring_emits_one_finding():
 
 def test_test_module_without_docstring_skipped():
     src = "def test_f():\n    pass\n"
-    findings = MissingModuleDocstringRule().analyse(
-        make_unit(src, display_path="tests/test_example.py"), default_ctx()
-    )
+    findings = MissingModuleDocstringRule().analyse(make_unit(src, display_path="tests/test_example.py"), default_ctx())
     assert findings == []
 
 
@@ -32,15 +30,11 @@ def test_empty_module_skipped():
 
 def test_init_py_reexport_shim_skipped():
     src = "from .x import a\nfrom .y import b\n__all__ = ['a', 'b']\n"
-    findings = MissingModuleDocstringRule().analyse(
-        make_unit(src, display_path="pkg/__init__.py"), default_ctx()
-    )
+    findings = MissingModuleDocstringRule().analyse(make_unit(src, display_path="pkg/__init__.py"), default_ctx())
     assert findings == []
 
 
 def test_init_py_with_code_not_skipped():
     src = "from .x import a\n\ndef helper():\n    pass\n"
-    findings = MissingModuleDocstringRule().analyse(
-        make_unit(src, display_path="pkg/__init__.py"), default_ctx()
-    )
+    findings = MissingModuleDocstringRule().analyse(make_unit(src, display_path="pkg/__init__.py"), default_ctx())
     assert len(findings) == 1

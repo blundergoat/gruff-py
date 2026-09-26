@@ -26,23 +26,13 @@ def test_module_string_constants_collects_single_assignment_all_caps_strings() -
 
 
 def test_module_string_constants_rejects_rebound_or_dynamic_names() -> None:
-    tree = ast.parse(
-        'PLUGIN_PACKAGE = "plugins.core"\n'
-        'PLUGIN_PACKAGE = "plugins.other"\n'
-        "DYNAMIC = input()\n"
-        'lowercase = "ignored"\n'
-    )
+    tree = ast.parse('PLUGIN_PACKAGE = "plugins.core"\nPLUGIN_PACKAGE = "plugins.other"\nDYNAMIC = input()\nlowercase = "ignored"\n')
 
     assert module_string_constants(tree) == {}
 
 
 def test_module_string_constants_rejects_global_rebinds() -> None:
-    tree = ast.parse(
-        'PLUGIN_PACKAGE = "plugins.core"\n'
-        "def configure():\n"
-        "    global PLUGIN_PACKAGE\n"
-        '    PLUGIN_PACKAGE = "plugins.other"\n'
-    )
+    tree = ast.parse('PLUGIN_PACKAGE = "plugins.core"\ndef configure():\n    global PLUGIN_PACKAGE\n    PLUGIN_PACKAGE = "plugins.other"\n')
 
     assert module_string_constants(tree) == {}
 
@@ -54,25 +44,13 @@ def test_module_string_constants_rejects_conditional_module_scope_rebinds() -> N
 
 
 def test_module_string_constants_rejects_try_import_fallback_rebinds() -> None:
-    tree = ast.parse(
-        'BACKEND = "json"\n'
-        "try:\n"
-        "    import yaml\n"
-        '    BACKEND = "yaml"\n'
-        "except ImportError:\n"
-        "    pass\n"
-    )
+    tree = ast.parse('BACKEND = "json"\ntry:\n    import yaml\n    BACKEND = "yaml"\nexcept ImportError:\n    pass\n')
 
     assert module_string_constants(tree) == {}
 
 
 def test_module_string_constants_keeps_constants_despite_function_local_shadows() -> None:
-    tree = ast.parse(
-        'PLUGIN_PACKAGE = "plugins.core"\n'
-        "def helper():\n"
-        '    PLUGIN_PACKAGE = "local-only"\n'
-        "    return PLUGIN_PACKAGE\n"
-    )
+    tree = ast.parse('PLUGIN_PACKAGE = "plugins.core"\ndef helper():\n    PLUGIN_PACKAGE = "local-only"\n    return PLUGIN_PACKAGE\n')
 
     assert module_string_constants(tree) == {"PLUGIN_PACKAGE": "plugins.core"}
 
@@ -96,9 +74,7 @@ def test_fixed_string_expression_rejects_runtime_material() -> None:
 def test_fixed_string_fragments_preserves_runtime_context() -> None:
     constants = {"TABLE_PREFIX": "shop"}
 
-    assert fixed_string_fragments(
-        _expr('f"SELECT * FROM {TABLE_PREFIX}_orders WHERE id = {oid}"'), constants
-    ) == (
+    assert fixed_string_fragments(_expr('f"SELECT * FROM {TABLE_PREFIX}_orders WHERE id = {oid}"'), constants) == (
         "SELECT * FROM ",
         "shop",
         "_orders WHERE id = ",

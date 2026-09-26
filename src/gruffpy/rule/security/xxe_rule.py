@@ -123,11 +123,7 @@ def _has_defusedxml_import(tree: ast.AST) -> bool:
             for alias in node.names:
                 if alias.name == "defusedxml" or alias.name.startswith("defusedxml."):
                     return True
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and (node.module == "defusedxml" or node.module.startswith("defusedxml."))
-        ):
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and (node.module == "defusedxml" or node.module.startswith("defusedxml.")):
             return True
     return False
 
@@ -207,10 +203,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` parses XML without external-entity protections - "
-            "XXE / billion-laughs risk."
-        ),
+        message=(f"`{target}(...)` parses XML without external-entity protections - XXE / billion-laughs risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

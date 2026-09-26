@@ -71,9 +71,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         settings = context.settings_for(definition)
         min_group = int(settings.numeric_threshold("minGroupSize"))
         findings: list[Finding] = []
-        groups: dict[str, list[ast.FunctionDef | ast.AsyncFunctionDef]] = collections.defaultdict(
-            list
-        )
+        groups: dict[str, list[ast.FunctionDef | ast.AsyncFunctionDef]] = collections.defaultdict(list)
         for fn, _scope in test_functions(unit):
             if any(isinstance(d, ast.Call) for d in fn.decorator_list):
                 continue  # decorated tests are already structured
@@ -87,10 +85,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} shares a body shape with {len(fns) - 1} other "
-                            f"test(s) - candidate for @pytest.mark.parametrize."
-                        ),
+                        message=(f"Test {symbol!r} shares a body shape with {len(fns) - 1} other test(s) - candidate for @pytest.mark.parametrize."),
                         file_path=unit.file.display_path,
                         line=fn.lineno,
                         severity=definition.default_severity,
@@ -99,10 +94,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
                         confidence=definition.confidence,
                         end_line=fn.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Collapse the duplicated tests into one parametrised test that "
-                            "iterates the differing values."
-                        ),
+                        remediation=("Collapse the duplicated tests into one parametrised test that iterates the differing values."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"groupSize": len(fns)},
                     ),

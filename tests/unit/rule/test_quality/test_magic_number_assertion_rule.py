@@ -47,10 +47,7 @@ def test_len_threshold_assertion_still_emits():
 
 
 def test_rule_threshold_metadata_assertion_skipped():
-    src = (
-        "def test_foo():\n"
-        "    assert definition.default_thresholds == {'warning': 15, 'error': 30}\n"
-    )
+    src = "def test_foo():\n    assert definition.default_thresholds == {'warning': 15, 'error': 30}\n"
     assert MagicNumberAssertionRule().analyse(make_unit(src), default_ctx()) == []
 
 

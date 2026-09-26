@@ -13,18 +13,14 @@ from gruffpy.rule.security.ssrf_rule import SsrfRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 _SUPPORTED_POSITIONAL_SINKS = (
-    pytest.param(
-        "import requests", "requests.get(target_url)", "requests.get", id="requests-get-positional"
-    ),
+    pytest.param("import requests", "requests.get(target_url)", "requests.get", id="requests-get-positional"),
     pytest.param(
         "import requests",
         "requests.post(target_url)",
         "requests.post",
         id="requests-post-positional",
     ),
-    pytest.param(
-        "import requests", "requests.put(target_url)", "requests.put", id="requests-put-positional"
-    ),
+    pytest.param("import requests", "requests.put(target_url)", "requests.put", id="requests-put-positional"),
     pytest.param(
         "import requests",
         "requests.patch(target_url)",
@@ -56,22 +52,12 @@ _SUPPORTED_POSITIONAL_SINKS = (
         id="requests-request-positional",
     ),
     pytest.param("import httpx", "httpx.get(target_url)", "httpx.get", id="httpx-get-positional"),
-    pytest.param(
-        "import httpx", "httpx.post(target_url)", "httpx.post", id="httpx-post-positional"
-    ),
+    pytest.param("import httpx", "httpx.post(target_url)", "httpx.post", id="httpx-post-positional"),
     pytest.param("import httpx", "httpx.put(target_url)", "httpx.put", id="httpx-put-positional"),
-    pytest.param(
-        "import httpx", "httpx.patch(target_url)", "httpx.patch", id="httpx-patch-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.delete(target_url)", "httpx.delete", id="httpx-delete-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.head(target_url)", "httpx.head", id="httpx-head-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.options(target_url)", "httpx.options", id="httpx-options-positional"
-    ),
+    pytest.param("import httpx", "httpx.patch(target_url)", "httpx.patch", id="httpx-patch-positional"),
+    pytest.param("import httpx", "httpx.delete(target_url)", "httpx.delete", id="httpx-delete-positional"),
+    pytest.param("import httpx", "httpx.head(target_url)", "httpx.head", id="httpx-head-positional"),
+    pytest.param("import httpx", "httpx.options(target_url)", "httpx.options", id="httpx-options-positional"),
     pytest.param(
         "import httpx",
         'httpx.request("GET", target_url)',
@@ -141,27 +127,17 @@ _SUPPORTED_KEYWORD_SINKS = (
         "requests.request",
         id="requests-request-keyword-url",
     ),
-    pytest.param(
-        "import httpx", "httpx.get(url=target_url)", "httpx.get", id="httpx-get-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.post(url=target_url)", "httpx.post", id="httpx-post-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.put(url=target_url)", "httpx.put", id="httpx-put-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.patch(url=target_url)", "httpx.patch", id="httpx-patch-keyword-url"
-    ),
+    pytest.param("import httpx", "httpx.get(url=target_url)", "httpx.get", id="httpx-get-keyword-url"),
+    pytest.param("import httpx", "httpx.post(url=target_url)", "httpx.post", id="httpx-post-keyword-url"),
+    pytest.param("import httpx", "httpx.put(url=target_url)", "httpx.put", id="httpx-put-keyword-url"),
+    pytest.param("import httpx", "httpx.patch(url=target_url)", "httpx.patch", id="httpx-patch-keyword-url"),
     pytest.param(
         "import httpx",
         "httpx.delete(url=target_url)",
         "httpx.delete",
         id="httpx-delete-keyword-url",
     ),
-    pytest.param(
-        "import httpx", "httpx.head(url=target_url)", "httpx.head", id="httpx-head-keyword-url"
-    ),
+    pytest.param("import httpx", "httpx.head(url=target_url)", "httpx.head", id="httpx-head-keyword-url"),
     pytest.param(
         "import httpx",
         "httpx.options(url=target_url)",
@@ -206,13 +182,7 @@ def _ssrf_findings_for_supported_call(
     Returns:
         SSRF findings the user would receive for the call.
     """
-    source = (
-        f"{http_client_import}\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        f"    {target_url_assignment}\n"
-        f"    {http_client_call}\n"
-    )
+    source = f"{http_client_import}\nfrom flask import request\ndef fetch():\n    {target_url_assignment}\n    {http_client_call}\n"
     return SsrfRule().analyse(make_unit(source), default_ctx())
 
 
@@ -354,13 +324,7 @@ def test_unrelated_receiver_with_http_import_stays_quiet(
 
 def test_bare_get_is_not_supported_http_sink() -> None:
     """Keep a bare application ``get(...)`` call out of the HTTP-client matrix."""
-    source = (
-        "import requests\n"
-        "from flask import request\n"
-        "def inspect_receiver():\n"
-        "    target_url = request.args['url']\n"
-        "    get(target_url)\n"
-    )
+    source = "import requests\nfrom flask import request\ndef inspect_receiver():\n    target_url = request.args['url']\n    get(target_url)\n"
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
@@ -435,13 +399,7 @@ def test_function_parameter_shadowing_http_module_stays_quiet(receiver_name: str
 
 def test_module_import_after_function_definition_still_proves_receiver() -> None:
     """A global import is resolved when the previously defined endpoint runs."""
-    source = (
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-        "import requests\n"
-    )
+    source = "from flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\nimport requests\n"
 
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -472,13 +430,7 @@ def test_submodule_import_still_proves_the_http_client(import_block: str) -> Non
     Args:
         import_block: Supported package or submodule import ordering under test.
     """
-    source = (
-        f"{import_block}"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-    )
+    source = f"{import_block}from flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\n"
 
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -487,26 +439,14 @@ def test_submodule_import_still_proves_the_http_client(import_block: str) -> Non
 
 def test_unrelated_module_sharing_a_client_name_prefix_stays_quiet() -> None:
     """``requests_oauthlib`` is a different distribution, not the supported client."""
-    source = (
-        "import requests_oauthlib\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-    )
+    source = "import requests_oauthlib\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\n"
 
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_parent_package_import_alone_does_not_prove_qualified_urlopen() -> None:
     """``import urllib`` does not bind ``urllib.request``, so the sink stays unproven."""
-    source = (
-        "import urllib\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    urllib.request.urlopen(target_url)\n"
-    )
+    source = "import urllib\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    urllib.request.urlopen(target_url)\n"
 
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
@@ -743,11 +683,7 @@ def test_rebound_http_client_method_stays_quiet(
             "    requests.get(target_url); requests.get = identity\n",
         ),
         pytest.param(
-            "import requests\n"
-            "from flask import request\n"
-            "target_url = request.args['url']\n"
-            "requests.get(target_url)\n"
-            "requests = object()\n",
+            "import requests\nfrom flask import request\ntarget_url = request.args['url']\nrequests.get(target_url)\nrequests = object()\n",
         ),
         pytest.param(
             "import requests\n"
@@ -826,11 +762,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
     "source",
     (
         pytest.param(
-            "import requests as r\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    r.get(target_url)\n",
+            "import requests as r\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    r.get(target_url)\n",
             id="requests-alias",
         ),
         pytest.param(
@@ -842,11 +774,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
             id="requests-session",
         ),
         pytest.param(
-            "import httpx\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    httpx.Client().get(target_url)\n",
+            "import httpx\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    httpx.Client().get(target_url)\n",
             id="httpx-client",
         ),
         pytest.param(
@@ -869,11 +797,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
             id="urllib3-pool",
         ),
         pytest.param(
-            "from requests import get\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    get(target_url)\n",
+            "from requests import get\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    get(target_url)\n",
             id="bare-requests-get",
         ),
         pytest.param(
@@ -906,25 +830,14 @@ def test_deferred_http_client_shapes_stay_quiet(source: str) -> None:
 
 def test_requests_get_tainted_url_emits():
     """Warn when a Flask URL reaches the common ``requests.get`` sink."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    requests.get(url)\n"
-    )
+    src = "import requests\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    requests.get(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_requests_get_request_accessor_integration_emits() -> None:
     """Warn when a user sends a Flask query accessor directly to ``requests``."""
-    source = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get(request.args.get('url'))\n"
-    )
+    source = "import requests\nfrom flask import request\ndef fetch():\n    requests.get(request.args.get('url'))\n"
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
     assert len(findings) == 1
 
@@ -944,50 +857,27 @@ def test_requests_post_fstring_url_emits():
 
 def test_requests_get_literal_url_skipped():
     """Keep a fixed health-check URL out of the user's SSRF findings."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get('https://api.example.com/healthcheck')\n"
-    )
+    src = "import requests\nfrom flask import request\ndef fetch():\n    requests.get('https://api.example.com/healthcheck')\n"
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_requests_request_method_then_tainted_url_emits():
     """Warn when ``requests.request`` receives a tainted positional URL."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    requests.request('GET', url)\n"
-    )
+    src = "import requests\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    requests.request('GET', url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_urlopen_tainted_url_emits():
     """Warn when a directly imported ``urlopen`` receives a tainted URL."""
-    src = (
-        "from urllib.request import urlopen\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    urlopen(url)\n"
-    )
+    src = "from urllib.request import urlopen\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    urlopen(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_httpx_get_tainted_url_emits():
     """Warn when a Flask URL reaches the common ``httpx.get`` sink."""
-    src = (
-        "import httpx\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    httpx.get(url)\n"
-    )
+    src = "import httpx\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    httpx.get(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
@@ -995,12 +885,7 @@ def test_httpx_get_tainted_url_emits():
 def test_unknown_wrapper_call_breaks_taint():
     """Keep unknown wrappers quiet under ADR-017's conservative posture."""
     src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    raw = request.args['url']\n"
-        "    safe = build_url(raw)\n"
-        "    requests.get(safe)\n"
+        "import requests\nfrom flask import request\ndef fetch():\n    raw = request.args['url']\n    safe = build_url(raw)\n    requests.get(safe)\n"
     )
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -1034,23 +919,13 @@ def test_branch_join_conservative_kills_taint():
 
 def test_no_http_client_imported_skipped():
     """Keep an unrelated cache lookup quiet when no HTTP client is used."""
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    payload = request.args['p']\n"
-        "    cache.get(payload)\n"
-    )
+    src = "from flask import request\ndef view():\n    payload = request.args['p']\n    cache.get(payload)\n"
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_carries_security_metadata():
     """Keep the source and sink labels stable for downstream report users."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get(request.args['url'])\n"
-    )
+    src = "import requests\nfrom flask import request\ndef fetch():\n    requests.get(request.args['url'])\n"
     finding = SsrfRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "http-client"
     assert finding.metadata["sourceLabel"] == "user-controlled-url"
@@ -1058,9 +933,7 @@ def test_carries_security_metadata():
 
 def test_module_qualified_request_taints_arg():
     """Warn when the module-qualified Flask proxy reaches ``requests.get``."""
-    src = (
-        "import requests\nimport flask\ndef fetch():\n    requests.get(flask.request.args['url'])\n"
-    )
+    src = "import requests\nimport flask\ndef fetch():\n    requests.get(flask.request.args['url'])\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

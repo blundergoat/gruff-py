@@ -83,10 +83,7 @@ class GlobalStateMutationRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Replace global state with explicit parameters or a fixture; "
-                            "isolate tests so order doesn't matter."
-                        ),
+                        remediation=("Replace global state with explicit parameters or a fixture; isolate tests so order doesn't matter."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"names": list(node.names)},
                     ),

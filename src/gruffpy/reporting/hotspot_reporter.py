@@ -31,6 +31,7 @@ class HotspotReporter:
                 "git churn weighting is not available until a later history layer provides it."
             ),
             "scope": score.scope if score is not None else "full-project",
+            "diagnostics": [diagnostic.to_dict() for diagnostic in report.diagnostics],
             "hotspots": [] if score is None else [item.to_dict() for item in score.top_offenders],
         }
         return json.dumps(payload, indent=4) + "\n"

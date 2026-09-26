@@ -104,9 +104,7 @@ def _number_is_rendered(value: Any, message: str) -> bool:
 
 def _findings_by_rule_id() -> dict[str, Finding]:
     findings = RuleRegistry.defaults().analyse([_unit(_SOURCE)], _threshold_ctx())
-    return {
-        finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS
-    }
+    return {finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS}
 
 
 def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:

@@ -218,12 +218,7 @@ def module_all_names(tree: ast.AST) -> frozenset[str]:
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "__all__":
                     return _string_seq(node.value)
-        if (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "__all__"
-            and node.value is not None
-        ):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__" and node.value is not None:
             return _string_seq(node.value)
     return frozenset()
 
@@ -274,9 +269,7 @@ def is_overload_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return any(_decorator_name(d).split(".")[-1] == "overload" for d in fn.decorator_list)
 
 
-def is_protocol_method_stub(
-    fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]
-) -> bool:
+def is_protocol_method_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
     """Return whether a function is an empty Protocol method stub.
 
     Args:
@@ -304,12 +297,7 @@ def _is_empty_body(body: list[ast.stmt]) -> bool:
         if isinstance(only, ast.Expr) and isinstance(only.value, ast.Constant):
             return True
     # Allow [docstring, pass] or [docstring, ...] as also empty.
-    if (
-        len(body) == 2
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
+    if len(body) == 2 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         second = body[1]
         if isinstance(second, ast.Pass):
             return True

@@ -246,9 +246,7 @@ class MarkdownSanitizerProvenance:
         # Functions evaluate headers outside, then analyze their body with fresh value state.
         if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             self._record_function_header(statement, state)
-            visible_module_callables = (
-                state.callables.clone() if scope_kind == "module" else module_callables.clone()
-            )
+            visible_module_callables = state.callables.clone() if scope_kind == "module" else module_callables.clone()
             function_state = _FlowState(callables=visible_module_callables)
             # Parameters are user-controlled local bindings, even when they reuse import names.
             for parameter_name in function_parameter_names(statement.args):
@@ -266,9 +264,7 @@ class MarkdownSanitizerProvenance:
             # Bases and decorators run in the outer user's current proof state.
             for header_expression in [*statement.bases, *statement.decorator_list]:
                 self._record_expression(header_expression, state)
-            visible_module_callables = (
-                state.callables.clone() if scope_kind == "module" else module_callables.clone()
-            )
+            visible_module_callables = state.callables.clone() if scope_kind == "module" else module_callables.clone()
             class_state = _FlowState(callables=visible_module_callables)
             self._scan_statements(
                 statement.body,
@@ -779,9 +775,7 @@ class MarkdownSanitizerProvenance:
                     )
                 continue
             # An overwrite or uncertain branch preserves the user's warning reason.
-            if (
-                previous_value is not None and previous_value.is_safe
-            ) or proof.sanitizer_resolution == "uncertain-provenance":
+            if (previous_value is not None and previous_value.is_safe) or proof.sanitizer_resolution == "uncertain-provenance":
                 tracked_values[assigned_name] = _TrackedValue(is_safe=False)
             else:
                 tracked_values.pop(assigned_name, None)
@@ -880,9 +874,7 @@ class MarkdownSanitizerProvenance:
         """
         self._invalidate_name(declared_name, state)
         # A module helper configured by its exact bare name is an intentional trust boundary.
-        if scope_kind == "module" and (
-            declared_name in self._label_targets or declared_name in self._url_targets
-        ):
+        if scope_kind == "module" and (declared_name in self._label_targets or declared_name in self._url_targets):
             state.callables.shadowed_roots.discard(declared_name)
 
     def _expression_safety(
@@ -927,9 +919,7 @@ class MarkdownSanitizerProvenance:
             )
         # Boolean expressions may return any operand, so every operand must be safe.
         if isinstance(expression, ast.BoolOp):
-            return combine_expression_safety(
-                [self._expression_safety(value, slot, state) for value in expression.values]
-            )
+            return combine_expression_safety([self._expression_safety(value, slot, state) for value in expression.values])
         # Concatenation/composition is safe only when both possible value sources are safe.
         if isinstance(expression, ast.BinOp):
             return combine_composed_safety(
@@ -940,15 +930,11 @@ class MarkdownSanitizerProvenance:
             )
         # Nested f-strings are safe only when every formatted value is already safe.
         if isinstance(expression, ast.JoinedStr):
-            formatted_values = [
-                value.value for value in expression.values if isinstance(value, ast.FormattedValue)
-            ]
+            formatted_values = [value.value for value in expression.values if isinstance(value, ast.FormattedValue)]
             # A static-only nested f-string is equivalent to a literal.
             if not formatted_values:
                 return _safe()
-            return combine_expression_safety(
-                [self._expression_safety(value, slot, state) for value in formatted_values]
-            )
+            return combine_expression_safety([self._expression_safety(value, slot, state) for value in formatted_values])
         # FormattedValue appears only as an f-string wrapper around its real expression.
         if isinstance(expression, ast.FormattedValue):
             return self._expression_safety(expression.value, slot, state)
@@ -987,9 +973,7 @@ class MarkdownSanitizerProvenance:
             # A splat or delimiter-preserving `safe` defeats Python's default quote
             # helpers. This applies to both slots: `]`, `(`, and `)` break out of a
             # visible label exactly as they break out of a click target.
-            if canonical_target in _DEFAULT_QUOTE_TARGETS and not is_quote_call_delimiter_safe(
-                call
-            ):
+            if canonical_target in _DEFAULT_QUOTE_TARGETS and not is_quote_call_delimiter_safe(call):
                 return _unsafe("unsafe-arguments")
             return _safe()
         # A helper configured for the other slot gives users a specific correction path.

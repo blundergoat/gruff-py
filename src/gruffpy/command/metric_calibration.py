@@ -337,10 +337,7 @@ def metric_calibration_payload(
             "functions": report.function_count,
         },
         "metrics": [summary.to_payload() for summary in report.summaries],
-        "top": {
-            metric: [row.to_payload(metric) for row in top_rows(report, metric, top)]
-            for metric in METRIC_ORDER
-        },
+        "top": {metric: [row.to_payload(metric) for row in top_rows(report, metric, top)] for metric in METRIC_ORDER},
         "diagnostics": [diagnostic.to_payload() for diagnostic in report.diagnostics],
     }
 
@@ -448,10 +445,7 @@ def _discover_metric_sources(
 
 
 def _missing_path_diagnostics(missing_paths: Sequence[str]) -> list[MetricDiagnostic]:
-    return [
-        MetricDiagnostic(type="missing-path", message="path not found", path=missing)
-        for missing in missing_paths
-    ]
+    return [MetricDiagnostic(type="missing-path", message="path not found", path=missing) for missing in missing_paths]
 
 
 def _collect_metric_rows(
@@ -468,9 +462,7 @@ def _collect_metric_rows(
             continue
         files_parsed += 1
         if unit.tree is not None:
-            rows.extend(
-                _metric_row(source_file.display_path, fn) for fn in iter_functions(unit.tree)
-            )
+            rows.extend(_metric_row(source_file.display_path, fn) for fn in iter_functions(unit.tree))
     return files_parsed, rows, diagnostics
 
 
@@ -510,10 +502,7 @@ def _append_distribution(lines: list[str], summaries: Sequence[MetricSummary]) -
         [
             "",
             "Metric distributions:",
-            (
-                f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'p99':>8} "
-                f"{'max':>8} {'threshold':>18}"
-            ),
+            (f"  {'metric':<24} {'min':>8} {'p50':>8} {'p90':>8} {'p99':>8} {'max':>8} {'threshold':>18}"),
         ]
     )
     lines.extend(_summary_line(summary) for summary in summaries)
@@ -545,10 +534,7 @@ def _append_top_rows(lines: list[str], report: MetricCalibrationReport, top: int
 
 
 def _top_row_line(row: FunctionMetricRow, metric: MetricName) -> str:
-    return (
-        f"  {row.file_path}:{row.line} {row.symbol} "
-        f"{metric}={_format_number(row.value_for(metric))}"
-    )
+    return f"  {row.file_path}:{row.line} {row.symbol} {metric}={_format_number(row.value_for(metric))}"
 
 
 def _metric_row(file_path: str, fn: FunctionLike) -> FunctionMetricRow:
@@ -568,9 +554,7 @@ def _metric_thresholds(config: AnalysisConfig) -> dict[MetricName, MetricThresho
     return {
         "cyclomatic": _threshold(config, CyclomaticComplexityRule.ID, Severity.WARNING, "above"),
         "halsteadVolume": _threshold(config, HalsteadVolumeRule.ID, Severity.WARNING, "above"),
-        "maintainabilityIndex": _threshold(
-            config, MaintainabilityIndexRule.ID, Severity.WARNING, "below"
-        ),
+        "maintainabilityIndex": _threshold(config, MaintainabilityIndexRule.ID, Severity.WARNING, "below"),
     }
 
 

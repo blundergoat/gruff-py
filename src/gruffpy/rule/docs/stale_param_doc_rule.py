@@ -67,10 +67,7 @@ class StaleParamDocRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _stale_param_finding(unit, definition, stale_param)
-            for stale_param in _stale_parameters(unit.tree)
-        ]
+        return [_stale_param_finding(unit, definition, stale_param) for stale_param in _stale_parameters(unit.tree)]
 
 
 def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
@@ -115,10 +112,7 @@ def _stale_param_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {stale_param.symbol!r} docstring documents parameter "
-            f"{stale_param.name!r}, which is not in the signature."
-        ),
+        message=(f"Function {stale_param.symbol!r} docstring documents parameter {stale_param.name!r}, which is not in the signature."),
         file_path=unit.file.display_path,
         line=stale_param.node.lineno,
         severity=definition.default_severity,

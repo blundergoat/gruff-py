@@ -160,15 +160,7 @@ def test_multiple_aaa_cycles_fires_when_configured(tmp_path: Path):
         }
     )
     ctx = RuleContext(project_root=str(tmp_path), config=config)
-    src = (
-        "def test_x():\n"
-        "    x = compute()\n"
-        "    assert x == 1\n"
-        "    y = compute()\n"
-        "    assert y == 2\n"
-        "    z = compute()\n"
-        "    assert z == 3\n"
-    )
+    src = "def test_x():\n    x = compute()\n    assert x == 1\n    y = compute()\n    assert y == 2\n    z = compute()\n    assert z == 3\n"
     findings = rule.analyse(make_unit(src), ctx)
     assert len(findings) == 1
     assert findings[0].metadata["cycles"] >= 2

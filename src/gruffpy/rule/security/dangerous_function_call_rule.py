@@ -67,10 +67,7 @@ class DangerousFunctionCallRule(Rule):
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         definition = self.definition()
-        return [
-            _dangerous_call_finding(unit, definition, node, kind)
-            for node, kind in _dangerous_calls(unit.tree)
-        ]
+        return [_dangerous_call_finding(unit, definition, node, kind) for node, kind in _dangerous_calls(unit.tree)]
 
 
 def _dangerous_calls(tree: ast.AST) -> list[tuple[ast.Call, str]]:

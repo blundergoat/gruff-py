@@ -1,6 +1,6 @@
 # CLAUDE.md (2026-08-08)
 
-gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: finding fingerprints reproduce gruff-php bytes, and the shared schema strings `gruff.analysis.v2` and `gruff.summary.v2` match the sibling implementations. `gruff-py.baseline.v1` and `gruff-py.hotspot.v1` are language-prefixed outliers that do NOT match sibling output; read `.goat-flow/learning-loop/footguns/compatibility.md` before changing either.
+gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: finding fingerprints reproduce gruff-php bytes, and the shared schema strings `gruff.analysis.v3`, `gruff.summary.v3`, `gruff.baseline.v3` and `gruff.hook.v2` match the sibling implementations. `gruff-py.hotspot.v1` and `gruff-py.config.v0.1` are language-prefixed outliers that do NOT match sibling output; read `.goat-flow/learning-loop/footguns/compatibility.md` before changing either.
 
 goat-flow version: 1.15.1
 
@@ -43,6 +43,7 @@ Ask First boundaries: cross-implementation contracts in `src/gruffpy/finding/fin
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy src
+uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 uv run pytest
 uv build
 uv run gruff-py analyse src/

@@ -242,11 +242,7 @@ def _analyse_unit(
         if _has_external_reference(candidate.node.name, references, own_references):
             continue
         # One uniquely resolved external load also proves a top-level function is live.
-        if (
-            candidate.is_module_level
-            and project_liveness is not None
-            and project_liveness.is_live(unit.file.display_path, candidate.node.name)
-        ):
+        if candidate.is_module_level and project_liveness is not None and project_liveness.is_live(unit.file.display_path, candidate.node.name):
             continue
         # Framework/plugin cases the static model cannot prove stay on ADR-015 allowlists.
         if _is_allowlisted(unit, candidate, allowlist):
@@ -473,10 +469,7 @@ def _has_external_reference(
         return True
     if scope.getattr_names[name] > defining_node.getattr_names[name]:
         return True
-    return any(
-        name.startswith(prefix) and count > defining_node.getattr_prefixes[prefix]
-        for prefix, count in scope.getattr_prefixes.items()
-    )
+    return any(name.startswith(prefix) and count > defining_node.getattr_prefixes[prefix] for prefix, count in scope.getattr_prefixes.items())
 
 
 def _joined_string_static_prefix(value: ast.JoinedStr) -> str:

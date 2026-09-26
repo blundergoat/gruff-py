@@ -1,3 +1,9 @@
+"""Exercise the provider API-key findings users receive during source scans.
+
+Fixtures cover supported vendor shapes, placeholders, deduplication, fixed preview output, and the
+provider label a user needs when choosing a credential-rotation workflow.
+"""
+
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
@@ -11,15 +17,7 @@ _GITLAB_TOKEN = "glpat-" + "abcDEF1234567890_abcDEF"
 _NPM_TOKEN = "npm_" + "abcDEF1234567890abcDEF1234567890"
 _GOOGLE_API_KEY = "AIza" + "SyA1b2C3d4E5" + "f6G7h8I9j0K1" + "l2M3n4O5p6Q"
 _GITHUB_FINE_GRAINED = "github_pat_" + "A" * 22 + "_" + "B" * 35
-_SLACK_WEBHOOK = (
-    "https://hooks.slack.com/services/"
-    + "T12345678"
-    + "/"
-    + "B12345678"
-    + "/"
-    + "abcdefghijklm"
-    + "nopqrstuvwxyz"
-)
+_SLACK_WEBHOOK = "https://hooks.slack.com/services/" + "T12345678" + "/" + "B12345678" + "/" + "abcdefghijklm" + "nopqrstuvwxyz"
 
 
 def test_stripe_live_key_emits():
@@ -109,7 +107,7 @@ def test_provider_metadata_and_message_do_not_leak_raw_key():
     assert _GOOGLE_API_KEY not in finding.message
     assert _GOOGLE_API_KEY not in str(finding.metadata)
     assert finding.metadata == {
-        "preview": "AIza...5p6Q (redacted, 39 chars)",
+        "preview": "[redacted:google-api-key]",
         "vendor": "google",
     }
 

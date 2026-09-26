@@ -90,14 +90,9 @@ def parse_docstring(text: str) -> ParsedDocstring | None:
     except _dp.ParseError:
         return None
 
-    style = (
-        _STYLE_MAP.get(raw.style, DocstringStyle.UNKNOWN) if raw.style else DocstringStyle.UNKNOWN
-    )
+    style = _STYLE_MAP.get(raw.style, DocstringStyle.UNKNOWN) if raw.style else DocstringStyle.UNKNOWN
 
-    parameters = tuple(
-        DocstringField(name=p.arg_name, type_hint=p.type_name, description=p.description)
-        for p in raw.params
-    )
+    parameters = tuple(DocstringField(name=p.arg_name, type_hint=p.type_name, description=p.description) for p in raw.params)
     returns: DocstringField | None = None
     if raw.returns is not None:
         returns = DocstringField(
@@ -105,10 +100,7 @@ def parse_docstring(text: str) -> ParsedDocstring | None:
             type_hint=raw.returns.type_name,
             description=raw.returns.description,
         )
-    raises = tuple(
-        DocstringField(name=r.type_name, type_hint=None, description=r.description)
-        for r in raw.raises
-    )
+    raises = tuple(DocstringField(name=r.type_name, type_hint=None, description=r.description) for r in raw.raises)
 
     return ParsedDocstring(
         summary=raw.short_description,

@@ -103,9 +103,7 @@ class SsrfRule(Rule):
             Findings visible to the user, or an empty list when no supported sink is unsafe.
         """
         # A parse failure or missing client token gives the user no reliable SSRF judgment.
-        if not isinstance(unit.tree, ast.Module) or not any(
-            needle in unit.source for needle in _SOURCE_NEEDLES
-        ):
+        if not isinstance(unit.tree, ast.Module) or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         taint_map = TaintAnalyser(_SSRF_SANITISERS).analyse_tree(unit.tree)
         definition = self.definition()
@@ -268,13 +266,11 @@ def _scope_client_binding_status(
         last effective binding in source order decides, so a canonical import
         that follows an earlier shadow restores trust.
     """
-    if isinstance(
-        scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-    ) and binding_name in _parameter_names(scope.args):
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and binding_name in _parameter_names(scope.args):
         return "shadowed"
-    has_retroactive_local_bindings = isinstance(
-        scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-    ) and not _has_external_binding_declaration(scope, binding_name)
+    has_retroactive_local_bindings = isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and not _has_external_binding_declaration(
+        scope, binding_name
+    )
     direct_statement_ids = {id(statement) for statement in _scope_statements(scope)}
     # The receiver a call sees is the last binding that executed before it, so
     # scanning to the end lets a canonical import undo an earlier shadow.
@@ -366,19 +362,13 @@ def _import_binding_status(
     """
     if should_ignore_later_binding:
         return "unbound"
-    if isinstance(statement, ast.ImportFrom) and any(
-        alias.name == "*" for alias in statement.names
-    ):
+    if isinstance(statement, ast.ImportFrom) and any(alias.name == "*" for alias in statement.names):
         return "shadowed"
     status: _ClientBindingStatus = "unbound"
     for imported_alias in statement.names:
         if _visible_import_name(statement, imported_alias) != binding_name:
             continue
-        if (
-            not is_direct_statement
-            or is_after_call
-            or not _is_exact_supported_import(statement, imported_alias, canonical_import)
-        ):
+        if not is_direct_statement or is_after_call or not _is_exact_supported_import(statement, imported_alias, canonical_import):
             return "shadowed"
         status = "supported"
     return status
@@ -426,10 +416,7 @@ def _has_external_binding_declaration(
     """
     if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
         return False
-    return any(
-        isinstance(node, (ast.Global, ast.Nonlocal)) and binding_name in node.names
-        for node in _scope_nodes(scope)
-    )
+    return any(isinstance(node, (ast.Global, ast.Nonlocal)) and binding_name in node.names for node in _scope_nodes(scope))
 
 
 def _is_after_call(node: ast.AST, *, call_line: int, call_column: int) -> bool:
@@ -501,12 +488,7 @@ def _is_exact_supported_import(
     if alias.asname is not None:
         return False
     if canonical_import == "urllib.request.urlopen":
-        return (
-            isinstance(statement, ast.ImportFrom)
-            and statement.level == 0
-            and statement.module == "urllib.request"
-            and alias.name == "urlopen"
-        )
+        return isinstance(statement, ast.ImportFrom) and statement.level == 0 and statement.module == "urllib.request" and alias.name == "urlopen"
     if not isinstance(statement, ast.Import):
         return False
     # `import requests.adapters` binds `requests` to the same package `import
@@ -586,10 +568,7 @@ def _build_finding(
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` receives a user-controlled URL - SSRF risk via "
-            "internal services, cloud metadata, or other reachable targets."
-        ),
+        message=(f"`{target}(...)` receives a user-controlled URL - SSRF risk via internal services, cloud metadata, or other reachable targets."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -75,9 +75,7 @@ class LoopAssertionWithoutMessageRule(Rule):
                     findings.append(
                         Finding(
                             rule_id=definition.id,
-                            message=(
-                                f"Test {symbol!r} has an assertion inside a loop with no message."
-                            ),
+                            message=(f"Test {symbol!r} has an assertion inside a loop with no message."),
                             file_path=unit.file.display_path,
                             line=inner.lineno,
                             severity=definition.default_severity,
@@ -86,10 +84,7 @@ class LoopAssertionWithoutMessageRule(Rule):
                             confidence=definition.confidence,
                             end_line=inner.end_lineno,
                             symbol=symbol,
-                            remediation=(
-                                "Add a message identifying the iteration, or split the "
-                                "cases into a parametrised test."
-                            ),
+                            remediation=("Add a message identifying the iteration, or split the cases into a parametrised test."),
                             secondary_pillars=definition.secondary_pillars,
                             metadata={},
                         ),

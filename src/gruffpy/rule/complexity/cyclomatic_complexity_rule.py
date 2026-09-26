@@ -99,8 +99,7 @@ class CyclomaticComplexityRule(Rule):
                     end_line=fn.end_lineno,
                     symbol=symbol,
                     remediation=(
-                        "Extract decision branches into helper functions; "
-                        "replace nested conditionals with early returns or dispatch tables."
+                        "Extract decision branches into helper functions; replace nested conditionals with early returns or dispatch tables."
                     ),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={

@@ -72,22 +72,13 @@ class EmptyClassRule(Rule):
 
 
 def _empty_classes(tree: ast.AST) -> list[ast.ClassDef]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef) and _should_report_empty_class(node)
-    ]
+    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and _should_report_empty_class(node)]
 
 
 def _should_report_empty_class(node: ast.ClassDef) -> bool:
     if not _is_empty_body(node.body):
         return False
-    return not (
-        has_framework_base(node)
-        or _is_marker_base_subclass(node)
-        or has_dataclass_decorator(node)
-        or has_framework_decorator(node)
-    )
+    return not (has_framework_base(node) or _is_marker_base_subclass(node) or has_dataclass_decorator(node) or has_framework_decorator(node))
 
 
 def _empty_class_finding(
@@ -107,9 +98,7 @@ def _empty_class_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Delete the class, or implement it; if it's a marker base, extend Protocol/ABC."
-        ),
+        remediation=("Delete the class, or implement it; if it's a marker base, extend Protocol/ABC."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

@@ -58,16 +58,16 @@ _SECURITY_POSTURE: dict[str, Posture] = {
 
 _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.api-key-pattern": (True, "warning", "high"),
-    "sensitive-data.aws-access-key": (True, "error", "high"),
-    "sensitive-data.database-url-password": (True, "error", "high"),
-    "sensitive-data.gcp-service-account-key": (True, "error", "high"),
+    "sensitive-data.aws-access-key": (True, "warning", "high"),
+    "sensitive-data.database-url-password": (True, "warning", "high"),
+    "sensitive-data.gcp-service-account-key": (True, "warning", "high"),
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
-    "sensitive-data.high-entropy-string": (True, "warning", "low"),
+    "sensitive-data.high-entropy-string": (True, "warning", "medium"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
-    "sensitive-data.phi-pattern": (True, "error", "medium"),
+    "sensitive-data.phi-pattern": (True, "warning", "medium"),
     "sensitive-data.pii-test-fixture": (True, "warning", "medium"),
-    "sensitive-data.private-key": (True, "error", "high"),
-    "sensitive-data.url-credentials": (True, "error", "high"),
+    "sensitive-data.private-key": (True, "warning", "high"),
+    "sensitive-data.url-credentials": (True, "warning", "high"),
 }
 
 
@@ -80,9 +80,7 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     ),
     ids=("docs.missing-*", "security.*", "sensitive-data.*"),
 )
-def test_reviewer_verification_families_keep_default_posture(
-    expected: dict[str, Posture], prefix: str
-) -> None:
+def test_reviewer_verification_families_keep_default_posture(expected: dict[str, Posture], prefix: str) -> None:
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
 

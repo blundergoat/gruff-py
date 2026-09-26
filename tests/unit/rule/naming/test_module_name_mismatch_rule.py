@@ -50,33 +50,25 @@ def test_package_path_tokens_can_complete_class_name():
 
 def test_multi_segment_package_path_tokens_can_complete_class_name():
     src = "class SingleImplementorProtocolRule:\n    pass\n"
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "src/gruffpy/rule/design/single_implementor_protocol_rule.py"), _ctx()
-    )
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/rule/design/single_implementor_protocol_rule.py"), _ctx())
     assert findings == []
 
 
 def test_role_suffix_can_be_completed_by_package_path():
     src = "class ProjectRuleProtocol:\n    pass\n"
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "src/gruffpy/rule/project_rule.py"), _ctx()
-    )
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/rule/project_rule.py"), _ctx())
     assert findings == []
 
 
 def test_matcher_suffix_can_be_completed_by_package_path():
     src = "class GitignoreMatcher:\n    pass\n"
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "src/gruffpy/source/gitignore.py"), _ctx()
-    )
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/source/gitignore.py"), _ctx())
     assert findings == []
 
 
 def test_conventional_module_name_can_group_domain_exceptions():
     src = "class ConfigError:\n    pass\n"
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "src/gruffpy/config/exceptions.py"), _ctx()
-    )
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/config/exceptions.py"), _ctx())
     assert findings == []
 
 
@@ -89,9 +81,7 @@ def test_http_server_acronym():
 
 def test_joined_initialism_filename_matches():
     src = "class NPathComplexityRule:\n    pass\n"
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "src/gruffpy/rule/complexity/npath_complexity_rule.py"), _ctx()
-    )
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "src/gruffpy/rule/complexity/npath_complexity_rule.py"), _ctx())
     assert findings == []
 
 
@@ -148,11 +138,7 @@ def test_router_module_with_envelope_dataclass_does_not_fire():
         )
     )
     src = (
-        "from dataclasses import dataclass\n\n"
-        "@dataclass(frozen=True)\n"
-        "class RenderedResponse:\n"
-        "    body: str\n"
-        "    status: int\n\n" + handlers + "\n"
+        "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass RenderedResponse:\n    body: str\n    status: int\n\n" + handlers + "\n"
     )
     findings = ModuleNameMismatchRule().analyse(_unit(src, "response.py"), _ctx())
     assert findings == []
@@ -187,13 +173,7 @@ def test_private_module_filename_does_not_fire():
     # Field-report shape: underscore-prefixed (private-by-convention) module.
     # Zero public functions here so only the private-filename guard applies -
     # renaming a private module for its result type is pure churn.
-    src = (
-        "from dataclasses import dataclass\n\n"
-        "@dataclass(frozen=True)\n"
-        "class LookupResult:\n"
-        "    value: str\n"
-        "    found: bool\n"
-    )
+    src = "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass LookupResult:\n    value: str\n    found: bool\n"
     findings = ModuleNameMismatchRule().analyse(_unit(src, "_internal_lookup.py"), _ctx())
     assert findings == []
 
@@ -201,15 +181,8 @@ def test_private_module_filename_does_not_fire():
 def test_test_prefixed_module_with_single_testcase_does_not_fire():
     # Field shape: a pytest/unittest module named for discovery, holding one
     # `*Tests` class. Renaming to `challenge_tests.py` would break collection.
-    src = (
-        "import unittest\n\n"
-        "class ChallengeTests(unittest.TestCase):\n"
-        "    def test_creates(self):\n"
-        "        assert True\n"
-    )
-    findings = ModuleNameMismatchRule().analyse(
-        _unit(src, "service/server/tests/test_challenges.py"), _ctx()
-    )
+    src = "import unittest\n\nclass ChallengeTests(unittest.TestCase):\n    def test_creates(self):\n        assert True\n"
+    findings = ModuleNameMismatchRule().analyse(_unit(src, "service/server/tests/test_challenges.py"), _ctx())
     assert findings == []
 
 
@@ -249,14 +222,7 @@ def test_substantial_class_in_utils_py_still_fires():
 
 
 def test_two_public_functions_beside_plain_class_do_not_fire():
-    src = (
-        "class UserService:\n"
-        "    pass\n\n"
-        "def create_user(name):\n"
-        "    return name\n\n"
-        "def delete_user(name):\n"
-        "    return name\n"
-    )
+    src = "class UserService:\n    pass\n\ndef create_user(name):\n    return name\n\ndef delete_user(name):\n    return name\n"
     findings = ModuleNameMismatchRule().analyse(_unit(src, "users.py"), _ctx())
     assert findings == []
 
@@ -285,26 +251,14 @@ def test_envelope_class_with_one_public_function_does_not_fire():
 def test_envelope_class_alone_still_fires():
     # With no public functions the envelope is the module's identity, so the
     # rename guidance stands.
-    src = (
-        "from dataclasses import dataclass\n\n"
-        "@dataclass(frozen=True)\n"
-        "class RenderedResponse:\n"
-        "    body: str\n"
-    )
+    src = "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass RenderedResponse:\n    body: str\n"
     findings = ModuleNameMismatchRule().analyse(_unit(src, "response.py"), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["expectedFilename"] == "rendered_response.py"
 
 
 def test_enum_class_with_public_function_does_not_fire():
-    src = (
-        "import enum\n\n"
-        "class Palette(enum.Enum):\n"
-        '    RED = "red"\n'
-        '    BLUE = "blue"\n\n'
-        "def default_palette():\n"
-        "    return Palette.RED\n"
-    )
+    src = 'import enum\n\nclass Palette(enum.Enum):\n    RED = "red"\n    BLUE = "blue"\n\ndef default_palette():\n    return Palette.RED\n'
     findings = ModuleNameMismatchRule().analyse(_unit(src, "colours.py"), _ctx())
     assert findings == []
 

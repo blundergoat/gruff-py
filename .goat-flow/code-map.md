@@ -15,7 +15,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/cli.py` = Click entrypoint, orchestration, report rendering choice, dashboard command wiring, and process exit-code logic.
 - `src/gruffpy/cli_options.py` = shared Click option definitions and the option-to-request translation used by every analysing subcommand; it is the largest CLI module, so flag work usually lands here rather than in `cli.py`.
 - `src/gruffpy/cli_dashboard.py`, `src/gruffpy/cli_hook.py`, `src/gruffpy/cli_list_rules.py`, `src/gruffpy/cli_menu.py`, `src/gruffpy/cli_migrate_config.py`, `src/gruffpy/cli_state.py`, `src/gruffpy/cli_summary.py` = per-subcommand implementations extracted from `cli.py` to keep it under the `size.file-length` error threshold; add new subcommand bodies here, not in `cli.py`.
-- `src/gruffpy/hook_contract.py` = the `gruff.hook.v1` projection and its stable-identity scheme, consumed by `gruff-py hook` and by the shared `.goat-flow/hooks/gruff-code-quality.sh` agent hook.
+- `src/gruffpy/hook_contract.py` = the `gruff.hook.v2` projection and its stable-identity scheme, consumed by `gruff-py hook` and by the shared `.goat-flow/hooks/gruff-code-quality.sh` agent hook.
 - `src/gruffpy/suppression/` = tokenizer-backed `# gruff: disable=` / `disable-next=` / `disable-file=` comment parser plus the central post-execution finding filter applied by `src/gruffpy/analysis/runner.py` (ADR-008).
 - `src/gruffpy/__main__.py` = `python -m gruffpy` entrypoint.
 - `src/gruffpy/version.py` = runtime version string shown by the CLI.

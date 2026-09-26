@@ -26,12 +26,7 @@ def test_one_finding_per_test():
 
 
 def test_skip_guard_clause_does_not_fire():
-    src = (
-        "def test_foo():\n"
-        "    if not has_tool:\n"
-        "        pytest.skip('tool unavailable')\n"
-        "    assert result == 'ok'\n"
-    )
+    src = "def test_foo():\n    if not has_tool:\n        pytest.skip('tool unavailable')\n    assert result == 'ok'\n"
     assert ConditionalLogicRule().analyse(make_unit(src), default_ctx()) == []
 
 

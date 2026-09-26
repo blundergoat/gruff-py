@@ -33,16 +33,11 @@ def _analyse(*units: AnalysisUnit):
 
 def test_single_implementor_protocol_without_external_usage_is_flagged():
     contract = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    def render(self, value: str) -> str: ...\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    def render(self, value: str) -> str: ...\n",
         "src/contracts.py",
     )
     implementation = _unit(
-        "from .contracts import Renderer\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    def render(self, value: str) -> str:\n"
-        "        return value\n",
+        "from .contracts import Renderer\n\nclass HtmlRenderer(Renderer):\n    def render(self, value: str) -> str:\n        return value\n",
         "src/html_renderer.py",
     )
 
@@ -62,11 +57,7 @@ def test_multiple_implementors_skip_protocol():
         "src/contracts.py",
     )
     implementations = _unit(
-        "from .contracts import Renderer\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n\n"
-        "class TextRenderer(Renderer):\n"
-        "    pass\n",
+        "from .contracts import Renderer\n\nclass HtmlRenderer(Renderer):\n    pass\n\nclass TextRenderer(Renderer):\n    pass\n",
         "src/renderers.py",
     )
 
@@ -90,11 +81,7 @@ def test_external_type_hint_usage_skips_protocol():
 
 def test_base_list_reference_alone_still_flags():
     source = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    pass\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
     )
 
@@ -152,11 +139,7 @@ def test_isinstance_tuple_reference_skips_protocol():
 
 def test_attribute_store_target_alone_still_flags():
     contract = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    pass\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
     )
     patcher = _unit(

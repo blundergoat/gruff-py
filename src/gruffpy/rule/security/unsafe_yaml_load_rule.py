@@ -223,9 +223,7 @@ class _AliasCollector(ast.NodeVisitor):
             node: Assignment node whose targets bind a loader name.
         """
         if self._scope_depth == 0:
-            _record_yaml_loader_assignments(
-                node.targets, node.value, self.imports, self.loader_assignments, node.lineno
-            )
+            _record_yaml_loader_assignments(node.targets, node.value, self.imports, self.loader_assignments, node.lineno)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
@@ -235,9 +233,7 @@ class _AliasCollector(ast.NodeVisitor):
             node: Annotated assignment node whose target binds a loader name.
         """
         if self._scope_depth == 0:
-            _record_yaml_loader_assignments(
-                [node.target], node.value, self.imports, self.loader_assignments, node.lineno
-            )
+            _record_yaml_loader_assignments([node.target], node.value, self.imports, self.loader_assignments, node.lineno)
         self.generic_visit(node)
 
 

@@ -173,9 +173,7 @@ class MagicNumberAssertionRule(Rule):
             return []
         definition = self.definition()
         settings = context.settings_for(definition)
-        allowed_raw = settings.options.get(
-            "allowed_numbers", definition.default_options["allowed_numbers"]
-        )
+        allowed_raw = settings.options.get("allowed_numbers", definition.default_options["allowed_numbers"])
         allowed = frozenset(int(n) for n in allowed_raw if isinstance(n, int))
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
@@ -200,8 +198,7 @@ class MagicNumberAssertionRule(Rule):
                         end_line=node.end_lineno,
                         symbol=symbol,
                         remediation=(
-                            "Name the value (`expected_count = 17`) or add it to the "
-                            "rule's `allowed_numbers` option if it's a domain constant."
+                            "Name the value (`expected_count = 17`) or add it to the rule's `allowed_numbers` option if it's a domain constant."
                         ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"numbers": list(magic)},
@@ -212,20 +209,11 @@ class MagicNumberAssertionRule(Rule):
 
 def _magic_numbers(expr: ast.expr, allowed: frozenset[int]) -> list[int]:
     out: list[int] = []
-    ignored = (
-        _len_count_constants(expr)
-        | _analyser_metric_constants(expr)
-        | _threshold_keyword_constants(expr)
-    )
+    ignored = _len_count_constants(expr) | _analyser_metric_constants(expr) | _threshold_keyword_constants(expr)
     for node in ast.walk(expr):
         if node in ignored:
             continue
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, int)
-            and not isinstance(node.value, bool)
-            and node.value not in allowed
-        ):
+        if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool) and node.value not in allowed:
             out.append(node.value)
     return out
 
@@ -310,8 +298,4 @@ def _is_len_call(node: ast.AST) -> bool:
 
 
 def _is_int_constant(node: ast.AST) -> TypeGuard[ast.Constant]:
-    return (
-        isinstance(node, ast.Constant)
-        and isinstance(node.value, int)
-        and not isinstance(node.value, bool)
-    )
+    return isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool)

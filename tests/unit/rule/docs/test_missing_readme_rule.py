@@ -33,6 +33,23 @@ def test_no_readme_emits(tmp_path: Path):
     assert findings[0].rule_id == "docs.missing-readme"
 
 
+def test_finding_path_is_project_relative(tmp_path: Path) -> None:
+    """Name ``README.md`` relative to the root, so two checkouts of one project share the finding's identity.
+
+    Args:
+        tmp_path: Parent of the two checkouts.
+    """
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    src = "def f():\n    pass\n"
+
+    findings = [MissingReadmeRule().analyse(make_unit(src), _ctx(root))[0] for root in (first, second)]
+
+    assert [finding.file_path for finding in findings] == ["README.md", "README.md"]
+    assert findings[0].fingerprint() == findings[1].fingerprint()
+
+
 def test_same_finding_per_unit_for_dedup(tmp_path: Path):
     # Two units with the same project root must produce byte-identical findings
     # so the registry's dedup collapses them to one. We approximate that by

@@ -37,9 +37,7 @@ from gruffpy.rule.security._security_node_helper import (
 )
 
 _DJANGO_GATE: frozenset[str] = frozenset({"django"})
-_MARK_SAFE_LEAVES: frozenset[str] = frozenset(
-    {"mark_safe", "SafeString", "SafeText", "format_html"}
-)
+_MARK_SAFE_LEAVES: frozenset[str] = frozenset({"mark_safe", "SafeString", "SafeText", "format_html"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("mark_safe", "SafeString", "SafeText", "format_html")
 _ESCAPE_LEAVES: frozenset[str] = frozenset({"escape", "conditional_escape"})
 _REMEDIATION = (
@@ -137,10 +135,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{leaf}(...)` applied to non-literal content - XSS risk if the "
-            "value is user-controlled."
-        ),
+        message=(f"`{leaf}(...)` applied to non-literal content - XSS risk if the value is user-controlled."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

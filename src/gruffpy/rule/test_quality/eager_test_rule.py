@@ -71,12 +71,7 @@ class EagerTestRule(Rule):
         threshold = settings.numeric_threshold("maxAssertions")
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            count = sum(
-                1
-                for node in walk_test_body(fn)
-                if isinstance(node, ast.Assert)
-                or (isinstance(node, ast.Call) and is_assertion_call(node))
-            )
+            count = sum(1 for node in walk_test_body(fn) if isinstance(node, ast.Assert) or (isinstance(node, ast.Call) and is_assertion_call(node)))
             if count <= threshold:
                 continue
             parents = parent_chain(fn)
@@ -84,10 +79,7 @@ class EagerTestRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} contains {count} assertions, above the "
-                        f"threshold of {threshold}."
-                    ),
+                    message=(f"Test {symbol!r} contains {count} assertions, above the threshold of {threshold}."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,

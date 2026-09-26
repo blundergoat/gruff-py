@@ -73,9 +73,7 @@ class ConfigMigration:
             True when a rewrite applies and the original text carries comment
             lines (the data-level re-render cannot preserve them).
         """
-        return self.has_changes() and any(
-            line.lstrip().startswith("#") for line in self.original_text.splitlines()
-        )
+        return self.has_changes() and any(line.lstrip().startswith("#") for line in self.original_text.splitlines())
 
 
 def migrate_config_file(project_root: Path, config_path: Path | None) -> ConfigMigration:
@@ -127,9 +125,7 @@ def _resolve_target(project_root: Path, config_path: Path | None) -> Path:
         if config_path.suffix == ".toml":
             raise ConfigError(_TOML_GUIDANCE)
         if config_path.suffix not in {".yaml", ".yml"}:
-            raise ConfigError(
-                f"Unsupported config file extension for {config_path}; use .yaml or .yml."
-            )
+            raise ConfigError(f"Unsupported config file extension for {config_path}; use .yaml or .yml.")
         if not config_path.exists():
             raise ConfigError(f"Config file does not exist: {config_path}")
         return config_path
@@ -159,18 +155,55 @@ def _migrate_document(
         if key != "schemaVersion":
             migrated[key] = value
 
+    changes.extend(_migrate_zero_six_keys(migrated))
+
     rules = migrated.get("rules")
     if isinstance(rules, dict):
         for rule_id, section in rules.items():
             if not isinstance(section, dict):
                 continue
             if rule_id not in defaults.rules:
-                notes.append(
-                    f"rules.{rule_id}: unknown rule id, left as-is (analysis warns about it)"
-                )
+                notes.append(f"rules.{rule_id}: unknown rule id, left as-is (analysis warns about it)")
                 continue
             changes.extend(_migrate_rule_section(rule_id, section, defaults.rules[rule_id]))
     return migrated, changes, notes
+
+
+def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
+    """Apply the two key moves 0.6.0 made, both of which the loader now refuses outright.
+
+    The per-command exit gate left ``minimumSeverity`` for ``failOn``; the same
+    key as a single severity is the 0.6 display floor and stays where it is.
+    ``allowlists.secretPreviews`` was removed because FAMILY-CONTRACT.md
+    section 5 makes category markers unconditional, and the key authorises
+    nothing.
+
+    Args:
+        migrated: The working document, edited in place.
+
+    Returns:
+        One readable line per rewrite; empty when the document was already
+        current.
+    """
+    changes: list[str] = []
+
+    gate = migrated.get("minimumSeverity")
+    # Only the per-command mapping is the old gate; a bare severity is the 0.6 display floor and keeps its name.
+    if isinstance(gate, dict):
+        migrated["failOn"] = migrated.pop("minimumSeverity")
+        changes.append("minimumSeverity: renamed to failOn, the key that gates the exit code in 0.6")
+
+    allowlists = migrated.get("allowlists")
+    # Presence is the test, not content: an empty list reads as configured redaction just as a populated one does.
+    if isinstance(allowlists, dict) and "secretPreviews" in allowlists:
+        allowlists.pop("secretPreviews")
+        changes.append("allowlists.secretPreviews: removed; section 5 makes category markers unconditional")
+
+        # A block whose last key just went is a mapping with nothing in it, which the loader reads as neither shape.
+        if not allowlists:
+            migrated.pop("allowlists")
+
+    return changes
 
 
 def _migrate_rule_section(
@@ -181,11 +214,7 @@ def _migrate_rule_section(
     thresholds = section.get("thresholds")
     if not isinstance(thresholds, dict):
         return []
-    legacy = {
-        tier: thresholds[tier]
-        for tier in ("warning", "error")
-        if tier in thresholds and tier not in default_settings.thresholds
-    }
+    legacy = {tier: thresholds[tier] for tier in ("warning", "error") if tier in thresholds and tier not in default_settings.thresholds}
     if not legacy:
         return []
     for tier in legacy:
@@ -194,25 +223,16 @@ def _migrate_rule_section(
         del section["thresholds"]
     dropped = ", ".join(f"thresholds.{tier}={value}" for tier, value in sorted(legacy.items()))
     if not _is_rubric(default_settings):
-        return [
-            f"rules.{rule_id}: removed legacy {dropped}; the rule has no severity rubric "
-            "and runs at its defaults"
-        ]
+        return [f"rules.{rule_id}: removed legacy {dropped}; the rule has no severity rubric and runs at its defaults"]
     tier = "error" if "error" in legacy else "warning"
     if "threshold" in section:
         if "severity" in section:
-            return [
-                f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity "
-                "pair is already present"
-            ]
+            return [f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity pair is already present"]
         # threshold without severity is fatal even in non-strict mode, so fill
         # the missing half from the legacy tier rather than write a config that
         # cannot load.
         section["severity"] = tier
-        return [
-            f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and "
-            f"added the missing severity={tier}"
-        ]
+        return [f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and added the missing severity={tier}"]
     section["threshold"] = legacy[tier]
     section["severity"] = tier
     note = f"rules.{rule_id}: thresholds.{tier} -> threshold={legacy[tier]}, severity={tier}"

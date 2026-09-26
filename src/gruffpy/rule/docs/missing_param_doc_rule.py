@@ -116,12 +116,7 @@ def _param_doc_candidate(node: FunctionNode) -> _ParamDocCandidate | None:
 
 
 def _should_skip_param_doc_check(node: FunctionNode) -> bool:
-    return (
-        not is_public(node.name)
-        or is_dunder(node.name)
-        or is_overload_stub(node)
-        or is_property_setter_or_deleter(node)
-    )
+    return not is_public(node.name) or is_dunder(node.name) or is_overload_stub(node) or is_property_setter_or_deleter(node)
 
 
 def _missing_param_findings(
@@ -131,10 +126,7 @@ def _missing_param_findings(
 ) -> list[Finding]:
     if not candidate.documented:
         return [_missing_all_parameters_finding(unit, definition, candidate)]
-    return [
-        _missing_one_param_finding(unit, definition, candidate, param)
-        for param in candidate.missing
-    ]
+    return [_missing_one_param_finding(unit, definition, candidate, param) for param in candidate.missing]
 
 
 def _missing_all_parameters_finding(
@@ -144,10 +136,7 @@ def _missing_all_parameters_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {candidate.symbol!r} needs docstring entries describing its "
-            f"{len(candidate.missing)} parameter(s)."
-        ),
+        message=(f"Function {candidate.symbol!r} needs docstring entries describing its {len(candidate.missing)} parameter(s)."),
         file_path=unit.file.display_path,
         line=candidate.node.lineno,
         severity=definition.default_severity,
@@ -174,9 +163,7 @@ def _missing_one_param_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {candidate.symbol!r} needs a docstring entry describing parameter {param!r}."
-        ),
+        message=(f"Function {candidate.symbol!r} needs a docstring entry describing parameter {param!r}."),
         file_path=unit.file.display_path,
         line=candidate.node.lineno,
         severity=definition.default_severity,

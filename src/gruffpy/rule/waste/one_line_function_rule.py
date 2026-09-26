@@ -69,19 +69,11 @@ class OneLineFunctionRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _one_line_function_finding(unit, definition, node)
-            for node in _one_line_functions(unit.tree)
-        ]
+        return [_one_line_function_finding(unit, definition, node) for node in _one_line_functions(unit.tree)]
 
 
 def _one_line_functions(tree: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and _is_one_line_passthrough(node)
-    ]
+    return [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_one_line_passthrough(node)]
 
 
 def _is_one_line_passthrough(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -90,11 +82,7 @@ def _is_one_line_passthrough(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bo
     if len(node.body) != 1:
         return False
     stmt = node.body[0]
-    return (
-        isinstance(stmt, ast.Return)
-        and isinstance(stmt.value, ast.Call)
-        and _has_passthrough_args(node, stmt.value)
-    )
+    return isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call) and _has_passthrough_args(node, stmt.value)
 
 
 def _one_line_function_finding(
@@ -105,10 +93,7 @@ def _one_line_function_finding(
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {symbol!r} is a thin wrapper that forwards its arguments "
-            "to a single call with no other work."
-        ),
+        message=(f"Function {symbol!r} is a thin wrapper that forwards its arguments to a single call with no other work."),
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,
@@ -117,10 +102,7 @@ def _one_line_function_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Inline the wrapped call or remove the wrapper if it's not "
-            "needed for typing / dispatch / monkey-patching."
-        ),
+        remediation=("Inline the wrapped call or remove the wrapper if it's not needed for typing / dispatch / monkey-patching."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )
@@ -143,10 +125,8 @@ def _has_passthrough_args(fn: ast.FunctionDef | ast.AsyncFunctionDef, call: ast.
 def _has_positional_passthrough(expected_positional: list[str], call: ast.Call) -> bool:
     if len(call.args) != len(expected_positional):
         return False
-    for name, passed in zip(expected_positional, call.args, strict=True):
-        if not (isinstance(passed, ast.Name) and passed.id == name):
-            return False
-    return True
+    # Every positional argument must be forwarded under its own parameter name for the wrapper to count as pass-through.
+    return all(isinstance(passed, ast.Name) and passed.id == name for name, passed in zip(expected_positional, call.args, strict=True))
 
 
 def _has_keyword_passthrough(expected_keywords: list[ast.arg], call: ast.Call) -> bool:

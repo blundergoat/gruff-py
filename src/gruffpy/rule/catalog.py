@@ -272,6 +272,13 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
     option_descriptions = _OPTION_DESCRIPTIONS.get(definition.id)
     if option_descriptions is not None:
         custom_docs = replace(custom_docs, option_descriptions=option_descriptions)
+    if not custom_docs.false_positive_shapes:
+        false_positive_guidance = _REVIEWED_FALSE_POSITIVE_GUIDANCE.get(definition.id)
+        if false_positive_guidance is not None:
+            custom_docs = replace(
+                custom_docs,
+                false_positive_shapes=(FalsePositiveShape(*false_positive_guidance),),
+            )
     return custom_docs
 
 
@@ -327,80 +334,340 @@ def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
     return ()
 
 
+# M04 review guidance for heuristic rules whose richer custom docs do not already
+# publish a false-positive shape. Each entry reflects a detector boundary covered
+# by the rule's source or tests; the runtime definition remains the single owner of
+# confidence, thresholds, and options.
+_REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
+    "complexity.halstead-volume": (
+        "A declarative builder dominated by one literal table can have high token volume despite having little control-flow complexity.",
+        "Extract the table to data or tune this rule's `threshold` and `severity` when the volume is an accepted project convention.",
+    ),
+    "complexity.maintainability-index": (
+        "A long but linear wiring, data-setup, or generated function can score poorly even when its branching is simple.",
+        "Split the function or tune this rule's `threshold` and `severity` after confirming "
+        "that logical length, rather than complexity, drives the score.",
+    ),
+    "dead-code.unused-private-attribute": (
+        "A private attribute read through `getattr`, serialization, or framework reflection has no parser-visible load.",
+        "Keep an explicit read when practical, or suppress `dead-code.unused-private-attribute` with a reason at the reviewed declaration.",
+    ),
+    "design.single-implementor-protocol": (
+        "A public Protocol or ABC can have downstream implementations or consumers outside "
+        "the scanned project while only one local implementation is visible.",
+        "Keep the abstraction when it is an external contract; exclude the reviewed path with "
+        "`options.additionalExcludedPaths` or suppress the finding with that reason.",
+    ),
+    "docs.complex-branch-rationale": (
+        "A complex function's rationale can live in an architecture record or issue rather "
+        "than in the nearby docstring or branch comment this rule inspects.",
+        "Add a substantive local rationale, or tune the public/private cyclomatic and cognitive warning options to the project's documented policy.",
+    ),
+    "docs.dataclass-attributes": (
+        "Dataclass fields documented by an inherited schema or external generator are not visible in the class's local docstring.",
+        "Add a local Attributes section, or tune `options.min_fields`, "
+        "`options.require_all_fields`, and `options.allow_bullets` to match the docs policy.",
+    ),
+    "docs.missing-module-docstring": (
+        "A generated or deliberately single-purpose production module can be documented by its package reference instead of a module docstring.",
+        "Add the local module summary, exclude generated paths from analysis, or suppress the rule for the reviewed module with a reason.",
+    ),
+    "docs.missing-param-doc": (
+        "An override can inherit its parameter contract from a documented interface even "
+        "though its local docstring has no Args or Parameters section.",
+        "Repeat the parameter contract locally, or suppress the rule on the reviewed override "
+        "when inherited documentation is the project convention.",
+    ),
+    "docs.missing-raises-doc": (
+        "A wrapper can re-raise an exception whose contract is documented on the interface it implements rather than in its local docstring.",
+        "Add a local Raises section, or suppress the rule on the reviewed wrapper when the inherited exception contract is authoritative.",
+    ),
+    "docs.missing-readme": (
+        "A package can use `docs/index.md` or another generated landing page as its maintained entry point instead of a root README.",
+        "Add a root README that points to the maintained documentation, or disable this rule "
+        "for the project after documenting the alternate entry point.",
+    ),
+    "docs.missing-return-doc": (
+        "An override can inherit its return contract from a documented Protocol or base class while omitting a local Returns section.",
+        "Repeat the return contract locally, or suppress the rule on the reviewed override when inherited documentation is authoritative.",
+    ),
+    "docs.todo-density": (
+        "A planning or migration module can intentionally carry several tracked TODO markers while the work remains bounded and owned.",
+        "Move the work to the issue tracker or tune this rule's `threshold` and `severity` for the reviewed planning surface.",
+    ),
+    "docs.useless-docstring": (
+        "A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.",
+        "Add the missing behavior or constraint to the summary, or tune `options.min_summary_words` for the project's documentation convention.",
+    ),
+    "modernisation.f-string-candidate": (
+        "A literal `.format()` call can be retained deliberately to mirror a documented format "
+        "template or keep a complex formatting expression easier to compare.",
+        "Use an f-string when it improves clarity, or suppress this advisory with the reason "
+        "the format-template spelling is part of the reviewed code.",
+    ),
+    "naming.boolean-prefix": (
+        "An externally constrained Boolean name can belong to a protocol, CLI, DTO, or schema "
+        "that the structural override exemptions do not recognize.",
+        "Add the exact contract name to `options.acceptedBooleanNames` instead of renaming the external surface.",
+    ),
+    "naming.confusing-name": (
+        "A deliberately short class name can gain its missing domain context from the enclosing module or package.",
+        "Rename the class with explicit domain context, or remove that suffix from "
+        "`options.confusingNames` when the package naming convention supplies it.",
+    ),
+    "naming.generic-function": (
+        "A framework hook or protocol can require a generic function name such as `run` or "
+        "`handle` even when the implementation has one clear responsibility.",
+        "Remove the required hook name from `options.genericFunctions` or suppress the finding at the reviewed implementation.",
+    ),
+    "naming.module-name-mismatch": (
+        "A feature-oriented module can intentionally contain one public class plus supporting functions without being named after that class.",
+        "Add the module name to `options.conventionalModuleNames`, reorganize the module, or suppress the reviewed exception.",
+    ),
+    "naming.short-variable": (
+        "A one-character domain or mathematical symbol can be conventional even when it is not one of the built-in loop, axis, or exception names.",
+        "Add the exact symbol to `options.acceptedShortNames` with the project's convention, or rename it where the short form is not load-bearing.",
+    ),
+    "naming.test-naming-consistency": (
+        "A compatibility or migration test file can intentionally preserve both unittest-style camelCase names and pytest-style snake_case names.",
+        "Finish the rename when compatibility permits, or suppress the file-level advisory with the migration reason.",
+    ),
+    "security.django-mark-safe": (
+        "A dynamic value can already be safe by an upstream validation or trusted-type contract "
+        "that is not a wrapping escape call in the inspected expression.",
+        "Pass the value through an explicit escaping helper or `format_html`, or suppress the reviewed sink with the upstream safety reason.",
+    ),
+    "security.error-suppression": (
+        "A best-effort cleanup or telemetry path can deliberately suppress every exception because failure must not replace the primary result.",
+        "Catch the narrow expected exceptions, or suppress this rule at the reviewed boundary "
+        "with the reason the fallback is intentionally fail-open.",
+    ),
+    "security.extract-compact-user-input": (
+        "A request mapping splat can contain only allowlisted keys after validation performed outside the expression this rule sees.",
+        "Copy validated keys into an explicit dictionary before `**` expansion, or suppress the reviewed call with the validation contract.",
+    ),
+    "security.github-actions-secrets-in-pr": (
+        "A secret reference in a pull-request workflow can sit behind a trusted-actor condition that the workflow text scan does not evaluate.",
+        "Move the secret-bearing job to a trusted workflow or suppress the reviewed reference "
+        "only after verifying the actor gate cannot be influenced by the pull request.",
+    ),
+    "security.hardcoded-bind-all-interfaces": (
+        "A containerized service can deliberately bind to all interfaces while an external network policy prevents public exposure.",
+        "Read the bind address from deployment configuration, or suppress the reviewed literal with the network-boundary reason.",
+    ),
+    "security.header-injection": (
+        "A dynamic Flask header name can be selected from an internal allowlist or enum before "
+        "the assignment, which this local AST check cannot prove.",
+        "Map the validated choice to literal header assignments, or suppress the reviewed sink with the allowlist evidence.",
+    ),
+    "security.insecure-random": (
+        "A non-secret simulation value or opaque identifier can use `random` inside a function "
+        "whose token- or password-like name suggests a security context.",
+        "Use `secrets` when unpredictability matters; otherwise rename the non-security value or suppress the reviewed call with its purpose.",
+    ),
+    "security.insecure-temp-file": (
+        "A fixed temporary path can be process-private inside an isolated sandbox even though that exclusivity is not visible at the call site.",
+        "Use `mkstemp` or `NamedTemporaryFile`, or suppress the reviewed path with evidence of the containing permission and lifecycle controls.",
+    ),
+    "security.sql-concatenation": (
+        "A SQL identifier selected from a strict allowlist cannot be bound as a DB-API value, "
+        "but its interpolation still looks like user-controlled query structure.",
+        "Map the choice to predeclared literal statements and bind all values, or suppress the "
+        "reviewed identifier interpolation with its allowlist evidence.",
+    ),
+    "security.variable-import": (
+        "A dynamic module name can come from a closed plugin registry or internal allowlist that the import expression does not expose.",
+        "Map allowed names to explicit imports, or suppress the reviewed import with the registry boundary that prevents user control.",
+    ),
+    "sensitive-data.hardcoded-env-value": (
+        "A non-secret value can use a key containing PASS, TOKEN, or SECRET while its length and entropy resemble a credential.",
+        "Rename the non-secret key or move the value to runtime configuration so the env-file "
+        "assignment no longer resembles committed secret material.",
+    ),
+    "sensitive-data.high-entropy-string": (
+        "A legitimate random-looking test vector, checksum, or opaque constant outside the "
+        "built-in identifier and path exclusions can exceed the entropy boundary.",
+        "Replace fixtures with a recognizable placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and path.",
+    ),
+    "sensitive-data.phi-pattern": (
+        "A structurally valid synthetic SSN or labelled MRN outside the placeholder set can look like real health data.",
+        "Use a recognized placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.",
+    ),
+    "sensitive-data.pii-test-fixture": (
+        "An intentionally synthetic but realistic email address or phone number outside the "
+        "reserved-domain and 555 placeholder forms can look like real fixture PII.",
+        "Use `example` domains or 555-style numbers, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.",
+    ),
+    "test-quality.conditional-logic": (
+        "A property, state-machine, or compatibility test can intentionally exercise several outcome branches in one named scenario.",
+        "Parametrize or split the branches for separate failures, or suppress the reviewed test when one scenario must retain the control flow.",
+    ),
+    "test-quality.eager-test": (
+        "One outcome can require many field-level assertions, so assertion count alone can make a focused contract test look eager.",
+        "Compare a structured expected value or tune `thresholds.maxAssertions` after confirming all assertions describe the same behavior.",
+    ),
+    "test-quality.exception-type-only": (
+        "A boundary can intentionally promise only that any wide exception escapes, with no stable message suitable for `match=`.",
+        "Prefer a narrow exception or stable message match; otherwise suppress the reviewed assertion with the type-only contract.",
+    ),
+    "test-quality.excessive-mocking": (
+        "A coordinator test can legitimately isolate several collaborators because orchestration is the production responsibility under test.",
+        "Use a higher-level test or tune `thresholds.maxMocks` for suites whose reviewed subject is an orchestrator.",
+    ),
+    "test-quality.global-state-mutation": (
+        "A test can restore a `global` binding in a fixture or `finally` block, but this rule reports the declaration without evaluating cleanup.",
+        "Use `monkeypatch` or a fixture-owned state boundary, or suppress the reviewed test with the cleanup guarantee.",
+    ),
+    "test-quality.loop-assertion-without-message": (
+        "The compared item can already have a stable, descriptive repr that identifies the failing iteration without a custom assertion message.",
+        "Add an iteration-specific message or parametrize the cases; otherwise suppress the "
+        "reviewed loop when failure output is already unambiguous.",
+    ),
+    "test-quality.loop-in-test": (
+        "A state-machine, fuzz, or property test can require a loop whose branches make the built-in fixture-loop exemption inapplicable.",
+        "Parametrize finite cases, or suppress the reviewed test when iteration is itself the behavior under test.",
+    ),
+    "test-quality.magic-number-assertion": (
+        "A bare literal can be an established domain constant such as a protocol version or exit "
+        "code even when it is outside the built-in small-count and HTTP sets.",
+        "Assert against a named constant or add the exact value to `options.allowed_numbers`.",
+    ),
+    "test-quality.mock-only-test": (
+        "An interaction can be the complete contract, such as proving an event was dispatched or a boundary received a mapped payload.",
+        "Keep an explicit mock expectation and suppress the reviewed test, or add an assertion on "
+        "an observable result when the contract is not purely interaction-based.",
+    ),
+    "test-quality.mock-without-expectation": (
+        "A deliberate null-object double can be passed only to satisfy a constructor signature, "
+        "with no expectation because no interaction is the contract.",
+        "Use a small fake or add an explicit `assert_not_called` expectation so the intent is visible to the rule and reviewer.",
+    ),
+    "test-quality.mocking-domain-object": (
+        "A configured domain namespace can also contain ports or interfaces that are appropriate mock boundaries.",
+        "Narrow `options.domain_namespaces` to concrete domain-object packages or use a small fake for the reviewed port.",
+    ),
+    "test-quality.multiple-aaa-cycles": (
+        "One workflow or state-transition test can deliberately assert after each step, making several call-separated assertion blocks one scenario.",
+        "Split the transitions or tune `thresholds.maxCycles` after confirming the test is one reviewed workflow.",
+    ),
+    "test-quality.mystery-guest": (
+        "A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call "
+        "the rule treats as network I/O even though the fixture keeps it hermetic.",
+        "Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.",
+    ),
+    "test-quality.naming-consistency": (
+        "A compatibility or staged migration suite can intentionally mix pytest function names with unittest-style function or class names.",
+        "Complete the rename when compatibility permits, or suppress the file-level advisory with the migration reason.",
+    ),
+    "test-quality.parametrize-annotation": (
+        "Simple enum, integer, or named-object cases can already have short stable repr values, so "
+        "generated pytest case names remain readable without `ids=`.",
+        "Add explicit IDs or tune `thresholds.maxCasesWithoutIds` after checking the actual report names.",
+    ),
+    "test-quality.private-reflection": (
+        "A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.",
+        "Prefer public behavior, or suppress the reviewed access with the compatibility contract it protects.",
+    ),
+    "test-quality.pytest-coverage-source-missing": (
+        "Coverage source can be supplied by CI arguments, `.coveragerc`, or environment settings that the pyproject-only check does not read.",
+        "Declare `[tool.coverage.run]` source, or suppress the project finding after checking the external coverage command.",
+    ),
+    "test-quality.pytest-deprecations-not-fatal": (
+        "CI can turn deprecations into errors through command-line warning flags or environment "
+        "settings that the pyproject-only check does not read.",
+        "Declare the error filter in `[tool.pytest.ini_options].filterwarnings`, or suppress the project finding after verifying the external gate.",
+    ),
+    "test-quality.pytest-strict-config-missing": (
+        "CI can pass pytest strict flags on the command line while pyproject omits them, "
+        "or a plugin compatibility shim can require permissive markers.",
+        "Add both flags to `[tool.pytest.ini_options].addopts`, or suppress the finding with the verified external gate or compatibility reason.",
+    ),
+    "test-quality.repeated-structure-missing-parametrize": (
+        "Three named scenarios can share one AST shape while their separate names and failures are "
+        "the contract, especially when only literal values differ.",
+        "Parametrize the cases or tune `thresholds.minGroupSize`; suppress the group when separate scenario identities are intentionally retained.",
+    ),
+    "test-quality.setup-bloat": (
+        "A costly domain fixture can be longer than its deliberately small focused tests without representing accidental shared state.",
+        "Extract factories or tune `thresholds.maxSetupLines` after confirming the shared setup is the reviewed suite boundary.",
+    ),
+    "test-quality.sut-not-called": (
+        "A contract test can validate module constants or metadata using only builtins and test helpers, with no callable system under test.",
+        "Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.",
+    ),
+    "test-quality.tautological-type-assertion": (
+        "The same call expression evaluated twice can return different runtime types, even though "
+        "the structural comparison treats both expressions as identical.",
+        "Evaluate the call once and assert the specific expected type, or suppress the reviewed dynamic-factory case.",
+    ),
+    "test-quality.test-longer-than-sut": (
+        "A table-driven contract test can need many scenarios around one short same-file function, so line ratio overstates duplication.",
+        "Split or extract setup, or tune `options.ratio` after reviewing the scenario coverage.",
+    ),
+    "test-quality.trivial-snapshot": (
+        "A canonical encoding or compatibility fixture can intentionally pin every element of a large literal collection.",
+        "Assert salient invariants, or suppress the reviewed snapshot with the exact compatibility contract it protects.",
+    ),
+    "waste.commented-out-code": (
+        "Explanatory prose can itself be valid Python after the code-like prefilter, such as a comment written as an assignment or call.",
+        "Rewrite it as prose that does not parse as a statement, or suppress the reviewed comment with its documentation purpose.",
+    ),
+    "waste.one-line-function": (
+        "A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.",
+        "Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.",
+    ),
+    "waste.unused-parameter": (
+        "An unrecognized callback or protocol can require a parameter that is consumed indirectly through `locals()` or reflection.",
+        "Prefix the name with `_` to declare it intentionally unused, or suppress the reviewed signature when the external protocol fixes the name.",
+    ),
+}
+
+
 _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "dead-code.exported-but-unreferenced": {
         "entryPointPatterns": (
-            "fnmatch globs over public symbol names consumed by plugin or "
-            "entry-point registration the scan cannot see (e.g. handle_*)."
+            "fnmatch globs over public symbol names consumed by plugin or entry-point registration the scan cannot see (e.g. handle_*)."
         ),
     },
     "design.single-implementor-protocol": {
         "externalProtocolBases": (
-            "Protocol-shaped base classes whose subclasses are exempt from the "
-            "single-implementor check (typing.Sized, typing.Iterable, etc.)."
+            "Protocol-shaped base classes whose subclasses are exempt from the single-implementor check (typing.Sized, typing.Iterable, etc.)."
         ),
-        "additionalExcludedPaths": (
-            "Project-relative glob patterns for files exempt from the rule."
-        ),
+        "additionalExcludedPaths": ("Project-relative glob patterns for files exempt from the rule."),
     },
     "docs.complex-branch-rationale": {
-        "cyclomatic_warning": (
-            "Public-function cyclomatic threshold above which rationale is required."
-        ),
-        "cognitive_warning": (
-            "Public-function cognitive complexity threshold above which rationale is required."
-        ),
-        "private_cyclomatic_warning": (
-            "Private-function cyclomatic threshold; private functions get more headroom."
-        ),
+        "cyclomatic_warning": ("Public-function cyclomatic threshold above which rationale is required."),
+        "cognitive_warning": ("Public-function cognitive complexity threshold above which rationale is required."),
+        "private_cyclomatic_warning": ("Private-function cyclomatic threshold; private functions get more headroom."),
         "private_cognitive_warning": "Private-function cognitive complexity threshold.",
     },
     "docs.dataclass-attributes": {
         "min_fields": ("Minimum dataclass field count before an Attributes docstring is required."),
-        "require_all_fields": (
-            "When true, every dataclass field must appear in the Attributes block."
-        ),
+        "require_all_fields": ("When true, every dataclass field must appear in the Attributes block."),
         "allow_bullets": "When true, accept Markdown bullet lists as well as Sphinx :ivar: blocks.",
     },
     "docs.missing-class-docstring": {
         "class_dataclass_exempt": (
-            "When true, @dataclass-decorated classes are exempt (rely on "
-            "docs.dataclass-attributes for their docs requirement instead)."
+            "When true, @dataclass-decorated classes are exempt (rely on docs.dataclass-attributes for their docs requirement instead)."
         ),
     },
     "docs.useless-docstring": {
-        "min_summary_words": (
-            "Per-kind minimum word count for a non-useless summary line "
-            "(keys: module, class, function)."
-        ),
+        "min_summary_words": ("Per-kind minimum word count for a non-useless summary line (keys: module, class, function)."),
     },
     "naming.confusing-name": {
-        "confusingNames": (
-            "Identifier suffixes flagged as low-content (Handler, Manager, Util, ...)."
-        ),
+        "confusingNames": ("Identifier suffixes flagged as low-content (Handler, Manager, Util, ...)."),
     },
     "naming.generic-function": {
-        "genericFunctions": (
-            "Function names flagged as too generic to convey intent (process, handle, run, ...)."
-        ),
+        "genericFunctions": ("Function names flagged as too generic to convey intent (process, handle, run, ...)."),
     },
     "naming.boolean-prefix": {
-        "acceptedBooleanNames": (
-            "Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts "
-            "(ok, force, verbose, etc.)."
-        ),
+        "acceptedBooleanNames": ("Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts (ok, force, verbose, etc.)."),
     },
     "naming.module-name-mismatch": {
-        "conventionalModuleNames": (
-            "Module names exempt from the convention check "
-            "(constants, exceptions, helpers, protocols, types)."
-        ),
+        "conventionalModuleNames": ("Module names exempt from the convention check (constants, exceptions, helpers, protocols, types)."),
     },
     "naming.short-variable": {
-        "acceptedShortNames": (
-            "Single-character identifiers accepted as conventional "
-            "(loop counters, math axes, exception variables)."
-        ),
+        "acceptedShortNames": ("Single-character identifiers accepted as conventional (loop counters, math axes, exception variables)."),
     },
     "security.unsanitized-markdown-interpolation": {
         "labelSanitizers": (
@@ -414,27 +681,20 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
         ),
     },
     "test-quality.magic-number-assertion": {
-        "allowed_numbers": (
-            "Integer literals accepted in test assertions without extraction "
-            "(small ints and HTTP status codes by default)."
-        ),
+        "allowed_numbers": ("Integer literals accepted in test assertions without extraction (small ints and HTTP status codes by default)."),
     },
     "test-quality.extends-production-class": {
         "additionalTestBases": (
-            "Exact dotted or terminal base-class names treated as test bases in addition to "
-            "the built-in allowlist and *TestCase suffix convention."
+            "Exact dotted or terminal base-class names treated as test bases in addition to the built-in allowlist and *TestCase suffix convention."
         ),
     },
     "test-quality.mocking-domain-object": {
         "domain_namespaces": (
-            "Dotted module prefixes considered domain code; mocking imports "
-            "from these paths trips the rule. Empty by default; populate to enable."
+            "Dotted module prefixes considered domain code; mocking imports from these paths trips the rule. Empty by default; populate to enable."
         ),
     },
     "test-quality.test-longer-than-sut": {
-        "ratio": (
-            "Allowed test-to-SUT length ratio above which the test is flagged (default 2.0)."
-        ),
+        "ratio": ("Allowed test-to-SUT length ratio above which the test is flagged (default 2.0)."),
     },
 }
 
@@ -572,9 +832,7 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(UnusedParameterRule),
 )
 
-_BUILTIN_RULES_BY_ID: dict[str, BuiltInRule] = {
-    entry.definition.id: entry for entry in BUILTIN_RULES
-}
+_BUILTIN_RULES_BY_ID: dict[str, BuiltInRule] = {entry.definition.id: entry for entry in BUILTIN_RULES}
 
 
 def default_rules() -> list[RuleLike]:

@@ -20,10 +20,7 @@ def test_app_run_no_debug_kwarg_skipped():
 
 
 def test_app_run_debug_dynamic_skipped():
-    src = (
-        "from flask import Flask\napp = Flask(__name__)\nimport os\n"
-        "app.run(debug=os.getenv('DEV'))\n"
-    )
+    src = "from flask import Flask\napp = Flask(__name__)\nimport os\napp.run(debug=os.getenv('DEV'))\n"
     assert FlaskDebugEnabledRule().analyse(make_unit(src), default_ctx()) == []
 
 

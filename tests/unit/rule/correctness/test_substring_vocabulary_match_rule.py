@@ -43,11 +43,7 @@ def test_any_scan_over_parameter_lowered_text_fires():
 
 
 def test_any_scan_directly_over_parameter_fires():
-    src = (
-        'TOPIC_WORDS = frozenset({"refund", "fee"})\n\n'
-        "def classify(text):\n"
-        "    return any(term in text for term in TOPIC_WORDS)\n"
-    )
+    src = 'TOPIC_WORDS = frozenset({"refund", "fee"})\n\ndef classify(text):\n    return any(term in text for term in TOPIC_WORDS)\n'
     findings = _analyse(src)
     assert len(findings) == 1
 
@@ -80,31 +76,17 @@ def test_same_name_token_reassignment_is_clean():
     # Reassigning the free-text parameter to a token list under the same name
     # makes `term in text` list membership, not substring matching - the rule
     # must not flag the tokenise-then-membership fix it recommends.
-    src = (
-        'TERM_SET = ("fee", "form")\n\n'
-        "def classify(text):\n"
-        "    text = text.split()\n"
-        "    return any(term in text for term in TERM_SET)\n"
-    )
+    src = 'TERM_SET = ("fee", "form")\n\ndef classify(text):\n    text = text.split()\n    return any(term in text for term in TERM_SET)\n'
     assert _analyse(src) == []
 
 
 def test_compiled_word_boundary_regex_is_clean():
-    src = (
-        "import re\n\n"
-        '_PATTERN = re.compile(r"\\b(?:fee|form)\\b")\n\n'
-        "def classify(message):\n"
-        "    return bool(_PATTERN.search(message.lower()))\n"
-    )
+    src = 'import re\n\n_PATTERN = re.compile(r"\\b(?:fee|form)\\b")\n\ndef classify(message):\n    return bool(_PATTERN.search(message.lower()))\n'
     assert _analyse(src) == []
 
 
 def test_phrase_only_vocabulary_is_clean():
-    src = (
-        'PHRASES = ("reset my password", "talk to a human")\n\n'
-        "def route(message):\n"
-        "    return any(term in message for term in PHRASES)\n"
-    )
+    src = 'PHRASES = ("reset my password", "talk to a human")\n\ndef route(message):\n    return any(term in message for term in PHRASES)\n'
     assert _analyse(src) == []
 
 
@@ -132,11 +114,7 @@ def test_call_derived_text_is_clean():
 
 
 def test_local_vocabulary_is_clean():
-    src = (
-        "def route(message):\n"
-        '    terms = ("fee", "form")\n'
-        "    return any(term in message for term in terms)\n"
-    )
+    src = 'def route(message):\n    terms = ("fee", "form")\n    return any(term in message for term in terms)\n'
     assert _analyse(src) == []
 
 
@@ -170,11 +148,7 @@ def test_dict_typed_parameter_membership_is_clean():
 
 def test_str_annotated_parameter_still_fires():
     # The collection-annotation guard must not suppress genuine str parameters.
-    src = (
-        'TERMS = ("fee", "form")\n\n'
-        "def classify(message: str) -> bool:\n"
-        "    return any(term in message for term in TERMS)\n"
-    )
+    src = 'TERMS = ("fee", "form")\n\ndef classify(message: str) -> bool:\n    return any(term in message for term in TERMS)\n'
     findings = _analyse(src)
     assert len(findings) == 1
 

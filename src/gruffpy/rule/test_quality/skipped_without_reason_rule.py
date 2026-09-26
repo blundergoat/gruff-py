@@ -82,10 +82,7 @@ class SkippedWithoutReasonRule(Rule):
                     confidence=definition.confidence,
                     end_line=decorator.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        'Add a `reason="..."` argument explaining why the test is skipped '
-                        "and what would unblock unskipping it."
-                    ),
+                    remediation=('Add a `reason="..."` argument explaining why the test is skipped and what would unblock unskipping it.'),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),

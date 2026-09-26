@@ -169,13 +169,7 @@ def test_new_file_diff_marks_whole_file_in_scope() -> None:
     finding = _finding("sample.py", line=1, symbol="old_bad")
     changed = parse_unified_diff(
         "stdin",
-        "diff --git a/sample.py b/sample.py\n"
-        "new file mode 100644\n"
-        "--- /dev/null\n"
-        "+++ b/sample.py\n"
-        "@@ -0,0 +1,2 @@\n"
-        "+def old_bad():\n"
-        "+    return 1\n",
+        "diff --git a/sample.py b/sample.py\nnew file mode 100644\n--- /dev/null\n+++ b/sample.py\n@@ -0,0 +1,2 @@\n+def old_bad():\n+    return 1\n",
     )
 
     result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
@@ -189,11 +183,7 @@ def test_symbol_scope_keeps_findings_for_deletion_only_hunk() -> None:
     finding = _finding("sample.py", line=1, symbol="changed")
     changed = parse_unified_diff(
         "stdin",
-        "diff --git a/sample.py b/sample.py\n"
-        "--- a/sample.py\n"
-        "+++ b/sample.py\n"
-        "@@ -2 +1,0 @@\n"
-        "-    x = 1\n",
+        "diff --git a/sample.py b/sample.py\n--- a/sample.py\n+++ b/sample.py\n@@ -2 +1,0 @@\n-    x = 1\n",
     )
 
     result = filter_findings_for_changed_regions([finding], [unit], changed, "symbol")
@@ -207,12 +197,7 @@ def test_quoted_diff_path_is_decoded_without_the_b_prefix() -> None:
     # decode to the UTF-8 display path with no leading b/, or the file is dropped.
     changed = parse_unified_diff(
         "stdin",
-        'diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n'
-        '--- "a/caf\\303\\251.py"\n'
-        '+++ "b/caf\\303\\251.py"\n'
-        "@@ -1 +1 @@\n"
-        "-x = 1\n"
-        "+x = 2\n",
+        'diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n--- "a/caf\\303\\251.py"\n+++ "b/caf\\303\\251.py"\n@@ -1 +1 @@\n-x = 1\n+x = 2\n',
     )
 
     assert changed.changed_files == ("café.py",)

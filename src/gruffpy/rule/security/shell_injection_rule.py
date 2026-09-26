@@ -103,10 +103,7 @@ class ShellInjectionRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Pass argv as a list with ``shell=False`` (the default), or "
-                        "use ``shlex.quote`` if a shell really is required."
-                    ),
+                    remediation=("Pass argv as a list with ``shell=False`` (the default), or use ``shlex.quote`` if a shell really is required."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),

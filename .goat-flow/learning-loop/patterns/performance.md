@@ -1,6 +1,6 @@
 ---
 category: performance
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-22
 ---
 
 ## Pattern: Measure performance changes with the shipped harness
@@ -42,3 +42,17 @@ walk consolidation also passed `scripts/test-performance.sh` without
 regressions: observed medians improved for `analyse-src-text` from 3.5779s to
 3.1986s, `analyse-src-json` from 3.4860s to 3.0260s, and `synthetic-1000` from
 5.2085s to 4.8498s.
+
+## Pattern: Degrade deep source analysis and bind its performance baseline
+
+**Created:** 2026-08-22
+
+**Evidence:** ACTUAL_MEASURED
+
+**Context:** The cryptography incident proved that expensive parsing can dominate a scan, but a generic text file and a Python source file do not have the same deep-analysis path. A cost bound must not skip raw-text security checks or apply to JSON/YAML/TOML inputs that are not Python source.
+
+**Approach:** Apply the paired limits in `src/gruffpy/parser/python_parser.py` (search: `effective_budget`) only after `SourceFile.is_python` classification. On overflow, retain the source in the analysis unit, emit a non-fatal `bounded-deep-scan` diagnostic, and omit AST/token-derived state. `src/gruffpy/analysis/runner.py` (search: `_apply_deep_scan_budget_override`) owns the atomic CLI-over-config result so every command receives one effective `{enabled, max_lines, max_bytes, override}` value.
+
+**Measurement integrity:** `scripts/test-performance.sh` records host, Python, Git, runtime-source, live-wrapper, and harness identities in the tracked `scripts/performance-baselines/linux-x86_64.json`. The 2026-08-22 full run replaced the stale 0.1.0-dev comparand with 0.5.0 and its runtime-source/wrapper digests match the source-bound M11 cohort run.
+
+**Verification:** `tests/unit/parser/test_python_parser.py` (search: `bounded-deep-scan`) protects degradation and non-code behavior; `tests/integration/test_cli_smoke.py` (search: `test_cli_deep_scan_budget_overrides_config_atomically`) protects precedence; and `tests/unit/reporting/test_reporters.py` (search: `bounded-deep-scan`) protects supported output surfaces.

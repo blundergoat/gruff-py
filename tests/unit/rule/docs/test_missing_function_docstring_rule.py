@@ -18,25 +18,19 @@ def test_function_without_docstring_emits():
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
     src = "def test_service_returns_value():\n    assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "tests/test_service.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_pytest_method_without_docstring_in_test_file_skipped():
     src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "tests/test_service.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_test_named_function_without_docstring_in_production_file_emits():
     src = "def test_service_returns_value():\n    return service()\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "src/service_helpers.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "src/service_helpers.py"), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "test_service_returns_value"
 
@@ -122,13 +116,7 @@ def test_nested_function_called_twice_still_emits():
     # Sanity: when the nested function is called multiple times in the
     # enclosing scope, it's behavioural enough to warrant a docstring.
     # Proves the single-callsite gate is real.
-    src = (
-        "def outer(xs):\n"
-        '    """Outer."""\n'
-        "    def helper(x):\n"
-        "        return x + 1\n"
-        "    return [helper(x) + helper(y) for x, y in xs]\n"
-    )
+    src = 'def outer(xs):\n    """Outer."""\n    def helper(x):\n        return x + 1\n    return [helper(x) + helper(y) for x, y in xs]\n'
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "outer.helper"

@@ -24,10 +24,7 @@ def test_cors_missing_origins_with_credentials_emits():
 
 
 def test_cors_specific_origin_with_credentials_skipped():
-    src = (
-        "from flask_cors import CORS\n"
-        "CORS(app, supports_credentials=True, origins=['https://app.example.com'])\n"
-    )
+    src = "from flask_cors import CORS\nCORS(app, supports_credentials=True, origins=['https://app.example.com'])\n"
     assert CorsWildcardWithCredentialsRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -44,10 +41,7 @@ def test_cors_credentials_false_skipped():
 
 def test_cors_wildcard_in_list_with_other_origins_emits():
     """If ['*', 'https://x'] is passed, the wildcard wins - fire."""
-    src = (
-        "from flask_cors import CORS\n"
-        "CORS(app, supports_credentials=True, origins=['*', 'https://x'])\n"
-    )
+    src = "from flask_cors import CORS\nCORS(app, supports_credentials=True, origins=['*', 'https://x'])\n"
     findings = CorsWildcardWithCredentialsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

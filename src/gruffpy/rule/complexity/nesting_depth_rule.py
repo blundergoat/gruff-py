@@ -95,9 +95,7 @@ class NestingDepthRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Flatten with guard clauses, early returns, or extracted helpers."
-                    ),
+                    remediation=("Flatten with guard clauses, early returns, or extracted helpers."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "depth": depth,

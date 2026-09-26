@@ -75,9 +75,7 @@ class TrivialAssertionRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} has a trivial assertion that is always true/false."
-                        ),
+                        message=(f"Test {symbol!r} has a trivial assertion that is always true/false."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,

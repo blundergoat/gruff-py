@@ -100,13 +100,7 @@ def test_function_path_glob_does_not_match_other_paths():
 
 
 def test_attribute_allowlisted_by_qualified_symbol():
-    src = (
-        "class Service:\n"
-        "    def __init__(self):\n"
-        "        self._cached = None\n"
-        "    def run(self):\n"
-        "        return 1\n"
-    )
+    src = "class Service:\n    def __init__(self):\n        self._cached = None\n    def run(self):\n        return 1\n"
     allowlist = DeadCodeAllowlist(symbols=("Service._cached",))
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx(allowlist=allowlist))
     assert findings == []
@@ -129,13 +123,7 @@ def test_attribute_allowlisted_by_class_decorator():
 
 
 def test_attribute_allowlisted_by_path():
-    src = (
-        "class Service:\n"
-        "    def __init__(self):\n"
-        "        self._cached = None\n"
-        "    def run(self):\n"
-        "        return 1\n"
-    )
+    src = "class Service:\n    def __init__(self):\n        self._cached = None\n    def run(self):\n        return 1\n"
     allowlist = DeadCodeAllowlist(paths=("src/legacy/**",))
     findings = UnusedPrivateAttributeRule().analyse(
         _unit(src, display_path="src/legacy/service.py"),

@@ -4,11 +4,15 @@
 # After reviewing findings, `gruff-py analyse . --generate-baseline` records known debt.
 # See docs/configuration.md for the full key reference.
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   analyse: advisory
   report: none
   dashboard: none
 minimumPythonVersion: '3.11'
+deepScanBudget:
+  enabled: true
+  maxLines: 20000
+  maxBytes: 2000000
 paths:
   ignore:
   - .agents/
@@ -19,6 +23,8 @@ paths:
   - .goat-flow/
   - tests/fixtures/**
 allowlists:
+  # The family's sixteen seeded words, none of which naming.abbreviation reports today, plus
+  # ctx: every ctx here is a click.Context parameter, the name Click's own documentation uses.
   acceptedAbbreviations:
   - age
   - app
@@ -37,7 +43,6 @@ allowlists:
   - tx
   - ui
   - url
-  secretPreviews: []
   deadCode:
     symbols: []
     # Click command functions are consumed by the decorator-registration
@@ -204,6 +209,14 @@ selection:
   - waste.unused-parameter
   excludePillars: []
   excludeRules: []
+# sensitiveExclusions is the only way to silence a sensitive-data finding.
+# Write each entry by hand with rule, path, and reason; symbol is optional.
+# No preview or matched value is ever turned into an entry automatically,
+# and every entry reports how many findings it suppressed.
+# The npm lockfile entry this list used to carry is gone: 0.6.0 skips the entropy rule in every
+# package-manager lockfile by name, and reports the count as a built-in audit row, so no project
+# needs to write that exclusion by hand.
+sensitiveExclusions: []
 rules:
   # Cognitive complexity
   complexity.cognitive:
@@ -238,7 +251,7 @@ rules:
     enabled: true
   # Exported but unreferenced
   dead-code.exported-but-unreferenced:
-    enabled: true
+    enabled: false
     options:
       entryPointPatterns: []
   # Unused private attribute
@@ -334,12 +347,19 @@ rules:
   naming.boolean-prefix:
     enabled: true
     options:
+      # `_fallback_applies_at` is an idiomatic subject-verb English predicate, the calibration class
+      # backlog.md records for this rule (search: `predicate-verb vocabulary in gruff-py`): the closed
+      # auxiliary-verb list cannot express it, and Python's own stdlib names booleans this way. It is
+      # accepted here rather than renamed because gruff-spec's M15 review evidence pins
+      # `def _fallback_applies_at(` as a live semantic anchor, and renaming to satisfy a style
+      # advisory would break immutable evidence. Extending the vocabulary is the backlog item.
       acceptedBooleanNames:
       - all
       - apply
       - check
       - dev
       - enabled
+      - fallback_applies_at
       - force
       - fresh
       - harness
@@ -390,6 +410,11 @@ rules:
   naming.module-name-mismatch:
     enabled: true
     options:
+      # This list replaces the rule's default, so it restates the five default names first.
+      # python_parser.py holds PythonFileParser and is imported under that name by three
+      # modules; the rule would ask for python_file_parser.py. It is the only entry that
+      # silences a finding today. The other six are role-named modules exempted by design and
+      # pinned by tests/unit/config/test_gruff_py_yaml_registry_coverage.py.
       conventionalModuleNames:
       - constants
       - exceptions
@@ -550,6 +575,9 @@ rules:
   # High-entropy string
   sensitive-data.high-entropy-string:
     enabled: true
+    thresholds:
+      minLength: 32
+      entropy: 4.2
   # JWT token
   sensitive-data.jwt-token:
     enabled: true

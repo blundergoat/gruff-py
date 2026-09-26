@@ -49,9 +49,7 @@ _STRUCTURE_INTERPOLATION_CONTEXT_RE = re.compile(
     r"\bGROUP\s+BY\b|\bIN)\s*\(?\s*$",
     re.IGNORECASE,
 )
-_QUOTED_PLACEHOLDER_RE = re.compile(
-    r"""(?P<quote>['"])\s*(?:%s|%\([A-Za-z_][A-Za-z0-9_]*\)s|\?|:\w+|\$\d+)\s*(?P=quote)"""
-)
+_QUOTED_PLACEHOLDER_RE = re.compile(r"""(?P<quote>['"])\s*(?:%s|%\([A-Za-z_][A-Za-z0-9_]*\)s|\?|:\w+|\$\d+)\s*(?P=quote)""")
 _SQLALCHEMY_FRAMEWORK = "sqlalchemy"
 _DYNAMIC_VALUE = "dynamic-value"
 _DYNAMIC_STRUCTURE = "dynamic-structure"
@@ -149,9 +147,7 @@ def _unsafe_sql_call(
 
 
 def _contains_sql_keyword(node: ast.expr, constants: dict[str, str]) -> bool:
-    return any(
-        _SQL_KEYWORD_RE.search(fragment) for fragment in fixed_string_fragments(node, constants)
-    )
+    return any(_SQL_KEYWORD_RE.search(fragment) for fragment in fixed_string_fragments(node, constants))
 
 
 def _uses_quoted_placeholder_with_parameters(call: ast.Call) -> bool:
@@ -178,26 +174,18 @@ def _sql_concatenation_finding(
     message_kind: str,
 ) -> Finding:
     if source_label == "quoted-placeholder":
-        message = (
-            f"`{target}()` manually quotes a SQL placeholder while passing parameters - "
-            "leave placeholders unquoted."
-        )
+        message = f"`{target}()` manually quotes a SQL placeholder while passing parameters - leave placeholders unquoted."
         remediation = (
-            "Pass placeholders unquoted and keep values in the driver parameter sequence: "
-            "``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
+            "Pass placeholders unquoted and keep values in the driver parameter sequence: ``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
         )
     elif message_kind == _DYNAMIC_STRUCTURE:
         message = f"`{target}()` receives dynamic SQL structure - validate SQL fragments."
         remediation = (
-            "Whitelist or validate table names, column names, clauses, and placeholder lists. "
-            "Keep values parameterised with driver parameters."
+            "Whitelist or validate table names, column names, clauses, and placeholder lists. Keep values parameterised with driver parameters."
         )
     else:
         message = f"`{target}()` receives a dynamic SQL string - use parameterised arguments."
-        remediation = (
-            "Pass values as a separate parameter sequence: "
-            "``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
-        )
+        remediation = "Pass values as a separate parameter sequence: ``cursor.execute('SELECT * FROM t WHERE id = ?', (id,))``."
     return Finding(
         rule_id=definition.id,
         message=message,
@@ -230,16 +218,11 @@ def _dynamic_message_kind(first_arg: ast.expr, call: ast.Call) -> str:
 
 
 def _has_value_interpolation(node: ast.expr) -> bool:
-    return any(
-        _VALUE_INTERPOLATION_CONTEXT_RE.search(context) for context in _interpolation_contexts(node)
-    )
+    return any(_VALUE_INTERPOLATION_CONTEXT_RE.search(context) for context in _interpolation_contexts(node))
 
 
 def _has_structure_interpolation(node: ast.expr) -> bool:
-    return any(
-        _STRUCTURE_INTERPOLATION_CONTEXT_RE.search(context)
-        for context in _interpolation_contexts(node)
-    )
+    return any(_STRUCTURE_INTERPOLATION_CONTEXT_RE.search(context) for context in _interpolation_contexts(node))
 
 
 def _interpolation_contexts(node: ast.expr) -> tuple[str, ...]:

@@ -146,19 +146,12 @@ def _metadata(finding: Finding) -> dict[str, object]:
     (
         pytest.param(
             "f-string",
-            (
-                "def render(raw_label, raw_url):\n"
-                '    return f"[prefix\\x00{raw_label}]({raw_url})"\n'
-            ),
+            ('def render(raw_label, raw_url):\n    return f"[prefix\\x00{raw_label}]({raw_url})"\n'),
             id="f-string",
         ),
         pytest.param(
             "format",
-            (
-                "def render(raw_label, raw_url):\n"
-                '    return "[prefix\\x00{label}]({url})".format('
-                "label=raw_label, url=raw_url)\n"
-            ),
+            ('def render(raw_label, raw_url):\n    return "[prefix\\x00{label}]({url})".format(label=raw_label, url=raw_url)\n'),
             id="format",
         ),
     ),
@@ -290,10 +283,7 @@ def test_default_url_sanitizer_unsafe_arguments_still_flag(
         module_prelude="import urllib.parse\n\n",
         label_expression='"docs"',
         url_expression=url_expression,
-        parameters=(
-            "raw_label, raw_url, allowed_characters='', quote_arguments=(), "
-            "quote_options=None, condition=True"
-        ),
+        parameters=("raw_label, raw_url, allowed_characters='', quote_arguments=(), quote_options=None, condition=True"),
     )
 
     findings = _analyse(source)
@@ -351,9 +341,7 @@ def test_assigned_configured_sanitizer_results_are_clean(syntax: LinkSyntax) -> 
     """
     source = _link_source(
         syntax,
-        setup=(
-            "    escaped_label = markdown_label(raw_label)\n    encoded_url = markdown_url(raw_url)"
-        ),
+        setup=("    escaped_label = markdown_label(raw_label)\n    encoded_url = markdown_url(raw_url)"),
         label_expression="escaped_label",
         url_expression="encoded_url",
     )
@@ -416,12 +404,7 @@ def test_raw_or_literal_fallback_is_uncertain(syntax: LinkSyntax) -> None:
     """
     source = _link_source(
         syntax,
-        setup=(
-            "    if condition:\n"
-            "        display_label = raw_label\n"
-            "    else:\n"
-            '        display_label = "docs"'
-        ),
+        setup=('    if condition:\n        display_label = raw_label\n    else:\n        display_label = "docs"'),
         label_expression="display_label",
         url_expression='"https://example.test"',
     )
@@ -709,11 +692,7 @@ def test_class_method_retains_prior_module_import_binding(method_return: str) ->
     Args:
         method_return: F-string or `.format()` return line inside the method.
     """
-    source = (
-        "from urllib.parse import quote\n"
-        "class Renderer:\n"
-        "    def render(self, raw_url):\n" + method_return
-    )
+    source = "from urllib.parse import quote\nclass Renderer:\n    def render(self, raw_url):\n" + method_return
 
     assert _analyse(source) == []
 
@@ -767,12 +746,7 @@ def test_lambda_body_retains_imported_callable_proof(lambda_expression: str) -> 
     Args:
         lambda_expression: F-string or `.format()` lambda body calling the import.
     """
-    source = (
-        "from urllib.parse import quote\n"
-        "def render(raw_url):\n"
-        f"    formatter = {lambda_expression}\n"
-        "    return formatter(raw_url)\n"
-    )
+    source = f"from urllib.parse import quote\ndef render(raw_url):\n    formatter = {lambda_expression}\n    return formatter(raw_url)\n"
 
     assert _analyse(source) == []
 
@@ -793,12 +767,7 @@ def test_comprehension_target_shadows_outer_sanitized_value(
     Args:
         comprehension_expression: F-string or `.format()` link built from the target.
     """
-    source = (
-        "from urllib.parse import quote\n"
-        "def render(raw_url, raw_urls):\n"
-        "    safe = quote(raw_url)\n"
-        f"    return {comprehension_expression}\n"
-    )
+    source = f"from urllib.parse import quote\ndef render(raw_url, raw_urls):\n    safe = quote(raw_url)\n    return {comprehension_expression}\n"
 
     findings = _analyse(source)
 
@@ -827,12 +796,7 @@ def test_comprehension_body_retains_unshadowed_outer_sanitized_value(
     Args:
         comprehension_expression: F-string or `.format()` link capturing the outer value.
     """
-    source = (
-        "from urllib.parse import quote\n"
-        "def render(raw_url, raw_urls):\n"
-        "    safe = quote(raw_url)\n"
-        f"    return {comprehension_expression}\n"
-    )
+    source = f"from urllib.parse import quote\ndef render(raw_url, raw_urls):\n    safe = quote(raw_url)\n    return {comprehension_expression}\n"
 
     assert _analyse(source) == []
 
@@ -851,11 +815,7 @@ def test_nested_function_starts_with_fresh_value_provenance(nested_return: str) 
     Args:
         nested_return: F-string or `.format()` return line inside the fresh scope.
     """
-    source = (
-        "def outer(raw_url):\n"
-        "    encoded_url = markdown_url(raw_url)\n"
-        "    def render():\n" + nested_return + "    return render()\n"
-    )
+    source = "def outer(raw_url):\n    encoded_url = markdown_url(raw_url)\n    def render():\n" + nested_return + "    return render()\n"
 
     findings = _analyse(source, _CUSTOM_SANITIZERS)
 
@@ -979,11 +939,7 @@ def test_match_case_rebinding_a_sanitizer_removes_its_proof() -> None:
 def test_match_capture_name_is_never_a_proved_value() -> None:
     """A value captured out of the subject is raw, so the user still sees a finding."""
     source = (
-        "def render(payload):\n"
-        "    match payload:\n"
-        "        case {'url': captured_url}:\n"
-        "            return f'[text]({captured_url})'\n"
-        "    return ''\n"
+        "def render(payload):\n    match payload:\n        case {'url': captured_url}:\n            return f'[text]({captured_url})'\n    return ''\n"
     )
 
     findings = _analyse(source, _CUSTOM_SANITIZERS)
@@ -1155,11 +1111,7 @@ def test_format_template_with_padding_placeholder_characters_does_not_crash() ->
 def test_walrus_rebinding_a_proved_value_stops_proving_the_render() -> None:
     """A ``:=`` assignment destroys an earlier sanitizer proof like any other rebind."""
     source = (
-        "def render(raw_url):\n"
-        "    safe_url = markdown_url(raw_url)\n"
-        "    if (safe_url := raw_url):\n"
-        "        pass\n"
-        "    return f'[text]({safe_url})'\n"
+        "def render(raw_url):\n    safe_url = markdown_url(raw_url)\n    if (safe_url := raw_url):\n        pass\n    return f'[text]({safe_url})'\n"
     )
 
     findings = _analyse(source, _CUSTOM_SANITIZERS)
@@ -1169,12 +1121,7 @@ def test_walrus_rebinding_a_proved_value_stops_proving_the_render() -> None:
 
 def test_walrus_proving_a_value_is_trusted_at_a_later_render() -> None:
     """A ``:=`` assignment can also establish the proof a later render relies on."""
-    source = (
-        "def render(raw_url):\n"
-        "    if (safe_url := markdown_url(raw_url)):\n"
-        "        pass\n"
-        "    return f'[text]({safe_url})'\n"
-    )
+    source = "def render(raw_url):\n    if (safe_url := markdown_url(raw_url)):\n        pass\n    return f'[text]({safe_url})'\n"
 
     assert _analyse(source, _CUSTOM_SANITIZERS) == []
 

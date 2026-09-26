@@ -81,9 +81,7 @@ class MockWithoutExpectationRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} has mocks with no .assert_* verification: {unverified}."
-                    ),
+                    message=(f"Test {symbol!r} has mocks with no .assert_* verification: {unverified}."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -92,10 +90,7 @@ class MockWithoutExpectationRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "If the test relies on the mock, call ``mock.assert_called_with(...)`` "
-                        "or similar. Otherwise drop the mock."
-                    ),
+                    remediation=("If the test relies on the mock, call ``mock.assert_called_with(...)`` or similar. Otherwise drop the mock."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"unverified": list(unverified)},
                 ),

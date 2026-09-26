@@ -81,10 +81,7 @@ class UnusedParameterRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _unused_parameter_finding(unit, definition, candidate)
-            for candidate in _unused_parameters(unit.tree)
-        ]
+        return [_unused_parameter_finding(unit, definition, candidate) for candidate in _unused_parameters(unit.tree)]
 
 
 def _unused_parameters(tree: ast.AST) -> list[_UnusedParameter]:
@@ -119,7 +116,23 @@ def _should_skip_unused_parameter_check(
     parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
     if parent_cls is None:
         return False
+    # Python fixes a protocol dunder's parameters, e.g. ``def __exit__(self, exc_type, exc, tb)`` must accept ``tb`` even unread.
+    # ``__init__`` and ``__call__`` take whatever the class designs, so their unused parameters still report.
+    if _is_protocol_dunder(node.name):
+        return True
     return has_framework_base(parent_cls) or _has_signature_constrained_base(parent_cls)
+
+
+def _is_protocol_dunder(name: str) -> bool:
+    """Return whether *name* is a dunder method whose parameters a Python protocol fixes, such as ``__exit__`` or ``__new__``.
+
+    Args:
+        name: The method's name as declared.
+
+    Returns:
+        True for a ``__name__`` method other than ``__init__`` and ``__call__``, so its unused parameters are not reported.
+    """
+    return name.startswith("__") and name.endswith("__") and len(name) > 4 and name not in {"__init__", "__call__"}
 
 
 def _unused_parameter_finding(
@@ -140,10 +153,7 @@ def _unused_parameter_finding(
         confidence=definition.confidence,
         end_line=candidate.function.end_lineno,
         symbol=symbol,
-        remediation=(
-            f"Remove the parameter or rename it to ``_{arg_name}`` "
-            "to signal it is intentionally unused."
-        ),
+        remediation=(f"Remove the parameter or rename it to ``_{arg_name}`` to signal it is intentionally unused."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"parameter": arg_name},
     )
@@ -163,9 +173,7 @@ def _collect_referenced_names(body: list[ast.stmt]) -> set[str]:
     return names
 
 
-def _unreferenced_parameters(
-    fn: ast.FunctionDef | ast.AsyncFunctionDef, referenced: set[str]
-) -> list[tuple[str, int]]:
+def _unreferenced_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, referenced: set[str]) -> list[tuple[str, int]]:
     args = fn.args
     unused: list[tuple[str, int]] = []
     candidates = list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)

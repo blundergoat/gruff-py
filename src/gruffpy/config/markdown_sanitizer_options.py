@@ -38,9 +38,7 @@ def validate_markdown_sanitizer_targets(option_name: str, value: Any) -> list[st
     public_config_key = f"rules.{MARKDOWN_SANITIZER_RULE_ID}.options.{option_name}"
     # A scalar or mapping cannot describe the user's ordered helper list.
     if not isinstance(value, list):
-        raise ConfigError(
-            f'Config key "{public_config_key}" must be a list of exact Python call targets.'
-        )
+        raise ConfigError(f'Config key "{public_config_key}" must be a list of exact Python call targets.')
     validated_targets: list[str] = []
     # Each configured spelling must map to one callable the scanner can see.
     for configured_target in value:
@@ -76,7 +74,4 @@ def _is_exact_python_call_target(configured_target: str) -> bool:
         return False
     target_parts = configured_target.split(".")
     # Every dotted segment must be usable as source-level Python syntax.
-    return all(
-        target_part.isidentifier() and not keyword.iskeyword(target_part)
-        for target_part in target_parts
-    )
+    return all(target_part.isidentifier() and not keyword.iskeyword(target_part) for target_part in target_parts)

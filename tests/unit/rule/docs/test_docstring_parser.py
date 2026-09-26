@@ -60,19 +60,7 @@ def test_google_style_extracts_raises():
     ]
 
 
-_NUMPY_TEXT = (
-    "Summary.\n\n"
-    "Parameters\n"
-    "----------\n"
-    "x : int\n"
-    "    The x value.\n"
-    "y\n"
-    "    The y value.\n\n"
-    "Returns\n"
-    "-------\n"
-    "str\n"
-    "    A description.\n"
-)
+_NUMPY_TEXT = "Summary.\n\nParameters\n----------\nx : int\n    The x value.\ny\n    The y value.\n\nReturns\n-------\nstr\n    A description.\n"
 
 
 def test_numpy_style_detected():
@@ -116,13 +104,7 @@ def test_sphinx_rest_style_extracts_params_returns_and_raises():
 
 
 def test_long_description_captured():
-    text = (
-        "Summary.\n\n"
-        "This is a longer prose paragraph that should\n"
-        "be captured in the description field.\n\n"
-        "Args:\n"
-        "    x: a value\n"
-    )
+    text = "Summary.\n\nThis is a longer prose paragraph that should\nbe captured in the description field.\n\nArgs:\n    x: a value\n"
     parsed = parse_docstring(text)
     assert parsed is not None
     assert parsed.summary == "Summary."
@@ -179,11 +161,7 @@ def test_sphinx_style_returns_only():
 
 
 def test_sphinx_style_multiple_raises():
-    text = (
-        "Summary.\n\n"
-        ":raises ValueError: when input is bad.\n"
-        ":raises RuntimeError: when state is bad.\n"
-    )
+    text = "Summary.\n\n:raises ValueError: when input is bad.\n:raises RuntimeError: when state is bad.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
     assert parsed.style is DocstringStyle.SPHINX

@@ -88,10 +88,7 @@ class TestLongerThanSutRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} is {test_len} lines for a {sut_len}-line SUT "
-                        f"{target_name!r} (ratio {test_len / sut_len:.1f}x)."
-                    ),
+                    message=(f"Test {symbol!r} is {test_len} lines for a {sut_len}-line SUT {target_name!r} (ratio {test_len / sut_len:.1f}x)."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,

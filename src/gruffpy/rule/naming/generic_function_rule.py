@@ -96,10 +96,7 @@ class GenericFunctionRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} has a generic name; "
-                        "add a domain noun (e.g. ``process_payment``)."
-                    ),
+                    message=(f"Function {symbol!r} has a generic name; add a domain noun (e.g. ``process_payment``)."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,

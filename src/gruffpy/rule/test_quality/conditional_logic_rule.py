@@ -76,10 +76,7 @@ class ConditionalLogicRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} contains conditional logic - split into "
-                            f"parametrised cases."
-                        ),
+                        message=(f"Test {symbol!r} contains conditional logic - split into parametrised cases."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -88,10 +85,7 @@ class ConditionalLogicRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Replace the branch with `@pytest.mark.parametrize` or two "
-                            "separate test functions."
-                        ),
+                        remediation=("Replace the branch with `@pytest.mark.parametrize` or two separate test functions."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
                     ),

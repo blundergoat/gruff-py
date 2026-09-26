@@ -90,10 +90,7 @@ class CognitiveComplexityRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Flatten nesting; replace nested conditionals with guard clauses "
-                        "or dispatch tables; extract sub-procedures."
-                    ),
+                    remediation=("Flatten nesting; replace nested conditionals with guard clauses or dispatch tables; extract sub-procedures."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "cognitive": score,
@@ -292,11 +289,7 @@ class _Counter:
             self.visit(value, nesting)
 
     def _visit_Call(self, node: ast.Call, nesting: int) -> None:
-        if (
-            self.self_name is not None
-            and isinstance(node.func, ast.Name)
-            and node.func.id == self.self_name
-        ):
+        if self.self_name is not None and isinstance(node.func, ast.Name) and node.func.id == self.self_name:
             self.score += 1
         for arg in node.args:
             self.visit(arg, nesting)

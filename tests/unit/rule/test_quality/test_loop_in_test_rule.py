@@ -37,11 +37,7 @@ def test_fixture_loop_with_assertion_context_is_not_flagged():
 
 
 def test_inline_case_loop_with_assertion_context_is_not_flagged():
-    src = (
-        "def test_cases():\n"
-        "    for case in [('json', '{}'), ('text', 'ok')]:\n"
-        "        assert case[1], case\n"
-    )
+    src = "def test_cases():\n    for case in [('json', '{}'), ('text', 'ok')]:\n        assert case[1], case\n"
     assert LoopInTestRule().analyse(make_unit(src), default_ctx()) == []
 
 

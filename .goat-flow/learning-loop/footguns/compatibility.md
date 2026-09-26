@@ -87,7 +87,7 @@ moves, six source surfaces must move together: the deciding ADR
 `Per-Command`); the canonical defaults table in
 `src/gruffpy/config/analysis_config.py` (search:
 `MINIMUM_SEVERITY_BINARY_DEFAULTS`); the Click decorator default in
-`src/gruffpy/cli_options.py` (search: `minimumSeverity.analyse in .gruff-py.yaml`); the validator
+`src/gruffpy/cli_options.py` (search: `failOn.analyse in .gruff-py.yaml`); the validator
 accept-set in `src/gruffpy/config/loader.py` (search:
 `VALID_MINIMUM_SEVERITY_VALUES`); the init renderer in
 `src/gruffpy/command/init_config.py` (search: `_default_init_analysis_config`);

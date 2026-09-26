@@ -3,33 +3,21 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_open_tainted_path_emits():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    open(name).read()\n"
-    )
+    src = "from flask import request\ndef view():\n    name = request.args['file']\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_open_module_qualified_request_path_emits():
     """Flag the module-qualified Flask idiom reaching a filesystem sink."""
-    src = (
-        "import flask\ndef view():\n    name = flask.request.args['file']\n    open(name).read()\n"
-    )
+    src = "import flask\ndef view():\n    name = flask.request.args['file']\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_open_application_object_request_path_skipped():
     """Keep an application object's request-shaped attribute quiet inside a web file."""
-    src = (
-        "from flask import request\n"
-        "def view(other):\n"
-        "    name = other.request.args['file']\n"
-        "    open(name).read()\n"
-    )
+    src = "from flask import request\ndef view(other):\n    name = other.request.args['file']\n    open(name).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -50,81 +38,41 @@ def test_open_secure_filename_sanitised_skipped():
 
 
 def test_basename_sanitised_skipped():
-    src = (
-        "import os\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    open(os.path.basename(name)).read()\n"
-    )
+    src = "import os\nfrom flask import request\ndef view():\n    name = request.args['file']\n    open(os.path.basename(name)).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_path_chained_read_text_emits():
-    src = (
-        "from pathlib import Path\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    Path(name).read_text()\n"
-    )
+    src = "from pathlib import Path\nfrom flask import request\ndef view():\n    name = request.args['file']\n    Path(name).read_text()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_path_chained_write_bytes_emits():
-    src = (
-        "from pathlib import Path\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    Path(name).write_bytes(b'')\n"
-    )
+    src = "from pathlib import Path\nfrom flask import request\ndef view():\n    name = request.args['file']\n    Path(name).write_bytes(b'')\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_path_chained_literal_skipped():
-    src = (
-        "from pathlib import Path\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    Path('/etc/config.json').read_text()\n"
-    )
+    src = "from pathlib import Path\nfrom flask import request\ndef view():\n    Path('/etc/config.json').read_text()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_shutil_copyfile_tainted_src_emits():
-    src = (
-        "import shutil\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    shutil.copyfile(name, '/safe/dest')\n"
-    )
+    src = "import shutil\nfrom flask import request\ndef view():\n    name = request.args['file']\n    shutil.copyfile(name, '/safe/dest')\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_os_remove_tainted_emits():
-    src = (
-        "import os\n"
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    os.remove(name)\n"
-    )
+    src = "import os\nfrom flask import request\ndef view():\n    name = request.args['file']\n    os.remove(name)\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_fstring_path_emits():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    name = request.args['file']\n"
-        "    open(f'/uploads/{name}').read()\n"
-    )
+    src = "from flask import request\ndef view():\n    name = request.args['file']\n    open(f'/uploads/{name}').read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
@@ -136,13 +84,7 @@ def test_non_web_file_skipped():
 
 
 def test_fastapi_query_parameter_emits():
-    src = (
-        "from fastapi import FastAPI, Query\n"
-        "app = FastAPI()\n"
-        "@app.get('/')\n"
-        "def view(name: str = Query(...)):\n"
-        "    open(name).read()\n"
-    )
+    src = "from fastapi import FastAPI, Query\napp = FastAPI()\n@app.get('/')\ndef view(name: str = Query(...)):\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 

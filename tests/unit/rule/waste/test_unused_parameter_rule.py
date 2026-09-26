@@ -54,12 +54,7 @@ def test_cls_does_not_fire_in_classmethod():
 
 
 def test_abstract_method_does_not_fire():
-    src = (
-        "from abc import ABC, abstractmethod\n"
-        "class A(ABC):\n"
-        "    @abstractmethod\n"
-        "    def m(self, x, y): ...\n"
-    )
+    src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self, x, y): ...\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -77,35 +72,19 @@ def test_pytest_fixture_does_not_fire():
 
 
 def test_rule_interface_method_does_not_fire():
-    src = (
-        "class Rule: ...\n"
-        "class R(Rule):\n"
-        "    def analyse(self, unit, context):\n"
-        "        return []\n"
-    )
+    src = "class Rule: ...\nclass R(Rule):\n    def analyse(self, unit, context):\n        return []\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_http_handler_override_does_not_fire():
-    src = (
-        "class BaseHTTPRequestHandler: ...\n"
-        "class H(BaseHTTPRequestHandler):\n"
-        "    def log_message(self, format, *args):\n"
-        "        return None\n"
-    )
+    src = "class BaseHTTPRequestHandler: ...\nclass H(BaseHTTPRequestHandler):\n    def log_message(self, format, *args):\n        return None\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_parameter_used_by_nested_closure_does_not_fire():
-    src = (
-        "def create(initial_state):\n"
-        "    class Handler:\n"
-        "        def get(self):\n"
-        "            return initial_state\n"
-        "    return Handler\n"
-    )
+    src = "def create(initial_state):\n    class Handler:\n        def get(self):\n            return initial_state\n    return Handler\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -121,3 +100,21 @@ def test_multiple_unused_each_emits():
     src = "def f(x, y, z):\n    return 1\n"
     findings = UnusedParameterRule().analyse(_unit(src), _ctx())
     assert {f.metadata["parameter"] for f in findings} == {"x", "y", "z"}
+
+
+def test_protocol_dunder_parameters_are_not_reported() -> None:
+    """Skip parameters a Python protocol fixes, and keep reporting ``__init__`` and ordinary methods."""
+    source = (
+        "class Resource:\n"
+        "    def __new__(cls, name):\n"
+        "        return super().__new__(cls)\n"
+        "    def __init__(self, name, unused_option):\n"
+        "        self.name = name\n"
+        "    def __exit__(self, exc_type, exc, tb):\n"
+        "        return None\n"
+        "    def close(self, reason):\n"
+        "        return None\n"
+    )
+    findings = UnusedParameterRule().analyse(_unit(source), _ctx())
+
+    assert sorted(finding.metadata["parameter"] for finding in findings) == ["reason", "unused_option"]

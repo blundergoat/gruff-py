@@ -9,15 +9,8 @@ from gruffpy.cli import main
 _SYNTHETIC_AWS_KEY = "AKIA" + "1234567890ABCDEF"
 _BROKEN_SOURCE_WITHOUT_SUPPRESSION = f"AWS_KEY = {_SYNTHETIC_AWS_KEY!r}\ndef broken(:\n"
 _BROKEN_SOURCE_SUPPRESSION_CASES = (
-    (
-        "# gruff: disable-file=sensitive-data.aws-access-key -- test fixture\n"
-        f"AWS_KEY = {_SYNTHETIC_AWS_KEY!r}\ndef broken(:\n"
-    ),
-    (
-        f"AWS_KEY = {_SYNTHETIC_AWS_KEY!r}  "
-        "# gruff: disable=sensitive-data.aws-access-key -- test fixture\n"
-        "def broken(:\n"
-    ),
+    (f"# gruff: disable-file=sensitive-data.aws-access-key -- test fixture\nAWS_KEY = {_SYNTHETIC_AWS_KEY!r}\ndef broken(:\n"),
+    (f"AWS_KEY = {_SYNTHETIC_AWS_KEY!r}  # gruff: disable=sensitive-data.aws-access-key -- test fixture\ndef broken(:\n"),
 )
 
 
@@ -28,9 +21,7 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text(
-        "import os; eval('payload')  # gruff: disable=waste.unused-import\n"
-    )
+    (src / "sample.py").write_text("import os; eval('payload')  # gruff: disable=waste.unused-import\n")
 
     result = CliRunner().invoke(
         main,
@@ -49,18 +40,14 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert [finding["ruleId"] for finding in payload["findings"]] == [
-        "security.dangerous-function-call"
-    ]
+    assert [finding["ruleId"] for finding in payload["findings"]] == ["security.dangerous-function-call"]
 
 
 def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text(
-        "# gruff: disable-next=security.dangerous-function-call\neval('first')\neval('second')\n"
-    )
+    (src / "sample.py").write_text("# gruff: disable-next=security.dangerous-function-call\neval('first')\neval('second')\n")
 
     result = CliRunner().invoke(
         main,
@@ -108,9 +95,7 @@ def test_gruff_disable_file_is_file_local(tmp_path: Path, monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert [(finding["file"], finding["ruleId"]) for finding in payload["findings"]] == [
-        ("src/visible.py", "size.file-length")
-    ]
+    assert [(finding["file"], finding["ruleId"]) for finding in payload["findings"]] == [("src/visible.py", "size.file-length")]
 
 
 def _analyse_broken_source(tmp_path: Path, source: str) -> tuple[int, dict]:
@@ -168,13 +153,8 @@ def test_parse_broken_source_text_findings_obey_suppressions(
     # An unsuppressed broken file keeps both the fatal diagnostic and recoverable text evidence.
     unsuppressed_contract = {
         "status": unsuppressed_status,
-        "diagnosticTypes": {
-            diagnostic["type"] for diagnostic in unsuppressed_payload["diagnostics"]
-        },
-        "hasAwsFinding": any(
-            finding["ruleId"] == "sensitive-data.aws-access-key"
-            for finding in unsuppressed_payload["findings"]
-        ),
+        "diagnosticTypes": {diagnostic["type"] for diagnostic in unsuppressed_payload["diagnostics"]},
+        "hasAwsFinding": any(finding["ruleId"] == "sensitive-data.aws-access-key" for finding in unsuppressed_payload["findings"]),
     }
     assert unsuppressed_contract == {
         "status": 2,
@@ -187,10 +167,7 @@ def test_parse_broken_source_text_findings_obey_suppressions(
     suppressed_contract = {
         "status": suppressed_status,
         "diagnosticTypes": {diagnostic["type"] for diagnostic in suppressed_payload["diagnostics"]},
-        "hasAwsFinding": any(
-            finding["ruleId"] == "sensitive-data.aws-access-key"
-            for finding in suppressed_payload["findings"]
-        ),
+        "hasAwsFinding": any(finding["ruleId"] == "sensitive-data.aws-access-key" for finding in suppressed_payload["findings"]),
     }
     assert suppressed_contract == {
         "status": 2,

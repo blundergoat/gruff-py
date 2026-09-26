@@ -1,3 +1,9 @@
+"""Exercise realistic contact details found in test and fixture files.
+
+The suite separates user-reviewable email and phone shapes from safe domains, 555 values,
+timestamps, Git references, and numeric fixtures. Findings expose only a fixed preview marker.
+"""
+
 import pytest
 
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
@@ -21,6 +27,7 @@ def test_real_email_in_test_file_emits():
     src = f"user_email = {_REAL_EMAIL!r}\n"
     findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
     assert len(findings) == 1
+    assert findings[0].metadata["preview"] == "[redacted:email]"
 
 
 def test_example_email_skipped():
@@ -37,13 +44,9 @@ def test_reserved_tld_email_domains_skipped():
         "a" + "@" + "b.localhost",
         "team" + "@" + "corp.example",
     )
-    src = "\n".join(
-        f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails)
-    )
+    src = "\n".join(f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails))
 
-    findings = PiiTestFixtureRule().analyse(
-        make_unit(f"{src}\n", "tests/test_users.py"), default_ctx()
-    )
+    findings = PiiTestFixtureRule().analyse(make_unit(f"{src}\n", "tests/test_users.py"), default_ctx())
 
     assert findings == []
 
@@ -107,10 +110,7 @@ def test_unlabelled_bare_realistic_number_remains_in_scope() -> None:
 
 def test_rfc3986_digit_charset_is_not_a_phone_number() -> None:
     """Exclude the separator-free digit run in requests' RFC 3986 character set."""
-    source = (
-        'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" '
-        '"abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
-    )
+    source = 'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" "abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
 
     findings = PiiTestFixtureRule().analyse(make_unit(source, "tests/test_utils.py"), default_ctx())
 

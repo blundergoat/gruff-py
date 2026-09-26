@@ -12,14 +12,10 @@ from dataclasses import dataclass, field
 
 from gruffpy.rule.security._security_node_helper import call_target_name, imported_module_names
 
-_REQUEST_ATTRS: frozenset[str] = frozenset(
-    {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
-)
+_REQUEST_ATTRS: frozenset[str] = frozenset({"json", "form", "args", "GET", "POST", "data", "query_params", "values"})
 _DIRECT_REQUEST_SOURCE_METHODS: frozenset[str] = frozenset({"get_json"})
 _REQUEST_ACCESSOR_METHODS: frozenset[str] = frozenset({"get", "getlist"})
-_FASTAPI_PARAM_SOURCES: frozenset[str] = frozenset(
-    {"Query", "Body", "Path", "Form", "Header", "Cookie", "File"}
-)
+_FASTAPI_PARAM_SOURCES: frozenset[str] = frozenset({"Query", "Body", "Path", "Form", "Header", "Cookie", "File"})
 
 
 @dataclass

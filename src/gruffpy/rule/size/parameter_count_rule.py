@@ -85,10 +85,7 @@ class ParameterCountRule(Rule):
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Group related parameters into a dataclass or context object, "
-                        "or split the function."
-                    ),
+                    remediation=("Group related parameters into a dataclass or context object, or split the function."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "parameters": count,

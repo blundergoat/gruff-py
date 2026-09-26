@@ -35,52 +35,27 @@ def test_thin_class_docstring_emits():
 
 
 def test_descriptive_summary_skipped():
-    src = (
-        "def get_name(self):\n"
-        '    """Return the rule\'s stable identifier as configured in defaults()."""\n'
-        "    return self._name\n"
-    )
+    src = 'def get_name(self):\n    """Return the rule\'s stable identifier as configured in defaults()."""\n    return self._name\n'
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_descriptive_module_docstring_skipped():
-    src = (
-        '"""Builds the serialisable analysis report payload returned by CLI and API callers."""\n'
-        "\n"
-        "VALUE = 1\n"
-    )
+    src = '"""Builds the serialisable analysis report payload returned by CLI and API callers."""\n\nVALUE = 1\n'
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_descriptive_class_docstring_skipped():
-    src = (
-        "class AnalysisReport:\n"
-        '    """Immutable analysis payload shared by reporters and exit-code handling."""\n'
-        "    pass\n"
-    )
+    src = 'class AnalysisReport:\n    """Immutable analysis payload shared by reporters and exit-code handling."""\n    pass\n'
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_summary_plus_body_skipped():
-    src = (
-        "def process(value):\n"
-        '    """Process the value.\n\n'
-        "    More context: the value flows through three stages.\n"
-        '    """\n'
-        "    return value\n"
-    )
+    src = 'def process(value):\n    """Process the value.\n\n    More context: the value flows through three stages.\n    """\n    return value\n'
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_summary_with_args_section_skipped():
-    src = (
-        "def process(value):\n"
-        '    """Process the value.\n\n'
-        "    Args:\n"
-        "        value: the thing.\n"
-        '    """\n'
-        "    return value\n"
-    )
+    src = 'def process(value):\n    """Process the value.\n\n    Args:\n        value: the thing.\n    """\n    return value\n'
     assert UselessDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 

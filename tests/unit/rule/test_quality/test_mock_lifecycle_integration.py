@@ -85,12 +85,5 @@ _MIN_TEST_QUALITY_RULE_COUNT = 28
 
 def test_registry_has_full_test_quality_rule_set():
     """v0.1 ships at least 28 default-on test-quality rules; the full set is 34."""
-    ids = {
-        r.definition().id
-        for r in RuleRegistry.defaults().all()
-        if r.definition().id.startswith("test-quality.")
-    }
-    assert len(ids) >= _MIN_TEST_QUALITY_RULE_COUNT, (
-        f"Expected ≥{_MIN_TEST_QUALITY_RULE_COUNT} test-quality rules; got "
-        f"{len(ids)}: {sorted(ids)}"
-    )
+    ids = {r.definition().id for r in RuleRegistry.defaults().all() if r.definition().id.startswith("test-quality.")}
+    assert len(ids) >= _MIN_TEST_QUALITY_RULE_COUNT, f"Expected ≥{_MIN_TEST_QUALITY_RULE_COUNT} test-quality rules; got {len(ids)}: {sorted(ids)}"

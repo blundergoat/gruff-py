@@ -93,9 +93,7 @@ class MultipleAaaCyclesRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Split each cycle into its own test for cleaner failure attribution."
-                    ),
+                    remediation=("Split each cycle into its own test for cleaner failure attribution."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"cycles": cycles, "threshold": threshold},
                 ),
@@ -129,11 +127,7 @@ def _count_aaa_cycles(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 def _is_assertion_stmt(stmt: ast.stmt) -> bool:
     if isinstance(stmt, ast.Assert):
         return True
-    return (
-        isinstance(stmt, ast.Expr)
-        and isinstance(stmt.value, ast.Call)
-        and is_assertion_call(stmt.value)
-    )
+    return isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call) and is_assertion_call(stmt.value)
 
 
 def _has_call(stmt: ast.stmt) -> bool:

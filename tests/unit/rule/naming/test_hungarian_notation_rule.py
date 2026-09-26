@@ -66,13 +66,7 @@ def test_dict_users_fires():
 
 
 def test_real_type_prefixes_still_fire():
-    src = (
-        "str_message = 'hello'\n"
-        "dict_users = {}\n"
-        "lst_predictions = []\n"
-        "bool_tokens = False\n"
-        "arr_values = []\n"
-    )
+    src = "str_message = 'hello'\ndict_users = {}\nlst_predictions = []\nbool_tokens = False\narr_values = []\n"
     findings = HungarianNotationRule().analyse(_unit(src), _ctx())
 
     assert {finding.metadata["identifier"] for finding in findings} == {

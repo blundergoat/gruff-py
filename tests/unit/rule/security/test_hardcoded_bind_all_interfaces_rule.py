@@ -33,11 +33,7 @@ def test_run_no_host_kwarg_skipped():
 
 
 def test_socket_bind_wildcard_tuple_emits():
-    src = (
-        "import socket\n"
-        "s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
-        "s.bind(('0.0.0.0', 8080))\n"
-    )
+    src = "import socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\ns.bind(('0.0.0.0', 8080))\n"
     findings = HardcodedBindAllInterfacesRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
@@ -56,10 +52,7 @@ def test_ipv6_wildcard_emits():
 
 def test_run_host_dynamic_skipped():
     """Non-literal host kwarg is skipped - we cannot prove unsafety."""
-    src = (
-        "import os\nfrom flask import Flask\napp = Flask(__name__)\n"
-        "app.run(host=os.getenv('HOST'))\n"
-    )
+    src = "import os\nfrom flask import Flask\napp = Flask(__name__)\napp.run(host=os.getenv('HOST'))\n"
     assert HardcodedBindAllInterfacesRule().analyse(make_unit(src), default_ctx()) == []
 
 
