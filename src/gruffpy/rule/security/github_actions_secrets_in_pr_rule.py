@@ -17,6 +17,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
+from gruffpy.rule.security._github_actions_guard import unreachable_secret_lines
 from gruffpy.rule.security._github_actions_helper import declared_workflow_events, is_workflow_file, source_line
 from gruffpy.rule.security._security_metadata import finding_security_metadata
 
@@ -64,9 +65,10 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
+        unreachable = unreachable_secret_lines(unit.source)
         for match in _SECRET_REF_RE.finditer(unit.source):
             secret = match.group(1)
-            if secret == "GITHUB_TOKEN":
+            if secret == "GITHUB_TOKEN" or source_line(unit.source, match.start()) in unreachable:
                 continue
             findings.append(
                 Finding(

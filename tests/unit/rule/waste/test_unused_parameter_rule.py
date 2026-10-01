@@ -1,5 +1,7 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -118,3 +120,30 @@ def test_protocol_dunder_parameters_are_not_reported() -> None:
     findings = UnusedParameterRule().analyse(_unit(source), _ctx())
 
     assert sorted(finding.metadata["parameter"] for finding in findings) == ["reason", "unused_option"]
+
+
+@pytest.mark.parametrize(
+    "source, exempt",
+    [
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            True,
+        ),
+        ('def pytest_exception_interact(node):\n    """Plugin hook specification."""\n', False),
+        (
+            'from elsewhere import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            False,
+        ),
+        ('from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\ndef ordinary(node):\n    """Unimplemented function."""\n', False),
+        ("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    def instance_dict(instance): ...\n", True),
+        ('import typing\nif typing.TYPE_CHECKING:\n    async def instance_dict(instance):\n        """Typing declaration."""\n        ...\n', True),
+        ("if TYPE_CHECKING:\n    pass\nelse:\n    def instance_dict(instance): ...\n", False),
+        ("if TYPE_CHECKING:\n    def instance_dict(instance): pass\n", False),
+        ("if DEBUG:\n    def instance_dict(instance): ...\n", False),
+    ],
+)
+def test_source_proven_declarations(source: str, exempt: bool) -> None:
+    findings = UnusedParameterRule().analyse(_unit(source), _ctx())
+    assert (not findings) is exempt

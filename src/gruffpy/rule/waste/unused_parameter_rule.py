@@ -25,6 +25,8 @@ from gruffpy.rule._python_dynamism import (
     has_framework_decorator,
     is_abstract_method,
     is_overload_stub,
+    is_pluggy_hookspec,
+    is_type_checking_stub,
 )
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
@@ -112,6 +114,8 @@ def _should_skip_unused_parameter_check(
     if has_framework_decorator(node):
         return True
     if is_abstract_method(node) or is_overload_stub(node):
+        return True
+    if is_pluggy_hookspec(node, parents) or is_type_checking_stub(node, parents):
         return True
     parent_cls = next((p for p in reversed(parents) if isinstance(p, ast.ClassDef)), None)
     if parent_cls is None:

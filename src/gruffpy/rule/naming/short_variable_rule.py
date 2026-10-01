@@ -172,6 +172,6 @@ def _short_variable_finding(
 def _is_test_file(display_path: str) -> bool:
     normalized = display_path.replace("\\", "/").lower()
     name = normalized.rsplit("/", 1)[-1]
-    if normalized.startswith("tests/") or "/tests/" in normalized:
+    if any(part in {"test", "tests"} for part in normalized.split("/")[:-1]):
         return True
     return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

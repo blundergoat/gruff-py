@@ -799,12 +799,12 @@ def _is_test_file(display_path: str) -> bool:
         display_path: User-visible path; empty text is treated as production input.
 
     Returns:
-        ``True`` for tests directories or a root-level ``test_*.py`` file.
+        ``True`` for test/tests directories or a root-level ``test_*.py`` file.
     """
     normalized_path = display_path.replace("\\", "/").lower()
     file_name = normalized_path.rsplit("/", 1)[-1]
-    # Any tests directory is example/verification code rather than product API.
-    if normalized_path.startswith("tests/") or "/tests/" in normalized_path:
+    # Exact directory names keep nearby production paths such as testing reportable.
+    if any(part in {"test", "tests"} for part in normalized_path.split("/")[:-1]):
         return True
     # A root-level pytest filename receives the same user-facing exemption.
     return "/" not in normalized_path and file_name.startswith("test_") and file_name.endswith(".py")

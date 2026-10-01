@@ -4,10 +4,42 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- Workflow secret warnings skip jobs or steps whose own event guard proves them unreachable for every detected PR event.
+
+- **Imported framework callbacks stop prompting deletion advice** - The private-function rule recognizes Django's formset deletion hook and SQLAlchemy compiler/inspection registrations only when the source proves their imports. Unrelated or rebound names remain reportable.
+
+- **Naming checks recognize singular `test/` folders** - Abbreviation, short-variable and Boolean-prefix advice now skips these test files.
+- **Source-proven hook and typing declarations stop prompting deletion advice** - The two waste rules recognize pluggy specifications and direct `TYPE_CHECKING` ellipsis stubs.
+
+- **Literal-only locals and escaped joins stop tripping `security.django-mark-safe`** - `mark_safe(name)` stays quiet when every binding of the
+name in the call's own scope assigns a plain string literal. A join stays quiet when its separator is a literal or an escape call and every item is
+a literal or a `format_html`, `escape` or `conditional_escape` call from `django.utils.html`. Parameters, reassignment, `+=`, loop and other
+bindings, outer-scope names, look-alike helpers and raw items still report.
+
+- **OpenSSH protocol names and grouped numbers stop looking like PII** - `sensitive-data.pii-test-fixture` skips exact OpenSSH protocol names
+seen in the corpus, such as `ssh-rsa-cert-v01@openssh.com`, and phone-shaped runs inside numbers grouped in thousands with commas. Other
+`@openssh.com` addresses and real phone numbers still report.
+
+- **Path settings in pyproject.toml stop looking like secrets** - A coverage `source`, `omit` or `include` entry, a ruff `per-file-ignores` key or a ty
+`exclude` entry no longer receives `sensitive-data.high-entropy-string` when it names a file or folder that exists inside the project. Other keys and
+tables, a missing path, a symlink on the way, a path leaving the project and a pyproject.toml that does not parse still report.
+
+- **Stored help-article links avoid false entropy warnings** - Complete article paths accept bounded titles, including the short words `a`, `to` and `in`.
+Extra URL components and opaque title suffixes remain eligible for warnings. The exact lowercase-letter-then-digit alphabet is also recognized.
+
+- **Entropy warnings recognize complete public formats and bounded names** - Public alphabets, structured identifiers and repository paths stay quiet
+only when the entire value qualifies; opaque suffixes remain reportable. Property names alone grant no exception.
+The bounded names include EC2 import paths and up to two parent-directory prefixes; the exact observed Hashids alphabet is also recognized.
+The standard Base64 decoder alphabet with one trailing `=`, the exact observed UUID alphabet and bounded help-category routes also stay quiet.
+Complete GitHub commit references use bounded owner, repository and revision formats; additional URL components grant no exception.
+The exact uppercase/lowercase/digit alphabet and nine complete Symfony signature service IDs also stay quiet.
+Complete Entra application-management links require the bounded UUID route and fixed navigation flags.
+Complete quoted help-article and SQS URLs stay quiet only when their full path and allowed options pass the public-format checks.
+
 Upgrading from 0.5.x: this release changes every machine-readable contract at once. `UPGRADING.md` in this repository gives each break's migration command and the way back: pin the 0.5 line and keep the pre-upgrade configuration and baseline files, which 0.5 still reads.
 
 - **Sensitive-data rules skip test, fixture and example files** - A scan of the family's 57-repository corpus found this pillar's findings in test code were overwhelmingly sample keys and placeholder credentials. Every sensitive-data rule except `sensitive-data.pii-test-fixture` now skips a file under a directory named `test`, `tests`, `__tests__`, `spec`, `testdata`, `fixtures` or `examples` (any letter case), or a file named like a test: `*_test.go`, `test_*.py`, `*_test.py`, `*Test.php`, `*.test.*` or `*.spec.*` for JavaScript and TypeScript. **The trade-off is deliberate: a real credential committed under one of those paths is no longer reported.** The skip is counted, never silent: each skipped file and rule is published as an audit row with `source: "built-in"`, after the lockfile rows. `sensitive-data.pii-test-fixture` still reads these files, because finding realistic personal data in them is its purpose.
-- **Vendor-documented sample values no longer report** - AWS's two example access key ids and secret keys, the sample token jwt.io shows, and fourteen test card numbers the card networks publish are documentation, not credentials. A value that equals one of these 19 exactly and whole is no longer reported by any sensitive-data rule. gruff-py has no card-number rule, so only the AWS and jwt.io samples change what it reports. The values are held as SHA-256 digests, so gruff-py's detectors carry none of them. A real key that merely resembles one still reports.
+- **Vendor-documented sample values no longer report** - AWS's two example access key ids and secret keys, the sample token jwt.io shows, Google's published reCAPTCHA v2 test site key, and fourteen test card numbers the card networks publish are documentation, not credentials. A value that equals one of these 20 exactly and whole is no longer reported by any sensitive-data rule. gruff-py has no card-number rule, so the AWS, jwt.io and reCAPTCHA samples affect its reports. The values are held as SHA-256 digests, so gruff-py's detectors carry none of them. A real key that merely resembles one still reports.
 - **`waste.unused-parameter` skips parameters a Python protocol fixes** - `def __exit__(self, exc_type, exc, tb)` must accept all three arguments whether or not it reads them, and the same holds for `__new__`, `__getattr__` and every other dunder method except `__init__` and `__call__`, whose parameters the class designs. An unused parameter in one of those two, or in an ordinary method, still reports.
 - **`sensitive-data.high-entropy-string` skips package-manager lockfiles by name** - A lockfile records one published integrity digest per resolved package. Every one of them is high-entropy by construction and none is a credential, so a real project's lockfile buried the rule's true findings under thousands of false ones. The rule, and no other, is now skipped in a file whose base name is one of nine ratified lockfile names at any depth: `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `composer.lock`, `Cargo.lock`, `go.sum`, `uv.lock`, `poetry.lock`. **The skip is counted, never silent:** every surface that applies it publishes one audit row per lockfile that had findings, carrying `source: "built-in"`, which is how a consumer tells it from an entry you configured. **Every other sensitive-data rule still reads the file**, so a credential pasted into a lockfile is reported exactly as it would be anywhere else, and the identical bytes under any other file name keep reporting the entropy rule too. gruff-py's own configuration no longer carries the hand-written lockfile exclusion this replaces.
 - **A scope the run could not read is one diagnostic, `changed-region`, with no findings beside it** - A `--changed-ranges` value the run cannot scope to used to arrive under a different type in almost every port, and some published their unscoped findings alongside it, so a caller could not tell a narrowed scan from a whole-tree one. The run now exits `2` with exactly one `changed-region` diagnostic and no findings, on the analyse surface and the hook alike.

@@ -1027,8 +1027,8 @@ except ValueError:
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Security metadata: `cwe` = `['CWE-200', 'CWE-522']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
-  - A secret reference in a pull-request workflow can sit behind a trusted-actor condition that the workflow text scan does not evaluate.
-    Mitigation: Move the secret-bearing job to a trusted workflow or suppress the reviewed reference only after verifying the actor gate cannot be influenced by the pull request.
+  - A secret reference can sit behind a trusted-actor gate, an unsupported event condition, or ambiguous YAML ownership that the source scan cannot prove.
+    Mitigation: An own job or step guard with bounded event-name comparisons can prove PR unreachability; otherwise move the secret-bearing job to a trusted workflow or review the unsupported boundary.
 - Bad example: Code that triggers `security.github-actions-secrets-in-pr` leaves repository secret in a pull_request_target workflow unaddressed.
 - Good example: Code that satisfies `security.github-actions-secrets-in-pr` makes repository secret in a pull_request_target workflow explicit or simpler.
 

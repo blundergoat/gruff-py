@@ -1,5 +1,7 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -169,6 +171,33 @@ def test_production_test_double_name_still_fires():
         _ctx_for("waste.empty-function"),
     )
     assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "source, exempt",
+    [
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            True,
+        ),
+        ('def pytest_exception_interact(node):\n    """Plugin hook specification."""\n', False),
+        (
+            'from elsewhere import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            False,
+        ),
+        ('from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\ndef ordinary(node):\n    """Unimplemented function."""\n', False),
+        ("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    def instance_dict(instance): ...\n", True),
+        ('import typing\nif typing.TYPE_CHECKING:\n    async def instance_dict(instance):\n        """Typing declaration."""\n        ...\n', True),
+        ("if TYPE_CHECKING:\n    pass\nelse:\n    def instance_dict(instance): ...\n", False),
+        ("if TYPE_CHECKING:\n    def instance_dict(instance): pass\n", False),
+        ("if DEBUG:\n    def instance_dict(instance): ...\n", False),
+    ],
+)
+def test_source_proven_declarations(source: str, exempt: bool) -> None:
+    findings = EmptyFunctionRule().analyse(_unit(source), _ctx_for("waste.empty-function"))
+    assert (not findings) is exempt
 
 
 def test_nested_inner_test_double_class_exempts_its_method():

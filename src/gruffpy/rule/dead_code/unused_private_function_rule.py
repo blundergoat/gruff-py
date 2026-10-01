@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from collections.abc import Container
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from gruffpy.config.dead_code_allowlist import DeadCodeAllowlist
 from gruffpy.finding.confidence import Confidence
@@ -219,14 +220,19 @@ def _analyse_unit(
         return []
     all_names = module_all_names(unit.tree)
     allowlist = context.config.dead_code_allowlist
+    nodes = list(ast.walk(unit.tree))
+    framework_bindings = _framework_import_bindings(unit.tree, unit.file.display_path, nodes)
 
     findings: list[Finding] = []
     scope_references: dict[int, _ReferenceCounts] = {}
     # Every candidate keeps the existing module/class reference and exemption model.
-    for raw_node in ast.walk(unit.tree):
+    for raw_node in nodes:
         candidate = _private_function_candidate(raw_node, unit.tree, all_names)
         # Non-private declarations and built-in dynamic exemptions produce no advice.
         if candidate is None:
+            continue
+        # Only imported framework roles prove these otherwise unreferenced callbacks.
+        if _has_source_proven_framework_role(candidate, framework_bindings):
             continue
         # A narrow scan cannot prove that an importable module function has no caller.
         if candidate.is_module_level and not include_module_level:
@@ -263,6 +269,158 @@ def _analyse_unit(
             )
         )
     return findings
+
+
+def _has_source_proven_framework_role(
+    candidate: _PrivateFunctionCandidate,
+    bindings: dict[str, str],
+) -> bool:
+    """Recognize the imported registration and inherited-hook roles we support.
+
+    Args:
+        candidate: Private function with its lexical parents and local scope.
+        bindings: Unrebound same-module imports, including explicit aliases.
+
+    Returns:
+        True only for the exact formset hook or a called registration decorator.
+    """
+    shadowed = {
+        argument.arg
+        for parent in candidate.parents
+        if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
+        for argument in ast.walk(parent.args)
+        if isinstance(argument, ast.arg)
+    }
+    visible = {name: target for name, target in bindings.items() if name not in shadowed}
+    for decorator in candidate.node.decorator_list:
+        if (
+            isinstance(decorator, ast.Call)
+            and decorator.args
+            and _framework_reference(decorator.func, visible)
+            in {
+                "sqlalchemy.ext.compiler.compiles",
+                "sqlalchemy.inspection._inspects",
+            }
+        ):
+            return True
+    if candidate.node.name != "_should_delete_form" or not candidate.parents:
+        return False
+    owner = candidate.parents[-1]
+    return isinstance(owner, ast.ClassDef) and any(_framework_reference(base, visible) == "django.forms.formsets.BaseFormSet" for base in owner.bases)
+
+
+def _framework_reference(expression: ast.expr, bindings: dict[str, str]) -> str:
+    """Resolve a plain imported name or attribute chain without calling code.
+
+    Args:
+        expression: Decorator callee or class base; calls and dynamic roots fail.
+        bindings: Same-file import identities available to this declaration.
+
+    Returns:
+        Qualified import identity, or an empty string when source cannot prove it.
+    """
+    parts: list[str] = []
+    while isinstance(expression, ast.Attribute):
+        parts.append(expression.attr)
+        expression = expression.value
+    if not isinstance(expression, ast.Name) or expression.id not in bindings:
+        return ""
+    return ".".join((bindings[expression.id], *reversed(parts)))
+
+
+def _framework_import_bindings(tree: ast.AST, display_path: str, nodes: list[ast.AST]) -> dict[str, str]:
+    """Collect unique imports while rejecting assignments and conflicting imports.
+
+    Args:
+        tree: Owning module; conditional imports do not establish a binding.
+        display_path: Project-relative source path for relative-import resolution.
+        nodes: Existing module walk shared with candidate checks.
+
+    Returns:
+        Imported local names with one identity and no observed rebinding.
+    """
+    if not isinstance(tree, ast.Module):
+        return {}
+    imported: dict[str, set[str]] = {}
+    direct_imports = {id(statement) for statement in tree.body if isinstance(statement, ast.Import | ast.ImportFrom)}
+    for statement in tree.body:
+        for name, target in _framework_statement_imports(statement, display_path):
+            imported.setdefault(name, set()).add(target)
+    rebound = _framework_rebound_names(nodes, direct_imports)
+    return {name: next(iter(targets)) for name, targets in imported.items() if len(targets) == 1 and name not in rebound}
+
+
+def _framework_statement_imports(statement: ast.AST, display_path: str) -> tuple[tuple[str, str], ...]:
+    """Describe explicit imports without treating an imported leaf as an API hint.
+
+    Args:
+        statement: Direct module statement, which may be an import.
+        display_path: Source path that anchors relative from-imports.
+
+    Returns:
+        Local-name and qualified-identity pairs; unsupported imports return empty.
+    """
+    if isinstance(statement, ast.Import):
+        return tuple(
+            (alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0]) for alias in statement.names
+        )
+    if not isinstance(statement, ast.ImportFrom):
+        return ()
+    module = _framework_import_module(statement, display_path)
+    if not module:
+        return ()
+    return tuple((alias.asname or alias.name, f"{module}.{alias.name}") for alias in statement.names if alias.name != "*")
+
+
+def _framework_import_module(statement: ast.ImportFrom, display_path: str) -> str:
+    """Resolve relative imports only inside the known framework package path.
+
+    Args:
+        statement: From-import whose level and module locate the imported API.
+        display_path: Project-relative module path; source-root prefixes are allowed.
+
+    Returns:
+        Absolute import text or a resolved framework path; unproved paths are empty.
+    """
+    if not statement.level:
+        return statement.module or ""
+    package = PurePosixPath(display_path.replace("\\", "/")).parent.parts
+    if statement.level > len(package):
+        return ""
+    resolved = (*package[: len(package) - statement.level + 1], *(statement.module or "").split("."))
+    for namespace in ("django", "sqlalchemy"):
+        if namespace in resolved:
+            return ".".join(part for part in resolved[resolved.index(namespace) :] if part)
+    return ""
+
+
+def _framework_rebound_names(nodes: list[ast.AST], direct_imports: set[int]) -> set[str]:
+    """Reject source bindings that can replace a framework import.
+
+    Args:
+        nodes: Existing module walk, checked conservatively across scopes.
+        direct_imports: Module import identities; nested imports are unproved.
+
+    Returns:
+        Names assigned, deleted, redeclared, captured or imported in nested scopes.
+    """
+    rebound: set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del):
+            rebound.add(node.id)
+        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store | ast.Del):
+            root = node.value
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name):
+                rebound.add(root.id)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.ExceptHandler | ast.MatchAs | ast.MatchStar) and node.name:
+            rebound.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            rebound.add(node.rest)
+        elif isinstance(node, ast.Import | ast.ImportFrom) and id(node) not in direct_imports:
+            rebound.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
+    return rebound
 
 
 def _is_allowlisted(

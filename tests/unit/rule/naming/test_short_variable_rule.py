@@ -1,5 +1,7 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -91,3 +93,18 @@ def test_function_param_does_not_fire():
     src = "def f(q): return q\n"
     findings = ShortVariableRule().analyse(_unit(src), _ctx())
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    "display_path, exempt",
+    [
+        ("test/helpers.py", True),
+        ("pkg/test/helpers.py", True),
+        ("pkg\\Test\\helpers.py", True),
+        ("testing/helpers.py", False),
+        ("pkg/test_helpers.py", False),
+    ],
+)
+def test_exact_singular_test_directory(display_path: str, exempt: bool) -> None:
+    findings = ShortVariableRule().analyse(_unit("q = 1\n", display_path), _ctx())
+    assert (not findings) is exempt

@@ -26,6 +26,35 @@ _TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset({"fixture", "fixtures"
 # an incidental qualifier such as `test-scan-repos` does not.
 _TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset({"fixture", "fixtures", "test", "tests"})
 _SEQUENTIAL_DIGIT_FIXTURES: frozenset[str] = frozenset({"0123456789", "1234567890"})
+# OpenSSH names its protocol extensions ``name@openssh.com``: certificate and key types, ciphers, MACs, compression,
+# channels, key exchange and SFTP extensions. The list is closed to the exact names observed in the calibration corpus,
+# so any other address at that domain, a person's included, is still reviewed.
+_OPENSSH_PROTOCOL_NAMES: frozenset[str] = frozenset(
+    {
+        "aes128-gcm@openssh.com",
+        "aes256-gcm@openssh.com",
+        "auth-agent-req@openssh.com",
+        "auth-agent@openssh.com",
+        "ecdsa-sha2-nistp256-cert-v01@openssh.com",
+        "ecdsa-sha2-nistp384-cert-v01@openssh.com",
+        "ecdsa-sha2-nistp521-cert-v01@openssh.com",
+        "hmac-sha2-256-etm@openssh.com",
+        "hmac-sha2-512-etm@openssh.com",
+        "kex-strict-c-v00@openssh.com",
+        "posix-rename@openssh.com",
+        "rsa-sha2-256-cert-v01@openssh.com",
+        "rsa-sha2-512-cert-v01@openssh.com",
+        "sk-ecdsa-sha2-nistp256@openssh.com",
+        "sk-ssh-ed25519@openssh.com",
+        "ssh-ed25519-cert-v01@openssh.com",
+        "ssh-rsa-cert-v01@openssh.com",
+        "zlib@openssh.com",
+    }
+)
+# Characters that can extend a written number around a phone-shaped run: digits, grouping commas and a decimal point.
+_NUMBER_CHARACTERS: frozenset[str] = frozenset("0123456789,.")
+# A number grouped in thousands with commas, such as ``1,234,567.1234567``; a phone number is never written this way.
+_COMMA_GROUPED_NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
 _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
     {
         "example.com",
@@ -121,6 +150,9 @@ class PiiTestFixtureRule(SourceTextRule):
             # Reserved domains are safe fixture placeholders rather than third-party PII.
             if _is_placeholder_email_domain(email_match.group("domain")):
                 continue
+            # An exact OpenSSH protocol name only borrows the email shape; it names an algorithm or extension, not a mailbox.
+            if email_address in _OPENSSH_PROTOCOL_NAMES:
+                continue
             findings.append(_build_pii_finding(definition, unit, email_match.start(), "email"))
         # Phone candidates need a plausible shape or an explicit nearby phone label.
         for phone_match in _PHONE_RE.finditer(unit.source):
@@ -201,10 +233,13 @@ def _is_known_non_phone_number(source: str, match: re.Match[str]) -> bool:
         match: Phone-shaped regex match; separator-bearing matches are already phone-like.
 
     Returns:
-        True for decimal fragments, timestamps, and sequential digit fixtures; false for other
-        bare or formatted values.
+        True for runs inside comma-grouped numbers, decimal fragments, timestamps, and sequential
+        digit fixtures; false for other bare or formatted values.
     """
     raw = match.group(0)
+    # A phone-shaped run inside a number grouped in thousands with commas is numeric data, not a contact number.
+    if _is_comma_grouped_number_fragment(source, match):
+        return True
     # Formatted values retain the security signal unless an existing placeholder rule handles them.
     if not raw.isdigit():
         return False
@@ -217,6 +252,26 @@ def _is_known_non_phone_number(source: str, match: re.Match[str]) -> bool:
         return True
     # These measured charset/test-string values are deterministic sequences, not contact numbers.
     return raw in _SEQUENTIAL_DIGIT_FIXTURES
+
+
+def _is_comma_grouped_number_fragment(source: str, match: re.Match[str]) -> bool:
+    """Return whether a phone-shaped match lies inside a number grouped in thousands with commas.
+
+    Args:
+        source: Full fixture text containing the candidate.
+        match: Phone-shaped regex match.
+
+    Returns:
+        True only when the whole written number around the match, without a sign, is comma-grouped
+        with an optional decimal part; any other character inside it keeps the phone signal.
+    """
+    start, end = match.start(), match.end()
+    # Widen to the complete run of digits, commas and points, so the whole written number is judged.
+    while start > 0 and source[start - 1] in _NUMBER_CHARACTERS:
+        start -= 1
+    while end < len(source) and source[end] in _NUMBER_CHARACTERS:
+        end += 1
+    return _COMMA_GROUPED_NUMBER.fullmatch(source[start:end]) is not None
 
 
 def _is_decimal_number_fragment(source: str, match: re.Match[str]) -> bool:

@@ -17,7 +17,9 @@ from gruffpy.rule._python_dynamism import (
     has_framework_decorator,
     is_abstract_method,
     is_overload_stub,
+    is_pluggy_hookspec,
     is_protocol_method_stub,
+    is_type_checking_stub,
 )
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
@@ -96,6 +98,8 @@ def _should_report_empty_function(
     return not (
         is_abstract_method(node)
         or is_overload_stub(node)
+        or is_pluggy_hookspec(node, parents)
+        or is_type_checking_stub(node, parents)
         or is_protocol_method_stub(node, parents)
         or has_framework_decorator(node)
         or _is_test_double_method(parents, display_path)

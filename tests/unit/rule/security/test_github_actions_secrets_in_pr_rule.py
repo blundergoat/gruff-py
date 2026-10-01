@@ -1,11 +1,257 @@
 """Tests for ``security.github-actions-secrets-in-pr``."""
 
+import pytest
+
 from gruffpy.rule.security.github_actions_secrets_in_pr_rule import (
     GithubActionsSecretsInPrRule,
 )
 from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
 _WF = ".github/workflows/pr.yml"
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name != 'pull_request_target'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: ${{ !(github.event_name == 'pull_request_target') }}\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: (github.event_name == 'push' || github.event_name == 'issues')\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues' && inputs.enabled\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    if: inputs.enabled && github.event_name == 'issues'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'PULL_REQUEST_TARGET'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'pull_request_target'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name != 'issues'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: inputs.enabled\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues' || inputs.enabled\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: ${{ github.event_name == 'issues' }} trailing\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues' trailing\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues' &&\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues' && contains(inputs.x, 'x')\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 0\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: !github.event_name == 'issues'\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n    if: github.event_name == 'issues'\n",
+            0,
+        ),
+        (
+            "'jobs':\n  'build':\n    'steps':\n      - 'run': echo ${{ secrets.DEPLOY_TOKEN }}\n        'if': github.event_name == 'issues'\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    steps:\n      - if: github.event_name == 'issues'\n        run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            0,
+        ),
+        (
+            "jobs:\n  build:\n    steps:\n      - run: |\n          if: github.event_name == 'issues'\n          echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    steps:\n      - run: |\n          echo ${{ secrets.DEPLOY_TOKEN }}\n        if: github.event_name == 'issues'\n",
+            0,
+        ),
+        (
+            "env:\n"
+            "  TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n"
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    steps:\n"
+            "      - run: echo ready\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    env:\n"
+            "      TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n"
+            "    steps:\n"
+            "      - if: github.event_name == 'issues'\n"
+            "        run: echo ready\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  safe:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    steps:\n"
+            "      - run: echo ready\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - if: github.event_name == 'issues'\n"
+            "        run: echo ready\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n"
+            "        with:\n"
+            "          if: github.event_name == 'issues'\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    if: inputs.enabled\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    steps:\n"
+            "      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - run: echo ready\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    env: &shared\n"
+            "      TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n"
+            "    steps:\n"
+            "      - run: echo ready\n",
+            1,
+        ),
+        (
+            "jobs:\n  build:\n    if: github.event_name == 'issues'\n    <<: *shared\n    steps:\n      - run: echo ${{ secrets.DEPLOY_TOKEN }}\n",
+            1,
+        ),
+        (
+            "jobs: {build: {if: \"github.event_name == 'issues'\", env: {TOKEN: ${{ secrets.DEPLOY_TOKEN }}}}}\n",
+            1,
+        ),
+        (
+            "jobs:\n"
+            "  build:\n"
+            "    if: github.event_name == 'issues'\n"
+            "    env:\n"
+            "      TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n"
+            "    steps:\n"
+            "      - *shared\n",
+            1,
+        ),
+    ],
+    ids=[
+        "expression github.event_name == 'issues'",
+        "expression github.event_name != 'pull_request_target'",
+        "expression ${{ !(github.event_name == 'pull_request_target') }}",
+        "expression (github.event_name == 'push' || github.event_name == 'issues')",
+        "expression github.event_name == 'issues' && inputs.enabled",
+        "expression inputs.enabled && github.event_name == 'issues'",
+        "expression github.event_name == 'PULL_REQUEST_TARGET'",
+        "expression github.event_name == 'pull_request_target'",
+        "expression github.event_name != 'issues'",
+        "expression inputs.enabled",
+        "expression github.event_name == 'issues' || inputs.enabled",
+        "expression ${{ github.event_name == 'issues' }} trailing",
+        "expression github.event_name == 'issues' trailing",
+        "expression github.event_name == 'issues' &&",
+        "expression github.event_name == 'issues' && contains(inputs.x, 'x')",
+        "expression github.event_name == 0",
+        "expression !github.event_name == 'issues'",
+        "ownership 1",
+        "ownership 2",
+        "ownership 3",
+        "ownership 4",
+        "ownership 5",
+        "ownership 6",
+        "ownership 7",
+        "ownership 8",
+        "ownership 9",
+        "ownership 10",
+        "ownership 11",
+        "ownership 12",
+        "ownership 13",
+        "ownership 14",
+        "ownership 15",
+        "scalar list alias",
+    ],
+)
+def test_own_workflow_event_guard(body: str, expected: int) -> None:
+    """Only own PR-unreachable guards may suppress a source reference."""
+    source = "on:\n  pull_request_target:\n" + body
+    findings = GithubActionsSecretsInPrRule().analyse(make_text_unit(source, _WF), default_ctx())
+    assert len(findings) == expected
 
 
 def test_pr_workflow_with_secret_fires():

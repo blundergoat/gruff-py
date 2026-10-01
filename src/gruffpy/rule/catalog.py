@@ -447,9 +447,10 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "Copy validated keys into an explicit dictionary before `**` expansion, or suppress the reviewed call with the validation contract.",
     ),
     "security.github-actions-secrets-in-pr": (
-        "A secret reference in a pull-request workflow can sit behind a trusted-actor condition that the workflow text scan does not evaluate.",
-        "Move the secret-bearing job to a trusted workflow or suppress the reviewed reference "
-        "only after verifying the actor gate cannot be influenced by the pull request.",
+        "A secret reference can sit behind a trusted-actor gate, an unsupported event condition, "
+        "or ambiguous YAML ownership that the source scan cannot prove.",
+        "An own job or step guard with bounded event-name comparisons can prove PR unreachability; "
+        "otherwise move the secret-bearing job to a trusted workflow or review the unsupported boundary.",
     ),
     "security.hardcoded-bind-all-interfaces": (
         "A containerized service can deliberately bind to all interfaces while an external network policy prevents public exposure.",
