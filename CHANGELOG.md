@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- Private-key warnings retain short opaque bodies; a complete block containing only the explicit `placeholder` word stays quiet.
+
 - Workflow secret warnings skip jobs or steps whose own event guard proves them unreachable for every detected PR event.
 
 - **Imported framework callbacks stop prompting deletion advice** - The private-function rule recognizes Django's formset deletion hook and SQLAlchemy compiler/inspection registrations only when the source proves their imports. Unrelated or rebound names remain reportable.

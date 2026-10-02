@@ -1,8 +1,7 @@
-"""``sensitive-data.private-key`` - PEM-formatted private key header in source.
+"""Warn when a developer scans source containing a private-key header.
 
-Detects ``-----BEGIN <ANY> PRIVATE KEY-----`` for RSA, EC, DSA, ED25519, and
-OpenSSH formats. The header alone is sufficient signal - the rest of the PEM
-body doesn't need to validate to confirm the leak.
+The raw-text check includes incomplete keys and escaped strings so truncated material still receives a warning.
+Only a complete block whose whole body is the word placeholder stays quiet; finding previews contain no key-derived text.
 """
 
 import re
@@ -24,31 +23,25 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 
 _PATTERN = compile_pattern(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
 _PEM_BLOCK_RE = re.compile(
-    r"-----BEGIN[^-]*PRIVATE KEY-----.*?-----END[^-]*PRIVATE KEY-----",
+    r"-----BEGIN (?P<label>[A-Z0-9 ]*PRIVATE KEY)-----(?P<body>.*?)-----END (?P=label)-----",
     re.DOTALL,
 )
-_PEM_ARMOR_RE = re.compile(r"-----[^-]*-----")
-_MIN_REAL_KEY_BODY_LEN = 100
 
 
 class PrivateKeyRule(SourceTextRule):
-    """Detect PEM private-key headers across common key formats.
+    """Report private-key headers when a developer scans repository source.
 
-    Users see the committed header's source line and rotation guidance for RSA, EC, DSA, ED25519,
-    and OpenSSH keys, while the finding preview contains no key-derived text.
+    Use the raw-text stage so incomplete or escaped key material still raises a warning.
+    Findings show the header's source line and rotation guidance, with a redacted preview.
     """
 
     ID = "sensitive-data.private-key"
 
     def definition(self) -> RuleDefinition:
-        """Describe the private-key rule as a high-confidence ERROR.
-
-        A PEM header gives users a high-confidence signal, and error severity reflects the need to
-        remove and rotate a committed private key.
+        """Supply the warning metadata used when a scan finds a possible committed private key.
 
         Returns:
-            Definition for the private-key rule under the sensitive-data
-            pillar.
+            Definition for a high-confidence warning in the sensitive-data pillar.
         """
         return RuleDefinition(
             id=self.ID,
@@ -60,23 +53,20 @@ class PrivateKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag any ``-----BEGIN <ANY> PRIVATE KEY-----`` PEM header in source.
-
-        Users see common key headers without full PEM validation, while short placeholder bodies
-        remain quiet.
+        """Report each private-key header unless its complete block contains only the placeholder example word.
 
         Args:
-            unit: Source file whose raw text is scanned.
-            context: Rule execution context (unused - no thresholds).
+            unit: Source file selected for the scan; empty source produces no findings.
+            context: Scan context supplied by the rule runner; this check uses no configurable thresholds.
 
         Returns:
-            One finding per PEM header occurrence.
+            Warnings for the remaining headers; an empty list means no reportable header was found.
         """
         definition = self.definition()
         findings: list[Finding] = []
         # Every PEM header is reviewed independently so users can rotate each committed key.
         for key_header_match in iter_matches(_PATTERN, unit.source):
-            # Short placeholder bodies remain useful examples and do not require user remediation.
+            # The explicit example word names no credential; short opaque material still reports.
             if _is_placeholder_pem_block(unit.source, key_header_match.start_offset):
                 continue
             findings.append(
@@ -101,13 +91,14 @@ class PrivateKeyRule(SourceTextRule):
 
 
 def _is_placeholder_pem_block(source: str, header_offset: int) -> bool:
-    """Return whether a full PEM block has only a short placeholder body."""
-    # Only the block containing this header can determine whether the user's key is a placeholder.
+    """Recognise the explicit example body before the scan reports this header.
+
+    A missing or incomplete block returns false, so unknown key material still receives a warning.
+    """
+    # Only a block beginning at this header can establish the user's complete placeholder example.
     for block_match in _PEM_BLOCK_RE.finditer(source):
-        # Other PEM blocks in the same file must not suppress this reported header.
-        if not (block_match.start() <= header_offset < block_match.end()):
+        # An enclosing or unrelated block cannot explain away this header's warning.
+        if block_match.start() != header_offset:
             continue
-        body = _PEM_ARMOR_RE.sub("", block_match.group(0))
-        body = re.sub(r"[^A-Za-z0-9+/=]", "", body)
-        return len(body) < _MIN_REAL_KEY_BODY_LEN
+        return block_match.group("body").strip() == "placeholder"
     return False
