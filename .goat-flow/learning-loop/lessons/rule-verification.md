@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-08-06
+last_reviewed: 2026-10-03
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -194,3 +194,140 @@ used `uv run --python 3.11 pytest` without `--isolated --locked --all-extras`.
 uv replaced the repository virtualenv with a runtime-only environment, then
 could not spawn pytest. Reuse the proven isolated command above verbatim; the
 flags protect both dependency coverage and the user's working virtualenv.
+
+## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
+
+**Created:** 2026-05-25
+**Updated:** 2026-06-10
+**Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
+added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
+silently clobbering seeded defaults. The functional change was trivial - two
+membership checks - but the self-check `uv run gruff-py analyse src tests
+--fail-on advisory` then surfaced a new `error`-severity finding:
+`complexity.npath` reporting NPATH 972 (>500 error threshold) on
+`ConfigLoader._apply_allowlists`. Evidence anchors: `src/gruffpy/config/loader.py`
+(search: `_validate_string_list_allowlists`) shows the helper split that brought
+NPATH back below 500. The `complexity.npath` rule was later removed in the
+0.3.0 plan, but the verification lesson still applies: the fix was to extract
+two helpers (`_validate_string_list_allowlists` and `_apply_present_allowlists`)
+so each function's branch count stayed local.
+
+When extending any function that already had multiple `if` guards or `or`/`and`
+short-circuits, run `uv run gruff-py analyse <changed-file> --fail-on advisory`
+before claiming the change is low-impact - NPATH multiplies branches, so each
+new `if` can push a function past the project's own complexity gate. Prefer
+extracting a per-key helper over chaining additional conditionals at the same
+nesting level.
+
+The same trap recurred on 2026-06-05 while fixing
+`test-quality.static-analysis-redundant-test` false positives:
+`scripts/preflight-checks.sh` passed lint, mypy, docs, tests, and build, but the
+Gruff self-check failed on `src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`
+(search: `def _build_class_table`, search: `def _class_decl`) for nested,
+cognitive, and cyclomatic complexity introduced by extra AST rebinding guards.
+The correction was to extract statement-target and class-body collection helpers
+(search: `def _module_bound_names`, search: `def _collect_class_child`) so the
+runtime behaviour stayed covered by the same regression tests while the dogfood
+gate could verify the implementation.
+
+The same trap recurred on 2026-06-10 while adding custom generated-docs text
+for `sensitive-data.pii-test-fixture`: focused tests, ruff, mypy, and docs
+checks passed, but `uv run gruff-py analyse src/ tests/ --fail-on none
+--format json` reported `size.file-length` and `size.function-length` on
+`src/gruffpy/rule/catalog.py` for the then-monolithic `_custom_docs_for` factory.
+The correction was to compact the new `RuleDocs` text so `catalog.py` stayed
+under 1000 lines and that factory stayed at the 100-line threshold; the per-rule
+custom-docs factories have since been extracted to
+`src/gruffpy/rule/catalog_docs.py` (search: `def custom_docs_for`).
+
+The trap recurred during scalar Boolean annotation work: one new
+`BooleanPrefixRule` match arm raised `custom_docs_for` from the allowed
+cyclomatic complexity of 20 to 21 even though focused tests, ruff, mypy, and
+generated-doc checks were green. The correction shares one naming-rule match
+arm and dispatches both naming documentation factories through
+`_naming_rule_docs` (same file), preserving the existing branch count without
+removing either rule card. Before extending a near-threshold dispatcher, share
+an existing family arm or extract a branch-free keyed dispatch, then rerun root
+dogfood.
+
+The same two shapes recurred during cross-module private-function liveness
+work. A separate dead-code catalog arm again raised `custom_docs_for` to 21,
+while one 118-line import/load collector crossed cyclomatic, cognitive,
+maintainability, and function-length thresholds. Sharing the dead-code arm via
+branch-free keyed dispatch and splitting binding collection from attribute/name
+load handling removed all five errors without changing focused outcomes. Treat
+one materialized AST walk as a data boundary, not a reason to keep both
+in-memory processing stages in one function.
+
+## Lesson: Reproduce rule false-positive claims by running `gruff-py analyse` on a crafted fixture
+
+**Created:** 2026-06-04
+**Incident:** Assessing PR #5 coding-agent review claims that the new
+`test-quality.static-analysis-redundant-test` rule emits false positives, the
+agent verified by writing a small crafted test file and running
+`uv run gruff-py analyse <dir> --format json --no-baseline`, then filtering the
+JSON for the rule id. This confirmed four real false positives plus a
+genuine-positive control - far stronger than code-reading alone - and separated a
+real-but-rare bot finding (class-body nested rebind, kept) from a real-but-exotic
+one with an over-broad proposed fix (metaclass hiding a method, fix rejected). The
+first run returned `0` findings and grade A because the scratch path
+`/tmp/gruff_repro` matched gruff-py's default ignore pattern `tmp`: the report
+showed `filesDiscovered: 0`, `exitCode: 0`, `Composite: A (100.00 / 100)` -
+visually identical to a clean pass. Recovered by re-running with
+`--include-ignored`, which parsed the file and flagged all four.
+
+When a review (bot or human) claims a rule fires, misses, or false-positives,
+reproduce it by running `gruff-py analyse` on a minimal crafted fixture and
+reading the findings for that rule id before agreeing or fixing - this is the
+rule-behaviour analog of the `CliRunner` lesson above for CLI claims. Two gotchas:
+(1) put the fixture on a path NOT covered by gruff-py's default ignores (anything
+containing `tmp`, plus gitignored paths) or pass `--include-ignored`, because an
+all-ignored scan reports zero findings, grade A, and exit 0 - check
+`summary.filesParsed`/`filesDiscovered` before trusting a clean result. (2)
+Include a known true-positive control in the fixture so a `0`-findings result
+proves the rule is silent, not that the harness is mis-wired.
+
+**Updated:** 2026-06-10. While implementing
+`test-quality.extends-production-class`, the first CLI true-positive scratch
+used `.goat-flow/scratchpad/0.4.0-M01/test_production_base.py` and returned
+zero target findings even though the source shape was `class TestX(ProductionY)`.
+Reading `src/gruffpy/rule/test_quality/extends_production_class_rule.py`
+(search: `def _is_test_file`) showed the rule only runs for paths under
+`tests/` or a top-level `test_*.py`; a nested filename alone is not enough. The
+scratch repro passed only after moving it to
+`.goat-flow/scratchpad/0.4.0-M01/tests/test_production_base.py`.
+
+When crafting rule repros, mirror the rule's path gate as well as its source
+shape. A true-positive source fixture can still report zero findings when the
+file path prevents the rule from running.
+
+**Updated:** 2026-07-12. The first ambiguous-module CLI proof used `app` and
+`vendor` as duplicate package source roots, but discovery default-ignored the
+latter; only one producer reached the resolver and the expected two LOW
+findings did not appear. Replacing the second temporary root with `lib` made
+the duplicate visible and the full matrix passed. For multi-file ambiguity
+fixtures, verify every intended path appears in discovery (or deliberately use
+`--include-ignored`) before interpreting resolver counts.
+
+## Lesson: Inline parametrize case tables count toward test length
+
+**Created:** 2026-10-03
+**Decision changed:** Put a long parametrize case table in a module-level `_..._CASES` tuple, with readable ids, before running the dogfood self-check.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident:** CI's Gruff self-check failed on 7823c47 and b40d306. Seven of its
+28 findings were errors on three tests whose bodies were short:
+`test_own_workflow_event_guard`, `test_shared_entropy_policy` and
+`test_source_proven_framework_roles` reported `size.function-length` and
+`test-quality.test-function-too-long` at 195 to 242 lines, and one also failed
+`complexity.maintainability-index`. ADR-002 measures a function from its first
+decorator line, so each inline case table counted as test body. Moving the
+tables to module-level constants cleared all seven errors with every pytest
+node id unchanged, and a value-level dump of all collected cases matched before
+and after.
+
+`test-quality.parametrize-annotation` counts only literal tables,
+`src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search: `case_count = len(cases.elts)`),
+so a named constant also stops it asking for `ids=`. Name the rows anyway, with
+`pytest.param(..., id=...)` or a sibling `_..._IDS` tuple, as
+`tests/unit/rule/security/test_github_actions_secrets_in_pr_rule.py` (search: `_OWN_WORKFLOW_EVENT_GUARD_IDS`) does.

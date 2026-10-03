@@ -226,187 +226,185 @@ def test_project_imported_and_registered_private_function_is_live(
     assert _project_findings([producer, consumer]) == []
 
 
-@pytest.mark.parametrize(
-    ("source", "display_path", "exempt"),
-    [
-        pytest.param(
-            "from django.forms.formsets import BaseFormSet\nclass Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
-            "x.py",
-            True,
-            id="django-hook",
-        ),
-        pytest.param(
-            "from django.forms.formsets import BaseFormSet as FormsBase\n"
-            "class Forms(FormsBase):\n"
-            "    def _should_delete_form(self, form): return True\n",
-            "x.py",
-            True,
-            id="django-alias",
-        ),
-        pytest.param(
-            "import django.forms.formsets as forms\nclass Forms(forms.BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
-            "x.py",
-            True,
-            id="django-module-alias",
-        ),
-        pytest.param(
-            "from django.forms.formsets import BaseFormSet\nclass Forms(BaseFormSet):\n    def _unused(self): return True\n",
-            "x.py",
-            False,
-            id="django-other-method",
-        ),
-        pytest.param(
-            "from app import BaseFormSet\nclass Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
-            "x.py",
-            False,
-            id="django-unrelated-base",
-        ),
-        pytest.param("class Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n", "x.py", False, id="django-unbound-base"),
-        pytest.param(
-            "from django.forms.formsets import BaseFormSet\n"
-            "BaseFormSet = object\n"
-            "class Forms(BaseFormSet):\n"
-            "    def _should_delete_form(self, form): return True\n",
-            "x.py",
-            False,
-            id="django-rebound-base",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n", "x.py", True, id="compiler"
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles as register_compiler\n@register_compiler(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            True,
-            id="compiler-alias",
-        ),
-        pytest.param(
-            "import sqlalchemy.ext.compiler as compiler\n@compiler.compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            True,
-            id="compiler-module-alias",
-        ),
-        pytest.param(
-            "import sqlalchemy.ext.compiler\n@sqlalchemy.ext.compiler.compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            True,
-            id="compiler-qualified",
-        ),
-        pytest.param(
-            "from .compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "lib/sqlalchemy/ext/custom.py",
-            True,
-            id="compiler-relative",
-        ),
-        pytest.param(
-            "from app.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n", "x.py", False, id="compiler-lookalike"
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n@compiles\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-bare-decorator",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n"
-            "compiles = lambda item: (lambda fn: fn)\n"
-            "@compiles(Item)\n"
-            "def _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-rebound",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n"
-            "def compiles(item): return lambda fn: fn\n"
-            "@compiles(Item)\n"
-            "def _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-replacement-def",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\ndef outer(compiles):\n    @compiles(Item)\n    def _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-local-parameter",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\ndel compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-deleted",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\nfrom app import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-conflicting-import",
-        ),
-        pytest.param(
-            "if enabled:\n    from sqlalchemy.ext.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-conditional-import",
-        ),
-        pytest.param(
-            "from sqlalchemy import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n", "x.py", True, id="inspection-absolute"
-        ),
-        pytest.param(
-            "from sqlalchemy.inspection import _inspects as inspect_type\n@inspect_type(Item)\ndef _callback(item): return 1\n",
-            "x.py",
-            True,
-            id="inspection-direct-alias",
-        ),
-        pytest.param(
-            "from ... import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
-            "lib/sqlalchemy/ext/asyncio/engine.py",
-            True,
-            id="inspection-relative",
-        ),
-        pytest.param(
-            "from ... import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
-            "lib/app/ext/asyncio/engine.py",
-            False,
-            id="inspection-wrong-relative",
-        ),
-        pytest.param(
-            "from sqlalchemy import inspection\ninspection = object()\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
-            "x.py",
-            False,
-            id="inspection-rebound",
-        ),
-        pytest.param(
-            "from sqlalchemy import inspection\n@inspection()._inspects(Item)\ndef _callback(item): return 1\n",
-            "x.py",
-            False,
-            id="inspection-call-receiver",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n"
-            "try:\n"
-            "    run()\n"
-            "except Exception as compiles:\n"
-            "    pass\n"
-            "@compiles(Item)\n"
-            "def _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-except-binding",
-        ),
-        pytest.param(
-            "from sqlalchemy.ext.compiler import compiles\n"
-            "match value:\n"
-            "    case {'factory': compiles}:\n"
-            "        pass\n"
-            "@compiles(Item)\n"
-            "def _callback(item, compiler): return 1\n",
-            "x.py",
-            False,
-            id="compiler-pattern-binding",
-        ),
-    ],
+_FRAMEWORK_ROLE_CASES = (
+    pytest.param(
+        "from django.forms.formsets import BaseFormSet\nclass Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
+        "x.py",
+        True,
+        id="django-hook",
+    ),
+    pytest.param(
+        "from django.forms.formsets import BaseFormSet as FormsBase\nclass Forms(FormsBase):\n    def _should_delete_form(self, form): return True\n",
+        "x.py",
+        True,
+        id="django-alias",
+    ),
+    pytest.param(
+        "import django.forms.formsets as forms\nclass Forms(forms.BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
+        "x.py",
+        True,
+        id="django-module-alias",
+    ),
+    pytest.param(
+        "from django.forms.formsets import BaseFormSet\nclass Forms(BaseFormSet):\n    def _unused(self): return True\n",
+        "x.py",
+        False,
+        id="django-other-method",
+    ),
+    pytest.param(
+        "from app import BaseFormSet\nclass Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n",
+        "x.py",
+        False,
+        id="django-unrelated-base",
+    ),
+    pytest.param("class Forms(BaseFormSet):\n    def _should_delete_form(self, form): return True\n", "x.py", False, id="django-unbound-base"),
+    pytest.param(
+        "from django.forms.formsets import BaseFormSet\n"
+        "BaseFormSet = object\n"
+        "class Forms(BaseFormSet):\n"
+        "    def _should_delete_form(self, form): return True\n",
+        "x.py",
+        False,
+        id="django-rebound-base",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n", "x.py", True, id="compiler"
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles as register_compiler\n@register_compiler(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        True,
+        id="compiler-alias",
+    ),
+    pytest.param(
+        "import sqlalchemy.ext.compiler as compiler\n@compiler.compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        True,
+        id="compiler-module-alias",
+    ),
+    pytest.param(
+        "import sqlalchemy.ext.compiler\n@sqlalchemy.ext.compiler.compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        True,
+        id="compiler-qualified",
+    ),
+    pytest.param(
+        "from .compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "lib/sqlalchemy/ext/custom.py",
+        True,
+        id="compiler-relative",
+    ),
+    pytest.param(
+        "from app.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n", "x.py", False, id="compiler-lookalike"
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n@compiles\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-bare-decorator",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n"
+        "compiles = lambda item: (lambda fn: fn)\n"
+        "@compiles(Item)\n"
+        "def _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-rebound",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n"
+        "def compiles(item): return lambda fn: fn\n"
+        "@compiles(Item)\n"
+        "def _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-replacement-def",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\ndef outer(compiles):\n    @compiles(Item)\n    def _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-local-parameter",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\ndel compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-deleted",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\nfrom app import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-conflicting-import",
+    ),
+    pytest.param(
+        "if enabled:\n    from sqlalchemy.ext.compiler import compiles\n@compiles(Item)\ndef _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-conditional-import",
+    ),
+    pytest.param(
+        "from sqlalchemy import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n", "x.py", True, id="inspection-absolute"
+    ),
+    pytest.param(
+        "from sqlalchemy.inspection import _inspects as inspect_type\n@inspect_type(Item)\ndef _callback(item): return 1\n",
+        "x.py",
+        True,
+        id="inspection-direct-alias",
+    ),
+    pytest.param(
+        "from ... import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
+        "lib/sqlalchemy/ext/asyncio/engine.py",
+        True,
+        id="inspection-relative",
+    ),
+    pytest.param(
+        "from ... import inspection\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
+        "lib/app/ext/asyncio/engine.py",
+        False,
+        id="inspection-wrong-relative",
+    ),
+    pytest.param(
+        "from sqlalchemy import inspection\ninspection = object()\n@inspection._inspects(Item)\ndef _callback(item): return 1\n",
+        "x.py",
+        False,
+        id="inspection-rebound",
+    ),
+    pytest.param(
+        "from sqlalchemy import inspection\n@inspection()._inspects(Item)\ndef _callback(item): return 1\n",
+        "x.py",
+        False,
+        id="inspection-call-receiver",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n"
+        "try:\n"
+        "    run()\n"
+        "except Exception as compiles:\n"
+        "    pass\n"
+        "@compiles(Item)\n"
+        "def _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-except-binding",
+    ),
+    pytest.param(
+        "from sqlalchemy.ext.compiler import compiles\n"
+        "match value:\n"
+        "    case {'factory': compiles}:\n"
+        "        pass\n"
+        "@compiles(Item)\n"
+        "def _callback(item, compiler): return 1\n",
+        "x.py",
+        False,
+        id="compiler-pattern-binding",
+    ),
 )
+
+
+@pytest.mark.parametrize(("source", "display_path", "exempt"), _FRAMEWORK_ROLE_CASES)
 def test_source_proven_framework_roles(source: str, display_path: str, exempt: bool) -> None:
     """Retain deletion advice unless the observed framework role is imported.
 

@@ -1,11 +1,30 @@
 ---
 category: setup
-last_reviewed: 2026-05-25
+last_reviewed: 2026-10-03
 ---
+
+## Footgun: uv sync can leave editable console scripts stale or missing
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** OBSERVED
+
+After dependency changes, `uv sync --all-extras --dev --locked` can consider the editable
+`gruff-py` package already installed while the `gruff-py` console script is missing from
+`.venv/bin`. Evidence anchors: `scripts/dependency-install.sh` (search:
+`--reinstall-package gruff-py`) and `scripts/dependency-update.sh` (search:
+`--reinstall-package gruff-py`).
+
+The failure mode is that `uv pip list` shows `gruff-py` installed, but
+`uv run gruff-py --version` fails with `Failed to spawn: gruff-py`, breaking
+`scripts/preflight-checks.sh` self-check and performance-smoke tests. Mutating dependency
+syncs should reinstall the local package with `--reinstall-package gruff-py`; non-mutating
+`--check` paths should not use that flag because it intentionally reports a reinstall would
+be needed.
+
+## Resolved Entries
 
 ## Footgun: deleting a rule `.py` file leaves stale `__pycache__/*.pyc` that may keep the rule "registered"
 
-**Status:** active | **Created:** 2026-05-25 | **Evidence:** OBSERVED
+**Status:** resolved | **Created:** 2026-05-25 | **Resolved:** 2026-10-03 | **Evidence:** OBSERVED
 
 hallucination-risk: high (the change you made to `catalog.py` looks correct, the test suite passes for the deleted-rule path, and yet a freshly-run `gruff-py init` keeps emitting the deleted rule's block — easy to misdiagnose as "my edit didn't take" and re-edit unrelated files)
 
@@ -29,24 +48,7 @@ How to avoid:
 
 This trap does not exist in `gruff-php` (PHP has no on-disk bytecode cache by default; OPcache is in-memory and process-bounded).
 
-## Footgun: uv sync can leave editable console scripts stale or missing
-
-**Status:** active | **Created:** 2026-05-24 | **Evidence:** OBSERVED
-
-After dependency changes, `uv sync --all-extras --dev --locked` can consider the editable
-`gruff-py` package already installed while the `gruff-py` console script is missing from
-`.venv/bin`. Evidence anchors: `scripts/dependency-install.sh` (search:
-`--reinstall-package gruff-py`) and `scripts/dependency-update.sh` (search:
-`--reinstall-package gruff-py`).
-
-The failure mode is that `uv pip list` shows `gruff-py` installed, but
-`uv run gruff-py --version` fails with `Failed to spawn: gruff-py`, breaking
-`scripts/preflight-checks.sh` self-check and performance-smoke tests. Mutating dependency
-syncs should reinstall the local package with `--reinstall-package gruff-py`; non-mutating
-`--check` paths should not use that flag because it intentionally reports a reinstall would
-be needed.
-
-## Resolved Entries
+**Resolution (2026-10-03):** the stated mechanism does not reproduce. CPython imports a `__pycache__` `.pyc` only while its source file exists (PEP 3147): on the project's Python 3.12.13, a probe imported `pkg.gone`, moved `gone.py` away, and the next import raised `ModuleNotFoundError` with `gone.cpython-312.pyc` still on disk. Clearing `__pycache__` is harmless but is not the fix, and the 2026-05-25 symptom's real cause was never isolated. If a deleted rule keeps appearing, first prove which code is running: `.goat-flow/learning-loop/lessons/verification.md` (search: `A version check must identify the executable path`), then check the stale editable install described in the uv sync footgun.
 
 ## Footgun: Sibling gruff-go contains scratchpad Go fixtures that are not package files
 

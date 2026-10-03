@@ -15,6 +15,6 @@
   },
   "homepage": "https://github.com/blundergoat/gruff-py#readme",
   "devDependencies": {
-    "@blundergoat/goat-flow": "^1.16.0"
+    "@blundergoat/goat-flow": "^1.17.0"
   }
 }

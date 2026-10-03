@@ -143,6 +143,17 @@ def test_protocol_dunder_parameters_are_not_reported() -> None:
         ("if TYPE_CHECKING:\n    def instance_dict(instance): pass\n", False),
         ("if DEBUG:\n    def instance_dict(instance): ...\n", False),
     ],
+    ids=[
+        "pluggy-hookspec",
+        "hook-name-without-marker",
+        "non-pluggy-marker",
+        "pluggy-marker-ordinary-function",
+        "type-checking-stub",
+        "typing-attribute-async-stub",
+        "type-checking-else-branch",
+        "type-checking-pass-body",
+        "unrelated-guard",
+    ],
 )
 def test_source_proven_declarations(source: str, exempt: bool) -> None:
     findings = UnusedParameterRule().analyse(_unit(source), _ctx())

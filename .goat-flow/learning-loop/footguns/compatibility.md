@@ -1,6 +1,6 @@
 ---
 category: compatibility
-last_reviewed: 2026-08-11
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: Baseline and hotspot schema strings are language-prefixed while every sibling uses the shared `gruff.*` name
@@ -28,10 +28,11 @@ The non-obvious failure mode is that "simplifying" JSON encoding, changing slash
 ## Footgun: hook and analysis `stableIdentity` use different input sets for symbol-less file/project findings
 
 **Status:** active | **Created:** 2026-06-09 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Never compare a hook `stableIdentity` with an analysis `stableIdentity`; carry reviewed findings into hook mode only through a ratified `gruff.baseline.v3` file.
 
-Two identity schemes share the field name `stableIdentity` but diverge. The analysis/report identity (`src/gruffpy/finding/fingerprint.py`, search: `def stable_identity_for`) hashes `[ruleId, file, message]` whenever `symbol is None` (ADR-020). The `gruff.hook.v1` identity (`src/gruffpy/hook_contract.py`, search: `def _hook_stable_identity`) instead hashes `[ruleId, file, scope]` for `file`/`project` scope and only falls back to `message` for `line` scope. So one `size.file-length` finding gets a message-keyed digest in `analyse --format json` and a scope-keyed digest in hook mode.
+Two identity schemes share the field name `stableIdentity` but diverge. The analysis/report identity, `src/gruffpy/finding/fingerprint.py` (search: `def stable_identity_for`), hashes `[ruleId, file, message]` whenever `symbol is None` (ADR-020). The `gruff.hook.v2` identity, `src/gruffpy/hook_contract.py` (search: `def _hook_stable_identity`), instead hashes `[ruleId, file, scope]` for `file`/`project` scope and only falls back to `message` for `line` scope. So one `size.file-length` finding gets a message-keyed digest in `analyse --format json` and a scope-keyed digest in hook mode.
 
-The non-obvious failure mode: feeding an `analyse --format json` report to `gruff-py hook --baseline` should suppress that report's findings, but file/project findings (`size.file-length`, `docs.missing-module-docstring`, `docs.todo-density`, ...) re-surfaced because the analysis digest never matched the hook digest. The hook reader must rebuild the hook identity from each baseline row's fields, not trust the row's `stableIdentity` string: `src/gruffpy/hook_contract.py` (search: `def _stable_identity_from_row`, search: `def _row_scope`) reconstructs scope from the rule id and line exactly as `_scope_for_finding` does, because analysis rows carry no `scope` field. Regression: `tests/integration/test_hook_contract.py` (search: `test_hook_baseline_accepts_analysis_format_json_for_file_scope`). The hook scheme is part of the cross-analyser `gruff.hook.v1` contract, so any sibling port adopting hook mode must use the same `[ruleId, file, scope]` set and the same row-reconstruction bridge.
+The original incident (2026-06-09): feeding an `analyse --format json` report to `gruff-py hook --baseline` re-surfaced file/project findings (`size.file-length`, `docs.missing-module-docstring`, `docs.todo-density`, ...) because the analysis digest never matched the hook digest. A row-reconstruction bridge in the hook reader patched that at the time. That bridge is gone: `src/gruffpy/cli_hook.py` (search: `def _apply_hook_baseline`) now applies only the ratified baseline v3 file that `analyse --generate-baseline` writes, matched by the shared baseline code, and refuses any other schema. `tests/integration/test_hook_contract.py` (search: `test_hook_baseline_refuses_a_document_that_is_not_a_v3_baseline`) proves an analysis report is rejected. Do not restore the bridge to make analysis JSON acceptable again; the divergence itself remains, so any new consumer that joins hook output with analysis output by `stableIdentity` will miss file- and project-scope findings.
 
 ## Footgun: Frozen AnalysisConfig is not deeply immutable
 

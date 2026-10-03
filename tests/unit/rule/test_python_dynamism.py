@@ -27,6 +27,15 @@ def _first_class(source: str) -> ast.ClassDef:
     raise AssertionError("no class")
 
 
+def _parse_with_parents(source: str) -> ast.Module:
+    tree = ast.parse(source)
+    # mirror PythonFileParser._attach_parents
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+    return tree
+
+
 def test_no_decorator_returns_false():
     assert has_framework_decorator(_first_fn("def f(): pass\n")) is False
 
@@ -191,14 +200,22 @@ def test_non_protocol_method_not_stub():
         ("if other.TYPE_CHECKING:\n    def declared(arg): ...\n", "is_type_checking_stub", False),
         ("if TYPE_CHECKING:\n    def declared(arg):\n        ...\n        return None\n", "is_type_checking_stub", False),
     ],
+    ids=[
+        "shadowed-hookspec-marker",
+        "called-type-checking",
+        "aliased-hookspec-marker",
+        "non-literal-hookspec-project",
+        "hookspec-method-not-module-function",
+        "hookspec-with-body",
+        "nested-type-checking-guard",
+        "attribute-type-checking",
+        "type-checking-stub-with-body",
+    ],
 )
 def test_declaration_guard_boundaries(source: str, predicate: str, expected: bool) -> None:
     from gruffpy.rule import _python_dynamism
     from gruffpy.rule.size._lines import parent_chain
 
-    tree = ast.parse(source)
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+    tree = _parse_with_parents(source)
     function = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name in {"pytest_event", "declared"})
     assert getattr(_python_dynamism, predicate)(function, parent_chain(function)) is expected

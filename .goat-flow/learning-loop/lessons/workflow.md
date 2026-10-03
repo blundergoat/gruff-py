@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-08-14
+last_reviewed: 2026-10-03
 ---
 
 ## Lesson: Separate static contract defects from behavioral pressure failures
@@ -150,7 +150,7 @@ multiple-choice options.
 
 **Created:** 2026-06-04
 **Incident:** While reproducing the static-analysis-redundant-test false positives
-(see `.goat-flow/learning-loop/lessons/verification.md`, search: `crafted fixture`), the agent
+(see `.goat-flow/learning-loop/lessons/rule-verification.md` (search: `crafted fixture`)), the agent
 put a heredoc append (`cat >> fixture.py <<'PY' ... PY`) and `rm -rf <dir>` in a
 single Bash command. The `deny-dangerous.sh` PreToolUse guard
 (`.goat-flow/hooks/deny-dangerous.sh`) rejected the whole command for `rm -r without

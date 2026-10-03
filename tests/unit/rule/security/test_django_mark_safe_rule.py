@@ -278,6 +278,7 @@ def test_rebound_join_helpers_keep_warning(body: str) -> None:
         ("import django.utils.html as html", "html.escape"),
         ("from django.utils import html", "html.escape"),
     ],
+    ids=["aliased-escape-import", "aliased-html-module", "html-submodule-import"],
 )
 def test_unmodified_join_helper_aliases_stay_quiet(binding: str, helper: str) -> None:
     src = f"from django.utils.safestring import mark_safe\n{binding}\ndef render(user):\n    return mark_safe(''.join([{helper}(user)]))\n"

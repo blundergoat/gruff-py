@@ -689,6 +689,7 @@ def test_accepted_boolean_name_keeps_exact_publish_index_boundary() -> None:
         ("testing/helpers.py", False),
         ("pkg/test_helpers.py", False),
     ],
+    ids=["root-test-dir", "nested-test-dir", "windows-mixed-case-test-dir", "testing-dir", "test-prefixed-file"],
 )
 def test_exact_singular_test_directory(display_path: str, exempt: bool) -> None:
     findings = BooleanPrefixRule().analyse(_unit("def status() -> bool:\n    return True\n", display_path), _ctx())

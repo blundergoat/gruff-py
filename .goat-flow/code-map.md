@@ -6,7 +6,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 1. `src/gruffpy/cli.py` - entrypoint, command registration, exit-code selection; the shared flag definitions it wires live in `src/gruffpy/cli_options.py`.
 2. `src/gruffpy/rule/registry.py` - what rules exist, how per-unit and project-level rules run, how findings deduplicate.
-3. `src/gruffpy/analysis/schema.py` - the `gruff.analysis.v2` / `gruff-py.baseline.v1` / `gruff-py.hotspot.v1` schema strings used by report models.
+3. `src/gruffpy/analysis/schema.py` - the `gruff.analysis.v3` / `gruff.summary.v3` / `gruff.baseline.v3` / `gruff-py.hotspot.v1` schema strings used by report models.
 4. `src/gruffpy/finding/fingerprint.py` - the PHP-compatible fingerprint algorithm.
 
 ## Source Tree
@@ -19,7 +19,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/suppression/` = tokenizer-backed `# gruff: disable=` / `disable-next=` / `disable-file=` comment parser plus the central post-execution finding filter applied by `src/gruffpy/analysis/runner.py` (ADR-008).
 - `src/gruffpy/__main__.py` = `python -m gruffpy` entrypoint.
 - `src/gruffpy/version.py` = runtime version string shown by the CLI.
-- `src/gruffpy/analysis/` = report, request, runner, diagnostic, baseline, changed-region, and schema models; native analysis is `gruff.analysis.v2`, baseline is `gruff-py.baseline.v1`, and hotspot is `gruff-py.hotspot.v1`. Only the analysis and summary strings are shared with the sibling ports - see `.goat-flow/learning-loop/footguns/compatibility.md` before touching the baseline or hotspot strings.
+- `src/gruffpy/analysis/` = report, request, runner, diagnostic, baseline, changed-region, and schema models; native analysis is `gruff.analysis.v3`, summary is `gruff.summary.v3`, baseline is `gruff.baseline.v3`, and hotspot is `gruff-py.hotspot.v1`. The analysis, summary, and baseline strings are shared with the sibling ports; the hotspot and config strings are gruff-py-only - see `.goat-flow/learning-loop/footguns/compatibility.md` before touching either.
 - `src/gruffpy/command/` = focused command helpers for init/migration, generated rule docs, ignore verdicts, calibration, and the local dashboard server/page.
 - `src/gruffpy/config/` = project config loading in this order: explicit `--config`, modern `.gruff-py.yaml`, legacy `.gruff.yaml`, modern `[tool.gruff-py]`, legacy `[tool.gruff]`, then defaults; rule selection and immutable-style config update helpers live here too.
 - `src/gruffpy/source/` = source file discovery, default ignored directories, lockfile filename filter, configured ignore matching, and `SourceFile` records.
@@ -36,7 +36,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/rule/sensitive_data/` = secrets and PHI/PII scanners; subclass `SourceTextRule` and run on text files as well as Python.
 - `src/gruffpy/rule/test_quality/` = pytest-aware test-smell rules; shared scope-detection cache lives in `_test_quality_node_helper`, project-config rules read `pyproject.toml` once via `_pytest_config`.
 - `src/gruffpy/rule/design/` = project-level design rules such as `design.single-implementor-protocol`.
-- `src/gruffpy/finding/` = finding model, severity/confidence/pillar enums, fail thresholds, output-format enum, and gruff-php-compatible fingerprints.
+- `src/gruffpy/finding/` = finding model, severity/confidence/pillar enums, fail thresholds, output-format enum, gruff-php-compatible fingerprints, and the family-ratified line-free baseline identity in `baseline_identity.py` that baselines and SARIF use.
 - `src/gruffpy/scoring/` = score calculation, grade models, per-pillar scores, and top-offender file scores.
 - `src/gruffpy/reporting/` = text, JSON, HTML, Markdown, GitHub annotation, hotspot, and SARIF renderers plus display-only finding filters.
 
@@ -61,15 +61,16 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.15.1` declaration.
+- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.17.0` declaration.
 - `.agents/skills/` = installed Codex goat-flow skills; `.agents/hooks.json` is a separate shared-agent hook surface.
 - `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
-- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.15.1` declaration.
+- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.17.0` declaration.
 - `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
-- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.15.1` declaration.
+- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.17.0` declaration.
 - `.github/skills/` = installed Copilot goat-flow skills; `.github/hooks/` is that surface's hook directory.
-- `.goat-flow/hooks/` = shared deny-dangerous and gruff-code-quality hook scripts, with policy patterns and self-test under `deny-dangerous/`.
+- `.goat-flow/hooks/` = shared deny-dangerous, deny-git-mutations, gruff-code-quality, and post-turn-safety hook scripts, with policy patterns and self-test under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version, skill-install mode, and hook enablement state.
+- `.goat-flow/security-policy.md` = optional project security policy read by the goat-security skill.
 - `.goat-flow/architecture.md` = cold-path system architecture.
 - `.goat-flow/code-map.md` = this repository map.
 - `.goat-flow/glossary.md` = project vocabulary.
@@ -78,13 +79,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/learning-loop/patterns/` = reusable project approaches.
 - `.goat-flow/learning-loop/decisions/` = ADRs when architectural decisions need durable context.
 - `.goat-flow/skill-docs/` = shared skill contract references.
-- `.goat-flow/skill-docs/playbooks/` = indexed top-level playbooks: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, and `writing-style.md`.
+- `.goat-flow/skill-docs/playbooks/` = indexed top-level playbooks: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `naming-and-placement.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-human-facing-prose.md`, `writing-sentence-diagnostics.md`, and `writing-structure-diagnostics.md`.
 - `.goat-flow/logs/sessions/` = local session continuity logs.
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
-- GOAT Flow package metadata records its internal src/dashboard/views/ HTML view inventory as (about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace); this is installer/reference metadata, not gruff-py source.
 
 All four tracked agent instruction surfaces currently declare GOAT Flow
-`1.15.1`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
+`1.17.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
 `.goat-flow/config.yaml` workspace record, alongside the shared references,
 hooks, and local CLI. Each instruction file stays standalone and owns its own
 skills directory; a declaration here that disagrees with `.goat-flow/config.yaml`

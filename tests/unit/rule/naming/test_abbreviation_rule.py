@@ -117,6 +117,7 @@ def test_dunder_names_are_skipped():
         ("testing/helpers.py", False),
         ("pkg/test_helpers.py", False),
     ],
+    ids=["root-test-dir", "nested-test-dir", "windows-mixed-case-test-dir", "testing-dir", "test-prefixed-file"],
 )
 def test_exact_singular_test_directory(display_path: str, exempt: bool) -> None:
     findings = AbbreviationRule().analyse(_unit("def load_cfg(req):\n    return req\n", display_path), _ctx())

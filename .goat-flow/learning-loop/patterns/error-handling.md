@@ -1,6 +1,6 @@
 ---
 category: error-handling
-last_reviewed: 2026-05-27
+last_reviewed: 2026-10-03
 ---
 
 ## Pattern: Raise a typed exception at the validation layer, convert to `click.ClickException` at the CLI boundary
@@ -13,8 +13,8 @@ traceback. Multiple intermediate layers sit between the detection point and the
 CLI command (in gruff-py: `ConfigLoader` -> `_load_analysis_config` -> `run_analysis`
 -> `_run_analysis_for_cli` -> the Click command body). The temptation to catch
 the exception at the first available layer and convert it to a diagnostic
-record / fallback / silent default *is the wrong shape* (`.goat-flow/learning-loop/footguns/config.md`,
-search: `swallowed into.*RunDiagnostic`).
+record / fallback / silent default *is the wrong shape*
+(`.goat-flow/learning-loop/footguns/config.md` (search: `swallowed into`)).
 
 **Approach:**
 

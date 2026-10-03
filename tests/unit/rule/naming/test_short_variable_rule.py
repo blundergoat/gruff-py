@@ -104,6 +104,7 @@ def test_function_param_does_not_fire():
         ("testing/helpers.py", False),
         ("pkg/test_helpers.py", False),
     ],
+    ids=["root-test-dir", "nested-test-dir", "windows-mixed-case-test-dir", "testing-dir", "test-prefixed-file"],
 )
 def test_exact_singular_test_directory(display_path: str, exempt: bool) -> None:
     findings = ShortVariableRule().analyse(_unit("q = 1\n", display_path), _ctx())

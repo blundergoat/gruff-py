@@ -223,7 +223,7 @@ def test_directories_merely_containing_test_text_are_not_scanned(display_path: s
 _OPENSSH_CERT_TYPE = "ssh-rsa-cert-v01" + "@" + "openssh.com"
 _OPENSSH_SECURITY_KEY_TYPE = "sk-ssh-ed25519" + "@" + "openssh.com"
 _OPENSSH_COMPRESSION = "zlib" + "@" + "openssh.com"
-_GROUPED_DECIMAL = "1,234," + "567.1234567"
+_GROUPED_DECIMAL = "1,234," + "567." + "1234567"
 
 
 def test_listed_openssh_protocol_names_skipped():
