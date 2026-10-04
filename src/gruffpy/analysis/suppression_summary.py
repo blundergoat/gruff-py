@@ -24,7 +24,7 @@ class SuppressionSummary:
         symbol: Optional qualified symbol that narrowed the scope, else ``None``.
         reason: The user's rationale, reproduced from configuration.
         suppressed: Findings this entry removed; ``0`` is a valid, non-failing result.
-        source: ``"built-in"`` on a row the family's lockfile skip produced, else ``None`` on a
+        source: ``"built-in"`` on a row the test-path skip produced, else ``None`` on a
             configured entry's row.
     """
 

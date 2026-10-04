@@ -8,7 +8,7 @@ import pytest
 
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
-from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
+from tests.unit.rule.sensitive_data._helpers import ctx_enabling, default_ctx, make_unit
 
 _PASSWORD = "rem0te" + "Secret!42"
 _URL = f"https://deploy:{_PASSWORD}@api.example.test/v1"
@@ -35,8 +35,14 @@ def test_http_url_with_embedded_password_emits():
     assert len(findings) == 1
 
 
-def test_url_credentials_routes_through_default_registry():
+def test_url_credentials_is_off_in_the_default_registry():
     findings = RuleRegistry.defaults().analyse([make_unit(f"REMOTE = {_URL!r}\n")], default_ctx())
+
+    assert "sensitive-data.url-credentials" not in {finding.rule_id for finding in findings}
+
+
+def test_url_credentials_routes_through_the_registry_once_enabled():
+    findings = RuleRegistry.defaults().analyse([make_unit(f"REMOTE = {_URL!r}\n")], ctx_enabling("sensitive-data.url-credentials"))
     rule_ids = {finding.rule_id for finding in findings}
 
     assert "sensitive-data.url-credentials" in rule_ids

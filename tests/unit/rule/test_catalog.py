@@ -178,7 +178,7 @@ def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
 
 
 def test_selected_security_rules_publish_taxonomy_metadata() -> None:
-    docs = documentation_for_rule("security.sql-concatenation")
+    docs = documentation_for_rule("security.django-raw-sql")
     assert docs.security_metadata["cwe"] == ["CWE-89"]
     assert docs.to_payload()["security"]["securitySeverity"] == "high"
 

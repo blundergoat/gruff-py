@@ -14,7 +14,7 @@ from dataclasses import replace
 
 from gruffpy.parser.analysis_unit import ParseDiagnostic
 from gruffpy.rule.registry import RuleRegistry
-from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
+from tests.unit.rule.sensitive_data._helpers import ctx_enabling, default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"
 # Section 5's grammar is closed: the bare marker, one of the seventeen ratified categories, or a
@@ -28,7 +28,6 @@ _STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
 _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
 _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
 _JWT_SIGNATURE = "abcdef123456" + "abcdef"
-_ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
 _DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
 _URL_CREDENTIAL = "https://deploy:" + "rem0teSecret!42" + "@api.example.test/v1"
 _SSN = "412" + "-78-" + "3491"
@@ -42,7 +41,6 @@ _DANGEROUS_FIXTURE = (
     f"DB = '{_DB_URL}'\n"
     f"REMOTE = '{_URL_CREDENTIAL}'\n"
     f"SSN = '{_SSN}'\n"
-    f"ENTROPY = '{_ENTROPY_VALUE}'\n"
     f"PRIVATE = '{_PRIVATE_KEY_HEADER}'\n"
     "{\n"
     '  "type": "service_account",\n'
@@ -57,14 +55,15 @@ _EXPECTED_RULE_IDS = {
     "sensitive-data.database-url-password",
     "sensitive-data.gcp-service-account-key",
     "sensitive-data.phi-pattern",
-    "sensitive-data.high-entropy-string",
     "sensitive-data.private-key",
     "sensitive-data.url-credentials",
 }
 
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
-    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
+    # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
+    ctx = ctx_enabling("sensitive-data.api-key-pattern", "sensitive-data.url-credentials")
+    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
     sensitive_findings = [finding for finding in findings if finding.rule_id.startswith("sensitive-data.")]
     fired = {finding.rule_id for finding in sensitive_findings}
     missing = _EXPECTED_RULE_IDS - fired
@@ -119,16 +118,3 @@ def test_every_secret_uses_a_zero_payload_marker_from_the_ratified_grammar():
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
     assert aws.metadata["preview"] == "[redacted:aws-access-key]"
     assert _MARKER_GRAMMAR.match(aws.metadata["preview"]) is not None
-
-
-def test_npm_integrity_style_hashes_suppressed():
-    """package-lock.json content is ignored at the discovery layer via the lockfile filter."""
-    # This unit test cannot exercise the lockfile filter owned by discovery.
-
-    # A high-entropy hash in non-lockfile content is the positive control and must still produce
-    # a finding.
-    hash_value = _ENTROPY_VALUE + "abcdef0123456789"
-    src = f"sha512 = {hash_value!r}\n"
-    findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
-    high_entropy = [f for f in findings if f.rule_id == "sensitive-data.high-entropy-string"]
-    assert len(high_entropy) >= 1

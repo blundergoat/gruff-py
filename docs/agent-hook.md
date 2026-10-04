@@ -35,12 +35,9 @@ written against `gruff.analysis.v3` cannot read hook rows unchanged.
 For a configured entry, `suppressed` is `0` when it matched nothing, so its row
 means the exclusion is configured, not that it silenced anything.
 
-The hook also carries the built-in rows the analysis publishes, after the
-configured ones, each with `source: "built-in"`: one per package-manager
-lockfile whose `sensitive-data.high-entropy-string` findings the lockfile skip
-removed, then one per file and rule the test-path skip removed, because every
-sensitive-data rule except `sensitive-data.pii-test-fixture` skips test, fixture
-and example files.
+The hook also carries the built-in rows the analysis publishes, after the configured ones, each with `source: "built-in"`: one per file
+and rule the test-path skip removed, because every sensitive-data rule except `sensitive-data.pii-test-fixture` skips test, fixture and
+example files.
 
 `--changed-ranges` scopes `hook` at the finding's own reported span: a finding is
 returned when its `line..endLine` intersects a changed range, and whole-file or

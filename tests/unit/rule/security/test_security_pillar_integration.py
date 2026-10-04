@@ -1,7 +1,7 @@
 """Cumulative security-pillar fixture + safe-equivalent regression set."""
 
 from gruffpy.rule.registry import RuleRegistry
-from tests.unit.rule.security._helpers import default_ctx, make_unit
+from tests.unit.rule.security._helpers import ctx_enabling, make_unit
 
 _DANGEROUS_FIXTURE = """import hashlib
 import jinja2
@@ -73,7 +73,6 @@ _EXPECTED_RULE_IDS = {
     "security.cors-wildcard-with-credentials",
     "security.dangerous-function-call",
     "security.disabled-ssl-verification",
-    "security.django-mark-safe",
     "security.django-raw-sql",
     "security.error-suppression",
     "security.extract-compact-user-input",
@@ -89,7 +88,6 @@ _EXPECTED_RULE_IDS = {
     "security.path-traversal",
     "security.shell-injection",
     "security.silent-except",
-    "security.sql-concatenation",
     "security.ssrf",
     "security.unsafe-pickle",
     "security.unsafe-yaml-load",
@@ -99,7 +97,9 @@ _EXPECTED_RULE_IDS = {
 
 
 def test_every_dangerous_rule_fires():
-    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
+    # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
+    ctx = ctx_enabling("security.django-raw-sql", "security.shell-injection")
+    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
     rule_ids = {f.rule_id for f in findings}
     missing = _EXPECTED_RULE_IDS - rule_ids
     assert not missing, f"Missing fires: {sorted(missing)}"
@@ -111,6 +111,8 @@ import secrets
 import subprocess
 import yaml
 
+from django.db.models.expressions import RawSQL
+
 
 def process(items):
     """Safe equivalents - every line is the recommended alternative."""
@@ -120,23 +122,27 @@ def process(items):
     digest = hashlib.sha256(items["content"]).hexdigest()
     token = secrets.token_hex(32)
     subprocess.run(["ls", "-la"])
+    rows = Model.objects.raw("SELECT * FROM t WHERE id = %s", [items["id"]])
+    total = RawSQL("SUM(x) WHERE id = %s", [items["id"]])
     try:
         risky()
     except KeyError:
         handle_missing()
-    return digest, token
+    return digest, token, rows, total
 '''
 
 
 def test_safe_equivalents_emit_no_security_findings():
-    findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], default_ctx())
+    # The two off-by-default rules run here too, so their safe forms (list-argument subprocess, parameterised raw SQL) stay checked.
+    ctx = ctx_enabling("security.django-raw-sql", "security.shell-injection")
+    findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], ctx)
     security_findings = [f for f in findings if f.rule_id.startswith("security.")]
     assert security_findings == [], f"Safe fixture should not trigger security rules: {[(f.rule_id, f.message) for f in security_findings]}"
 
 
 def test_security_registry_has_expected_rule_count():
     ids = {rule.definition().id for rule in RuleRegistry.defaults().all() if rule.definition().id.startswith("security.")}
-    assert len(ids) == 35
+    assert len(ids) == 33
     assert _EXPECTED_RULE_IDS.issubset(ids)
     assert {
         "security.dependency-git-reference",

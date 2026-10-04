@@ -3,7 +3,6 @@
 import ast
 
 from gruffpy.rule.security._security_node_helper import (
-    fixed_string_fragments,
     is_fixed_string_expression,
     module_string_constants,
 )
@@ -69,13 +68,3 @@ def test_fixed_string_expression_rejects_runtime_material() -> None:
     assert not is_fixed_string_expression(_expr('plugin_package + ".loader"'), constants)
     assert not is_fixed_string_expression(_expr('f"{PLUGIN_PACKAGE!r}.loader"'), constants)
     assert not is_fixed_string_expression(_expr('f"{PLUGIN_PACKAGE:>12}.loader"'), constants)
-
-
-def test_fixed_string_fragments_preserves_runtime_context() -> None:
-    constants = {"TABLE_PREFIX": "shop"}
-
-    assert fixed_string_fragments(_expr('f"SELECT * FROM {TABLE_PREFIX}_orders WHERE id = {oid}"'), constants) == (
-        "SELECT * FROM ",
-        "shop",
-        "_orders WHERE id = ",
-    )

@@ -437,6 +437,10 @@ before accepting or rejecting it. Fixed by walking module scope with
 function/class/lambda bodies pruned and invalidating every Store-context
 ALL-CAPS name outside its recording assignment (search:
 `_module_scope_rebound_names`).
+`security.sql-concatenation` was retired in 0.6.0 (ADR-029); the collector
+still feeds `security.variable-import`
+(`src/gruffpy/rule/security/variable_import_rule.py`, search:
+`module_string_constants(unit.tree)`).
 
 When an allowlist depends on "single assignment at module scope", iterating
 `tree.body` alone is not single-assignment proof: rebinds hide in nested

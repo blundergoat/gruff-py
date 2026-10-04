@@ -53,7 +53,6 @@ from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.suppression.sensitive_exclusion_filter import (
-    apply_built_in_lockfile_skip,
     apply_built_in_test_path_skip,
     partition_sensitive_exclusions,
 )
@@ -253,8 +252,6 @@ def _name_findings(
     # exactly like the inline directive channel, and every drop is counted for the report.
     findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
     # A configured entry claims its findings first, so its count stays what the user wrote it for.
-    findings, suppressions = apply_built_in_lockfile_skip(findings, suppressions)
-    # The lockfile skip runs first, so ``tests/uv.lock`` gets one audit row, not two.
     findings, suppressions = apply_built_in_test_path_skip(findings, suppressions)
     # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
     # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.

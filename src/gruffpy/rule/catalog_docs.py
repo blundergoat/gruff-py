@@ -13,7 +13,6 @@ from typing import Any
 from gruffpy.rule.correctness.substring_vocabulary_match_rule import SubstringVocabularyMatchRule
 from gruffpy.rule.correctness.unsafe_numeric_coercion_rule import UnsafeNumericCoercionRule
 from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
-from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
@@ -25,7 +24,6 @@ from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
-from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
     UnsanitizedMarkdownInterpolationRule,
 )
@@ -160,8 +158,8 @@ def custom_docs_for(
             return _security_rule_docs(definition.id, config_keys)
         case RuntimeSysPathMutationRule.ID:
             return _runtime_sys_path_mutation_docs(config_keys)
-        case ExportedButUnreferencedRule.ID | UnusedPrivateFunctionRule.ID:
-            return _dead_code_rule_docs(definition.id, config_keys)
+        case ExportedButUnreferencedRule.ID:
+            return _exported_but_unreferenced_docs(config_keys)
         case ApiKeyPatternRule.ID:
             return _api_key_pattern_docs(config_keys)
         case GcpServiceAccountKeyRule.ID:
@@ -180,8 +178,6 @@ def custom_docs_for(
             return _test_quality_rule_docs(definition.id, config_keys)
         case CommentedOutCodeRule.ID:
             return _commented_out_code_docs(config_keys)
-        case SqlConcatenationRule.ID:
-            return _sql_concatenation_docs(config_keys, definition.id)
         case IgnoreDirectiveReasonRule.ID:
             return _ignore_directive_reason_docs(config_keys)
         case DataclassAttributesRule.ID:
@@ -380,63 +376,6 @@ def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             ),
         ),
     )
-
-
-def _unused_private_function_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Explain when users can trust or configure private-function findings.
-
-    Args:
-        config_keys: Public settings shown in generated docs; empty means none.
-
-    Returns:
-        Curated guidance for interpreting and resolving this rule's findings.
-    """
-    return RuleDocs(
-        rationale=(
-            "A private function with no local caller may still be live through "
-            "another module's callback registry. Full-project scans therefore "
-            "require a real load after an unambiguously resolved import; narrow "
-            "scans omit module-level deletion advice because external callers "
-            "are outside the evidence boundary."
-        ),
-        fix_guidance=(
-            "Delete a genuinely unused function or add the real caller. For "
-            "framework, plugin, or string-based loading that static imports cannot "
-            "prove, use allowlists.deadCode.symbols, decorators, or paths with the "
-            "project's documented reason."
-        ),
-        bad_example=("`def _legacy_handler(): ...` with no local call and no loaded import anywhere in a full-project scan."),
-        good_example=("`from handlers import _format_failed; REGISTRY['failed'] = _format_failed` in another scanned module."),
-        confidence_rationale=(
-            "Medium confidence when full-project import coverage is complete; "
-            "LOW when a real load maps to duplicate scanned module paths. "
-            "Private methods retain class-local evidence in every scan scope."
-        ),
-        config_keys=config_keys,
-        false_positive_shapes=(
-            FalsePositiveShape(
-                shape=("A framework or plugin loads the private function dynamically through a string, entry point, or unscanned external package."),
-                mitigation=("Add the exact symbol, framework decorator, or path to allowlists.deadCode rather than adding a fake static caller."),
-            ),
-        ),
-    )
-
-
-def _dead_code_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
-    """Dispatch one project-scope dead-code card without growing catalog branching.
-
-    Args:
-        rule_id: Matched dead-code rule id; empty or unknown ids never reach here.
-        config_keys: Public settings shown in generated docs; empty means none.
-
-    Returns:
-        Curated guidance for the matched project-scope dead-code rule.
-    """
-    documentation_factory = {
-        ExportedButUnreferencedRule.ID: _exported_but_unreferenced_docs,
-        UnusedPrivateFunctionRule.ID: _unused_private_function_docs,
-    }[rule_id]
-    return documentation_factory(config_keys)
 
 
 def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
@@ -829,18 +768,6 @@ def _commented_out_code_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "Low confidence: source-comment tokens pass a cheap code-like prefilter and parser confirmation, but prose can still resemble Python."
         ),
         config_keys=config_keys,
-    )
-
-
-def _sql_concatenation_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
-    return RuleDocs(
-        rationale="Dynamic SQL is hard to verify safely without focused sink gates.",
-        fix_guidance="Use driver parameters; validate dynamic SQL structure separately.",
-        bad_example='`cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`',
-        good_example="`cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`",
-        confidence_rationale="Medium confidence: keyword, constant, and SQLAlchemy gates.",
-        config_keys=config_keys,
-        security_metadata=rule_security_metadata(rule_id),
     )
 
 

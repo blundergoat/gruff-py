@@ -237,8 +237,8 @@ lives in the inner body. Code that handles the split by skipping the store
 keeps only the outer answer, so every later load in that body resolves to the
 outer import as if the store never ran.
 
-`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py`,
-search: `def _build_binding_events`) did exactly that: a `continue` dropped any
+`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py` at `4a6eb32`,
+search: `def _build_binding_events`; the module was removed with the rule in 0.6.0, ADR-029) did exactly that: a `continue` dropped any
 store whose name appeared in `_externally_declared_names`. Four shapes of
 `dead-code.unused-private-function` finding went missing, measured against the
 registry path - `global` then store then load in one function; the same at
@@ -258,10 +258,10 @@ same name.
 Mitigation: record the store in the declaring scope, and give the resolver the
 declared-name map so a load with no store ordered before it keeps walking
 outward instead of reading the name as a local
-(`_active_binding`, search: `def _active_binding`). Cover both directions -
+(`_active_binding` at `4a6eb32`, search: `def _active_binding`). Cover both directions -
 loads the store precedes, and loads it cannot be ordered against. Regression
-coverage lives in
-`tests/unit/rule/dead_code/test_unused_private_function_rule.py` (search:
+coverage lived in
+`tests/unit/rule/dead_code/test_unused_private_function_rule.py` at `4a6eb32` (search:
 `test_project_global_store_before_a_later_load_hides_the_import` and
 `test_project_global_store_does_not_reach_a_module_level_load`).
 

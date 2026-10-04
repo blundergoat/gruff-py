@@ -272,21 +272,6 @@ def is_fixed_string_expression(node: ast.expr, constants: Mapping[str, str]) -> 
     return _fixed_string_value(node, constants) is not None
 
 
-def fixed_string_fragments(node: ast.expr, constants: Mapping[str, str]) -> tuple[str, ...]:
-    """Return fixed string fragments visible inside *node*.
-
-    Args:
-        node: Expression to inspect.
-        constants: Same-module string constants from :func:`module_string_constants`.
-
-    Returns:
-        Literal and constant string fragments found in stable traversal order.
-    """
-    fragments: list[str] = []
-    _collect_fixed_string_fragments(node, constants, fragments)
-    return tuple(fragments)
-
-
 def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -365,41 +350,6 @@ def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[s
         return values
     fixed = _fixed_string_value(node, constants)
     return None if fixed is None else [fixed]
-
-
-def _collect_fixed_string_fragments(
-    node: ast.expr,
-    constants: Mapping[str, str],
-    fragments: list[str],
-) -> None:
-    """Collect only compile-time string fragments from dynamic string builders.
-
-    The branch structure mirrors Python's common string-building AST shapes:
-    f-strings, `+` concatenation, and `.format(...)`. Runtime holes are visited
-    only to recover nested fixed fragments; callers use the resulting keyword
-    evidence without treating dynamic values as safe.
-    """
-    fixed = _fixed_string_value(node, constants)
-    if fixed is not None:
-        fragments.append(fixed)
-        return
-    if isinstance(node, ast.JoinedStr):
-        for value in node.values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                fragments.append(value.value)
-            elif isinstance(value, ast.FormattedValue):
-                _collect_fixed_string_fragments(value.value, constants, fragments)
-        return
-    if isinstance(node, ast.BinOp):
-        _collect_fixed_string_fragments(node.left, constants, fragments)
-        _collect_fixed_string_fragments(node.right, constants, fragments)
-        return
-    if _is_format_call(node) and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        _collect_fixed_string_fragments(node.func.value, constants, fragments)
-        for arg in node.args:
-            _collect_fixed_string_fragments(arg, constants, fragments)
-        for keyword in node.keywords:
-            _collect_fixed_string_fragments(keyword.value, constants, fragments)
 
 
 def is_dynamic_string(node: ast.expr) -> bool:

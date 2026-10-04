@@ -51,7 +51,7 @@ def test_raw_in_non_django_file_skipped():
 
 
 def test_cursor_execute_dynamic_not_duplicated():
-    """cursor.execute(dynamic) is sql-concatenation's territory; this rule must not fire."""
+    """cursor.execute(dynamic) is outside this rule; it must not fire (no rule has covered it since 0.6.0, ADR-029)."""
     src = (
         "from django.db import connection\n"
         "def search(val):\n"

@@ -28,7 +28,7 @@ from gruffpy.reporting.sarif_reporter import SarifReporter
 from gruffpy.reporting.text_reporter import TextReporter
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
-from tests.unit.rule.security._helpers import default_ctx, make_text_unit
+from tests.unit.rule.security._helpers import ctx_enabling, default_ctx, make_text_unit
 
 
 @dataclass(frozen=True, slots=True)
@@ -606,10 +606,10 @@ def test_sarif_reporter_projects_finding_remediation_and_metadata() -> None:
 
 def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     finding = _finding(
-        rule_id="security.sql-concatenation",
+        rule_id="security.django-raw-sql",
         message="SQL placeholder is quoted.",
         metadata={
-            "target": "cursor.execute",
+            "target": "QuerySet.raw",
             "cwe": ["CWE-89"],
             "owasp": ["A03:2021-Injection"],
             "securitySeverity": "high",
@@ -622,7 +622,7 @@ def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
     rules = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}
     result = run["results"][0]
 
-    assert rules["security.sql-concatenation"]["properties"]["documentation"]["security"] == {
+    assert rules["security.django-raw-sql"]["properties"]["documentation"]["security"] == {
         "cwe": ["CWE-89"],
         "owasp": ["A03:2021-Injection"],
         "securitySeverity": "high",
@@ -739,7 +739,8 @@ def _sensitive_data_findings() -> list[Finding]:
         finding
         for finding in RuleRegistry.defaults().analyse(
             [make_text_unit(source, "secrets.env")],
-            default_ctx(),
+            # Two of these rules ship off by default (ADR-029); the leak check must still see their findings.
+            ctx_enabling("sensitive-data.api-key-pattern", "sensitive-data.url-credentials"),
         )
         if finding.rule_id.startswith("sensitive-data.")
     ]

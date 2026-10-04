@@ -47,6 +47,8 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            # Off unless a project enables it: wrong on its only judged finding in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

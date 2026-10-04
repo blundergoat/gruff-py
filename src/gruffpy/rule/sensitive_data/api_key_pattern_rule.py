@@ -78,6 +78,8 @@ class ApiKeyPatternRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: wrong on all 5 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -127,18 +129,6 @@ def _identify_vendor(api_key: str) -> str:
         if compile_pattern(f"^{vendor_pattern}$").match(api_key):
             return "slack" if vendor_name == "slack_webhook" else vendor_name
     return "unknown"
-
-
-def contains_provider_api_key(text: str) -> bool:
-    """Return whether *text* contains one of the provider API-key shapes.
-
-    Args:
-        text: Candidate raw source fragment or entropy candidate to inspect.
-
-    Returns:
-        True when the fragment includes a known provider API-key pattern.
-    """
-    return _PATTERN.search(text) is not None
 
 
 def _display_vendor(vendor: str) -> str:

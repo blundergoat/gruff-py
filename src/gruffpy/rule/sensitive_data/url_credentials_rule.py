@@ -58,6 +58,8 @@ class UrlCredentialsRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: wrong on all 3 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

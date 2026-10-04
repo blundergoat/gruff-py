@@ -4,7 +4,6 @@ Fixtures cover supported vendor shapes, placeholders, deduplication, fixed previ
 provider label a user needs when choosing a credential-rotation workflow.
 """
 
-from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
@@ -110,16 +109,6 @@ def test_provider_metadata_and_message_do_not_leak_raw_key():
         "preview": "[redacted:google-api-key]",
         "vendor": "google",
     }
-
-
-def test_provider_api_key_is_not_duplicated_by_high_entropy_rule():
-    src = f"GOOGLE_API_KEY = {_GOOGLE_API_KEY!r}\n"
-
-    findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
-    rule_ids = [finding.rule_id for finding in findings]
-
-    assert rule_ids.count("sensitive-data.api-key-pattern") == 1
-    assert "sensitive-data.high-entropy-string" not in rule_ids
 
 
 def test_unrelated_string_skipped():

@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.6.0` registers 130 rules across 12 pillars in `RuleRegistry.defaults()`.
+gruff-py `0.6.0` registers 125 rules across 12 pillars in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -13,12 +13,12 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `correctness` | 2 | Mechanically detectable runtime-defect shapes |
-| `dead-code` | 11 | Unused and waste-oriented rules |
+| `dead-code` | 9 | Unused and waste-oriented rules |
 | `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 35 | Heuristic AST-level dangerous patterns |
-| `sensitive-data` | 11 | Secret, key, PII, and PHI patterns |
+| `security` | 33 | Heuristic AST-level dangerous patterns |
+| `sensitive-data` | 10 | Secret, key, PII, and PHI patterns |
 | `test-quality` | 34 | Pytest-aware test smells and project config checks |
 | `design` | 2 | Project-level abstraction and runtime import-path checks |
 
@@ -51,7 +51,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 - `dead-code.exported-but-unreferenced` (default off)
 - `dead-code.unused-private-attribute`
-- `dead-code.unused-private-function`
 - `waste.commented-out-code`
 - `waste.empty-class`
 - `waste.empty-function`
@@ -59,7 +58,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `waste.redundant-variable`
 - `waste.unreachable-code`
 - `waste.unused-import`
-- `waste.unused-parameter`
 
 ### Modernisation
 
@@ -101,15 +99,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.dependency-local-path`
 - `security.dependency-url-reference`
 - `security.disabled-ssl-verification`
-- `security.django-mark-safe`
-- `security.django-raw-sql`
+- `security.django-raw-sql` (default off)
 - `security.error-suppression`
 - `security.extract-compact-user-input`
 - `security.flask-debug-enabled`
 - `security.github-actions-broad-permissions`
 - `security.github-actions-pull-request-target`
 - `security.github-actions-remote-shell`
-- `security.github-actions-secrets-in-pr`
+- `security.github-actions-secrets-in-pr` (default off)
 - `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
@@ -120,9 +117,8 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.jinja2-autoescape-off`
 - `security.paramiko-no-host-key-check`
 - `security.path-traversal`
-- `security.shell-injection`
+- `security.shell-injection` (default off)
 - `security.silent-except`
-- `security.sql-concatenation`
 - `security.ssrf`
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load`
@@ -133,17 +129,16 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 ### Sensitive Data
 
-- `sensitive-data.api-key-pattern`
+- `sensitive-data.api-key-pattern` (default off)
 - `sensitive-data.aws-access-key`
 - `sensitive-data.database-url-password`
 - `sensitive-data.gcp-service-account-key`
 - `sensitive-data.hardcoded-env-value`
-- `sensitive-data.high-entropy-string`
 - `sensitive-data.jwt-token`
 - `sensitive-data.phi-pattern`
 - `sensitive-data.pii-test-fixture`
 - `sensitive-data.private-key`
-- `sensitive-data.url-credentials`
+- `sensitive-data.url-credentials` (default off)
 
 ### Test Quality
 
@@ -357,23 +352,6 @@ except ValueError:
     Mitigation: Keep an explicit read when practical, or suppress `dead-code.unused-private-attribute` with a reason at the reviewed declaration.
 - Bad example: Code that triggers `dead-code.unused-private-attribute` leaves unused private attribute unaddressed.
 - Good example: Code that satisfies `dead-code.unused-private-attribute` makes unused private attribute explicit or simpler.
-
-### `dead-code.unused-private-function`
-
-- Name: Unused private function
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: A private function with no local caller may still be live through another module's callback registry. Full-project scans therefore require a real load after an unambiguously resolved import; narrow scans omit module-level deletion advice because external callers are outside the evidence boundary.
-- Fix guidance: Delete a genuinely unused function or add the real caller. For framework, plugin, or string-based loading that static imports cannot prove, use allowlists.deadCode.symbols, decorators, or paths with the project's documented reason.
-- Confidence rationale: Medium confidence when full-project import coverage is complete; LOW when a real load maps to duplicate scanned module paths. Private methods retain class-local evidence in every scan scope.
-- Common false-positive shapes:
-  - A framework or plugin loads the private function dynamically through a string, entry point, or unscanned external package.
-    Mitigation: Add the exact symbol, framework decorator, or path to allowlists.deadCode rather than adding a fake static caller.
-- Bad example: `def _legacy_handler(): ...` with no local call and no loaded import anywhere in a full-project scan.
-- Good example: `from handlers import _format_failed; REGISTRY['failed'] = _format_failed` in another scanned module.
 
 ### `design.runtime-sys-path-mutation`
 
@@ -887,24 +865,6 @@ except ValueError:
 - Bad example: Code that triggers `security.disabled-ssl-verification` leaves disabled ssl verification unaddressed.
 - Good example: Code that satisfies `security.disabled-ssl-verification` makes disabled ssl verification explicit or simpler.
 
-### `security.django-mark-safe`
-
-- Name: Django mark_safe on dynamic content
-- Pillar: `security`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `security.django-mark-safe` protects the security pillar by flagging django mark_safe on dynamic content before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported django mark_safe on dynamic content directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Security metadata: `cwe` = `['CWE-79']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'medium'`
-- Common false-positive shapes:
-  - A dynamic value can already be safe by an upstream validation or trusted-type contract that is not a wrapping escape call in the inspected expression.
-    Mitigation: Pass the value through an explicit escaping helper or `format_html`, or suppress the reviewed sink with the upstream safety reason.
-- Bad example: Code that triggers `security.django-mark-safe` leaves django mark_safe on dynamic content unaddressed.
-- Good example: Code that satisfies `security.django-mark-safe` makes django mark_safe on dynamic content explicit or simpler.
-
 ### `security.django-raw-sql`
 
 - Name: Django raw SQL with dynamic string
@@ -912,7 +872,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.django-raw-sql` protects the security pillar by flagging django raw sql with dynamic string before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported django raw sql with dynamic string directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
@@ -1021,7 +981,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.github-actions-secrets-in-pr` protects the security pillar by flagging repository secret in a pull_request_target workflow before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported repository secret in a pull_request_target workflow directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -1199,7 +1159,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.shell-injection` protects the security pillar by flagging shell injection before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported shell injection directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
@@ -1219,24 +1179,6 @@ except ValueError:
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `security.silent-except` leaves silent except unaddressed.
 - Good example: Code that satisfies `security.silent-except` makes silent except explicit or simpler.
-
-### `security.sql-concatenation`
-
-- Name: SQL concatenation
-- Pillar: `security`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: Dynamic SQL is hard to verify safely without focused sink gates.
-- Fix guidance: Use driver parameters; validate dynamic SQL structure separately.
-- Confidence rationale: Medium confidence: keyword, constant, and SQLAlchemy gates.
-- Security metadata: `cwe` = `['CWE-89']`, `owasp` = `['A03:2021-Injection']`, `securitySeverity` = `'high'`
-- Common false-positive shapes:
-  - A SQL identifier selected from a strict allowlist cannot be bound as a DB-API value, but its interpolation still looks like user-controlled query structure.
-    Mitigation: Map the choice to predeclared literal statements and bind all values, or suppress the reviewed identifier interpolation with its allowlist evidence.
-- Bad example: `cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`
-- Good example: `cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`
 
 ### `security.ssrf`
 
@@ -1361,7 +1303,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: Provider-prefixed API keys are high-signal credential leaks; keeping them under one rule avoids provider-specific config churn while the `vendor` metadata tells reviewers which console to rotate in.
 - Fix guidance: Rotate the key with the provider, remove it from source, and load it from a secret manager or environment-specific runtime configuration.
 - Confidence rationale: High confidence: each match requires a provider-specific prefix and minimum token length, with dummy/example placeholders skipped.
@@ -1426,24 +1368,6 @@ except ValueError:
     Mitigation: Rename the non-secret key or move the value to runtime configuration so the env-file assignment no longer resembles committed secret material.
 - Bad example: Code that triggers `sensitive-data.hardcoded-env-value` leaves hardcoded env-file secret unaddressed.
 - Good example: Code that satisfies `sensitive-data.hardcoded-env-value` makes hardcoded env-file secret explicit or simpler.
-
-### `sensitive-data.high-entropy-string`
-
-- Name: High-entropy string
-- Pillar: `sensitive-data`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `sensitive-data.high-entropy-string` protects the sensitive-data pillar by flagging high-entropy string before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported high-entropy string directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Named thresholds: `entropy` = `4.2`, `minLength` = `32`
-- Common false-positive shapes:
-  - A legitimate random-looking test vector, checksum, or opaque constant outside the built-in identifier and path exclusions can exceed the entropy boundary.
-    Mitigation: Replace fixtures with a recognizable placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and path.
-- Bad example: Code that triggers `sensitive-data.high-entropy-string` leaves high-entropy string unaddressed.
-- Good example: Code that satisfies `sensitive-data.high-entropy-string` makes high-entropy string explicit or simpler.
 
 ### `sensitive-data.jwt-token`
 
@@ -1514,7 +1438,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts.
 - Fix guidance: Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store.
 - Confidence rationale: High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`.
@@ -2318,23 +2242,6 @@ def test_parse(text): assert parse(text)`
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `waste.unused-import` leaves unused import unaddressed.
 - Good example: Code that satisfies `waste.unused-import` makes unused import explicit or simpler.
-
-### `waste.unused-parameter`
-
-- Name: Unused parameter
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `waste.unused-parameter` protects the dead-code pillar by flagging unused parameter before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported unused parameter directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - An unrecognized callback or protocol can require a parameter that is consumed indirectly through `locals()` or reflection.
-    Mitigation: Prefix the name with `_` to declare it intentionally unused, or suppress the reviewed signature when the external protocol fixes the name.
-- Bad example: Code that triggers `waste.unused-parameter` leaves unused parameter unaddressed.
-- Good example: Code that satisfies `waste.unused-parameter` makes unused parameter explicit or simpler.
 
 ## Suppressing Findings
 

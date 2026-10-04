@@ -85,13 +85,11 @@ Every analysis and summary document includes `suppressions`, with one
 is empty when no exclusion is configured and no built-in skip applied. See
 [Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions).
 
-The family's two built-in skips also publish rows, after the configured ones,
-numbered from `0` among themselves and marked `source: "built-in"`, which a
-configured row never carries. The lockfile skip adds one row per package-manager
-lockfile whose `sensitive-data.high-entropy-string` findings it removed. The
-test-path skip then adds one row per file and rule it removed, because every
-sensitive-data rule except `sensitive-data.pii-test-fixture` skips test, fixture
-and example files. Text output labels them `builtInLockfile[<path>]` and
+The family's built-in test-path skip also publishes rows, after the configured
+ones, numbered from `0` among themselves and marked `source: "built-in"`, which
+a configured row never carries. It adds one row per file and rule it removed,
+because every sensitive-data rule except `sensitive-data.pii-test-fixture` skips
+test, fixture and example files. Text output labels them
 `builtInTestPath[<path>]`.
 
 ## Changed-Region Scoping (native diff mode)

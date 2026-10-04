@@ -56,6 +56,10 @@ gates are green.
 ## Lesson: File-size splits must expose cross-file helper ownership
 
 **Created:** 2026-07-12
+**Status:** historical
+**Reason:** `dead-code.unused-private-function`, which reported the cross-file
+private helpers, was retired in 0.6.0 (ADR-029). The principle still applies:
+name a helper by who uses it, and run root dogfood right after a split.
 **What happened:** The Markdown sanitizer provenance helper exceeded the
 project's 1,000-line error threshold, so it was split into a statement index and
 a flow model. Seven underscore-prefixed model functions were imported and used
@@ -331,3 +335,25 @@ and after.
 so a named constant also stops it asking for `ids=`. Name the rows anyway, with
 `pytest.param(..., id=...)` or a sibling `_..._IDS` tuple, as
 `tests/unit/rule/security/test_github_actions_secrets_in_pr_rule.py` (search: `_OWN_WORKFLOW_EVENT_GUARD_IDS`) does.
+
+## Lesson: A safe-form check proves nothing for a rule the fixture never exercises
+
+**Created:** 2026-10-05
+**Decision changed:** Before claiming a safe fixture covers a rule, add the rule's safe call shape and show an unsafe copy of it fires.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Prevention:** An empty finding list from a safe fixture only covers the rules
+whose call shapes the fixture contains. For each rule a safe test claims, put
+its safe form in the fixture, then rewrite that form unsafely in a scratch copy
+and confirm the rule fires on it.
+
+**Incident:** Turning `security.django-raw-sql` off by default (ADR-029) made
+the security pillar's safe test enable it again, with a comment saying its
+parameterised raw-SQL form stayed checked. The fixture had no Django import and
+no `.raw` or `RawSQL` call, so the rule's framework gate ruled the file out and
+the test passed whatever the rule did. The first review found the test checked
+nothing for the off rules; the fix added the enabling call but still no raw-SQL
+call, and a second review caught it. The fixture now carries parameterised
+`Model.objects.raw` and `RawSQL` calls, and their f-string copies fire both
+shapes: `tests/unit/rule/security/test_security_pillar_integration.py`
+(search: `def test_safe_equivalents_emit_no_security_findings`).

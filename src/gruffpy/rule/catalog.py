@@ -20,7 +20,6 @@ from gruffpy.rule.correctness.substring_vocabulary_match_rule import SubstringVo
 from gruffpy.rule.correctness.unsafe_numeric_coercion_rule import UnsafeNumericCoercionRule
 from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
 from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAttributeRule
-from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
@@ -58,7 +57,6 @@ from gruffpy.rule.security.dependency_git_reference_rule import DependencyGitRef
 from gruffpy.rule.security.dependency_local_path_rule import DependencyLocalPathRule
 from gruffpy.rule.security.dependency_url_reference_rule import DependencyUrlReferenceRule
 from gruffpy.rule.security.disabled_ssl_verification_rule import DisabledSslVerificationRule
-from gruffpy.rule.security.django_mark_safe_rule import DjangoMarkSafeRule
 from gruffpy.rule.security.django_raw_sql_rule import DjangoRawSqlRule
 from gruffpy.rule.security.error_suppression_rule import ErrorSuppressionRule
 from gruffpy.rule.security.extract_compact_user_input_rule import ExtractCompactUserInputRule
@@ -95,7 +93,6 @@ from gruffpy.rule.security.paramiko_no_host_key_check_rule import (
 from gruffpy.rule.security.path_traversal_rule import PathTraversalRule
 from gruffpy.rule.security.shell_injection_rule import ShellInjectionRule
 from gruffpy.rule.security.silent_except_rule import SilentExceptRule
-from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
 from gruffpy.rule.security.ssrf_rule import SsrfRule
 from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
 from gruffpy.rule.security.unsafe_yaml_load_rule import UnsafeYamlLoadRule
@@ -110,7 +107,6 @@ from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
 from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
-from gruffpy.rule.sensitive_data.high_entropy_string_rule import HighEntropyStringRule
 from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
 from gruffpy.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
@@ -178,7 +174,6 @@ from gruffpy.rule.waste.one_line_function_rule import OneLineFunctionRule
 from gruffpy.rule.waste.redundant_variable_rule import RedundantVariableRule
 from gruffpy.rule.waste.unreachable_code_rule import UnreachableCodeRule
 from gruffpy.rule.waste.unused_import_rule import UnusedImportRule
-from gruffpy.rule.waste.unused_parameter_rule import UnusedParameterRule
 
 __all__ = ["RELATED_RULES", "FalsePositiveShape", "RuleDocs"]
 
@@ -432,11 +427,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A compatibility or migration test file can intentionally preserve both unittest-style camelCase names and pytest-style snake_case names.",
         "Finish the rename when compatibility permits, or suppress the file-level advisory with the migration reason.",
     ),
-    "security.django-mark-safe": (
-        "A dynamic value can already be safe by an upstream validation or trusted-type contract "
-        "that is not a wrapping escape call in the inspected expression.",
-        "Pass the value through an explicit escaping helper or `format_html`, or suppress the reviewed sink with the upstream safety reason.",
-    ),
     "security.error-suppression": (
         "A best-effort cleanup or telemetry path can deliberately suppress every exception because failure must not replace the primary result.",
         "Catch the narrow expected exceptions, or suppress this rule at the reviewed boundary "
@@ -470,12 +460,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A fixed temporary path can be process-private inside an isolated sandbox even though that exclusivity is not visible at the call site.",
         "Use `mkstemp` or `NamedTemporaryFile`, or suppress the reviewed path with evidence of the containing permission and lifecycle controls.",
     ),
-    "security.sql-concatenation": (
-        "A SQL identifier selected from a strict allowlist cannot be bound as a DB-API value, "
-        "but its interpolation still looks like user-controlled query structure.",
-        "Map the choice to predeclared literal statements and bind all values, or suppress the "
-        "reviewed identifier interpolation with its allowlist evidence.",
-    ),
     "security.variable-import": (
         "A dynamic module name can come from a closed plugin registry or internal allowlist that the import expression does not expose.",
         "Map allowed names to explicit imports, or suppress the reviewed import with the registry boundary that prevents user control.",
@@ -484,11 +468,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A non-secret value can use a key containing PASS, TOKEN, or SECRET while its length and entropy resemble a credential.",
         "Rename the non-secret key or move the value to runtime configuration so the env-file "
         "assignment no longer resembles committed secret material.",
-    ),
-    "sensitive-data.high-entropy-string": (
-        "A legitimate random-looking test vector, checksum, or opaque constant outside the "
-        "built-in identifier and path exclusions can exceed the entropy boundary.",
-        "Replace fixtures with a recognizable placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and path.",
     ),
     "sensitive-data.phi-pattern": (
         "A structurally valid synthetic SSN or labelled MRN outside the placeholder set can look like real health data.",
@@ -617,10 +596,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.",
         "Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.",
     ),
-    "waste.unused-parameter": (
-        "An unrecognized callback or protocol can require a parameter that is consumed indirectly through `locals()` or reflection.",
-        "Prefix the name with `_` to declare it intentionally unused, or suppress the reviewed signature when the external protocol fixes the name.",
-    ),
 }
 
 
@@ -710,7 +685,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(UnsafeNumericCoercionRule),
     _entry(ExportedButUnreferencedRule),
     _entry(UnusedPrivateAttributeRule),
-    _entry(UnusedPrivateFunctionRule),
     _entry(RuntimeSysPathMutationRule),
     _entry(SingleImplementorProtocolRule),
     _entry(ComplexBranchRationaleRule),
@@ -742,7 +716,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(DependencyLocalPathRule),
     _entry(DependencyUrlReferenceRule),
     _entry(DisabledSslVerificationRule),
-    _entry(DjangoMarkSafeRule),
     _entry(DjangoRawSqlRule),
     _entry(ErrorSuppressionRule),
     _entry(ExtractCompactUserInputRule),
@@ -763,7 +736,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(PathTraversalRule),
     _entry(ShellInjectionRule),
     _entry(SilentExceptRule),
-    _entry(SqlConcatenationRule),
     _entry(SsrfRule),
     _entry(UnsafePickleRule),
     _entry(UnsafeYamlLoadRule),
@@ -776,7 +748,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(DatabaseUrlPasswordRule),
     _entry(GcpServiceAccountKeyRule),
     _entry(HardcodedEnvValueRule),
-    _entry(HighEntropyStringRule),
     _entry(JwtTokenRule),
     _entry(PhiPatternRule),
     _entry(PiiTestFixtureRule),
@@ -830,7 +801,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(RedundantVariableRule),
     _entry(UnreachableCodeRule),
     _entry(UnusedImportRule),
-    _entry(UnusedParameterRule),
 )
 
 _BUILTIN_RULES_BY_ID: dict[str, BuiltInRule] = {entry.definition.id: entry for entry in BUILTIN_RULES}

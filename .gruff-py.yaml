@@ -86,7 +86,6 @@ selection:
   - correctness.unsafe-numeric-coercion
   - dead-code.exported-but-unreferenced
   - dead-code.unused-private-attribute
-  - dead-code.unused-private-function
   - design.runtime-sys-path-mutation
   - design.single-implementor-protocol
   - docs.complex-branch-rationale
@@ -118,7 +117,6 @@ selection:
   - security.dependency-local-path
   - security.dependency-url-reference
   - security.disabled-ssl-verification
-  - security.django-mark-safe
   - security.django-raw-sql
   - security.error-suppression
   - security.extract-compact-user-input
@@ -139,7 +137,6 @@ selection:
   - security.path-traversal
   - security.shell-injection
   - security.silent-except
-  - security.sql-concatenation
   - security.ssrf
   - security.unsafe-pickle
   - security.unsafe-yaml-load
@@ -152,7 +149,6 @@ selection:
   - sensitive-data.database-url-password
   - sensitive-data.gcp-service-account-key
   - sensitive-data.hardcoded-env-value
-  - sensitive-data.high-entropy-string
   - sensitive-data.jwt-token
   - sensitive-data.phi-pattern
   - sensitive-data.pii-test-fixture
@@ -206,16 +202,12 @@ selection:
   - waste.redundant-variable
   - waste.unreachable-code
   - waste.unused-import
-  - waste.unused-parameter
   excludePillars: []
   excludeRules: []
 # sensitiveExclusions is the only way to silence a sensitive-data finding.
 # Write each entry by hand with rule, path, and reason; symbol is optional.
 # No preview or matched value is ever turned into an entry automatically,
 # and every entry reports how many findings it suppressed.
-# The npm lockfile entry this list used to carry is gone: 0.6.0 skips the entropy rule in every
-# package-manager lockfile by name, and reports the count as a built-in audit row, so no project
-# needs to write that exclusion by hand.
 sensitiveExclusions: []
 rules:
   # Cognitive complexity
@@ -256,9 +248,6 @@ rules:
       entryPointPatterns: []
   # Unused private attribute
   dead-code.unused-private-attribute:
-    enabled: true
-  # Unused private function
-  dead-code.unused-private-function:
     enabled: true
   # Runtime sys.path mutation
   design.runtime-sys-path-mutation:
@@ -465,12 +454,9 @@ rules:
   # Disabled SSL verification
   security.disabled-ssl-verification:
     enabled: true
-  # Django mark_safe on dynamic content
-  security.django-mark-safe:
-    enabled: true
   # Django raw SQL with dynamic string
   security.django-raw-sql:
-    enabled: true
+    enabled: false
   # Wide error suppression
   security.error-suppression:
     enabled: true
@@ -491,7 +477,7 @@ rules:
     enabled: true
   # Repository secret in a PR-triggered workflow
   security.github-actions-secrets-in-pr:
-    enabled: true
+    enabled: false
   # Unpinned GitHub Actions reference
   security.github-actions-unpinned-action:
     enabled: true
@@ -524,12 +510,9 @@ rules:
     enabled: true
   # Shell injection
   security.shell-injection:
-    enabled: true
+    enabled: false
   # Silent except
   security.silent-except:
-    enabled: true
-  # SQL concatenation
-  security.sql-concatenation:
     enabled: true
   # Server-side request forgery (SSRF)
   security.ssrf:
@@ -559,7 +542,7 @@ rules:
     enabled: true
   # API key pattern
   sensitive-data.api-key-pattern:
-    enabled: true
+    enabled: false
   # AWS access key
   sensitive-data.aws-access-key:
     enabled: true
@@ -572,12 +555,6 @@ rules:
   # Hardcoded env-file secret
   sensitive-data.hardcoded-env-value:
     enabled: true
-  # High-entropy string
-  sensitive-data.high-entropy-string:
-    enabled: true
-    thresholds:
-      minLength: 32
-      entropy: 4.2
   # JWT token
   sensitive-data.jwt-token:
     enabled: true
@@ -592,7 +569,7 @@ rules:
     enabled: true
   # URL embedded credentials
   sensitive-data.url-credentials:
-    enabled: true
+    enabled: false
   # Attribute count
   size.attribute-count:
     enabled: true
@@ -793,7 +770,4 @@ rules:
     enabled: true
   # Unused import
   waste.unused-import:
-    enabled: true
-  # Unused parameter
-  waste.unused-parameter:
     enabled: true

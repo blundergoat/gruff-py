@@ -138,7 +138,7 @@ def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]
 def shannon_entropy(text: str) -> float:
     """Return the per-character Shannon entropy of *text* in bits.
 
-    Used by the high-entropy-string and hardcoded-env-value rules.
+    Used by the hardcoded-env-value rule.
     Empty strings return 0.0.
 
     Args:
@@ -186,7 +186,7 @@ _SCHEME_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*$")
 def fixed_preview() -> str:
     """Return the bare marker, used when a detector classified nothing more specific.
 
-    Generic-assignment and entropy matches always use this: they name no class the user can act on.
+    A generic ``KEY=value`` match, or a category or scheme the family never ratified, falls back to it: neither names a class to act on.
 
     Returns:
         Classification-only marker with no value-derived characters or length.

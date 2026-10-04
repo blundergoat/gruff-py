@@ -6,10 +6,9 @@ accept raw SQL strings; using them with a dynamic string (f-string,
 ``.format()``, ``%`` formatting, ``+`` concat) reintroduces classic
 SQL-injection risk.
 
-``cursor.execute(<dynamic>)`` is intentionally not duplicated here - it is
-covered by ``security.sql-concatenation``. ``QuerySet.extra()`` is out of
-scope for v1 (the SQL injection vectors live inside ``select`` /
-``where`` / ``tables`` collections, which need a different match shape).
+``cursor.execute(<dynamic>)`` is out of scope: the rule that covered it, ``security.sql-concatenation``, was retired in 0.6.0
+(ADR-029). ``QuerySet.extra()`` is out of scope for v1 too, because its SQL injection vectors live inside ``select`` / ``where`` /
+``tables`` collections, which need a different match shape.
 """
 
 import ast
@@ -63,13 +62,15 @@ class DjangoRawSqlRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: right on 2 of 5 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``.raw(<dynamic>)`` and ``RawSQL(<dynamic>, ...)`` in Django files.
 
-        Reuses the ``is_dynamic_string`` helper from sql-concatenation so
-        the dynamic-detection logic stays consistent. Files without a
+        Uses the shared ``is_dynamic_string`` helper so dynamic-string
+        detection matches the other security rules. Files without a
         Django import are skipped entirely (framework gate).
 
         Args:
