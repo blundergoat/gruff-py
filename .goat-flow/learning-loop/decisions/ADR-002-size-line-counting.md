@@ -2,12 +2,14 @@
 
 **Status:** Accepted
 **Date:** 2026-05-13
-**Updated:** 2026-08-08
+**Updated:** 2026-10-09
 **Ticket/Context:** 0.1 size-pillar delivery; cross-impl parity with gruff-php M05.
 
 > **Amendment (2026-08-08) — `size.file-length` counts substantive lines.** The gruff family ratified substantive-line counting for file length on 2026-08-05, and every port shipped it: gruff-php added `src/Rules/Size/SubstantiveLineCounter.php`, and gruff-go, gruff-rs, and gruff-ts each record "file-length: 1000 substantive lines at error (family ratification)" in their changelogs. gruff-py's `size.file-length` therefore counts substantive lines — blank lines, full-line `#` comments, and PEP 257 docstrings are free, while strings outside docstring positions still count. This satisfies the coordinated-sibling-change condition in Reversibility below; it is family convergence, not gruff-py drift.
 >
 > Scope of the amendment: **`size.file-length` only.** Every other size rule, the `complexity.maintainability-index` LOC term, and the test-length rules still consume raw `lines_for_size(...)` spans exactly as ratified above. Baselines are unaffected: `fingerprint` hashes `[ruleId, file, line, endLine, column, symbol]`, the finding stays anchored at line 1, and `end_line` still reports `unit.line_count()`, so only the `metadata.lines` measurement changed. Because substantive counts are never greater than raw counts, the change can only remove findings, never add them.
+
+> **Amendment (2026-10-09) - every size count is code lines.** The gruff family ratified code lines for every line count a rule compares with a threshold (FAMILY-CONTRACT.md section 12, search "Code lines in every line count"). `lines_for_size(...)` therefore counts code lines, with blank lines, comment-only lines, PEP 257 docstrings and decorator lines free, for every size rule (`size.function-length`, `size.class-length`, `size.average-function-length` and `size.file-length`), the `complexity.maintainability-index` lines term, and the test-length rules (`test-quality.setup-bloat`, `test-quality.test-function-too-long` and `test-quality.test-longer-than-sut`). For `size.file-length` the only new free lines are decorator lines; the 2026-08-08 policy already freed the rest. This supersedes the `size.file-length`-only scope of the 2026-08-08 amendment and the "Docstrings count" clause of the Decision below. Thresholds are unchanged; a finding's `metadata.lines` reports the code-line count.
 
 ## Decision
 

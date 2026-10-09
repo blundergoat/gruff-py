@@ -19,7 +19,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
@@ -71,7 +71,8 @@ class TestLongerThanSutRule(Rule):
         definition = self.definition()
         settings = context.settings_for(definition)
         ratio = float(settings.options.get("ratio", definition.default_options["ratio"]))
-        target_lengths = _function_lengths(unit.tree)
+        code_lines = code_line_numbers(unit.source, unit.tree)
+        target_lengths = _function_lengths(unit.tree, code_lines)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             target_name = _target_from_test_name(fn.name)
@@ -80,7 +81,7 @@ class TestLongerThanSutRule(Rule):
             sut_len = target_lengths.get(target_name)
             if sut_len is None or sut_len <= 5:
                 continue  # trivial SUT or no match; skip
-            test_len = lines_for_size(fn)
+            test_len = lines_for_size(fn, code_lines)
             if test_len <= sut_len * ratio:
                 continue
             parents = parent_chain(fn)
@@ -119,9 +120,9 @@ def _target_from_test_name(test_name: str) -> str | None:
     return candidate or None
 
 
-def _function_lengths(tree: ast.AST) -> dict[str, int]:
+def _function_lengths(tree: ast.AST, code_lines: frozenset[int]) -> dict[str, int]:
     out: dict[str, int] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            out[node.name] = lines_for_size(node)
+            out[node.name] = lines_for_size(node, code_lines)
     return out

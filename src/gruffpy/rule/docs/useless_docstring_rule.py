@@ -1,9 +1,9 @@
 """``docs.useless-docstring`` - docstring without enough useful context.
 
-Heuristics:
-
-- public function summary restates the function name/signature;
-- module/class/function summary is too thin after removing generic words.
+Heuristic: a public function's summary restates its name and parameters without adding intent. A short summary that
+says something the name does not is accepted, whatever its word count (FAMILY-CONTRACT section 15: adding an accurate
+docstring must not create a finding). The ``min_summary_words`` option is still accepted, so existing configurations keep
+loading, but it is ignored and goes away in 0.7.0.
 
 Conservative - docstrings with a description body or structured Params /
 Returns / Raises sections are accepted. Dunder methods are exempt because
@@ -83,7 +83,8 @@ _STOP_WORDS: frozenset[str] = frozenset(
 )
 
 _MAX_CONTENT_WORDS = 5
-_MIN_CONTENT_WORDS = {
+# Default of the deprecated ``min_summary_words`` option, kept only so configurations that set it still validate.
+_IGNORED_MIN_SUMMARY_WORDS = {
     "module": 6,
     "class": 4,
     "function": 4,
@@ -122,7 +123,7 @@ class UselessDocstringRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
-            default_options={"min_summary_words": dict(_MIN_CONTENT_WORDS)},
+            default_options={"min_summary_words": dict(_IGNORED_MIN_SUMMARY_WORDS)},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -130,46 +131,29 @@ class UselessDocstringRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context with rule options.
+            context: Rule execution context; the deprecated ``min_summary_words`` option is not read.
 
         Returns:
-            Findings for module, class, or function docstrings that lack signal.
+            Findings for public function docstrings that only restate the signature.
         """
         if unit.tree is None:
             return []
         definition = self.definition()
-        settings = context.settings_for(definition)
-        min_words = _min_summary_words(settings.options.get("min_summary_words"))
-        return [_useless_docstring_finding(unit, definition, candidate) for candidate in _useless_docstrings(unit.tree, min_words=min_words)]
+        return [_useless_docstring_finding(unit, definition, candidate) for candidate in _useless_docstrings(unit.tree)]
 
 
-def _min_summary_words(value: object) -> dict[str, int]:
-    if not isinstance(value, dict):
-        return dict(_MIN_CONTENT_WORDS)
-    minimums = dict(_MIN_CONTENT_WORDS)
-    for key in minimums:
-        configured = value.get(key)
-        if isinstance(configured, int) and not isinstance(configured, bool) and configured > 0:
-            minimums[key] = configured
-    return minimums
-
-
-def _useless_docstrings(tree: ast.AST, *, min_words: dict[str, int]) -> list[_UselessDocstring]:
+def _useless_docstrings(tree: ast.AST) -> list[_UselessDocstring]:
     candidates: list[_UselessDocstring] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        candidate = _useless_docstring(node, min_words=min_words)
+        candidate = _useless_docstring(node)
         if candidate is not None:
             candidates.append(candidate)
     return candidates
 
 
-def _useless_docstring(
-    node: DocstringNode,
-    *,
-    min_words: dict[str, int],
-) -> _UselessDocstring | None:
+def _useless_docstring(node: DocstringNode) -> _UselessDocstring | None:
     kind = _docstring_kind(node)
     if kind is None or _should_skip_useless_docstring_check(node):
         return None
@@ -181,7 +165,7 @@ def _useless_docstring(
         return None
     if parsed.description or parsed.params or parsed.returns or parsed.raises:
         return None
-    reason = _useless_reason(node, kind, parsed.summary, min_words=min_words)
+    reason = _useless_reason(node, parsed.summary)
     if reason is None:
         return None
     return _UselessDocstring(
@@ -211,18 +195,9 @@ def _should_skip_useless_docstring_check(node: DocstringNode) -> bool:
     return not is_public(node.name) or is_dunder(node.name) or is_overload_stub(node) or is_property_setter_or_deleter(node)
 
 
-def _useless_reason(
-    node: DocstringNode,
-    kind: str,
-    summary: str,
-    *,
-    min_words: dict[str, int],
-) -> str | None:
+def _useless_reason(node: DocstringNode, summary: str) -> str | None:
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and _is_signature_restatement(node, summary):
         return "restates the signature without adding intent"
-    content_word_count = len(_content_words(summary))
-    if content_word_count < min_words[kind]:
-        return f"has only {content_word_count} descriptive word(s)"
     return None
 
 

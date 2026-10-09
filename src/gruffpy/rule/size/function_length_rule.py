@@ -12,7 +12,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
@@ -42,9 +42,9 @@ class FunctionLengthRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per function whose body exceeds the configured line count.
 
-        Length is measured via ``lines_for_size`` (logical-line count, shared
-        across size rules) and includes decorators when computing the
-        finding's start line.
+        Length is the function's code-line count from ``lines_for_size``, shared
+        with every length rule: blank lines, comments, docstrings and decorators
+        are free. The finding's start line still includes decorators.
 
         Args:
             unit: Parsed source file to walk.
@@ -61,14 +61,15 @@ class FunctionLengthRule(Rule):
         settings = context.settings_for(definition)
         threshold = _active_high_threshold(settings)
 
-        return [_function_length_finding(unit, definition, node, settings) for node in _long_functions(unit.tree, threshold)]
+        code_lines = code_line_numbers(unit.source, unit.tree)
+        return [_function_length_finding(unit, definition, node, settings) for node in _long_functions(unit.tree, code_lines, threshold)]
 
 
-def _long_functions(tree: ast.AST, warning_threshold: int | float) -> list[FunctionNode]:
+def _long_functions(tree: ast.AST, code_lines: frozenset[int], warning_threshold: int | float) -> list[FunctionNode]:
     return [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) and lines_for_size(node) > warning_threshold
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) and lines_for_size(node, code_lines) > warning_threshold
     ]
 
 
@@ -84,7 +85,7 @@ def _function_length_finding(
     node: FunctionNode,
     settings: RuleSettings,
 ) -> Finding:
-    line_count = lines_for_size(node)
+    line_count = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
     threshold_match = settings.high_value_threshold_match(line_count)
     if threshold_match is None:
         raise ValueError("function length finding requires a threshold match")

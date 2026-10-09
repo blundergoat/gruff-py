@@ -64,12 +64,21 @@ def test_nested_class_emits_qualified_symbol():
     assert "Outer.Inner" in symbols
 
 
-def test_decorator_counted_in_class_span():
+def test_decorator_lines_are_free_in_class_length():
     body = "\n".join(["    x = 1"] * 5)
     source = f"@dataclass\nclass C:\n{body}\n"
     findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert len(findings) == 1
     f = findings[0]
-    # decorator (1) + class (2) + 5 body lines = 7
-    assert f.metadata["lines"] == 7
+    # class line + 5 body lines = 6; the decorator is free
+    assert f.metadata["lines"] == 6
     assert f.line == 1
+
+
+def test_documented_class_is_measured_by_its_code_lines():
+    docstring = '    """Holds five values.\n\n    Each attribute below is code.\n    """'
+    comments = "\n".join(["    # Explain the next value."] * 10)
+    body = "\n".join(["    x = 1"] * 5)
+    source = f"class C:\n{docstring}\n{comments}\n{body}\n"
+    assert ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=6)) == []
+    assert len(ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))) == 1

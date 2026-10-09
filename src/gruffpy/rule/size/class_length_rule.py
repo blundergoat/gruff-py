@@ -12,7 +12,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 
 class ClassLengthRule(Rule):
@@ -55,11 +55,12 @@ class ClassLengthRule(Rule):
         settings = context.settings_for(definition)
         threshold = _active_high_threshold(settings)
 
-        return [_class_length_finding(unit, definition, node, settings) for node in _long_classes(unit.tree, threshold)]
+        code_lines = code_line_numbers(unit.source, unit.tree)
+        return [_class_length_finding(unit, definition, node, settings) for node in _long_classes(unit.tree, code_lines, threshold)]
 
 
-def _long_classes(tree: ast.AST, warning_threshold: int | float) -> list[ast.ClassDef]:
-    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and lines_for_size(node) > warning_threshold]
+def _long_classes(tree: ast.AST, code_lines: frozenset[int], warning_threshold: int | float) -> list[ast.ClassDef]:
+    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and lines_for_size(node, code_lines) > warning_threshold]
 
 
 def _class_length_finding(
@@ -68,7 +69,7 @@ def _class_length_finding(
     node: ast.ClassDef,
     settings: RuleSettings,
 ) -> Finding:
-    line_count = lines_for_size(node)
+    line_count = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
     threshold_match = settings.high_value_threshold_match(line_count)
     if threshold_match is None:
         raise ValueError("class length finding requires a threshold match")

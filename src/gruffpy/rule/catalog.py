@@ -392,7 +392,7 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
     ),
     "docs.useless-docstring": (
         "A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.",
-        "Add the missing behavior or constraint to the summary, or tune `options.min_summary_words` for the project's documentation convention.",
+        "Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.",
     ),
     "modernisation.f-string-candidate": (
         "A literal `.format()` call can be retained deliberately to mirror a documented format "
@@ -628,7 +628,9 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
         ),
     },
     "docs.useless-docstring": {
-        "min_summary_words": ("Per-kind minimum word count for a non-useless summary line (keys: module, class, function)."),
+        "min_summary_words": (
+            "Deprecated and ignored since 0.6.0, when the word-count check was removed; still accepted so configurations load. Removed in 0.7.0."
+        ),
     },
     "naming.confusing-name": {
         "confusingNames": ("Identifier suffixes flagged as low-content (Handler, Manager, Util, ...)."),

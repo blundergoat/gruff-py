@@ -39,6 +39,10 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 16. **five rules are off by default** — `security.django-raw-sql`, `security.github-actions-secrets-in-pr`, `security.shell-injection`, `sensitive-data.api-key-pattern` and `sensitive-data.url-credentials` each scored below half on fewer than ten findings. Enable one with `rules.<id>.enabled: true`; `--include-rule` narrows the run to rules already on and does not turn one on. A config written by an earlier `init` lists them as `enabled: true` and keeps them on. The decision is ADR-029.
 
+17. **length rules count code lines only** — Function, class, average-function and test-function length, setup length, the test-to-subject ratio and the maintainability index's line term now count code lines only: docstrings, comments, blank lines and decorators are free, as file length already treated docstrings and comments. File length now leaves decorator lines out as well. A documented unit can stop reporting, and a finding's `metadata.lines` falls when the unit carries documentation; no threshold changes and no finding moves. This is the family contract's code-lines clause, ratified 2026-10-09.
+
+18. **`docs.useless-docstring` no longer counts words, and `min_summary_words` is ignored** — The rule now reports only a public function's summary that restates its name and parameters. A short accurate summary on a function, class or module is accepted whatever its word count. `rules.docs.useless-docstring.options.min_summary_words` still loads without error but has no effect; remove it, because `0.7.0` drops it.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

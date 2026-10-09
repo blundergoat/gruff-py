@@ -71,3 +71,14 @@ def test_nested_class_with_too_few_methods_skipped():
     source = f"class Outer:\n    class Inner:\n        def m(self):\n{body}\n"
     findings = AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert findings == []
+
+
+def _documented_method(name: str) -> str:
+    doc = '        """Returns a value.\n\n        The single statement below is the whole method.\n        """'
+    comments = "\n".join(["        # Explain this step."] * 20)
+    return f"    def {name}(self):\n{doc}\n{comments}\n        return 1\n"
+
+
+def test_documentation_does_not_lengthen_the_average():
+    source = "class C:\n" + _documented_method("a") + _documented_method("b") + _documented_method("c")
+    assert AverageFunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=2)) == []

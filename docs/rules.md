@@ -603,7 +603,7 @@ except ValueError:
 - Options: `min_summary_words` = `{'module': 6, 'class': 4, 'function': 4}`
 - Common false-positive shapes:
   - A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.
-    Mitigation: Add the missing behavior or constraint to the summary, or tune `options.min_summary_words` for the project's documentation convention.
+    Mitigation: Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.
 - Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
 - Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
 

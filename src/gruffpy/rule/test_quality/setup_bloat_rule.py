@@ -1,7 +1,7 @@
 """``test-quality.setup-bloat`` - ``setUp`` / ``setup_method`` / fixture is too long.
 
 A setup that's longer than the typical test signals over-shared state. Default
-threshold: 30 lines. Uses the ``lines_for_size`` helper.
+threshold: 30 code lines, measured with the shared ``lines_for_size`` helper.
 """
 
 import ast
@@ -16,7 +16,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import call_target_name
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 _SETUP_NAMES: frozenset[str] = frozenset({"setUp", "setUpClass", "setup_method", "setup_class", "setup_function", "setup"})
 
@@ -72,7 +72,7 @@ class SetupBloatRule(Rule):
                 continue
             if not _is_setup(node):
                 continue
-            lines = lines_for_size(node)
+            lines = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
             if lines <= threshold:
                 continue
             parents = parent_chain(node)
