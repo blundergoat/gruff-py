@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-10
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -339,7 +339,7 @@ so a named constant also stops it asking for `ids=`. Name the rows anyway, with
 ## Lesson: A safe-form check proves nothing for a rule the fixture never exercises
 
 **Created:** 2026-10-05
-**Decision changed:** Before claiming a safe fixture covers a rule, add the rule's safe call shape and show an unsafe copy of it fires.
+**Decision changed:** Before claiming a fixture covers a rule, enable that detector and show its unsafe form fires beside the safe case.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Prevention:** An empty finding list from a safe fixture only covers the rules
@@ -357,3 +357,5 @@ call, and a second review caught it. The fixture now carries parameterised
 `Model.objects.raw` and `RawSQL` calls, and their f-string copies fire both
 shapes: `tests/unit/rule/security/test_security_pillar_integration.py`
 (search: `def test_safe_equivalents_emit_no_security_findings`).
+
+**Recurrence 2026-10-10:** M15 made eight test-quality rules opt-in. The full-pillar fixture lost their required findings, and the lifecycle fixture lost exception-type-only. Their assertions remain intact; their existing configurations now enable the required rules. Evidence: `tests/unit/rule/test_quality/test_full_pillar_integration.py` (search: `_ctx_with_opt_in_rules`) and `tests/unit/rule/test_quality/test_mock_lifecycle_integration.py` (search: `test_mock_lifecycle_rules_fire_on_cumulative_fixture`).

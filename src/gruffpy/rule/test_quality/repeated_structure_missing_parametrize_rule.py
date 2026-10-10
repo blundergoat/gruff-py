@@ -20,7 +20,8 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
-from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
+from gruffpy.rule.test_quality._test_quality_node_helper import scopes_for_unit, test_functions
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class RepeatedStructureMissingParametrizeRule(Rule):
@@ -80,12 +81,14 @@ class RepeatedStructureMissingParametrizeRule(Rule):
             if len(fns) < min_group:
                 continue
             for fn in fns:
+                is_unittest = scopes_for_unit(unit)[fn].kind == TestScopeKind.UNITTEST_TEST_METHOD
+                table_style = "self.subTest(...)" if is_unittest else "@pytest.mark.parametrize"
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(f"Test {symbol!r} shares a body shape with {len(fns) - 1} other test(s) - candidate for @pytest.mark.parametrize."),
+                        message=(f"Test {symbol!r} shares a body shape with {len(fns) - 1} other test(s) - candidate for {table_style}."),
                         file_path=unit.file.display_path,
                         line=fn.lineno,
                         severity=definition.default_severity,
@@ -94,7 +97,11 @@ class RepeatedStructureMissingParametrizeRule(Rule):
                         confidence=definition.confidence,
                         end_line=fn.end_lineno,
                         symbol=symbol,
-                        remediation=("Collapse the duplicated tests into one parametrised test that iterates the differing values."),
+                        remediation=(
+                            "Collapse the duplicated tests into one `self.subTest(...)` loop over the differing values."
+                            if is_unittest
+                            else "Collapse the duplicated tests into one parametrised test that iterates the differing values."
+                        ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"groupSize": len(fns)},
                     ),

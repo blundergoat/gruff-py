@@ -44,6 +44,7 @@ class TrivialAssertionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -70,6 +71,8 @@ class TrivialAssertionRule(Rule):
                     continue
                 if not _is_trivial(node.test):
                     continue
+                if _is_failure_guard(node):
+                    continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
                 findings.append(
@@ -90,6 +93,34 @@ class TrivialAssertionRule(Rule):
                     ),
                 )
         return findings
+
+
+def _is_failure_guard(node: ast.Assert) -> bool:
+    if not isinstance(node.test, ast.Constant) or bool(node.test.value):
+        return False
+    current: ast.AST = node
+    while hasattr(current, "parent"):
+        parent = current.parent
+        if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
+            return False
+        if (
+            isinstance(parent, ast.Try)
+            and current in [*parent.body, *parent.orelse]
+            and parent.handlers
+            and not any(_can_catch_assertion_error(handler.type) for handler in parent.handlers)
+        ):
+            return any(isinstance(value, ast.Call) for statement in parent.body for value in ast.walk(statement))
+        current = parent
+    return False
+
+
+def _can_catch_assertion_error(exception: ast.expr | None) -> bool:
+    if exception is None:
+        return True
+    if isinstance(exception, ast.Tuple):
+        return any(_can_catch_assertion_error(value) for value in exception.elts)
+    name = exception.id if isinstance(exception, ast.Name) else exception.attr if isinstance(exception, ast.Attribute) else ""
+    return name in {"AssertionError", "Exception", "BaseException"}
 
 
 def _is_trivial(expr: ast.expr) -> bool:

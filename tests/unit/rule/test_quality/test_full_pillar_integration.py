@@ -71,6 +71,14 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
     for rule_id, options in {
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
         "test-quality.multiple-aaa-cycles": {},
+        "test-quality.exception-type-only": {},
+        "test-quality.loop-assertion-without-message": {},
+        "test-quality.loop-in-test": {},
+        "test-quality.no-assertions": {},
+        "test-quality.parametrize-annotation": {},
+        "test-quality.sleep-in-test": {},
+        "test-quality.sut-not-called": {},
+        "test-quality.trivial-assertion": {},
     }.items():
         settings = config.rule_settings(rule_id)
         config = config.with_rule_settings(

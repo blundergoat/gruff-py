@@ -1,3 +1,5 @@
+import pytest
+
 from gruffpy.rule.test_quality.sut_not_called_rule import SutNotCalledRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
@@ -73,3 +75,30 @@ def test_module_level_computed_constant_read_skipped():
         "    assert 'must describe' in MODULE_SOURCE\n"
     )
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    ("actual", "setup", "expected"),
+    [("normalise(heard)", "", 0), ("heard", "", 1), ("normalise(heard)", "self = another_object\n        ", 1)],
+    ids=["helper-calls-sut", "assertion-only-helper", "rebound-receiver"],
+)
+def test_local_assertion_helper_exercises_the_sut(actual: str, setup: str, expected: int) -> None:
+    """Follow one local helper without treating framework assertions as SUT calls.
+
+    Args:
+        actual: Expression checked by the custom assertion method.
+        setup: Optional receiver rebinding before the helper call.
+        expected: Number of SUT-not-called findings.
+
+    Returns:
+        None.
+    """
+    source = (
+        "import unittest\n"
+        "class MishearTest(unittest.TestCase):\n"
+        "    def assert_normalises(self, heard):\n"
+        f"        self.assertIn('flu vaccination', {actual})\n"
+        "    def test_flush_shot(self):\n"
+        f"        {setup}self.assert_normalises('flush shot')\n"
+    )
+    assert len(SutNotCalledRule().analyse(make_unit(source), default_ctx())) == expected

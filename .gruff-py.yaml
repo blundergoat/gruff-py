@@ -618,7 +618,7 @@ rules:
     enabled: true
   # Exception type-only assertion
   test-quality.exception-type-only:
-    enabled: true
+    enabled: false
   # Excessive mocking
   test-quality.excessive-mocking:
     enabled: true
@@ -634,10 +634,10 @@ rules:
     enabled: true
   # Loop assertion without message
   test-quality.loop-assertion-without-message:
-    enabled: true
+    enabled: false
   # Loop in test
   test-quality.loop-in-test:
-    enabled: true
+    enabled: false
   # Magic-number assertion
   test-quality.magic-number-assertion:
     enabled: true
@@ -688,10 +688,10 @@ rules:
     enabled: true
   # Test without assertions
   test-quality.no-assertions:
-    enabled: true
+    enabled: false
   # Parametrize without `ids`
   test-quality.parametrize-annotation:
-    enabled: true
+    enabled: false
     thresholds:
       maxCasesWithoutIds: 2
   # Private reflection in test
@@ -721,13 +721,13 @@ rules:
     enabled: true
   # Sleep in test
   test-quality.sleep-in-test:
-    enabled: true
+    enabled: false
   # Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file.
   test-quality.static-analysis-redundant-test:
     enabled: true
   # System under test never called
   test-quality.sut-not-called:
-    enabled: true
+    enabled: false
   # Tautological type assertion
   test-quality.tautological-type-assertion:
     enabled: true
@@ -743,7 +743,7 @@ rules:
       ratio: 2.0
   # Trivial assertion
   test-quality.trivial-assertion:
-    enabled: true
+    enabled: false
   # Trivial snapshot assertion
   test-quality.trivial-snapshot:
     enabled: true

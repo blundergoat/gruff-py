@@ -21,6 +21,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class ConditionalLogicRule(Rule):
@@ -65,7 +66,7 @@ class ConditionalLogicRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
+        for fn, scope in test_functions(unit):
             for node in walk_test_body(fn):
                 if not isinstance(node, ast.If | ast.Match):
                     continue
@@ -85,7 +86,11 @@ class ConditionalLogicRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=("Replace the branch with `@pytest.mark.parametrize` or two separate test functions."),
+                        remediation=(
+                            "Drive the cases from a `self.subTest(...)` loop with explicit inputs and expected outcomes."
+                            if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                            else "Replace the branch with `@pytest.mark.parametrize` or two separate test functions."
+                        ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
                     ),

@@ -99,6 +99,7 @@ class NoAssertionsRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -189,7 +190,54 @@ def _has_any_assertion(
         # Exception and warning expectations are expressed as context managers.
         if isinstance(node, ast.With) and _has_with_item_assertion(node, imported_pytest_assertions):
             return True
-    return _has_decorator_assertion_call(fn, imported_pytest_assertions)
+    return _has_installed_failure_fake(fn) or _has_decorator_assertion_call(fn, imported_pytest_assertions)
+
+
+def _has_installed_failure_fake(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Recognise a negative expectation installed as a patch replacement.
+
+    A raising fake can fail the test when an unwanted dependency is called. Its
+    mere definition is insufficient: it must occupy a replacement argument,
+    rather than the patched target, in a recognised patch call.
+
+    Args:
+        fn: Test function whose nested fakes and patch calls are inspected.
+
+    Returns:
+        True when a local fake raising AssertionError is installed.
+    """
+    failures = {
+        node.name
+        for node in ast.walk(fn)
+        if node is not fn
+        and isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and any(_is_assertion_failure(value) for statement in node.body for value in ast.walk(statement))
+    }
+    for call in _walk_test_body_deeply(fn):
+        if not isinstance(call, ast.Call) or _callee_name(call) not in {
+            "monkeypatch.setattr",
+            "patch",
+            "patch.object",
+            "mock.patch",
+            "mock.patch.object",
+            "unittest.mock.patch",
+            "unittest.mock.patch.object",
+        }:
+            continue
+        target = _callee_name(call) or ""
+        position = 2 if target.endswith(".object") or (target.endswith(".setattr") and len(call.args) >= 3) else 1
+        replacements = [call.args[position]] if len(call.args) > position else []
+        replacements.extend(keyword.value for keyword in call.keywords if keyword.arg in {"new", "side_effect"})
+        if any(isinstance(value, ast.Name) and value.id in failures for value in replacements):
+            return True
+    return False
+
+
+def _is_assertion_failure(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Raise) or node.exc is None:
+        return False
+    exception = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+    return isinstance(exception, ast.Name) and exception.id == "AssertionError"
 
 
 def _is_standalone_assertion_call(
@@ -276,7 +324,9 @@ def _is_recognised_assertion_call(
     Returns:
         True when the shared matcher or an import-aware callee match recognises the call.
     """
-    return is_assertion_call(call) or _callee_name(call) in imported_pytest_assertions
+    target = _callee_name(call)
+    private_assertion = target is not None and target.split(".")[-1].startswith("_assert")
+    return is_assertion_call(call) or private_assertion or target in imported_pytest_assertions
 
 
 def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:

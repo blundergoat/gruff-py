@@ -145,12 +145,12 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.conditional-logic`
 - `test-quality.eager-test`
 - `test-quality.empty-parametrize`
-- `test-quality.exception-type-only`
+- `test-quality.exception-type-only` (default off)
 - `test-quality.excessive-mocking`
 - `test-quality.extends-production-class`
 - `test-quality.global-state-mutation`
-- `test-quality.loop-assertion-without-message`
-- `test-quality.loop-in-test`
+- `test-quality.loop-assertion-without-message` (default off)
+- `test-quality.loop-in-test` (default off)
 - `test-quality.magic-number-assertion`
 - `test-quality.mock-only-test`
 - `test-quality.mock-without-expectation`
@@ -158,8 +158,8 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.multiple-aaa-cycles`
 - `test-quality.mystery-guest`
 - `test-quality.naming-consistency`
-- `test-quality.no-assertions`
-- `test-quality.parametrize-annotation`
+- `test-quality.no-assertions` (default off)
+- `test-quality.parametrize-annotation` (default off)
 - `test-quality.private-reflection`
 - `test-quality.pytest-coverage-source-missing`
 - `test-quality.pytest-deprecations-not-fatal`
@@ -167,13 +167,13 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.repeated-structure-missing-parametrize`
 - `test-quality.setup-bloat`
 - `test-quality.skipped-without-reason`
-- `test-quality.sleep-in-test`
+- `test-quality.sleep-in-test` (default off)
 - `test-quality.static-analysis-redundant-test`
-- `test-quality.sut-not-called`
+- `test-quality.sut-not-called` (default off)
 - `test-quality.tautological-type-assertion`
 - `test-quality.test-function-too-long`
 - `test-quality.test-longer-than-sut`
-- `test-quality.trivial-assertion`
+- `test-quality.trivial-assertion` (default off)
 - `test-quality.trivial-snapshot`
 - `test-quality.unused-mock`
 
@@ -1620,7 +1620,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.exception-type-only` protects the test-quality pillar by flagging exception type-only assertion before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported exception type-only assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -1687,7 +1687,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.loop-assertion-without-message` protects the test-quality pillar by flagging loop assertion without message before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported loop assertion without message directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -1704,7 +1704,7 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: A loop in a test body runs every case under one pass or fail, so a failure does not say which iteration broke and the cases cannot be selected or rerun on their own.
 - Fix guidance: Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.
 - Confidence rationale: Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a fixture sweep, and a loop can legitimately be the behaviour under test.
@@ -1846,7 +1846,7 @@ def test_parse(text): assert parse(text)`
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: Collected tests without assertions are easy to mistake for coverage.
 - Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
 - Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
@@ -1865,7 +1865,7 @@ def test_parse(text): assert parse(text)`
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.parametrize-annotation` protects the test-quality pillar by flagging parametrize without `ids` before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported parametrize without `ids` directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -2001,7 +2001,7 @@ def test_parse(text): assert parse(text)`
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.sleep-in-test` protects the test-quality pillar by flagging sleep in test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported sleep in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
@@ -2032,7 +2032,7 @@ def test_parse(text): assert parse(text)`
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.sut-not-called` protects the test-quality pillar by flagging system under test never called before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported system under test never called directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
@@ -2101,7 +2101,7 @@ def test_parse(text): assert parse(text)`
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.trivial-assertion` protects the test-quality pillar by flagging trivial assertion before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported trivial assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.

@@ -25,7 +25,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
 
 
 class SleepInTestRule(Rule):
-    """Detect calls to `time.sleep`, `asyncio.sleep`, or other `.sleep`-suffixed waits in tests."""
+    """Detect waits in tests, excluding a bound, awaited `asyncio.sleep(0)` cooperative yield."""
 
     ID = "test-quality.sleep-in-test"
 
@@ -46,6 +46,7 @@ class SleepInTestRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -65,6 +66,7 @@ class SleepInTestRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
+        cooperative_sleep_names = _asyncio_sleep_names(unit.tree)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
             for node in walk_test_body(fn):
@@ -72,6 +74,8 @@ class SleepInTestRule(Rule):
                     continue
                 target = call_target_name(node)
                 if target is None or not target.endswith("sleep"):
+                    continue
+                if _is_cooperative_yield(node, fn, target, cooperative_sleep_names):
                     continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
@@ -96,3 +100,28 @@ class SleepInTestRule(Rule):
                     ),
                 )
         return findings
+
+
+def _asyncio_sleep_names(tree: ast.AST) -> frozenset[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(f"{alias.asname or alias.name}.sleep" for alias in node.names if alias.name == "asyncio")
+        if isinstance(node, ast.ImportFrom) and node.module == "asyncio":
+            names.update(alias.asname or alias.name for alias in node.names if alias.name == "sleep")
+    return frozenset(names)
+
+
+def _is_cooperative_yield(
+    call: ast.Call,
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+    target: str,
+    names: frozenset[str],
+) -> bool:
+    if target not in names or not isinstance(getattr(call, "parent", None), ast.Await) or not call.args:
+        return False
+    delay = call.args[0]
+    if not isinstance(delay, ast.Constant) or delay.value != 0:
+        return False
+    receiver = target.split(".")[0]
+    return not any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn))

@@ -43,6 +43,44 @@ def is_fixture_loop(
     return not assertions or all(assertion.msg is not None for assertion in assertions)
 
 
+def is_subtest_loop(
+    node: ast.For | ast.AsyncFor | ast.While,
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Recognise a loop whose entire body carries unittest case context.
+
+    Args:
+        node: Candidate loop in a unittest test method.
+        fn: Owning method, whose first argument binds the TestCase receiver.
+
+    Returns:
+        True when each statement is inside a subTest naming a bound loop value.
+    """
+    if isinstance(node, ast.While) or node.orelse or _contains_branch(node.body):
+        return False
+    parameters = [*fn.args.posonlyargs, *fn.args.args]
+    if not parameters:
+        return False
+    receiver = parameters[0].arg
+    if any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn)):
+        return False
+    bound_names = _target_names(node.target)
+    return bool(node.body) and all(_is_subtest_statement(statement, receiver, bound_names) for statement in node.body)
+
+
+def _is_subtest_statement(statement: ast.stmt, receiver: str, bound_names: frozenset[str]) -> bool:
+    if not isinstance(statement, ast.With):
+        return False
+    for item in statement.items:
+        call = item.context_expr
+        if not isinstance(call, ast.Call) or _call_name(call) != f"{receiver}.subTest":
+            continue
+        values = [*call.args, *(keyword.value for keyword in call.keywords)]
+        if any(isinstance(n, ast.Name) and n.id in bound_names for value in values for n in ast.walk(value)):
+            return True
+    return False
+
+
 def is_guard_clause(node: ast.If | ast.Match) -> bool:
     """Return whether a branch exits/skips rather than changing expectations.
 

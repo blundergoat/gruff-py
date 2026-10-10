@@ -130,6 +130,36 @@ def test_non_assert_helper_does_not_count():
     assert len(findings) == 1
 
 
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("_assert_turn(route(turn), 'local')", 0),
+        ("monkeypatch.setattr(service, 'write_event', fail_write)\n    service.answer()", 0),
+        ("with patch.object(service, 'write_event', new=fail_write):\n        service.answer()", 0),
+        ("service.answer()", 1),
+        ("monkeypatch.setattr(fail_write, 'sentinel', service.answer)", 1),
+    ],
+    ids=["private-assertion", "installed-failure-fake", "patched-failure-fake", "uninstalled-fake", "fake-is-patch-target"],
+)
+def test_assertion_helpers_and_installed_raising_fakes(body: str, expected: int) -> None:
+    """Recognise the field report's assertions and retain unverified calls.
+
+    Args:
+        body: Verification helper, installed failure fake, or unverified call.
+        expected: Number of no-assertions findings.
+
+    Returns:
+        None.
+    """
+    source = (
+        "def test_production_mode(monkeypatch):\n"
+        "    def fail_write(*args, **kwargs):\n"
+        "        raise AssertionError('tester write must not run')\n"
+        f"    {body}\n"
+    )
+    assert len(NoAssertionsRule().analyse(make_unit(source), default_ctx())) == expected
+
+
 def test_fixture_named_test_image_is_not_reported():
     src = "import pytest\n@pytest.fixture\ndef test_image():\n    return load_image()\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []

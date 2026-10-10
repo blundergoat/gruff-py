@@ -16,11 +16,12 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
-from gruffpy.rule.test_quality._control_flow_exemptions import is_fixture_loop
+from gruffpy.rule.test_quality._control_flow_exemptions import is_fixture_loop, is_subtest_loop
 from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class LoopInTestRule(Rule):
@@ -48,8 +49,10 @@ class LoopInTestRule(Rule):
             description=(
                 "Flags the first for, async for, or while loop in a collected test, unless it is a for loop with no "
                 "branch that sweeps a fixture table (a literal collection or file glob named like cases, files, "
-                "paths, samples, or scenarios) and every assertion inside it carries a message."
+                "paths, samples, or scenarios) and every assertion inside it carries a message, or a unittest loop "
+                "whose whole body uses subTest with a bound case value."
             ),
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -71,18 +74,24 @@ class LoopInTestRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
+        for fn, scope in test_functions(unit):
             for node in walk_test_body(fn):
                 if not isinstance(node, ast.For | ast.AsyncFor | ast.While):
                     continue
                 if is_fixture_loop(node, fn):
+                    continue
+                if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD and is_subtest_loop(node, fn):
                     continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(f"Test {symbol!r} contains a loop - prefer `@pytest.mark.parametrize` for case enumeration."),
+                        message=(
+                            f"Test {symbol!r} contains a loop - wrap iterations in `self.subTest(...)`."
+                            if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                            else f"Test {symbol!r} contains a loop - prefer `@pytest.mark.parametrize` for case enumeration."
+                        ),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -91,7 +100,11 @@ class LoopInTestRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=("Convert the loop into a parametrised test so each case produces its own pass/fail signal."),
+                        remediation=(
+                            "Wrap each iteration in `self.subTest(...)` so each case has its own failure context."
+                            if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                            else "Convert the loop into a parametrised test so each case produces its own pass/fail signal."
+                        ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
                     ),

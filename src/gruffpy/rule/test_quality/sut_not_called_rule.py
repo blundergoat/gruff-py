@@ -91,6 +91,7 @@ class SutNotCalledRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -116,7 +117,7 @@ class SutNotCalledRule(Rule):
         module_names = _collect_module_level_names(unit.tree)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            if _has_sut_call(fn, module_names):
+            if _has_sut_call(fn, module_names) or _has_local_helper_sut_call(fn, module_names):
                 continue
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
@@ -151,6 +152,27 @@ def _has_sut_call(
             return True
         if _is_schema_inspection_access(node):
             return True
+    return False
+
+
+def _has_local_helper_sut_call(fn: ast.FunctionDef | ast.AsyncFunctionDef, module_names: frozenset[str]) -> bool:
+    parent = getattr(fn, "parent", None)
+    parameters = [*fn.args.posonlyargs, *fn.args.args]
+    if not isinstance(parent, ast.ClassDef) or not parameters:
+        return False
+    receiver = parameters[0].arg
+    if any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn)):
+        return False
+    helpers = {
+        f"{receiver}.{node.name}": node
+        for node in parent.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(("assert", "_assert"))
+    }
+    for node in walk_test_body(fn):
+        if isinstance(node, ast.Call):
+            helper = helpers.get(call_target_name(node) or "")
+            if helper is not None and _has_sut_call(helper, module_names):
+                return True
     return False
 
 

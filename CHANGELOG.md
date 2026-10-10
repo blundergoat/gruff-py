@@ -4,6 +4,12 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: two more test-quality checks are opt-in** - `test-quality.no-assertions` and `test-quality.sut-not-called` have insufficient precision evidence, with 16/50 and 17/50 unresolved cards. Enable either with `rules.<id>.enabled: true`; existing explicit settings remain effective. No-assertions retains its failed first after audit and passing retry. This policy decision makes no new floor-failure or deletion claim.
+
+- **BREAKING: six test-quality checks are opt-in** - `test-quality.exception-type-only`, `test-quality.loop-assertion-without-message`, `test-quality.loop-in-test`, `test-quality.parametrize-annotation`, `test-quality.sleep-in-test` and `test-quality.trivial-assertion` stayed below the 0.70 precision floor after repair. Enable one with `rules.<id>.enabled: true`; existing explicit settings remain effective. The loop-in-test before audit exceeded the disagreement limit twice, so its off-by-default decision carries that caveat and makes no calibrated improvement claim.
+
+- **Test-quality checks accept labelled cases and verified helper assertions** - Named `subTest` loops, per-case `pytest.param` ids, installed raising fakes and class-local assertion helpers now count. Captured exception details, zero-delay asyncio yields and missing-exception sentinels no longer trigger their respective warnings. TestCase advice names `subTest`.
+
 - **BREAKING: `complexity.cyclomatic` is off by default** - After the repair below, it was worth acting on 26 times in 50 at one and
   a half times its limit or more, under the 0.60 floor. `complexity.cognitive` covers the same functions and stays on. Enable it with
   `rules.complexity.cyclomatic.enabled: true`; a config that already sets it keeps it on.

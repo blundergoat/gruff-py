@@ -56,6 +56,7 @@ class ParametrizeAnnotationRule(Rule):
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
             default_thresholds={"maxCasesWithoutIds": 2},
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -108,7 +109,16 @@ def _parametrize_candidate(
     case_count = len(cases.elts) if isinstance(cases, ast.List | ast.Tuple) else 0
     if case_count <= min_cases or call_keyword(decorator, "ids") is not None:
         return None
+    if isinstance(cases, ast.List | ast.Tuple) and all(_has_case_id(case) for case in cases.elts):
+        return None
     return _ParametrizeWithoutIds(fn=fn, decorator=decorator, case_count=case_count)
+
+
+def _has_case_id(case: ast.expr) -> bool:
+    if not isinstance(case, ast.Call) or call_target_name(case) != "pytest.param":
+        return False
+    label = call_keyword(case, "id")
+    return isinstance(label, ast.Constant) and isinstance(label.value, str) and bool(label.value.strip())
 
 
 def _parametrize_without_ids_finding(
