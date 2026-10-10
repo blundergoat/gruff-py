@@ -29,9 +29,7 @@ def test_usecase_suffix_still_emits():
 
 def test_test_class_inheriting_production_emits_under_tests_directory():
     src = "class TestService(Service):\n    def test_x(self):\n        assert True\n"
-    findings = ExtendsProductionClassRule().analyse(
-        make_unit(src, "tests/unit/test_service.py"), default_ctx()
-    )
+    findings = ExtendsProductionClassRule().analyse(make_unit(src, "tests/unit/test_service.py"), default_ctx())
     assert len(findings) == 1
 
 
@@ -73,9 +71,7 @@ def test_additional_test_bases_exact_terminal_match_skips():
 
 
 def test_additional_test_bases_exact_dotted_match_skips():
-    src = (
-        "class TestBrowser(project.testing.WebTest):\n    def test_x(self):\n        assert True\n"
-    )
+    src = "class TestBrowser(project.testing.WebTest):\n    def test_x(self):\n        assert True\n"
     ctx = _ctx_with_options({"additionalTestBases": ["project.testing.WebTest"]})
 
     assert ExtendsProductionClassRule().analyse(make_unit(src), ctx) == []

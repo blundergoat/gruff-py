@@ -52,20 +52,13 @@ def test_both_tiers_map_to_error_threshold(tmp_path: Path):
     _write_config(tmp_path, _LEGACY_CONFIG)
     migration = migrate_config_file(tmp_path, None)
     assert migration.has_changes()
-    assert any(
-        "threshold=30, severity=error" in change and "warning tier 15 dropped" in change
-        for change in migration.changes
-    )
+    assert any("threshold=30, severity=error" in change and "warning tier 15 dropped" in change for change in migration.changes)
 
 
 def test_warning_only_tier_maps_to_warning_threshold(tmp_path: Path):
     _write_config(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  complexity.cognitive:\n"
-        "    thresholds:\n"
-        "      warning: 15\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.cognitive:\n    thresholds:\n      warning: 15\n",
     )
     migration = migrate_config_file(tmp_path, None)
     assert any("threshold=15, severity=warning" in change for change in migration.changes)
@@ -107,11 +100,7 @@ def test_missing_schema_version_is_inserted(tmp_path: Path):
 def test_non_rubric_legacy_tiers_are_removed_with_note(tmp_path: Path):
     _write_config(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  naming.module-name-mismatch:\n"
-        "    thresholds:\n"
-        "      warning: 3\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.module-name-mismatch:\n    thresholds:\n      warning: 3\n",
     )
     migration = migrate_config_file(tmp_path, None)
     assert any("no severity rubric" in change for change in migration.changes)
@@ -121,11 +110,7 @@ def test_non_rubric_legacy_tiers_are_removed_with_note(tmp_path: Path):
 def test_unknown_rule_id_is_left_as_is_with_note(tmp_path: Path):
     _write_config(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  complexity.npath:\n"
-        "    thresholds:\n"
-        "      warning: 200\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    thresholds:\n      warning: 200\n",
     )
     migration = migrate_config_file(tmp_path, None)
     assert not migration.has_changes()
@@ -133,14 +118,7 @@ def test_unknown_rule_id_is_left_as_is_with_note(tmp_path: Path):
 
 
 def test_current_config_reports_no_changes_and_keeps_text(tmp_path: Path):
-    body = (
-        "# keep me\n"
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  complexity.cognitive:\n"
-        "    threshold: 30\n"
-        "    severity: error\n"
-    )
+    body = "# keep me\nschemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.cognitive:\n    threshold: 30\n    severity: error\n"
     _write_config(tmp_path, body)
     migration = migrate_config_file(tmp_path, None)
     assert not migration.has_changes()

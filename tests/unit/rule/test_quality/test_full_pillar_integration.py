@@ -56,16 +56,10 @@ def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
         ctx,
     )
 
-    counts = Counter(
-        finding.rule_id for finding in findings if finding.rule_id.startswith("test-quality.")
-    )
+    counts = Counter(finding.rule_id for finding in findings if finding.rule_id.startswith("test-quality."))
 
     assert counts == _EXPECTED_COUNTS
-    assert set(counts) == {
-        rule.definition().id
-        for rule in registry.all()
-        if rule.definition().id.startswith("test-quality.")
-    }
+    assert set(counts) == {rule.definition().id for rule in registry.all() if rule.definition().id.startswith("test-quality.")}
 
 
 def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContext:
@@ -77,6 +71,14 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
     for rule_id, options in {
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
         "test-quality.multiple-aaa-cycles": {},
+        "test-quality.exception-type-only": {},
+        "test-quality.loop-assertion-without-message": {},
+        "test-quality.loop-in-test": {},
+        "test-quality.no-assertions": {},
+        "test-quality.parametrize-annotation": {},
+        "test-quality.sleep-in-test": {},
+        "test-quality.sut-not-called": {},
+        "test-quality.trivial-assertion": {},
     }.items():
         settings = config.rule_settings(rule_id)
         config = config.with_rule_settings(

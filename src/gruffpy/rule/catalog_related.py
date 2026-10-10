@@ -83,27 +83,10 @@ RELATED_RULES: dict[str, tuple[str, ...]] = {
     "waste.one-line-function": ("waste.empty-function", "waste.redundant-variable"),
     "waste.redundant-variable": (
         "waste.unused-import",
-        "waste.unused-parameter",
         "waste.one-line-function",
     ),
-    "waste.unused-import": (
-        "waste.unused-parameter",
-        "waste.redundant-variable",
-        "dead-code.unused-private-function",
-    ),
-    "waste.unused-parameter": ("waste.unused-import", "waste.redundant-variable"),
+    "waste.unused-import": ("waste.redundant-variable",),
     "waste.commented-out-code": ("docs.todo-density",),
-    "waste.unreachable-code": (
-        "dead-code.unused-private-function",
-        "dead-code.unused-private-attribute",
-    ),
-    "dead-code.unused-private-function": (
-        "dead-code.unused-private-attribute",
-        "waste.unused-import",
-        "waste.unreachable-code",
-    ),
-    "dead-code.unused-private-attribute": (
-        "dead-code.unused-private-function",
-        "waste.unused-import",
-    ),
+    "waste.unreachable-code": ("dead-code.unused-private-attribute",),
+    "dead-code.unused-private-attribute": ("waste.unused-import",),
 }

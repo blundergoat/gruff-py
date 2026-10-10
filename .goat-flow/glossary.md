@@ -12,11 +12,11 @@ This glossary defines terms used by `gruff-py`, its public reports, and local pr
 
 ### Analysis Report
 
-The complete result of one scan: schema version, tool metadata, run metadata, paths, summary counts, score data, diagnostics, findings, baseline state, and optional diff/mutation state. Native JSON uses `gruff.analysis.v2`.
+The complete result of one scan: schema version, tool metadata, run metadata, paths, summary counts, score data, diagnostics, findings, baseline state, and optional diff/mutation state. Native JSON uses `gruff.analysis.v3`.
 
 ### Baseline
 
-A reviewed-finding suppression file. `gruff-py` writes `gruff-py.baseline.v1` and can read legacy `gruff.baseline.v1`; entries match by stable finding identity so known findings can be suppressed without disabling rules.
+A reviewed-finding suppression file. `gruff-py` writes and reads the family-shared `gruff.baseline.v3`; entries match by the ratified line-free finding identity, so a reviewed finding that moves lines stays suppressed without disabling rules, and sensitive findings are never baselined. A 0.5 baseline (`gruff-py.baseline.v1` or `gruff.baseline.v1`) is refused; `gruff-py analyse --migrate-baseline <old> --generate-baseline <new>` carries its reviews into a new file.
 
 ### Changed-Code Scan
 
@@ -36,7 +36,7 @@ A run-level problem such as an input error, parse error, config error, baseline 
 
 ### Display Filter
 
-A report-only filter such as `--min-severity`, include/exclude pillar, or include/exclude rule. Display filters change rendered output, not rule execution.
+A presentation filter that changes which findings are rendered and never rule execution, the score, or the exit code: `--min-severity` and its `minimumSeverity:` config default, `--show-rule`, `--hide-rule`, `--show-pillar`, and `--hide-pillar`. A run records it under `displayFilter`. `--include-rule`, `--exclude-rule`, `--include-pillar`, and `--exclude-pillar` are not display filters: they choose which rules run, so the score and the exit code move with them.
 
 ### Exit Codes
 
@@ -52,7 +52,7 @@ A stable 16-character SHA-256-derived identifier. It is intended to match `gruff
 
 ### Gruff Config
 
-Project configuration that tunes discovery, allowlists, rule selection, and per-rule thresholds/severity/options. Shared keys are `paths.ignore`, `allowlists.acceptedAbbreviations`, `allowlists.secretPreviews`, `selection`, and `rules.<id>`.
+Project configuration that tunes discovery, allowlists, rule selection, and per-rule thresholds/severity/options. Shared keys are `paths.ignore`, `allowlists.acceptedAbbreviations`, `selection`, and `rules.<id>`.
 
 ### Hotspot Output
 
@@ -72,7 +72,7 @@ The set of built-in rules plus their public metadata. `list-rules --format json`
 
 ### Rule ID
 
-Stable public identifier for one rule, using dotted gruff-family names such as `size.file-length`, `docs.missing-function-docstring`, and `sensitive-data.high-entropy-string`. Documentation rules use `docs.*` while the emitted pillar is `documentation`.
+Stable public identifier for one rule, using dotted gruff-family names such as `size.file-length`, `docs.missing-function-docstring`, and `sensitive-data.aws-access-key`. Documentation rules use `docs.*` while the emitted pillar is `documentation`.
 
 ### SARIF
 
@@ -132,7 +132,7 @@ The Python fingerprint algorithm is constrained by the PHP implementation for sh
 
 ### GOAT Flow
 
-Local agent workflow framework installed from `@blundergoat/goat-flow`. The workspace config, all four agent instruction surfaces, shared references, hooks, and project-local CLI declare `1.15.1`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
+Local agent workflow framework installed from `@blundergoat/goat-flow`. The workspace config, all four agent instruction surfaces, shared references, hooks, and project-local CLI declare `1.17.0`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
 
 ### Agent-Owned Surface
 

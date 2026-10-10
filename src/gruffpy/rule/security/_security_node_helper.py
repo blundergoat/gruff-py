@@ -48,9 +48,7 @@ _FRAMEWORK_IMPORTS: dict[str, str] = {
     "sqlalchemy": "sqlalchemy",
     "requests": "requests",
 }
-_LOGGING_LEAVES: frozenset[str] = frozenset(
-    {"log", "debug", "info", "warning", "error", "critical", "exception", "print"}
-)
+_LOGGING_LEAVES: frozenset[str] = frozenset({"log", "debug", "info", "warning", "error", "critical", "exception", "print"})
 _MODULE_CONSTANT_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -156,11 +154,7 @@ def module_string_constants(tree: ast.AST) -> dict[str, str]:
             invalid.update(name for name in node.names if _is_module_constant_name(name))
         elif isinstance(node, ast.Delete):
             invalid.update(_deleted_constant_names(node.targets))
-    return {
-        name: value
-        for name, value in candidates.items()
-        if name not in invalid and _is_module_constant_name(name)
-    }
+    return {name: value for name, value in candidates.items() if name not in invalid and _is_module_constant_name(name)}
 
 
 def _collect_module_constant_candidate(
@@ -229,11 +223,7 @@ def _module_scope_rebound_names(
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
             continue
         if isinstance(node, ast.Name):
-            if (
-                isinstance(node.ctx, ast.Store)
-                and _is_module_constant_name(node.id)
-                and node is not owner_targets.get(node.id)
-            ):
+            if isinstance(node.ctx, ast.Store) and _is_module_constant_name(node.id) and node is not owner_targets.get(node.id):
                 rebound.add(node.id)
         elif isinstance(node, ast.Import | ast.ImportFrom):
             rebound.update(_constant_import_names(node.names))
@@ -282,21 +272,6 @@ def is_fixed_string_expression(node: ast.expr, constants: Mapping[str, str]) -> 
     return _fixed_string_value(node, constants) is not None
 
 
-def fixed_string_fragments(node: ast.expr, constants: Mapping[str, str]) -> tuple[str, ...]:
-    """Return fixed string fragments visible inside *node*.
-
-    Args:
-        node: Expression to inspect.
-        constants: Same-module string constants from :func:`module_string_constants`.
-
-    Returns:
-        Literal and constant string fragments found in stable traversal order.
-    """
-    fragments: list[str] = []
-    _collect_fixed_string_fragments(node, constants, fragments)
-    return tuple(fragments)
-
-
 def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -343,11 +318,7 @@ def _fixed_binop_string_value(node: ast.BinOp, constants: Mapping[str, str]) -> 
 
 
 def _fixed_format_call_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
-    if not (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "format"
-    ):
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format"):
         return None
     receiver = _fixed_string_value(node.func.value, constants)
     if receiver is None:
@@ -379,45 +350,6 @@ def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[s
         return values
     fixed = _fixed_string_value(node, constants)
     return None if fixed is None else [fixed]
-
-
-def _collect_fixed_string_fragments(
-    node: ast.expr,
-    constants: Mapping[str, str],
-    fragments: list[str],
-) -> None:
-    """Collect only compile-time string fragments from dynamic string builders.
-
-    The branch structure mirrors Python's common string-building AST shapes:
-    f-strings, `+` concatenation, and `.format(...)`. Runtime holes are visited
-    only to recover nested fixed fragments; callers use the resulting keyword
-    evidence without treating dynamic values as safe.
-    """
-    fixed = _fixed_string_value(node, constants)
-    if fixed is not None:
-        fragments.append(fixed)
-        return
-    if isinstance(node, ast.JoinedStr):
-        for value in node.values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                fragments.append(value.value)
-            elif isinstance(value, ast.FormattedValue):
-                _collect_fixed_string_fragments(value.value, constants, fragments)
-        return
-    if isinstance(node, ast.BinOp):
-        _collect_fixed_string_fragments(node.left, constants, fragments)
-        _collect_fixed_string_fragments(node.right, constants, fragments)
-        return
-    if (
-        _is_format_call(node)
-        and isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-    ):
-        _collect_fixed_string_fragments(node.func.value, constants, fragments)
-        for arg in node.args:
-            _collect_fixed_string_fragments(arg, constants, fragments)
-        for keyword in node.keywords:
-            _collect_fixed_string_fragments(keyword.value, constants, fragments)
 
 
 def is_dynamic_string(node: ast.expr) -> bool:
@@ -459,11 +391,7 @@ def _is_dynamic_string_binop(node: ast.BinOp) -> bool:
 
 
 def _is_format_call(node: ast.expr) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "format"
-    )
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format"
 
 
 def frameworks_in_use(tree: ast.AST) -> frozenset[str]:

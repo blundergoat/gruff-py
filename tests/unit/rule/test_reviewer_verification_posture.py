@@ -25,15 +25,14 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.dependency-local-path": (True, "warning", "high"),
     "security.dependency-url-reference": (True, "warning", "high"),
     "security.disabled-ssl-verification": (True, "error", "high"),
-    "security.django-mark-safe": (True, "warning", "medium"),
-    "security.django-raw-sql": (True, "warning", "high"),
+    "security.django-raw-sql": (False, "warning", "high"),
     "security.error-suppression": (True, "advisory", "medium"),
     "security.extract-compact-user-input": (True, "warning", "medium"),
     "security.flask-debug-enabled": (True, "error", "high"),
     "security.github-actions-broad-permissions": (True, "warning", "high"),
     "security.github-actions-pull-request-target": (True, "error", "high"),
     "security.github-actions-remote-shell": (True, "warning", "high"),
-    "security.github-actions-secrets-in-pr": (True, "warning", "medium"),
+    "security.github-actions-secrets-in-pr": (False, "warning", "medium"),
     "security.github-actions-unpinned-action": (True, "warning", "high"),
     "security.hardcoded-bind-all-interfaces": (True, "warning", "medium"),
     "security.hardcoded-framework-secret-key": (True, "error", "high"),
@@ -44,9 +43,8 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.jinja2-autoescape-off": (True, "error", "high"),
     "security.paramiko-no-host-key-check": (True, "error", "high"),
     "security.path-traversal": (True, "error", "high"),
-    "security.shell-injection": (True, "error", "high"),
+    "security.shell-injection": (False, "error", "high"),
     "security.silent-except": (True, "advisory", "high"),
-    "security.sql-concatenation": (True, "warning", "medium"),
     "security.ssrf": (True, "error", "high"),
     "security.unsafe-pickle": (True, "error", "high"),
     "security.unsafe-yaml-load": (True, "error", "high"),
@@ -57,17 +55,16 @@ _SECURITY_POSTURE: dict[str, Posture] = {
 }
 
 _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
-    "sensitive-data.api-key-pattern": (True, "warning", "high"),
-    "sensitive-data.aws-access-key": (True, "error", "high"),
-    "sensitive-data.database-url-password": (True, "error", "high"),
-    "sensitive-data.gcp-service-account-key": (True, "error", "high"),
+    "sensitive-data.api-key-pattern": (False, "warning", "high"),
+    "sensitive-data.aws-access-key": (True, "warning", "high"),
+    "sensitive-data.database-url-password": (True, "warning", "high"),
+    "sensitive-data.gcp-service-account-key": (True, "warning", "high"),
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
-    "sensitive-data.high-entropy-string": (True, "warning", "low"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
-    "sensitive-data.phi-pattern": (True, "error", "medium"),
+    "sensitive-data.phi-pattern": (True, "warning", "medium"),
     "sensitive-data.pii-test-fixture": (True, "warning", "medium"),
-    "sensitive-data.private-key": (True, "error", "high"),
-    "sensitive-data.url-credentials": (True, "error", "high"),
+    "sensitive-data.private-key": (True, "warning", "high"),
+    "sensitive-data.url-credentials": (False, "warning", "high"),
 }
 
 
@@ -80,9 +77,7 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     ),
     ids=("docs.missing-*", "security.*", "sensitive-data.*"),
 )
-def test_reviewer_verification_families_keep_default_posture(
-    expected: dict[str, Posture], prefix: str
-) -> None:
+def test_reviewer_verification_families_keep_default_posture(expected: dict[str, Posture], prefix: str) -> None:
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
 

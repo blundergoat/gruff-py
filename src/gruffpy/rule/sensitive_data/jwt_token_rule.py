@@ -15,16 +15,20 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
     iter_matches,
-    redact_preview,
 )
 
 _PATTERN = compile_pattern(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
 
 
 class JwtTokenRule(SourceTextRule):
-    """Detect ``eyJ<header>.<payload>.<signature>``-shaped JWT literals committed to source."""
+    """Detect JWT-shaped literals committed to source.
+
+    Users encounter this rule when a scan finds three token segments beginning with ``eyJ`` and
+    receive the exact source line plus rotation guidance without any token-derived preview text.
+    """
 
     ID = "sensitive-data.jwt-token"
 
@@ -58,23 +62,23 @@ class JwtTokenRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in iter_matches(_PATTERN, unit.source):
+        # Each token occurrence remains visible so users can invalidate every committed credential.
+        for token_match in iter_matches(_PATTERN, unit.source):
             findings.append(
                 Finding(
                     rule_id=definition.id,
                     message="JWT-shaped token literal in source.",
                     file_path=unit.file.display_path,
-                    line=match.line,
+                    line=token_match.line,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     remediation=(
-                        "Hard-coded JWTs are short-lived but often leak signing intent. "
-                        "Rotate the signing key, then load tokens at runtime."
+                        "Hard-coded JWTs are short-lived but often leak signing intent. Rotate the signing key, then load tokens at runtime."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": redact_preview(match.raw)},
+                    metadata={"preview": category_preview("jwt")},
                 ),
             )
         return findings

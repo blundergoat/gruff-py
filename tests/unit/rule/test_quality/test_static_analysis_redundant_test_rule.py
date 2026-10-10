@@ -36,9 +36,7 @@ def test_inspect_isclass_flags_local_class_declaration():
     assert finding.rule_id == RULE_ID
     assert finding.metadata["variant"] == "inspect-isclass"
     assert finding.metadata["evidenceSymbol"] == "ShapeService"
-    assert (
-        finding.metadata["staticFact"] == "class ShapeService is declared in the same parsed file"
-    )
+    assert finding.metadata["staticFact"] == "class ShapeService is declared in the same parsed file"
 
 
 def test_hasattr_method_flags_declared_method():
@@ -55,9 +53,7 @@ def test_hasattr_method_flags_declared_method():
 def test_hasattr_class_attribute_flags_assignment():
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'label')\n")
     assert finding.metadata["variant"] == "hasattr-class-attribute"
-    assert finding.metadata["staticFact"] == (
-        "attribute ShapeService.label is declared in the same parsed file"
-    )
+    assert finding.metadata["staticFact"] == ("attribute ShapeService.label is declared in the same parsed file")
 
 
 def test_hasattr_class_attribute_flags_annotated_assignment_with_value():
@@ -78,11 +74,7 @@ def test_callable_attribute_method_variant():
 
 
 def test_unittest_asserttrue_is_detected():
-    source = (
-        "class TestShape(unittest.TestCase):\n"
-        "    def test_decl(self):\n"
-        "        self.assertTrue(hasattr(ShapeService, 'render'))\n"
-    )
+    source = "class TestShape(unittest.TestCase):\n    def test_decl(self):\n        self.assertTrue(hasattr(ShapeService, 'render'))\n"
     finding = _only(source)
     assert finding.symbol == "TestShape.test_decl"
     assert finding.metadata["assertion"] == "self.assertTrue(hasattr(ShapeService, 'render'))"
@@ -104,10 +96,7 @@ def test_finding_carries_advisory_high_and_required_metadata_keys():
 
 def test_remediation_is_behaviour_first():
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'render')\n")
-    assert finding.remediation == (
-        "Remove only the redundant assertion, or replace it with behavioral "
-        "evidence that static analysis cannot prove."
-    )
+    assert finding.remediation == ("Remove only the redundant assertion, or replace it with behavioral evidence that static analysis cannot prove.")
 
 
 def test_each_redundant_assertion_emits_one_finding():
@@ -151,11 +140,7 @@ def test_instance_receiver_is_clean():
 
 
 def test_imported_symbol_is_clean():
-    source = (
-        "def test_value():\n"
-        "    from datetime import datetime\n\n"
-        "    assert hasattr(datetime, 'fromisoformat')\n"
-    )
+    source = "def test_value():\n    from datetime import datetime\n\n    assert hasattr(datetime, 'fromisoformat')\n"
     assert _findings(source) == []
 
 
@@ -180,54 +165,27 @@ def test_negated_existence_is_clean():
 
 
 def test_assert_false_is_clean():
-    source = (
-        "class TestShape(unittest.TestCase):\n"
-        "    def test_value(self):\n"
-        "        self.assertFalse(hasattr(ShapeService, 'render'))\n"
-    )
+    source = "class TestShape(unittest.TestCase):\n    def test_value(self):\n        self.assertFalse(hasattr(ShapeService, 'render'))\n"
     assert _findings(source) == []
 
 
 def test_assert_not_has_attr_is_clean():
-    source = (
-        "class TestShape(unittest.TestCase):\n"
-        "    def test_value(self):\n"
-        "        self.assertNotHasAttr(ShapeService, 'render')\n"
-    )
+    source = "class TestShape(unittest.TestCase):\n    def test_value(self):\n        self.assertNotHasAttr(ShapeService, 'render')\n"
     assert _findings(source) == []
 
 
 def test_property_member_is_clean():
-    source = (
-        "class WithProp:\n"
-        "    @property\n"
-        "    def name(self):\n"
-        "        return 'x'\n\n"
-        "def test_value():\n"
-        "    assert hasattr(WithProp, 'name')\n"
-    )
+    source = "class WithProp:\n    @property\n    def name(self):\n        return 'x'\n\ndef test_value():\n    assert hasattr(WithProp, 'name')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_instance_only_attribute_is_clean():
-    source = (
-        "class Stateful:\n"
-        "    def __init__(self):\n"
-        "        self.count = 0\n\n"
-        "def test_value():\n"
-        "    assert hasattr(Stateful, 'count')\n"
-    )
+    source = "class Stateful:\n    def __init__(self):\n        self.count = 0\n\ndef test_value():\n    assert hasattr(Stateful, 'count')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_setattr_injected_member_is_clean():
-    source = (
-        "class Dynamic:\n"
-        "    pass\n\n"
-        "setattr(Dynamic, 'injected', 1)\n\n"
-        "def test_value():\n"
-        "    assert hasattr(Dynamic, 'injected')\n"
-    )
+    source = "class Dynamic:\n    pass\n\nsetattr(Dynamic, 'injected', 1)\n\ndef test_value():\n    assert hasattr(Dynamic, 'injected')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
@@ -244,14 +202,7 @@ def test_conditionally_declared_class_is_clean():
 
 
 def test_module_level_rebinding_makes_class_ambiguous():
-    source = (
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "Widget = None\n\n"
-        "def test_value():\n"
-        "    assert hasattr(Widget, 'render')\n"
-    )
+    source = "class Widget:\n    def render(self):\n        return 'x'\n\nWidget = None\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
@@ -269,25 +220,13 @@ def test_module_level_function_rebinding_makes_class_ambiguous():
 
 
 def test_module_level_delete_makes_class_ambiguous():
-    source = (
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "del Widget\n\n"
-        "def test_value():\n"
-        "    assert hasattr(Widget, 'render')\n"
-    )
+    source = "class Widget:\n    def render(self):\n        return 'x'\n\ndel Widget\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_module_level_member_rebinding_makes_method_ambiguous():
     source = (
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "Widget.render = None\n\n"
-        "def test_value():\n"
-        "    assert callable(Widget.render)\n"
+        "class Widget:\n    def render(self):\n        return 'x'\n\nWidget.render = None\n\ndef test_value():\n    assert callable(Widget.render)\n"
     )
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
@@ -307,37 +246,21 @@ def test_nested_class_rebinding_makes_nested_class_ambiguous():
 
 def test_test_local_rebinding_makes_class_ambiguous():
     source = (
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "def test_value():\n"
-        "    Widget = object()\n"
-        "    assert hasattr(Widget, 'render')\n"
+        "class Widget:\n    def render(self):\n        return 'x'\n\ndef test_value():\n    Widget = object()\n    assert hasattr(Widget, 'render')\n"
     )
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_star_import_disables_class_evidence():
     source = (
-        "from os import *\n\n"
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "def test_value():\n"
-        "    assert hasattr(Widget, 'render')\n"
+        "from os import *\n\nclass Widget:\n    def render(self):\n        return 'x'\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     )
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_test_parameter_shadow_is_clean():
     # A fixture / parametrized argument shadows the same-file class name.
-    source = (
-        "class Widget:\n"
-        "    def render(self):\n"
-        "        return 'x'\n\n"
-        "def test_value(Widget):\n"
-        "    assert hasattr(Widget, 'render')\n"
-    )
+    source = "class Widget:\n    def render(self):\n        return 'x'\n\ndef test_value(Widget):\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 

@@ -139,11 +139,7 @@ def _joined_str_findings(
     Returns:
         Slot findings for this f-string; empty means it is not a link or every slot is safe.
     """
-    static_text = "".join(
-        value.value
-        for value in node.values
-        if isinstance(value, ast.Constant) and isinstance(value.value, str)
-    )
+    static_text = "".join(value.value for value in node.values if isinstance(value, ast.Constant) and isinstance(value.value, str))
     placeholder = _placeholder_absent_from(static_text)
     template_parts: list[str] = []
     dynamic_values: list[ast.expr] = []
@@ -228,11 +224,7 @@ def _resolve_format_fields(
     # ``IndexError`` on the value list). This mirrors the f-string path, which
     # derives its token from the concatenated static constants.
     placeholder = _placeholder_absent_from(_FORMAT_FIELD_PATTERN.sub("", template))
-    keyword_arguments = {
-        keyword_argument.arg: keyword_argument.value
-        for keyword_argument in node.keywords
-        if keyword_argument.arg is not None
-    }
+    keyword_arguments = {keyword_argument.arg: keyword_argument.value for keyword_argument in node.keywords if keyword_argument.arg is not None}
     dynamic_values: list[ast.expr] = []
     auto_index = 0
     resolved: list[str] = []

@@ -87,10 +87,7 @@ class SilentExceptRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Log the exception, re-raise, or catch a specific exception type "
-                        "and handle it deliberately."
-                    ),
+                    remediation=("Log the exception, re-raise, or catch a specific exception type and handle it deliberately."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),

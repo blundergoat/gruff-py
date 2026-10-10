@@ -80,13 +80,6 @@ def test_safe_loader_assignment_after_call_does_not_mask_unsafe_call():
 
 
 def test_function_scoped_safe_loader_does_not_leak_to_other_function():
-    src = (
-        "import yaml\n"
-        "def safe_setup():\n"
-        "    loader = yaml.SafeLoader\n"
-        "    return loader\n"
-        "def attack(data):\n"
-        "    yaml.load(data, Loader=loader)\n"
-    )
+    src = "import yaml\ndef safe_setup():\n    loader = yaml.SafeLoader\n    return loader\ndef attack(data):\n    yaml.load(data, Loader=loader)\n"
     findings = UnsafeYamlLoadRule().analyse(make_unit(src), default_ctx())
     assert [f.metadata["target"] for f in findings] == ["yaml.load"]

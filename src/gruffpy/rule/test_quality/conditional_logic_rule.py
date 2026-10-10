@@ -21,6 +21,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class ConditionalLogicRule(Rule):
@@ -65,7 +66,7 @@ class ConditionalLogicRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
+        for fn, scope in test_functions(unit):
             for node in walk_test_body(fn):
                 if not isinstance(node, ast.If | ast.Match):
                     continue
@@ -76,10 +77,7 @@ class ConditionalLogicRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} contains conditional logic - split into "
-                            f"parametrised cases."
-                        ),
+                        message=(f"Test {symbol!r} contains conditional logic - split into parametrised cases."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -89,8 +87,9 @@ class ConditionalLogicRule(Rule):
                         end_line=node.end_lineno,
                         symbol=symbol,
                         remediation=(
-                            "Replace the branch with `@pytest.mark.parametrize` or two "
-                            "separate test functions."
+                            "Drive the cases from a `self.subTest(...)` loop with explicit inputs and expected outcomes."
+                            if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                            else "Replace the branch with `@pytest.mark.parametrize` or two separate test functions."
                         ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},

@@ -17,21 +17,44 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
-from gruffpy.rule.sensitive_data._secret_scanner_helper import redact_preview
+from gruffpy.rule.sensitive_data._secret_scanner_helper import category_preview
 
 _EMAIL_RE = re.compile(r"(?<!\\)\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
-_PHONE_RE = re.compile(
-    r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b"
-)
-_TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset(
-    {"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"}
-)
+_PHONE_RE = re.compile(r"\b\+?1?[-.\s]?\(?(?P<area>\d{3})\)?[-.\s]?(?P<exchange>\d{3})[-.\s]?\d{4}\b")
+_TEST_FIXTURE_DIRECTORY_NAMES: frozenset[str] = frozenset({"fixture", "fixtures", "test", "test-data", "test_data", "testdata", "testing", "tests"})
 # Compound directories such as `integration_tests` end in one of these tokens;
 # an incidental qualifier such as `test-scan-repos` does not.
-_TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset(
-    {"fixture", "fixtures", "test", "tests"}
-)
+_TEST_FIXTURE_DIRECTORY_SUFFIX_TOKENS: frozenset[str] = frozenset({"fixture", "fixtures", "test", "tests"})
 _SEQUENTIAL_DIGIT_FIXTURES: frozenset[str] = frozenset({"0123456789", "1234567890"})
+# OpenSSH names its protocol extensions ``name@openssh.com``: certificate and key types, ciphers, MACs, compression,
+# channels, key exchange and SFTP extensions. The list is closed to the exact names observed in the calibration corpus,
+# so any other address at that domain, a person's included, is still reviewed.
+_OPENSSH_PROTOCOL_NAMES: frozenset[str] = frozenset(
+    {
+        "aes128-gcm@openssh.com",
+        "aes256-gcm@openssh.com",
+        "auth-agent-req@openssh.com",
+        "auth-agent@openssh.com",
+        "ecdsa-sha2-nistp256-cert-v01@openssh.com",
+        "ecdsa-sha2-nistp384-cert-v01@openssh.com",
+        "ecdsa-sha2-nistp521-cert-v01@openssh.com",
+        "hmac-sha2-256-etm@openssh.com",
+        "hmac-sha2-512-etm@openssh.com",
+        "kex-strict-c-v00@openssh.com",
+        "posix-rename@openssh.com",
+        "rsa-sha2-256-cert-v01@openssh.com",
+        "rsa-sha2-512-cert-v01@openssh.com",
+        "sk-ecdsa-sha2-nistp256@openssh.com",
+        "sk-ssh-ed25519@openssh.com",
+        "ssh-ed25519-cert-v01@openssh.com",
+        "ssh-rsa-cert-v01@openssh.com",
+        "zlib@openssh.com",
+    }
+)
+# Characters that can extend a written number around a phone-shaped run: digits, grouping commas and a decimal point.
+_NUMBER_CHARACTERS: frozenset[str] = frozenset("0123456789,.")
+# A number grouped in thousands with commas, such as ``1,234,567.1234567``; a phone number is never written this way.
+_COMMA_GROUPED_NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?")
 _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
     {
         "example.com",
@@ -43,12 +66,11 @@ _PLACEHOLDER_DOMAINS: frozenset[str] = frozenset(
         "domain.tld",
     }
 )
-_RESERVED_EMAIL_TLDS: frozenset[str] = frozenset(
-    {"example", "invalid", "localhost", "local", "test"}
-)
-# 555 in the exchange position (NXX-555-NNNN) is the canonical US placeholder
-# for fictitious numbers. The area-code 555 is also reserved for directory-
-# assistance use, so treat either position as a placeholder.
+_RESERVED_EMAIL_TLDS: frozenset[str] = frozenset({"example", "invalid", "localhost", "local", "test"})
+# 555 in the exchange position (NXX-555-NNNN) is the canonical US placeholder.
+
+# Area-code 555 is also reserved for directory assistance.
+# Either position therefore means the user has supplied a placeholder.
 _PLACEHOLDER_PHONE_SEGMENTS: frozenset[str] = frozenset({"555"})
 _TIMESTAMP_CONTEXT_TERMS: frozenset[str] = frozenset(
     {
@@ -73,17 +95,19 @@ _TIMESTAMP_CONTEXT_TERMS: frozenset[str] = frozenset(
 
 
 class PiiTestFixtureRule(SourceTextRule):
-    """Detect realistic emails or phone numbers in test/fixture files (ignoring placeholders)."""
+    """Detect realistic emails or phone numbers in test and fixture files.
+
+    Users see a finding after a test contains contact details that do not match safe fixture
+    conventions, while reserved domains, 555 numbers, and numeric test data remain quiet.
+    """
 
     ID = "sensitive-data.pii-test-fixture"
 
     def definition(self) -> RuleDefinition:
         """Describe the PII-in-test-fixture rule as a medium-confidence warning.
 
-        Medium confidence because realistic-looking emails/phones don't
-        always belong to a real person; the placeholder allowlists
-        (``example.com``, reserved TLDs, ``555`` numbers, timestamp-shaped
-        fixture numbers) cover the canonical fixture shapes.
+        Users receive a warning because realistic contact details may still be synthetic; reserved
+        domains, 555 numbers, timestamps, and known sequences remove common fixture shapes.
 
         Returns:
             Definition for the PII-test-fixture rule under the
@@ -101,11 +125,8 @@ class PiiTestFixtureRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag realistic emails and phone numbers in files under test paths.
 
-        Path gate: the file must use a recognised test/fixture directory or
-        filename convention. Placeholder domains (``example.com``,
-        ``test.com``, reserved final labels such as ``.local`` / ``.test``),
-        US ``555`` area / exchange codes, timestamp-shaped values, and known
-        sequential digit fixtures are recognised and skipped.
+        Users see contact-shaped values only in recognized test locations after safe domains,
+        555 numbers, timestamps, and known numeric fixtures are removed.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -121,27 +142,28 @@ class PiiTestFixtureRule(SourceTextRule):
         definition = self.definition()
         findings: list[Finding] = []
         # Each realistic email remains a separate reviewable fixture occurrence.
-        for match in _EMAIL_RE.finditer(unit.source):
-            value = match.group(0)
+        for email_match in _EMAIL_RE.finditer(unit.source):
+            email_address = email_match.group(0)
             # Git SSH references contain an email-shaped user/host prefix, not a person's address.
-            if _is_scp_style_git_reference(unit.source, match.end(), value):
+            if _is_scp_style_git_reference(unit.source, email_match.end(), email_address):
                 continue
             # Reserved domains are safe fixture placeholders rather than third-party PII.
-            if _is_placeholder_email_domain(match.group("domain")):
+            if _is_placeholder_email_domain(email_match.group("domain")):
                 continue
-            findings.append(_build_finding(definition, unit, match.start(), value, "email"))
+            # An exact OpenSSH protocol name only borrows the email shape; it names an algorithm or extension, not a mailbox.
+            if email_address in _OPENSSH_PROTOCOL_NAMES:
+                continue
+            findings.append(_build_pii_finding(definition, unit, email_match.start(), "email"))
         # Phone candidates need a plausible shape or an explicit nearby phone label.
-        for match in _PHONE_RE.finditer(unit.source):
+        for phone_match in _PHONE_RE.finditer(unit.source):
             # Known placeholders and numeric fixtures do not identify a person.
             if (
-                match.group("area") in _PLACEHOLDER_PHONE_SEGMENTS
-                or match.group("exchange") in _PLACEHOLDER_PHONE_SEGMENTS
-                or _is_known_non_phone_number(unit.source, match)
+                phone_match.group("area") in _PLACEHOLDER_PHONE_SEGMENTS
+                or phone_match.group("exchange") in _PLACEHOLDER_PHONE_SEGMENTS
+                or _is_known_non_phone_number(unit.source, phone_match)
             ):
                 continue
-            findings.append(
-                _build_finding(definition, unit, match.start(), match.group(0), "phone")
-            )
+            findings.append(_build_pii_finding(definition, unit, phone_match.start(), "phone"))
         return findings
 
 
@@ -172,9 +194,8 @@ def _is_test_fixture_path(display_path: str) -> bool:
 def _is_test_fixture_directory_name(directory_name: str) -> bool:
     """Return whether a compound directory names a test or fixture collection.
 
-    The final token decides, so ``integration_tests`` and ``test-fixtures`` are
-    recognised while an incidental qualifier such as ``test-scan-repos`` - whose
-    last token names repositories, not tests - stays out of this fixture signal.
+    The final token includes ``integration_tests`` and ``test-fixtures`` while keeping an incidental
+    qualifier such as ``test-scan-repos`` outside the user's fixture findings.
 
     Args:
         directory_name: One lowercase path segment; empty text names nothing.
@@ -212,10 +233,13 @@ def _is_known_non_phone_number(source: str, match: re.Match[str]) -> bool:
         match: Phone-shaped regex match; separator-bearing matches are already phone-like.
 
     Returns:
-        True for decimal fragments, timestamps, and sequential digit fixtures; false for other
-        bare or formatted values.
+        True for runs inside comma-grouped numbers, decimal fragments, timestamps, and sequential
+        digit fixtures; false for other bare or formatted values.
     """
     raw = match.group(0)
+    # A phone-shaped run inside a number grouped in thousands with commas is numeric data, not a contact number.
+    if _is_comma_grouped_number_fragment(source, match):
+        return True
     # Formatted values retain the security signal unless an existing placeholder rule handles them.
     if not raw.isdigit():
         return False
@@ -230,7 +254,28 @@ def _is_known_non_phone_number(source: str, match: re.Match[str]) -> bool:
     return raw in _SEQUENTIAL_DIGIT_FIXTURES
 
 
+def _is_comma_grouped_number_fragment(source: str, match: re.Match[str]) -> bool:
+    """Return whether a phone-shaped match lies inside a number grouped in thousands with commas.
+
+    Args:
+        source: Full fixture text containing the candidate.
+        match: Phone-shaped regex match.
+
+    Returns:
+        True only when the whole written number around the match, without a sign, is comma-grouped
+        with an optional decimal part; any other character inside it keeps the phone signal.
+    """
+    start, end = match.start(), match.end()
+    # Widen to the complete run of digits, commas and points, so the whole written number is judged.
+    while start > 0 and source[start - 1] in _NUMBER_CHARACTERS:
+        start -= 1
+    while end < len(source) and source[end] in _NUMBER_CHARACTERS:
+        end += 1
+    return _COMMA_GROUPED_NUMBER.fullmatch(source[start:end]) is not None
+
+
 def _is_decimal_number_fragment(source: str, match: re.Match[str]) -> bool:
+    """Return whether a phone-shaped match is part of decimal data a user need not replace."""
     before = source[match.start() - 1] if match.start() > 0 else ""
     after = source[match.end()] if match.end() < len(source) else ""
     after_next = source[match.end() + 1] if match.end() + 1 < len(source) else ""
@@ -238,8 +283,10 @@ def _is_decimal_number_fragment(source: str, match: re.Match[str]) -> bool:
 
 
 def _source_context_for_match(source: str, match: re.Match[str]) -> str:
+    """Return nearby lowercase text used to recognize labelled timestamp fixtures."""
     line_start = _context_line_start(source, match.start(), previous_lines=2)
     line_end = source.find("\n", match.end())
+    # A final line without a newline still contributes its full context to fixture classification.
     if line_end == -1:
         line_end = len(source)
     window_start = max(0, match.start() - 40)
@@ -248,21 +295,24 @@ def _source_context_for_match(source: str, match: re.Match[str]) -> str:
 
 
 def _context_line_start(source: str, offset: int, previous_lines: int) -> int:
+    """Return the start offset that provides enough prior user context for classification."""
     start = source.rfind("\n", 0, offset)
+    # Nearby prior lines may contain the label that explains an otherwise phone-shaped number.
     for _ in range(previous_lines):
+        # Reaching the file start means no earlier context is available for this user value.
         if start <= 0:
             return 0
         start = source.rfind("\n", 0, start)
     return start + 1
 
 
-def _build_finding(
+def _build_pii_finding(
     definition: RuleDefinition,
     unit: AnalysisUnit,
     offset: int,
-    value: str,
     kind: str,
 ) -> Finding:
+    """Build the fixed-preview PII finding shown at the matched fixture line."""
     line = unit.source.count("\n", 0, offset) + 1
     return Finding(
         rule_id=definition.id,
@@ -274,9 +324,8 @@ def _build_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         remediation=(
-            "Replace with documented placeholders (`user@example.com`, `user@app.test`, "
-            "`+1-555-...`) so test failures don't expose third-party PII."
+            "Replace with documented placeholders (`user@example.com`, `user@app.test`, `+1-555-...`) so test failures don't expose third-party PII."
         ),
         secondary_pillars=definition.secondary_pillars,
-        metadata={"preview": redact_preview(value), "kind": kind},
+        metadata={"preview": category_preview(kind), "kind": kind},
     )

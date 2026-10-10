@@ -68,7 +68,7 @@ def _rule_detail_payload(
         "defaultSeverity": definition.default_severity.value,
         "confidence": definition.confidence.value,
         "defaultEnabled": definition.default_enabled,
-        **definition.threshold_payload(),
+        **definition.listing_threshold_payload(),
         "options": dict(definition.default_options),
         "documentation": docs.to_payload(),
         "relatedRules": list(related),

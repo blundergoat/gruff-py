@@ -61,15 +61,11 @@ _MOCK_LEAVES: frozenset[str] = frozenset(
         "reset_mock",
     }
 )
-_BUILTIN_LEAVES: frozenset[str] = frozenset(
-    {"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"}
-)
+_BUILTIN_LEAVES: frozenset[str] = frozenset({"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"})
 # Schema-inspection accessors: a test that reads any of these IS exercising
 # the schema declaration, even when there's no callable SUT (e.g. a contract
 # test asserting on ``MyModel.model_fields``).
-_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset(
-    {"model_fields", "__annotations__", "__fields__", "model_config"}
-)
+_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset({"model_fields", "__annotations__", "__fields__", "model_config"})
 
 
 class SutNotCalledRule(Rule):
@@ -95,6 +91,7 @@ class SutNotCalledRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -120,17 +117,14 @@ class SutNotCalledRule(Rule):
         module_names = _collect_module_level_names(unit.tree)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            if _has_sut_call(fn, module_names):
+            if _has_sut_call(fn, module_names) or _has_local_helper_sut_call(fn, module_names):
                 continue
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} never calls a non-framework, non-mock function "
-                        f"- is the SUT exercised?"
-                    ),
+                    message=(f"Test {symbol!r} never calls a non-framework, non-mock function - is the SUT exercised?"),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -139,10 +133,7 @@ class SutNotCalledRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Make sure the test actually calls into the function or class "
-                        "it claims to verify."
-                    ),
+                    remediation=("Make sure the test actually calls into the function or class it claims to verify."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),
@@ -161,6 +152,27 @@ def _has_sut_call(
             return True
         if _is_schema_inspection_access(node):
             return True
+    return False
+
+
+def _has_local_helper_sut_call(fn: ast.FunctionDef | ast.AsyncFunctionDef, module_names: frozenset[str]) -> bool:
+    parent = getattr(fn, "parent", None)
+    parameters = [*fn.args.posonlyargs, *fn.args.args]
+    if not isinstance(parent, ast.ClassDef) or not parameters:
+        return False
+    receiver = parameters[0].arg
+    if any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn)):
+        return False
+    helpers = {
+        f"{receiver}.{node.name}": node
+        for node in parent.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(("assert", "_assert"))
+    }
+    for node in walk_test_body(fn):
+        if isinstance(node, ast.Call):
+            helper = helpers.get(call_target_name(node) or "")
+            if helper is not None and _has_sut_call(helper, module_names):
+                return True
     return False
 
 
@@ -203,9 +215,7 @@ def _is_schema_inspection_access(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr in _SCHEMA_INSPECTION_ATTRS
 
 
-_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset(
-    {"pytest", "unittest", "mock", "unittest.mock"}
-)
+_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset({"pytest", "unittest", "mock", "unittest.mock"})
 
 
 def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:

@@ -130,6 +130,4 @@ def test_matcher_matches_git_check_ignore_on_probe(probe: _PathProbe, corpus: Pa
     target = corpus / probe.rel
     git_verdict = _is_git_ignored(corpus, target)
     matcher_verdict = matcher.is_ignored(target, is_dir=probe.is_dir)
-    assert matcher_verdict == git_verdict, (
-        f"{probe.rel} (is_dir={probe.is_dir}): git={git_verdict} matcher={matcher_verdict}"
-    )
+    assert matcher_verdict == git_verdict, f"{probe.rel} (is_dir={probe.is_dir}): git={git_verdict} matcher={matcher_verdict}"

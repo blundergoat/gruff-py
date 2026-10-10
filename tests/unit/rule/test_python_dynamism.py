@@ -1,5 +1,7 @@
 import ast
 
+import pytest
+
 from gruffpy.rule._python_dynamism import (
     has_dataclass_decorator,
     has_framework_base,
@@ -23,6 +25,15 @@ def _first_class(source: str) -> ast.ClassDef:
         if isinstance(node, ast.ClassDef):
             return node
     raise AssertionError("no class")
+
+
+def _parse_with_parents(source: str) -> ast.Module:
+    tree = ast.parse(source)
+    # mirror PythonFileParser._attach_parents
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+    return tree
 
 
 def test_no_decorator_returns_false():
@@ -161,3 +172,50 @@ def test_non_protocol_method_not_stub():
     method = cls.body[0]
     assert isinstance(method, ast.FunctionDef)
     assert is_protocol_method_stub(method, parents=[tree, cls]) is False
+
+
+@pytest.mark.parametrize(
+    "source, predicate, expected",
+    [
+        (
+            "from pluggy import HookspecMarker\n"
+            'def HookspecMarker(project): return project\nhookspec = HookspecMarker("pytest")\ndef pytest_event(arg): ...\n',
+            "is_pluggy_hookspec",
+            False,
+        ),
+        ("if TYPE_CHECKING():\n    def declared(arg): ...\n", "is_type_checking_stub", False),
+        ('from pluggy import HookspecMarker as Marker\nhookspec = Marker("pytest")\ndef pytest_event(arg): ...\n', "is_pluggy_hookspec", True),
+        ("from pluggy import HookspecMarker\nhookspec = HookspecMarker(project)\ndef pytest_event(arg): ...\n", "is_pluggy_hookspec", False),
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\nclass Plugin:\n    def pytest_event(self, arg): ...\n',
+            "is_pluggy_hookspec",
+            False,
+        ),
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\ndef pytest_event(arg):\n    return None\n',
+            "is_pluggy_hookspec",
+            False,
+        ),
+        ("if TYPE_CHECKING:\n    if DEBUG:\n        def declared(arg): ...\n", "is_type_checking_stub", False),
+        ("if other.TYPE_CHECKING:\n    def declared(arg): ...\n", "is_type_checking_stub", False),
+        ("if TYPE_CHECKING:\n    def declared(arg):\n        ...\n        return None\n", "is_type_checking_stub", False),
+    ],
+    ids=[
+        "shadowed-hookspec-marker",
+        "called-type-checking",
+        "aliased-hookspec-marker",
+        "non-literal-hookspec-project",
+        "hookspec-method-not-module-function",
+        "hookspec-with-body",
+        "nested-type-checking-guard",
+        "attribute-type-checking",
+        "type-checking-stub-with-body",
+    ],
+)
+def test_declaration_guard_boundaries(source: str, predicate: str, expected: bool) -> None:
+    from gruffpy.rule import _python_dynamism
+    from gruffpy.rule.size._lines import parent_chain
+
+    tree = _parse_with_parents(source)
+    function = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name in {"pytest_event", "declared"})
+    assert getattr(_python_dynamism, predicate)(function, parent_chain(function)) is expected

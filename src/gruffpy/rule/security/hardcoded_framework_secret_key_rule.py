@@ -5,10 +5,8 @@ imports Flask or Django is the canonical anti-pattern: the secret is now
 in version control, in every developer's checkout, and unrotatable across
 environments.
 
-The rule is distinct from ``sensitive-data.high-entropy-string`` -
-high-entropy fires on the literal's randomness, this rule fires on the
-*shape* (``SECRET_KEY = "..."``) regardless of how innocuous the literal
-looks. A development placeholder like ``SECRET_KEY = "dev-key"`` is also
+The rule fires on the *shape* (``SECRET_KEY = "..."``) regardless of how
+innocuous the literal looks. A development placeholder like ``SECRET_KEY = "dev-key"`` is also
 worth flagging because it tends to slip into production.
 
 Only module-scope assignments fire; ``SECRET_KEY`` used as a local
@@ -125,10 +123,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            "Module-scope `SECRET_KEY` is assigned a string literal - read "
-            "it from the environment instead."
-        ),
+        message=("Module-scope `SECRET_KEY` is assigned a string literal - read it from the environment instead."),
         file_path=unit.file.display_path,
         line=assign.lineno,
         severity=definition.default_severity,

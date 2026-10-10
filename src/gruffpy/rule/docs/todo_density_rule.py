@@ -86,9 +86,7 @@ class TodoDensityRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 end_line=line_count,
-                remediation=(
-                    "Triage outstanding TODOs into tracked issues, or fix and remove them inline."
-                ),
+                remediation=("Triage outstanding TODOs into tracked issues, or fix and remove them inline."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "markers": marker_count,

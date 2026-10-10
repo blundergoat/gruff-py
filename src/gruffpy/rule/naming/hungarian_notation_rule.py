@@ -111,10 +111,7 @@ class HungarianNotationRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Identifier {name!r} uses Hungarian-notation type prefix; "
-                            "rely on type hints / annotations instead."
-                        ),
+                        message=(f"Identifier {name!r} uses Hungarian-notation type prefix; rely on type hints / annotations instead."),
                         file_path=unit.file.display_path,
                         line=lineno,
                         severity=definition.default_severity,
@@ -123,10 +120,7 @@ class HungarianNotationRule(Rule):
                         confidence=definition.confidence,
                         end_line=lineno,
                         symbol=name,
-                        remediation=(
-                            "Rename to drop the type prefix "
-                            f"(e.g. ``{name}`` → ``{_drop_prefix(name)}``)."
-                        ),
+                        remediation=(f"Rename to drop the type prefix (e.g. ``{name}`` → ``{_drop_prefix(name)}``)."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"identifier": name, "prefix": _prefix_of(name)},
                     ),

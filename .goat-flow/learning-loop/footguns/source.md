@@ -1,6 +1,6 @@
 ---
 category: source
-last_reviewed: 2026-05-20
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: Gitignore ignored-parent guard cannot be removed for re-includes

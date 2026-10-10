@@ -89,10 +89,7 @@ class UnusedMockRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Delete the unused mock, or assert on its interactions to prove "
-                        "the SUT calls it the way you expect."
-                    ),
+                    remediation=("Delete the unused mock, or assert on its interactions to prove the SUT calls it the way you expect."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"mocks": list(unused)},
                 ),

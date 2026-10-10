@@ -59,7 +59,7 @@ class _Record:
 # pytest fixture pattern - _setup is registered by name, not by reference.
 def _setup(request):
     """Pretend pytest fixture; framework-decorated equivalent skipped by
-    has_framework_decorator. This bare form requires __all__ to suppress."""
+    has_framework_decorator. Left bare to show no dead-code or waste rule reports it."""
     return None
 
 
@@ -100,11 +100,7 @@ def _ctx() -> RuleContext:
         rules[d.id] = RuleSettings(
             enabled=True,
             thresholds=dict(d.default_thresholds),
-            severity_threshold=(
-                SeverityThreshold(d.default_threshold, d.default_severity)
-                if d.default_threshold is not None
-                else None
-            ),
+            severity_threshold=(SeverityThreshold(d.default_threshold, d.default_severity) if d.default_threshold is not None else None),
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
@@ -113,7 +109,6 @@ def test_registry_includes_all_m04_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
-        "dead-code.unused-private-function",
         "dead-code.unused-private-attribute",
         "waste.commented-out-code",
         "waste.empty-class",
@@ -122,7 +117,6 @@ def test_registry_includes_all_m04_rules():
         "waste.redundant-variable",
         "waste.unreachable-code",
         "waste.unused-import",
-        "waste.unused-parameter",
     }
     assert expected.issubset(ids)
 
@@ -134,17 +128,7 @@ def test_dynamism_fixture_emits_only_acceptable_findings():
     # to count their findings.
     target_rule_prefixes = ("dead-code.", "waste.")
     suspect = [f for f in findings if any(f.rule_id.startswith(p) for p in target_rule_prefixes)]
-    # Acceptable findings on the bare `_setup` function (no @pytest.fixture
-    # decorator - the fixture intentionally documents the user-facing trap):
-    # 1. dead-code.unused-private-function: nothing calls _setup
-    # 2. waste.unused-parameter on `request`: _setup ignores its arg
-    # Both vanish once the user adds @pytest.fixture, demonstrating the
-    # suppression. Everything else MUST be silent.
-    expected_on_setup = {
-        ("dead-code.unused-private-function", "_setup"),
-        ("waste.unused-parameter", "_setup"),
-    }
-    unexpected = [
-        (f.rule_id, f.symbol) for f in suspect if (f.rule_id, f.symbol) not in expected_on_setup
-    ]
+    # The two rules that reported the bare `_setup` function were retired in 0.6.0 (ADR-029), so every dead-code and
+    # waste rule must now stay silent on this fixture.
+    unexpected = [(f.rule_id, f.symbol) for f in suspect]
     assert unexpected == [], f"unexpected findings: {unexpected}"

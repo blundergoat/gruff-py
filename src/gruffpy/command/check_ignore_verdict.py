@@ -69,9 +69,7 @@ def classify_paths(
     Raises:
         ConfigError: When config loading fails (propagated to the CLI for exit 2).
     """
-    patterns = _load_ignore_patterns(
-        project_root=project_root, config_path=config_path, no_config=no_config
-    )
+    patterns = _load_ignore_patterns(project_root=project_root, config_path=config_path, no_config=no_config)
     discovery = SourceDiscovery(project_root)
     verdicts: list[CheckIgnoreVerdict] = []
     for raw_path in paths:

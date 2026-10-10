@@ -26,10 +26,6 @@ def test_specific_exception_skipped():
 
 
 def test_except_with_logging_skipped():
-    src = (
-        "import logging\n"
-        "logger = logging.getLogger(__name__)\n"
-        "try:\n    x = 1\nexcept Exception:\n    logger.exception('oops')\n    pass\n"
-    )
+    src = "import logging\nlogger = logging.getLogger(__name__)\ntry:\n    x = 1\nexcept Exception:\n    logger.exception('oops')\n    pass\n"
     # Note: body is not pass-only when logger.exception precedes pass, so rule doesn't fire.
     assert SilentExceptRule().analyse(make_unit(src), default_ctx()) == []

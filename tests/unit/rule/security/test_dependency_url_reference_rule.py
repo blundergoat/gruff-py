@@ -15,9 +15,7 @@ dependencies = [
 ]
 """
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert len(findings) == 1
     finding = findings[0]
@@ -40,9 +38,7 @@ dependencies = [
 ]
 """
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert findings == []
 
@@ -51,9 +47,7 @@ def test_non_dependency_toml_path_skipped() -> None:
     """Direct URLs outside dependency metadata do not trigger the rule."""
     src = 'source = "https://downloads.example.test/tool.tar.gz"\n'
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "config/tool.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "config/tool.toml"), default_ctx())
 
     assert findings == []
 
@@ -66,8 +60,6 @@ dependencies = [
 ]
 """
 
-    findings = RuleRegistry.defaults().analyse(
-        [make_text_unit(src, "pyproject.toml")], default_ctx()
-    )
+    findings = RuleRegistry.defaults().analyse([make_text_unit(src, "pyproject.toml")], default_ctx())
 
     assert "security.dependency-url-reference" in {finding.rule_id for finding in findings}

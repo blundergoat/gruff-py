@@ -18,9 +18,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.naming._identifier_tokenizer import lower_tokens
 from gruffpy.rule.rule import Rule
 
-_PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
-    {"temp", "foo", "bar", "baz", "qux", "thing", "stuff"}
-)
+_PLACEHOLDER_TOKENS: frozenset[str] = frozenset({"temp", "foo", "bar", "baz", "qux", "thing", "stuff"})
 _NUMBERED_BASES: frozenset[str] = frozenset({"result", "data", "value", "item", "var", "x"})
 
 
@@ -172,11 +170,7 @@ def _is_numbered_placeholder(identifier_tokens: list[str]) -> bool:
     Returns:
         ``True`` for shapes such as ``result1`` or ``data42``.
     """
-    return (
-        len(identifier_tokens) >= 2
-        and identifier_tokens[0] in _NUMBERED_BASES
-        and identifier_tokens[1].isdigit()
-    )
+    return len(identifier_tokens) >= 2 and identifier_tokens[0] in _NUMBERED_BASES and identifier_tokens[1].isdigit()
 
 
 def _identifiers_in(candidate_node: ast.AST) -> list[tuple[str, int]]:
@@ -250,9 +244,5 @@ def _target_identifiers(assignment_target: ast.expr) -> list[tuple[str, int]]:
         return [(assignment_target.id, assignment_target.lineno)]
     # Tuple/list unpacking exposes each simple child name independently.
     if isinstance(assignment_target, ast.Tuple | ast.List):
-        return [
-            (element.id, element.lineno)
-            for element in assignment_target.elts
-            if isinstance(element, ast.Name)
-        ]
+        return [(element.id, element.lineno) for element in assignment_target.elts if isinstance(element, ast.Name)]
     return []

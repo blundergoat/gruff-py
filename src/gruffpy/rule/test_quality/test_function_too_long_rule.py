@@ -13,7 +13,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
@@ -65,7 +65,7 @@ class TestFunctionTooLongRule(Rule):
         settings = context.settings_for(definition)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            lines = lines_for_size(fn)
+            lines = lines_for_size(fn, code_line_numbers(unit.source, unit.tree))
             threshold_match = settings.high_value_threshold_match(lines)
             if threshold_match is None:
                 continue
@@ -75,9 +75,7 @@ class TestFunctionTooLongRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Test {symbol!r} is {lines} lines, above the "
-                        f"{threshold_match.severity.value} threshold of "
-                        f"{threshold_match.threshold}."
+                        f"Test {symbol!r} is {lines} lines, above the {threshold_match.severity.value} threshold of {threshold_match.threshold}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
@@ -87,9 +85,7 @@ class TestFunctionTooLongRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Split the test into focused cases or extract setup into a fixture."
-                    ),
+                    remediation=("Split the test into focused cases or extract setup into a fixture."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "lines": lines,

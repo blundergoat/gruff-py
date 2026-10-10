@@ -62,6 +62,8 @@ class ShellInjectionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: right on 3 of 7 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -103,10 +105,7 @@ class ShellInjectionRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Pass argv as a list with ``shell=False`` (the default), or "
-                        "use ``shlex.quote`` if a shell really is required."
-                    ),
+                    remediation=("Pass argv as a list with ``shell=False`` (the default), or use ``shlex.quote`` if a shell really is required."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),

@@ -3,8 +3,8 @@ from gruffpy.scoring.grade import Grade
 from gruffpy.scoring.pillar_score import PillarScore
 from gruffpy.scoring.score_calculator import (
     CONFIDENCE_WEIGHTS,
-    FILE_PENALTY_MULTIPLIER,
-    PILLAR_PENALTY_MULTIPLIER,
+    DENSITY_SCALE,
+    SCORE_FLOOR,
     SEVERITY_WEIGHTS,
     STATIC_PILLARS,
     ScoreCalculator,
@@ -13,10 +13,10 @@ from gruffpy.scoring.score_report import ScoreReport
 
 __all__ = [
     "CONFIDENCE_WEIGHTS",
-    "FILE_PENALTY_MULTIPLIER",
+    "DENSITY_SCALE",
     "FileScore",
     "Grade",
-    "PILLAR_PENALTY_MULTIPLIER",
+    "SCORE_FLOOR",
     "PillarScore",
     "SEVERITY_WEIGHTS",
     "STATIC_PILLARS",

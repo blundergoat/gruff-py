@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-11
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: goat-flow install appends a duplicate Stop registration on every run
@@ -29,6 +29,33 @@ the version migration.
 Duplicate Stop entries do not fail `goat-flow audit`, so nothing in the normal
 verification trio reports them. Check the registration counts directly, or run
 `hooks sync` unconditionally after install and re-read the config.
+
+Not reproduced 2026-10-03 on goat-flow 1.17.0: four sequential
+`install . --agent claude|codex|antigravity|copilot` runs left exactly one
+`Stop` registration in `.claude/settings.json` and in `.codex/hooks.json`.
+
+## Footgun: goat-flow install drops retired Claude denies without adding the new ones
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** After any `goat-flow install` over an existing `.claude/settings.json`, diff its `permissions.deny` list against the installed package's Claude settings template and add the missing rules before running the harness audit.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-10-03
+
+Upgrading 1.15.1 to 1.17.0, the installer edited the user-owned
+`.claude/settings.json` in place. It removed the retired deny rules: the blanket
+Bash denies for privileged and disk-wiping commands, and the Read/Edit denies for
+`secrets/**` and `credentials*`. It did not add the 20 credential-store rules
+that the 1.17.0 template ships for `.netrc`, `.pgpass`, `.git-credentials`,
+`.config/gh/hosts.yml`, and gcloud; they now sit in `.claude/settings.json`
+(search: "Read(~/.pgpass)") only because they were added by hand. A fresh
+install seeds the full template, so only upgraded projects miss them.
+
+`audit . --agent claude --harness` then failed `deny-covers-secrets` with
+`missingPatterns: ["file-read-secret-paths"]`, because the audit requires the
+four `~/` plaintext-store Read denies. Setting the deny list to the template's
+list (72 rules, a strict superset of the upgraded file) cleared the failure.
+The base audit and `--check-drift` both pass with the gap present.
 
 ## Resolved Entries
 

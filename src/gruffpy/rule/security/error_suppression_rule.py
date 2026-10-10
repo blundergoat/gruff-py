@@ -82,9 +82,7 @@ class ErrorSuppressionRule(Rule):
                 findings.append(_build_finding(definition, unit, node, "tuple-wide-except"))
         return findings
 
-    def _check_with(
-        self, definition: RuleDefinition, unit: AnalysisUnit, with_stmt: ast.With
-    ) -> list[Finding]:
+    def _check_with(self, definition: RuleDefinition, unit: AnalysisUnit, with_stmt: ast.With) -> list[Finding]:
         out: list[Finding] = []
         for item in with_stmt.items:
             if not isinstance(item.context_expr, ast.Call):
@@ -125,10 +123,7 @@ def _build_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=getattr(node, "end_lineno", None),
-        remediation=(
-            "Narrow the exception type or remove the suppression and handle "
-            "the failure deliberately."
-        ),
+        remediation=("Narrow the exception type or remove the suppression and handle the failure deliberately."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"shape": label},
     )

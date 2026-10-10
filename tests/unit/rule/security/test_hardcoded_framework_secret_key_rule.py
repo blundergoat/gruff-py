@@ -29,9 +29,7 @@ def test_secret_key_from_getenv_skipped():
 
 def test_function_scope_secret_key_skipped():
     """SECRET_KEY inside a function is a local variable, not the framework setting."""
-    src = (
-        "from flask import Flask\ndef setup():\n    SECRET_KEY = 'literal'\n    return SECRET_KEY\n"
-    )
+    src = "from flask import Flask\ndef setup():\n    SECRET_KEY = 'literal'\n    return SECRET_KEY\n"
     assert HardcodedFrameworkSecretKeyRule().analyse(make_unit(src), default_ctx()) == []
 
 

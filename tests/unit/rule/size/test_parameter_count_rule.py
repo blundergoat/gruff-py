@@ -36,12 +36,13 @@ def test_function_within_threshold_emits_no_finding():
     assert ParameterCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_function_above_threshold_emits_error():
+def test_function_just_over_threshold_is_a_lower_band_notice():
     source = "def f(a, b, c, d, e, ff):\n    return a\n"
     findings = ParameterCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.ERROR
+    assert f.severity == Severity.ADVISORY
+    assert f.metadata["limitBand"] == "lower"
     assert f.metadata["parameters"] == 6
 
 

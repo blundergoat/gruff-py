@@ -113,10 +113,7 @@ def _thresholds(
     options: dict[str, Any],
     defaults: dict[str, Any],
 ) -> dict[str, int]:
-    return {
-        key: _positive_int(options.get(key, defaults[key]), fallback=int(defaults[key]))
-        for key in defaults
-    }
+    return {key: _positive_int(options.get(key, defaults[key]), fallback=int(defaults[key])) for key in defaults}
 
 
 def _positive_int(value: Any, *, fallback: int) -> int:
@@ -132,14 +129,8 @@ def _has_threshold_crossing(
     thresholds: dict[str, int],
 ) -> bool:
     if is_public(fn.name):
-        return (
-            cyclomatic > thresholds["cyclomatic_warning"]
-            or cognitive > thresholds["cognitive_warning"]
-        )
-    return (
-        cyclomatic > thresholds["private_cyclomatic_warning"]
-        or cognitive > thresholds["private_cognitive_warning"]
-    )
+        return cyclomatic > thresholds["cyclomatic_warning"] or cognitive > thresholds["cognitive_warning"]
+    return cyclomatic > thresholds["private_cyclomatic_warning"] or cognitive > thresholds["private_cognitive_warning"]
 
 
 def _has_substantive_docstring(fn: _FunctionNode) -> bool:
@@ -202,9 +193,7 @@ def _complex_branch_finding(
     symbol = qualified_symbol(fn, parent_chain(fn))
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {symbol!r} is complex but lacks a substantive docstring or branch rationale."
-        ),
+        message=(f"Function {symbol!r} is complex but lacks a substantive docstring or branch rationale."),
         file_path=unit.file.display_path,
         line=fn.lineno,
         severity=definition.default_severity,
@@ -213,10 +202,7 @@ def _complex_branch_finding(
         confidence=definition.confidence,
         end_line=fn.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Extract the branching logic, or add a concise rationale explaining "
-            "the compatibility, protocol, or risk boundary."
-        ),
+        remediation=("Extract the branching logic, or add a concise rationale explaining the compatibility, protocol, or risk boundary."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "cyclomatic": cyclomatic,

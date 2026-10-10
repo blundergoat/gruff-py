@@ -56,7 +56,7 @@ config so every dashboard launch starts at the project's preferred default:
 
 ```yaml
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   dashboard: warning
 ```
 

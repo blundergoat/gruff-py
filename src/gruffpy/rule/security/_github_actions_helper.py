@@ -5,6 +5,11 @@ files are workflows; the rules then scan ``unit.source`` as raw text (these
 files are delivered as ``SourceTextRule`` units with ``tree=None``).
 """
 
+import re
+
+_ON_KEY_RE = re.compile(r"""^["']?on["']?\s*:\s*(.*)$""")
+_EVENT_KEY_RE = re.compile(r"""^(?:-\s*)?["']?([A-Za-z_]+)["']?\s*(?::|$)""")
+
 
 def is_workflow_file(display_path: str) -> bool:
     """Return whether *display_path* is a GitHub Actions workflow YAML file.
@@ -30,3 +35,54 @@ def source_line(source: str, offset: int) -> int:
         One-based line number containing *offset*.
     """
     return source.count("\n", 0, offset) + 1
+
+
+def declared_workflow_events(source: str) -> set[str]:
+    """Return the events a workflow's top-level ``on:`` key declares.
+
+    Reads the scalar, ``[a, b]`` flow-sequence, ``{a: x}`` flow-mapping, block-mapping and block-sequence forms. An
+    ``if:`` expression or a step input that names an event elsewhere is not a trigger.
+
+    Args:
+        source: Full workflow text.
+
+    Returns:
+        The declared event names.
+    """
+    events: set[str] = set()
+    in_on_block = False
+    event_indent: int | None = None
+    for raw in source.splitlines():
+        code = raw.split(" #", 1)[0].rstrip()
+        stripped = code.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(code) - len(code.lstrip(" "))
+        if indent == 0:
+            on_key = _ON_KEY_RE.match(stripped)
+            value = on_key.group(1).strip() if on_key else ""
+            in_on_block = on_key is not None and value == ""
+            event_indent = None
+            events |= _flow_events(value)
+            continue
+        if not in_on_block:
+            continue
+        # The first nested line fixes the event level; deeper lines configure one event, such as its branches.
+        event_indent = indent if event_indent is None else event_indent
+        match = _EVENT_KEY_RE.match(stripped) if indent == event_indent else None
+        if match:
+            events.add(match.group(1))
+    return events
+
+
+def _flow_events(value: str) -> set[str]:
+    """Return the events an ``on:`` scalar, ``[a, b]`` flow sequence or ``{a: x}`` flow mapping names.
+
+    Args:
+        value: The text after a top-level ``on:``; empty for the block forms and for any other key.
+
+    Returns:
+        The event names it lists.
+    """
+    names = (item.split(":", 1)[0].strip().strip("\"'") for item in value.lstrip("[{").rstrip("]}").split(","))
+    return {name for name in names if name}

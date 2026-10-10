@@ -16,13 +16,7 @@ from gruffpy.config.loader import ConfigLoader
 from gruffpy.rule.registry import RuleRegistry
 
 _LEGACY_COGNITIVE_YAML = (
-    "schemaVersion: gruff-py.config.v0.1\n"
-    "rules:\n"
-    "  complexity.cognitive:\n"
-    "    enabled: true\n"
-    "    thresholds:\n"
-    "      warning: 15\n"
-    "      error: 30\n"
+    "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.cognitive:\n    enabled: true\n    thresholds:\n      warning: 15\n      error: 30\n"
 )
 
 _CUSTOM_MIN_FIELDS = 6
@@ -47,13 +41,7 @@ def _markdown_options_yaml(option_lines: str) -> str:
     Returns:
         Complete config text a user could place in ``.gruff-py.yaml``.
     """
-    return (
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        f"  {_MARKDOWN_RULE_ID}:\n"
-        "    options:\n"
-        f"{option_lines}"
-    )
+    return f"schemaVersion: gruff-py.config.v0.1\nrules:\n  {_MARKDOWN_RULE_ID}:\n    options:\n{option_lines}"
 
 
 def _defaults() -> AnalysisConfig:
@@ -169,10 +157,7 @@ def test_unknown_option_keeps_valid_sibling_and_registered_default(tmp_path: Pat
     options = config.rules["docs.dataclass-attributes"].options
 
     assert options["min_fields"] == _CUSTOM_MIN_FIELDS
-    assert (
-        options["allow_bullets"]
-        is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
-    )
+    assert options["allow_bullets"] is defaults.rules["docs.dataclass-attributes"].options["allow_bullets"]
     assert "allowBullet" not in options
 
 
@@ -253,12 +238,7 @@ def test_markdown_sanitizer_options_accept_exact_targets_and_empty_strict_mode(
     """
     _write_yaml(
         tmp_path,
-        _markdown_options_yaml(
-            "      labelSanitizers:\n"
-            "        - markdown_label\n"
-            "        - helpers.markdown_label\n"
-            "      urlSanitizers: []\n"
-        ),
+        _markdown_options_yaml("      labelSanitizers:\n        - markdown_label\n        - helpers.markdown_label\n      urlSanitizers: []\n"),
     )
 
     config, _ = ConfigLoader(tmp_path, _defaults(), strict=True).load()
@@ -301,11 +281,7 @@ def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
 def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  naming.module-name-mismatch:\n"
-        "    enabled: false\n"
-        "    flavour: spicy\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.module-name-mismatch:\n    enabled: false\n    flavour: spicy\n",
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
@@ -317,11 +293,7 @@ def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
 def test_threshold_on_non_rubric_rule_warns_and_is_dropped(tmp_path: Path):
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n"
-        "  naming.module-name-mismatch:\n"
-        "    threshold: 5\n"
-        "    severity: warning\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.module-name-mismatch:\n    threshold: 5\n    severity: warning\n",
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()

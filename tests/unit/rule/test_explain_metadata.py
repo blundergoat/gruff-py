@@ -44,12 +44,7 @@ def test_rule_with_options_has_option_descriptions(rule_id: str) -> None:
 def test_related_rules_only_reference_registered_rule_ids() -> None:
     registry = RuleRegistry.defaults()
     valid_ids = {rule.definition().id for rule in registry.all()}
-    invalid = {
-        f"{rule_id} -> {sibling}"
-        for rule_id, siblings in RELATED_RULES.items()
-        for sibling in siblings
-        if sibling not in valid_ids
-    }
+    invalid = {f"{rule_id} -> {sibling}" for rule_id, siblings in RELATED_RULES.items() for sibling in siblings if sibling not in valid_ids}
     assert invalid == set()
 
 
@@ -59,9 +54,7 @@ def test_related_rules_never_list_self() -> None:
 
 
 def test_related_rules_caps_siblings_at_four() -> None:
-    over_cap = {
-        rule_id: len(siblings) for rule_id, siblings in RELATED_RULES.items() if len(siblings) > 4
-    }
+    over_cap = {rule_id: len(siblings) for rule_id, siblings in RELATED_RULES.items() if len(siblings) > 4}
     assert over_cap == {}
 
 

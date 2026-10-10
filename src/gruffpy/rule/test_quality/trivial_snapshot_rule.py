@@ -81,9 +81,7 @@ class TrivialSnapshotRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} asserts against a large literal - brittle snapshot."
-                        ),
+                        message=(f"Test {symbol!r} asserts against a large literal - brittle snapshot."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -92,10 +90,7 @@ class TrivialSnapshotRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Assert on the salient invariant (length, key presence, type) "
-                            "instead of pinning the full structure."
-                        ),
+                        remediation=("Assert on the salient invariant (length, key presence, type) instead of pinning the full structure."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"literalSize": literal},
                     ),

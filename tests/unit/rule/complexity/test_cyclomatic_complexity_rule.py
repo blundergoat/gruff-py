@@ -91,14 +91,15 @@ def test_simple_function_returns_1():
     assert findings == []
 
 
-def test_high_complexity_emits_error():
-    # Build a function with 11 if-statements -> cc = 12 (> default threshold 10)
+def test_complexity_just_over_threshold_is_a_lower_band_notice():
+    # 11 if-statements -> cc = 12: over this test's threshold of 10 (the rule's default is 20), under one and a half times it
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(11)])
     src = f"def f(x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.ERROR
+    assert f.severity == Severity.ADVISORY
+    assert f.metadata["limitBand"] == "lower"
     assert f.metadata["complexity"] == 12
     assert f.symbol == "f"
 
@@ -125,3 +126,32 @@ def test_method_symbol_qualified():
     src = f"class C:\n    def m(self, x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert findings[0].symbol == "C.m"
+
+
+def test_rule_counts_a_match_once_and_an_if_chain_per_branch():
+    # Twelve match cases are one decision (cc 2); twelve if statements stay twelve decisions (cc 13).
+    branch_count = 12
+    cases = "\n".join(f"        case {i}:\n            return {i}" for i in range(branch_count))
+    matched = f"def dispatch(x):\n    match x:\n{cases}\n        case _:\n            return -1\n"
+    branches = "\n".join(f"    if x == {i}: return {i}" for i in range(branch_count))
+    chained = f"def chain(x):\n{branches}\n    return -1\n"
+    reported = {
+        finding.symbol: finding.metadata["complexity"]
+        for finding in CyclomaticComplexityRule().analyse(_make_unit(matched + "\n\n" + chained), _ctx(1))
+    }
+    assert reported == {"dispatch": 2, "chain": branch_count + 1}
+
+
+def test_rule_skips_test_files():
+    body = "\n".join([f"    if x == {i}: assert x" for i in range(30)])
+    src = f"def test_many(x):\n{body}\n"
+    unit = _make_unit(src)
+    # The family's test-path class: a test directory anywhere on the path, or a test file name in any folder.
+    for display_path in ("tests/test_x.py", "test/orm/test_collection.py", "testing/code/test_excinfo.py", "pkg/x_test.py"):
+        test_unit = AnalysisUnit(
+            file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
+            source=src,
+            tree=unit.tree,
+        )
+        assert CyclomaticComplexityRule().analyse(test_unit, _ctx()) == [], display_path
+    assert len(CyclomaticComplexityRule().analyse(unit, _ctx())) == 1

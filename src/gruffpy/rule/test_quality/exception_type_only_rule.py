@@ -19,13 +19,14 @@ from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import call_keyword, call_target_name
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import (
+    is_assertion_call,
     test_functions,
     walk_test_body,
 )
 
 
 class ExceptionTypeOnlyRule(Rule):
-    """Detect `pytest.raises(Exception)` or `pytest.warns` blocks that omit a `match=` argument."""
+    """Detect exception expectations that check neither a match nor captured error details."""
 
     ID = "test-quality.exception-type-only"
 
@@ -46,6 +47,7 @@ class ExceptionTypeOnlyRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -65,10 +67,7 @@ class ExceptionTypeOnlyRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _exception_type_only_finding(unit, definition, fn, node)
-            for fn, node in _type_only_exception_assertions(unit)
-        ]
+        return [_exception_type_only_finding(unit, definition, fn, node) for fn, node in _type_only_exception_assertions(unit)]
 
 
 def _type_only_exception_assertions(
@@ -77,9 +76,49 @@ def _type_only_exception_assertions(
     findings: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.Call]] = []
     for fn, _scope in test_functions(unit):
         for node in walk_test_body(fn):
-            if isinstance(node, ast.Call) and _is_type_only_exception_assertion(node):
+            if isinstance(node, ast.Call) and _is_type_only_exception_assertion(node) and not _has_captured_detail_check(fn, node):
                 findings.append((fn, node))
     return findings
+
+
+def _has_captured_detail_check(fn: ast.FunctionDef | ast.AsyncFunctionDef, call: ast.Call) -> bool:
+    for statement in walk_test_body(fn):
+        if not isinstance(statement, ast.With):
+            continue
+        for item in statement.items:
+            if item.context_expr is call and isinstance(item.optional_vars, ast.Name):
+                return _has_later_detail_assertion(fn, statement, item.optional_vars.id)
+    return False
+
+
+def _has_later_detail_assertion(fn: ast.FunctionDef | ast.AsyncFunctionDef, context: ast.With, capture: str) -> bool:
+    end_line = context.end_lineno or context.lineno
+    nodes = list(walk_test_body(fn))
+    for node in nodes:
+        if not isinstance(node, ast.Assert | ast.Call) or node.lineno <= end_line:
+            continue
+        if isinstance(node, ast.Call) and not is_assertion_call(node):
+            continue
+        if any(
+            isinstance(other, ast.Name) and other.id == capture and isinstance(other.ctx, ast.Store) and end_line < other.lineno <= node.lineno
+            for other in nodes
+        ):
+            continue
+        if any(_is_captured_detail(value, capture) for value in ast.walk(node)):
+            return True
+    return False
+
+
+def _is_captured_detail(node: ast.AST, capture: str) -> bool:
+    if isinstance(node, ast.Call) and call_target_name(node) in {"str", "repr"} and node.args:
+        return _is_captured_value(node.args[0], capture)
+    if isinstance(node, ast.Attribute) and node.attr in {"args", "msg", "message", "code", "errno", "reason"}:
+        return _is_captured_value(node.value, capture)
+    return False
+
+
+def _is_captured_value(node: ast.AST, capture: str) -> bool:
+    return isinstance(node, ast.Attribute) and node.attr == "value" and isinstance(node.value, ast.Name) and node.value.id == capture
 
 
 def _is_type_only_exception_assertion(node: ast.Call) -> bool:
@@ -109,10 +148,7 @@ def _exception_type_only_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Narrow the exception type or add `match='expected substring'` "
-            "to bind the assertion to the message."
-        ),
+        remediation=("Narrow the exception type or add `match='expected substring'` to bind the assertion to the message."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

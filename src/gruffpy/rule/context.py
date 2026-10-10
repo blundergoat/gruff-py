@@ -1,5 +1,6 @@
 """Per-run context passed to every rule (project root + resolved config)."""
 
+import ast
 from dataclasses import dataclass
 
 from gruffpy.config.analysis_config import AnalysisConfig
@@ -25,11 +26,16 @@ class RuleContext:
             project rules can suppress themselves on partial context
             (ADR-025); the default is the suppressed-safe value for any
             constructor that does not thread it.
+        reference_trees: Parsed modules that configured ``paths.ignore``
+            globs keep out of the report. A project rule may count
+            references in them but never reports on them; empty unless a
+            full-project run ignores paths.
     """
 
     project_root: str
     config: AnalysisConfig
     scan_scope: str = "partial-scope"
+    reference_trees: tuple[ast.Module, ...] = ()
 
     def settings_for(self, definition: RuleDefinition) -> RuleSettings:
         """Return the per-rule settings for *definition*'s id.

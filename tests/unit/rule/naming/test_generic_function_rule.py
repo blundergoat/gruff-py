@@ -24,9 +24,7 @@ def _ctx(options: dict | None = None) -> RuleContext:
     rule = GenericFunctionRule()
     return RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(enabled=True, options=options or {})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True, options=options or {})}),
     )
 
 
@@ -76,7 +74,5 @@ def test_non_generic_does_not_fire():
 
 def test_configurable_replacement():
     src = "def calculate(): return 1\n"
-    findings = GenericFunctionRule().analyse(
-        _unit(src), _ctx(options={"genericFunctions": ["calculate"]})
-    )
+    findings = GenericFunctionRule().analyse(_unit(src), _ctx(options={"genericFunctions": ["calculate"]}))
     assert len(findings) == 1

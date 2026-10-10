@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-08-16
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -57,11 +57,10 @@ complexity rules already have `gruffpy.rule.complexity._walks`
 (`body_nodes`, search: `without descending into nested scopes`). The trap is
 recurring - `_walks.py` exists for exactly this reason, and the correctness
 rules re-introduced it. Fixed sites:
-`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`
-(search: `_scan_function`, `_parameter_text_sources`) and
-`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
-(search: `_coercion_calls`, `_float_assignment_sources`,
-`_isfinite_argument_names`).
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py` (search: `_scan_function`)
+together with its `_parameter_text_sources`, and
+`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py` (search: `_coercion_calls`)
+together with its `_float_assignment_sources` and `_isfinite_argument_names`.
 
 ## Footgun: `dead-code.exported-but-unreferenced` flags `__all__` exports by design - the library noise is not a bug
 
@@ -102,9 +101,9 @@ name carried the `input` free-text token - it is dict-key membership, not
 copy routing.
 
 When a rule interprets a containment or comparison operator semantically, gate
-on the operand's TYPE, not just its name. The fix
-(`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`, search:
-`_is_collection_annotated`, `_COLLECTION_ANNOTATIONS`) excludes parameters whose
+on the operand's TYPE, not just its name. The fix,
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py` (search: `_is_collection_annotated`)
+with its `_COLLECTION_ANNOTATIONS` set, excludes parameters whose
 annotation head is a known non-`str` collection; `_annotation_head_names` (same
 file) unwraps `dict[..]`, `typing.Dict`, and `X | None` to the head type.
 
@@ -121,12 +120,13 @@ runs exactly when the module is *imported* - the opposite of the entry-point
 case the exemption is for. Walking to the enclosing node and returning early
 ignores which branch the node is in, so the exemption over-applies.
 
-This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
-(search: `_is_protected_by_try`) suppressed conversions in a try's
-`else`/`finally`, and `src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py`
-(search: `_is_inside_main_block`) exempted `sys.path` mutations in a main
-guard's `else`. The fix in both threads the child down the parent walk and
-requires `child in current.body` before treating the ancestor as exempting.
+This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py` (search: `_is_protected_by_try`)
+suppressed conversions in a try's `else`/`finally`, and
+`src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py` (search: `_main_guard_branch`)
+exempted `sys.path` mutations in a main guard's `else`. The fix in both threads
+the child down the parent walk and checks `child in current.body` before
+treating the ancestor as exempting; `_main_guard_branch` returns `"body"` or
+`"else"` so the caller can tell the two apart.
 
 ## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
 
@@ -237,8 +237,8 @@ lives in the inner body. Code that handles the split by skipping the store
 keeps only the outer answer, so every later load in that body resolves to the
 outer import as if the store never ran.
 
-`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py`,
-search: `def _build_binding_events`) did exactly that: a `continue` dropped any
+`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py` at `4a6eb32`,
+search: `def _build_binding_events`; the module was removed with the rule in 0.6.0, ADR-029) did exactly that: a `continue` dropped any
 store whose name appeared in `_externally_declared_names`. Four shapes of
 `dead-code.unused-private-function` finding went missing, measured against the
 registry path - `global` then store then load in one function; the same at
@@ -258,10 +258,10 @@ same name.
 Mitigation: record the store in the declaring scope, and give the resolver the
 declared-name map so a load with no store ordered before it keeps walking
 outward instead of reading the name as a local
-(`_active_binding`, search: `def _active_binding`). Cover both directions -
+(`_active_binding` at `4a6eb32`, search: `def _active_binding`). Cover both directions -
 loads the store precedes, and loads it cannot be ordered against. Regression
-coverage lives in
-`tests/unit/rule/dead_code/test_unused_private_function_rule.py` (search:
+coverage lived in
+`tests/unit/rule/dead_code/test_unused_private_function_rule.py` at `4a6eb32` (search:
 `test_project_global_store_before_a_later_load_hides_the_import` and
 `test_project_global_store_does_not_reach_a_module_level_load`).
 
@@ -307,5 +307,5 @@ regression tests in
 search: `test_class_body_conditional_rebinding_makes_member_ambiguous`,
 search: `test_match_case_body_rebinding_makes_class_ambiguous`,
 search: `test_match_capture_pattern_makes_class_ambiguous`). Prove the guard with
-a crafted fixture before trusting it - see `.goat-flow/learning-loop/lessons/verification.md`
+a crafted fixture before trusting it - see `.goat-flow/learning-loop/lessons/rule-verification.md`
 (search: `crafted fixture`).

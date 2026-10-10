@@ -1,4 +1,4 @@
-"""Serializes an :class:`AnalysisReport` into ``gruff.analysis.v2`` JSON text.
+"""Serializes an :class:`AnalysisReport` into canonical v3 JSON text.
 
 Owns the byte-for-byte JSON projection of an analysis run - 4-space indent,
 ASCII-escaped non-ASCII, and unescaped forward slashes - so this port emits
@@ -21,7 +21,7 @@ class JsonReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as the ``gruff.analysis.v2`` JSON document.
+        """Render *report* as the ``gruff.analysis.v3`` JSON document.
 
         Output is byte-compatible with gruff-php - 4-space indent,
         ASCII-escaped non-ASCII, unescaped forward slashes. Finite floats
@@ -35,6 +35,17 @@ class JsonReporter:
             Pretty-printed JSON document with a trailing newline.
         """
         return json.dumps(_php_json_value(report.to_dict()), indent=4) + "\n"
+
+    def render_summary(self, report: AnalysisReport) -> str:
+        """Render the exact findings-free ``gruff.summary.v3`` projection.
+
+        Args:
+            report: Fully-populated canonical analysis report.
+
+        Returns:
+            Pretty-printed summary projection with a trailing newline.
+        """
+        return json.dumps(_php_json_value(report.to_summary_dict()), indent=4) + "\n"
 
 
 def _php_json_value(value: Any) -> Any:

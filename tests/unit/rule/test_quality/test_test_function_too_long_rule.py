@@ -50,3 +50,12 @@ def test_custom_threshold_above_emits_error():
     finding = findings[0]
     assert finding.severity == Severity.ERROR
     assert finding.metadata["thresholdType"] == "error"
+
+
+def test_documented_test_is_measured_by_its_code_lines():
+    notes = "\n".join(f"    Note {i}." for i in range(20))
+    doc = f'    """Checks every value.\n\n{notes}\n    """'
+    comments = "\n".join(f"    # Step {i}." for i in range(20))
+    body = "\n".join(f"    x{i} = {i}" for i in range(95))
+    src = f"def test_foo():\n{doc}\n{comments}\n{body}\n    assert True\n"
+    assert TestFunctionTooLongRule().analyse(make_unit(src), default_ctx()) == []

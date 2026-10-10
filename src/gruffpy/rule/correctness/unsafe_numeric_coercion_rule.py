@@ -198,9 +198,7 @@ def _early_exit_guard_findings(
                     continue
                 if _is_protected_by_try(call, _GUARDED_STRING_EXCEPTIONS):
                     continue
-                findings.append(
-                    _guarded_string_finding(definition, unit, call, name, active_guards[name])
-                )
+                findings.append(_guarded_string_finding(definition, unit, call, name, active_guards[name]))
             for bound in _bound_names(statement):
                 active_guards.pop(bound, None)
     return findings
@@ -219,22 +217,14 @@ def _statement_sequences(tree: ast.AST | None) -> list[list[ast.stmt]]:
 
 
 def _is_early_exit_guard(statement: ast.If) -> bool:
-    return (
-        not statement.orelse
-        and bool(statement.body)
-        and isinstance(statement.body[-1], (ast.Raise, ast.Return, ast.Continue, ast.Break))
-    )
+    return not statement.orelse and bool(statement.body) and isinstance(statement.body[-1], (ast.Raise, ast.Return, ast.Continue, ast.Break))
 
 
 def _negated_guarded_names(test: ast.expr) -> dict[str, str]:
     if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
         return {}
     ascii_guarded = _ascii_guarded_names(test.operand)
-    return {
-        name: guard
-        for name, guard in _guarded_names(test.operand).items()
-        if name not in ascii_guarded
-    }
+    return {name: guard for name, guard in _guarded_names(test.operand).items() if name not in ascii_guarded}
 
 
 def _guarded_string_finding(
@@ -297,11 +287,7 @@ def _ascii_guarded_names(test: ast.expr) -> set[str]:
 
 def _coercion_calls(nodes: Iterable[ast.AST]) -> list[ast.Call]:
     return [
-        candidate
-        for candidate in nodes
-        if isinstance(candidate, ast.Call)
-        and isinstance(candidate.func, ast.Name)
-        and candidate.func.id == "int"
+        candidate for candidate in nodes if isinstance(candidate, ast.Call) and isinstance(candidate.func, ast.Name) and candidate.func.id == "int"
     ]
 
 
@@ -324,11 +310,7 @@ def _is_protected_by_try(
     while current is not None and current is not stop_at:
         # Only the try body is protected: handlers do not catch exceptions
         # raised from the same try's else/finally clauses.
-        if (
-            isinstance(current, ast.Try)
-            and child in current.body
-            and _has_protective_handler(current, required)
-        ):
+        if isinstance(current, ast.Try) and child in current.body and _has_protective_handler(current, required):
             return True
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
             return False
@@ -403,9 +385,7 @@ def _has_defensive_signature(function: ast.FunctionDef | ast.AsyncFunctionDef) -
         *function.args.args,
         *function.args.kwonlyargs,
     ]
-    real_parameters = [
-        parameter for parameter in parameters if parameter.arg not in {"self", "cls"}
-    ]
+    real_parameters = [parameter for parameter in parameters if parameter.arg not in {"self", "cls"}]
     if not real_parameters:
         return False
     return all(_is_defensive_annotation(parameter.annotation) for parameter in real_parameters)
@@ -441,9 +421,7 @@ def _float_assignment_sources(function: ast.AST) -> dict[str, set[str]]:
             and node.value.args
             and not isinstance(node.value.args[0], ast.Constant)
         ):
-            sources[node.targets[0].id] = {
-                inner.id for inner in ast.walk(node.value.args[0]) if isinstance(inner, ast.Name)
-            }
+            sources[node.targets[0].id] = {inner.id for inner in ast.walk(node.value.args[0]) if isinstance(inner, ast.Name)}
     return sources
 
 

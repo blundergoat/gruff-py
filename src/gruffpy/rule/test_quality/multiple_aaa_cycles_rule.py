@@ -23,6 +23,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
     is_assertion_call,
     test_functions,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class MultipleAaaCyclesRule(Rule):
@@ -75,7 +76,7 @@ class MultipleAaaCyclesRule(Rule):
         settings = context.settings_for(definition)
         threshold = settings.numeric_threshold("maxCycles")
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
+        for fn, scope in test_functions(unit):
             cycles = _count_aaa_cycles(fn)
             if cycles <= threshold:
                 continue
@@ -94,7 +95,10 @@ class MultipleAaaCyclesRule(Rule):
                     end_line=fn.end_lineno,
                     symbol=symbol,
                     remediation=(
-                        "Split each cycle into its own test for cleaner failure attribution."
+                        "Fold independent data-only cycles into one `self.subTest(...)` loop, or drop cycles another test already proves."
+                        if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                        else "Fold the repeated arrange-act-assert cycles into one `@pytest.mark.parametrize` table, "
+                        "or drop cycles that repeat what another test already proves."
                     ),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"cycles": cycles, "threshold": threshold},
@@ -129,11 +133,7 @@ def _count_aaa_cycles(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 def _is_assertion_stmt(stmt: ast.stmt) -> bool:
     if isinstance(stmt, ast.Assert):
         return True
-    return (
-        isinstance(stmt, ast.Expr)
-        and isinstance(stmt.value, ast.Call)
-        and is_assertion_call(stmt.value)
-    )
+    return isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call) and is_assertion_call(stmt.value)
 
 
 def _has_call(stmt: ast.stmt) -> bool:

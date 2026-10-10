@@ -98,9 +98,7 @@ class WeakCryptoRule(Rule):
             if candidate is None:
                 continue
             call, algorithm, source_label = candidate
-            findings.append(
-                _finding_for_call(definition, unit.file.display_path, call, algorithm, source_label)
-            )
+            findings.append(_finding_for_call(definition, unit.file.display_path, call, algorithm, source_label))
         return findings
 
 
@@ -164,17 +162,11 @@ def _finding_for_call(
     remediation = (
         "Use ``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
         if password_hashing
-        else (
-            "Use ``hashlib.sha256``/``sha512`` for content hashing or "
-            "``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
-        )
+        else ("Use ``hashlib.sha256``/``sha512`` for content hashing or ``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage.")
     )
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`hashlib.{algorithm}` used in a security-smelling context - "
-            f"prefer SHA-256+ or a password-hashing KDF."
-        ),
+        message=(f"`hashlib.{algorithm}` used in a security-smelling context - prefer SHA-256+ or a password-hashing KDF."),
         file_path=file_path,
         line=call.lineno,
         severity=definition.default_severity,
@@ -263,19 +255,11 @@ def _has_security_smelling_parent(call: ast.Call) -> bool:
 
 
 def _has_security_smelling_target(targets: list[ast.expr]) -> bool:
-    return any(
-        name is not None and has_security_smell(name)
-        for target in targets
-        for name in [_target_security_name(target)]
-    )
+    return any(name is not None and has_security_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _has_password_hashing_target(targets: list[ast.expr]) -> bool:
-    return any(
-        name is not None and _has_password_hashing_smell(name)
-        for target in targets
-        for name in [_target_security_name(target)]
-    )
+    return any(name is not None and _has_password_hashing_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _target_security_name(target: ast.expr) -> str | None:

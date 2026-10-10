@@ -70,10 +70,7 @@ class RedundantVariableRule(Rule):
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _redundant_variable_finding(unit, definition, candidate)
-            for candidate in _redundant_variables(unit.tree)
-        ]
+        return [_redundant_variable_finding(unit, definition, candidate) for candidate in _redundant_variables(unit.tree)]
 
 
 def _redundant_variables(tree: ast.AST) -> list[_RedundantReturn]:
@@ -125,10 +122,7 @@ def _redundant_variable_finding(
     name = candidate.name
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {symbol!r}: variable {name!r} is assigned once "
-            f"and immediately returned; inline the expression."
-        ),
+        message=(f"Function {symbol!r}: variable {name!r} is assigned once and immediately returned; inline the expression."),
         file_path=unit.file.display_path,
         line=candidate.assign.lineno,
         severity=definition.default_severity,

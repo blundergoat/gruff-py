@@ -1,3 +1,9 @@
+"""Exercise realistic contact details found in test and fixture files.
+
+The suite separates user-reviewable email and phone shapes from safe domains, 555 values,
+timestamps, Git references, and numeric fixtures. Findings expose only a fixed preview marker.
+"""
+
 import pytest
 
 from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
@@ -21,6 +27,7 @@ def test_real_email_in_test_file_emits():
     src = f"user_email = {_REAL_EMAIL!r}\n"
     findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/test_users.py"), default_ctx())
     assert len(findings) == 1
+    assert findings[0].metadata["preview"] == "[redacted:email]"
 
 
 def test_example_email_skipped():
@@ -37,13 +44,9 @@ def test_reserved_tld_email_domains_skipped():
         "a" + "@" + "b.localhost",
         "team" + "@" + "corp.example",
     )
-    src = "\n".join(
-        f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails)
-    )
+    src = "\n".join(f"user_email_{index} = {email!r}" for index, email in enumerate(reserved_emails))
 
-    findings = PiiTestFixtureRule().analyse(
-        make_unit(f"{src}\n", "tests/test_users.py"), default_ctx()
-    )
+    findings = PiiTestFixtureRule().analyse(make_unit(f"{src}\n", "tests/test_users.py"), default_ctx())
 
     assert findings == []
 
@@ -107,10 +110,7 @@ def test_unlabelled_bare_realistic_number_remains_in_scope() -> None:
 
 def test_rfc3986_digit_charset_is_not_a_phone_number() -> None:
     """Exclude the separator-free digit run in requests' RFC 3986 character set."""
-    source = (
-        'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" '
-        '"abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
-    )
+    source = 'UNRESERVED_SET = "ABCDEFGHIJKLM" "NOPQRSTUVWXYZ" "abcdefghijklm" "nopqrstuvwxyz" + "0123456789-._~"\n'
 
     findings = PiiTestFixtureRule().analyse(make_unit(source, "tests/test_utils.py"), default_ctx())
 
@@ -218,3 +218,47 @@ def test_directories_merely_containing_test_text_are_not_scanned(display_path: s
     findings = PiiTestFixtureRule().analyse(make_unit(source, display_path), default_ctx())
 
     assert findings == []
+
+
+_OPENSSH_CERT_TYPE = "ssh-rsa-cert-v01" + "@" + "openssh.com"
+_OPENSSH_SECURITY_KEY_TYPE = "sk-ssh-ed25519" + "@" + "openssh.com"
+_OPENSSH_COMPRESSION = "zlib" + "@" + "openssh.com"
+_GROUPED_DECIMAL = "1,234," + "567." + "1234567"
+
+
+def test_listed_openssh_protocol_names_skipped():
+    # Cases 217/219: paramiko compares key types and quotes them in error text; each is a protocol name, not a mailbox.
+    src = (
+        f"assert key.public_blob.key_type == {_OPENSSH_CERT_TYPE!r}\n"
+        f"err = 'PublicBlob type {_OPENSSH_CERT_TYPE} incompatible with key type ssh-ed25519'\n"
+        f"security_key = {_OPENSSH_SECURITY_KEY_TYPE!r}\ncompression = {_OPENSSH_COMPRESSION!r}\n"
+    )
+    findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/pkey.py"), default_ctx())
+    assert findings == []
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["jane.doe" + "@" + "openssh.com", "ssh-rsa-cert-v01-backup" + "@" + "openssh.com", "ssh-rsa-cert-v01" + "@" + "openssh.org"],
+    ids=["person-at-openssh", "extended-protocol-name", "protocol-name-at-other-domain"],
+)
+def test_unlisted_openssh_addresses_emit(address: str) -> None:
+    findings = PiiTestFixtureRule().analyse(make_unit(f"owner = {address!r}\n", "tests/pkey.py"), default_ctx())
+    assert [finding.metadata["kind"] for finding in findings] == ["email"]
+
+
+def test_comma_grouped_numbers_skipped():
+    # Case 221: Django's intcomma fixtures group thousands with commas, so a phone-shaped run inside them is numeric data.
+    src = f"values = [{_GROUPED_DECIMAL!r}, '-{_GROUPED_DECIMAL}', '1,000,000']\n"
+    findings = PiiTestFixtureRule().analyse(make_unit(src, "tests/humanize_tests/tests.py"), default_ctx())
+    assert findings == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["415." + "867." + "5309", "1,234 " + "415-867-" + "5309"],
+    ids=["dotted-phone", "phone-after-grouped-number"],
+)
+def test_phone_numbers_outside_grouped_numbers_emit(value: str) -> None:
+    findings = PiiTestFixtureRule().analyse(make_unit(f"value = {value!r}\n", "tests/test_users.py"), default_ctx())
+    assert [finding.metadata["kind"] for finding in findings] == ["phone"]

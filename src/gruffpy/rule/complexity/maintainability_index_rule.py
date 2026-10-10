@@ -26,7 +26,7 @@ from gruffpy.rule.complexity.cyclomatic_complexity_rule import cyclomatic_for
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 
 class MaintainabilityIndexRule(Rule):
@@ -68,7 +68,7 @@ class MaintainabilityIndexRule(Rule):
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
-            mi = maintainability_index_for(fn)
+            mi = maintainability_index_for(fn, code_line_numbers(unit.source, unit.tree))
             threshold_match = settings.low_value_threshold_match(mi)
             if threshold_match is None:
                 continue
@@ -105,21 +105,22 @@ class MaintainabilityIndexRule(Rule):
         return findings
 
 
-def maintainability_index_for(fn: FunctionLike) -> float:
+def maintainability_index_for(fn: FunctionLike, code_lines: frozenset[int]) -> float:
     """Compute maintainability index for a function-like node.
 
-    Uses the shared `lines_for_size()` helper for LOC so this rule does not
-    re-derive line counts (ADR-002 cross-impl invariant).
+    Uses the shared `lines_for_size()` helper for LOC, so the line term counts
+    code lines only and documenting a function never lowers its index.
 
     Args:
         fn: Function, async function, or lambda node to score.
+        code_lines: The file's code lines, from ``code_line_numbers``.
 
     Returns:
         Maintainability index clamped to the range 0 through 100.
     """
     hv = halstead_for(fn).volume
     cc = cyclomatic_for(fn)
-    loc = lines_for_size(fn) if fn.end_lineno is not None else 1
+    loc = lines_for_size(fn, code_lines) if fn.end_lineno is not None else 1
     # Guard against ln(0): treat zero terms as 1.
     log_hv = math.log(hv) if hv > 0 else 0.0
     log_loc = math.log(loc) if loc > 0 else 0.0

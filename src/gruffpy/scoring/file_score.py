@@ -12,7 +12,7 @@ class FileScore:
 
     Attributes:
         file_path: Display path for the scored file.
-        grade: Letter grade assigned to the file.
+        grade: Letter grade assigned to the file, ``None`` when the run evaluated nothing.
         findings: Total findings for the file.
         advisories: Advisory findings for the file.
         warnings: Warning findings for the file.
@@ -25,7 +25,7 @@ class FileScore:
     """
 
     file_path: str
-    grade: Grade
+    grade: Grade | None
     findings: int
     advisories: int
     warnings: int
@@ -37,17 +37,18 @@ class FileScore:
     mutation_score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise the file score to its ``gruff.analysis.v2`` payload shape.
+        """Serialize the native per-file score row.
 
-        ``penalty`` is rounded to two decimals so JSON comparisons across
-        the PHP/Python implementations stay stable.
+        `penalty` is rounded to two decimals so PHP and Python comparisons
+        remain stable. The v3 machine adapter normalizes the offender path and
+        optional fields.
 
         Returns:
-            JSON-ready dict with file path, grade, severity counts, and metric maxima.
+            JSON-ready native score fields and metric maxima.
         """
         return {
             "file": self.file_path,
-            "grade": self.grade.to_dict(),
+            "grade": None if self.grade is None else self.grade.to_dict(),
             "findings": self.findings,
             "advisories": self.advisories,
             "warnings": self.warnings,

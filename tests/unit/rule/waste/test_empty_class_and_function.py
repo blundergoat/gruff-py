@@ -1,5 +1,7 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -64,12 +66,7 @@ def test_subclass_of_custom_error_does_not_fire():
     # Error/Exception/Warning is treated as exception-flavoured even when its own
     # definition isn't in this file (e.g. RuntimeError, or a project-defined
     # `class VoiceTurnError(Exception)`).
-    src = (
-        "class VoiceTurnError(Exception):\n"
-        "    pass\n"
-        "class VoiceTurnTimeoutError(VoiceTurnError):\n"
-        "    pass\n"
-    )
+    src = "class VoiceTurnError(Exception):\n    pass\nclass VoiceTurnTimeoutError(VoiceTurnError):\n    pass\n"
     findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
     assert findings == []
 
@@ -118,12 +115,7 @@ def test_empty_function_ellipsis_fires():
 
 
 def test_abstract_method_does_not_fire():
-    src = (
-        "from abc import ABC, abstractmethod\n"
-        "class A(ABC):\n"
-        "    @abstractmethod\n"
-        "    def m(self): ...\n"
-    )
+    src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self): ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
@@ -179,6 +171,44 @@ def test_production_test_double_name_still_fires():
         _ctx_for("waste.empty-function"),
     )
     assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "source, exempt",
+    [
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            True,
+        ),
+        ('def pytest_exception_interact(node):\n    """Plugin hook specification."""\n', False),
+        (
+            'from elsewhere import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            False,
+        ),
+        ('from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\ndef ordinary(node):\n    """Unimplemented function."""\n', False),
+        ("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    def instance_dict(instance): ...\n", True),
+        ('import typing\nif typing.TYPE_CHECKING:\n    async def instance_dict(instance):\n        """Typing declaration."""\n        ...\n', True),
+        ("if TYPE_CHECKING:\n    pass\nelse:\n    def instance_dict(instance): ...\n", False),
+        ("if TYPE_CHECKING:\n    def instance_dict(instance): pass\n", False),
+        ("if DEBUG:\n    def instance_dict(instance): ...\n", False),
+    ],
+    ids=[
+        "pluggy-hookspec",
+        "hook-name-without-marker",
+        "non-pluggy-marker",
+        "pluggy-marker-ordinary-function",
+        "type-checking-stub",
+        "typing-attribute-async-stub",
+        "type-checking-else-branch",
+        "type-checking-pass-body",
+        "unrelated-guard",
+    ],
+)
+def test_source_proven_declarations(source: str, exempt: bool) -> None:
+    findings = EmptyFunctionRule().analyse(_unit(source), _ctx_for("waste.empty-function"))
+    assert (not findings) is exempt
 
 
 def test_nested_inner_test_double_class_exempts_its_method():

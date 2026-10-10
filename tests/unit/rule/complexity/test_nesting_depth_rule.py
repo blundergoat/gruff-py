@@ -60,14 +60,7 @@ def test_for_inside_if_depth_two():
 
 
 def test_try_except_increments_depth():
-    src = (
-        "def f():\n"
-        "    try:\n"
-        "        if x:\n"
-        "            pass\n"
-        "    except ValueError:\n"
-        "        pass\n"
-    )
+    src = "def f():\n    try:\n        if x:\n            pass\n    except ValueError:\n        pass\n"
     # try at depth 1; if inside try at depth 2
     assert nesting_depth_for(_first_fn(src)) == 2
 
@@ -82,8 +75,8 @@ def test_with_block_increments_depth():
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
-def test_deeply_nested_emits_error():
-    # 5-deep: if/if/if/if/if
+def test_depth_just_over_threshold_is_a_lower_band_notice():
+    # 5-deep: if/if/if/if/if, over the threshold but under one and a half times it
     src = (
         "def f(a, b, c, d, e):\n"
         "    if a:\n"
@@ -95,18 +88,13 @@ def test_deeply_nested_emits_error():
     )
     findings = NestingDepthRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
+    assert findings[0].severity == Severity.ADVISORY
+    assert findings[0].metadata["limitBand"] == "lower"
     assert findings[0].metadata["depth"] == 5
 
 
 def test_extremely_nested_emits_error():
-    src = (
-        "def f():\n"
-        + "\n".join("    " * i + f"if x{i}:" for i in range(1, 9))
-        + "\n        "
-        + "    " * 7
-        + "return 1\n"
-    )
+    src = "def f():\n" + "\n".join("    " * i + f"if x{i}:" for i in range(1, 9)) + "\n        " + "    " * 7 + "return 1\n"
     findings = NestingDepthRule().analyse(_make_unit(src), _ctx())
     assert findings[0].severity == Severity.ERROR
 
@@ -128,3 +116,22 @@ def test_nested_function_evaluated_separately():
     assert "outer.inner" in symbols
     # outer itself has no nested control flow -> no finding
     assert "outer" not in symbols
+
+
+def test_elif_chain_is_one_level_not_one_per_branch():
+    # Four peer branches, each holding one more if: depth 2, not the 5 an elif-as-nesting count would give.
+    src = (
+        "def f(x, y):\n"
+        "    if x == 1:\n        if y:\n            return 1\n"
+        "    elif x == 2:\n        if y:\n            return 2\n"
+        "    elif x == 3:\n        if y:\n            return 3\n"
+        "    else:\n        if y:\n            return 4\n"
+        "    return 0\n"
+    )
+    assert nesting_depth_for(_first_fn(src)) == 2
+
+
+def test_nested_ifs_still_count_each_level():
+    # The close control: an if inside an else block is a real level, so three nested ifs stay depth 3.
+    src = "def f(a, b, c):\n    if a:\n        pass\n    else:\n        if b:\n            if c:\n                return 1\n    return 0\n"
+    assert nesting_depth_for(_first_fn(src)) == 3

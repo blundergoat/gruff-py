@@ -80,9 +80,7 @@ class GitignoreMatcher:
             ancestor = current_dir / part
             ancestor_is_ignored = None
             for gitignore_dir in applicable_dirs:
-                ancestor_is_ignored = self._is_ignored_by_spec(
-                    gitignore_dir, ancestor, is_dir=True, prior=ancestor_is_ignored
-                )
+                ancestor_is_ignored = self._is_ignored_by_spec(gitignore_dir, ancestor, is_dir=True, prior=ancestor_is_ignored)
             if ancestor_is_ignored is True:
                 return True
             current_dir = ancestor
@@ -122,11 +120,7 @@ class GitignoreMatcher:
         result = spec.check_file(_match_path(rel_str, is_dir))
         if result.include is None:
             return None
-        if (
-            is_dir
-            and result.include is True
-            and GitignoreMatcher._is_directory_match_contents_only(spec, rel_str, result.index)
-        ):
+        if is_dir and result.include is True and GitignoreMatcher._is_directory_match_contents_only(spec, rel_str, result.index):
             return None
         return bool(result.include)
 

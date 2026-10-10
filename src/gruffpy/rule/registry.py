@@ -104,9 +104,7 @@ class RuleRegistry:
         project_units = self._project_units(units)
         findings.extend(self._analyse_project_rules(project_units, context, project_rules))
         findings = self._deduplicate(findings)
-        findings.sort(
-            key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
-        )
+        findings.sort(key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message))
         return findings
 
     @staticmethod
@@ -130,11 +128,7 @@ class RuleRegistry:
 
     @staticmethod
     def _project_units(units: list[AnalysisUnit]) -> list[AnalysisUnit]:
-        return [
-            unit
-            for unit in units
-            if not unit.has_parse_errors() and unit.file.is_python() and unit.tree is not None
-        ]
+        return [unit for unit in units if not unit.has_parse_errors() and unit.file.is_python() and unit.tree is not None]
 
     @staticmethod
     def _analyse_units(
@@ -159,10 +153,14 @@ class RuleRegistry:
         findings: list[Finding] = []
         # A broken Python file retains useful source text but has no AST that
         # Python rules can inspect honestly.
-        if unit.file.is_python() and not unit.has_parse_errors():
+        if unit.file.is_python() and not unit.has_parse_errors() and not unit.is_deep_scan_bounded():
             # Parseable Python units follow the existing per-file AST rule order.
             for rule in python_rules:
                 findings.extend(rule.analyse(unit, context))
+        elif unit.file.is_python() and unit.is_deep_scan_bounded():
+            for rule in python_rules:
+                if rule.definition().id == "size.file-length":
+                    findings.extend(rule.analyse(unit, context))
         # Every discovered unit keeps its original source, including parser failures.
         for rule in text_rules:
             findings.extend(rule.analyse(unit, context))

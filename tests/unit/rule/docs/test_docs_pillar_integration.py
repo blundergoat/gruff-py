@@ -30,9 +30,7 @@ _DENSE_MARKERS = (
 
 def _todo_density_fixture_lines() -> str:
     labels = ("one", "two", "three", "four", "five", "six")
-    return "\n".join(
-        f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True)
-    )
+    return "\n".join(f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True))
 
 
 # Source crafted to trigger every docs rule at least once.
@@ -145,9 +143,7 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
 
 def test_docs_registry_has_thirteen_rules():
     registry = RuleRegistry.defaults()
-    docs_ids = {
-        rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")
-    }
+    docs_ids = {rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")}
     assert docs_ids == _EXPECTED_RULE_IDS
 
 
@@ -164,17 +160,12 @@ def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
 
 
 def test_config_can_disable_missing_function_docstring_for_test_paths(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  docs.missing-function-docstring:\n    enabled: false\n"
-    )
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  docs.missing-function-docstring:\n    enabled: false\n")
     registry = RuleRegistry.defaults()
     defaults = AnalysisConfig.from_registry(registry)
     config, _ = ConfigLoader(tmp_path, defaults).load()
     ctx = RuleContext(project_root=str(tmp_path), config=config)
 
-    findings = registry.analyse(
-        [make_unit("def test_without_doc():\n    pass\n", "tests/test_x.py")], ctx
-    )
+    findings = registry.analyse([make_unit("def test_without_doc():\n    pass\n", "tests/test_x.py")], ctx)
 
     assert "docs.missing-function-docstring" not in {finding.rule_id for finding in findings}

@@ -21,6 +21,7 @@ from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class EagerTestRule(Rule):
@@ -70,13 +71,8 @@ class EagerTestRule(Rule):
         settings = context.settings_for(definition)
         threshold = settings.numeric_threshold("maxAssertions")
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
-            count = sum(
-                1
-                for node in walk_test_body(fn)
-                if isinstance(node, ast.Assert)
-                or (isinstance(node, ast.Call) and is_assertion_call(node))
-            )
+        for fn, scope in test_functions(unit):
+            count = sum(1 for node in walk_test_body(fn) if isinstance(node, ast.Assert) or (isinstance(node, ast.Call) and is_assertion_call(node)))
             if count <= threshold:
                 continue
             parents = parent_chain(fn)
@@ -84,10 +80,7 @@ class EagerTestRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} contains {count} assertions, above the "
-                        f"threshold of {threshold}."
-                    ),
+                    message=(f"Test {symbol!r} contains {count} assertions, above the threshold of {threshold}."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -96,7 +89,13 @@ class EagerTestRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=("Split the test into focused cases - one behaviour per test."),
+                    remediation=(
+                        "Keep the test on one behaviour: drop assertions other tests already cover, "
+                        "or drive the varying calls from one `self.subTest(...)` loop."
+                        if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                        else "Keep the test on one behaviour: drop assertions about behaviour that other tests already cover, "
+                        "or turn the varying calls into one `@pytest.mark.parametrize` table."
+                    ),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"assertions": count, "threshold": threshold},
                 ),
