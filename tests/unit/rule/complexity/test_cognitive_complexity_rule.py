@@ -147,12 +147,13 @@ def test_nested_function_does_not_inflate_outer():
     assert cognitive_for(outer) == 0
 
 
-def test_high_score_emits_error_finding():
-    # 6 pairs of nested if -> 6 * 3 = 18 cognitive points (> 15 threshold)
+def test_score_just_over_threshold_is_a_lower_band_notice():
+    # 6 pairs of nested if -> 6 * 3 = 18 cognitive points: over the threshold of 15, under one and a half times it
     body = "\n".join(f"    if x{i}:\n        if y{i}:\n            return {i}" for i in range(6))
     args = ", ".join(sum([[f"x{i}", f"y{i}"] for i in range(6)], []))
     src = f"def f({args}):\n{body}\n"
     findings = CognitiveComplexityRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
+    assert findings[0].severity == Severity.ADVISORY
+    assert findings[0].metadata["limitBand"] == "lower"
     assert findings[0].metadata["cognitive"] == 18

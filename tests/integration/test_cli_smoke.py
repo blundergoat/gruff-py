@@ -1997,7 +1997,8 @@ def test_cli_quiet_suppresses_success_output(tmp_path: Path, monkeypatch: pytest
     assert result.output == ""
 
 
-_LONG_FIXTURE_LINE_COUNT = 1001
+# Past one and a half times the 1000-line limit, so file length reports at its own severity, not as a notice.
+_LONG_FIXTURE_LINE_COUNT = 1600
 _FINGERPRINT_HEX_LENGTH = 16
 
 
@@ -2438,7 +2439,7 @@ def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.Mo
     src = tmp_path / "src"
     src.mkdir()
     warning_lines = "\n".join(f"x{i} = {i}" for i in range(500)) + "\n"
-    error_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
+    error_lines = "\n".join(f"x{i} = {i}" for i in range(1600)) + "\n"
     (src / "warning.py").write_text(warning_lines)
     (src / "error.py").write_text(error_lines)
 
@@ -2621,7 +2622,7 @@ def test_cli_fail_on_error_exits_1_when_errors_present(tmp_path: Path, monkeypat
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    long_lines = "\n".join(f"x{i} = {i}" for i in range(1001)) + "\n"
+    long_lines = "\n".join(f"x{i} = {i}" for i in range(1600)) + "\n"
     (src / "long.py").write_text(long_lines)
 
     result = CliRunner().invoke(

@@ -42,7 +42,9 @@ def test_annotated_class_attributes_counted():
     findings = AttributeCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["attributes"] == 20
-    assert findings[0].severity == Severity.ERROR
+    # Twenty attributes against the limit of 15 sit under one and a half times it, so the finding is a notice.
+    assert findings[0].severity == Severity.ADVISORY
+    assert findings[0].metadata["limitBand"] == "lower"
 
 
 def test_init_self_assignments_counted():

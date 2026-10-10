@@ -12,7 +12,9 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
+from gruffpy.rule.size._lines import logical_line_numbers, logical_lines_for_size, parent_chain, qualified_symbol
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
@@ -42,9 +44,9 @@ class FunctionLengthRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per function whose body exceeds the configured line count.
 
-        Length is the function's code-line count from ``lines_for_size``, shared
-        with every length rule: blank lines, comments, docstrings and decorators
-        are free. The finding's start line still includes decorators.
+        Length is the function's logical-line count from ``logical_lines_for_size``:
+        a statement or compound-statement header counts once however many lines it
+        spans, and blank lines, comments, docstrings and decorators are free. The finding's start line still includes decorators.
 
         Args:
             unit: Parsed source file to walk.
@@ -61,15 +63,15 @@ class FunctionLengthRule(Rule):
         settings = context.settings_for(definition)
         threshold = _active_high_threshold(settings)
 
-        code_lines = code_line_numbers(unit.source, unit.tree)
-        return [_function_length_finding(unit, definition, node, settings) for node in _long_functions(unit.tree, code_lines, threshold)]
+        logical_lines = logical_line_numbers(unit.source, unit.tree)
+        return [_function_length_finding(unit, definition, node, settings) for node in _long_functions(unit.tree, logical_lines, threshold)]
 
 
-def _long_functions(tree: ast.AST, code_lines: frozenset[int], warning_threshold: int | float) -> list[FunctionNode]:
+def _long_functions(tree: ast.AST, logical_lines: frozenset[int], warning_threshold: int | float) -> list[FunctionNode]:
     return [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) and lines_for_size(node, code_lines) > warning_threshold
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) and logical_lines_for_size(node, logical_lines) > warning_threshold
     ]
 
 
@@ -85,8 +87,9 @@ def _function_length_finding(
     node: FunctionNode,
     settings: RuleSettings,
 ) -> Finding:
-    line_count = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
+    line_count = logical_lines_for_size(node, logical_line_numbers(unit.source, unit.tree))
     threshold_match = settings.high_value_threshold_match(line_count)
+    band = limit_band(line_count, limit_in_force(settings))
     if threshold_match is None:
         raise ValueError("function length finding requires a threshold match")
     symbol = qualified_symbol(node, parent_chain(node))
@@ -99,13 +102,13 @@ def _function_length_finding(
         ),
         file_path=unit.file.display_path,
         line=_start_line(node),
-        severity=threshold_match.severity,
+        severity=banded_severity(band, threshold_match.severity),
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=("Extract helper functions; split distinct steps into named units."),
+        remediation=band_advice(band, _band.LOWER_FUNCTION, _band.SPLIT_FUNCTION),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "lines": line_count,
@@ -113,6 +116,7 @@ def _function_length_finding(
             "threshold": threshold_match.threshold,
             "thresholdDirection": "above",
             "thresholdType": threshold_match.severity.value,
+            LIMIT_BAND_KEY: band,
         },
     )
 

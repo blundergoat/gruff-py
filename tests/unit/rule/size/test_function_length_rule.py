@@ -60,13 +60,15 @@ def test_above_threshold_emits_error():
 
 
 def test_far_above_threshold_emits_error():
-    body = "\n".join(["    x = 1"] * 25)
+    # 31 lines against 20 is at one and a half times the limit or more, so the finding keeps error severity.
+    body = "\n".join(["    x = 1"] * 30)
     source = f"def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=20))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.ERROR
-    assert f.metadata["lines"] == 26
+    assert f.metadata["limitBand"] == "upper"
+    assert f.metadata["lines"] == 31
     assert f.metadata["threshold"] == 20
 
 

@@ -4,6 +4,31 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: `complexity.cyclomatic` is off by default** - After the repair below, it was worth acting on 26 times in 50 at one and
+  a half times its limit or more, under the 0.60 floor. `complexity.cognitive` covers the same functions and stays on. Enable it with
+  `rules.complexity.cyclomatic.enabled: true`; a config that already sets it keeps it on.
+- **An `elif` chain is one nesting level** - `complexity.nesting-depth` reads each `elif` as a peer of its `if`; an `if` written
+  inside an `else` block still counts one level deeper.
+- **Cyclomatic findings skip test files and count a `match` once** - `complexity.cyclomatic` reports no finding in a file of the
+  family's test-path class (a `test`, `tests`, `__tests__`, `spec`, `testdata`, `fixtures` or `examples` folder, or a
+  `test_*.py` or `*_test.py` file) and
+  scores a `match` as one decision however many cases it has. The maintainability index and the complex-branch rationale rule
+  keep the radon-aligned count.
+
+- **BREAKING: size and complexity findings report in two bands** - A unit over its limit but under one and a half times it now
+  reports as an advisory notice, `limitBand: lower`, that asks you not to add to it. At one and a half times the limit or more
+  the finding keeps its severity, `limitBand: upper`, and asks you to split the unit or simplify its execution path
+  (FAMILY-CONTRACT.md section 12). This covers `size.file-length`, `size.class-length`, `size.function-length`,
+  `size.parameter-count`, `size.attribute-count`, `size.public-method-count`, `complexity.cognitive`,
+  `complexity.cyclomatic` and `complexity.nesting-depth`, whatever severity a config sets. Messages are unchanged, so
+  baselines keep matching. A `--fail-on warning` or `--fail-on error` gate stops failing on lower-band findings; the default
+  `analyse` gate still fails on them. Complexity advice no longer suggests extracting helpers.
+- **`size.function-length` counts statements** - A multi-line literal, a call whose arguments span lines, or a signature with
+  one parameter per line now counts once, so data no longer reads as a long function. Findings can disappear or shrink;
+  docstrings and decorators stay free (ADR-002, amended).
+- **`size.public-method-count` counts each public name once** - A property's getter and setter, and an overloaded method's
+  stubs and implementation, count as one public method.
+
 - Private-key warnings retain short opaque bodies; a complete block containing only the explicit `placeholder` word stays quiet.
 
 - Workflow secret warnings skip jobs or steps whose own event guard proves them unreachable for every detected PR event.

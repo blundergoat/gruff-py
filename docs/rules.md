@@ -37,7 +37,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 ### Complexity And Maintainability
 
 - `complexity.cognitive`
-- `complexity.cyclomatic`
+- `complexity.cyclomatic` (default off)
 - `complexity.halstead-volume`
 - `complexity.maintainability-index`
 - `complexity.nesting-depth`
@@ -210,7 +210,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cyclomatic complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.

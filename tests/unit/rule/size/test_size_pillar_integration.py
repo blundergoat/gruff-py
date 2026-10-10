@@ -102,7 +102,17 @@ class WithLongInit:
         i,
         j,
     ):
-        return a + b + c + d + e + f + g + h + i + j
+        # Ten statements: function length counts statements, so the long signature above is one line of it.
+        total = a + b
+        total += c
+        total += d
+        total += e
+        total += f
+        total += g
+        total += h
+        total += i
+        total += j
+        return total
 
 
 async def big_async():

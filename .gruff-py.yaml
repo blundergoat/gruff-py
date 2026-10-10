@@ -217,7 +217,7 @@ rules:
     severity: error
   # Cyclomatic complexity
   complexity.cyclomatic:
-    enabled: true
+    enabled: false
     threshold: 20
     severity: error
   # Halstead volume

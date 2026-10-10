@@ -25,6 +25,8 @@ from gruffpy.rule.complexity._walks import FunctionLike, iter_functions
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
@@ -69,6 +71,7 @@ class CognitiveComplexityRule(Rule):
         for fn in iter_functions(unit.tree):
             score = cognitive_for(fn)
             threshold_match = settings.high_value_threshold_match(score)
+            band = limit_band(score, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -84,13 +87,13 @@ class CognitiveComplexityRule(Rule):
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=("Flatten nesting; replace nested conditionals with guard clauses or dispatch tables; extract sub-procedures."),
+                    remediation=band_advice(band, _band.LOWER_FUNCTION, _band.SIMPLIFY_PATH),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "cognitive": score,
@@ -98,6 +101,7 @@ class CognitiveComplexityRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )

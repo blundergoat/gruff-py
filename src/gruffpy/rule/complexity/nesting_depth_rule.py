@@ -2,6 +2,7 @@
 
 A control-flow block is any of: ``if``, ``for``, ``while``, ``try``,
 ``except`` (each handler counts as a level), ``match``, ``with``.
+An ``elif`` chain stays at one level; an ``if`` nested inside an ``else`` opens another.
 
 Lambdas reset depth (their body counts at 0). Nested function definitions
 are scored independently.
@@ -19,6 +20,8 @@ from gruffpy.rule.complexity._walks import FunctionLike, iter_functions
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 _NESTING_KINDS = (
@@ -74,6 +77,7 @@ class NestingDepthRule(Rule):
         for fn in iter_functions(unit.tree):
             depth = nesting_depth_for(fn)
             threshold_match = settings.high_value_threshold_match(depth)
+            band = limit_band(depth, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -89,13 +93,13 @@ class NestingDepthRule(Rule):
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=("Flatten with guard clauses, early returns, or extracted helpers."),
+                    remediation=band_advice(band, _band.LOWER_FUNCTION, _band.SIMPLIFY_PATH),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "depth": depth,
@@ -103,6 +107,7 @@ class NestingDepthRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -169,6 +174,11 @@ def _walk_match(node: ast.Match, current: int) -> int:
 def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
     body = getattr(node, "body", []) or []
     orelse = getattr(node, "orelse", None) or []
+    # An elif parses as an If inside its parent's orelse, but a reader sees a peer branch, not a level deeper. It starts
+    # at its if's column; an if written inside an else block is indented, and stays one level deeper.
+    is_elif = len(orelse) == 1 and isinstance(orelse[0], ast.If) and orelse[0].col_offset == getattr(node, "col_offset", -1)
+    if isinstance(node, ast.If) and is_elif:
+        return max(current, _deepest_in_statements(body, current), _walk(orelse[0], current - 1))
     return max(
         current,
         _deepest_in_statements(body, current),

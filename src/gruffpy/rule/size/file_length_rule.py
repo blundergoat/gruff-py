@@ -11,6 +11,8 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import code_line_numbers, fallback_code_line_count
 
 
@@ -57,6 +59,7 @@ class FileLengthRule(Rule):
         settings = context.settings_for(definition)
         line_count = fallback_code_line_count(unit.source) if unit.is_deep_scan_bounded() else _substantive_line_count(unit.source, unit.tree)
         threshold_match = settings.high_value_threshold_match(line_count)
+        band = limit_band(line_count, limit_in_force(settings))
         if threshold_match is None:
             return []
 
@@ -70,12 +73,12 @@ class FileLengthRule(Rule):
                 ),
                 file_path=unit.file.display_path,
                 line=1,
-                severity=threshold_match.severity,
+                severity=banded_severity(band, threshold_match.severity),
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
                 end_line=unit.line_count(),
-                remediation=("Split oversized files or move responsibilities into smaller units."),
+                remediation=band_advice(band, _band.LOWER_FILE, _band.SPLIT_FILE),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "lines": line_count,
@@ -83,6 +86,7 @@ class FileLengthRule(Rule):
                     "threshold": threshold_match.threshold,
                     "thresholdDirection": "above",
                     "thresholdType": threshold_match.severity.value,
+                    LIMIT_BAND_KEY: band,
                 },
             ),
         ]

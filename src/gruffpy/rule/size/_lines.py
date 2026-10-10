@@ -2,9 +2,13 @@
 
 Defined by ADR-002, as amended for FAMILY-CONTRACT section 12's code-lines clause (search: ``Code lines in every line
 count``): a unit's length is the number of code lines it spans. Blank lines, ``#`` comments, PEP 257 docstrings and
-decorator lines never count, so documenting a unit cannot push it over a limit. File length, function, class,
+decorator lines never count, so documenting a unit cannot push it over a limit. File, class,
 average-function and test-function length, setup length, the test-to-subject ratio and the maintainability index's
 line term all read the same per-file set of code lines.
+
+Function length is the one exception (FAMILY-CONTRACT section 12, search: ``Measures that stop counting data or syntax
+as logic``): it counts logical lines, so a literal or a call that spans several lines counts once. Docstrings and
+decorators stay free there too.
 """
 
 import ast
@@ -13,8 +17,9 @@ import tokenize
 
 LineCountableNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
 
-# The per-file code-line set is stored on the parsed tree, so the rules that measure one file tokenize it once.
+# The per-file code-line and logical-line sets are stored on the parsed tree, so the rules that measure one file compute each set once.
 _CODE_LINES_ATTRIBUTE = "_gruff_code_lines"
+_LOGICAL_LINES_ATTRIBUTE = "_gruff_logical_lines"
 _IGNORED_TOKEN_TYPES = frozenset(
     {
         tokenize.COMMENT,
@@ -70,6 +75,65 @@ def lines_for_size(node: LineCountableNode, code_lines: frozenset[int]) -> int:
         # Defensive: Python >= 3.8 always populates end_lineno on nodes returned by ast.parse().
         return 1
     return sum(1 for line in range(node.lineno, end + 1) if line in code_lines)
+
+
+def logical_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
+    """Return the start line of every logical line of code in a file.
+
+    A logical line is what the tokenizer ends with a NEWLINE token: one statement, or one compound-statement header,
+    however many physical lines its literals, calls or brackets span. A logical line made only of a docstring or a
+    decorator is left out, as ``code_line_numbers`` leaves those lines out. Source that cannot be tokenized falls back
+    to the code lines themselves.
+
+    Args:
+        source: Full source text of the analysed file.
+        tree: Parsed AST for the same source, or None for text files and parse failures.
+
+    Returns:
+        One-based line numbers where a logical line of code starts.
+    """
+    if tree is not None:
+        cached = getattr(tree, _LOGICAL_LINES_ATTRIBUTE, None)
+        if isinstance(cached, frozenset):
+            return cached
+    code_lines = code_line_numbers(source, tree)
+    try:
+        tokens = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        return code_lines
+    starts: set[int] = set()
+    first_code_line: int | None = None
+    for token in tokens:
+        if token.type == tokenize.NEWLINE:
+            if first_code_line is not None:
+                starts.add(first_code_line)
+            first_code_line = None
+            continue
+        # The logical line starts at its first token that sits on a code line.
+        if first_code_line is None and token.type not in _IGNORED_TOKEN_TYPES and token.start[0] in code_lines:
+            first_code_line = token.start[0]
+    lines = frozenset(starts)
+    if tree is not None:
+        setattr(tree, _LOGICAL_LINES_ATTRIBUTE, lines)
+    return lines
+
+
+def logical_lines_for_size(node: LineCountableNode, logical_lines: frozenset[int]) -> int:
+    """Return how many logical lines start in a node's span, from its ``def`` or ``lambda`` line to its end line.
+
+    Args:
+        node: Function, async function, or lambda node to measure.
+        logical_lines: The file's logical-line starts, from ``logical_line_numbers``.
+
+    Returns:
+        Number of logical lines that start in the node's span; at least 1, since a lambda inside a longer statement
+        starts no logical line of its own.
+    """
+    end = node.end_lineno
+    if end is None:
+        # Defensive: Python >= 3.8 always populates end_lineno on nodes returned by ast.parse().
+        return 1
+    return max(1, sum(1 for line in range(node.lineno, end + 1) if line in logical_lines))
 
 
 def fallback_code_line_count(source: str) -> int:

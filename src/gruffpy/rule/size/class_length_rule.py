@@ -12,6 +12,8 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 
@@ -71,6 +73,7 @@ def _class_length_finding(
 ) -> Finding:
     line_count = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
     threshold_match = settings.high_value_threshold_match(line_count)
+    band = limit_band(line_count, limit_in_force(settings))
     if threshold_match is None:
         raise ValueError("class length finding requires a threshold match")
     symbol = qualified_symbol(node, parent_chain(node))
@@ -83,13 +86,13 @@ def _class_length_finding(
         ),
         file_path=unit.file.display_path,
         line=_start_line(node),
-        severity=threshold_match.severity,
+        severity=banded_severity(band, threshold_match.severity),
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=("Split the class along responsibility boundaries; extract collaborators or value objects."),
+        remediation=band_advice(band, _band.LOWER_CLASS, _band.SPLIT_CLASS),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "lines": line_count,
@@ -97,6 +100,7 @@ def _class_length_finding(
             "threshold": threshold_match.threshold,
             "thresholdDirection": "above",
             "thresholdType": threshold_match.severity.value,
+            LIMIT_BAND_KEY: band,
         },
     )
 
