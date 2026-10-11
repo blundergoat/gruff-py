@@ -295,21 +295,29 @@ rules:
   # Missing function docstring
   docs.missing-function-docstring:
     enabled: true
+    options:
+      everyCallable: false
   # Missing module docstring
   docs.missing-module-docstring:
     enabled: true
   # Missing parameter documentation
   docs.missing-param-doc:
     enabled: true
+    options:
+      everyCallable: false
   # Missing raises documentation
   docs.missing-raises-doc:
     enabled: true
+    options:
+      everyCallable: false
   # Missing README
   docs.missing-readme:
     enabled: true
   # Missing return documentation
   docs.missing-return-doc:
     enabled: true
+    options:
+      everyCallable: false
   # Stale parameter documentation
   docs.stale-param-doc:
     enabled: true

@@ -4,6 +4,12 @@ Public = the name does not start with ``_``. Dunder methods, abstract methods,
 pytest-style ``test_*`` functions in test files, ``@typing.overload`` stubs,
 and ``@<name>.setter``/``@<name>.deleter`` methods are exempt. ``@property``
 getters require a docstring like any public method.
+
+The ``everyCallable`` option, off by default, brings underscore-private
+functions and methods and ``test_*`` functions in test files into scope. The
+message names what the docstring should hold: the intent, an entry for each
+parameter, and a Returns or Yields and a Raises section only when the function
+returns a value or raises.
 """
 
 import ast
@@ -23,10 +29,18 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.docs._docstring_parser import extract_docstring
 from gruffpy.rule.docs._helpers import (
-    is_dunder,
+    EVERY_CALLABLE_OPTION,
+    every_callable_enabled,
+    has_none_only_return,
+    has_raise_in_body,
+    has_return_annotation,
+    is_generator,
+    is_in_documentation_scope,
     is_property_setter_or_deleter,
-    is_public,
     is_test_file,
+    quoted_names,
+    returns_value,
+    signature_param_names,
 )
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
@@ -48,10 +62,15 @@ class MissingFunctionDocstringRule(Rule):
         return RuleDefinition(
             id=self.ID,
             name="Missing function docstring",
+            description=(
+                "Flags a public function or method with no docstring; with `everyCallable`, also underscore-private "
+                "functions and methods and `test_*` functions in test files."
+            ),
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_options={EVERY_CALLABLE_OPTION: False},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -59,25 +78,30 @@ class MissingFunctionDocstringRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Rule execution context supplied by the analyzer; its
+                ``everyCallable`` option widens the rule.
 
         Returns:
-            Findings for public functions or methods missing docstrings.
+            Findings for functions or methods in scope that miss docstrings.
         """
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [_missing_function_docstring_finding(unit, definition, node, parents) for node, parents in _undocumented_functions(unit)]
+        every_callable = every_callable_enabled(context, definition)
+        return [
+            _missing_function_docstring_finding(unit, definition, node, parents)
+            for node, parents in _undocumented_functions(unit, every_callable=every_callable)
+        ]
 
 
-def _undocumented_functions(unit: AnalysisUnit) -> list[tuple[FunctionNode, list[ast.AST]]]:
+def _undocumented_functions(unit: AnalysisUnit, *, every_callable: bool) -> list[tuple[FunctionNode, list[ast.AST]]]:
     assert unit.tree is not None
     candidates: list[tuple[FunctionNode, list[ast.AST]]] = []
     for node in ast.walk(unit.tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         parents = parent_chain(node)
-        if _should_report_missing_function_docstring(node, parents, unit.file.display_path):
+        if _should_report_missing_function_docstring(node, parents, unit.file.display_path, every_callable=every_callable):
             candidates.append((node, parents))
     return candidates
 
@@ -86,10 +110,12 @@ def _should_report_missing_function_docstring(
     node: FunctionNode,
     parents: list[ast.AST],
     display_path: str,
+    *,
+    every_callable: bool,
 ) -> bool:
-    if not is_public(node.name) or is_dunder(node.name):
+    if not is_in_documentation_scope(node.name, every_callable=every_callable):
         return False
-    if node.name.startswith("test_") and is_test_file(display_path):
+    if not every_callable and node.name.startswith("test_") and is_test_file(display_path):
         return False
     return not (
         extract_docstring(node) is not None
@@ -140,7 +166,7 @@ def _missing_function_docstring_finding(
     symbol = qualified_symbol(node, parents)
     return Finding(
         rule_id=definition.id,
-        message=f"Function {symbol!r} needs a brief intent description in its docstring.",
+        message=_missing_docstring_message(node, symbol),
         file_path=unit.file.display_path,
         line=node.lineno,
         severity=definition.default_severity,
@@ -156,3 +182,36 @@ def _missing_function_docstring_finding(
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )
+
+
+def _missing_docstring_message(node: FunctionNode, symbol: str) -> str:
+    """Build the message from the signature, asking only for what this function has.
+
+    Args:
+        node: Undocumented function node.
+        symbol: Qualified symbol shown in the finding.
+
+    Returns:
+        A message naming the intent, each parameter, and a Returns or Yields and
+        a Raises section only when the function returns a value or raises.
+    """
+    wanted = ["a brief intent description"]
+    parameters = [name for name in signature_param_names(node) if not name.startswith("_")]
+    if parameters:
+        entries = "an entry for parameter" if len(parameters) == 1 else "entries for parameters"
+        wanted.append(f"{entries} {quoted_names(parameters)}")
+    if is_generator(node):
+        wanted.append("a Yields section")
+    elif _returns_documentable_value(node):
+        wanted.append("a Returns section")
+    if has_raise_in_body(node):
+        wanted.append("a Raises section")
+    listed = wanted[0] if len(wanted) == 1 else f"{', '.join(wanted[:-1])} and {wanted[-1]}"
+    return f"Function {symbol!r} needs a docstring with {listed}."
+
+
+def _returns_documentable_value(node: FunctionNode) -> bool:
+    """Return whether the function hands back a value its docstring should describe."""
+    if has_return_annotation(node):
+        return not has_none_only_return(node)
+    return returns_value(node)

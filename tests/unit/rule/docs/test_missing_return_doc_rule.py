@@ -1,5 +1,5 @@
 from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
-from tests.unit.rule.docs._helpers import default_ctx, make_unit
+from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_unit
 
 
 def test_documented_returns_emits_nothing():
@@ -29,3 +29,21 @@ def test_no_annotation_skipped():
 def test_private_function_skipped():
     src = 'def _f() -> int:\n    """X."""\n    return 1\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_private_function_reported_with_every_callable():
+    src = 'def _f() -> int:\n    """X."""\n    return 1\n'
+    findings = MissingReturnDocRule().analyse(make_unit(src), every_callable_ctx(MissingReturnDocRule.ID))
+    assert [f.symbol for f in findings] == ["_f"]
+
+
+def test_unannotated_value_return_reported_only_with_every_callable():
+    src = (
+        'def plain(x):\n    """Double."""\n    return x * 2\n\n'
+        'async def fetch(x):\n    """Fetch."""\n    return x\n\n'
+        'def silent(x):\n    """Log."""\n    print(x)\n    return None\n\n'
+        'def gen(x):\n    """Count.\n\n    Yields:\n        int: each value.\n    """\n    yield x\n'
+    )
+    assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
+    findings = MissingReturnDocRule().analyse(make_unit(src), every_callable_ctx(MissingReturnDocRule.ID))
+    assert sorted(f.symbol for f in findings) == ["fetch", "plain"]

@@ -1,5 +1,5 @@
 from gruffpy.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
-from tests.unit.rule.docs._helpers import default_ctx, make_unit
+from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_unit
 
 
 def test_function_with_docstring_skipped():
@@ -12,8 +12,7 @@ def test_function_without_docstring_emits():
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "f"
-    assert "needs a brief intent description" in findings[0].message
-    assert "has no docstring" not in findings[0].message
+    assert findings[0].message == "Function 'f' needs a docstring with a brief intent description and a Returns section."
 
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
@@ -120,3 +119,27 @@ def test_nested_function_called_twice_still_emits():
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "outer.helper"
+
+
+def test_message_asks_only_for_what_the_function_has():
+    src = (
+        "def act():\n    print(1)\n\n"
+        "def convert(value, unit, _cache=None):\n    if value < 0:\n        raise ValueError\n    return value\n\n"
+        "def walk(root):\n    yield root\n"
+    )
+    messages = {f.symbol: f.message for f in MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())}
+    assert messages == {
+        "act": "Function 'act' needs a docstring with a brief intent description.",
+        "convert": (
+            "Function 'convert' needs a docstring with a brief intent description, "
+            "entries for parameters 'value' and 'unit', a Returns section and a Raises section."
+        ),
+        "walk": "Function 'walk' needs a docstring with a brief intent description, an entry for parameter 'root' and a Yields section.",
+    }
+
+
+def test_private_and_test_functions_reported_with_every_callable():
+    ctx = every_callable_ctx(MissingFunctionDocstringRule.ID)
+    private = MissingFunctionDocstringRule().analyse(make_unit("def _f():\n    return 1\n"), ctx)
+    test = MissingFunctionDocstringRule().analyse(make_unit("def test_service():\n    assert service() == 1\n", "tests/test_service.py"), ctx)
+    assert [f.symbol for f in private + test] == ["_f", "test_service"]

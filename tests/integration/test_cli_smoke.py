@@ -2413,7 +2413,7 @@ def test_cli_analyse_docs_messages_describe_intent_not_absence(tmp_path: Path, m
         ["analyse", "--format", "text", "--fail-on", "none", "--no-config", "src"],
     )
     assert result.exit_code == 0, result.output
-    assert "needs a brief intent description" in result.output
+    assert "needs a docstring with a brief intent description" in result.output
     assert "has no docstring" not in result.output
 
 

@@ -467,6 +467,7 @@ except ValueError:
 - Rationale: `docs.missing-function-docstring` protects the documentation pillar by flagging missing function docstring before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing function docstring directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Options: `everyCallable` = `False`
 - Bad example: Code that triggers `docs.missing-function-docstring` leaves missing function docstring unaddressed.
 - Good example: Code that satisfies `docs.missing-function-docstring` makes missing function docstring explicit or simpler.
 
@@ -498,6 +499,7 @@ except ValueError:
 - Rationale: `docs.missing-param-doc` protects the documentation pillar by flagging missing parameter documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing parameter documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `everyCallable` = `False`
 - Common false-positive shapes:
   - An override can inherit its parameter contract from a documented interface even though its local docstring has no Args or Parameters section.
     Mitigation: Repeat the parameter contract locally, or suppress the rule on the reviewed override when inherited documentation is the project convention.
@@ -515,6 +517,7 @@ except ValueError:
 - Rationale: `docs.missing-raises-doc` protects the documentation pillar by flagging missing raises documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing raises documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
+- Options: `everyCallable` = `False`
 - Common false-positive shapes:
   - A wrapper can re-raise an exception whose contract is documented on the interface it implements rather than in its local docstring.
     Mitigation: Add a local Raises section, or suppress the rule on the reviewed wrapper when the inherited exception contract is authoritative.
@@ -549,6 +552,7 @@ except ValueError:
 - Rationale: `docs.missing-return-doc` protects the documentation pillar by flagging missing return documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing return documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Options: `everyCallable` = `False`
 - Common false-positive shapes:
   - An override can inherit its return contract from a documented Protocol or base class while omitting a local Returns section.
     Mitigation: Repeat the return contract locally, or suppress the rule on the reviewed override when inherited documentation is authoritative.

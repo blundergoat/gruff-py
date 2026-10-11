@@ -4,6 +4,18 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: one missing-parameter finding per function** - `docs.missing-param-doc` reports a function once and names
+  every undocumented parameter, as in "Function 'add' needs docstring entries describing parameters 'y' and 'z'." Its
+  metadata lists them under `parameters`; the per-finding `parameter` key is gone. Counts fall wherever a function missed
+  more than one entry.
+- **Missing-docstring messages say what the docstring needs** - `docs.missing-function-docstring` names each parameter,
+  and asks for a Returns or Yields section and a Raises section only when the function returns a value or raises.
+- **`everyCallable` widens four documentation rules, off by default** - With `rules.<id>.options.everyCallable: true`,
+  `docs.missing-function-docstring`, `docs.missing-param-doc`, `docs.missing-return-doc` and `docs.missing-raises-doc`
+  also check underscore-private functions and methods. The docstring rule then also asks `test_*` functions in test files
+  for a docstring, the return rule checks an unannotated function that returns or yields a value, and the parameter rule
+  stops counting an entry with no description. Nothing changes until a configuration turns it on.
+
 - **BREAKING: two more test-quality checks are opt-in** - `test-quality.no-assertions` and `test-quality.sut-not-called` have insufficient precision evidence, with 16/50 and 17/50 unresolved cards. Enable either with `rules.<id>.enabled: true`; existing explicit settings remain effective. No-assertions retains its failed first after audit and passing retry. This policy decision makes no new floor-failure or deletion claim.
 
 - **BREAKING: six test-quality checks are opt-in** - `test-quality.exception-type-only`, `test-quality.loop-assertion-without-message`, `test-quality.loop-in-test`, `test-quality.parametrize-annotation`, `test-quality.sleep-in-test` and `test-quality.trivial-assertion` stayed below the 0.70 precision floor after repair. Enable one with `rules.<id>.enabled: true`; existing explicit settings remain effective. The loop-in-test before audit exceeded the disagreement limit twice, so its off-by-default decision carries that caveat and makes no calibrated improvement claim.

@@ -1,7 +1,9 @@
 """``docs.missing-raises-doc`` - documented function that raises but lacks a Raises section.
 
-Public functions only. Walks the body for ``raise`` statements, stopping at
-nested function/lambda boundaries (those raises belong to the nested scope).
+Public functions only, unless the ``everyCallable`` option, off by default,
+brings underscore-private functions and methods into scope. Walks the body for
+``raise`` statements, stopping at nested function/lambda boundaries (those
+raises belong to the nested scope).
 """
 
 import ast
@@ -17,10 +19,11 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.docs._docstring_parser import DocstringStyle, extract_docstring, parse_docstring
 from gruffpy.rule.docs._helpers import (
+    EVERY_CALLABLE_OPTION,
+    every_callable_enabled,
     has_raise_in_body,
-    is_dunder,
+    is_in_documentation_scope,
     is_property_setter_or_deleter,
-    is_public,
 )
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
@@ -42,10 +45,15 @@ class MissingRaisesDocRule(Rule):
         return RuleDefinition(
             id=self.ID,
             name="Missing raises documentation",
+            description=(
+                "Flags a public function whose body raises an exception and whose docstring has no Raises section; "
+                "with `everyCallable`, also underscore-private functions and methods."
+            ),
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
+            default_options={EVERY_CALLABLE_OPTION: False},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -53,30 +61,35 @@ class MissingRaisesDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Rule execution context supplied by the analyzer; its
+                ``everyCallable`` option widens the rule.
 
         Returns:
-            Findings for documented public functions that raise without docs.
+            Findings for documented functions in scope that raise without docs.
         """
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [_missing_raises_doc_finding(unit, definition, node, style) for node, style in _missing_raises_doc_nodes(unit.tree)]
+        every_callable = every_callable_enabled(context, definition)
+        return [
+            _missing_raises_doc_finding(unit, definition, node, style)
+            for node, style in _missing_raises_doc_nodes(unit.tree, every_callable=every_callable)
+        ]
 
 
-def _missing_raises_doc_nodes(tree: ast.AST) -> list[tuple[FunctionNode, DocstringStyle]]:
+def _missing_raises_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tuple[FunctionNode, DocstringStyle]]:
     candidates: list[tuple[FunctionNode, DocstringStyle]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        style = _missing_raises_doc_style(node)
+        style = _missing_raises_doc_style(node, every_callable=every_callable)
         if style is not None:
             candidates.append((node, style))
     return candidates
 
 
-def _missing_raises_doc_style(node: FunctionNode) -> DocstringStyle | None:
-    if _should_skip_raises_doc_check(node):
+def _missing_raises_doc_style(node: FunctionNode, *, every_callable: bool) -> DocstringStyle | None:
+    if _should_skip_raises_doc_check(node, every_callable=every_callable):
         return None
     text = extract_docstring(node)
     if text is None:
@@ -87,10 +100,9 @@ def _missing_raises_doc_style(node: FunctionNode) -> DocstringStyle | None:
     return parsed.style
 
 
-def _should_skip_raises_doc_check(node: FunctionNode) -> bool:
+def _should_skip_raises_doc_check(node: FunctionNode, *, every_callable: bool) -> bool:
     return (
-        not is_public(node.name)
-        or is_dunder(node.name)
+        not is_in_documentation_scope(node.name, every_callable=every_callable)
         or is_overload_stub(node)
         or is_property_setter_or_deleter(node)
         or not has_raise_in_body(node)

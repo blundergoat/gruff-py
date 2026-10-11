@@ -627,6 +627,25 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "When true, @dataclass-decorated classes are exempt (rely on docs.dataclass-attributes for their docs requirement instead)."
         ),
     },
+    "docs.missing-function-docstring": {
+        "everyCallable": (
+            "When true, underscore-private functions and methods and test_* functions in test files also need a docstring. Off by default."
+        ),
+    },
+    "docs.missing-param-doc": {
+        "everyCallable": (
+            "When true, underscore-private functions and methods are checked too, and an entry with no description does not count. Off by default."
+        ),
+    },
+    "docs.missing-raises-doc": {
+        "everyCallable": "When true, underscore-private functions and methods are checked too. Off by default.",
+    },
+    "docs.missing-return-doc": {
+        "everyCallable": (
+            "When true, underscore-private functions and methods are checked too, and so is an unannotated function that returns or yields "
+            "a value. Off by default."
+        ),
+    },
     "docs.useless-docstring": {
         "min_summary_words": (
             "Deprecated and ignored since 0.6.0, when the word-count check was removed; still accepted so configurations load. Removed in 0.7.0."

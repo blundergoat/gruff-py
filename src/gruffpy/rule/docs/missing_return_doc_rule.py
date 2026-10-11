@@ -3,6 +3,10 @@
 Fires on documented public functions whose declared return type is not ``None``
 and whose docstring lacks a Returns / :returns: entry. Skips functions that
 declare ``-> None`` (or no return annotation at all) and ``__init__`` constructors.
+
+The ``everyCallable`` option, off by default, brings underscore-private
+functions and methods into scope, and also functions with no return
+annotation whose own body returns or yields a value.
 """
 
 import ast
@@ -18,11 +22,13 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.docs._docstring_parser import DocstringStyle, extract_docstring, parse_docstring
 from gruffpy.rule.docs._helpers import (
+    EVERY_CALLABLE_OPTION,
+    every_callable_enabled,
     has_none_only_return,
     has_return_annotation,
-    is_dunder,
+    is_in_documentation_scope,
     is_property_setter_or_deleter,
-    is_public,
+    returns_value,
 )
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
@@ -44,10 +50,16 @@ class MissingReturnDocRule(Rule):
         return RuleDefinition(
             id=self.ID,
             name="Missing return documentation",
+            description=(
+                "Flags a public function annotated to return a value whose docstring has no Returns section; with "
+                "`everyCallable`, also underscore-private functions and methods, and an unannotated function whose "
+                "body returns or yields a value."
+            ),
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_options={EVERY_CALLABLE_OPTION: False},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -55,30 +67,35 @@ class MissingReturnDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Rule execution context supplied by the analyzer; its
+                ``everyCallable`` option widens the rule.
 
         Returns:
-            Findings for documented public functions missing Returns sections.
+            Findings for documented functions in scope missing Returns sections.
         """
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [_missing_return_doc_finding(unit, definition, node, style) for node, style in _missing_return_doc_nodes(unit.tree)]
+        every_callable = every_callable_enabled(context, definition)
+        return [
+            _missing_return_doc_finding(unit, definition, node, style)
+            for node, style in _missing_return_doc_nodes(unit.tree, every_callable=every_callable)
+        ]
 
 
-def _missing_return_doc_nodes(tree: ast.AST) -> list[tuple[FunctionNode, DocstringStyle]]:
+def _missing_return_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tuple[FunctionNode, DocstringStyle]]:
     candidates: list[tuple[FunctionNode, DocstringStyle]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        style = _missing_return_doc_style(node)
+        style = _missing_return_doc_style(node, every_callable=every_callable)
         if style is not None:
             candidates.append((node, style))
     return candidates
 
 
-def _missing_return_doc_style(node: FunctionNode) -> DocstringStyle | None:
-    if _should_skip_return_doc_check(node):
+def _missing_return_doc_style(node: FunctionNode, *, every_callable: bool) -> DocstringStyle | None:
+    if _should_skip_return_doc_check(node, every_callable=every_callable):
         return None
     text = extract_docstring(node)
     if text is None:
@@ -91,15 +108,18 @@ def _missing_return_doc_style(node: FunctionNode) -> DocstringStyle | None:
     return parsed.style
 
 
-def _should_skip_return_doc_check(node: FunctionNode) -> bool:
-    return (
-        not is_public(node.name)
-        or is_dunder(node.name)
+def _should_skip_return_doc_check(node: FunctionNode, *, every_callable: bool) -> bool:
+    if (
+        not is_in_documentation_scope(node.name, every_callable=every_callable)
         or is_overload_stub(node)
         or is_property_setter_or_deleter(node)
-        or not has_return_annotation(node)
         or has_none_only_return(node)
-    )
+    ):
+        return True
+    if has_return_annotation(node):
+        return False
+    # Without an annotation, only the widened scope reads the body to see whether a value comes back.
+    return not (every_callable and returns_value(node))
 
 
 def _missing_return_doc_finding(
