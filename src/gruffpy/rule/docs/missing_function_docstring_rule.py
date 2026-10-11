@@ -185,7 +185,7 @@ def _missing_function_docstring_finding(
 
 
 def _missing_docstring_message(node: FunctionNode, symbol: str) -> str:
-    """Build the message from the signature, asking only for what this function has.
+    """Build the message from the signature and own body, asking only for what this function has.
 
     Args:
         node: Undocumented function node.
