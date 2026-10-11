@@ -1,6 +1,7 @@
 """The family's built-in test-path skip, as a gruff-py user meets it.
 
-Test, fixture and example files hold sample credentials, so sensitive-data findings there are dropped by path.
+Test, fixture and example files hold sample credentials and call insecure APIs on purpose, so sensitive-data and
+security findings there are dropped by path.
 ``FAMILY-CONTRACT.md`` (search: ``### 13a. Sensitive exclusions``) lets no surface filter in silence, so every drop is
 counted and published as a built-in audit row, and production files keep reporting.
 """
@@ -73,6 +74,30 @@ def test_test_path_class_skips_sensitive_findings_and_counts_them(sample_key_pro
     ]
     # No audit row may carry matched value material (FAMILY-CONTRACT.md section 5).
     assert _SYNTHETIC_AWS_KEY not in json.dumps(built_in_rows)
+
+
+def test_test_path_class_skips_security_findings_and_counts_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip a deliberate ``eval`` in test and example files with the security reason, and keep production code reporting.
+
+    Args:
+        tmp_path: Empty directory used as the project root.
+        monkeypatch: Fixture used to make that directory the working directory.
+    """
+    source = 'def run(expression):\n    """Evaluate an expression."""\n    return eval(expression)\n'
+    for relative_path in ("src/probe/runner.py", "tests/test_runner.py", "examples/run_demo.py"):
+        (tmp_path / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / relative_path).write_text(source)
+    monkeypatch.chdir(tmp_path)
+
+    payload = _analyse(tmp_path)
+    security_files = sorted({finding["file"] for finding in payload["findings"] if finding["ruleId"].startswith("security.")})
+    security_rows = [row for row in payload["suppressions"] if row.get("source") == "built-in" and row["rule"].startswith("security.")]
+
+    assert security_files == ["src/probe/runner.py"]
+    assert sorted({row["paths"][0] for row in security_rows}) == ["examples/run_demo.py", "tests/test_runner.py"]
+    assert {row["reason"] for row in security_rows} == {
+        "Test, fixture and example files exercise insecure calls on purpose, so security rules skip them by path."
+    }
 
 
 # `summary` takes no --fail-on: it reports rather than gates.

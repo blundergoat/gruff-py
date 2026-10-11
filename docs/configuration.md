@@ -241,7 +241,7 @@ Unknown rule IDs and per-rule keys follow the warning policy in
 deliberately separate from `selection`, so no message- or value-matching key can ever apply to the
 sensitive-data pillar.
 
-A built-in test-path skip also hides sensitive-data findings in test, fixture and example files, and counts each one in `suppressions`.
+A built-in test-path skip also hides sensitive-data and security findings in test, fixture and example files, and counts each one in `suppressions`.
 It covers every sensitive-data rule except `sensitive-data.pii-test-fixture`.
 A configured entry applies first, so a finding it claims is counted under the entry.
 

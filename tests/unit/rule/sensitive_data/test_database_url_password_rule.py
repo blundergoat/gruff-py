@@ -61,3 +61,31 @@ def test_placeholder_password_skipped(password: str) -> None:
 def test_passwordless_url_skipped():
     src = "URL = 'postgresql://user@host/db'\n"
     assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://postgres:postgres@localhost:5432/app",
+        "mysql://root:root@127.0.0.1/app",
+        "redis://Guest:Secret@db:6379",
+        "postgres://scott:tiger@0.0.0.0/orcl",
+    ],
+    ids=["postgres_localhost", "root_loopback", "service_name_mixed_case", "scott_tiger_any_address"],
+)
+def test_stock_development_pair_on_local_host_skipped(url: str) -> None:
+    src = f"URL = {url!r}\n"
+    assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://postgres:postgres" + "@" + "db.example.com/app",
+        "postgresql://postgres:" + "Vq7" + "mZ2" + "kP9" + "@localhost/app",
+    ],
+    ids=["stock_pair_reachable_host", "real_password_local_host"],
+)
+def test_stock_pair_elsewhere_or_real_password_locally_emits(url: str) -> None:
+    src = f"URL = {url!r}\n"
+    assert len(DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx())) == 1

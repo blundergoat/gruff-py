@@ -2,8 +2,10 @@
 
 Pattern: ``<scheme>://<user>:<password>@<host>`` where the password is not a
 placeholder (``password``, ``changeme``, ``change-me``, ``xxx``, ``***``,
-``****``, ``dummy``, ``fake``, ``redacted``, blank). Covers Postgres, MySQL,
-MariaDB, MongoDB, Redis, ClickHouse, and the most common SQLAlchemy-style URLs.
+``****``, ``dummy``, ``fake``, ``redacted``, blank), and the URL is not a stock
+development pair such as ``postgres:postgres`` on a loopback or single-label host
+(FAMILY-CONTRACT.md section 5). Covers Postgres, MySQL, MariaDB, MongoDB, Redis,
+ClickHouse, and the most common SQLAlchemy-style URLs.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -55,6 +57,16 @@ _PLACEHOLDER_PASSWORDS: frozenset[str] = frozenset(
         "redacted",
     }
 )
+# Stock development user names and passwords, compared case-insensitively and whole (FAMILY-CONTRACT.md section 5).
+# They are documented defaults such as ``scott:tiger``, not credentials, so they are held as plain text.
+_STOCK_DEVELOPMENT_WORDS: frozenset[str] = frozenset(
+    {
+        "admin", "bar", "dbpass", "dbuser", "default", "demo", "example", "foo", "guest", "mysql", "pass",
+        "passwd", "password", "postgres", "root", "sa", "scott", "secret", "test", "tiger", "user", "username",
+    }
+)  # fmt: skip
+# Loopback hosts, on which a stock pair is a development default rather than a live weakness.
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
 
 class DatabaseUrlPasswordRule(SourceTextRule):
@@ -104,8 +116,8 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         for database_url_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(database_url_match.raw)
             # Unparseable or placeholder passwords do not represent a credential the user must
-            # rotate.
-            if embedded_password is None or _is_placeholder_password(embedded_password):
+            # rotate, and nor does a stock pair on a host only a developer's machine reaches.
+            if embedded_password is None or _is_placeholder_password(embedded_password) or _is_stock_development_url(database_url_match.raw):
                 continue
             findings.append(
                 Finding(
@@ -167,3 +179,26 @@ def _extract_password(url: str) -> str | None:
 def _is_placeholder_password(password: str) -> bool:
     """Return whether *password* is an exact known fixture placeholder."""
     return password.strip().casefold() in _PLACEHOLDER_PASSWORDS
+
+
+def _is_stock_development_url(url: str) -> bool:
+    """Return whether a matched URL holds a stock development pair on a loopback or single-label host.
+
+    The same pair on any other host still reports, because a default credential on a reachable host is a
+    live weakness (FAMILY-CONTRACT.md section 5).
+
+    Args:
+        url: Matched ``scheme://user:password@host`` text; the rule's pattern stops the host before any port.
+
+    Returns:
+        True when the user name and the password are both stock words and the host is ``localhost``,
+        ``127.0.0.1``, ``::1``, ``0.0.0.0`` or a name with no dot, such as a Compose service called ``db``.
+    """
+    _, _, authority = url.partition("://")
+    credentials, _, host = authority.partition("@")
+    user, _, password = credentials.partition(":")
+    # Both halves must be stock words; one real word keeps the finding.
+    if user.casefold() not in _STOCK_DEVELOPMENT_WORDS or password.casefold() not in _STOCK_DEVELOPMENT_WORDS:
+        return False
+    host = host.casefold()
+    return host in _LOOPBACK_HOSTS or (host != "" and "." not in host)
