@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 
 _DEFAULT_SKIP_REASONS = {
+    "*.min.*": "generated",
     ".fleet": "local-tooling",
     ".git": "vcs",
     ".hg": "vcs",
@@ -40,12 +41,16 @@ _DEFAULT_SKIP_REASONS = {
     ".venv": "dependency",
     ".vscode": "local-tooling",
     "__pycache__": "tool-cache",
+    "bower_components": "dependency",
     "build": "build-output",
     "coverage": "build-output",
     "dist": "build-output",
     "htmlcov": "build-output",
     "node_modules": "dependency",
+    "third-party": "dependency",
+    "third_party": "dependency",
     "vendor": "dependency",
+    "vendors": "dependency",
     "venv": "dependency",
 }
 

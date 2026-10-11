@@ -156,3 +156,91 @@ def test_discover_ignored_paths_remains_plain_strings(tmp_path: Path) -> None:
 
     assert all(isinstance(path, str) for path in result.ignored_paths)
     assert "gen/out.py" in result.ignored_paths
+
+
+def test_third_party_directories_are_skipped_under_a_governing_gitignore(tmp_path: Path) -> None:
+    """Section 7 (precision-floor M04): copied and built code is skipped at any depth, whatever the .gitignore says.
+
+    Args:
+        tmp_path: Synthetic project root.
+    """
+    _write(tmp_path / ".gitignore", "*.log\n")
+    for directory in ("vendor", "Vendors", "pkg/THIRD_PARTY", "pkg/third-party", "web/bower_components", "app/Dist"):
+        _write(tmp_path / directory / "copied.py")
+    _write(tmp_path / "src" / "app.py")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert {source.display_path for source in result.files} == {"src/app.py"}
+    assert {(reason.path, reason.source, reason.pattern) for reason in result.ignored_path_reasons} == {
+        ("vendor", "default", "vendor"),
+        ("Vendors", "default", "vendors"),
+        ("pkg/THIRD_PARTY", "default", "third_party"),
+        ("pkg/third-party", "default", "third-party"),
+        ("web/bower_components", "default", "bower_components"),
+        ("app/Dist", "default", "dist"),
+    }
+
+
+def test_outermost_third_party_directory_names_the_reason(tmp_path: Path) -> None:
+    _write(tmp_path / "vendor" / "lib" / "dist" / "copied.py")
+
+    result = SourceDiscovery(tmp_path).classify("vendor/lib/dist/copied.py", include_ignored=False)
+
+    # An existing file operand bypasses the classes, so the hypothetical sibling carries the path-policy verdict.
+    assert result is None
+    assert SourceDiscovery(tmp_path).classify("vendor/lib/dist/other.py") == IgnoredPath(
+        path="vendor/lib/dist/other.py", source="default", pattern="vendor"
+    )
+
+
+def test_minified_files_are_skipped_and_listed_only_when_eligible(tmp_path: Path) -> None:
+    _write(tmp_path / "config" / "settings.min.json", "{}")
+    _write(tmp_path / "static" / "jquery.min.js", "var a=1;")
+    _write(tmp_path / "config" / "settings.json", "{}")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert {source.display_path for source in result.files} == {"config/settings.json"}
+    # py never scans .js, so the minified script is unsupported rather than listed as ignored.
+    assert result.ignored_path_reasons == (IgnoredPath(path="config/settings.min.json", source="default", pattern="*.min.*"),)
+
+
+def test_include_ignored_and_explicit_files_bring_the_classes_back(tmp_path: Path) -> None:
+    _write(tmp_path / "vendor" / "copied.py")
+    _write(tmp_path / "dist" / "built.py")
+    _write(tmp_path / "config" / "settings.min.json", "{}")
+
+    included = SourceDiscovery(tmp_path).discover(["."], include_ignored=True)
+    explicit = SourceDiscovery(tmp_path).discover(["vendor/copied.py", "config/settings.min.json"])
+
+    assert {source.display_path for source in included.files} == {"vendor/copied.py", "dist/built.py", "config/settings.min.json"}
+    assert {source.display_path for source in explicit.files} == {"vendor/copied.py", "config/settings.min.json"}
+
+
+def test_first_party_names_that_only_resemble_the_classes_stay_in_scope(tmp_path: Path) -> None:
+    for relative in (
+        "src/vendor_api.py",
+        "src/vendors.py",
+        "src/dist.py",
+        "build/scripts/release.py",
+        "lib/helpers.py",
+        "external/typings.py",
+        "src/admin.mini.py",
+        "src/min.py",
+    ):
+        _write(tmp_path / relative)
+    _write(tmp_path / ".gitignore", "*.log\n")
+
+    result = SourceDiscovery(tmp_path).discover(["."])
+
+    assert {source.display_path for source in result.files} == {
+        "src/vendor_api.py",
+        "src/vendors.py",
+        "src/dist.py",
+        "build/scripts/release.py",
+        "lib/helpers.py",
+        "external/typings.py",
+        "src/admin.mini.py",
+        "src/min.py",
+    }

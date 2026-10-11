@@ -617,14 +617,20 @@ Source discovery applies four layers of exclusions, in order:
    (root plus nested) exclude is skipped by default. Nested `.gitignore`
    files override their parents; negation patterns (`!keep.py`) are honored.
    `.git/info/exclude` and the user's global gitignore are not consulted.
-4. **No-gitignore fallback.** When no `.gitignore` exists from the project root
+4. **Third-party copies, build output and minified files.** Directories named
+   `vendor`, `vendors`, `third_party`, `third-party` or `bower_components`
+   (reason `dependency`) or `dist` (reason `build-output`), compared in any
+   letter case at any depth, and files with `.min.` directly before the final
+   extension, such as `settings.min.json` (reason `generated`), are skipped
+   even when a `.gitignore` exists.
+5. **No-gitignore fallback.** When no `.gitignore` exists from the project root
    through a candidate's parent, gruff-py skips `.fleet`, `.idea`, `.vscode`,
-   `build`, `coverage`, `dist`, `node_modules`, and `vendor`, plus Python's
+   `build`, `coverage`, and `node_modules`, plus Python's
    `.mypy_cache`, `.pyre`, `.pytest_cache`, `.pytype`, `.ruff_cache`, `.tox`,
    `.venv`, `__pycache__`, `htmlcov`, and `venv` exceptions, at any depth.
 
-`--include-ignored` bypasses layers 3 and 4 only. An explicit supported file
-also bypasses those two layers. Lockfile names do not exclude a file: eligible
+`--include-ignored` bypasses layers 3 to 5 only. An explicit supported file
+also bypasses those three layers. Lockfile names do not exclude a file: eligible
 forms such as `package-lock.json` are scanned, while `.lock` files remain outside
 the existing extension set.
 

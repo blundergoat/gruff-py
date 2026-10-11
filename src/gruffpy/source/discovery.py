@@ -41,12 +41,25 @@ FALLBACK_IGNORED_DIRECTORIES: tuple[str, ...] = (
     "__pycache__",
     "build",
     "coverage",
-    "dist",
     "htmlcov",
     "node_modules",
-    "vendor",
     "venv",
 )
+
+# Directories holding third-party copies, and ``dist``, the one build-output name section 7 adds; ``build``,
+# ``coverage`` and ``htmlcov`` stay fallback-only. Like the fallback directories above they match at any depth, but
+# they are skipped even under a governing .gitignore and compared case-insensitively over ASCII, because a committed
+# copy is still someone else's code (FAMILY-CONTRACT.md section 7, amended by precision-floor M04).
+THIRD_PARTY_DIRECTORIES: frozenset[str] = frozenset({"bower_components", "dist", "third-party", "third_party", "vendor", "vendors"})
+
+# Pattern recorded for a minified file such as ``settings.min.json``, which section 7 skips as generated.
+MINIFIED_FILE_PATTERN = "*.min.*"
+
+# A base name with ``.min.`` directly before its final extension, after ASCII lowercasing.
+_MINIFIED_NAME = re.compile(r"\.min\.[^.]+$")
+
+# Lowercases A-Z only, so every port folds the same names: ``VENDOR`` matches and a non-ASCII look-alike does not.
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 # Ignore-decision source labels recorded on every skipped path. Shared by the
 # report's ``ignoredPathDetails`` field and the ``check-ignore`` command so a
@@ -371,6 +384,30 @@ class SourceDiscovery:
                     return ignored
         return None
 
+    def _third_party_match(self, path: Path, *, is_dir: bool) -> str | None:
+        """Return the outermost third-party or build-output directory on ``path``, lowercased.
+
+        A file's own name is not a directory, so a file called ``dist`` never matches, while ``a/Vendor/x.py`` gives
+        ``vendor``. The outermost directory wins, so ``vendor/x/dist/y.py`` is reported as ``vendor`` in every port.
+
+        Args:
+            path: Candidate file or directory.
+            is_dir: Whether the candidate itself is a directory, which makes its own name eligible.
+
+        Returns:
+            The matched directory name in lowercase, or ``None`` when no directory on the path is in the class.
+        """
+        display = self._display_path(path).replace("\\", "/")
+        if display == ".":
+            return None
+        segments = display.strip("/").split("/")
+        directories = segments if is_dir else segments[:-1]
+        for segment in directories:
+            lowered = segment.translate(_ASCII_LOWER)
+            if lowered in THIRD_PARTY_DIRECTORIES:
+                return lowered
+        return None
+
     def _fallback_applies_at(self, path: Path) -> bool:
         parent = self._canonical(path.parent)
         try:
@@ -421,6 +458,17 @@ class SourceDiscovery:
         if self._is_gitignored(path, is_dir=is_dir):
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_GITIGNORE, None))
+        # A gitignore match above names the reason first; unlike the fallback below, the section 7 classes still apply
+        # when a .gitignore governs the path, outermost directory before file name.
+        third_party = self._third_party_match(path, is_dir=is_dir)
+        if third_party is not None:
+            recorded = display_path if record_file or is_dir else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, third_party))
+        if not is_dir and _MINIFIED_NAME.search(path.name.translate(_ASCII_LOWER)):
+            # A walked minified file is listed only when gruff-py would otherwise scan it, as FAMILY-CONTRACT.md
+            # section 7 requires.
+            recorded = display_path if record_file or self._source_type(path) is not None else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, MINIFIED_FILE_PATTERN))
         default_match = self._ignored_component_match(path, FALLBACK_IGNORED_DIRECTORIES)
         if default_match is not None and self._fallback_applies_at(path):
             recorded = display_path if record_file or is_dir else None
