@@ -179,7 +179,7 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
 
 
 def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> None:
-    """Show how many sensitive-data findings configuration removed, and under which rationale.
+    """Show how many findings configured exclusions, the test-path skip and section 13c removed, and why.
 
     Follows the family total gruff-rs renders (``gruff-rs/src/render/text.rs``, search:
     ``Suppressed findings:``) so no configured suppression is invisible in terminal output.
@@ -199,11 +199,13 @@ def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> Non
     # A run where no configured scope matched has no suppression total to reconcile.
     if total == 0:
         return
-    # A built-in row names the file it skipped, since no config entry exists to point at; the test-path skip is the only built-in class.
+    # A built-in or section 13c row names the file it covers, since no config entry exists to point at:
+    # ``builtInTestPath[...]``, ``inline[...]`` or ``duplicate[...]``.
+    labels = {"built-in": "builtInTestPath", "inline": "inline", "duplicate": "duplicate"}
     details = "; ".join(
         (
-            f"builtInTestPath[{summary.paths[0]}] {summary.rule}: {summary.suppressed} ({summary.reason})"
-            if summary.source == "built-in"
+            f"{labels[summary.source]}[{summary.paths[0]}] {summary.rule}: {summary.suppressed} ({summary.reason})"
+            if summary.source in labels
             else f"sensitiveExclusions[{summary.index}] {summary.rule}: {summary.suppressed} ({summary.reason})"
         )
         for summary in report.suppressions

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
-from gruffpy.analysis.suppression_summary import SuppressionSummary
+from gruffpy.analysis.suppression_summary import SuppressedFinding, SuppressionSummary
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.severity import Severity
 from gruffpy.scoring.score_report import ScoreReport
@@ -92,6 +92,9 @@ class AnalysisReport:
             ``run.extensions.py.run.configWarnings`` only when non-empty;
             deliberately not diagnostics so they never flip the exit code.
         machine_context: Serializer-only root, include-ignore flag, and pre-display findings.
+        suppressed_findings: Findings another tool's comment or a repeated claim removed (FAMILY-CONTRACT.md
+            section 13c). Never serialized into the JSON envelope, which counts them in ``suppressions``;
+            SARIF keeps each as a result marked suppressed.
     """
 
     tool_version: str
@@ -117,6 +120,7 @@ class AnalysisReport:
     config_warnings: tuple[str, ...] = ()
     suppressions: tuple[SuppressionSummary, ...] = ()
     machine_context: MachineReportContext = field(default_factory=MachineReportContext)
+    suppressed_findings: tuple[SuppressedFinding, ...] = ()
 
     def finding_counts(self) -> dict[str, int]:
         """Return finding counts grouped by severity.

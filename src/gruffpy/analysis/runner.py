@@ -32,7 +32,7 @@ from gruffpy.analysis.changed_region import (
 )
 from gruffpy.analysis.report import AnalysisReport, MachineReportContext, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
-from gruffpy.analysis.suppression_summary import SuppressionSummary
+from gruffpy.analysis.suppression_summary import SuppressedFinding, SuppressionSummary
 from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
@@ -51,6 +51,7 @@ from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
+from gruffpy.suppression.inline_suppression_filter import apply_inline_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
 from gruffpy.suppression.sensitive_exclusion_filter import (
     apply_built_in_test_path_skip,
@@ -88,6 +89,7 @@ class _ReportAssembly:
     changed_suppressed_count: int
     config_warnings: tuple[str, ...]
     suppressions: tuple[SuppressionSummary, ...]
+    suppressed_findings: tuple[SuppressedFinding, ...]
 
 
 def _evaluated_file_count(units: list[AnalysisUnit]) -> int:
@@ -147,7 +149,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     diagnostics.extend(parse_diagnostics)
 
     scan_scope = _resolve_scan_scope(request, changed)
-    findings, suppressions = _name_findings(
+    findings, suppressions, suppressed_findings = _name_findings(
         registry=registry,
         units=units,
         config=config,
@@ -204,6 +206,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             changed_suppressed_count=changed_filter_result.suppressed_count,
             config_warnings=config_warnings,
             suppressions=suppressions,
+            suppressed_findings=suppressed_findings,
         )
     )
 
@@ -217,7 +220,7 @@ def _name_findings(
     scan_scope: str,
     diagnostics: list[RunDiagnostic],
     reference_trees: tuple[ast.Module, ...] = (),
-) -> tuple[list[Finding], tuple[SuppressionSummary, ...]]:
+) -> tuple[list[Finding], tuple[SuppressionSummary, ...], tuple[SuppressedFinding, ...]]:
     """Run the rules over the parsed units and name every finding before anything filters it.
 
     Args:
@@ -231,8 +234,9 @@ def _name_findings(
             read references from; empty means none apply.
 
     Returns:
-        The findings that survive inline and reviewed suppression, each carrying its baseline
-        identity, and the audit summary of every reviewed sensitive-data exclusion applied.
+        Tuple ``(findings, suppressions, removed)``: findings surviving gruff's own directives, reviewed
+        exclusions, the test-path skip and section 13c, each with its baseline identity; audit rows in order;
+        and the findings section 13c removed, with their audit reasons.
     """
     context = RuleContext(
         project_root=str(project_root),
@@ -255,7 +259,11 @@ def _name_findings(
     findings, suppressions = apply_built_in_test_path_skip(findings, suppressions)
     # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
     # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
-    return _with_baseline_identities(findings, units), suppressions
+    findings = _with_baseline_identities(findings, units)
+    # Another tool's comment and a repeated claim are judged on named findings, so a suppressed result keeps its
+    # identity in SARIF and the findings left keep the ordinals they had without the comment (section 13c).
+    sources = {unit.file.display_path: unit.source for unit in units}
+    return apply_inline_suppressions(findings, suppressions, sources)
 
 
 def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
@@ -287,6 +295,7 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
         config_warnings=assembly.config_warnings,
         suppressions=assembly.suppressions,
+        suppressed_findings=assembly.suppressed_findings,
         machine_context=MachineReportContext(
             project_root=str(assembly.request.project_root),
             include_ignored=assembly.request.include_ignored,

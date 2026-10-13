@@ -92,6 +92,26 @@ because every security rule, and every sensitive-data rule except
 `sensitive-data.pii-test-fixture`, skips test, fixture and example files. Text output labels them
 `builtInTestPath[<path>]`.
 
+Another tool's suppression comment that names the same check as a gruff-py rule
+suppresses that finding where it was written (FAMILY-CONTRACT.md section 13c): a
+bare bandit `# nosec` for every security and sensitive-data rule, and zizmor
+`# zizmor: ignore[unpinned-uses]` or `ignore[dangerous-triggers]` for the matching
+workflow rule. The comment must be on the reported line or alone on the line above
+it. A `# nosec` naming a bandit test id, such as `# nosec B301`, suppresses nothing,
+and type-checker comments such as `# type: ignore` are never honoured. A dynamic
+`__import__` that both `security.dangerous-function-call` and
+`security.variable-import` report is reported once, under
+`security.dangerous-function-call`. gruff-py's own `# gruff: disable=` directives
+keep working alongside these comments.
+
+Suppressed findings are counted in one row per file and rule after the built-in rows, numbered
+on from them, with `source: "inline"` and the reason "Another tool's suppression
+comment names this check, so the finding is suppressed where it was written." Each
+merge adds a row with `source: "duplicate"` and the reason "Another rule reports
+the same claim on this line, so the line reports it once." Text output labels them
+`inline[<path>]` and `duplicate[<path>]`, and SARIF keeps each removed finding as a
+result carrying `"suppressions": [{"kind": "inSource", "justification": <reason>}]`.
+
 ## Changed-Region Scoping (native diff mode)
 
 `analyse` can scope a run to just-changed code so an agent hook surfaces only the

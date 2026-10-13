@@ -1373,6 +1373,26 @@ def test_cli_analyse_auto_applies_default_baseline_when_present(tmp_path: Path, 
     assert applied_payload["baseline"]["suppressedFindings"] == len(generated_payload["findings"])
 
 
+def test_cli_text_names_a_discovered_baseline_and_no_baseline_declines_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Confirm ADR-006 on the text surface: a discovered baseline is named with its source, and ``--no-baseline`` declines it.
+
+    Args:
+        tmp_path: Project root holding the generated default baseline.
+        monkeypatch: Moves the working directory into the project.
+    """
+    monkeypatch.chdir(tmp_path)
+    generated_payload = _generate_default_baseline(tmp_path)
+
+    applied = CliRunner().invoke(main, ["analyse", "src", "--fail-on", "none", "--no-config"])
+    declined = CliRunner().invoke(main, ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-config", "--no-baseline"])
+
+    assert (applied.exit_code, declined.exit_code) == (0, 0), applied.output + declined.output
+    assert "  Path: gruff-baseline.json" in applied.output
+    assert "  Source: default" in applied.output
+    declined_payload = json.loads(declined.output)
+    assert len(declined_payload["findings"]) == len(generated_payload["findings"])
+
+
 def test_cli_generated_baseline_applies_in_a_copied_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep a committed baseline's project-level reviews when the project is checked out somewhere else.
 

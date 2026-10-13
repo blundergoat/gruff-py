@@ -33,7 +33,7 @@ class SarifReporter:
             Pretty-printed SARIF JSON, trailing newline included.
         """
         rules: dict[str, dict[str, Any]] = {rule.definition().id: _rule_metadata(rule.definition()) for rule in RuleRegistry.defaults().all()}
-        for finding in report.findings:
+        for finding in (*report.findings, *(item.finding for item in report.suppressed_findings)):
             rules.setdefault(finding.rule_id, _fallback_rule_metadata(finding))
 
         rule_ids = sorted(rules)
@@ -46,7 +46,18 @@ class SarifReporter:
                     "rules": [rules[rule_id] for rule_id in rule_ids],
                 }
             },
-            "results": [_result(finding, rule_indexes[finding.rule_id]) for finding in report.findings],
+            "results": [
+                *(_result(finding, rule_indexes[finding.rule_id]) for finding in report.findings),
+                # A finding another tool's comment or a repeated claim removed stays a result marked suppressed, so a
+                # code-scanning tool shows it as suppressed rather than fixed (FAMILY-CONTRACT.md section 13c).
+                *(
+                    {
+                        **_result(item.finding, rule_indexes[item.finding.rule_id]),
+                        "suppressions": [{"kind": "inSource", "justification": item.justification}],
+                    }
+                    for item in report.suppressed_findings
+                ),
+            ],
             "properties": _run_properties(report),
         }
         if report.diagnostics:
