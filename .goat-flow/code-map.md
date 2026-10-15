@@ -61,12 +61,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `AGENTS.md` = Codex hot-path project instructions and GOAT Flow `1.17.0` declaration.
-- `.agents/skills/` = installed Codex goat-flow skills; `.agents/hooks.json` is a separate shared-agent hook surface.
+- `AGENTS.md` = shared Codex and Antigravity hot-path project instructions and GOAT Flow `1.18.0` declaration.
+- `.agents/skills/` = installed goat-flow skills shared by Codex and Antigravity; `.agents/hooks.json` is Antigravity's hook registration surface.
 - `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
-- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.17.0` declaration.
+- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.18.0` declaration.
 - `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
-- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.17.0` declaration.
+- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.18.0` declaration.
 - `.github/skills/` = installed Copilot goat-flow skills; `.github/hooks/` is that surface's hook directory.
 - `.goat-flow/hooks/` = shared deny-dangerous, deny-git-mutations, gruff-code-quality, and post-turn-safety hook scripts, with policy patterns and self-test under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version, skill-install mode, and hook enablement state.
@@ -84,7 +84,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
 
 All four tracked agent instruction surfaces currently declare GOAT Flow
-`1.17.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
+`1.18.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
 `.goat-flow/config.yaml` workspace record, alongside the shared references,
 hooks, and local CLI. Each instruction file stays standalone and owns its own
 skills directory; a declaration here that disagrees with `.goat-flow/config.yaml`

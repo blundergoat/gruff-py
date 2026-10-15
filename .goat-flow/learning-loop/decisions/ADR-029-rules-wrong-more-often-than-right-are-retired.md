@@ -3,9 +3,11 @@
 **Status:** Accepted
 **Date:** 2026-10-05
 **Author(s):** Claude, user direction
-**Ticket/Context:** precision-floor M19 under family lock M82. The operator ruled on 2026-10-04 that a rule right less than
-half the time is deleted, and accepted the gruff-py table with "Accept all (Recommended)". The same decision is gruff-go
-ADR-021 and gruff-php ADR-034.
+**Ticket/Context:** precision-floor M19 under family lock M82.
+
+## Context
+
+The 0.6.0 precision measurement evaluated finding accuracy across the rule catalogue. On 2026-10-04 the operator ruled that any rule with enough judged findings that is right less than half the time is deleted rather than tuned, and accepted the gruff-py retirement table with "Accept all (Recommended)". The same family decision is recorded in gruff-go ADR-021 and gruff-php ADR-034.
 
 ## Decision
 

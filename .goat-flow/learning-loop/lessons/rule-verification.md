@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-15
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -120,7 +120,7 @@ The source-order follow-up repeated the naming trap once:
 `_is_call_shadowed_by_binding` made the predicate contract explicit.
 **Evidence:** `src/gruffpy/rule/security/ssrf_rule.py` (search:
 `def _scope_client_binding_status`, search: `def _has_name_binding`) and
-`src/gruffpy/rule/size/file_length_rule.py` (search:
+`src/gruffpy/rule/size/_lines.py` (search:
 `def _is_inside_docstring_span`) contain the corrected predicate anchors.
 **Prevention:** Name Boolean-returning helpers for their predicate contract
 before the first root dogfood run; static tooling does not enforce the

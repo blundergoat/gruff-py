@@ -132,7 +132,7 @@ The Python fingerprint algorithm is constrained by the PHP implementation for sh
 
 ### GOAT Flow
 
-Local agent workflow framework installed from `@blundergoat/goat-flow`. The workspace config, all four agent instruction surfaces, shared references, hooks, and project-local CLI declare `1.17.0`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
+Local agent workflow framework installed from `@blundergoat/goat-flow`. The workspace config, all four agent instruction surfaces, shared references, hooks, and project-local CLI declare `1.18.0`. It provides skills, audit commands, safety references, and `.goat-flow/` project-memory directories.
 
 ### Agent-Owned Surface
 
