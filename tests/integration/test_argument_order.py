@@ -52,18 +52,21 @@ def _without_timestamps(output: str) -> str:
 
 
 @pytest.mark.parametrize(("command", "flags"), _OPERAND_COMMANDS, ids=[name for name, _ in _OPERAND_COMMANDS])
-def test_flags_after_the_path_change_nothing(command: str, flags: tuple[str, ...], probe_project: Path) -> None:
+def test_flags_after_the_path_change_nothing(command: str, flags: tuple[str, ...], probe_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Moving a command's flags after its path changes neither its output nor its exit code.
 
     Args:
         command: The operand-accepting command under test.
         flags: The flags whose placement is being moved.
         probe_project: The one-file project both runs scan.
+        monkeypatch: Restores the working directory after the isolated command comparison.
     """
+    working_directory = probe_project / "working-directory"
+    working_directory.mkdir()
+    monkeypatch.chdir(working_directory)
     runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=probe_project.parent):
-        before = runner.invoke(main, [command, *flags, str(probe_project / "probe.py")])
-        after = runner.invoke(main, [command, str(probe_project / "probe.py"), *flags])
+    before = runner.invoke(main, [command, *flags, str(probe_project / "probe.py")])
+    after = runner.invoke(main, [command, str(probe_project / "probe.py"), *flags])
 
     assert before.exit_code == after.exit_code, f"{command} exits differently when its flags follow the path"
     assert _without_timestamps(before.output) == _without_timestamps(after.output), f"{command} prints differently when its flags follow the path"
