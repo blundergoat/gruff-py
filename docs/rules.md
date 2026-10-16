@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.6.0` registers 124 rules across 11 pillars in `RuleRegistry.defaults()`.
+gruff-py `0.6.0` registers 96 rules across 10 pillars in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -10,15 +10,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | Pillar | Rule count | Notes |
 |---|---:|---|
 | `size` | 7 | File, class, function, parameter, method, and attribute size |
-| `complexity` | 4 | Cyclomatic, cognitive, Halstead, and nesting |
-| `maintainability` | 1 | Maintainability index rule emits under this pillar |
+| `complexity` | 3 | Cyclomatic, cognitive, and nesting |
 | `correctness` | 2 | Mechanically detectable runtime-defect shapes |
-| `dead-code` | 9 | Unused and waste-oriented rules |
-| `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
-| `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
-| `security` | 33 | Heuristic AST-level dangerous patterns |
-| `sensitive-data` | 10 | Secret, key, PII, and PHI patterns |
-| `test-quality` | 34 | Pytest-aware test smells and project config checks |
+| `dead-code` | 4 | Unused and waste-oriented rules |
+| `naming` | 5 | Intent-layer names; PEP 8 case style stays with ruff |
+| `documentation` | 12 | Docstring presence and quality, stale docs, TODO density, README presence |
+| `security` | 32 | Heuristic AST-level dangerous patterns |
+| `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
+| `test-quality` | 20 | Pytest-aware test smells and project config checks |
 | `design` | 2 | Project-level abstraction and runtime import-path checks |
 
 ## Rule IDs
@@ -37,8 +36,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 - `complexity.cognitive`
 - `complexity.cyclomatic` (default off)
-- `complexity.halstead-volume`
-- `complexity.maintainability-index`
 - `complexity.nesting-depth`
 
 ### Correctness
@@ -50,23 +47,14 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 - `dead-code.exported-but-unreferenced` (default off)
 - `dead-code.unused-private-attribute`
-- `waste.commented-out-code`
-- `waste.empty-class`
 - `waste.empty-function`
-- `waste.one-line-function`
-- `waste.redundant-variable`
 - `waste.unreachable-code`
-- `waste.unused-import`
 
 ### Naming
 
 - `naming.abbreviation`
-- `naming.boolean-prefix`
-- `naming.confusing-name`
 - `naming.generic-function`
-- `naming.hungarian-notation`
 - `naming.identifier-quality`
-- `naming.module-name-mismatch`
 - `naming.short-variable`
 - `naming.test-naming-consistency`
 
@@ -84,7 +72,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `docs.missing-return-doc`
 - `docs.stale-param-doc`
 - `docs.todo-density`
-- `docs.useless-docstring`
 
 ### Security
 
@@ -117,7 +104,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.ssrf`
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load`
-- `security.unsanitized-markdown-interpolation`
 - `security.variable-import`
 - `security.weak-crypto`
 - `security.xxe`
@@ -131,45 +117,30 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `sensitive-data.hardcoded-env-value`
 - `sensitive-data.jwt-token`
 - `sensitive-data.phi-pattern`
-- `sensitive-data.pii-test-fixture`
 - `sensitive-data.private-key`
 - `sensitive-data.url-credentials` (default off)
 
 ### Test Quality
 
-- `test-quality.conditional-logic`
-- `test-quality.eager-test`
 - `test-quality.empty-parametrize`
-- `test-quality.exception-type-only` (default off)
 - `test-quality.excessive-mocking`
-- `test-quality.extends-production-class`
 - `test-quality.global-state-mutation`
 - `test-quality.loop-assertion-without-message` (default off)
-- `test-quality.loop-in-test` (default off)
-- `test-quality.magic-number-assertion`
 - `test-quality.mock-only-test`
-- `test-quality.mock-without-expectation`
 - `test-quality.mocking-domain-object`
-- `test-quality.multiple-aaa-cycles`
-- `test-quality.mystery-guest`
 - `test-quality.naming-consistency`
 - `test-quality.no-assertions` (default off)
-- `test-quality.parametrize-annotation` (default off)
 - `test-quality.private-reflection`
 - `test-quality.pytest-coverage-source-missing`
 - `test-quality.pytest-deprecations-not-fatal`
 - `test-quality.pytest-strict-config-missing`
 - `test-quality.repeated-structure-missing-parametrize`
 - `test-quality.setup-bloat`
-- `test-quality.skipped-without-reason`
-- `test-quality.sleep-in-test` (default off)
 - `test-quality.static-analysis-redundant-test`
 - `test-quality.sut-not-called` (default off)
-- `test-quality.tautological-type-assertion`
 - `test-quality.test-function-too-long`
 - `test-quality.test-longer-than-sut`
 - `test-quality.trivial-assertion` (default off)
-- `test-quality.trivial-snapshot`
 - `test-quality.unused-mock`
 
 ### Design
@@ -215,48 +186,6 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Formula provenance: Radon-aligned decision-point counting.
 - Bad example: Code that triggers `complexity.cyclomatic` leaves cyclomatic complexity unaddressed.
 - Good example: Code that satisfies `complexity.cyclomatic` makes cyclomatic complexity explicit or simpler.
-
-### `complexity.halstead-volume`
-
-- Name: Halstead volume
-- Pillar: `complexity`
-- Tier: `v0.1`
-- Default severity: `error`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `complexity.halstead-volume` protects the complexity pillar by flagging halstead volume before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported halstead volume directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Config threshold: `threshold` = `400`, `severity` = `error`
-- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
-- Threshold direction: `above`
-- Formula provenance: Radon-inspired Halstead volume with documented Python AST deltas. The dogfood rubric uses one configured threshold, `>400` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed p50=4.75, p90=38.04, p99=96.0, max=283.39.
-- Common false-positive shapes:
-  - A declarative builder dominated by one literal table can have high token volume despite having little control-flow complexity.
-    Mitigation: Extract the table to data or tune this rule's `threshold` and `severity` when the volume is an accepted project convention.
-- Bad example: Code that triggers `complexity.halstead-volume` leaves halstead volume unaddressed.
-- Good example: Code that satisfies `complexity.halstead-volume` makes halstead volume explicit or simpler.
-
-### `complexity.maintainability-index`
-
-- Name: Maintainability index
-- Pillar: `maintainability`
-- Tier: `v0.1`
-- Default severity: `error`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `complexity.maintainability-index` protects the maintainability pillar by flagging maintainability index before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported maintainability index directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Config threshold: `threshold` = `70`, `severity` = `error`
-- Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
-- Threshold direction: `below`
-- Formula provenance: gruff per-function maintainability heuristic based on Halstead volume, cyclomatic complexity, and raw function lines. The dogfood rubric uses one configured threshold, `<70` at error severity; the legacy built-in fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed min=78.78, p50=100, p90=100, p99=100. Radon 6.0.1 ranks maintainability index 20-100 as A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command.
-- Common false-positive shapes:
-  - A long but linear wiring, data-setup, or generated function can score poorly even when its branching is simple.
-    Mitigation: Split the function or tune this rule's `threshold` and `severity` after confirming that logical length, rather than complexity, drives the score.
-- Bad example: Code that triggers `complexity.maintainability-index` leaves maintainability index unaddressed.
-- Good example: Code that satisfies `complexity.maintainability-index` makes maintainability index explicit or simpler.
 
 ### `complexity.nesting-depth`
 
@@ -588,24 +517,6 @@ except ValueError:
 - Bad example: Code that triggers `docs.todo-density` leaves todo density unaddressed.
 - Good example: Code that satisfies `docs.todo-density` makes todo density explicit or simpler.
 
-### `docs.useless-docstring`
-
-- Name: Useless docstring
-- Pillar: `documentation`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `docs.useless-docstring` protects the documentation pillar by flagging useless docstring before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported useless docstring directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `min_summary_words` = `{'module': 6, 'class': 4, 'function': 4}`
-- Common false-positive shapes:
-  - A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.
-    Mitigation: Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.
-- Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
-- Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
-
 ### `naming.abbreviation`
 
 - Name: Abbreviation
@@ -622,42 +533,6 @@ except ValueError:
     Mitigation: Add the exact token to allowlists.acceptedAbbreviations with its project meaning; retain any universal seed values the project uses because configured values replace the seed.
 - Bad example: `def load_cfg(ctx): ...` uses shorthand without documenting what the configuration or context represents.
 - Good example: Use `context`, `config`, `request`, and `index`, or document exact project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`.
-
-### `naming.boolean-prefix`
-
-- Name: Boolean prefix
-- Pillar: `naming`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: Scalar Boolean returns and attributes are easier to review when their names reveal predicate intent; container members and callable return parameters do not impose that naming contract.
-- Fix guidance: Rename a scalar Boolean declaration with an is_/has_/can_-style predicate, or list an exact external boundary name under acceptedBooleanNames.
-- Confidence rationale: Medium confidence: exact bool, optional-bool, and Annotated scalar syntax is matched structurally, including bounded quoted annotations; containers, callables, mixed unions, and arbitrary generics stay quiet.
-- Options: `acceptedBooleanNames` = `['all', 'apply', 'check', 'dev', 'enabled', 'force', 'fresh', 'harness', 'json', 'ok', 'verbose', 'yes']`
-- Common false-positive shapes:
-  - An externally constrained Boolean name can belong to a protocol, CLI, DTO, or schema that the structural override exemptions do not recognize.
-    Mitigation: Add the exact contract name to `options.acceptedBooleanNames` instead of renaming the external surface.
-- Bad example: `def status() -> bool: ...` hides the Boolean result in a noun.
-- Good example: `def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` is outside this scalar rule.
-
-### `naming.confusing-name`
-
-- Name: Confusing class name
-- Pillar: `naming`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `naming.confusing-name` protects the naming pillar by flagging confusing class name before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported confusing class name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `confusingNames` = `['Handler', 'Processor', 'Manager', 'Util', 'Utils', 'Helper', 'Helpers', 'Data', 'Info', 'Service', 'Stuff', 'Thing', 'Object', 'Item']`
-- Common false-positive shapes:
-  - A deliberately short class name can gain its missing domain context from the enclosing module or package.
-    Mitigation: Rename the class with explicit domain context, or remove that suffix from `options.confusingNames` when the package naming convention supplies it.
-- Bad example: Code that triggers `naming.confusing-name` leaves confusing class name unaddressed.
-- Good example: Code that satisfies `naming.confusing-name` makes confusing class name explicit or simpler.
 
 ### `naming.generic-function`
 
@@ -677,20 +552,6 @@ except ValueError:
 - Bad example: Code that triggers `naming.generic-function` leaves generic function name unaddressed.
 - Good example: Code that satisfies `naming.generic-function` makes generic function name explicit or simpler.
 
-### `naming.hungarian-notation`
-
-- Name: Hungarian notation
-- Pillar: `naming`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: Type prefixes duplicate information that type hints and readable names already carry.
-- Fix guidance: Drop type prefixes such as `str_`, `dict_`, or `arr_`; keep semantic count names such as `num_items` or `n_samples`.
-- Confidence rationale: High confidence: narrow type-prefix vocabulary; count abbreviations are excluded.
-- Bad example: `str_message = "hello"` or `dict_users = {}`
-- Good example: `message = "hello"` or `num_users = len(users)`
-
 ### `naming.identifier-quality`
 
 - Name: Identifier quality
@@ -704,24 +565,6 @@ except ValueError:
 - Confidence rationale: High confidence: only reviewed first-token placeholder families and numbered base-plus-digit shapes match; exact domain words are not inferred.
 - Bad example: `temp = load_tasks()` or `result1 = publish()` hides the value's role.
 - Good example: `pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary.
-
-### `naming.module-name-mismatch`
-
-- Name: Module name mismatch
-- Pillar: `naming`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `naming.module-name-mismatch` protects the naming pillar by flagging module name mismatch before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported module name mismatch directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `conventionalModuleNames` = `['constants', 'exceptions', 'helpers', 'protocols', 'types']`
-- Common false-positive shapes:
-  - A feature-oriented module can intentionally contain one public class plus supporting functions without being named after that class.
-    Mitigation: Add the module name to `options.conventionalModuleNames`, reorganize the module, or suppress the reviewed exception.
-- Bad example: Code that triggers `naming.module-name-mismatch` leaves module name mismatch unaddressed.
-- Good example: Code that satisfies `naming.module-name-mismatch` makes module name mismatch explicit or simpler.
 
 ### `naming.short-variable`
 
@@ -1206,26 +1049,6 @@ except ValueError:
 - Bad example: Code that triggers `security.unsafe-yaml-load` leaves unsafe yaml load unaddressed.
 - Good example: Code that satisfies `security.unsafe-yaml-load` makes unsafe yaml load explicit or simpler.
 
-### `security.unsanitized-markdown-interpolation`
-
-- Name: Unsanitized markdown interpolation
-- Pillar: `security`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: A markdown link label of `evil](https://bad.example) trick` turns `[{label}]({url})` into markdown whose first parsed link is the injected pair, redirecting the rendered target; the rule exists to catch the one interpolation site that forgot the project's sanitiser.
-- Fix guidance: Use an exact helper from the matching labelSanitizers or urlSanitizers list. Labels must remove `]`, `(`, and `)`; URLs may use the default urllib.parse.quote/quote_plus calls without a delimiter-preserving `safe` argument.
-- Confidence rationale: Medium confidence: exact configured call targets, same-function assignments, one-hop aliases, and conservative branch/rebinding joins replace the former any-call proxy.
-- Options: `labelSanitizers` = `[]`, `urlSanitizers` = `['urllib.parse.quote', 'urllib.parse.quote_plus']`
-- Common false-positive shapes:
-  - Link slots interpolating values already constrained upstream (enum names, validated slugs) without a wrapping call.
-    Mitigation: Wrap the value in the sanitising helper anyway (cheap and self-documenting), or suppress with `# gruff: disable=security.unsanitized-markdown-interpolation` plus the constraint.
-  - A label wrapped in html.escape(...) or markupsafe.escape(...) still reports under the strict default. This is deliberate: HTML escaping leaves `]`, `(`, and `)` unchanged, so `evil](https://bad.example)` still injects a Markdown link.
-    Mitigation: After verifying that the project's renderer makes HTML escaping sufficient, add the exact helper to labelSanitizers; otherwise use a Markdown-aware label sanitizer.
-- Bad example: `f"[{title}]({url})"` with `title`/`url` from parameters.
-- Good example: `f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with markdown_label listed under labelSanitizers.
-
 ### `security.variable-import`
 
 - Name: Variable import
@@ -1382,23 +1205,6 @@ except ValueError:
 - Bad example: Code that triggers `sensitive-data.phi-pattern` leaves phi pattern unaddressed.
 - Good example: Code that satisfies `sensitive-data.phi-pattern` makes phi pattern explicit or simpler.
 
-### `sensitive-data.pii-test-fixture`
-
-- Name: PII in test fixture
-- Pillar: `sensitive-data`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: Test fixtures should use placeholders, not realistic third-party PII.
-- Fix guidance: Use reserved domains such as `example.com`, `.test`, `.local`, `.invalid`, `.localhost`, or `.example`; use `555` phone placeholders and keep epoch or reset timestamps named with timestamp context.
-- Confidence rationale: Medium confidence: raw test text scan with explicit escapes.
-- Common false-positive shapes:
-  - An intentionally synthetic but realistic email address or phone number outside the reserved-domain and 555 placeholder forms can look like real fixture PII.
-    Mitigation: Use `example` domains or 555-style numbers, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.
-- Bad example: `email = "jane.doe@gmail.com"` or `phone = "4158675309"`
-- Good example: `email = "admin@app.test"` or `phone = "+1-415-555-0100"`
-
 ### `sensitive-data.private-key`
 
 - Name: Private key
@@ -1546,41 +1352,6 @@ except ValueError:
 - Bad example: Code that triggers `size.public-method-count` leaves public method count unaddressed.
 - Good example: Code that satisfies `size.public-method-count` makes public method count explicit or simpler.
 
-### `test-quality.conditional-logic`
-
-- Name: Conditional logic in test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.conditional-logic` protects the test-quality pillar by flagging conditional logic in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported conditional logic in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A property, state-machine, or compatibility test can intentionally exercise several outcome branches in one named scenario.
-    Mitigation: Parametrize or split the branches for separate failures, or suppress the reviewed test when one scenario must retain the control flow.
-- Bad example: Code that triggers `test-quality.conditional-logic` leaves conditional logic in test unaddressed.
-- Good example: Code that satisfies `test-quality.conditional-logic` makes conditional logic in test explicit or simpler.
-
-### `test-quality.eager-test`
-
-- Name: Eager test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.eager-test` protects the test-quality pillar by flagging eager test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported eager test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Named thresholds: `maxAssertions` = `5`
-- Common false-positive shapes:
-  - One outcome can require many field-level assertions, so assertion count alone can make a focused contract test look eager.
-    Mitigation: Compare a structured expected value or tune `thresholds.maxAssertions` after confirming all assertions describe the same behavior.
-- Bad example: Code that triggers `test-quality.eager-test` leaves eager test unaddressed.
-- Good example: Code that satisfies `test-quality.eager-test` makes eager test explicit or simpler.
-
 ### `test-quality.empty-parametrize`
 
 - Name: Empty parametrize
@@ -1594,23 +1365,6 @@ except ValueError:
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `test-quality.empty-parametrize` leaves empty parametrize unaddressed.
 - Good example: Code that satisfies `test-quality.empty-parametrize` makes empty parametrize explicit or simpler.
-
-### `test-quality.exception-type-only`
-
-- Name: Exception type-only assertion
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: no
-- Rationale: `test-quality.exception-type-only` protects the test-quality pillar by flagging exception type-only assertion before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported exception type-only assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A boundary can intentionally promise only that any wide exception escapes, with no stable message suitable for `match=`.
-    Mitigation: Prefer a narrow exception or stable message match; otherwise suppress the reviewed assertion with the type-only contract.
-- Bad example: Code that triggers `test-quality.exception-type-only` leaves exception type-only assertion unaddressed.
-- Good example: Code that satisfies `test-quality.exception-type-only` makes exception type-only assertion explicit or simpler.
 
 ### `test-quality.excessive-mocking`
 
@@ -1629,21 +1383,6 @@ except ValueError:
     Mitigation: Use a higher-level test or tune `thresholds.maxMocks` for suites whose reviewed subject is an orchestrator.
 - Bad example: Code that triggers `test-quality.excessive-mocking` leaves excessive mocking unaddressed.
 - Good example: Code that satisfies `test-quality.excessive-mocking` makes excessive mocking explicit or simpler.
-
-### `test-quality.extends-production-class`
-
-- Name: Test class extends production class
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `test-quality.extends-production-class` protects the test-quality pillar by flagging test class extends production class before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported test class extends production class directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Options: `additionalTestBases` = `[]`
-- Bad example: Code that triggers `test-quality.extends-production-class` leaves test class extends production class unaddressed.
-- Good example: Code that satisfies `test-quality.extends-production-class` makes test class extends production class explicit or simpler.
 
 ### `test-quality.global-state-mutation`
 
@@ -1679,42 +1418,6 @@ except ValueError:
 - Bad example: Code that triggers `test-quality.loop-assertion-without-message` leaves loop assertion without message unaddressed.
 - Good example: Code that satisfies `test-quality.loop-assertion-without-message` makes loop assertion without message explicit or simpler.
 
-### `test-quality.loop-in-test`
-
-- Name: Loop in test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: no
-- Rationale: A loop in a test body runs every case under one pass or fail, so a failure does not say which iteration broke and the cases cannot be selected or rerun on their own.
-- Fix guidance: Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.
-- Confidence rationale: Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a fixture sweep, and a loop can legitimately be the behaviour under test.
-- Common false-positive shapes:
-  - A state-machine, fuzz, or property test can require a loop whose branches make the built-in fixture-loop exemption inapplicable.
-    Mitigation: Parametrize finite cases, or suppress the reviewed test when iteration is itself the behavior under test.
-- Bad example: `def test_parse(): for text in ['1', '2']: assert parse(text)`
-- Good example: `@pytest.mark.parametrize('text', ['1', '2'])
-def test_parse(text): assert parse(text)`
-
-### `test-quality.magic-number-assertion`
-
-- Name: Magic-number assertion
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.magic-number-assertion` protects the test-quality pillar by flagging magic-number assertion before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported magic-number assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Options: `allowed_numbers` = `[-1, 0, 1, 2, 3, 200, 201, 204, 301, 302, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]`
-- Common false-positive shapes:
-  - A bare literal can be an established domain constant such as a protocol version or exit code even when it is outside the built-in small-count and HTTP sets.
-    Mitigation: Assert against a named constant or add the exact value to `options.allowed_numbers`.
-- Bad example: Code that triggers `test-quality.magic-number-assertion` leaves magic-number assertion unaddressed.
-- Good example: Code that satisfies `test-quality.magic-number-assertion` makes magic-number assertion explicit or simpler.
-
 ### `test-quality.mock-only-test`
 
 - Name: Mock-only test
@@ -1731,23 +1434,6 @@ def test_parse(text): assert parse(text)`
     Mitigation: Keep an explicit mock expectation and suppress the reviewed test, or add an assertion on an observable result when the contract is not purely interaction-based.
 - Bad example: Code that triggers `test-quality.mock-only-test` leaves mock-only test unaddressed.
 - Good example: Code that satisfies `test-quality.mock-only-test` makes mock-only test explicit or simpler.
-
-### `test-quality.mock-without-expectation`
-
-- Name: Mock without expectation
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.mock-without-expectation` protects the test-quality pillar by flagging mock without expectation before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported mock without expectation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A deliberate null-object double can be passed only to satisfy a constructor signature, with no expectation because no interaction is the contract.
-    Mitigation: Use a small fake or add an explicit `assert_not_called` expectation so the intent is visible to the rule and reviewer.
-- Bad example: Code that triggers `test-quality.mock-without-expectation` leaves mock without expectation unaddressed.
-- Good example: Code that satisfies `test-quality.mock-without-expectation` makes mock without expectation explicit or simpler.
 
 ### `test-quality.mocking-domain-object`
 
@@ -1766,43 +1452,6 @@ def test_parse(text): assert parse(text)`
     Mitigation: Narrow `options.domain_namespaces` to concrete domain-object packages or use a small fake for the reviewed port.
 - Bad example: Code that triggers `test-quality.mocking-domain-object` leaves mocking domain object unaddressed.
 - Good example: Code that satisfies `test-quality.mocking-domain-object` makes mocking domain object explicit or simpler.
-
-### `test-quality.multiple-aaa-cycles`
-
-- Name: Multiple AAA cycles
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `low`
-- Default enabled: yes
-- Rationale: `test-quality.multiple-aaa-cycles` protects the test-quality pillar by flagging multiple aaa cycles before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported multiple aaa cycles directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Named thresholds: `maxCycles` = `2`
-- Common false-positive shapes:
-  - One workflow or state-transition test can deliberately assert after each step, making several call-separated assertion blocks one scenario.
-    Mitigation: Split the transitions or tune `thresholds.maxCycles` after confirming the test is one reviewed workflow.
-- Bad example: Code that triggers `test-quality.multiple-aaa-cycles` leaves multiple aaa cycles unaddressed.
-- Good example: Code that satisfies `test-quality.multiple-aaa-cycles` makes multiple aaa cycles explicit or simpler.
-
-### `test-quality.mystery-guest`
-
-- Name: Mystery guest in test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: A test that performs network, filesystem, mail, or FTP I/O when it runs depends on state outside the test, so it is slow, non-hermetic, and can fail for a reason the test body does not show.
-- Fix guidance: Mock the I/O boundary or serve the dependency from a fixture. Open files under a `tmp_path` or `tmpdir` fixture, which the rule already treats as hermetic.
-- Confidence rationale: Medium confidence: the rule matches calls that perform I/O when they run - module helpers such as `requests.get`, socket, FTP and SMTP entry points, and request methods on a client the test built - and skips constructors, parameters that shadow a module name, and assertion calls, but it cannot tell whether a URL points at a local fixture server.
-- Common false-positive shapes:
-  - A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call the rule treats as network I/O even though the fixture keeps it hermetic.
-    Mitigation: Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.
-- Bad example: `def test_health(): assert requests.get('https://api.example.test/health').ok`
-- Good example: `def test_write(tmp_path):
-    with open(tmp_path / 'out.txt', 'w') as handle:
-        handle.write('x')`
 
 ### `test-quality.naming-consistency`
 
@@ -1839,24 +1488,6 @@ def test_parse(text): assert parse(text)`
     Mitigation: Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.
 - Bad example: `def test_saves_user(): service.save(user)`
 - Good example: `def test_saves_user(): service.save(user); assert_user_saved(user)`
-
-### `test-quality.parametrize-annotation`
-
-- Name: Parametrize without `ids`
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: no
-- Rationale: `test-quality.parametrize-annotation` protects the test-quality pillar by flagging parametrize without `ids` before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported parametrize without `ids` directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Named thresholds: `maxCasesWithoutIds` = `2`
-- Common false-positive shapes:
-  - Simple enum, integer, or named-object cases can already have short stable repr values, so generated pytest case names remain readable without `ids=`.
-    Mitigation: Add explicit IDs or tune `thresholds.maxCasesWithoutIds` after checking the actual report names.
-- Bad example: Code that triggers `test-quality.parametrize-annotation` leaves parametrize without `ids` unaddressed.
-- Good example: Code that satisfies `test-quality.parametrize-annotation` makes parametrize without `ids` explicit or simpler.
 
 ### `test-quality.private-reflection`
 
@@ -1962,34 +1593,6 @@ def test_parse(text): assert parse(text)`
 - Bad example: Code that triggers `test-quality.setup-bloat` leaves setup bloat unaddressed.
 - Good example: Code that satisfies `test-quality.setup-bloat` makes setup bloat explicit or simpler.
 
-### `test-quality.skipped-without-reason`
-
-- Name: Skipped without reason
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `test-quality.skipped-without-reason` protects the test-quality pillar by flagging skipped without reason before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported skipped without reason directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `test-quality.skipped-without-reason` leaves skipped without reason unaddressed.
-- Good example: Code that satisfies `test-quality.skipped-without-reason` makes skipped without reason explicit or simpler.
-
-### `test-quality.sleep-in-test`
-
-- Name: Sleep in test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: no
-- Rationale: `test-quality.sleep-in-test` protects the test-quality pillar by flagging sleep in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported sleep in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `test-quality.sleep-in-test` leaves sleep in test unaddressed.
-- Good example: Code that satisfies `test-quality.sleep-in-test` makes sleep in test explicit or simpler.
-
 ### `test-quality.static-analysis-redundant-test`
 
 - Name: Static-analysis-redundant test candidate
@@ -2023,23 +1626,6 @@ def test_parse(text): assert parse(text)`
     Mitigation: Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.
 - Bad example: Code that triggers `test-quality.sut-not-called` leaves system under test never called unaddressed.
 - Good example: Code that satisfies `test-quality.sut-not-called` makes system under test never called explicit or simpler.
-
-### `test-quality.tautological-type-assertion`
-
-- Name: Tautological type assertion
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.tautological-type-assertion` protects the test-quality pillar by flagging tautological type assertion before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported tautological type assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - The same call expression evaluated twice can return different runtime types, even though the structural comparison treats both expressions as identical.
-    Mitigation: Evaluate the call once and assert the specific expected type, or suppress the reviewed dynamic-factory case.
-- Bad example: Code that triggers `test-quality.tautological-type-assertion` leaves tautological type assertion unaddressed.
-- Good example: Code that satisfies `test-quality.tautological-type-assertion` makes tautological type assertion explicit or simpler.
 
 ### `test-quality.test-function-too-long`
 
@@ -2090,23 +1676,6 @@ def test_parse(text): assert parse(text)`
 - Bad example: Code that triggers `test-quality.trivial-assertion` leaves trivial assertion unaddressed.
 - Good example: Code that satisfies `test-quality.trivial-assertion` makes trivial assertion explicit or simpler.
 
-### `test-quality.trivial-snapshot`
-
-- Name: Trivial snapshot assertion
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `test-quality.trivial-snapshot` protects the test-quality pillar by flagging trivial snapshot assertion before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported trivial snapshot assertion directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A canonical encoding or compatibility fixture can intentionally pin every element of a large literal collection.
-    Mitigation: Assert salient invariants, or suppress the reviewed snapshot with the exact compatibility contract it protects.
-- Bad example: Code that triggers `test-quality.trivial-snapshot` leaves trivial snapshot assertion unaddressed.
-- Good example: Code that satisfies `test-quality.trivial-snapshot` makes trivial snapshot assertion explicit or simpler.
-
 ### `test-quality.unused-mock`
 
 - Name: Unused mock
@@ -2120,37 +1689,6 @@ def test_parse(text): assert parse(text)`
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `test-quality.unused-mock` leaves unused mock unaddressed.
 - Good example: Code that satisfies `test-quality.unused-mock` makes unused mock explicit or simpler.
-
-### `waste.commented-out-code`
-
-- Name: Commented-out code
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `low`
-- Default enabled: yes
-- Rationale: Tombstoned source comments make reviewers ask whether dead code still matters.
-- Fix guidance: Delete commented-out source code or turn it into prose documentation; docstring examples are ignored because only tokenizer comment tokens are scanned.
-- Confidence rationale: Low confidence: source-comment tokens pass a cheap code-like prefilter and parser confirmation, but prose can still resemble Python.
-- Common false-positive shapes:
-  - Explanatory prose can itself be valid Python after the code-like prefilter, such as a comment written as an assignment or call.
-    Mitigation: Rewrite it as prose that does not parse as a statement, or suppress the reviewed comment with its documentation purpose.
-- Bad example: `# old_value = compute()`
-- Good example: `# Recompute only after the cache expires.`
-
-### `waste.empty-class`
-
-- Name: Empty class
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `waste.empty-class` protects the dead-code pillar by flagging empty class before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported empty class directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `waste.empty-class` leaves empty class unaddressed.
-- Good example: Code that satisfies `waste.empty-class` makes empty class explicit or simpler.
 
 ### `waste.empty-function`
 
@@ -2166,37 +1704,6 @@ def test_parse(text): assert parse(text)`
 - Bad example: Code that triggers `waste.empty-function` leaves empty function unaddressed.
 - Good example: Code that satisfies `waste.empty-function` makes empty function explicit or simpler.
 
-### `waste.one-line-function`
-
-- Name: One-line function wrapper
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `waste.one-line-function` protects the dead-code pillar by flagging one-line function wrapper before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported one-line function wrapper directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.
-    Mitigation: Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.
-- Bad example: Code that triggers `waste.one-line-function` leaves one-line function wrapper unaddressed.
-- Good example: Code that satisfies `waste.one-line-function` makes one-line function wrapper explicit or simpler.
-
-### `waste.redundant-variable`
-
-- Name: Redundant variable
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `waste.redundant-variable` protects the dead-code pillar by flagging redundant variable before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported redundant variable directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `waste.redundant-variable` leaves redundant variable unaddressed.
-- Good example: Code that satisfies `waste.redundant-variable` makes redundant variable explicit or simpler.
-
 ### `waste.unreachable-code`
 
 - Name: Unreachable code
@@ -2210,20 +1717,6 @@ def test_parse(text): assert parse(text)`
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `waste.unreachable-code` leaves unreachable code unaddressed.
 - Good example: Code that satisfies `waste.unreachable-code` makes unreachable code explicit or simpler.
-
-### `waste.unused-import`
-
-- Name: Unused import
-- Pillar: `dead-code`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `high`
-- Default enabled: yes
-- Rationale: `waste.unused-import` protects the dead-code pillar by flagging unused import before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported unused import directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `waste.unused-import` leaves unused import unaddressed.
-- Good example: Code that satisfies `waste.unused-import` makes unused import explicit or simpler.
 
 ## Suppressing Findings
 
@@ -2280,7 +1773,7 @@ Adjust a named threshold knob:
 
 ```yaml
 rules:
-  test-quality.eager-test:
+  test-quality.excessive-mocking:
     thresholds:
-      maxAssertions: 5
+      maxMocks: 4
 ```

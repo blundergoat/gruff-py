@@ -19,13 +19,8 @@ from gruffpy.rule.complexity.cyclomatic_complexity_rule import (
     CyclomaticComplexityRule,
     cyclomatic_for,
 )
-from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
-from gruffpy.rule.complexity.maintainability_index_rule import (
-    MaintainabilityIndexRule,
-    maintainability_index_for,
-)
 from gruffpy.rule.registry import RuleRegistry
-from gruffpy.rule.size._lines import code_line_numbers, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.version import TOOL_NAME, VERSION
@@ -547,15 +542,38 @@ def _metric_row(file_path: str, fn: FunctionLike, code_lines: frozenset[int]) ->
         symbol=qualified_symbol(fn, parent_chain(fn)),
         cyclomatic=cyclomatic_for(fn),
         halstead_volume=halstead.volume,
-        maintainability_index=maintainability_index_for(fn, code_lines),
+        maintainability_index=_maintainability_index_for(fn, code_lines),
     )
+
+
+def _maintainability_index_for(fn: FunctionLike, code_lines: frozenset[int]) -> float:
+    """Compute maintainability index for a function-like node.
+
+    Uses the shared `lines_for_size()` helper for LOC, so the line term counts
+    code lines only and documenting a function never lowers its index.
+
+    Args:
+        fn: Function, async function, or lambda node to score.
+        code_lines: The file's code lines, from ``code_line_numbers``.
+
+    Returns:
+        Maintainability index clamped to the range 0 through 100.
+    """
+    hv = halstead_for(fn).volume
+    cc = cyclomatic_for(fn)
+    loc = lines_for_size(fn, code_lines) if fn.end_lineno is not None else 1
+    # Guard against ln(0): treat zero terms as 1.
+    log_hv = math.log(hv) if hv > 0 else 0.0
+    log_loc = math.log(loc) if loc > 0 else 0.0
+    raw = 171 - 5.2 * log_hv - 0.23 * cc - 16.2 * log_loc
+    return max(0.0, min(100.0, raw))
 
 
 def _metric_thresholds(config: AnalysisConfig) -> dict[MetricName, MetricThreshold]:
     return {
         "cyclomatic": _threshold(config, CyclomaticComplexityRule.ID, Severity.WARNING, "above"),
-        "halsteadVolume": _threshold(config, HalsteadVolumeRule.ID, Severity.WARNING, "above"),
-        "maintainabilityIndex": _threshold(config, MaintainabilityIndexRule.ID, Severity.WARNING, "below"),
+        "halsteadVolume": MetricThreshold(400.0, Severity.ERROR, "above"),
+        "maintainabilityIndex": MetricThreshold(70.0, Severity.ERROR, "below"),
     }
 
 

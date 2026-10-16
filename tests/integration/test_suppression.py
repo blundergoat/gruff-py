@@ -21,7 +21,7 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
-    (src / "sample.py").write_text("import os; eval('payload')  # gruff: disable=waste.unused-import\n")
+    (src / "sample.py").write_text("def f():\n    return\n    eval('payload')  # gruff: disable=waste.unreachable-code\n")
 
     result = CliRunner().invoke(
         main,
@@ -33,7 +33,7 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
             "none",
             "--no-config",
             "--include-rule",
-            "waste.unused-import,security.dangerous-function-call",
+            "waste.unreachable-code,security.dangerous-function-call",
             "src",
         ],
     )

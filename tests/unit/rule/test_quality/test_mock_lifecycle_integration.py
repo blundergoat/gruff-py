@@ -5,9 +5,6 @@ Also re-checks the memoisation invariant after the full test-quality rule set
 is layered onto the helper - single scope computation per unit.
 """
 
-from dataclasses import replace
-
-from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.test_quality._test_quality_node_helper import (
     compute_count,
@@ -57,22 +54,12 @@ _EXPECTED_MOCK_LIFECYCLE_FIRES = {
     "test-quality.empty-parametrize",
     "test-quality.unused-mock",
     "test-quality.private-reflection",
-    "test-quality.exception-type-only",
-    "test-quality.tautological-type-assertion",
-    "test-quality.extends-production-class",
     "test-quality.global-state-mutation",
 }
 
 
 def test_mock_lifecycle_rules_fire_on_cumulative_fixture():
-    ctx = default_ctx()
-    rule_id = "test-quality.exception-type-only"
-    settings = ctx.config.rule_settings(rule_id)
-    config = ctx.config.with_rule_settings(
-        rule_id,
-        RuleSettings(enabled=True, thresholds=dict(settings.thresholds), options=dict(settings.options)),
-    )
-    findings = RuleRegistry.defaults().analyse([make_unit(_FIXTURE)], replace(ctx, config=config))
+    findings = RuleRegistry.defaults().analyse([make_unit(_FIXTURE)], default_ctx())
     fired = {f.rule_id for f in findings}
     missing = _EXPECTED_MOCK_LIFECYCLE_FIRES - fired
     assert not missing, f"Missing fires: {sorted(missing)}"
@@ -87,13 +74,3 @@ def test_memoisation_invariant_holds_for_full_pillar():
     after = compute_count()
     # One compute regardless of how many test-quality rules consumed the scope.
     assert after - before == 1, f"Memoisation broken: {after - before} computes"
-
-
-# Floor for v0.1: 28 registered test-quality rules. The full catalogue ships 34.
-_MIN_TEST_QUALITY_RULE_COUNT = 28
-
-
-def test_registry_has_full_test_quality_rule_set():
-    """v0.1 registers at least 28 test-quality rules; the full set is 34."""
-    ids = {r.definition().id for r in RuleRegistry.defaults().all() if r.definition().id.startswith("test-quality.")}
-    assert len(ids) >= _MIN_TEST_QUALITY_RULE_COUNT, f"Expected ≥{_MIN_TEST_QUALITY_RULE_COUNT} test-quality rules; got {len(ids)}: {sorted(ids)}"

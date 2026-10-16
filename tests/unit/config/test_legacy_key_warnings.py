@@ -5,7 +5,6 @@ ignored. Strict scans stop on the same exact key without claiming it was
 ignored, so CI users never mistake a rejected config for an applied one.
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -28,20 +27,6 @@ _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML = (
     f"      min_fields: {_CUSTOM_MIN_FIELDS}\n"
     "      allowBullet: false\n"
 )
-
-_MARKDOWN_RULE_ID = "security.unsanitized-markdown-interpolation"
-
-
-def _markdown_options_yaml(option_lines: str) -> str:
-    """Place sanitizer option YAML under the public Markdown rule.
-
-    Args:
-        option_lines: Already-indented option entries; empty means no overrides.
-
-    Returns:
-        Complete config text a user could place in ``.gruff-py.yaml``.
-    """
-    return f"schemaVersion: gruff-py.config.v0.1\nrules:\n  {_MARKDOWN_RULE_ID}:\n    options:\n{option_lines}"
 
 
 def _defaults() -> AnalysisConfig:
@@ -188,84 +173,6 @@ def test_unknown_option_strict_error_lists_registered_alternatives(tmp_path: Pat
     assert "options.require_all_fields" in message
 
 
-@pytest.mark.parametrize(
-    ("option_lines", "expected_message"),
-    [
-        (
-            "      labelSanitizers: markdown_label\n",
-            "must be a list of exact Python call targets",
-        ),
-        (
-            "      labelSanitizers:\n        - ''\n",
-            "contains invalid call target ''",
-        ),
-        (
-            "      urlSanitizers:\n        - helpers.*\n",
-            "contains invalid call target 'helpers.*'",
-        ),
-        (
-            "      urlSanitizers:\n        - helpers.markdown_url\n        - 7\n",
-            "contains invalid call target 7",
-        ),
-    ],
-    ids=["scalar", "empty", "wildcard", "non-text"],
-)
-def test_markdown_sanitizer_options_reject_ambiguous_targets(
-    tmp_path: Path,
-    option_lines: str,
-    expected_message: str,
-) -> None:
-    """Stop before scanning when a user helper cannot map to one exact call.
-
-    Args:
-        tmp_path: Project receiving the invalid sanitizer configuration.
-        option_lines: User option value exercising one invalid public shape.
-        expected_message: Stable explanation fragment shown for that shape.
-    """
-    _write_yaml(tmp_path, _markdown_options_yaml(option_lines))
-
-    with pytest.raises(ConfigError, match=re.escape(expected_message)):
-        ConfigLoader(tmp_path, _defaults()).load()
-
-
-def test_markdown_sanitizer_options_accept_exact_targets_and_empty_strict_mode(
-    tmp_path: Path,
-) -> None:
-    """Keep exact label helpers while an empty URL list trusts no call.
-
-    Args:
-        tmp_path: Project receiving a valid slot-asymmetric configuration.
-    """
-    _write_yaml(
-        tmp_path,
-        _markdown_options_yaml("      labelSanitizers:\n        - markdown_label\n        - helpers.markdown_label\n      urlSanitizers: []\n"),
-    )
-
-    config, _ = ConfigLoader(tmp_path, _defaults(), strict=True).load()
-
-    assert config.rules[_MARKDOWN_RULE_ID].options == {
-        "labelSanitizers": ["markdown_label", "helpers.markdown_label"],
-        "urlSanitizers": [],
-    }
-
-
-def test_markdown_sanitizer_toml_rejects_wildcard_target(tmp_path: Path) -> None:
-    """Apply the same exact-target error to users configuring pyproject TOML.
-
-    Args:
-        tmp_path: Project receiving a TOML wildcard sanitizer target.
-    """
-    (tmp_path / "pyproject.toml").write_text(
-        "[tool.gruff-py]\n"
-        'schemaVersion = "gruff-py.config.v0.1"\n'
-        f'[tool.gruff-py.rules."{_MARKDOWN_RULE_ID}".options]\n'
-        'urlSanitizers = ["helpers.*"]\n'
-    )
-
-    with pytest.raises(ConfigError, match=r"contains invalid call target 'helpers\.\*'"):
-        ConfigLoader(tmp_path, _defaults()).load()
-
-
 def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
     _write_yaml(
         tmp_path,
@@ -281,25 +188,25 @@ def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
 def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.module-name-mismatch:\n    enabled: false\n    flavour: spicy\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.short-variable:\n    enabled: false\n    flavour: spicy\n",
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert len(loader.warnings) == 1
-    assert 'Unknown key "rules.naming.module-name-mismatch.flavour"' in loader.warnings[0]
-    assert config.rules["naming.module-name-mismatch"].enabled is False
+    assert 'Unknown key "rules.naming.short-variable.flavour"' in loader.warnings[0]
+    assert config.rules["naming.short-variable"].enabled is False
 
 
 def test_threshold_on_non_rubric_rule_warns_and_is_dropped(tmp_path: Path):
     _write_yaml(
         tmp_path,
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.module-name-mismatch:\n    threshold: 5\n    severity: warning\n",
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.short-variable:\n    threshold: 5\n    severity: warning\n",
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert len(loader.warnings) == 1
     assert "only supported for severity-threshold rubrics" in loader.warnings[0]
-    assert config.rules["naming.module-name-mismatch"].severity_threshold is None
+    assert config.rules["naming.short-variable"].severity_threshold is None
 
 
 def test_severity_without_threshold_warns_and_is_dropped(tmp_path: Path):

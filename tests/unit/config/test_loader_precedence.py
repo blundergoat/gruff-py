@@ -392,12 +392,10 @@ def test_threshold_and_warning_severity_supported(tmp_path: Path):
 
 def _settings_with_low_threshold_override(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        f"rules:\n  complexity.maintainability-index:\n    threshold: {_LOW_THRESHOLD_BOUNDARY}\n"
-        "    severity: error\n"
+        f"schemaVersion: gruff-py.config.v0.1\nrules:\n  size.function-length:\n    threshold: {_LOW_THRESHOLD_BOUNDARY}\n    severity: error\n"
     )
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
-    return config.rule_settings("complexity.maintainability-index")
+    return config.rule_settings("size.function-length")
 
 
 def test_low_value_threshold_override_does_not_match_at_boundary(tmp_path: Path):
@@ -436,12 +434,12 @@ def test_threshold_on_named_threshold_rule_warns_by_default_and_raises_under_str
     tmp_path: Path,
 ):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.eager-test:\n    threshold: 5\n    severity: error\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.excessive-mocking:\n    threshold: 5\n    severity: error\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
     assert any("only supported for severity-threshold rubrics" in warning for warning in loader.warnings)
-    assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
+    assert config.rules["test-quality.excessive-mocking"] == _defaults().rules["test-quality.excessive-mocking"]
 
     with pytest.raises(ConfigError, match="only supported for severity-threshold rubrics"):
         ConfigLoader(tmp_path, _defaults(), strict=True).load()
@@ -473,14 +471,14 @@ def test_threshold_with_legacy_tier_block_warns_and_keeps_explicit_threshold(tmp
 
 def test_unknown_named_threshold_warns_by_default_and_raises_under_strict(tmp_path: Path):
     (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.eager-test:\n    thresholds:\n      warning: 5\n"
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n  test-quality.excessive-mocking:\n    thresholds:\n      warning: 5\n"
     )
     loader = ConfigLoader(tmp_path, _defaults())
     config, _ = loader.load()
-    assert any('Unknown threshold "rules.test-quality.eager-test' in warning for warning in loader.warnings)
-    assert config.rules["test-quality.eager-test"] == _defaults().rules["test-quality.eager-test"]
+    assert any('Unknown threshold "rules.test-quality.excessive-mocking' in warning for warning in loader.warnings)
+    assert config.rules["test-quality.excessive-mocking"] == _defaults().rules["test-quality.excessive-mocking"]
 
-    with pytest.raises(ConfigError, match='Unknown threshold "rules.test-quality.eager-test'):
+    with pytest.raises(ConfigError, match='Unknown threshold "rules.test-quality.excessive-mocking'):
         ConfigLoader(tmp_path, _defaults(), strict=True).load()
 
 

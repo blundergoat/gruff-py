@@ -16,8 +16,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.docs._comment_scanner import SourceComment, scan_comments
 from gruffpy.rule.docs._docstring_parser import extract_docstring, parse_docstring
-from gruffpy.rule.docs._helpers import is_public
-from gruffpy.rule.docs.useless_docstring_rule import _content_words
+from gruffpy.rule.docs._helpers import _content_words, is_public
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 

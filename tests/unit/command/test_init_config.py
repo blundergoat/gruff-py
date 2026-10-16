@@ -74,14 +74,14 @@ _FULLY_CUSTOMISED_YAML = (
     "    enabled: false\n"
     "    threshold: 777\n"
     "    severity: warning\n"
-    "  test-quality.eager-test:\n"
+    "  test-quality.excessive-mocking:\n"
     "    enabled: false\n"
     "    thresholds:\n"
-    "      maxAssertions: 9\n"
-    "  naming.boolean-prefix:\n"
+    "      maxMocks: 9\n"
+    "  naming.short-variable:\n"
     "    enabled: true\n"
     "    options:\n"
-    "      acceptedBooleanNames:\n"
+    "      acceptedShortNames:\n"
     "      - ready\n"
 )
 
@@ -164,15 +164,10 @@ def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> 
     assert bare_rule == {"enabled": True}
 
 
-def test_render_default_config_yaml_shows_markdown_sanitizer_defaults() -> None:
-    """Show strict labels and vetted URL encoders in a user's generated config."""
+def test_render_default_config_yaml_omits_retired_markdown_rule() -> None:
+    """Keep the retired Markdown rule out of a user's generated config."""
     document = yaml.safe_load(render_default_config_yaml())
-    markdown_rule = document["rules"]["security.unsanitized-markdown-interpolation"]
-
-    assert markdown_rule["options"] == {
-        "labelSanitizers": [],
-        "urlSanitizers": ["urllib.parse.quote", "urllib.parse.quote_plus"],
-    }
+    assert "security.unsanitized-markdown-interpolation" not in document["rules"]
 
 
 def test_render_default_config_yaml_uses_single_threshold_and_severity() -> None:

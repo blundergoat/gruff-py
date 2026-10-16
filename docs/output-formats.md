@@ -88,8 +88,7 @@ is empty when no exclusion is configured and no built-in skip applied. See
 The family's built-in test-path skip also publishes rows, after the configured
 ones, numbered from `0` among themselves and marked `source: "built-in"`, which
 a configured row never carries. It adds one row per file and rule it removed,
-because every security rule, and every sensitive-data rule except
-`sensitive-data.pii-test-fixture`, skips test, fixture and example files. Text output labels them
+because every shipping security and sensitive-data rule skips test, fixture and example files. Text output labels them
 `builtInTestPath[<path>]`.
 
 Another tool's suppression comment that names the same check as a gruff-py rule

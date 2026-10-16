@@ -1,7 +1,4 @@
-# gruff: disable-file=test-quality.eager-test -- hook tests assert many invariants per call.
-# gruff: disable-file=test-quality.loop-in-test -- loops enumerate finding rows, not cases.
 # gruff: disable-file=test-quality.loop-assertion-without-message -- finding ruleId names the row.
-# gruff: disable-file=test-quality.conditional-logic -- threshold branch mirrors finding shape.
 # gruff: disable-file=docs.complex-branch-rationale -- threshold branch mirrors finding shape.
 import ast
 import json

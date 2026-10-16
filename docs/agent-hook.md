@@ -36,7 +36,7 @@ For a configured entry, `suppressed` is `0` when it matched nothing, so its row
 means the exclusion is configured, not that it silenced anything.
 
 The hook also carries the built-in rows the analysis publishes, after the configured ones, each with `source: "built-in"`: one per file
-and rule the test-path skip removed, because every sensitive-data rule except `sensitive-data.pii-test-fixture` skips test, fixture and
+and rule the test-path skip removed, because every shipping sensitive-data rule skips test, fixture and
 example files.
 
 `--changed-ranges` scopes `hook` at the finding's own reported span: a finding is

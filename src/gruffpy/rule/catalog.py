@@ -13,8 +13,6 @@ from gruffpy.rule.catalog_docs import (
 from gruffpy.rule.catalog_related import RELATED_RULES as RELATED_RULES
 from gruffpy.rule.complexity.cognitive_complexity_rule import CognitiveComplexityRule
 from gruffpy.rule.complexity.cyclomatic_complexity_rule import CyclomaticComplexityRule
-from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
-from gruffpy.rule.complexity.maintainability_index_rule import MaintainabilityIndexRule
 from gruffpy.rule.complexity.nesting_depth_rule import NestingDepthRule
 from gruffpy.rule.correctness.substring_vocabulary_match_rule import SubstringVocabularyMatchRule
 from gruffpy.rule.correctness.unsafe_numeric_coercion_rule import UnsafeNumericCoercionRule
@@ -35,14 +33,9 @@ from gruffpy.rule.docs.missing_readme_rule import MissingReadmeRule
 from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
-from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
-from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
-from gruffpy.rule.naming.confusing_name_rule import ConfusingNameRule
 from gruffpy.rule.naming.generic_function_rule import GenericFunctionRule
-from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
-from gruffpy.rule.naming.module_name_mismatch_rule import ModuleNameMismatchRule
 from gruffpy.rule.naming.short_variable_rule import ShortVariableRule
 from gruffpy.rule.naming.test_naming_consistency_rule import TestNamingConsistencyRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
@@ -95,9 +88,6 @@ from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from gruffpy.rule.security.ssrf_rule import SsrfRule
 from gruffpy.rule.security.unsafe_pickle_rule import UnsafePickleRule
 from gruffpy.rule.security.unsafe_yaml_load_rule import UnsafeYamlLoadRule
-from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
-    UnsanitizedMarkdownInterpolationRule,
-)
 from gruffpy.rule.security.variable_import_rule import VariableImportRule
 from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.security.xxe_rule import XxeRule
@@ -108,7 +98,6 @@ from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceA
 from gruffpy.rule.sensitive_data.hardcoded_env_value_rule import HardcodedEnvValueRule
 from gruffpy.rule.sensitive_data.jwt_token_rule import JwtTokenRule
 from gruffpy.rule.sensitive_data.phi_pattern_rule import PhiPatternRule
-from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from gruffpy.rule.size.attribute_count_rule import AttributeCountRule
@@ -118,26 +107,16 @@ from gruffpy.rule.size.file_length_rule import FileLengthRule
 from gruffpy.rule.size.function_length_rule import FunctionLengthRule
 from gruffpy.rule.size.parameter_count_rule import ParameterCountRule
 from gruffpy.rule.size.public_method_count_rule import PublicMethodCountRule
-from gruffpy.rule.test_quality.conditional_logic_rule import ConditionalLogicRule
-from gruffpy.rule.test_quality.eager_test_rule import EagerTestRule
 from gruffpy.rule.test_quality.empty_parametrize_rule import EmptyParametrizeRule
-from gruffpy.rule.test_quality.exception_type_only_rule import ExceptionTypeOnlyRule
 from gruffpy.rule.test_quality.excessive_mocking_rule import ExcessiveMockingRule
-from gruffpy.rule.test_quality.extends_production_class_rule import ExtendsProductionClassRule
 from gruffpy.rule.test_quality.global_state_mutation_rule import GlobalStateMutationRule
 from gruffpy.rule.test_quality.loop_assertion_without_message_rule import (
     LoopAssertionWithoutMessageRule,
 )
-from gruffpy.rule.test_quality.loop_in_test_rule import LoopInTestRule
-from gruffpy.rule.test_quality.magic_number_assertion_rule import MagicNumberAssertionRule
 from gruffpy.rule.test_quality.mock_only_test_rule import MockOnlyTestRule
-from gruffpy.rule.test_quality.mock_without_expectation_rule import MockWithoutExpectationRule
 from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
-from gruffpy.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
-from gruffpy.rule.test_quality.mystery_guest_rule import MysteryGuestRule
 from gruffpy.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
-from gruffpy.rule.test_quality.parametrize_annotation_rule import ParametrizeAnnotationRule
 from gruffpy.rule.test_quality.private_reflection_rule import PrivateReflectionRule
 from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
@@ -152,27 +131,16 @@ from gruffpy.rule.test_quality.repeated_structure_missing_parametrize_rule impor
     RepeatedStructureMissingParametrizeRule,
 )
 from gruffpy.rule.test_quality.setup_bloat_rule import SetupBloatRule
-from gruffpy.rule.test_quality.skipped_without_reason_rule import SkippedWithoutReasonRule
-from gruffpy.rule.test_quality.sleep_in_test_rule import SleepInTestRule
 from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
     StaticAnalysisRedundantTestRule,
 )
 from gruffpy.rule.test_quality.sut_not_called_rule import SutNotCalledRule
-from gruffpy.rule.test_quality.tautological_type_assertion_rule import (
-    TautologicalTypeAssertionRule,
-)
 from gruffpy.rule.test_quality.test_function_too_long_rule import TestFunctionTooLongRule
 from gruffpy.rule.test_quality.test_longer_than_sut_rule import TestLongerThanSutRule
 from gruffpy.rule.test_quality.trivial_assertion_rule import TrivialAssertionRule
-from gruffpy.rule.test_quality.trivial_snapshot_rule import TrivialSnapshotRule
 from gruffpy.rule.test_quality.unused_mock_rule import UnusedMockRule
-from gruffpy.rule.waste.commented_out_code_rule import CommentedOutCodeRule
-from gruffpy.rule.waste.empty_class_rule import EmptyClassRule
 from gruffpy.rule.waste.empty_function_rule import EmptyFunctionRule
-from gruffpy.rule.waste.one_line_function_rule import OneLineFunctionRule
-from gruffpy.rule.waste.redundant_variable_rule import RedundantVariableRule
 from gruffpy.rule.waste.unreachable_code_rule import UnreachableCodeRule
-from gruffpy.rule.waste.unused_import_rule import UnusedImportRule
 
 __all__ = ["RELATED_RULES", "FalsePositiveShape", "RuleDocs"]
 
@@ -186,29 +154,10 @@ _STANDARD_THRESHOLD_METADATA_KEYS = (
     "thresholdType",
 )
 
-_THRESHOLD_DIRECTIONS = {
-    "complexity.maintainability-index": "below",
-}
+_THRESHOLD_DIRECTIONS: dict[str, str] = {}
 
 _FORMULA_PROVENANCE = {
     "complexity.cyclomatic": "Radon-aligned decision-point counting.",
-    "complexity.halstead-volume": (
-        "Radon-inspired Halstead volume with documented Python AST deltas. "
-        "The dogfood rubric uses one configured threshold, `>400` at error "
-        "severity; the legacy built-in fallback came from Java/PHP-tuned gruff "
-        "defaults. 2026-05-18 metric-calibration on `src/` and `tests/` observed "
-        "p50=4.75, p90=38.04, p99=96.0, max=283.39."
-    ),
-    "complexity.maintainability-index": (
-        "gruff per-function maintainability heuristic based on Halstead volume, "
-        "cyclomatic complexity, and raw function lines. The dogfood rubric uses "
-        "one configured threshold, `<70` at error severity; the legacy built-in "
-        "fallback came from Java/PHP-tuned gruff defaults. 2026-05-18 "
-        "metric-calibration on `src/` and `tests/` observed min=78.78, p50=100, "
-        "p90=100, p99=100. Radon 6.0.1 ranks maintainability index 20-100 as "
-        "A/very high, 10-19 as B/medium, and 0-9 as C/extremely low: "
-        "https://radon.readthedocs.io/en/stable/commandline.html#the-mi-command."
-    ),
 }
 
 
@@ -333,15 +282,6 @@ def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
 # by the rule's source or tests; the runtime definition remains the single owner of
 # confidence, thresholds, and options.
 _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
-    "complexity.halstead-volume": (
-        "A declarative builder dominated by one literal table can have high token volume despite having little control-flow complexity.",
-        "Extract the table to data or tune this rule's `threshold` and `severity` when the volume is an accepted project convention.",
-    ),
-    "complexity.maintainability-index": (
-        "A long but linear wiring, data-setup, or generated function can score poorly even when its branching is simple.",
-        "Split the function or tune this rule's `threshold` and `severity` after confirming "
-        "that logical length, rather than complexity, drives the score.",
-    ),
     "dead-code.unused-private-attribute": (
         "A private attribute read through `getattr`, serialization, or framework reflection has no parser-visible load.",
         "Keep an explicit read when practical, or suppress `dead-code.unused-private-attribute` with a reason at the reviewed declaration.",
@@ -389,28 +329,10 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A planning or migration module can intentionally carry several tracked TODO markers while the work remains bounded and owned.",
         "Move the work to the issue tracker or tune this rule's `threshold` and `severity` for the reviewed planning surface.",
     ),
-    "docs.useless-docstring": (
-        "A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.",
-        "Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.",
-    ),
-    "naming.boolean-prefix": (
-        "An externally constrained Boolean name can belong to a protocol, CLI, DTO, or schema "
-        "that the structural override exemptions do not recognize.",
-        "Add the exact contract name to `options.acceptedBooleanNames` instead of renaming the external surface.",
-    ),
-    "naming.confusing-name": (
-        "A deliberately short class name can gain its missing domain context from the enclosing module or package.",
-        "Rename the class with explicit domain context, or remove that suffix from "
-        "`options.confusingNames` when the package naming convention supplies it.",
-    ),
     "naming.generic-function": (
         "A framework hook or protocol can require a generic function name such as `run` or "
         "`handle` even when the implementation has one clear responsibility.",
         "Remove the required hook name from `options.genericFunctions` or suppress the finding at the reviewed implementation.",
-    ),
-    "naming.module-name-mismatch": (
-        "A feature-oriented module can intentionally contain one public class plus supporting functions without being named after that class.",
-        "Add the module name to `options.conventionalModuleNames`, reorganize the module, or suppress the reviewed exception.",
     ),
     "naming.short-variable": (
         "A one-character domain or mathematical symbol can be conventional even when it is not one of the built-in loop, axis, or exception names.",
@@ -466,23 +388,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A structurally valid synthetic SSN or labelled MRN outside the placeholder set can look like real health data.",
         "Use a recognized placeholder, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.",
     ),
-    "sensitive-data.pii-test-fixture": (
-        "An intentionally synthetic but realistic email address or phone number outside the "
-        "reserved-domain and 555 placeholder forms can look like real fixture PII.",
-        "Use `example` domains or 555-style numbers, or add a reasoned `sensitiveExclusions` entry for the exact reviewed rule and fixture path.",
-    ),
-    "test-quality.conditional-logic": (
-        "A property, state-machine, or compatibility test can intentionally exercise several outcome branches in one named scenario.",
-        "Parametrize or split the branches for separate failures, or suppress the reviewed test when one scenario must retain the control flow.",
-    ),
-    "test-quality.eager-test": (
-        "One outcome can require many field-level assertions, so assertion count alone can make a focused contract test look eager.",
-        "Compare a structured expected value or tune `thresholds.maxAssertions` after confirming all assertions describe the same behavior.",
-    ),
-    "test-quality.exception-type-only": (
-        "A boundary can intentionally promise only that any wide exception escapes, with no stable message suitable for `match=`.",
-        "Prefer a narrow exception or stable message match; otherwise suppress the reviewed assertion with the type-only contract.",
-    ),
     "test-quality.excessive-mocking": (
         "A coordinator test can legitimately isolate several collaborators because orchestration is the production responsibility under test.",
         "Use a higher-level test or tune `thresholds.maxMocks` for suites whose reviewed subject is an orchestrator.",
@@ -496,46 +401,18 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "Add an iteration-specific message or parametrize the cases; otherwise suppress the "
         "reviewed loop when failure output is already unambiguous.",
     ),
-    "test-quality.loop-in-test": (
-        "A state-machine, fuzz, or property test can require a loop whose branches make the built-in fixture-loop exemption inapplicable.",
-        "Parametrize finite cases, or suppress the reviewed test when iteration is itself the behavior under test.",
-    ),
-    "test-quality.magic-number-assertion": (
-        "A bare literal can be an established domain constant such as a protocol version or exit "
-        "code even when it is outside the built-in small-count and HTTP sets.",
-        "Assert against a named constant or add the exact value to `options.allowed_numbers`.",
-    ),
     "test-quality.mock-only-test": (
         "An interaction can be the complete contract, such as proving an event was dispatched or a boundary received a mapped payload.",
         "Keep an explicit mock expectation and suppress the reviewed test, or add an assertion on "
         "an observable result when the contract is not purely interaction-based.",
     ),
-    "test-quality.mock-without-expectation": (
-        "A deliberate null-object double can be passed only to satisfy a constructor signature, "
-        "with no expectation because no interaction is the contract.",
-        "Use a small fake or add an explicit `assert_not_called` expectation so the intent is visible to the rule and reviewer.",
-    ),
     "test-quality.mocking-domain-object": (
         "A configured domain namespace can also contain ports or interfaces that are appropriate mock boundaries.",
         "Narrow `options.domain_namespaces` to concrete domain-object packages or use a small fake for the reviewed port.",
     ),
-    "test-quality.multiple-aaa-cycles": (
-        "One workflow or state-transition test can deliberately assert after each step, making several call-separated assertion blocks one scenario.",
-        "Split the transitions or tune `thresholds.maxCycles` after confirming the test is one reviewed workflow.",
-    ),
-    "test-quality.mystery-guest": (
-        "A test can reach a local test server, such as the `httpbin` fixture requests' own suite uses, through a call "
-        "the rule treats as network I/O even though the fixture keeps it hermetic.",
-        "Move the I/O behind an explicit fixture/helper or suppress the reviewed test with the fixture boundary.",
-    ),
     "test-quality.naming-consistency": (
         "A compatibility or staged migration suite can intentionally mix pytest function names with unittest-style function or class names.",
         "Complete the rename when compatibility permits, or suppress the file-level advisory with the migration reason.",
-    ),
-    "test-quality.parametrize-annotation": (
-        "Simple enum, integer, or named-object cases can already have short stable repr values, so "
-        "generated pytest case names remain readable without `ids=`.",
-        "Add explicit IDs or tune `thresholds.maxCasesWithoutIds` after checking the actual report names.",
     ),
     "test-quality.private-reflection": (
         "A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.",
@@ -568,18 +445,9 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A contract test can validate module constants or metadata using only builtins and test helpers, with no callable system under test.",
         "Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.",
     ),
-    "test-quality.tautological-type-assertion": (
-        "The same call expression evaluated twice can return different runtime types, even though "
-        "the structural comparison treats both expressions as identical.",
-        "Evaluate the call once and assert the specific expected type, or suppress the reviewed dynamic-factory case.",
-    ),
     "test-quality.test-longer-than-sut": (
         "A table-driven contract test can need many scenarios around one short same-file function, so line ratio overstates duplication.",
         "Split or extract setup, or tune `options.ratio` after reviewing the scenario coverage.",
-    ),
-    "test-quality.trivial-snapshot": (
-        "A canonical encoding or compatibility fixture can intentionally pin every element of a large literal collection.",
-        "Assert salient invariants, or suppress the reviewed snapshot with the exact compatibility contract it protects.",
     ),
     "waste.commented-out-code": (
         "Explanatory prose can itself be valid Python after the code-like prefilter, such as a comment written as an assignment or call.",
@@ -639,44 +507,11 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "a value. Off by default."
         ),
     },
-    "docs.useless-docstring": {
-        "min_summary_words": (
-            "Deprecated and ignored since 0.6.0, when the word-count check was removed; still accepted so configurations load. Removed in 0.7.0."
-        ),
-    },
-    "naming.confusing-name": {
-        "confusingNames": ("Identifier suffixes flagged as low-content (Handler, Manager, Util, ...)."),
-    },
     "naming.generic-function": {
         "genericFunctions": ("Function names flagged as too generic to convey intent (process, handle, run, ...)."),
     },
-    "naming.boolean-prefix": {
-        "acceptedBooleanNames": ("Exact boolean names accepted for external protocol, CLI, DTO, or schema contracts (ok, force, verbose, etc.)."),
-    },
-    "naming.module-name-mismatch": {
-        "conventionalModuleNames": ("Module names exempt from the convention check (constants, exceptions, helpers, protocols, types)."),
-    },
     "naming.short-variable": {
         "acceptedShortNames": ("Single-character identifiers accepted as conventional (loop counters, math axes, exception variables)."),
-    },
-    "security.unsanitized-markdown-interpolation": {
-        "labelSanitizers": (
-            "Exact call targets trusted for visible link labels. Empty is strict; "
-            "html.escape and markupsafe.escape are opt-ins only after verifying "
-            "the renderer because they leave Markdown link delimiters unchanged."
-        ),
-        "urlSanitizers": (
-            "Exact call targets trusted for click targets. Defaults to urllib.parse.quote "
-            "and quote_plus with delimiter-safe arguments; an empty list trusts no call."
-        ),
-    },
-    "test-quality.magic-number-assertion": {
-        "allowed_numbers": ("Integer literals accepted in test assertions without extraction (small ints and HTTP status codes by default)."),
-    },
-    "test-quality.extends-production-class": {
-        "additionalTestBases": (
-            "Exact dotted or terminal base-class names treated as test bases in addition to the built-in allowlist and *TestCase suffix convention."
-        ),
     },
     "test-quality.mocking-domain-object": {
         "domain_namespaces": (
@@ -692,8 +527,6 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
 BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(CognitiveComplexityRule),
     _entry(CyclomaticComplexityRule),
-    _entry(HalsteadVolumeRule),
-    _entry(MaintainabilityIndexRule),
     _entry(NestingDepthRule),
     _entry(SubstringVocabularyMatchRule),
     _entry(UnsafeNumericCoercionRule),
@@ -713,14 +546,9 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(MissingReturnDocRule),
     _entry(StaleParamDocRule),
     _entry(TodoDensityRule),
-    _entry(UselessDocstringRule),
     _entry(AbbreviationRule),
-    _entry(BooleanPrefixRule),
-    _entry(ConfusingNameRule),
     _entry(GenericFunctionRule),
-    _entry(HungarianNotationRule),
     _entry(IdentifierQualityRule),
-    _entry(ModuleNameMismatchRule),
     _entry(ShortVariableRule),
     _entry(TestNamingConsistencyRule),
     _entry(CorsWildcardWithCredentialsRule),
@@ -752,7 +580,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(SsrfRule),
     _entry(UnsafePickleRule),
     _entry(UnsafeYamlLoadRule),
-    _entry(UnsanitizedMarkdownInterpolationRule),
     _entry(VariableImportRule),
     _entry(WeakCryptoRule),
     _entry(XxeRule),
@@ -763,42 +590,27 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(HardcodedEnvValueRule),
     _entry(JwtTokenRule),
     _entry(PhiPatternRule),
-    _entry(PiiTestFixtureRule),
     _entry(PrivateKeyRule),
     _entry(UrlCredentialsRule),
-    _entry(ConditionalLogicRule),
-    _entry(EagerTestRule),
     _entry(EmptyParametrizeRule),
-    _entry(ExceptionTypeOnlyRule),
     _entry(ExcessiveMockingRule),
-    _entry(ExtendsProductionClassRule),
     _entry(GlobalStateMutationRule),
     _entry(LoopAssertionWithoutMessageRule),
-    _entry(LoopInTestRule),
-    _entry(MagicNumberAssertionRule),
     _entry(MockOnlyTestRule),
-    _entry(MockWithoutExpectationRule),
     _entry(MockingDomainObjectRule),
-    _entry(MultipleAaaCyclesRule),
-    _entry(MysteryGuestRule),
     _entry(NamingConsistencyRule),
     _entry(NoAssertionsRule),
-    _entry(ParametrizeAnnotationRule),
     _entry(PrivateReflectionRule),
     _entry(PytestCoverageSourceMissingRule),
     _entry(PytestDeprecationsNotFatalRule),
     _entry(PytestStrictConfigMissingRule),
     _entry(RepeatedStructureMissingParametrizeRule),
     _entry(SetupBloatRule),
-    _entry(SkippedWithoutReasonRule),
-    _entry(SleepInTestRule),
     _entry(StaticAnalysisRedundantTestRule),
     _entry(SutNotCalledRule),
-    _entry(TautologicalTypeAssertionRule),
     _entry(TestFunctionTooLongRule),
     _entry(TestLongerThanSutRule),
     _entry(TrivialAssertionRule),
-    _entry(TrivialSnapshotRule),
     _entry(UnusedMockRule),
     _entry(AttributeCountRule),
     _entry(AverageFunctionLengthRule),
@@ -807,13 +619,8 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(FunctionLengthRule),
     _entry(ParameterCountRule),
     _entry(PublicMethodCountRule),
-    _entry(CommentedOutCodeRule),
-    _entry(EmptyClassRule),
     _entry(EmptyFunctionRule),
-    _entry(OneLineFunctionRule),
-    _entry(RedundantVariableRule),
     _entry(UnreachableCodeRule),
-    _entry(UnusedImportRule),
 )
 
 _BUILTIN_RULES_BY_ID: dict[str, BuiltInRule] = {entry.definition.id: entry for entry in BUILTIN_RULES}

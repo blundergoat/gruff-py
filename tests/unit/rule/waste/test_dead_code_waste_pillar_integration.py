@@ -105,18 +105,13 @@ def _ctx() -> RuleContext:
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
-def test_registry_includes_all_m04_rules():
+def test_registry_includes_surviving_m04_rules():
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
         "dead-code.unused-private-attribute",
-        "waste.commented-out-code",
-        "waste.empty-class",
         "waste.empty-function",
-        "waste.one-line-function",
-        "waste.redundant-variable",
         "waste.unreachable-code",
-        "waste.unused-import",
     }
     assert expected.issubset(ids)
 

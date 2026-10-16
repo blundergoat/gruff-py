@@ -20,26 +20,17 @@ from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationa
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
-from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
-from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
-from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
-    UnsanitizedMarkdownInterpolationRule,
-)
 from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
-from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
-from gruffpy.rule.test_quality.loop_in_test_rule import LoopInTestRule
-from gruffpy.rule.test_quality.mystery_guest_rule import MysteryGuestRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
 from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
     StaticAnalysisRedundantTestRule,
 )
-from gruffpy.rule.waste.commented_out_code_rule import CommentedOutCodeRule
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,8 +145,8 @@ def custom_docs_for(
             return _unsafe_numeric_coercion_docs(config_keys)
         case SubstringVocabularyMatchRule.ID:
             return _substring_vocabulary_match_docs(config_keys)
-        case UnsanitizedMarkdownInterpolationRule.ID | WeakCryptoRule.ID:
-            return _security_rule_docs(definition.id, config_keys)
+        case WeakCryptoRule.ID:
+            return _weak_crypto_docs(config_keys, definition.id)
         case RuntimeSysPathMutationRule.ID:
             return _runtime_sys_path_mutation_docs(config_keys)
         case ExportedButUnreferencedRule.ID:
@@ -170,14 +161,10 @@ def custom_docs_for(
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case AbbreviationRule.ID | BooleanPrefixRule.ID | HungarianNotationRule.ID | IdentifierQualityRule.ID:
+        case AbbreviationRule.ID | IdentifierQualityRule.ID:
             return _naming_rule_docs(definition.id, config_keys)
-        case PiiTestFixtureRule.ID:
-            return _pii_test_fixture_docs(config_keys)
-        case NoAssertionsRule.ID | MysteryGuestRule.ID | LoopInTestRule.ID:
-            return _test_quality_rule_docs(definition.id, config_keys)
-        case CommentedOutCodeRule.ID:
-            return _commented_out_code_docs(config_keys)
+        case NoAssertionsRule.ID:
+            return _no_assertions_docs(config_keys)
         case IgnoreDirectiveReasonRule.ID:
             return _ignore_directive_reason_docs(config_keys)
         case DataclassAttributesRule.ID:
@@ -257,24 +244,6 @@ def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             ),
         ),
     )
-
-
-def _security_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
-    """Dispatch curated docs for security rules sharing one catalog arm.
-
-    Grouping these rules keeps ``custom_docs_for`` under the repository
-    cyclomatic-complexity limit, as its docstring requires.
-
-    Args:
-        rule_id: Rule being documented.
-        config_keys: Public config keys computed for the rule by the catalog.
-
-    Returns:
-        Curated ``RuleDocs`` for the requested security rule.
-    """
-    if rule_id == WeakCryptoRule.ID:
-        return _weak_crypto_docs(config_keys, rule_id)
-    return _unsanitized_markdown_interpolation_docs(config_keys, rule_id)
 
 
 def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
@@ -414,69 +383,6 @@ def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _unsanitized_markdown_interpolation_docs(
-    config_keys: tuple[str, ...],
-    rule_id: str,
-) -> RuleDocs:
-    """Explain slot-specific sanitizer trust in CLI cards and generated rule docs.
-
-    Args:
-        config_keys: Public option paths; empty would leave users no tuning route.
-        rule_id: Registered rule id used to attach standard security metadata.
-
-    Returns:
-        User guidance including the deliberate HTML-escaper retained positive.
-    """
-    return RuleDocs(
-        rationale=(
-            "A markdown link label of `evil](https://bad.example) trick` turns "
-            "`[{label}]({url})` into markdown whose first parsed link is the "
-            "injected pair, redirecting the rendered target; the rule exists "
-            "to catch the one interpolation site that forgot the project's "
-            "sanitiser."
-        ),
-        fix_guidance=(
-            "Use an exact helper from the matching labelSanitizers or urlSanitizers "
-            "list. Labels must remove `]`, `(`, and `)`; URLs may use the default "
-            "urllib.parse.quote/quote_plus calls without a delimiter-preserving "
-            "`safe` argument."
-        ),
-        bad_example='`f"[{title}]({url})"` with `title`/`url` from parameters.',
-        good_example=('`f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with markdown_label listed under labelSanitizers.'),
-        confidence_rationale=(
-            "Medium confidence: exact configured call targets, same-function "
-            "assignments, one-hop aliases, and conservative branch/rebinding "
-            "joins replace the former any-call proxy."
-        ),
-        config_keys=config_keys,
-        security_metadata=rule_security_metadata(rule_id),
-        false_positive_shapes=(
-            FalsePositiveShape(
-                shape=("Link slots interpolating values already constrained upstream (enum names, validated slugs) without a wrapping call."),
-                mitigation=(
-                    "Wrap the value in the sanitising helper anyway (cheap "
-                    "and self-documenting), or suppress with "
-                    "`# gruff: disable=security.unsanitized-markdown-interpolation` "
-                    "plus the constraint."
-                ),
-            ),
-            FalsePositiveShape(
-                shape=(
-                    "A label wrapped in html.escape(...) or markupsafe.escape(...) "
-                    "still reports under the strict default. This is deliberate: "
-                    "HTML escaping leaves `]`, `(`, and `)` unchanged, so "
-                    "`evil](https://bad.example)` still injects a Markdown link."
-                ),
-                mitigation=(
-                    "After verifying that the project's renderer makes HTML escaping "
-                    "sufficient, add the exact helper to labelSanitizers; otherwise use "
-                    "a Markdown-aware label sanitizer."
-                ),
-            ),
-        ),
-    )
-
-
 def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     return RuleDocs(
         rationale=(
@@ -524,8 +430,6 @@ def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
     """
     documentation_factory = {
         AbbreviationRule.ID: _abbreviation_docs,
-        BooleanPrefixRule.ID: _boolean_prefix_docs,
-        HungarianNotationRule.ID: _hungarian_notation_docs,
         IdentifierQualityRule.ID: _identifier_quality_docs,
     }[rule_id]
     return documentation_factory(config_keys)
@@ -576,49 +480,6 @@ def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _boolean_prefix_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Explain exact scalar Boolean annotation matching to scan users.
-
-    Args:
-        config_keys: Public tuning paths; empty means users cannot preserve an
-            external boundary name through configuration.
-
-    Returns:
-        Rule guidance covering supported shapes and deliberate collisions.
-    """
-    return RuleDocs(
-        rationale=(
-            "Scalar Boolean returns and attributes are easier to review when "
-            "their names reveal predicate intent; container members and callable "
-            "return parameters do not impose that naming contract."
-        ),
-        fix_guidance=(
-            "Rename a scalar Boolean declaration with an is_/has_/can_-style "
-            "predicate, or list an exact external boundary name under "
-            "acceptedBooleanNames."
-        ),
-        bad_example="`def status() -> bool: ...` hides the Boolean result in a noun.",
-        good_example=("`def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` is outside this scalar rule."),
-        confidence_rationale=(
-            "Medium confidence: exact bool, optional-bool, and Annotated scalar "
-            "syntax is matched structurally, including bounded quoted annotations; "
-            "containers, callables, mixed unions, and arbitrary generics stay quiet."
-        ),
-        config_keys=config_keys,
-    )
-
-
-def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale=("Type prefixes duplicate information that type hints and readable names already carry."),
-        fix_guidance=("Drop type prefixes such as `str_`, `dict_`, or `arr_`; keep semantic count names such as `num_items` or `n_samples`."),
-        bad_example='`str_message = "hello"` or `dict_users = {}`',
-        good_example='`message = "hello"` or `num_users = len(users)`',
-        confidence_rationale=("High confidence: narrow type-prefix vocabulary; count abbreviations are excluded."),
-        config_keys=config_keys,
-    )
-
-
 def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     """Explain the narrow placeholder vocabulary shown to scan users.
 
@@ -646,39 +507,6 @@ def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         ),
         config_keys=config_keys,
     )
-
-
-def _pii_test_fixture_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale="Test fixtures should use placeholders, not realistic third-party PII.",
-        fix_guidance=(
-            "Use reserved domains such as `example.com`, `.test`, `.local`, "
-            "`.invalid`, `.localhost`, or `.example`; use `555` phone placeholders "
-            "and keep epoch or reset timestamps named with timestamp context."
-        ),
-        bad_example='`email = "jane.doe@gmail.com"` or `phone = "4158675309"`',
-        good_example='`email = "admin@app.test"` or `phone = "+1-415-555-0100"`',
-        confidence_rationale="Medium confidence: raw test text scan with explicit escapes.",
-        config_keys=config_keys,
-    )
-
-
-def _test_quality_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
-    """Dispatch one curated test-quality card without growing catalog branching.
-
-    Args:
-        rule_id: Matched test-quality rule id; empty or unknown ids are never routed here.
-        config_keys: Public settings shown in generated docs; empty means none.
-
-    Returns:
-        Curated documentation for the matched test-quality rule.
-    """
-    documentation_factory = {
-        LoopInTestRule.ID: _loop_in_test_docs,
-        MysteryGuestRule.ID: _mystery_guest_docs,
-        NoAssertionsRule.ID: _no_assertions_docs,
-    }[rule_id]
-    return documentation_factory(config_keys)
 
 
 def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
@@ -713,61 +541,6 @@ def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
                 mitigation="Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.",
             ),
         ),
-    )
-
-
-def _mystery_guest_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale=(
-            "A test that performs network, filesystem, mail, or FTP I/O when it runs depends on state outside "
-            "the test, so it is slow, non-hermetic, and can fail for a reason the test body does not show."
-        ),
-        fix_guidance=(
-            "Mock the I/O boundary or serve the dependency from a fixture. Open files under a `tmp_path` or "
-            "`tmpdir` fixture, which the rule already treats as hermetic."
-        ),
-        bad_example="`def test_health(): assert requests.get('https://api.example.test/health').ok`",
-        good_example="`def test_write(tmp_path):\n    with open(tmp_path / 'out.txt', 'w') as handle:\n        handle.write('x')`",
-        confidence_rationale=(
-            "Medium confidence: the rule matches calls that perform I/O when they run - module helpers such as "
-            "`requests.get`, socket, FTP and SMTP entry points, and request methods on a client the test built - "
-            "and skips constructors, parameters that shadow a module name, and assertion calls, but it cannot "
-            "tell whether a URL points at a local fixture server."
-        ),
-        config_keys=config_keys,
-    )
-
-
-def _loop_in_test_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale=(
-            "A loop in a test body runs every case under one pass or fail, so a failure does not say which "
-            "iteration broke and the cases cannot be selected or rerun on their own."
-        ),
-        fix_guidance="Enumerate the cases with `@pytest.mark.parametrize` so each one produces its own pass or fail.",
-        bad_example="`def test_parse(): for text in ['1', '2']: assert parse(text)`",
-        good_example="`@pytest.mark.parametrize('text', ['1', '2'])\ndef test_parse(text): assert parse(text)`",
-        confidence_rationale=(
-            "Medium confidence: every `for`, `async for`, and `while` loop in a collected test reports except a "
-            "fixture sweep, and a loop can legitimately be the behaviour under test."
-        ),
-        config_keys=config_keys,
-    )
-
-
-def _commented_out_code_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale="Tombstoned source comments make reviewers ask whether dead code still matters.",
-        fix_guidance=(
-            "Delete commented-out source code or turn it into prose documentation; "
-            "docstring examples are ignored because only tokenizer comment tokens are scanned."
-        ),
-        bad_example="`# old_value = compute()`",
-        good_example="`# Recompute only after the cache expires.`",
-        confidence_rationale=(
-            "Low confidence: source-comment tokens pass a cheap code-like prefilter and parser confirmation, but prose can still resemble Python."
-        ),
-        config_keys=config_keys,
     )
 
 

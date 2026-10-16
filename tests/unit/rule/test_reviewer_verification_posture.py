@@ -48,7 +48,6 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.ssrf": (True, "error", "high"),
     "security.unsafe-pickle": (True, "error", "high"),
     "security.unsafe-yaml-load": (True, "error", "high"),
-    "security.unsanitized-markdown-interpolation": (True, "advisory", "medium"),
     "security.variable-import": (True, "warning", "medium"),
     "security.weak-crypto": (True, "warning", "high"),
     "security.xxe": (True, "error", "high"),
@@ -62,7 +61,6 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
     "sensitive-data.phi-pattern": (True, "warning", "medium"),
-    "sensitive-data.pii-test-fixture": (True, "warning", "medium"),
     "sensitive-data.private-key": (True, "warning", "high"),
     "sensitive-data.url-credentials": (False, "warning", "high"),
 }

@@ -123,7 +123,6 @@ _EXPECTED_RULE_IDS = {
     "docs.missing-return-doc",
     "docs.missing-raises-doc",
     "docs.stale-param-doc",
-    "docs.useless-docstring",
     "docs.todo-density",
     "docs.missing-readme",
 }

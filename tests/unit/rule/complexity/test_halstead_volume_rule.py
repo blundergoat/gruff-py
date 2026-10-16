@@ -1,13 +1,6 @@
 import ast
 
-from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
-from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity._halstead import halstead_for
-from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
-from gruffpy.rule.context import RuleContext
-from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
@@ -16,28 +9,6 @@ def _first_fn(source: str) -> ast.FunctionDef:
         if isinstance(node, ast.FunctionDef):
             return node
     raise AssertionError("no function found")
-
-
-def _make_unit(source: str) -> AnalysisUnit:
-    tree = ast.parse(source)
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
-    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    return AnalysisUnit(file=file, source=source, tree=tree)
-
-
-def _ctx(threshold: int = 180) -> RuleContext:
-    rule = HalsteadVolumeRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(
-                enabled=True,
-                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
-            ),
-        }
-    )
-    return RuleContext(project_root="/", config=config)
 
 
 def test_simple_function_low_volume():
@@ -96,17 +67,6 @@ def test_nested_function_not_included():
     metrics = halstead_for(_first_fn(src))
     # outer's body has no operators
     assert metrics.total_operators == 0
-
-
-def test_huge_function_emits_finding():
-    # Force vocabulary and length high with both BinOps and Compares.
-    # Volume well over the error threshold -> finding.
-    pairs = "\n".join(f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}" for i in range(60))
-    src = f"def f():\n{pairs}\n"
-    findings = HalsteadVolumeRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
-    assert findings[0].metadata["halsteadVolume"] > 400
 
 
 _RADON_VOLUMES = {

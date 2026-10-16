@@ -39,6 +39,22 @@ The operator accepted M02's review amendment and M95 runtime scope, inherited by
 
 The workspace evidence is `.goat-flow/plans/0.6.0-precision-floor/evidence/m02/py-line/verification.json` (search: `modernisation.f-string-candidate`). Its M102 record-retirement transition preserves the historical review record under workspace ADR-010. Existing retired-id configuration, suppression and selection behavior above remains in force; no replacement is enabled. The other approved Python retirements remain pending.
 
+## Remaining M02 retirements, 2026-10-17
+
+The operator approved these twenty-eight additional retirements through M02's tables and M95's source scope, inherited by M102. Together with the f-string pilot they implement the twenty-nine approved Python deletions. The py-004 exception preserves `docs.missing-return-doc` for a bounded repair.
+
+- complexity: `complexity.halstead-volume`, `complexity.maintainability-index`.
+- docs: `docs.useless-docstring`.
+- naming: `naming.boolean-prefix`, `naming.confusing-name`, `naming.hungarian-notation`, `naming.module-name-mismatch`.
+- security: `security.unsanitized-markdown-interpolation`.
+- sensitive-data: `sensitive-data.pii-test-fixture`.
+- test-quality: `test-quality.conditional-logic`, `test-quality.eager-test`, `test-quality.exception-type-only`, `test-quality.extends-production-class`, `test-quality.loop-in-test`, `test-quality.magic-number-assertion`, `test-quality.mock-without-expectation`, `test-quality.multiple-aaa-cycles`, `test-quality.mystery-guest`, `test-quality.parametrize-annotation`, `test-quality.skipped-without-reason`, `test-quality.sleep-in-test`, `test-quality.tautological-type-assertion`, `test-quality.trivial-snapshot`.
+- waste: `waste.commented-out-code`, `waste.empty-class`, `waste.one-line-function`, `waste.redundant-variable`, `waste.unused-import`.
+
+The catalogue falls from 124 to 96; all ninety-six surviving native records compare exactly with the committed pilot. The native absence table preserves positive source cases and explicitly enables each old setting. Halstead and maintainability calculations remain available through `metric-calibration`, whose three-metric output and default threshold payloads compare byte-for-byte. Shared calculation tests and the retained documentation rule's content-word helper remain; retired-only Markdown helpers and options are removed.
+
+The workspace records an M102 record-retirement transition preserving every prior native record and reviewed judgment under workspace ADR-010. Original retired-id configuration behaviour remains in force. Workspace `0.6.0-precision-floor/evidence/m02/py-retirements/` retains source and measurement evidence. Final verification, remaining default-off decisions and repairs, and milestone acceptance remain separate gates.
+
 ## Reversibility
 
 A retired rule can return as a new, measured rule; `.goat-flow/plans/0.7.0-roadmap/rules-to-rebuild.md` in the workspace

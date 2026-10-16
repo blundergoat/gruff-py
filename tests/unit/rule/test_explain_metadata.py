@@ -16,14 +16,8 @@ _OPTION_DESCRIPTION_RULES = (
     "docs.complex-branch-rationale",
     "docs.dataclass-attributes",
     "docs.missing-class-docstring",
-    "docs.useless-docstring",
-    "naming.confusing-name",
     "naming.generic-function",
-    "naming.module-name-mismatch",
     "naming.short-variable",
-    "security.unsanitized-markdown-interpolation",
-    "test-quality.extends-production-class",
-    "test-quality.magic-number-assertion",
     "test-quality.mocking-domain-object",
     "test-quality.test-longer-than-sut",
 )
@@ -100,24 +94,6 @@ def test_abbreviation_docs_expose_false_positive_shape() -> None:
     assert "project vocabulary" in docs.false_positive_shapes[0].shape
     assert "allowlists.acceptedAbbreviations" in docs.false_positive_shapes[0].mitigation
     assert "falsePositiveShapes" in payload
-
-
-def test_markdown_rule_explains_slot_specific_sanitizer_options() -> None:
-    """Give users separate label and URL guidance in explain-mode payloads."""
-    docs = documentation_for_rule("security.unsanitized-markdown-interpolation")
-
-    assert "labelSanitizers" in docs.option_descriptions
-    assert "urlSanitizers" in docs.option_descriptions
-    assert any("html.escape" in shape.shape for shape in docs.false_positive_shapes)
-
-
-def test_boolean_prefix_docs_explain_scalar_annotation_boundary() -> None:
-    """Tell users why containers and callables receive no predicate-name finding."""
-    docs = documentation_for_rule("naming.boolean-prefix")
-
-    assert "Scalar Boolean" in docs.rationale
-    assert "containers" in docs.confidence_rationale
-    assert "acceptedBooleanNames" in docs.fix_guidance
 
 
 def test_identifier_quality_docs_separate_domain_names_from_placeholders() -> None:

@@ -5,12 +5,10 @@ from pathlib import Path
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.test_quality._pytest_config import reset_cache
 from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
-from gruffpy.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
 from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
 )
@@ -128,7 +126,7 @@ def test_coverage_source_present_skips(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "rule_cls",
-    [MockingDomainObjectRule, MultipleAaaCyclesRule],
+    [MockingDomainObjectRule],
     ids=lambda c: c.__name__,
 )
 def test_test_quality_rules_default_on(rule_cls: type) -> None:
@@ -138,29 +136,3 @@ def test_test_quality_rules_default_on(rule_cls: type) -> None:
         rule_cls: Rule class expected to ship with ``default_enabled=True``.
     """
     assert rule_cls().definition().default_enabled is True
-
-
-def test_multiple_aaa_cycles_enabled_by_default():
-    """Default config keeps multiple-AAA-cycles enabled in the registry."""
-    config = AnalysisConfig.from_registry(RuleRegistry.defaults())
-    settings = config.rule_settings(MultipleAaaCyclesRule.ID)
-    assert settings.enabled is True
-
-
-def test_multiple_aaa_cycles_fires_when_configured(tmp_path: Path):
-    """The rule fires on multi-cycle tests when its threshold is tight.
-
-    Args:
-        tmp_path: Pytest-provided per-test directory used as the project root.
-    """
-    rule = MultipleAaaCyclesRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(enabled=True, thresholds={"maxCycles": 1}),
-        }
-    )
-    ctx = RuleContext(project_root=str(tmp_path), config=config)
-    src = "def test_x():\n    x = compute()\n    assert x == 1\n    y = compute()\n    assert y == 2\n    z = compute()\n    assert z == 3\n"
-    findings = rule.analyse(make_unit(src), ctx)
-    assert len(findings) == 1
-    assert findings[0].metadata["cycles"] >= 2

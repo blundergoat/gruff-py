@@ -33,8 +33,8 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
 
 _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
-    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
-    Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
+    Pillar.COMPLEXITY: "Cyclomatic, cognitive, and nesting",
+    Pillar.MAINTAINABILITY: "Reserved after the maintainability-index rule retired",
     Pillar.CORRECTNESS: "Mechanically detectable runtime-defect shapes",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
@@ -399,9 +399,9 @@ def _choosing_rules_lines() -> list[str]:
         "",
         "```yaml",
         "rules:",
-        "  test-quality.eager-test:",
+        "  test-quality.excessive-mocking:",
         "    thresholds:",
-        "      maxAssertions: 5",
+        "      maxMocks: 4",
         "```",
         "",
     ]

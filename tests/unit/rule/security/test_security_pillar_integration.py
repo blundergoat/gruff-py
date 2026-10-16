@@ -142,7 +142,7 @@ def test_safe_equivalents_emit_no_security_findings():
 
 def test_security_registry_has_expected_rule_count():
     ids = {rule.definition().id for rule in RuleRegistry.defaults().all() if rule.definition().id.startswith("security.")}
-    assert len(ids) == 33
+    assert len(ids) == 32
     assert _EXPECTED_RULE_IDS.issubset(ids)
     assert {
         "security.dependency-git-reference",

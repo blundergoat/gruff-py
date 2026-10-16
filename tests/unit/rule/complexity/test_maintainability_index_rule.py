@@ -1,54 +1,14 @@
 import ast
 import math
 
-from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
-from gruffpy.finding.pillar import Pillar
-from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
-from gruffpy.rule.complexity.maintainability_index_rule import (
-    MaintainabilityIndexRule,
-    maintainability_index_for,
-)
-from gruffpy.rule.context import RuleContext
+from gruffpy.command.metric_calibration import _maintainability_index_for
 from gruffpy.rule.size._lines import code_line_numbers
-from gruffpy.source.source_file import SourceFile
-
-
-def _first_fn(source: str) -> ast.FunctionDef:
-    tree = ast.parse(source)
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
-            return node
-    raise AssertionError("no function found")
 
 
 def _mi(source: str) -> float:
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef))
-    return maintainability_index_for(fn, code_line_numbers(source, tree))
-
-
-def _make_unit(source: str) -> AnalysisUnit:
-    tree = ast.parse(source)
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
-    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    return AnalysisUnit(file=file, source=source, tree=tree)
-
-
-def _ctx(threshold: int = 80) -> RuleContext:
-    rule = MaintainabilityIndexRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(
-                enabled=True,
-                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
-            ),
-        }
-    )
-    return RuleContext(project_root="/", config=config)
+    return _maintainability_index_for(fn, code_line_numbers(source, tree))
 
 
 def _branched_body(branch_count: int, with_elif: bool = False) -> str:
@@ -100,36 +60,6 @@ def test_complex_function_lowers_mi():
     src = _branched_body(40)
     mi = _mi(src)
     assert mi < 80.0  # below default warning
-
-
-def test_warning_finding_emitted_for_low_mi():
-    # Use 40-branch fixture so MI is guaranteed below default warning=80.
-    src = _branched_body(40)
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    finding = findings[0]
-    assert finding.pillar == Pillar.MAINTAINABILITY  # separate pillar
-    assert "maintainabilityIndex" in finding.metadata
-    assert finding.severity in (Severity.WARNING, Severity.ERROR)
-
-
-def test_error_finding_emitted_for_very_low_mi():
-    # Aggressively low MI: many branches and operators.
-    src = _branched_body(80, with_elif=True)
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
-
-
-def test_lower_threshold_means_worse_mi_is_threshold():
-    # Threshold semantics: lower MI = worse.
-    src = "def f(x):\n    return x + 1\n"
-    # threshold = 100 -> 100 is NOT below 100, no finding
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=100))
-    assert findings == []
-    # threshold = 110 -> 100 is below 110, finding emitted
-    findings2 = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=110))
-    assert len(findings2) == 1
 
 
 def test_documenting_a_function_leaves_its_index_unchanged():

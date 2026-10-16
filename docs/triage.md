@@ -8,7 +8,7 @@
 gruff-py summary --group-by=rule tests/
 ```
 
-Output shape:
+The output shape below uses the earlier catalogue. `test-quality.trivial-snapshot`, `test-quality.loop-in-test` and `test-quality.parametrize-annotation` were retired in 0.6.0; their rows illustrate formatting rather than current findings.
 
 ```
 gruff-py 0.6.0 summary

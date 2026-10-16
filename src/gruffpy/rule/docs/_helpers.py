@@ -7,6 +7,7 @@ broader ``_python_dynamism`` helper.
 """
 
 import ast
+import re
 from collections.abc import Iterator
 
 from gruffpy.rule.context import RuleContext
@@ -278,3 +279,55 @@ def _decorator_name(decorator: ast.AST) -> str:
         prefix = _decorator_name(decorator.value)
         return f"{prefix}.{decorator.attr}" if prefix else decorator.attr
     return ""
+
+
+_WORD_PATTERN = re.compile(r"[A-Za-z]+")
+
+_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "as",
+        "at",
+        "be",
+        "by",
+        "do",
+        "does",
+        "docstring",
+        "for",
+        "from",
+        "get",
+        "gets",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "method",
+        "module",
+        "of",
+        "on",
+        "or",
+        "perform",
+        "return",
+        "returns",
+        "run",
+        "runs",
+        "set",
+        "sets",
+        "that",
+        "the",
+        "this",
+        "thing",
+        "to",
+        "value",
+        "values",
+        "with",
+    }
+)
+
+
+def _content_words(summary: str) -> list[str]:
+    """Return lowercased non-stop-word tokens from *summary*."""
+    return [w.lower() for w in _WORD_PATTERN.findall(summary) if w.lower() not in _STOP_WORDS and len(w) > 1]

@@ -82,16 +82,16 @@ rules:
     threshold: 900
     severity: error
 
-  test-quality.eager-test:
+  test-quality.excessive-mocking:
     thresholds:
-      maxAssertions: 5
+      maxMocks: 4
 
-  naming.boolean-prefix:
+  naming.short-variable:
     options:
-      acceptedBooleanNames:
-        - ok
-        - enabled
-        - verbose
+      acceptedShortNames:
+        - i
+        - j
+        - k
 ```
 
 ## pyproject.toml Example
@@ -137,11 +137,11 @@ reason = "Synthetic key used by the loader fixture; not a live credential."
 threshold = 900
 severity = "error"
 
-[tool.gruff-py.rules."test-quality.eager-test"]
-thresholds = { maxAssertions = 5 }
+[tool.gruff-py.rules."test-quality.excessive-mocking"]
+thresholds = { maxMocks = 4 }
 
-[tool.gruff-py.rules."naming.boolean-prefix".options]
-acceptedBooleanNames = ["ok", "enabled", "verbose"]
+[tool.gruff-py.rules."naming.short-variable".options]
+acceptedShortNames = ["i", "j", "k"]
 ```
 
 ## Supported Keys
@@ -242,7 +242,7 @@ deliberately separate from `selection`, so no message- or value-matching key can
 sensitive-data pillar.
 
 A built-in test-path skip also hides sensitive-data and security findings in test, fixture and example files, and counts each one in `suppressions`.
-It covers every sensitive-data rule except `sensitive-data.pii-test-fixture`.
+It covers every shipping sensitive-data rule.
 A configured entry applies first, so a finding it claims is counted under the entry.
 
 ```yaml
@@ -337,50 +337,9 @@ Prefer a rename when the short token is temporary, ambiguous, or means
 different things in different modules. The allowlist is a project vocabulary
 contract, not a general exemption for short names.
 
-## Boolean Boundary Names
+## Retired Boolean Boundary Options
 
-`naming.boolean-prefix` normally asks boolean-returning functions, methods, and
-fields to use names such as `is_ready`, `has_token`, or `can_retry`. Exact
-external boundary names can be allowed with
-`rules.naming.boolean-prefix.options.acceptedBooleanNames` when a rename would
-break a CLI option, DTO/schema field, wire-format key, or protocol contract.
-
-The rule matches scalar annotation shapes only: `bool`, exact optional forms
-such as `Optional[bool]`, `bool | None`, and `Union[bool, None]`, plus
-`Annotated` wrappers around those shapes. It does not treat `list[bool]`,
-`tuple[bool, ...]`, dictionaries, iterators, generators, callables, mixed
-unions, or arbitrary generics as scalar Boolean declarations. Explicit quoted
-annotations use the same bounded syntax matcher; gruff-py never evaluates the
-text or imports user code.
-
-Emitted findings add provisional `metadata.annotationShape` with `bool`,
-`optional-bool`, or `annotated-bool` so report consumers can explain why the
-name was reviewed. This additive key is registered in workspace
-`FAMILY-CONTRACT.md` §4 pending family vocabulary ratification; it does not
-participate in fingerprints or stable identities.
-
-Before configuring an exact boundary name, `ok` is treated like any other vague
-boolean name:
-
-```python
-def ok() -> bool:
-    return True
-```
-
-After adding an exact allowlist entry, the protocol name can remain stable
-without disabling the rule for unrelated names:
-
-```yaml
-rules:
-  naming.boolean-prefix:
-    options:
-      acceptedBooleanNames:
-        - ok
-```
-
-Prefer the narrowest exact names needed by the boundary. Do not add broad
-project vocabulary when the identifier can be renamed to a clearer boolean
-prefix.
+`naming.boolean-prefix` is retired in 0.6.0, including `acceptedBooleanNames`. Remove its settings, selections and suppression comments. It no longer reports Boolean names, and no replacement is enabled. Obsolete rule blocks warn by default or fail with `--strict-config`.
 
 ## Tooling And Evaluation Paths
 
@@ -399,8 +358,6 @@ structural rules:
 ```yaml
 schemaVersion: gruff-py.config.v0.1
 rules:
-  naming.boolean-prefix:
-    enabled: false
   complexity.cognitive:
     threshold: 30
     severity: warning
@@ -430,61 +387,12 @@ safety run gates every finding from the selected safety pillars. Calibrate the
 tooling config against the real scripts rather than copying the example
 threshold as a universal recommendation.
 
-For one isolated file contract, a precise file directive is smaller than a
-second config:
-
-```python
-# gruff: disable-file=naming.boolean-prefix -- external evaluation schema fixes these names
-```
-
-Keep the rationale local and suppress only the named rule. See
+Remove older file directives naming `naming.boolean-prefix`, retired in 0.6.0; the retired ID makes a suppression invalid. For surviving rules, keep the rationale local and suppress only the named rule. See
 [Suppressing Findings](rules.md#suppressing-findings) for the complete syntax.
 
-## Markdown Link Sanitizers
+## Retired Markdown Link Sanitizers
 
-`security.unsanitized-markdown-interpolation` checks visible labels and click
-targets separately. In 0.5.0, labels trust no call by default. URLs trust
-`urllib.parse.quote` and `urllib.parse.quote_plus` only when no `safe` argument
-is supplied, or when `safe` is a literal string containing none of `]`, `(`,
-or `)`. A dynamic `safe`, `safe='()'`, a second positional value containing
-those delimiters, or any `*args`/`**kwargs` splat remains a finding.
-
-Configure project helpers by their exact Python call targets:
-
-```yaml
-rules:
-  security.unsanitized-markdown-interpolation:
-    options:
-      labelSanitizers:
-        - markdown_label
-        - helpers.markdown_label
-      urlSanitizers:
-        - urllib.parse.quote
-        - urllib.parse.quote_plus
-        - helpers.markdown_url
-```
-
-Targets are exact dotted identifiers: no wildcards, substrings, or inferred
-`safe`/`escape` names. Same-file imports are recognized, so
-`from urllib.parse import quote as encode_url` lets `encode_url(value)` match
-the canonical URL default until that alias is reassigned or shadowed by a
-parameter. The scanner never imports user code or follows an import graph.
-
-Set either list to `[]` for strict mode in that slot. In particular,
-`urlSanitizers: []` makes even `urllib.parse.quote(...)` untrusted. An empty
-`labelSanitizers` list is already the generated default.
-
-`html.escape` and `markupsafe.escape` are not label defaults. Both leave the
-Markdown delimiters `]`, `(`, and `)` unchanged, so a label such as
-`evil](https://bad.example)` still injects a rival link. Add one to
-`labelSanitizers` only after verifying that the project's renderer makes HTML
-escaping sufficient for that specific context.
-
-Migration from 0.4.1: the old rule accepted any wrapper call. Add every real
-project sanitizer to the matching option, then review findings from `str(...)`,
-identity helpers, wrong-slot calls, shadowed targets, raw overwrites, and
-ambiguous branches. Assigned sanitizer results and one-hop value aliases remain
-accepted within the same function.
+`security.unsanitized-markdown-interpolation` is retired in 0.6.0. Remove its rule block, including `labelSanitizers` and `urlSanitizers`; these options no longer configure an analyser. Its selection and suppression entries are invalid. Other security rules keep their existing settings.
 
 ## Severity Gate
 

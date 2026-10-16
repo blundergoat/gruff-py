@@ -1,8 +1,4 @@
 # gruff: disable-file=size.file-length -- end-to-end CLI smoke covers every subcommand.
-# gruff: disable-file=test-quality.eager-test -- smoke tests assert many invariants per call.
-# gruff: disable-file=test-quality.loop-in-test -- loops enumerate output rows, not test cases.
-# gruff: disable-file=test-quality.magic-number-assertion -- column positions are the contract.
-# gruff: disable-file=test-quality.conditional-logic -- branches mirror the --format axis.
 # gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
 # gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
 """Exercise complete CLI journeys from user-entered options to visible output.
@@ -795,7 +791,7 @@ def test_cli_list_rules_json_lists_rule_metadata():
 def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
     payload = _list_rules_payload()
 
-    heuristic_rule = next(candidate for candidate in payload["rules"] if candidate["id"] == "complexity.halstead-volume")
+    heuristic_rule = next(candidate for candidate in payload["rules"] if candidate["id"] == "dead-code.unused-private-attribute")
     assert heuristic_rule["falsePositiveShapes"]
     assert "falsePositiveShapes" not in heuristic_rule["documentation"]
 
@@ -809,7 +805,7 @@ def test_cli_list_rules_json_publishes_thresholds_as_named_knob_maps():
     # A rubric with no knob name anywhere in the family publishes the one-key map.
     assert rules["docs.todo-density"]["thresholds"] == {"threshold": 10}
     # A named-knob rule publishes its map unchanged.
-    assert rules["test-quality.eager-test"]["thresholds"] == {"maxAssertions": 5}
+    assert rules["test-quality.excessive-mocking"]["thresholds"] == {"maxMocks": 4}
     # A rule with no threshold omits the key, and no rule publishes the retired scalar.
     assert "thresholds" not in rules["security.ssrf"]
     assert [rule_id for rule_id, rule in rules.items() if "threshold" in rule] == []

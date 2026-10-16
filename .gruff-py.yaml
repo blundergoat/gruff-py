@@ -65,7 +65,6 @@ selection:
   - v0.1
   pillars:
   - complexity
-  - maintainability
   - correctness
   - dead-code
   - design
@@ -78,8 +77,6 @@ selection:
   rules:
   - complexity.cognitive
   - complexity.cyclomatic
-  - complexity.halstead-volume
-  - complexity.maintainability-index
   - complexity.nesting-depth
   - correctness.substring-vocabulary-match
   - correctness.unsafe-numeric-coercion
@@ -99,14 +96,9 @@ selection:
   - docs.missing-return-doc
   - docs.stale-param-doc
   - docs.todo-density
-  - docs.useless-docstring
   - naming.abbreviation
-  - naming.boolean-prefix
-  - naming.confusing-name
   - naming.generic-function
-  - naming.hungarian-notation
   - naming.identifier-quality
-  - naming.module-name-mismatch
   - naming.short-variable
   - naming.test-naming-consistency
   - security.cors-wildcard-with-credentials
@@ -138,7 +130,6 @@ selection:
   - security.ssrf
   - security.unsafe-pickle
   - security.unsafe-yaml-load
-  - security.unsanitized-markdown-interpolation
   - security.variable-import
   - security.weak-crypto
   - security.xxe
@@ -149,7 +140,6 @@ selection:
   - sensitive-data.hardcoded-env-value
   - sensitive-data.jwt-token
   - sensitive-data.phi-pattern
-  - sensitive-data.pii-test-fixture
   - sensitive-data.private-key
   - sensitive-data.url-credentials
   - size.attribute-count
@@ -159,47 +149,28 @@ selection:
   - size.function-length
   - size.parameter-count
   - size.public-method-count
-  - test-quality.conditional-logic
-  - test-quality.eager-test
   - test-quality.empty-parametrize
-  - test-quality.exception-type-only
   - test-quality.excessive-mocking
-  - test-quality.extends-production-class
   - test-quality.global-state-mutation
   - test-quality.loop-assertion-without-message
-  - test-quality.loop-in-test
-  - test-quality.magic-number-assertion
   - test-quality.mock-only-test
-  - test-quality.mock-without-expectation
   - test-quality.mocking-domain-object
-  - test-quality.multiple-aaa-cycles
-  - test-quality.mystery-guest
   - test-quality.naming-consistency
   - test-quality.no-assertions
-  - test-quality.parametrize-annotation
   - test-quality.private-reflection
   - test-quality.pytest-coverage-source-missing
   - test-quality.pytest-deprecations-not-fatal
   - test-quality.pytest-strict-config-missing
   - test-quality.repeated-structure-missing-parametrize
   - test-quality.setup-bloat
-  - test-quality.skipped-without-reason
-  - test-quality.sleep-in-test
   - test-quality.static-analysis-redundant-test
   - test-quality.sut-not-called
-  - test-quality.tautological-type-assertion
   - test-quality.test-function-too-long
   - test-quality.test-longer-than-sut
   - test-quality.trivial-assertion
-  - test-quality.trivial-snapshot
   - test-quality.unused-mock
-  - waste.commented-out-code
-  - waste.empty-class
   - waste.empty-function
-  - waste.one-line-function
-  - waste.redundant-variable
   - waste.unreachable-code
-  - waste.unused-import
   excludePillars: []
   excludeRules: []
 # sensitiveExclusions is the only way to silence a sensitive-data finding.
@@ -217,16 +188,6 @@ rules:
   complexity.cyclomatic:
     enabled: false
     threshold: 20
-    severity: error
-  # Halstead volume
-  complexity.halstead-volume:
-    enabled: true
-    threshold: 400
-    severity: error
-  # Maintainability index
-  complexity.maintainability-index:
-    enabled: true
-    threshold: 70
     severity: error
   # Nesting depth
   complexity.nesting-depth:
@@ -324,60 +285,9 @@ rules:
     enabled: true
     threshold: 10
     severity: error
-  # Useless docstring
-  docs.useless-docstring:
-    enabled: true
-    options:
-      min_summary_words:
-        module: 6
-        class: 4
-        function: 4
   # Abbreviation
   naming.abbreviation:
     enabled: true
-  # Boolean prefix
-  naming.boolean-prefix:
-    enabled: true
-    options:
-      # `_fallback_applies_at` is an idiomatic subject-verb English predicate, the calibration class
-      # backlog.md records for this rule (search: `predicate-verb vocabulary in gruff-py`): the closed
-      # auxiliary-verb list cannot express it, and Python's own stdlib names booleans this way. It is
-      # accepted here rather than renamed because gruff-spec's M15 review evidence pins
-      # `def _fallback_applies_at(` as a live semantic anchor, and renaming to satisfy a style
-      # advisory would break immutable evidence. Extending the vocabulary is the backlog item.
-      acceptedBooleanNames:
-      - all
-      - apply
-      - check
-      - dev
-      - enabled
-      - fallback_applies_at
-      - force
-      - fresh
-      - harness
-      - json
-      - ok
-      - verbose
-      - 'yes'
-  # Confusing class name
-  naming.confusing-name:
-    enabled: true
-    options:
-      confusingNames:
-      - Handler
-      - Processor
-      - Manager
-      - Util
-      - Utils
-      - Helper
-      - Helpers
-      - Data
-      - Info
-      - Service
-      - Stuff
-      - Thing
-      - Object
-      - Item
   # Generic function name
   naming.generic-function:
     enabled: true
@@ -392,34 +302,9 @@ rules:
       - apply
       - manage
       - operate
-  # Hungarian notation
-  naming.hungarian-notation:
-    enabled: true
   # Identifier quality
   naming.identifier-quality:
     enabled: true
-  # Module name mismatch
-  naming.module-name-mismatch:
-    enabled: true
-    options:
-      # This list replaces the rule's default, so it restates the five default names first.
-      # python_parser.py holds PythonFileParser and is imported under that name by three
-      # modules; the rule would ask for python_file_parser.py. It is the only entry that
-      # silences a finding today. The other six are role-named modules exempted by design and
-      # pinned by tests/unit/config/test_gruff_py_yaml_registry_coverage.py.
-      conventionalModuleNames:
-      - constants
-      - exceptions
-      - helpers
-      - protocols
-      - types
-      - cli
-      - dashboard_server
-      - python_parser
-      - _halstead
-      - _secret_scanner_helper
-      - _comment_scanner
-      - _dependency_posture_helper
   # Short variable name
   naming.short-variable:
     enabled: true
@@ -526,14 +411,6 @@ rules:
   # Unsafe YAML load
   security.unsafe-yaml-load:
     enabled: true
-  # Unsanitized markdown interpolation
-  security.unsanitized-markdown-interpolation:
-    enabled: true
-    options:
-      labelSanitizers: []
-      urlSanitizers:
-      - urllib.parse.quote
-      - urllib.parse.quote_plus
   # Variable import
   security.variable-import:
     enabled: true
@@ -563,9 +440,6 @@ rules:
     enabled: true
   # PHI pattern
   sensitive-data.phi-pattern:
-    enabled: true
-  # PII in test fixture
-  sensitive-data.pii-test-fixture:
     enabled: true
   # Private key
   sensitive-data.private-key:
@@ -608,95 +482,34 @@ rules:
     enabled: true
     threshold: 10
     severity: error
-  # Conditional logic in test
-  test-quality.conditional-logic:
-    enabled: true
-  # Eager test
-  test-quality.eager-test:
-    enabled: true
-    thresholds:
-      maxAssertions: 5
   # Empty parametrize
   test-quality.empty-parametrize:
     enabled: true
-  # Exception type-only assertion
-  test-quality.exception-type-only:
-    enabled: false
   # Excessive mocking
   test-quality.excessive-mocking:
     enabled: true
     thresholds:
       maxMocks: 4
-  # Test class extends production class
-  test-quality.extends-production-class:
-    enabled: true
-    options:
-      additionalTestBases: []
   # Global state mutation in test
   test-quality.global-state-mutation:
     enabled: true
   # Loop assertion without message
   test-quality.loop-assertion-without-message:
     enabled: false
-  # Loop in test
-  test-quality.loop-in-test:
-    enabled: false
-  # Magic-number assertion
-  test-quality.magic-number-assertion:
-    enabled: true
-    options:
-      allowed_numbers:
-      - -1
-      - 0
-      - 1
-      - 2
-      - 3
-      - 200
-      - 201
-      - 204
-      - 301
-      - 302
-      - 400
-      - 401
-      - 403
-      - 404
-      - 409
-      - 422
-      - 429
-      - 500
-      - 502
-      - 503
-      - 504
   # Mock-only test
   test-quality.mock-only-test:
-    enabled: true
-  # Mock without expectation
-  test-quality.mock-without-expectation:
     enabled: true
   # Mocking domain object
   test-quality.mocking-domain-object:
     enabled: true
     options:
       domain_namespaces: []
-  # Multiple AAA cycles
-  test-quality.multiple-aaa-cycles:
-    enabled: true
-    thresholds:
-      maxCycles: 2
-  # Mystery guest in test
-  test-quality.mystery-guest:
-    enabled: true
   # Test-naming consistency
   test-quality.naming-consistency:
     enabled: true
   # Test without assertions
   test-quality.no-assertions:
     enabled: false
-  # Parametrize without `ids`
-  test-quality.parametrize-annotation:
-    enabled: false
-    thresholds:
-      maxCasesWithoutIds: 2
   # Private reflection in test
   test-quality.private-reflection:
     enabled: true
@@ -719,21 +532,12 @@ rules:
     enabled: true
     thresholds:
       maxSetupLines: 30
-  # Skipped without reason
-  test-quality.skipped-without-reason:
-    enabled: true
-  # Sleep in test
-  test-quality.sleep-in-test:
-    enabled: false
   # Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file.
   test-quality.static-analysis-redundant-test:
     enabled: true
   # System under test never called
   test-quality.sut-not-called:
     enabled: false
-  # Tautological type assertion
-  test-quality.tautological-type-assertion:
-    enabled: true
   # Test function too long
   test-quality.test-function-too-long:
     enabled: true
@@ -747,30 +551,12 @@ rules:
   # Trivial assertion
   test-quality.trivial-assertion:
     enabled: false
-  # Trivial snapshot assertion
-  test-quality.trivial-snapshot:
-    enabled: true
   # Unused mock
   test-quality.unused-mock:
-    enabled: true
-  # Commented-out code
-  waste.commented-out-code:
-    enabled: true
-  # Empty class
-  waste.empty-class:
     enabled: true
   # Empty function
   waste.empty-function:
     enabled: true
-  # One-line function wrapper
-  waste.one-line-function:
-    enabled: true
-  # Redundant variable
-  waste.redundant-variable:
-    enabled: true
   # Unreachable code
   waste.unreachable-code:
-    enabled: true
-  # Unused import
-  waste.unused-import:
     enabled: true

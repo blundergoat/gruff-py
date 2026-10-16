@@ -73,7 +73,7 @@ def test_rendered_rule_docs_explain_how_a_rule_measures_and_misfires() -> None:
     assert "Formula provenance: Radon-aligned decision-point counting." in _RENDERED_DOCS
     assert threshold_metadata in _RENDERED_DOCS
     assert "- Common false-positive shapes:" in _RENDERED_DOCS
-    assert "A declarative builder dominated by one literal table" in _RENDERED_DOCS
+    assert "A private attribute read through `getattr`, serialization, or framework reflection" in _RENDERED_DOCS
 
 
 def test_rendered_rule_docs_header_uses_runtime_totals() -> None:

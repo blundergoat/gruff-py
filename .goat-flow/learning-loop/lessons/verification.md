@@ -233,6 +233,21 @@ running broad verification.
 
 **Recurrence 2026-10-17:** The M02 f-string pilot removed the rule's settings and selection but left its sole `modernisation` pillar in `selection.pillars`. Full pytest failed `test_repo_yaml_lists_every_pillar_in_catalog_order` in `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`. Retiring a pillar's last rule also removes that pillar from the mirrored selection; the schema's pillar enum remains unchanged. Run the whole registry-coverage test before full pytest. The pilot also corrected formatter drift before its final proof.
 
+**Recurrence 2026-10-17, remaining M02 retirements:** A broader run found five stale expectations: the security count, generated Markdown settings, retired-rule prose, committed generated docs and a different heuristic's documentation shape. Read count-only assertions and generated prose as well as literal rule IDs. Preserve config, suppression, calculation and shared-rule controls with surviving representatives; rerun the original failing selection.
+
+The full native preflight then rejected four historical rule IDs and its documentation mutation control: historical prose must say "retired" or "removed" and a numeric version on the same line. Mark the actual retirement as 0.6.0 rather than deleting useful history or weakening scripts/preflight-checks.sh (search: phantom). The corrected original gate reports All 13/13 checks passed, including seven rejected documentation mutations.
+
+## Lesson: include surrounding delimiters when pruning catalogue literals
+
+**Created:** 2026-10-17
+**Decision changed:** Remove an entire catalogue entry, including grouping parentheses, and parse every prospective Python edit before applying it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** An AST constant's span ends at its last string token, before optional grouping parentheses. Include the delimiters and entry comma when removing metadata. Keep syntax validation ahead of source writes.
+
+M02's in-memory draft left two closing parentheses after removing the Halstead and maintainability provenance strings. `ast.parse` rejected it before a source write. Corrected spans removed the entries; `src/gruffpy/rule/catalog.py` (search: `_FORMULA_PROVENANCE`) retains cyclomatic provenance. Ruff also caught two long preserved fixture literals and an import-group gap. Splitting the literals kept their source bytes, and the native fixture and calibration checks were rerun.
+
 ## Lesson: Inspect each item's body before bucketing tests for bulk deletion
 
 **Created:** 2026-05-24
