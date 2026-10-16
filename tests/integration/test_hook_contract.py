@@ -81,14 +81,15 @@ def test_hook_changed_ranges_omit_file_scope_and_keep_line_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
     sample = src / "sample.py"
     _write_long_file_with_eval(sample, eval_line=500, total_lines=1010)
 
-    scoped = _hook("--no-config", "--changed-ranges", "500-500", "src/sample.py")
-    anchor = _hook("--no-config", "--changed-ranges", "1-1", "src/sample.py")
-    full = _hook("--no-config", "src/sample.py")
+    scoped = _hook("--config", ".gruff-py.yaml", "--changed-ranges", "500-500", "src/sample.py")
+    anchor = _hook("--config", ".gruff-py.yaml", "--changed-ranges", "1-1", "src/sample.py")
+    full = _hook("--config", ".gruff-py.yaml", "src/sample.py")
 
     scoped_rules = {finding["ruleId"]: finding for finding in scoped["findings"]}
     anchor_rules = {finding["ruleId"]: finding for finding in anchor["findings"]}
@@ -134,14 +135,15 @@ def test_hook_stable_identity_survives_line_shift_and_measured_value_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
 
     line_file = src / "line.py"
     line_file.write_text('value = eval("1")\n')
-    before_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
+    before_shift = _finding_by_rule(_hook("--config", ".gruff-py.yaml", "src/line.py"), "security.dangerous-function-call")
     line_file.write_text("# inserted\n" + line_file.read_text())
-    after_shift = _finding_by_rule(_hook("--no-config", "src/line.py"), "security.dangerous-function-call")
+    after_shift = _finding_by_rule(_hook("--config", ".gruff-py.yaml", "src/line.py"), "security.dangerous-function-call")
 
     assert before_shift["stableIdentity"] == after_shift["stableIdentity"]
     assert before_shift["fingerprint"] != after_shift["fingerprint"]
@@ -203,6 +205,7 @@ def test_hook_baseline_with_no_findings_is_accepted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text('value = eval("1")\n')
@@ -219,7 +222,7 @@ def test_hook_baseline_with_no_findings_is_accepted(
         )
     )
 
-    result = _invoke_hook("--no-config", "--baseline", str(clean_baseline), "src/sample.py")
+    result = _invoke_hook("--config", ".gruff-py.yaml", "--baseline", str(clean_baseline), "src/sample.py")
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -349,13 +352,15 @@ def test_hook_exclude_rule_removes_finding_from_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text('value = eval("1")\n')
 
-    full = _hook("--no-config", "src/sample.py")
+    full = _hook("--config", ".gruff-py.yaml", "src/sample.py")
     excluded = _hook(
-        "--no-config",
+        "--config",
+        ".gruff-py.yaml",
         "--exclude-rule",
         "security.dangerous-function-call",
         "src/sample.py",

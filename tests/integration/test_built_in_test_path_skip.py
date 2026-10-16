@@ -89,7 +89,10 @@ def test_test_path_class_skips_security_findings_and_counts_them(tmp_path: Path,
         (tmp_path / relative_path).write_text(source)
     monkeypatch.chdir(tmp_path)
 
-    payload = _analyse(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--config", ".gruff-py.yaml", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
     security_files = sorted({finding["file"] for finding in payload["findings"] if finding["ruleId"].startswith("security.")})
     security_rows = [row for row in payload["suppressions"] if row.get("source") == "built-in" and row["rule"].startswith("security.")]
 

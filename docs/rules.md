@@ -76,7 +76,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 ### Security
 
 - `security.cors-wildcard-with-credentials`
-- `security.dangerous-function-call`
+- `security.dangerous-function-call` (default off)
 - `security.dependency-git-reference`
 - `security.dependency-local-path`
 - `security.dependency-url-reference`
@@ -92,7 +92,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
 - `security.hardcoded-framework-secret-key`
-- `security.header-injection`
+- `security.header-injection` (default off)
 - `security.insecure-random`
 - `security.insecure-temp-file`
 - `security.insecure-tls-protocol`
@@ -103,16 +103,16 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.silent-except`
 - `security.ssrf`
 - `security.unsafe-pickle`
-- `security.unsafe-yaml-load`
-- `security.variable-import`
+- `security.unsafe-yaml-load` (default off)
+- `security.variable-import` (default off)
 - `security.weak-crypto`
-- `security.xxe`
+- `security.xxe` (default off)
 
 ### Sensitive Data
 
 - `sensitive-data.api-key-pattern` (default off)
 - `sensitive-data.aws-access-key`
-- `sensitive-data.database-url-password`
+- `sensitive-data.database-url-password` (default off)
 - `sensitive-data.gcp-service-account-key`
 - `sensitive-data.hardcoded-env-value`
 - `sensitive-data.jwt-token`
@@ -180,6 +180,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cyclomatic complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor.
 - Config threshold: `threshold` = `20`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
@@ -623,10 +624,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.dangerous-function-call` protects the security pillar by flagging dangerous function call before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported dangerous function call directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: 10 right of 15 judged, with 10 unresolved labels.
 - Bad example: Code that triggers `security.dangerous-function-call` leaves dangerous function call unaddressed.
 - Good example: Code that satisfies `security.dangerous-function-call` makes dangerous function call explicit or simpler.
 
@@ -872,10 +874,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.header-injection` protects the security pillar by flagging header injection before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported header injection directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: neither of two judged findings was right, and one label remained unresolved.
 - Common false-positive shapes:
   - A dynamic Flask header name can be selected from an internal allowlist or enum before the assignment, which this local AST check cannot prove.
     Mitigation: Map the validated choice to literal header assignments, or suppress the reviewed sink with the allowlist evidence.
@@ -1041,10 +1044,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.unsafe-yaml-load` protects the security pillar by flagging unsafe yaml load before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unsafe yaml load directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: two right of three judged, with one unresolved label.
 - Security metadata: `cwe` = `['CWE-502']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.unsafe-yaml-load` leaves unsafe yaml load unaddressed.
 - Good example: Code that satisfies `security.unsafe-yaml-load` makes unsafe yaml load explicit or simpler.
@@ -1056,10 +1060,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.variable-import` protects the security pillar by flagging variable import before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported variable import directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: three right of eleven judged, with eight unresolved labels.
 - Common false-positive shapes:
   - A dynamic module name can come from a closed plugin registry or internal allowlist that the import expression does not expose.
     Mitigation: Map allowed names to explicit imports, or suppress the reviewed import with the registry boundary that prevents user control.
@@ -1093,10 +1098,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.xxe` protects the security pillar by flagging xml external entity (xxe) before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported xml external entity (xxe) directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in after M02: only three default findings, two right and one unresolved, leave too little evidence for the precision floor.
 - Security metadata: `cwe` = `['CWE-611', 'CWE-776']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.xxe` leaves xml external entity (xxe) unaddressed.
 - Good example: Code that satisfies `security.xxe` makes xml external entity (xxe) explicit or simpler.
@@ -1136,10 +1142,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: Credentialed database URLs in source usually expose direct data access.
 - Fix guidance: Move real passwords to environment variables or a secret manager; use exact placeholders such as `password`, `change-me`, `dummy`, `fake`, or `redacted` only in examples.
 - Confidence rationale: High confidence: exact URL userinfo pattern with exact placeholder escapes.
+- Default-off reason: Opt-in after M02: none of seven judged findings was right, but only eight default findings were available, too few for deletion.
 - Bad example: A database URL literal with a real password in the userinfo segment.
 - Good example: `DATABASE_URL = "postgresql://user:change-me@host/db"`
 
@@ -1481,6 +1488,7 @@ except ValueError:
 - Rationale: Collected tests without assertions are easy to mistake for coverage.
 - Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
 - Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
+- Default-off reason: Remains opt-in under M02's accepted table: seven right of 36 judged findings do not establish its 0.70 precision floor.
 - Common false-positive shapes:
   - A test can assert through a matcher that raises on a mismatch without an `assert` name, such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`.
     Mitigation: Call the matcher through an `assert_*` helper, or suppress the reviewed test with `# gruff: disable=test-quality.no-assertions` and the matcher that asserts.
@@ -1621,6 +1629,7 @@ except ValueError:
 - Rationale: `test-quality.sut-not-called` protects the test-quality pillar by flagging system under test never called before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported system under test never called directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Remains opt-in under M02's accepted table: nine right of 28 judged findings do not establish its 0.70 precision floor.
 - Common false-positive shapes:
   - A contract test can validate module constants or metadata using only builtins and test helpers, with no callable system under test.
     Mitigation: Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.

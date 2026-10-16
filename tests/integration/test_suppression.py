@@ -19,6 +19,7 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
     monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text("def f():\n    return\n    eval('payload')  # gruff: disable=waste.unreachable-code\n")
@@ -31,7 +32,8 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
             "json",
             "--fail-on",
             "none",
-            "--no-config",
+            "--config",
+            ".gruff-py.yaml",
             "--include-rule",
             "waste.unreachable-code,security.dangerous-function-call",
             "src",
@@ -45,6 +47,7 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
 
 def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text("# gruff: disable-next=security.dangerous-function-call\neval('first')\neval('second')\n")
@@ -57,7 +60,8 @@ def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypat
             "json",
             "--fail-on",
             "none",
-            "--no-config",
+            "--config",
+            ".gruff-py.yaml",
             "--include-rule",
             "security.dangerous-function-call",
             "src",

@@ -33,9 +33,9 @@ class DangerousFunctionCallRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the dangerous-function-call rule as a high-confidence ERROR.
 
-        ERROR severity because arbitrary code execution surfaces are
-        unambiguous bugs; high confidence because the targets are exact
-        stdlib names with very few legitimate uses.
+        ERROR severity reflects the risk when the matched input is unsafe.
+        High confidence describes the exact built-in target match; the rule
+        does not establish input provenance.
 
         Returns:
             Definition for the dangerous-function-call rule under the
@@ -48,6 +48,7 @@ class DangerousFunctionCallRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

@@ -55,8 +55,23 @@ The catalogue falls from 124 to 96; all ninety-six surviving native records comp
 
 The workspace records an M102 record-retirement transition preserving every prior native record and reviewed judgment under workspace ADR-010. Original retired-id configuration behaviour remains in force. Workspace `0.6.0-precision-floor/evidence/m02/py-retirements/` retains source and measurement evidence. Final verification, remaining default-off decisions and repairs, and milestone acceptance remain separate gates.
 
+## M02 opt-in dispositions, 2026-10-17
+
+The operator approved continuation of M02's accepted nine-row default-off table under the source scope inherited by M103. Six retained rules become opt-in:
+
+- `security.dangerous-function-call`: ten right of fifteen judged, with ten unresolved labels; provenance review remained insufficient.
+- `security.header-injection`: neither of two judged findings was right, with one unresolved label; provenance review remained insufficient.
+- `security.unsafe-yaml-load`: two right of three judged, with one unresolved label; provenance review remained insufficient.
+- `security.variable-import`: three right of eleven judged, with eight unresolved labels; provenance review remained insufficient.
+- `security.xxe`: only three default findings, two right and one unresolved, leave insufficient evidence.
+- `sensitive-data.database-url-password`: none of seven judged findings was right; eight default findings are too few for deletion.
+
+`complexity.cyclomatic`, `test-quality.no-assertions` and `test-quality.sut-not-called` retain their existing opt-in defaults. Their measured reasons are recorded beside the six new dispositions in generated `docs/rules.md` (search: `Default-off reason`). All nine rules stay registered and emit on their existing positive source cases when configuration enables them. Include-rule filters do not enable a disabled rule. The detector predicates and other native metadata remain unchanged.
+
+The workspace records the six enablement changes as an additive M103 catalogue transition, preserving the earlier chain, and marks their review records shadow, score-neutral, exit-ineligible and hook-ineligible. Measurements and reviewed judgments are unchanged; capture, recall accounting and final milestone acceptance remain separate verification gates.
+
 ## Reversibility
 
 A retired rule can return as a new, measured rule; `.goat-flow/plans/0.7.0-roadmap/rules-to-rebuild.md` in the workspace
 keeps its wrong shapes and what a rebuilt rule needs. A rule turned off comes back on by removing `default_enabled=False`
-once a measurement on more findings puts it at half or better.
+once a measurement establishes its applicable precision floor.

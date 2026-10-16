@@ -1,4 +1,5 @@
 import ast
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,57 @@ _FORMULA_RULES = {
 }
 
 _ALL_DEFINITIONS = catalog_definitions()
+
+_M02_OPT_IN_CASES = (
+    ("complexity.cyclomatic", "def f(x):\n" + "\n".join(f"    if x == {i}: return {i}" for i in range(25)) + "\n", "x.py"),
+    ("security.dangerous-function-call", "eval(user_input)\n", "x.py"),
+    (
+        "security.header-injection",
+        "from flask import Flask, request\n"
+        "app = Flask(__name__)\n"
+        "@app.route('/x')\n"
+        "def view():\n"
+        "    response = make_response('hi')\n"
+        "    response.headers[request.args['name']] = 'value'\n"
+        "    return response\n",
+        "x.py",
+    ),
+    ("security.unsafe-yaml-load", "import yaml\nyaml.unsafe_load(data)\n", "x.py"),
+    ("security.variable-import", "import importlib\nname = request.args['mod']\nimportlib.import_module(name)\n", "x.py"),
+    ("security.xxe", "import xml.etree.ElementTree as ET\ntree = ET.parse('x.xml')\n", "x.py"),
+    ("sensitive-data.database-url-password", "DATABASE_URL = 'postgresql://admin:" + "s3cret!" + "@db.example.com/myapp'\n", "x.py"),
+    ("test-quality.no-assertions", "def test_foo():\n    x = 1\n", "test_x.py"),
+    ("test-quality.sut-not-called", "def test_foo():\n    assert True\n", "test_x.py"),
+)
+
+
+@pytest.mark.parametrize(("rule_id", "source", "display_path"), _M02_OPT_IN_CASES, ids=[case[0] for case in _M02_OPT_IN_CASES])
+def test_m02_opt_in_rules_require_configuration_to_emit(rule_id: str, source: str, display_path: str) -> None:
+    """Keep each accepted opt-in rule quiet until its existing positive case is enabled.
+
+    Args:
+        rule_id: Rule kept opt-in by M02's accepted table.
+        source: Positive input retained from the rule's detector tests.
+        display_path: Production or collected-test scope required by the detector.
+    """
+    registry = RuleRegistry.defaults()
+    config = AnalysisConfig.from_registry(registry)
+    tree = ast.parse(source)
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]  # Production parsing supplies AST parent links.
+    unit = AnalysisUnit(
+        file=SourceFile(absolute_path="/" + display_path, display_path=display_path, type="python"),
+        source=source,
+        tree=tree,
+    )
+
+    assert config.rule_settings(rule_id).enabled is False
+    assert not any(finding.rule_id == rule_id for finding in registry.analyse([unit], RuleContext(project_root="/", config=config)))
+
+    enabled = config.with_rule_settings(rule_id, replace(config.rule_settings(rule_id), enabled=True))
+    findings = registry.analyse([unit], RuleContext(project_root="/", config=enabled))
+    assert any(finding.rule_id == rule_id for finding in findings)
 
 
 def test_catalog_entries_are_importable_and_unique() -> None:

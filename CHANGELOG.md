@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: six more rules become opt-in** - `security.dangerous-function-call`, `security.header-injection`, `security.unsafe-yaml-load`, `security.variable-import`, `security.xxe` and `sensitive-data.database-url-password` no longer run by default because M02's accepted measurements did not establish their precision floors. Enable a retained rule with `rules.<id>.enabled: true`; `--include-rule` alone does not enable it. Existing explicit enable settings remain effective. `docs/rules.md` records each reason, including the three table rules already opt-in.
+
 - **BREAKING: twenty-eight further rules are removed** - Remove the IDs below from selections, sensitive exclusions and suppression comments. Obsolete `rules:` blocks warn, or fail with `--strict-config`. Earlier tuning and opt-in notes for these IDs are superseded. No replacement is enabled. `metric-calibration` retains all three metrics and its default output; retired complexity settings no longer configure findings.
 
 - complexity: `complexity.halstead-volume`, `complexity.maintainability-index`.

@@ -62,7 +62,7 @@ _EXPECTED_RULE_IDS = {
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
     # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
-    ctx = ctx_enabling("sensitive-data.api-key-pattern", "sensitive-data.url-credentials")
+    ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
     sensitive_findings = [finding for finding in findings if finding.rule_id.startswith("sensitive-data.")]
     fired = {finding.rule_id for finding in sensitive_findings}

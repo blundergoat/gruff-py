@@ -60,6 +60,37 @@ _GROUP_ORDER = (
     "Design",
 )
 
+_M02_DEFAULT_OFF_REASONS = {
+    "complexity.cyclomatic": (
+        "Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor."
+    ),
+    "security.dangerous-function-call": (
+        "Opt-in after M02's blind provenance review remained insufficient: 10 right of 15 judged, with 10 unresolved labels."
+    ),
+    "security.header-injection": (
+        "Opt-in after M02's blind provenance review remained insufficient: neither of two judged findings was right, "
+        "and one label remained unresolved."
+    ),
+    "security.unsafe-yaml-load": (
+        "Opt-in after M02's blind provenance review remained insufficient: two right of three judged, with one unresolved label."
+    ),
+    "security.variable-import": (
+        "Opt-in after M02's blind provenance review remained insufficient: three right of eleven judged, with eight unresolved labels."
+    ),
+    "security.xxe": (
+        "Opt-in after M02: only three default findings, two right and one unresolved, leave too little evidence for the precision floor."
+    ),
+    "sensitive-data.database-url-password": (
+        "Opt-in after M02: none of seven judged findings was right, but only eight default findings were available, too few for deletion."
+    ),
+    "test-quality.no-assertions": (
+        "Remains opt-in under M02's accepted table: seven right of 36 judged findings do not establish its 0.70 precision floor."
+    ),
+    "test-quality.sut-not-called": (
+        "Remains opt-in under M02's accepted table: nine right of 28 judged findings do not establish its 0.70 precision floor."
+    ),
+}
+
 
 def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> str:
     """Render deterministic Markdown documentation for the built-in rule catalog.
@@ -253,6 +284,8 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
+    if not definition.default_enabled and definition.id in _M02_DEFAULT_OFF_REASONS:
+        lines.append(f"- Default-off reason: {_M02_DEFAULT_OFF_REASONS[definition.id]}")
     # Metric rules show the threshold a user can tune for finding severity.
     if _has_severity_thresholds(definition):
         lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")

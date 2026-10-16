@@ -431,9 +431,10 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
     src.mkdir()
-    # The changed symbol carries one default-on finding on line 8; the hunk is line 9 only, so hunk scope hides it.
+    # The changed symbol carries one enabled finding on line 8; the hunk is line 9 only, so hunk scope hides it.
     (src / "sample.py").write_text(
         '"""Module."""\n'
         'PREFIX = "diag"\n\n\n'
@@ -450,7 +451,8 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
         "json",
         "--fail-on",
         "warning",
-        "--no-config",
+        "--config",
+        ".gruff-py.yaml",
         "--no-baseline",
         "--changed-ranges",
         "9-9",
@@ -2370,7 +2372,10 @@ def test_cli_deep_scan_budget_overrides_config_atomically(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "sample.py").write_text("result = eval('payload')\n")
-    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\ndeepScanBudget:\n  enabled: true\n  maxLines: 1\n  maxBytes: 1\n")
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\ndeepScanBudget:\n  enabled: true\n  maxLines: 1\n  maxBytes: 1\n"
+        "rules:\n  security.dangerous-function-call:\n    enabled: true\n"
+    )
 
     result = CliRunner().invoke(
         main,

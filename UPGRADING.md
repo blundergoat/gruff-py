@@ -49,6 +49,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 21. **Twenty-eight further rules are removed** - Remove the IDs listed in [CHANGELOG.md](CHANGELOG.md) from selections, sensitive exclusions and suppression comments. Obsolete `rules:` blocks warn, or fail with `--strict-config`; include/exclude filters accept retired IDs but cannot make them run. Earlier tuning and opt-in instructions for those IDs are superseded. `metric-calibration` retains all three metrics at its existing defaults; retired complexity settings no longer configure findings.
 
+22. **six more rules become opt-in** - `security.dangerous-function-call`, `security.header-injection`, `security.unsafe-yaml-load`, `security.variable-import`, `security.xxe` and `sensitive-data.database-url-password` remain available but stop reporting at the defaults. M02's accepted measurements did not establish their precision floors; each reason is recorded in [docs/rules.md](docs/rules.md). Enable one with `rules.<id>.enabled: true`; `--include-rule` only filters enabled rules. Existing explicit `enabled: true` settings keep a rule running. Cyclomatic complexity, no-assertions and sut-not-called retain their existing opt-in defaults.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

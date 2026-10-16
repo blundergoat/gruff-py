@@ -97,8 +97,8 @@ _EXPECTED_RULE_IDS = {
 
 
 def test_every_dangerous_rule_fires():
-    # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
-    ctx = ctx_enabling("security.django-raw-sql", "security.shell-injection")
+    # Enable every fixture subject so opt-in defaults do not hide a detector regression.
+    ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
     rule_ids = {f.rule_id for f in findings}
     missing = _EXPECTED_RULE_IDS - rule_ids
@@ -133,8 +133,8 @@ def process(items):
 
 
 def test_safe_equivalents_emit_no_security_findings():
-    # The two off-by-default rules run here too, so their safe forms (list-argument subprocess, parameterised raw SQL) stay checked.
-    ctx = ctx_enabling("security.django-raw-sql", "security.shell-injection")
+    # Exercise the same enabled rules against safe forms.
+    ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], ctx)
     security_findings = [f for f in findings if f.rule_id.startswith("security.")]
     assert security_findings == [], f"Safe fixture should not trigger security rules: {[(f.rule_id, f.message) for f in security_findings]}"

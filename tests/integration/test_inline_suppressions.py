@@ -66,6 +66,11 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "app" / "loader.py").write_text(_LOADER)
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
     (tmp_path / ".github" / "workflows" / "ci.yml").write_text(_WORKFLOW)
+    (tmp_path / ".gruff-py.yaml").write_text(
+        "schemaVersion: gruff-py.config.v0.1\nrules:\n"
+        "  security.dangerous-function-call:\n    enabled: true\n"
+        "  security.variable-import:\n    enabled: true\n"
+    )
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
@@ -79,7 +84,7 @@ def _analyse(output_format: str) -> str:
     Returns:
         The command's standard output.
     """
-    arguments = ["analyse", ".", "--format", output_format, "--fail-on", "none", "--no-config", "--no-baseline", "--include-ignored"]
+    arguments = ["analyse", ".", "--format", output_format, "--fail-on", "none", "--config", ".gruff-py.yaml", "--no-baseline", "--include-ignored"]
     result = CliRunner().invoke(main, arguments)
     assert result.exit_code == 0, result.output
     return result.stdout

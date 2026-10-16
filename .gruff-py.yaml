@@ -329,7 +329,7 @@ rules:
     enabled: true
   # Dangerous function call
   security.dangerous-function-call:
-    enabled: true
+    enabled: false
   # Dependency installed from Git reference
   security.dependency-git-reference:
     enabled: true
@@ -377,7 +377,7 @@ rules:
     enabled: true
   # Header injection
   security.header-injection:
-    enabled: true
+    enabled: false
   # Insecure random source
   security.insecure-random:
     enabled: true
@@ -410,16 +410,16 @@ rules:
     enabled: true
   # Unsafe YAML load
   security.unsafe-yaml-load:
-    enabled: true
+    enabled: false
   # Variable import
   security.variable-import:
-    enabled: true
+    enabled: false
   # Weak cryptographic hash
   security.weak-crypto:
     enabled: true
   # XML external entity (XXE)
   security.xxe:
-    enabled: true
+    enabled: false
   # API key pattern
   sensitive-data.api-key-pattern:
     enabled: false
@@ -428,7 +428,7 @@ rules:
     enabled: true
   # Database URL with password
   sensitive-data.database-url-password:
-    enabled: true
+    enabled: false
   # GCP service-account key
   sensitive-data.gcp-service-account-key:
     enabled: true

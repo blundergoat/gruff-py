@@ -20,7 +20,7 @@ _DOCS_MISSING_POSTURE: dict[str, Posture] = {
 
 _SECURITY_POSTURE: dict[str, Posture] = {
     "security.cors-wildcard-with-credentials": (True, "error", "high"),
-    "security.dangerous-function-call": (True, "error", "high"),
+    "security.dangerous-function-call": (False, "error", "high"),
     "security.dependency-git-reference": (True, "warning", "high"),
     "security.dependency-local-path": (True, "warning", "high"),
     "security.dependency-url-reference": (True, "warning", "high"),
@@ -36,7 +36,7 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.github-actions-unpinned-action": (True, "warning", "high"),
     "security.hardcoded-bind-all-interfaces": (True, "warning", "medium"),
     "security.hardcoded-framework-secret-key": (True, "error", "high"),
-    "security.header-injection": (True, "warning", "medium"),
+    "security.header-injection": (False, "warning", "medium"),
     "security.insecure-random": (True, "warning", "medium"),
     "security.insecure-temp-file": (True, "warning", "medium"),
     "security.insecure-tls-protocol": (True, "error", "high"),
@@ -47,16 +47,16 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.silent-except": (True, "advisory", "high"),
     "security.ssrf": (True, "error", "high"),
     "security.unsafe-pickle": (True, "error", "high"),
-    "security.unsafe-yaml-load": (True, "error", "high"),
-    "security.variable-import": (True, "warning", "medium"),
+    "security.unsafe-yaml-load": (False, "error", "high"),
+    "security.variable-import": (False, "warning", "medium"),
     "security.weak-crypto": (True, "warning", "high"),
-    "security.xxe": (True, "error", "high"),
+    "security.xxe": (False, "error", "high"),
 }
 
 _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.api-key-pattern": (False, "warning", "high"),
     "sensitive-data.aws-access-key": (True, "warning", "high"),
-    "sensitive-data.database-url-password": (True, "warning", "high"),
+    "sensitive-data.database-url-password": (False, "warning", "high"),
     "sensitive-data.gcp-service-account-key": (True, "warning", "high"),
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
     "sensitive-data.jwt-token": (True, "warning", "high"),

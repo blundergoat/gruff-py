@@ -79,9 +79,9 @@ class DatabaseUrlPasswordRule(SourceTextRule):
     ID = "sensitive-data.database-url-password"
 
     def definition(self) -> RuleDefinition:
-        """Describe the database-URL-password rule as a high-confidence ERROR.
+        """Describe the database-URL-password rule as a high-confidence warning.
 
-        Exact supported schemes give users high-confidence findings, while error severity reflects
+        Exact supported schemes give users high-confidence findings, while warning severity reflects
         the broad access an exposed database credential can provide.
 
         Returns:
@@ -95,6 +95,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
