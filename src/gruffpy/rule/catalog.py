@@ -36,7 +36,6 @@ from gruffpy.rule.docs.missing_return_doc_rule import MissingReturnDocRule
 from gruffpy.rule.docs.stale_param_doc_rule import StaleParamDocRule
 from gruffpy.rule.docs.todo_density_rule import TodoDensityRule
 from gruffpy.rule.docs.useless_docstring_rule import UselessDocstringRule
-from gruffpy.rule.modernisation.f_string_candidate_rule import FStringCandidateRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
 from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
 from gruffpy.rule.naming.confusing_name_rule import ConfusingNameRule
@@ -394,12 +393,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A protocol adapter or command method can have a deliberately terse summary whose meaning is supplied by a stable interface.",
         "Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.",
     ),
-    "modernisation.f-string-candidate": (
-        "A literal `.format()` call can be retained deliberately to mirror a documented format "
-        "template or keep a complex formatting expression easier to compare.",
-        "Use an f-string when it improves clarity, or suppress this advisory with the reason "
-        "the format-template spelling is part of the reviewed code.",
-    ),
     "naming.boolean-prefix": (
         "An externally constrained Boolean name can belong to a protocol, CLI, DTO, or schema "
         "that the structural override exemptions do not recognize.",
@@ -721,7 +714,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(StaleParamDocRule),
     _entry(TodoDensityRule),
     _entry(UselessDocstringRule),
-    _entry(FStringCandidateRule),
     _entry(AbbreviationRule),
     _entry(BooleanPrefixRule),
     _entry(ConfusingNameRule),

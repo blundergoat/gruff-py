@@ -45,6 +45,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 19. **`docs.missing-param-doc` reports a function once, and four documentation rules can widen** — The rule names every undocumented parameter in one finding and lists them in `metadata.parameters`; the per-finding `metadata.parameter` key is gone, so a consumer reading it must read the list. On the 0.6.0 precision measurement's twelve Python repositories that removed 121 findings at the defaults. `docs.missing-function-docstring` messages now say what the docstring needs. The `everyCallable` option is off by default; turning it on for all four documentation rules there added 25,791 `docs.missing-function-docstring`, 4,536 `docs.missing-return-doc`, 1,432 `docs.missing-param-doc` and 244 `docs.missing-raises-doc` findings, taking the total from 89,593 to 121,596. The rest of this entry is in `CHANGELOG.md`.
 
+20. **`modernisation.f-string-candidate` is removed** — The accepted precision table found no right labels among 23 judged findings. Remove its selection entries and suppression comments, which now exit `2`; obsolete `rules:` settings are ignored with a warning. CLI include/exclude filters still accept the retired id, and a run narrowed to it runs no rule. No replacement is enabled.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

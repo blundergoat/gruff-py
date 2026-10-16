@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -202,3 +203,36 @@ def _concrete_rule_class_paths() -> list[str]:
 def _looks_like_rule_class(cls: ast.ClassDef) -> bool:
     methods = {node.name for node in cls.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)}
     return "definition" in methods and bool({"analyse", "analyse_project"} & methods)
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        'msg = "Hello, {}!".format(name)\n',
+        'msg = "Hello, {name}!".format(name=name)\n',
+        'msg = "Hello".format()\n',
+        'template = "Hello, {}!"\nmsg = template.format(name)\n',
+        'msg = f"Hello, {name}!"\n',
+        'msg = "hello".upper()\n',
+        "msg = (1).bit_length()\n",
+        'a = "x={}".format(x)\nb = "y={}".format(y)\n',
+    ),
+    ids=("positional", "keyword", "no-arguments", "variable-template", "f-string", "other-method", "non-string", "two-calls"),
+)
+def test_retired_f_string_rule_never_runs(source: str) -> None:
+    """Keep the retired detector absent even when its former setting is enabled.
+
+    Args:
+        source: A preserved positive or negative case from the retired rule's tests.
+    """
+    registry = RuleRegistry.defaults()
+    config = AnalysisConfig.from_registry(registry)
+    config.rules["modernisation.f-string-candidate"] = RuleSettings(enabled=True)
+    unit = AnalysisUnit(
+        file=SourceFile(absolute_path="/pilot.py", display_path="pilot.py", type="python"),
+        source=source,
+        tree=ast.parse(source),
+    )
+    findings = registry.analyse([unit], RuleContext(project_root="/", config=config))
+    assert "modernisation.f-string-candidate" not in {rule.definition().id for rule in registry.all()}
+    assert not any(finding.rule_id == "modernisation.f-string-candidate" for finding in findings)

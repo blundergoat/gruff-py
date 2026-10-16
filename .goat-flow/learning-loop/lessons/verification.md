@@ -231,6 +231,8 @@ When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
 alongside the catalog, generated docs, fixtures, and focused rule tests before
 running broad verification.
 
+**Recurrence 2026-10-17:** The M02 f-string pilot removed the rule's settings and selection but left its sole `modernisation` pillar in `selection.pillars`. Full pytest failed `test_repo_yaml_lists_every_pillar_in_catalog_order` in `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`. Retiring a pillar's last rule also removes that pillar from the mirrored selection; the schema's pillar enum remains unchanged. Run the whole registry-coverage test before full pytest. The pilot also corrected formatter drift before its final proof.
+
 ## Lesson: Inspect each item's body before bucketing tests for bulk deletion
 
 **Created:** 2026-05-24

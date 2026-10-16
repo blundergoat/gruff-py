@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.6.0` registers 125 rules across 12 pillars in `RuleRegistry.defaults()`.
+gruff-py `0.6.0` registers 124 rules across 11 pillars in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -14,7 +14,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `maintainability` | 1 | Maintainability index rule emits under this pillar |
 | `correctness` | 2 | Mechanically detectable runtime-defect shapes |
 | `dead-code` | 9 | Unused and waste-oriented rules |
-| `modernisation` | 1 | Python syntax and library modernisation opportunities |
 | `naming` | 9 | Intent-layer names; PEP 8 case style stays with ruff |
 | `documentation` | 13 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 33 | Heuristic AST-level dangerous patterns |
@@ -58,10 +57,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `waste.redundant-variable`
 - `waste.unreachable-code`
 - `waste.unused-import`
-
-### Modernisation
-
-- `modernisation.f-string-candidate`
 
 ### Naming
 
@@ -610,23 +605,6 @@ except ValueError:
     Mitigation: Add the missing behavior or constraint to the summary, or suppress the finding with the interface that defines the method's meaning.
 - Bad example: Code that triggers `docs.useless-docstring` leaves useless docstring unaddressed.
 - Good example: Code that satisfies `docs.useless-docstring` makes useless docstring explicit or simpler.
-
-### `modernisation.f-string-candidate`
-
-- Name: F-string candidate
-- Pillar: `modernisation`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: `modernisation.f-string-candidate` protects the modernisation pillar by flagging f-string candidate before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported f-string candidate directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Common false-positive shapes:
-  - A literal `.format()` call can be retained deliberately to mirror a documented format template or keep a complex formatting expression easier to compare.
-    Mitigation: Use an f-string when it improves clarity, or suppress this advisory with the reason the format-template spelling is part of the reviewed code.
-- Bad example: Code that triggers `modernisation.f-string-candidate` leaves f-string candidate unaddressed.
-- Good example: Code that satisfies `modernisation.f-string-candidate` makes f-string candidate explicit or simpler.
 
 ### `naming.abbreviation`
 

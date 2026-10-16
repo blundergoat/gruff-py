@@ -70,7 +70,6 @@ selection:
   - dead-code
   - design
   - documentation
-  - modernisation
   - naming
   - security
   - sensitive-data
@@ -101,7 +100,6 @@ selection:
   - docs.stale-param-doc
   - docs.todo-density
   - docs.useless-docstring
-  - modernisation.f-string-candidate
   - naming.abbreviation
   - naming.boolean-prefix
   - naming.confusing-name
@@ -334,9 +332,6 @@ rules:
         module: 6
         class: 4
         function: 4
-  # F-string candidate
-  modernisation.f-string-candidate:
-    enabled: true
   # Abbreviation
   naming.abbreviation:
     enabled: true

@@ -33,6 +33,12 @@ judged finding), `security.shell-injection` (right on 3 of 7), `sensitive-data.a
 The family specification records the retirements as a catalogue transition with no successor, and keeps each rule's
 review record as `retired` (workspace ADR-010).
 
+## M02 retirement pilot, 2026-10-17
+
+The operator accepted M02's review amendment and M95 runtime scope, inherited by M102. Row py-006 retires `modernisation.f-string-candidate`: none of its 23 judged findings was right, and the observed conversions did not make formatting templates easier to verify. The source module, its eight direct detector tests, catalogue metadata and dogfood settings are removed. The same eight positive and negative source cases now exercise the default registry with the former rule explicitly enabled, proving it cannot emit. The other 124 native records are unchanged.
+
+The workspace evidence is `.goat-flow/plans/0.6.0-precision-floor/evidence/m02/py-line/verification.json` (search: `modernisation.f-string-candidate`). Its M102 record-retirement transition preserves the historical review record under workspace ADR-010. Existing retired-id configuration, suppression and selection behavior above remains in force; no replacement is enabled. The other approved Python retirements remain pending.
+
 ## Reversibility
 
 A retired rule can return as a new, measured rule; `.goat-flow/plans/0.7.0-roadmap/rules-to-rebuild.md` in the workspace
