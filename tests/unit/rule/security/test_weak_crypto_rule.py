@@ -108,3 +108,23 @@ def test_usedforsecurity_false_keeps_fast_password_hash_finding() -> None:
     assert len(findings) == 1
     assert findings[0].metadata["algorithm"] == "sha256"
     assert findings[0].metadata["sourceLabel"] == "password-material"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_finding_count"),
+    (
+        ("import os\nfrom hashlib import sha1\nsalt = os.urandom(sha1().digest_size)\n", 0),
+        ("from hashlib import sha1\npassword_hash = sha1()\npassword_hash.update(password)\n", 1),
+    ),
+    ids=("digest-size", "incremental-password"),
+)
+def test_empty_hash_constructor_size_query_vs_incremental(source: str, expected_finding_count: int) -> None:
+    """Keep size queries quiet without hiding an incremental password hasher.
+
+    Args:
+        source: Caller code that either reads the size or retains the hash for later input.
+        expected_finding_count: Zero for the size query; one for the retained password hasher.
+    """
+    findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
+
+    assert len(findings) == expected_finding_count

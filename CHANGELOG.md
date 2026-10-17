@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: weak-crypto becomes opt-in** - `security.weak-crypto` no longer runs by default because fewer than ten enabled corpus findings remain, below the minimum needed to assess its security precision floor. Set `rules.security.weak-crypto.enabled: true` to use it; `--include-rule` alone does not enable it. When enabled, a no-argument MD5 or SHA1 constructor used only for `digest_size` stays quiet, while incremental password hashing still reports.
+
 - **BREAKING: insecure temporary-file check becomes opt-in** - `security.insecure-temp-file` stops running by default because no current corpus findings survive the shared test-path exclusion, leaving no evidence for its security precision floor. Set `rules.security.insecure-temp-file.enabled: true` to use the unchanged detector; existing explicit enable settings keep it running, and `--include-rule` alone does not enable it. The test-path exclusion still applies when enabled.
 
 - **BREAKING: framework SECRET_KEY check becomes opt-in** - `security.hardcoded-framework-secret-key` no longer runs by default because its one remaining corpus finding is too little evidence to establish the security precision floor. Set `rules.security.hardcoded-framework-secret-key.enabled: true` to retain the check. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.

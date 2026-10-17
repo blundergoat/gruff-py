@@ -69,6 +69,7 @@ class WeakCryptoRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -121,6 +122,10 @@ def _weak_crypto_call(node: ast.AST) -> tuple[ast.Call, str, str] | None:
     weak_algorithm = _weak_algorithm(call_target)
     # MD5/SHA1 have the standard-library opt-out; no other candidate uses it.
     if weak_algorithm is not None:
+        parent = getattr(node, "parent", None)
+        # Reading an empty constructor's digest size does not hash security material.
+        if not node.args and not node.keywords and isinstance(parent, ast.Attribute) and parent.attr == "digest_size":
+            return None
         # A literal False tells the user-facing rule this hash is intentionally non-security.
         if _has_literal_usedforsecurity_opt_out(node):
             return None

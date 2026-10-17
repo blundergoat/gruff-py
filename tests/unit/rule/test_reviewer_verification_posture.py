@@ -49,7 +49,7 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.unsafe-pickle": (True, "error", "high"),
     "security.unsafe-yaml-load": (False, "error", "high"),
     "security.variable-import": (False, "warning", "medium"),
-    "security.weak-crypto": (True, "warning", "high"),
+    "security.weak-crypto": (False, "warning", "high"),
     "security.xxe": (False, "error", "high"),
 }
 

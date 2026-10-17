@@ -274,6 +274,13 @@ def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
         security_metadata=rule_security_metadata(rule_id),
         false_positive_shapes=(
             FalsePositiveShape(
+                shape="Reading `sha1().digest_size` to choose a random salt length queries a size rather than hashing security material.",
+                mitigation=(
+                    "No setting is needed for a no-argument MD5 or SHA1 constructor used directly for `digest_size`. "
+                    "Empty constructors retained for incremental password hashing still report when enabled."
+                ),
+            ),
+            FalsePositiveShape(
                 shape=(
                     "A cache key, ETag, or content digest whose surrounding "
                     "names (token, signature, password) read as security "

@@ -414,9 +414,9 @@ rules:
   # Variable import
   security.variable-import:
     enabled: false
-  # Weak cryptographic hash
+  # Weak cryptographic hash remains opt-in while the enabled corpus is too small to assess its precision floor.
   security.weak-crypto:
-    enabled: true
+    enabled: false
   # XML external entity (XXE)
   security.xxe:
     enabled: false

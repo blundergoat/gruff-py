@@ -59,6 +59,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 26. **Insecure temporary-file check becomes opt-in** - `security.insecure-temp-file` retains its detector, but no current corpus findings survive the shared test-path exclusion, so its security precision floor remains unmeasured. Set `rules.security.insecure-temp-file.enabled: true` to use it; existing explicit enable settings remain effective, and `--include-rule` alone does not enable it. Test, fixture and example paths remain excluded when enabled.
 
+27. **Weak-crypto becomes opt-in** - `security.weak-crypto` stays registered but no longer runs by default because its enabled corpus has fewer than ten findings, too few to assess the security precision floor. Set `rules.security.weak-crypto.enabled: true` to use the bounded repair; existing explicit enable settings remain effective, and `--include-rule` alone does not enable it. A no-argument MD5 or SHA1 constructor used only for `digest_size` stays quiet, while incremental password hashing still reports when enabled.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

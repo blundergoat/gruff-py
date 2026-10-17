@@ -105,7 +105,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load` (default off)
 - `security.variable-import` (default off)
-- `security.weak-crypto`
+- `security.weak-crypto` (default off)
 - `security.xxe` (default off)
 
 ### Sensitive Data
@@ -1082,12 +1082,15 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: MD5 and SHA1 are broken for signatures, tokens, and password material, but they remain valid for cache keys and content digests. The rule reports them only where surrounding names or arguments imply security-sensitive material, so non-security digests stay quiet without configuration.
 - Fix guidance: Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and SHA-256 or better for signatures and tokens. When the digest is genuinely non-security, pass the standard-library keyword `usedforsecurity=False` rather than suppressing the rule.
 - Confidence rationale: High confidence: the call target must resolve to a literal weak algorithm, and a security-context smell in the surrounding names or arguments is required before reporting.
+- Default-off reason: Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, below the minimum needed to assess the 0.80 security precision floor. Explicit enablement retains the repair.
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
+  - Reading `sha1().digest_size` to choose a random salt length queries a size rather than hashing security material.
+    Mitigation: No setting is needed for a no-argument MD5 or SHA1 constructor used directly for `digest_size`. Empty constructors retained for incremental password hashing still report when enabled.
   - A cache key, ETag, or content digest whose surrounding names (token, signature, password) read as security material even though the value is not a secret.
     Mitigation: Pass `usedforsecurity=False`, which is the standard library's own non-security marker and suppresses the MD5/SHA1 finding without touching rule config.
   - A literal `usedforsecurity=False` on MD5 or SHA1 suppresses the finding even when the hashed value looks like a password. This is deliberate: the keyword is the caller's explicit non-security declaration, and only a literal False qualifies - True, 0, None, and dynamic flags all keep the finding.
