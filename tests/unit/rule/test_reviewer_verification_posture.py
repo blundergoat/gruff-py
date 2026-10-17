@@ -38,7 +38,7 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.hardcoded-framework-secret-key": (False, "error", "high"),
     "security.header-injection": (False, "warning", "medium"),
     "security.insecure-random": (True, "warning", "medium"),
-    "security.insecure-temp-file": (True, "warning", "medium"),
+    "security.insecure-temp-file": (False, "warning", "medium"),
     "security.insecure-tls-protocol": (True, "error", "high"),
     "security.jinja2-autoescape-off": (True, "error", "high"),
     "security.paramiko-no-host-key-check": (True, "error", "high"),

@@ -69,6 +69,7 @@ class InsecureTempFileRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

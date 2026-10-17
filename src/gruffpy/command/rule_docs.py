@@ -65,6 +65,10 @@ _M02_DEFAULT_OFF_REASONS = {
         "Opt-in under M02: only one current corpus finding remains after the shared test-path exclusion, "
         "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
     ),
+    "security.insecure-temp-file": (
+        "Opt-in under M02: no current corpus findings remain after the shared test-path exclusion, "
+        "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
+    ),
     "security.silent-except": (
         "Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. "
         "The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled."

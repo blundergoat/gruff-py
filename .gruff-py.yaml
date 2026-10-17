@@ -383,7 +383,7 @@ rules:
     enabled: true
   # Insecure temporary file
   security.insecure-temp-file:
-    enabled: true
+    enabled: false
   # Insecure TLS protocol
   security.insecure-tls-protocol:
     enabled: true

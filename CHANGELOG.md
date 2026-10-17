@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: insecure temporary-file check becomes opt-in** - `security.insecure-temp-file` stops running by default because no current corpus findings survive the shared test-path exclusion, leaving no evidence for its security precision floor. Set `rules.security.insecure-temp-file.enabled: true` to use the unchanged detector; existing explicit enable settings keep it running, and `--include-rule` alone does not enable it. The test-path exclusion still applies when enabled.
+
 - **BREAKING: framework SECRET_KEY check becomes opt-in** - `security.hardcoded-framework-secret-key` no longer runs by default because its one remaining corpus finding is too little evidence to establish the security precision floor. Set `rules.security.hardcoded-framework-secret-key.enabled: true` to retain the check. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.
 
 - **BREAKING: silent-except becomes opt-in** - `security.silent-except` recognizes comments explaining a handler's deliberate fallback. M02's complete repaired census judged 21 of 29 findings worth acting on, below the 0.80 security floor, so it no longer runs by default. The enabled repair preserves all 22 occurrences judged right across both versions; default scans omit them. Set `rules.security.silent-except.enabled: true` to use it; `--include-rule` alone does not enable it.

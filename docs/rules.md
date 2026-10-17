@@ -94,7 +94,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.hardcoded-framework-secret-key` (default off)
 - `security.header-injection` (default off)
 - `security.insecure-random`
-- `security.insecure-temp-file`
+- `security.insecure-temp-file` (default off)
 - `security.insecure-tls-protocol`
 - `security.jinja2-autoescape-off`
 - `security.paramiko-no-host-key-check`
@@ -911,10 +911,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.insecure-temp-file` protects the security pillar by flagging insecure temporary file before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported insecure temporary file directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Opt-in under M02: no current corpus findings remain after the shared test-path exclusion, below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector.
 - Security metadata: `cwe` = `['CWE-377', 'CWE-379']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
   - A fixed temporary path can be process-private inside an isolated sandbox even though that exclusivity is not visible at the call site.
