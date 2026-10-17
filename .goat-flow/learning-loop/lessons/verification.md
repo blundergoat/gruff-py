@@ -136,6 +136,8 @@ invalidating an otherwise final gate ladder.
 ## Lesson: Re-run raw-source analyzers after formatting fixture strings
 
 **Created:** 2026-05-18
+**Incident count:** 5
+**Latest occurrence:** 2026-10-17
 **Incident:** While removing `docs.todo-density` findings from
 `src/gruffpy/rule/sensitive_data/hardcoded_env_value_rule.py`,
 `tests/unit/rule/docs/test_todo_density_rule.py`,
@@ -171,6 +173,8 @@ split, `tests/unit/rule/sensitive_data/test_pii_test_fixture_rule.py` (search: `
 `"1,234," + "567.1234567"` still matched `_PHONE_RE` because its second half
 alone is a 3-3-4 digit run. A split must leave no single literal that matches
 the trigger; `"567." + "1234567"` cleared it with the same runtime value.
+
+**Recurrence 2026-10-17:** The silent-except repair and its unfinished-handling test exposed raw marker literals to the density rule. Preserve their runtime words with formatter-stable joins, then format and rerun the selected analyzer. No suppression or density threshold changed. Evidence: `src/gruffpy/rule/security/silent_except_rule.py` (search: `_UNFINISHED_MARKERS`) and `tests/unit/rule/security/test_silent_except_rule.py` (search: `unfinished-handling`).
 
 ## Lesson: Test directive parsers against reason delimiters before dogfood
 

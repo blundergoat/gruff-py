@@ -100,7 +100,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.paramiko-no-host-key-check`
 - `security.path-traversal`
 - `security.shell-injection` (default off)
-- `security.silent-except`
+- `security.silent-except` (default off)
 - `security.ssrf`
 - `security.unsafe-pickle`
 - `security.unsafe-yaml-load` (default off)
@@ -1002,10 +1002,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.silent-except` protects the security pillar by flagging silent except before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported silent except directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled.
 - Bad example: Code that triggers `security.silent-except` leaves silent except unaddressed.
 - Good example: Code that satisfies `security.silent-except` makes silent except explicit or simpler.
 

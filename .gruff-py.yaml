@@ -401,7 +401,7 @@ rules:
     enabled: false
   # Silent except
   security.silent-except:
-    enabled: true
+    enabled: false
   # Server-side request forgery (SSRF)
   security.ssrf:
     enabled: true

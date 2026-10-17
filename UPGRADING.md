@@ -53,6 +53,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 23. **return documentation remains available as an opt-in check** - `docs.missing-return-doc` is retained under the return-documentation exception, with a bounded repair that recognizes result prose instead of requiring a Returns section. It is off by default until fresh blind validation establishes its precision floor. Set `rules.docs.missing-return-doc.enabled: true` to use it; an existing explicit enable setting stays effective. Findings ask you to describe the result in prose or a return field.
 
+24. **silent-except becomes opt-in** - `security.silent-except` recognizes explanatory comments inside a handler, but M02's complete repaired census remains below the 0.80 security floor at 21 right of 29 judged findings. The enabled repair preserves all 22 occurrences judged right across both versions; default scans omit them. Set `rules.security.silent-except.enabled: true` to retain this check. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

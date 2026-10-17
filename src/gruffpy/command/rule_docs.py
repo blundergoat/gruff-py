@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "security.silent-except": (
+        "Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. "
+        "The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled."
+    ),
     "docs.missing-return-doc": (
         "Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish "
         "the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending."

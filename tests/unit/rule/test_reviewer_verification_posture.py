@@ -44,7 +44,7 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.paramiko-no-host-key-check": (True, "error", "high"),
     "security.path-traversal": (True, "error", "high"),
     "security.shell-injection": (False, "error", "high"),
-    "security.silent-except": (True, "advisory", "high"),
+    "security.silent-except": (False, "advisory", "high"),
     "security.ssrf": (True, "error", "high"),
     "security.unsafe-pickle": (True, "error", "high"),
     "security.unsafe-yaml-load": (False, "error", "high"),
