@@ -441,9 +441,9 @@ rules:
   # PHI pattern
   sensitive-data.phi-pattern:
     enabled: true
-  # Private key
+  # Private-key detection remains opt-in while the enabled corpus is too small to assess its precision floor.
   sensitive-data.private-key:
-    enabled: true
+    enabled: false
   # URL embedded credentials
   sensitive-data.url-credentials:
     enabled: false

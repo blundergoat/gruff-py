@@ -26,6 +26,7 @@ from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
+from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
 from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
@@ -155,6 +156,8 @@ def custom_docs_for(
             return _api_key_pattern_docs(config_keys)
         case GcpServiceAccountKeyRule.ID:
             return _gcp_service_account_key_docs(config_keys)
+        case PrivateKeyRule.ID:
+            return _private_key_docs(config_keys)
         case UrlCredentialsRule.ID:
             return _url_credentials_docs(config_keys)
         case SingleImplementorProtocolRule.ID:
@@ -651,6 +654,32 @@ def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "and private-key material in the same file, while short placeholders pass."
         ),
         config_keys=config_keys,
+    )
+
+
+def _private_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain which private-key headers remain reportable when this opt-in check runs."""
+    return RuleDocs(
+        rationale=(
+            "Private-key headers can identify committed credentials, including incomplete or escaped key material. "
+            "Two adjacent uppercase parser constants containing only matching BEGIN/END marker literals carry no key body."
+        ),
+        fix_guidance=(
+            "Move the private key out of the repository. Rotate the key, store the new one in a secret manager, and reference it at runtime."
+        ),
+        bad_example="A private-key header accompanied by opaque key material in repository source.",
+        good_example="Load the private key from a secret manager at runtime.",
+        confidence_rationale=(
+            "High confidence in the presence of a private-key header. Complete placeholder blocks and exact marker-only "
+            "assignment pairs are excluded; bare headers and short opaque bodies still require review."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape="Two consecutive uppercase constant assignments containing only matching private-key BEGIN/END markers.",
+                mitigation="The marker-only pair is excluded; opaque content between the assignments and unmatched markers still report.",
+            ),
+        ),
     )
 
 

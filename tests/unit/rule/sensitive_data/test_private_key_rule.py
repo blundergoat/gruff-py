@@ -110,3 +110,31 @@ def test_placeholder_requires_matching_unbroken_private_key_armour(source_templa
     source_text = source_template.format(header=header, footer=footer, rsa_footer=rsa_footer)
 
     assert len(PrivateKeyRule().analyse(make_unit(source_text), default_ctx())) == expected_warnings
+
+
+@pytest.mark.parametrize(
+    ("source_template", "expected_warnings"),
+    [
+        ("_SK_START = b'{header}'\n_SK_END = b'{footer}'\n", 0),
+        ("_SK_START = b'{header}'\nKEY_DATA = b'MIIEowIBAAKCAQEA'\n_SK_END = b'{footer}'\n", 1),
+        ("_SK_START = b'{header}'\n_SK_END = b'{rsa_footer}'\n", 1),
+        ("_SK_START = b'{header}'\n", 1),
+    ],
+    ids=["parser-markers", "opaque-body-between-markers", "mismatched-marker-labels", "unmatched-marker"],
+)
+def test_parser_marker_pairs_require_empty_matching_assignments(source_template: str, expected_warnings: int):
+    """Keep parser delimiters quiet without hiding opaque or unmatched key material.
+
+    Args:
+        source_template: Source based on the observed OpenSSH parser constants, with one boundary changed per control.
+        expected_warnings: Zero only for the matching marker-only pair; other controls retain one warning.
+    """
+    header = "-----BEGIN OPENSSH " + "PRIVATE KEY-----"
+    footer = "-----END OPENSSH " + "PRIVATE KEY-----"
+    rsa_footer = "-----END RSA " + "PRIVATE KEY-----"
+    source_text = source_template.format(header=header, footer=footer, rsa_footer=rsa_footer)
+
+    findings = PrivateKeyRule().analyse(make_unit(source_text), default_ctx())
+
+    assert len(findings) == expected_warnings
+    assert all(finding.metadata == {"preview": "[redacted:private-key]"} for finding in findings)

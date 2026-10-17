@@ -117,7 +117,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `sensitive-data.hardcoded-env-value`
 - `sensitive-data.jwt-token`
 - `sensitive-data.phi-pattern`
-- `sensitive-data.private-key`
+- `sensitive-data.private-key` (default off)
 - `sensitive-data.url-credentials` (default off)
 
 ### Test Quality
@@ -1226,12 +1226,16 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `warning`
 - Confidence: `high`
-- Default enabled: yes
-- Rationale: `sensitive-data.private-key` protects the sensitive-data pillar by flagging private key before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported private key directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Bad example: Code that triggers `sensitive-data.private-key` leaves private key unaddressed.
-- Good example: Code that satisfies `sensitive-data.private-key` makes private key explicit or simpler.
+- Default enabled: no
+- Rationale: Private-key headers can identify committed credentials, including incomplete or escaped key material. Two adjacent uppercase parser constants containing only matching BEGIN/END marker literals carry no key body.
+- Fix guidance: Move the private key out of the repository. Rotate the key, store the new one in a secret manager, and reference it at runtime.
+- Confidence rationale: High confidence in the presence of a private-key header. Complete placeholder blocks and exact marker-only assignment pairs are excluded; bare headers and short opaque bodies still require review.
+- Default-off reason: Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair.
+- Common false-positive shapes:
+  - Two consecutive uppercase constant assignments containing only matching private-key BEGIN/END markers.
+    Mitigation: The marker-only pair is excluded; opaque content between the assignments and unmatched markers still report.
+- Bad example: A private-key header accompanied by opaque key material in repository source.
+- Good example: Load the private key from a secret manager at runtime.
 
 ### `sensitive-data.url-credentials`
 

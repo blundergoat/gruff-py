@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "sensitive-data.private-key": (
+        "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
+        "below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair."
+    ),
     "security.weak-crypto": (
         "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
         "below the minimum needed to assess the 0.80 security precision floor. Explicit enablement retains the repair."

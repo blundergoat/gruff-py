@@ -61,6 +61,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 27. **Weak-crypto becomes opt-in** - `security.weak-crypto` stays registered but no longer runs by default because its enabled corpus has fewer than ten findings, too few to assess the security precision floor. Set `rules.security.weak-crypto.enabled: true` to use the bounded repair; existing explicit enable settings remain effective, and `--include-rule` alone does not enable it. A no-argument MD5 or SHA1 constructor used only for `digest_size` stays quiet, while incremental password hashing still reports when enabled.
 
+28. **Private-key detection becomes opt-in** - Enable `rules.sensitive-data.private-key.enabled: true` to retain this check. The bounded repair excludes adjacent marker-only parser constants, but its small enabled corpus cannot establish the 0.80 sensitive-data precision floor. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it. Enabled scans retain warnings for opaque, incomplete and unmatched key material, with redacted previews.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

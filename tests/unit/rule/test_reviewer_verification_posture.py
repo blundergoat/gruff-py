@@ -61,7 +61,7 @@ _SENSITIVE_DATA_POSTURE: dict[str, Posture] = {
     "sensitive-data.hardcoded-env-value": (True, "warning", "medium"),
     "sensitive-data.jwt-token": (True, "warning", "high"),
     "sensitive-data.phi-pattern": (True, "warning", "medium"),
-    "sensitive-data.private-key": (True, "warning", "high"),
+    "sensitive-data.private-key": (False, "warning", "high"),
     "sensitive-data.url-credentials": (False, "warning", "high"),
 }
 

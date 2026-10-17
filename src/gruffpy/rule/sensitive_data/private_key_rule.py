@@ -1,7 +1,7 @@
 """Warn when a developer scans source containing a private-key header.
 
 The raw-text check includes incomplete keys and escaped strings so truncated material still receives a warning.
-Only a complete block whose whole body is the word placeholder stays quiet; finding previews contain no key-derived text.
+Complete placeholder blocks and paired marker-only constants stay quiet; previews contain no key-derived text.
 """
 
 import re
@@ -26,10 +26,17 @@ _PEM_BLOCK_RE = re.compile(
     r"-----BEGIN (?P<label>[A-Z0-9 ]*PRIVATE KEY)-----(?P<body>.*?)-----END (?P=label)-----",
     re.DOTALL,
 )
+_MARKER_ASSIGNMENT_PAIR_RE = re.compile(
+    r"""^[ \t]*[A-Z_][A-Z0-9_]*[ \t]*=[ \t]*b?(?P<quote>["'])"""
+    r"(?P<header>-----BEGIN (?P<label>[A-Z0-9 ]*PRIVATE KEY)-----)(?P=quote)[ \t]*\n"
+    r"""[ \t]*[A-Z_][A-Z0-9_]*[ \t]*=[ \t]*b?(?P<end_quote>["'])"""
+    r"-----END (?P=label)-----(?P=end_quote)[ \t]*(?:\n|$)",
+    re.MULTILINE,
+)
 
 
 class PrivateKeyRule(SourceTextRule):
-    """Report private-key headers when a developer scans repository source.
+    """Report private-key headers when a developer explicitly enables the check.
 
     Use the raw-text stage so incomplete or escaped key material still raises a warning.
     Findings show the header's source line and rotation guidance, with a redacted preview.
@@ -38,7 +45,7 @@ class PrivateKeyRule(SourceTextRule):
     ID = "sensitive-data.private-key"
 
     def definition(self) -> RuleDefinition:
-        """Supply the warning metadata used when a scan finds a possible committed private key.
+        """Supply the opt-in warning metadata for a possible committed private key.
 
         Returns:
             Definition for a high-confidence warning in the sensitive-data pillar.
@@ -50,10 +57,11 @@ class PrivateKeyRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Report each private-key header unless its complete block contains only the placeholder example word.
+        """Report headers except complete placeholder blocks and matching marker-only assignment pairs.
 
         Args:
             unit: Source file selected for the scan; empty source produces no findings.
@@ -66,6 +74,9 @@ class PrivateKeyRule(SourceTextRule):
         findings: list[Finding] = []
         # Every PEM header is reviewed independently so users can rotate each committed key.
         for key_header_match in iter_matches(_PATTERN, unit.source):
+            # Matching marker assignments contain no key body.
+            if _is_marker_only_assignment_pair(unit.source, key_header_match.start_offset):
+                continue
             # The explicit example word names no credential; short opaque material still reports.
             if _is_placeholder_pem_block(unit.source, key_header_match.start_offset):
                 continue
@@ -102,3 +113,11 @@ def _is_placeholder_pem_block(source: str, header_offset: int) -> bool:
             continue
         return block_match.group("body").strip() == "placeholder"
     return False
+
+
+def _is_marker_only_assignment_pair(source: str, header_offset: int) -> bool:
+    """Recognise adjacent uppercase assignments holding only matching PEM markers.
+
+    Opaque content between the assignments or an unmatched footer does not qualify for this exemption.
+    """
+    return any(pair.start("header") == header_offset for pair in _MARKER_ASSIGNMENT_PAIR_RE.finditer(source))
