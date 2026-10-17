@@ -131,9 +131,7 @@ def _finding_for_identifier(
         confidence=definition.confidence,
         end_line=lineno,
         symbol=name,
-        remediation=(
-            "Rename the identifier with the full domain term or add a documented allowlist entry."
-        ),
+        remediation=("Rename the identifier with the full domain term or add a documented allowlist entry."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"identifier": name, "kind": kind, "abbreviation": abbreviation},
     )
@@ -174,9 +172,7 @@ def _target_identifiers(target: ast.expr) -> list[tuple[str, int, str]]:
     if isinstance(target, ast.Name):
         return [(target.id, target.lineno, "variable")]
     if isinstance(target, ast.Tuple | ast.List):
-        return [
-            (elt.id, elt.lineno, "variable") for elt in target.elts if isinstance(elt, ast.Name)
-        ]
+        return [(elt.id, elt.lineno, "variable") for elt in target.elts if isinstance(elt, ast.Name)]
     return []
 
 
@@ -196,6 +192,6 @@ def _is_dunder(name: str) -> bool:
 def _is_test_file(display_path: str) -> bool:
     normalized = display_path.replace("\\", "/").lower()
     name = normalized.rsplit("/", 1)[-1]
-    if normalized.startswith("tests/") or "/tests/" in normalized:
+    if any(part in {"test", "tests"} for part in normalized.split("/")[:-1]):
         return True
     return "/" not in normalized and name.startswith("test_") and name.endswith(".py")

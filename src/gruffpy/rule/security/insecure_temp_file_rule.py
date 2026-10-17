@@ -30,9 +30,7 @@ from gruffpy.rule.security._security_node_helper import call_target_name
 
 _MKTEMP_TARGETS: frozenset[str] = frozenset({"tempfile.mktemp", "mktemp"})
 _TMP_PREFIXES: tuple[str, ...] = ("/tmp/", "/var/tmp/")
-_FILE_API_LEAVES: frozenset[str] = frozenset(
-    {"open", "copyfile", "copy", "copy2", "move", "remove", "unlink", "rename"}
-)
+_FILE_API_LEAVES: frozenset[str] = frozenset({"open", "copyfile", "copy", "copy2", "move", "remove", "unlink", "rename"})
 _PATH_CONSTRUCTORS: frozenset[str] = frozenset({"Path", "PurePath", "PosixPath", "PurePosixPath"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("mktemp", "/tmp/", "/var/tmp/")
 _MKTEMP_REMEDIATION = (
@@ -71,6 +69,7 @@ class InsecureTempFileRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -129,9 +128,7 @@ def _build_mktemp_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            "`tempfile.mktemp()` returns a path without creating the file - TOCTOU race risk."
-        ),
+        message=("`tempfile.mktemp()` returns a path without creating the file - TOCTOU race risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,
@@ -161,10 +158,7 @@ def _build_temp_path_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{leaf}('{matched_literal}'...)` uses a hardcoded world-writeable "
-            "tmp path - symlink / race risk."
-        ),
+        message=(f"`{leaf}('{matched_literal}'...)` uses a hardcoded world-writeable tmp path - symlink / race risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

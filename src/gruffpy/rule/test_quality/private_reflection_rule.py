@@ -89,10 +89,7 @@ class PrivateReflectionRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Test through the public API. If the private behaviour is "
-                            "load-bearing, extract it into a public helper."
-                        ),
+                        remediation=("Test through the public API. If the private behaviour is load-bearing, extract it into a public helper."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"attribute": node.attr},
                     ),

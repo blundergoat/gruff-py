@@ -2,19 +2,11 @@ import ast
 
 from gruffpy.rule.docs._helpers import has_raise_in_body
 from gruffpy.rule.docs.missing_raises_doc_rule import MissingRaisesDocRule
-from tests.unit.rule.docs._helpers import default_ctx, make_unit
+from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_unit
 
 
 def test_documented_raises_emits_nothing():
-    src = (
-        "def f(x):\n"
-        '    """Do.\n\n'
-        "    Raises:\n"
-        "        ValueError: when x is negative.\n"
-        '    """\n'
-        "    if x < 0:\n"
-        "        raise ValueError\n"
-    )
+    src = 'def f(x):\n    """Do.\n\n    Raises:\n        ValueError: when x is negative.\n    """\n    if x < 0:\n        raise ValueError\n'
     assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
 
 
@@ -39,6 +31,13 @@ def test_nested_function_raise_does_not_trigger_outer():
 def test_function_without_docstring_skipped():
     src = "def f():\n    raise ValueError\n"
     assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
+
+
+def test_private_function_reported_only_with_every_callable():
+    src = 'def _f(x):\n    """Do."""\n    if x < 0:\n        raise ValueError\n    return x\n'
+    assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
+    findings = MissingRaisesDocRule().analyse(make_unit(src), every_callable_ctx(MissingRaisesDocRule.ID))
+    assert [f.symbol for f in findings] == ["_f"]
 
 
 def _wrap_in_unary_ops(node: ast.expr, depth: int) -> ast.expr:

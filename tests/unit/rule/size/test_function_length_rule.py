@@ -60,13 +60,15 @@ def test_above_threshold_emits_error():
 
 
 def test_far_above_threshold_emits_error():
-    body = "\n".join(["    x = 1"] * 25)
+    # 31 lines against 20 is at one and a half times the limit or more, so the finding keeps error severity.
+    body = "\n".join(["    x = 1"] * 30)
     source = f"def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=20))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.ERROR
-    assert f.metadata["lines"] == 26
+    assert f.metadata["limitBand"] == "upper"
+    assert f.metadata["lines"] == 31
     assert f.metadata["threshold"] == 20
 
 
@@ -89,14 +91,30 @@ def test_nested_functions_emit_independent_findings():
     assert "outer.inner" in symbols
 
 
-def test_decorator_lines_counted():
+def test_decorator_lines_are_free_but_still_mark_the_start():
     source = "@decorator\ndef f():\n    return 1\n"
-    # Span = decorator (1) + def (2) + body (3) = 3 lines total
-    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=2))
+    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=1))
     assert len(findings) == 1
     f = findings[0]
-    assert f.metadata["lines"] == 3
-    assert f.line == 1  # starts at decorator line
+    assert f.metadata["lines"] == 2
+    assert f.line == 1  # the finding still starts at the decorator line
+
+
+def test_function_with_101_code_lines_is_reported_whatever_its_documentation():
+    docstring = '    """Builds the values.\n\n    Every assignment below is code.\n    """'
+    body = "\n".join(f"    x{i} = {i}" for i in range(100))
+    source = f"def f():\n{docstring}\n{body}\n"
+    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=100))
+    assert len(findings) == 1
+    assert findings[0].metadata["lines"] == 101
+
+
+def test_documented_short_function_is_not_reported():
+    explanation = "\n".join(f"    Line {i} of a long explanation." for i in range(50))
+    docstring = f'    """Returns one.\n\n{explanation}\n    """'
+    comments = "\n".join(f"    # Step {i} of the reasoning." for i in range(150))
+    source = f"def f():\n{docstring}\n{comments}\n    return 1\n"
+    assert FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=100)) == []
 
 
 def test_async_function_flagged():

@@ -1,7 +1,8 @@
 # ADR-019: Per-Command `minimumSeverity:` Config Dimension
 
-**Status:** Accepted
+**Status:** Superseded by the family CLI contract decision `config-exit-gate-key` (`gruff-spec/contracts/core/cli.v1.json`) on 2026-09-19: `failOn` carries the per-command exit gate, and `minimumSeverity` is the display floor.
 **Date:** 2026-05-26
+**Updated:** 2026-09-19
 **Cross-implementation pair:** `gruff-go/.goat-flow/learning-loop/decisions/ADR-010-per-command-minimum-severity.md` (planned; gruff-go's current 0.1.2 draft still ships `never` as the off-switch value and needs to flip to `none` to match this ADR).
 **Ticket/Context:** 0.1.2 per-command severity issue brief; wording-brainstorm critique at `gruff-go/.goat-flow/logs/critiques/2026-05-26-config-wording-brainstorm-b5k2x.md`.
 

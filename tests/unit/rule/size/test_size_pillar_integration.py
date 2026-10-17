@@ -102,7 +102,17 @@ class WithLongInit:
         i,
         j,
     ):
-        return a + b + c + d + e + f + g + h + i + j
+        # Ten statements: function length counts statements, so the long signature above is one line of it.
+        total = a + b
+        total += c
+        total += d
+        total += e
+        total += f
+        total += g
+        total += h
+        total += i
+        total += j
+        return total
 
 
 async def big_async():
@@ -219,10 +229,7 @@ def _ctx_with_threshold_overrides(
     overrides: dict[str, dict[str, int]],
 ) -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules = {
-        rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id))
-        for rule in registry.all()
-    }
+    rules = {rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id)) for rule in registry.all()}
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
@@ -241,12 +248,7 @@ def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContex
 
 def _ctx_with_disabled(disabled_id: str) -> RuleContext:
     registry = RuleRegistry.defaults()
-    rules = {
-        rule.definition().id: _settings_for(
-            rule, None, enabled=(rule.definition().id != disabled_id)
-        )
-        for rule in registry.all()
-    }
+    rules = {rule.definition().id: _settings_for(rule, None, enabled=(rule.definition().id != disabled_id)) for rule in registry.all()}
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
@@ -282,9 +284,7 @@ def test_cumulative_fixture_findings_carry_symbol_and_metadata_lines():
     assert fl, "expected function-length findings"
     assert all(f.symbol for f in fl), f"missing symbol on: {fl}"
     assert all("lines" in f.metadata for f in fl), f"missing 'lines' in metadata: {fl}"
-    assert all(isinstance(f.metadata["lines"], int) for f in fl), (
-        f"non-int 'lines' in metadata: {fl}"
-    )
+    assert all(isinstance(f.metadata["lines"], int) for f in fl), f"non-int 'lines' in metadata: {fl}"
 
 
 _THRESHOLD_METADATA_FIXTURE_SRC = """

@@ -99,13 +99,7 @@ def _decorator_names(decorators: list[ast.expr]) -> tuple[str, ...]:
 
 
 def _candidate_classes(tree: ast.AST) -> list[ast.ClassDef]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef)
-        and not has_framework_base(node)
-        and not has_dataclass_decorator(node)
-    ]
+    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and not has_framework_base(node) and not has_dataclass_decorator(node)]
 
 
 def _unused_attribute_findings(
@@ -189,11 +183,7 @@ def _collect_property_names(cls: ast.ClassDef) -> set[str]:
             continue
         for decorator in stmt.decorator_list:
             decorator_name = _decorator_repr(decorator)
-            if (
-                decorator_name == "property"
-                or decorator_name.endswith(".setter")
-                or decorator_name.endswith(".getter")
-            ):
+            if decorator_name == "property" or decorator_name.endswith(".setter") or decorator_name.endswith(".getter"):
                 names.add(stmt.name)
     return names
 

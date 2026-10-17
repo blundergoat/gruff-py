@@ -7,6 +7,7 @@ attachment dance in every rule test.
 import ast
 
 from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
@@ -50,3 +51,15 @@ def default_ctx(project_root: str = "/tmp/no-such-root") -> RuleContext:
     """
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
     return RuleContext(project_root=project_root, config=config)
+
+
+def every_callable_ctx(rule_id: str) -> RuleContext:
+    """Build a ``RuleContext`` with one docs rule's ``everyCallable`` option turned on.
+
+    Args:
+        rule_id: Rule whose widened scope the test exercises.
+
+    Returns:
+        Context whose settings for *rule_id* carry ``everyCallable: true``.
+    """
+    return RuleContext(project_root="/", config=AnalysisConfig(rules={rule_id: RuleSettings(options={"everyCallable": True})}))

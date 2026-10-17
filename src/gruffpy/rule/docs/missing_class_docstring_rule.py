@@ -73,8 +73,7 @@ def _undocumented_classes(tree: ast.AST, *, dataclass_exempt: bool) -> list[ast.
     return [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef)
-        and _should_report_missing_class_docstring(node, dataclass_exempt=dataclass_exempt)
+        if isinstance(node, ast.ClassDef) and _should_report_missing_class_docstring(node, dataclass_exempt=dataclass_exempt)
     ]
 
 
@@ -109,10 +108,7 @@ def _missing_class_docstring_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Describe the class's role and any non-obvious invariants. "
-            "Describe behaviour, not the field types."
-        ),
+        remediation=("Describe the class's role and any non-obvious invariants. Describe behaviour, not the field types."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

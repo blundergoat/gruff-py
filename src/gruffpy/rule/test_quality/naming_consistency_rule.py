@@ -63,10 +63,7 @@ class NamingConsistencyRule(Rule):
         """
         if not isinstance(unit.tree, ast.Module):
             return []
-        if (
-            not unit.file.display_path.endswith(".py")
-            or "test" not in unit.file.display_path.lower()
-        ):
+        if not unit.file.display_path.endswith(".py") or "test" not in unit.file.display_path.lower():
             return []
         conventions: set[str] = set()
         for node in unit.tree.body:
@@ -93,10 +90,7 @@ class NamingConsistencyRule(Rule):
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                remediation=(
-                    "Pick one convention per project (pytest's `def test_foo` is the "
-                    "modern default) and rename the outliers."
-                ),
+                remediation=("Pick one convention per project (pytest's `def test_foo` is the modern default) and rename the outliers."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={"conventions": sorted(conventions)},
             ),

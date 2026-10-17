@@ -25,51 +25,41 @@ TEXT_EXTENSIONS: frozenset[str] = frozenset(
 
 TEXT_FILENAMES: frozenset[str] = frozenset({"setup.cfg"})
 
-IGNORED_FILENAMES: frozenset[str] = frozenset(
-    {
-        # Python lockfiles / package metadata that routinely contain high-entropy
-        # hashes (sha256 integrity blobs) that look like secrets.
-        "uv.lock",
-        "poetry.lock",
-        "Pipfile.lock",
-        "package-lock.json",
-        "yarn.lock",
-        "pnpm-lock.yaml",
-        "composer.lock",
-        "Cargo.lock",
-        "go.sum",
-    }
-)
+VCS_IGNORED_DIRECTORIES: tuple[str, ...] = (".git", ".hg", ".svn")
 
-DEFAULT_IGNORED_DIRECTORIES: tuple[str, ...] = (
+FALLBACK_IGNORED_DIRECTORIES: tuple[str, ...] = (
     ".fleet",
-    ".git",
-    ".goat-flow/logs",
-    ".goat-flow/scratchpad",
-    ".goat-flow/plans",
-    ".hg",
     ".idea",
     ".mypy_cache",
     ".pyre",
     ".pytest_cache",
     ".pytype",
     ".ruff_cache",
-    ".svn",
     ".tox",
     ".venv",
     ".vscode",
     "__pycache__",
     "build",
-    "cache",
     "coverage",
-    "dist",
-    "generated",
     "htmlcov",
     "node_modules",
-    "tmp",
-    "vendor",
     "venv",
 )
+
+# Directories holding third-party copies, and ``dist``, the one build-output name section 7 adds; ``build``,
+# ``coverage`` and ``htmlcov`` stay fallback-only. Like the fallback directories above they match at any depth, but
+# they are skipped even under a governing .gitignore and compared case-insensitively over ASCII, because a committed
+# copy is still someone else's code (FAMILY-CONTRACT.md section 7, amended by precision-floor M04).
+THIRD_PARTY_DIRECTORIES: frozenset[str] = frozenset({"bower_components", "dist", "third-party", "third_party", "vendor", "vendors"})
+
+# Pattern recorded for a minified file such as ``settings.min.json``, which section 7 skips as generated.
+MINIFIED_FILE_PATTERN = "*.min.*"
+
+# A base name with ``.min.`` directly before its final extension, after ASCII lowercasing.
+_MINIFIED_NAME = re.compile(r"\.min\.[^.]+$")
+
+# Lowercases A-Z only, so every port folds the same names: ``VENDOR`` matches and a non-ASCII look-alike does not.
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 # Ignore-decision source labels recorded on every skipped path. Shared by the
 # report's ``ignoredPathDetails`` field and the ``check-ignore`` command so a
@@ -87,8 +77,8 @@ class IgnoreReason:
     Attributes:
         source: One of ``config``, ``gitignore``, ``default``, or ``generated``.
         pattern: The exact matched glob for ``config``, the matched directory for
-            ``default``, the lockfile name for ``generated``, or ``None`` for
-            ``gitignore`` (the matcher does not surface the matching line).
+            ``default``, or ``None`` for ``gitignore`` (the matcher does not
+            surface the matching line).
     """
 
     source: str
@@ -196,7 +186,7 @@ class SourceDiscovery:
             if missing_path is not None:
                 missing.append(missing_path)
             for found_path in found_paths:
-                self._add_file(found_path, files, ignored)
+                self._add_file(found_path, files)
 
         sorted_files = tuple(files[k] for k in sorted(files))
         deduped: dict[str, IgnoredPath] = {}
@@ -220,9 +210,8 @@ class SourceDiscovery:
         """Return why gruff would ignore ``raw_path``, or ``None`` if it would not.
 
         Shares ``discover``'s ignore decision so ``check-ignore`` and ``analyse``
-        cannot diverge, then adds the generated-lockfile check that discovery
-        otherwise applies through source-type filtering. Works on hypothetical
-        paths that do not exist on disk, mirroring ``git check-ignore``.
+        cannot diverge. Existing file operands receive explicit-file semantics;
+        hypothetical paths retain path-policy classification.
 
         Args:
             raw_path: File or directory path relative to the project root.
@@ -239,12 +228,11 @@ class SourceDiscovery:
             include_ignored=include_ignored,
             patterns=patterns,
             record_file=True,
+            explicit_file=absolute.is_file(),
         )
         if decision.is_ignored and decision.reason is not None:
             display = decision.display_path or self._display_path(absolute)
             return IgnoredPath(display, decision.reason.source, decision.reason.pattern)
-        if absolute.name in IGNORED_FILENAMES:
-            return IgnoredPath(self._display_path(absolute), IGNORE_SOURCE_GENERATED, absolute.name)
         return None
 
     def _discover_requested_paths(
@@ -264,6 +252,7 @@ class SourceDiscovery:
             include_ignored=include_ignored,
             patterns=patterns,
             record_file=True,
+            explicit_file=absolute.is_file(),
         )
         if decision.is_ignored:
             self._record_ignored(decision, ignored)
@@ -293,11 +282,8 @@ class SourceDiscovery:
                     continue
                 if is_dir:
                     stack.append(entry)
-                elif entry.is_file():
-                    if self._source_type(entry) is not None:
-                        yield entry
-                    else:
-                        self._record_generated_lockfile(entry, ignored_paths)
+                elif entry.is_file() and self._source_type(entry) is not None:
+                    yield entry
 
     @staticmethod
     def _directory_entries(directory: Path) -> list[Path]:
@@ -330,33 +316,18 @@ class SourceDiscovery:
     def _record_ignored(decision: _IgnoreDecision, ignored_paths: list[IgnoredPath]) -> None:
         if decision.display_path is None or decision.reason is None:
             return
-        ignored_paths.append(
-            IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern)
-        )
+        ignored_paths.append(IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern))
 
-    def _add_file(
-        self, path: Path, target: dict[str, SourceFile], ignored: list[IgnoredPath]
-    ) -> None:
+    def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
         canonical = self._canonical(path)
         source_type = self._source_type(canonical)
         if source_type is None:
-            # An explicitly requested generated lockfile reaches here (the walk filters
-            # them earlier); record it so analyse's ignoredPathDetails matches what
-            # check-ignore reports instead of dropping it with no reason.
-            self._record_generated_lockfile(canonical, ignored)
             return
         target[str(canonical)] = SourceFile(
             absolute_path=str(canonical),
             display_path=self._display_path(canonical),
             type=source_type,
         )
-
-    def _record_generated_lockfile(self, path: Path, ignored: list[IgnoredPath]) -> None:
-        canonical = self._canonical(path)
-        if canonical.name in IGNORED_FILENAMES:
-            ignored.append(
-                IgnoredPath(self._display_path(canonical), IGNORE_SOURCE_GENERATED, canonical.name)
-            )
 
     def _absolute_path(self, raw: str) -> Path:
         if raw == "":
@@ -383,16 +354,10 @@ class SourceDiscovery:
         return "." if text == "." else text
 
     def _source_type(self, path: Path) -> SourceFileType | None:
-        if path.name in IGNORED_FILENAMES:
-            return None
         suffix = path.suffix.lower()
         if suffix in PYTHON_EXTENSIONS:
             return "python"
-        if (
-            suffix in TEXT_EXTENSIONS
-            or self._is_env_like(path)
-            or self._is_dependency_metadata_file(path)
-        ):
+        if suffix in TEXT_EXTENSIONS or self._is_env_like(path) or self._is_dependency_metadata_file(path):
             return "text"
         return None
 
@@ -404,22 +369,60 @@ class SourceDiscovery:
     @staticmethod
     def _is_dependency_metadata_file(path: Path) -> bool:
         name = path.name.lower()
-        return name in TEXT_FILENAMES or (
-            name.startswith("requirements") and name.endswith((".txt", ".in"))
-        )
+        return name in TEXT_FILENAMES or (name.startswith("requirements") and name.endswith((".txt", ".in")))
 
-    def _default_ignored_match(self, path: Path) -> str | None:
+    def _ignored_component_match(self, path: Path, ignored_names: tuple[str, ...]) -> str | None:
         display = self._display_path(path).replace("\\", "/")
         if display == ".":
             return None
         segments = display.strip("/").split("/")
-        for ignored in DEFAULT_IGNORED_DIRECTORIES:
+        for ignored in ignored_names:
             ig_segments = ignored.split("/")
             ig_count = len(ig_segments)
             for i in range(0, len(segments) - ig_count + 1):
                 if segments[i : i + ig_count] == ig_segments:
                     return ignored
         return None
+
+    def _third_party_match(self, path: Path, *, is_dir: bool) -> str | None:
+        """Return the outermost third-party or build-output directory on ``path``, lowercased.
+
+        A file's own name is not a directory, so a file called ``dist`` never matches, while ``a/Vendor/x.py`` gives
+        ``vendor``. The outermost directory wins, so ``vendor/x/dist/y.py`` is reported as ``vendor`` in every port.
+
+        Args:
+            path: Candidate file or directory.
+            is_dir: Whether the candidate itself is a directory, which makes its own name eligible.
+
+        Returns:
+            The matched directory name in lowercase, or ``None`` when no directory on the path is in the class.
+        """
+        display = self._display_path(path).replace("\\", "/")
+        if display == ".":
+            return None
+        segments = display.strip("/").split("/")
+        directories = segments if is_dir else segments[:-1]
+        for segment in directories:
+            lowered = segment.translate(_ASCII_LOWER)
+            if lowered in THIRD_PARTY_DIRECTORIES:
+                return lowered
+        return None
+
+    def _fallback_applies_at(self, path: Path) -> bool:
+        parent = self._canonical(path.parent)
+        try:
+            relative_parent = parent.relative_to(self._project_root)
+        except ValueError:
+            return True
+
+        current = self._project_root
+        if (current / ".gitignore").is_file():
+            return False
+        for segment in relative_parent.parts:
+            current /= segment
+            if (current / ".gitignore").is_file():
+                return False
+        return True
 
     def _configured_pattern(self, path: Path, patterns: list[str]) -> str | None:
         if not patterns:
@@ -438,26 +441,38 @@ class SourceDiscovery:
         patterns: list[str],
         is_dir: bool | None = None,
         record_file: bool,
+        explicit_file: bool = False,
     ) -> _IgnoreDecision:
         display_path = self._display_path(path)
         configured = self._configured_pattern(path, patterns)
         if configured is not None:
-            return _IgnoreDecision(
-                True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured)
-            )
-        if include_ignored:
-            return _IgnoreDecision(False)
+            return _IgnoreDecision(True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured))
         if is_dir is None:
             is_dir = path.is_dir()
-        default_match = self._default_ignored_match(path)
-        if default_match is not None:
+        vcs_match = self._ignored_component_match(path, VCS_IGNORED_DIRECTORIES)
+        if vcs_match is not None:
             recorded = display_path if record_file or is_dir else None
-            return _IgnoreDecision(
-                True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match)
-            )
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, vcs_match))
+        if include_ignored or explicit_file:
+            return _IgnoreDecision(False)
         if self._is_gitignored(path, is_dir=is_dir):
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_GITIGNORE, None))
+        # A gitignore match above names the reason first; unlike the fallback below, the section 7 classes still apply
+        # when a .gitignore governs the path, outermost directory before file name.
+        third_party = self._third_party_match(path, is_dir=is_dir)
+        if third_party is not None:
+            recorded = display_path if record_file or is_dir else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, third_party))
+        if not is_dir and _MINIFIED_NAME.search(path.name.translate(_ASCII_LOWER)):
+            # A walked minified file is listed only when gruff-py would otherwise scan it, as FAMILY-CONTRACT.md
+            # section 7 requires.
+            recorded = display_path if record_file or self._source_type(path) is not None else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, MINIFIED_FILE_PATTERN))
+        default_match = self._ignored_component_match(path, FALLBACK_IGNORED_DIRECTORIES)
+        if default_match is not None and self._fallback_applies_at(path):
+            recorded = display_path if record_file or is_dir else None
+            return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match))
         return _IgnoreDecision(False)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
@@ -477,7 +492,5 @@ def _is_pattern_match(display_path: str, pattern: str) -> bool:
     if normalised_path.startswith(normalised_pattern + "/"):
         return True
     escaped = re.escape(normalised_pattern)
-    regex = (
-        "^" + escaped.replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]") + "$"
-    )
+    regex = "^" + escaped.replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]") + "$"
     return re.match(regex, normalised_path) is not None

@@ -47,11 +47,7 @@ class RuleSelection:
     def _is_included(self, definition: "RuleDefinition") -> bool:
         if not self.tiers and not self.pillars and not self.rules:
             return True
-        return (
-            definition.tier.value in self.tiers
-            or definition.pillar.value in self.pillars
-            or definition.id in self.rules
-        )
+        return definition.tier.value in self.tiers or definition.pillar.value in self.pillars or definition.id in self.rules
 
     def to_dict(self) -> dict[str, list[str]]:
         """Serialise the selection into the camelCase shape used in report metadata.

@@ -20,10 +20,7 @@ def test_environment_autoescape_true_skipped():
 
 
 def test_environment_with_select_autoescape_skipped():
-    src = (
-        "from jinja2 import Environment, select_autoescape\n"
-        "env = Environment(autoescape=select_autoescape(['html', 'xml']))\n"
-    )
+    src = "from jinja2 import Environment, select_autoescape\nenv = Environment(autoescape=select_autoescape(['html', 'xml']))\n"
     assert Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx()) == []
 
 

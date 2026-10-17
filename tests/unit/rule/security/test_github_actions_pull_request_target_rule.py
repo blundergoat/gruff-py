@@ -20,13 +20,8 @@ def test_target_with_head_checkout_fires():
 
 
 def test_target_without_head_checkout_skipped():
-    src = (
-        "on:\n  pull_request_target:\n    types: [labeled]\n"
-        "jobs:\n  x:\n    steps:\n      - run: echo hi\n"
-    )
-    assert (
-        GithubActionsPullRequestTargetRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
-    )
+    src = "on:\n  pull_request_target:\n    types: [labeled]\njobs:\n  x:\n    steps:\n      - run: echo hi\n"
+    assert GithubActionsPullRequestTargetRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
 
 
 def test_plain_pull_request_with_head_checkout_skipped():
@@ -36,6 +31,4 @@ def test_plain_pull_request_with_head_checkout_skipped():
         "on: pull_request\njobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n"
         "        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n"
     )
-    assert (
-        GithubActionsPullRequestTargetRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
-    )
+    assert GithubActionsPullRequestTargetRule().analyse(make_text_unit(src, _WF), default_ctx()) == []

@@ -8,13 +8,7 @@ from gruffpy.command.metric_calibration import (
 )
 
 _TWO_FUNCTION_SAMPLE = (
-    "def simple(value):\n"
-    "    return value\n"
-    "\n"
-    "def branchy(value):\n"
-    "    if value > 0 and value < 10:\n"
-    "        return value + 1\n"
-    "    return value - 1\n"
+    "def simple(value):\n    return value\n\ndef branchy(value):\n    if value > 0 and value < 10:\n        return value + 1\n    return value - 1\n"
 )
 
 

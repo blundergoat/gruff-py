@@ -28,9 +28,7 @@ from gruffpy.analysis.runner import _scan_scope
         "two-subdirs",
     ],
 )
-def test_scan_scope_treats_project_root_paths_as_full_project(
-    tmp_path: Path, paths: tuple[str, ...], expected: str
-) -> None:
+def test_scan_scope_treats_project_root_paths_as_full_project(tmp_path: Path, paths: tuple[str, ...], expected: str) -> None:
     assert _scan_scope(paths, tmp_path) == expected
 
 
