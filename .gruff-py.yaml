@@ -374,7 +374,7 @@ rules:
     enabled: true
   # Hardcoded framework SECRET_KEY
   security.hardcoded-framework-secret-key:
-    enabled: true
+    enabled: false
   # Header injection
   security.header-injection:
     enabled: false

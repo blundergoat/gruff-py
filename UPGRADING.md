@@ -55,6 +55,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 24. **silent-except becomes opt-in** - `security.silent-except` recognizes explanatory comments inside a handler, but M02's complete repaired census remains below the 0.80 security floor at 21 right of 29 judged findings. The enabled repair preserves all 22 occurrences judged right across both versions; default scans omit them. Set `rules.security.silent-except.enabled: true` to retain this check. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.
 
+25. **Framework SECRET_KEY check becomes opt-in** - `security.hardcoded-framework-secret-key` stays registered with the same detection logic, but one remaining corpus finding is too little evidence to establish the security precision floor. Default scans omit this check. Set `rules.security.hardcoded-framework-secret-key.enabled: true` to retain it; existing explicit enable settings remain effective, and `--include-rule` alone does not enable it.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

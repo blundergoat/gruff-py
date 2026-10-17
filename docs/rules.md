@@ -91,7 +91,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.github-actions-secrets-in-pr` (default off)
 - `security.github-actions-unpinned-action`
 - `security.hardcoded-bind-all-interfaces`
-- `security.hardcoded-framework-secret-key`
+- `security.hardcoded-framework-secret-key` (default off)
 - `security.header-injection` (default off)
 - `security.insecure-random`
 - `security.insecure-temp-file`
@@ -860,10 +860,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.hardcoded-framework-secret-key` protects the security pillar by flagging hardcoded framework secret_key before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported hardcoded framework secret_key directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in under M02: only one current corpus finding remains after the shared test-path exclusion, below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector.
 - Security metadata: `cwe` = `['CWE-798', 'CWE-321']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.hardcoded-framework-secret-key` leaves hardcoded framework secret_key unaddressed.
 - Good example: Code that satisfies `security.hardcoded-framework-secret-key` makes hardcoded framework secret_key explicit or simpler.

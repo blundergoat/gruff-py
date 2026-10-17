@@ -35,7 +35,7 @@ _SECURITY_POSTURE: dict[str, Posture] = {
     "security.github-actions-secrets-in-pr": (False, "warning", "medium"),
     "security.github-actions-unpinned-action": (True, "warning", "high"),
     "security.hardcoded-bind-all-interfaces": (True, "warning", "medium"),
-    "security.hardcoded-framework-secret-key": (True, "error", "high"),
+    "security.hardcoded-framework-secret-key": (False, "error", "high"),
     "security.header-injection": (False, "warning", "medium"),
     "security.insecure-random": (True, "warning", "medium"),
     "security.insecure-temp-file": (True, "warning", "medium"),

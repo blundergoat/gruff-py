@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: framework SECRET_KEY check becomes opt-in** - `security.hardcoded-framework-secret-key` no longer runs by default because its one remaining corpus finding is too little evidence to establish the security precision floor. Set `rules.security.hardcoded-framework-secret-key.enabled: true` to retain the check. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.
+
 - **BREAKING: silent-except becomes opt-in** - `security.silent-except` recognizes comments explaining a handler's deliberate fallback. M02's complete repaired census judged 21 of 29 findings worth acting on, below the 0.80 security floor, so it no longer runs by default. The enabled repair preserves all 22 occurrences judged right across both versions; default scans omit them. Set `rules.security.silent-except.enabled: true` to use it; `--include-rule` alone does not enable it.
 
 - **BREAKING: return-documentation checks become opt-in** - `docs.missing-return-doc` stays registered but no longer runs by default while its bounded repair awaits fresh blind validation. Recognized result prose can satisfy the rule without a Returns section, including property descriptions and named returned values. Findings now ask for a result description. Enable it with `rules.docs.missing-return-doc.enabled: true`; `--include-rule` alone does not enable it.
