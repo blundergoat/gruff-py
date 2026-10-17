@@ -322,7 +322,7 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "for the project after documenting the alternate entry point.",
     ),
     "docs.missing-return-doc": (
-        "An override can inherit its return contract from a documented Protocol or base class while omitting a local Returns section.",
+        "An override can inherit its return contract from a documented Protocol or base class while omitting a local result description.",
         "Repeat the return contract locally, or suppress the rule on the reviewed override when inherited documentation is authoritative.",
     ),
     "docs.todo-density": (

@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: return-documentation checks become opt-in** - `docs.missing-return-doc` stays registered but no longer runs by default while its bounded repair awaits fresh blind validation. Recognized result prose can satisfy the rule without a Returns section, including property descriptions and named returned values. Findings now ask for a result description. Enable it with `rules.docs.missing-return-doc.enabled: true`; `--include-rule` alone does not enable it.
+
 - **BREAKING: six more rules become opt-in** - `security.dangerous-function-call`, `security.header-injection`, `security.unsafe-yaml-load`, `security.variable-import`, `security.xxe` and `sensitive-data.database-url-password` no longer run by default because M02's accepted measurements did not establish their precision floors. Enable a retained rule with `rules.<id>.enabled: true`; `--include-rule` alone does not enable it. Existing explicit enable settings remain effective. `docs/rules.md` records each reason, including the three table rules already opt-in.
 
 - **BREAKING: twenty-eight further rules are removed** - Remove the IDs below from selections, sensitive exclusions and suppression comments. Obsolete `rules:` blocks warn, or fail with `--strict-config`. Earlier tuning and opt-in notes for these IDs are superseded. No replacement is enabled. `metric-calibration` retains all three metrics and its default output; retired complexity settings no longer configure findings.

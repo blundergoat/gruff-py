@@ -5,6 +5,7 @@ expected rule_ids fire. Stricter than per-rule tests: catches accidental
 double-fires and registry omissions.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 from gruffpy.config.analysis_config import AnalysisConfig
@@ -131,6 +132,8 @@ _EXPECTED_RULE_IDS = {
 def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
+    # The cumulative fixture exercises the retained opt-in detector as well as default-on rules.
+    config.rules["docs.missing-return-doc"] = replace(config.rules["docs.missing-return-doc"], enabled=True)
     ctx = RuleContext(project_root=str(tmp_path), config=config)
 
     findings = registry.analyse([make_unit(_FIXTURE, "widget.py")], ctx)
@@ -140,7 +143,7 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     assert not missing, f"Missing rule fires: {sorted(missing)}"
 
 
-def test_docs_registry_has_thirteen_rules():
+def test_docs_registry_contains_every_expected_rule():
     registry = RuleRegistry.defaults()
     docs_ids = {rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")}
     assert docs_ids == _EXPECTED_RULE_IDS

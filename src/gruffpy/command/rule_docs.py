@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "docs.missing-return-doc": (
+        "Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish "
+        "the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending."
+    ),
     "complexity.cyclomatic": (
         "Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor."
     ),

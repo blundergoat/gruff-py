@@ -274,7 +274,7 @@ rules:
     enabled: true
   # Missing return documentation
   docs.missing-return-doc:
-    enabled: true
+    enabled: false
     options:
       everyCallable: false
   # Stale parameter documentation

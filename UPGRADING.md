@@ -51,6 +51,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 22. **six more rules become opt-in** - `security.dangerous-function-call`, `security.header-injection`, `security.unsafe-yaml-load`, `security.variable-import`, `security.xxe` and `sensitive-data.database-url-password` remain available but stop reporting at the defaults. M02's accepted measurements did not establish their precision floors; each reason is recorded in [docs/rules.md](docs/rules.md). Enable one with `rules.<id>.enabled: true`; `--include-rule` only filters enabled rules. Existing explicit `enabled: true` settings keep a rule running. Cyclomatic complexity, no-assertions and sut-not-called retain their existing opt-in defaults.
 
+23. **return documentation remains available as an opt-in check** - `docs.missing-return-doc` is retained under the return-documentation exception, with a bounded repair that recognizes result prose instead of requiring a Returns section. It is off by default until fresh blind validation establishes its precision floor. Set `rules.docs.missing-return-doc.enabled: true` to use it; an existing explicit enable setting stays effective. Findings ask you to describe the result in prose or a return field.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 1. Read the list above and decide which breaks touch your project. A project with no committed

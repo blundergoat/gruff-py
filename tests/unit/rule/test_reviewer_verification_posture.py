@@ -15,7 +15,7 @@ _DOCS_MISSING_POSTURE: dict[str, Posture] = {
     "docs.missing-param-doc": (True, "advisory", "medium"),
     "docs.missing-raises-doc": (True, "advisory", "low"),
     "docs.missing-readme": (True, "advisory", "medium"),
-    "docs.missing-return-doc": (True, "advisory", "medium"),
+    "docs.missing-return-doc": (False, "advisory", "medium"),
 }
 
 _SECURITY_POSTURE: dict[str, Posture] = {

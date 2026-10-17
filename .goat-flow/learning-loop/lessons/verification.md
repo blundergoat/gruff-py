@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-17
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -101,7 +101,7 @@ hypotheses, not just verification claims.
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
 
 **Created:** 2026-05-18
-**Updated:** 2026-07-12
+**Updated:** 2026-10-17
 **Incident:** During M25, `uv run ruff format --check src tests` mixed a new
 touched-file formatting issue with pre-existing unrelated formatting drift
 outside the patch. The correction was to run `uv run ruff format` only on the
@@ -130,6 +130,8 @@ before the repo-wide non-mutating gate, even when the repository was clean at
 the start. Then rerun the touched focused tests. This separates agent-owned
 formatting from unrelated drift and prevents a later assertion split from
 invalidating an otherwise final gate ladder.
+
+**Recurrence 2026-10-17:** The return-documentation repair's formatter left a 151-character remediation string, and Ruff lint rejected it with E501. Split adjacent string literals without changing the emitted text, then rerun both lint and formatter checks on the written paths. Evidence: `src/gruffpy/rule/docs/missing_return_doc_rule.py` (search: `_missing_return_doc_finding`); the corrected focused run passed 25 tests.
 
 ## Lesson: Re-run raw-source analyzers after formatting fixture strings
 

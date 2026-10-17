@@ -69,7 +69,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `docs.missing-param-doc`
 - `docs.missing-raises-doc`
 - `docs.missing-readme`
-- `docs.missing-return-doc`
+- `docs.missing-return-doc` (default off)
 - `docs.stale-param-doc`
 - `docs.todo-density`
 
@@ -473,13 +473,14 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `docs.missing-return-doc` protects the documentation pillar by flagging missing return documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing return documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending.
 - Options: `everyCallable` = `False`
 - Common false-positive shapes:
-  - An override can inherit its return contract from a documented Protocol or base class while omitting a local Returns section.
+  - An override can inherit its return contract from a documented Protocol or base class while omitting a local result description.
     Mitigation: Repeat the return contract locally, or suppress the rule on the reviewed override when inherited documentation is authoritative.
 - Bad example: Code that triggers `docs.missing-return-doc` leaves missing return documentation unaddressed.
 - Good example: Code that satisfies `docs.missing-return-doc` makes missing return documentation explicit or simpler.
