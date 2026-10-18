@@ -43,6 +43,7 @@ class SetupBloatRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
             default_thresholds={"maxSetupLines": 30},
         )
 
@@ -50,8 +51,8 @@ class SetupBloatRule(Rule):
         """Flag ``setUp``/``setup_method``/``@pytest.fixture`` bodies over ``maxSetupLines`` lines.
 
         Matches ``setUp``, ``setUpClass``, ``setup_method``, ``setup_class``,
-        ``setup_function``, ``setup`` by name, plus any function decorated
-        with a ``@*.fixture`` call.
+        ``setup_function`` by name. Plain ``setup`` also needs a conventional
+        test path. Any function decorated with a ``@*.fixture`` call remains eligible.
 
         Args:
             unit: Parsed source file to inspect.
@@ -70,7 +71,7 @@ class SetupBloatRule(Rule):
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            if not _is_setup(node):
+            if not _is_setup(node, unit.file.absolute_path):
                 continue
             lines = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
             if lines <= threshold:
@@ -97,7 +98,25 @@ class SetupBloatRule(Rule):
         return findings
 
 
-def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    if fn.name in _SETUP_NAMES:
+def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef, source_path: str) -> bool:
+    if fn.name in _SETUP_NAMES and (fn.name != "setup" or _is_test_setup_path(source_path)):
         return True
     return any((call_target_name(d) or "").split(".")[-1] == "fixture" for d in fn.decorator_list if isinstance(d, ast.Call))
+
+
+def _is_test_setup_path(source_path: str) -> bool:
+    """Recognize test paths before treating plain ``setup`` as a test hook.
+
+    Args:
+        source_path: Full source path, retaining test directories for explicit-file scans.
+
+    Returns:
+        True for test directories, conftest.py, or conventional test-file names.
+    """
+    *directories, filename = source_path.replace("\\", "/").lower().split("/")
+    return (
+        any(directory in {"test", "tests"} for directory in directories)
+        or filename == "conftest.py"
+        or (filename.startswith("test_") and filename.endswith(".py"))
+        or filename.endswith("_test.py")
+    )

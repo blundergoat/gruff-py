@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "test-quality.setup-bloat": (
+        "Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. "
+        "Explicit enablement retains the production-hook repair; default scans omit this rule's findings."
+    ),
     "security.unsafe-pickle": (
         "Opt-in under M02 while its 0.80 security precision floor remains unestablished. "
         "The local detector cannot infer whether a non-literal payload is a trusted internal cache. "

@@ -135,7 +135,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.pytest-deprecations-not-fatal`
 - `test-quality.pytest-strict-config-missing`
 - `test-quality.repeated-structure-missing-parametrize`
-- `test-quality.setup-bloat`
+- `test-quality.setup-bloat` (default off)
 - `test-quality.static-analysis-redundant-test`
 - `test-quality.sut-not-called` (default off)
 - `test-quality.test-function-too-long`
@@ -1603,10 +1603,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.setup-bloat` protects the test-quality pillar by flagging setup bloat before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported setup bloat directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. Explicit enablement retains the production-hook repair; default scans omit this rule's findings.
 - Named thresholds: `maxSetupLines` = `30`
 - Common false-positive shapes:
   - A costly domain fixture can be longer than its deliberately small focused tests without representing accidental shared state.

@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: setup-bloat becomes opt-in** - `test-quality.setup-bloat` judged seven of sixteen repaired findings worth acting on, below the 0.70 test-quality floor. Set `rules.test-quality.setup-bloat.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans require a conventional test path for plain `setup`, keeping Sphinx registration and application initialization quiet while preserving other lifecycle names and decorated fixtures at the same threshold.
+
 - **BREAKING: unsafe-pickle becomes opt-in** - `security.unsafe-pickle` stops running by default while its security precision floor remains unestablished. Set `rules.security.unsafe-pickle.enabled: true` to retain the existing check; `--include-rule` alone does not enable it. Existing explicit enable settings remain effective.
 
 - **BREAKING: generic-function naming becomes opt-in** - `naming.generic-function` remains below its 0.60 naming floor after the required-hook repair, at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept recognized imported Django command, docutils directive, thread and logging handler hooks, while unrelated generic names still report.

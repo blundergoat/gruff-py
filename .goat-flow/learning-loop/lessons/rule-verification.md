@@ -1,6 +1,6 @@
 ---
 category: rule-verification
-last_reviewed: 2026-10-15
+last_reviewed: 2026-10-18
 ---
 
 ## Lesson: New test docstrings need complete fixture and failure contracts before dogfood
@@ -342,6 +342,8 @@ so a named constant also stops it asking for `ids=`. Name the rows anyway, with
 **Decision changed:** Before claiming a fixture covers a rule, enable that detector and show its unsafe form fires beside the safe case.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 4
+**Latest occurrence:** 2026-10-18
 **Prevention:** An empty finding list from a safe fixture only covers the rules
 whose call shapes the fixture contains. For each rule a safe test claims, put
 its safe form in the fixture, then rewrite that form unsafely in a scratch copy
@@ -359,3 +361,7 @@ shapes: `tests/unit/rule/security/test_security_pillar_integration.py`
 (search: `def test_safe_equivalents_emit_no_security_findings`).
 
 **Recurrence 2026-10-10:** M15 made eight test-quality rules opt-in. The full-pillar fixture lost their required findings, and the lifecycle fixture lost exception-type-only. Their assertions remain intact; their existing configurations now enable the required rules. Evidence: `tests/unit/rule/test_quality/test_full_pillar_integration.py` (search: `_ctx_with_opt_in_rules`) and `tests/unit/rule/test_quality/test_mock_lifecycle_integration.py` (search: `test_mock_lifecycle_rules_fire_on_cumulative_fixture`).
+
+**Recurrence 2026-10-18:** M02 setup-bloat became opt-in, and the full-pillar fixture lost its expected finding. Inspect cumulative positive fixtures before changing a default, then explicitly enable the detector in their existing configuration. The correction adds setup-bloat to `_ctx_with_opt_in_rules` and preserves both exact count assertions and the fixture source. Evidence: `tests/unit/rule/test_quality/test_full_pillar_integration.py` (search: `test_full_pillar_fixture_exercises_every_test_quality_rule`).
+
+**Recurrence 2026-10-18:** A setup-bloat CLI positive exposed a different missing input: selecting Django's test helper directly reduced its display path to `utils.py`, hiding its test directory. The original detector emitted one finding; the first repair emitted none. Test explicit-file context as well as corpus context. The predicate now uses the full source path, and the regression separates that path from the displayed basename. Evidence: `tests/unit/rule/test_quality/test_setup_bloat_rule.py` (search: `test_plain_setup_keeps_test_path_for_explicit_file_input`).

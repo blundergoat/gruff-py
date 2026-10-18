@@ -65,6 +65,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 29. **Unsafe-pickle becomes opt-in** - Set `rules.security.unsafe-pickle.enabled: true` to retain the existing check. Its security precision floor remains unestablished, and the local detector cannot infer whether a non-literal payload is a trusted internal cache. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it.
 
+30. **Setup-bloat becomes opt-in** - Set `rules.test-quality.setup-bloat.enabled: true` to retain this check. Seven of sixteen repaired findings were worth acting on, below the 0.70 test-quality floor. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it. Enabled scans skip plain production `setup` hooks outside conventional test paths while preserving other lifecycle names and decorated fixtures.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 `naming.generic-function` becomes opt-in because its bounded repair remains below the 0.60 naming floor at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept required methods on explicitly imported Django commands (`handle`, `execute`), docutils directives (`run`), threads (`run`) and logging handlers (`handle`). Import aliases are supported; ambiguous bindings and unrecognized bases still report. Options and remediation are unchanged.

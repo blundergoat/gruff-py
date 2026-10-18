@@ -58,6 +58,7 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
         "test-quality.loop-assertion-without-message": {},
         "test-quality.no-assertions": {},
+        "test-quality.setup-bloat": {},
         "test-quality.sut-not-called": {},
         "test-quality.trivial-assertion": {},
     }.items():

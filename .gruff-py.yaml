@@ -529,7 +529,7 @@ rules:
       minGroupSize: 3
   # Setup bloat
   test-quality.setup-bloat:
-    enabled: true
+    enabled: false
     thresholds:
       maxSetupLines: 30
   # Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file.
