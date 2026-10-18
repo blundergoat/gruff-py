@@ -48,10 +48,10 @@ _UNSAFE_XML_TARGETS: frozenset[str] = frozenset(
 )
 _SOURCE_NEEDLES: tuple[str, ...] = ("xml", "lxml", "etree", "minidom", "pulldom", "sax")
 _REMEDIATION = (
-    "Replace stdlib/lxml XML parsers with the corresponding `defusedxml` "
-    "module (e.g. `from defusedxml.ElementTree import parse`). defusedxml "
-    "disables external-entity resolution and DTD processing, blocking XXE, "
-    "billion-laughs, and external-DTD attacks."
+    "Replace stdlib or lxml XML parsers with the matching `defusedxml` module "
+    "(for example `from defusedxml.ElementTree import parse`). defusedxml refuses "
+    "entity declarations and external references by default; pass "
+    "`forbid_dtd=True` to reject DTDs as well."
 )
 _XML_MODULE_PREFIXES: tuple[str, ...] = ("xml.", "lxml.")
 

@@ -75,7 +75,8 @@ class JwtTokenRule(SourceTextRule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     remediation=(
-                        "Hard-coded JWTs are short-lived but often leak signing intent. Rotate the signing key, then load tokens at runtime."
+                        "Remove the token from source and treat it as a live bearer credential until it expires: "
+                        "revoke it or rotate the signing key, then load tokens at runtime from the environment or a secret manager."
                     ),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"preview": category_preview("jwt")},

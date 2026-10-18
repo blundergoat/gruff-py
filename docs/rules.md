@@ -1750,7 +1750,7 @@ Suppressions are applied after rule execution and before scoring/reporting.
 Suppress one rule on the same line:
 
 ```python
-import os  # gruff: disable=waste.unused-import
+app.run(host="0.0.0.0")  # gruff: disable=security.hardcoded-bind-all-interfaces
 ```
 
 Suppress one or more rules on the next physical line:
