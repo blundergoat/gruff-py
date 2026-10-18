@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: generic-function naming becomes opt-in** - `naming.generic-function` remains below its 0.60 naming floor after the required-hook repair, at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept recognized imported Django command, docutils directive, thread and logging handler hooks, while unrelated generic names still report.
+
 - **BREAKING: private-key detection becomes opt-in** - `sensitive-data.private-key` no longer runs by default while its enabled corpus has fewer than ten findings. Set `rules.sensitive-data.private-key.enabled: true` to use it; `--include-rule` alone does not enable it. When enabled, matching BEGIN/END parser constants with no key body stay quiet, while opaque, incomplete and unmatched key material still reports with redacted previews.
 
 - **BREAKING: weak-crypto becomes opt-in** - `security.weak-crypto` no longer runs by default because fewer than ten enabled corpus findings remain, below the minimum needed to assess its security precision floor. Set `rules.security.weak-crypto.enabled: true` to use it; `--include-rule` alone does not enable it. When enabled, a no-argument MD5 or SHA1 constructor used only for `digest_size` stays quiet, while incremental password hashing still reports.

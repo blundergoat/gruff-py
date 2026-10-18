@@ -53,7 +53,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 ### Naming
 
 - `naming.abbreviation`
-- `naming.generic-function`
+- `naming.generic-function` (default off)
 - `naming.identifier-quality`
 - `naming.short-variable`
 - `naming.test-naming-consistency`
@@ -543,10 +543,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `advisory`
 - Confidence: `medium`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `naming.generic-function` protects the naming pillar by flagging generic function name before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported generic function name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Default-off reason: Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings.
 - Options: `genericFunctions` = `['process', 'handle', 'do', 'run', 'execute', 'perform', 'apply', 'manage', 'operate']`
 - Common false-positive shapes:
   - A framework hook or protocol can require a generic function name such as `run` or `handle` even when the implementation has one clear responsibility.

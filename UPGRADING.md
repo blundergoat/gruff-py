@@ -65,6 +65,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
+`naming.generic-function` becomes opt-in because its bounded repair remains below the 0.60 naming floor at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept required methods on explicitly imported Django commands (`handle`, `execute`), docutils directives (`run`), threads (`run`) and logging handlers (`handle`). Import aliases are supported; ambiguous bindings and unrecognized bases still report. Options and remediation are unchanged.
+
 1. Read the list above and decide which breaks touch your project. A project with no committed
    baseline and no hand-written configuration is usually unaffected by all but the rule changes.
 2. Upgrade the package:

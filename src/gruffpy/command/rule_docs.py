@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "naming.generic-function": (
+        "Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. "
+        "Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings."
+    ),
     "sensitive-data.private-key": (
         "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
         "below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair."

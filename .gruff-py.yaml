@@ -290,7 +290,7 @@ rules:
     enabled: true
   # Generic function name
   naming.generic-function:
-    enabled: true
+    enabled: false
     options:
       genericFunctions:
       - process
