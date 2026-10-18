@@ -540,7 +540,7 @@ rules:
     enabled: false
   # Test function too long
   test-quality.test-function-too-long:
-    enabled: true
+    enabled: false
     threshold: 100
     severity: error
   # Test longer than SUT

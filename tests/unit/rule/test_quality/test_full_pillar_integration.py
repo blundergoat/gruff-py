@@ -60,6 +60,7 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
         "test-quality.no-assertions": {},
         "test-quality.setup-bloat": {},
         "test-quality.sut-not-called": {},
+        "test-quality.test-function-too-long": {},
         "test-quality.trivial-assertion": {},
     }.items():
         settings = config.rule_settings(rule_id)
@@ -69,6 +70,7 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
                 enabled=True,
                 thresholds=dict(settings.thresholds),
                 options={**dict(settings.options), **options},
+                severity_threshold=settings.severity_threshold,
             ),
         )
     return RuleContext(project_root=str(tmp_path), config=config)

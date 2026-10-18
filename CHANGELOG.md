@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: test-function-too-long becomes opt-in** - Nine of twenty-five repaired findings were worth acting on, below the 0.70 test-quality floor. Set `rules.test-quality.test-function-too-long.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans exempt single literal-URL GET/status/inline-snapshot checks while retaining the configured physical code-line limit for other tests.
+
 - **BREAKING: setup-bloat becomes opt-in** - `test-quality.setup-bloat` judged seven of sixteen repaired findings worth acting on, below the 0.70 test-quality floor. Set `rules.test-quality.setup-bloat.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans require a conventional test path for plain `setup`, keeping Sphinx registration and application initialization quiet while preserving other lifecycle names and decorated fixtures at the same threshold.
 
 - **BREAKING: unsafe-pickle becomes opt-in** - `security.unsafe-pickle` stops running by default while its security precision floor remains unestablished. Set `rules.security.unsafe-pickle.enabled: true` to retain the existing check; `--include-rule` alone does not enable it. Existing explicit enable settings remain effective.

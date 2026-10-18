@@ -61,6 +61,10 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "test-quality.test-function-too-long": (
+        "Opt-in after M02's bounded repair: nine of twenty-five judged findings were worth acting on, below the 0.70 test-quality floor. "
+        "Explicit enablement retains the literal response-snapshot exemption; default scans omit this rule's findings."
+    ),
     "test-quality.setup-bloat": (
         "Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. "
         "Explicit enablement retains the production-hook repair; default scans omit this rule's findings."

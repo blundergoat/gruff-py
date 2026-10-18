@@ -138,7 +138,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.setup-bloat` (default off)
 - `test-quality.static-analysis-redundant-test`
 - `test-quality.sut-not-called` (default off)
-- `test-quality.test-function-too-long`
+- `test-quality.test-function-too-long` (default off)
 - `test-quality.test-longer-than-sut`
 - `test-quality.trivial-assertion` (default off)
 - `test-quality.unused-mock`
@@ -1657,10 +1657,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test function too long directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in after M02's bounded repair: nine of twenty-five judged findings were worth acting on, below the 0.70 test-quality floor. Explicit enablement retains the literal response-snapshot exemption; default scans omit this rule's findings.
 - Config threshold: `threshold` = `100`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
