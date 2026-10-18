@@ -4,6 +4,8 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **BREAKING: unsafe-pickle becomes opt-in** - `security.unsafe-pickle` stops running by default while its security precision floor remains unestablished. Set `rules.security.unsafe-pickle.enabled: true` to retain the existing check; `--include-rule` alone does not enable it. Existing explicit enable settings remain effective.
+
 - **BREAKING: generic-function naming becomes opt-in** - `naming.generic-function` remains below its 0.60 naming floor after the required-hook repair, at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept recognized imported Django command, docutils directive, thread and logging handler hooks, while unrelated generic names still report.
 
 - **BREAKING: private-key detection becomes opt-in** - `sensitive-data.private-key` no longer runs by default while its enabled corpus has fewer than ten findings. Set `rules.sensitive-data.private-key.enabled: true` to use it; `--include-rule` alone does not enable it. When enabled, matching BEGIN/END parser constants with no key body stay quiet, while opaque, incomplete and unmatched key material still reports with redacted previews.

@@ -69,6 +69,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / ".gruff-py.yaml").write_text(
         "schemaVersion: gruff-py.config.v0.1\nrules:\n"
         "  security.dangerous-function-call:\n    enabled: true\n"
+        "  security.unsafe-pickle:\n    enabled: true\n"
         "  security.variable-import:\n    enabled: true\n"
     )
     monkeypatch.chdir(tmp_path)

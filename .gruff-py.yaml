@@ -405,9 +405,9 @@ rules:
   # Server-side request forgery (SSRF)
   security.ssrf:
     enabled: true
-  # Unsafe pickle deserialisation
+  # Unsafe pickle remains opt-in while local cache provenance is unresolved.
   security.unsafe-pickle:
-    enabled: true
+    enabled: false
   # Unsafe YAML load
   security.unsafe-yaml-load:
     enabled: false

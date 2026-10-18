@@ -61,6 +61,11 @@ _GROUP_ORDER = (
 )
 
 _M02_DEFAULT_OFF_REASONS = {
+    "security.unsafe-pickle": (
+        "Opt-in under M02 while its 0.80 security precision floor remains unestablished. "
+        "The local detector cannot infer whether a non-literal payload is a trusted internal cache. "
+        "Explicit enablement retains the existing checks."
+    ),
     "naming.generic-function": (
         "Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. "
         "Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings."

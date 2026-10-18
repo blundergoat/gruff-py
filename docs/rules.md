@@ -102,7 +102,7 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `security.shell-injection` (default off)
 - `security.silent-except` (default off)
 - `security.ssrf`
-- `security.unsafe-pickle`
+- `security.unsafe-pickle` (default off)
 - `security.unsafe-yaml-load` (default off)
 - `security.variable-import` (default off)
 - `security.weak-crypto` (default off)
@@ -1035,10 +1035,11 @@ except ValueError:
 - Tier: `v0.1`
 - Default severity: `error`
 - Confidence: `high`
-- Default enabled: yes
+- Default enabled: no
 - Rationale: `security.unsafe-pickle` protects the security pillar by flagging unsafe pickle deserialisation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unsafe pickle deserialisation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Default-off reason: Opt-in under M02 while its 0.80 security precision floor remains unestablished. The local detector cannot infer whether a non-literal payload is a trusted internal cache. Explicit enablement retains the existing checks.
 - Bad example: Code that triggers `security.unsafe-pickle` leaves unsafe pickle deserialisation unaddressed.
 - Good example: Code that satisfies `security.unsafe-pickle` makes unsafe pickle deserialisation explicit or simpler.
 
