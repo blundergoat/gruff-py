@@ -155,6 +155,24 @@ def test_correlated_downweighting_requires_same_symbol():
     assert offender.grade.score == 50.62
 
 
+def test_correlated_findings_without_a_line_share_one_penalty():
+    """Charge one shared penalty for correlated findings that carry no line, matching the cluster the report publishes.
+
+    Two warnings (base 4 each) on one symbol share max(4, 4) / 2 = 2.0 each, so the pillar is charged 4.0 and the one
+    cluster row reports 4.0. Charging them in full billed 8.0 while the cluster row claimed they were one root cause.
+    """
+    findings = [
+        _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="run", line=None),
+        _finding("complexity.cognitive", pillar=Pillar.COMPLEXITY, symbol="run", line=None),
+    ]
+
+    report = ScoreCalculator().calculate(findings, 10)
+
+    pillar_penalties = {pillar.pillar: pillar.penalty for pillar in report.pillars}
+    assert pillar_penalties["complexity"] == 4.0
+    assert [cluster["weight"] for cluster in report.clusters] == [4.0]
+
+
 def test_correlated_downweighting_groups_decorated_function_across_lines():
     # size.function-length reports the decorator line and complexity rules the def
     # line, so the same decorated symbol lands on different lines; it must still

@@ -351,11 +351,12 @@ def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
     penalties = {id(finding): _base_penalty(finding) for finding in findings}
     groups: dict[tuple[str, str], list[Finding]] = {}
     for finding in findings:
-        if finding.rule_id not in CORRELATED_COMPLEXITY_RULES or finding.symbol is None or finding.line is None:
+        if finding.rule_id not in CORRELATED_COMPLEXITY_RULES or finding.symbol is None:
             continue
         # Key on the qualified symbol only, not the line: size.function-length reports
         # the decorator line while complexity rules report the def line, so a line in
-        # the key splits a decorated function's findings and skips down-weighting.
+        # the key splits a decorated function's findings and skips down-weighting. A
+        # finding without a line still names its function, so it shares the penalty too.
         key = (finding.file_path, finding.symbol)
         groups.setdefault(key, []).append(finding)
     for group in groups.values():
