@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -222,7 +223,7 @@ def hook_payload(
     *,
     paths: tuple[str, ...],
     changed_ranges: str | None = None,
-    base_stable_identities: frozenset[str] | None = None,
+    base_stable_identities: Counter[str] | None = None,
     mode: str = "full",
     baseline_path: str | None = None,
     baseline_statuses: dict[int, str] | None = None,
@@ -236,8 +237,8 @@ def hook_payload(
         paths: Requested hook path arguments, used to map explicit
             `--changed-ranges` onto files.
         changed_ranges: Raw explicit changed-range string from the hook CLI.
-        base_stable_identities: Hook stable identities from a baseline or git
-            base tree when a new-only comparison is active.
+        base_stable_identities: Hook stable identities from the git base tree,
+            each with its occurrence count, when a new-only comparison is active.
         mode: Which region selector chose the work, for the run audit block.
         baseline_path: Project-relative baseline that classified the run, or None.
         baseline_statuses: Baseline status per finding, keyed by `id(finding)`;
@@ -323,35 +324,68 @@ def _filter_findings_for_hook(
     *,
     paths: tuple[str, ...],
     changed_ranges: str | None = None,
-    base_stable_identities: frozenset[str] | None = None,
+    base_stable_identities: Counter[str] | None = None,
     has_prior_base: bool = False,
 ) -> _HookFilterResult:
     """Apply hook changed-region and new-only semantics to full-scan findings."""
     changed = _changed_region_set(findings, paths, changed_ranges)
     kept: list[Finding] = []
     suppressed_count = 0
+    scopes = [_scope_for_finding(finding) for finding in findings]
+    covered = _base_covered_findings(findings, scopes, base_stable_identities)
 
-    for finding in findings:
-        scope = _scope_for_finding(finding)
-        stable_identity = _hook_stable_identity(finding, scope)
+    for index, finding in enumerate(findings):
+        scope = scopes[index]
 
         if changed.active:
             if scope in {"file", "project"}:
                 # Without a prior base the hook cannot attribute a whole-file issue to this edit, and a base that
-                # already knew about it says the edit did not introduce it.
-                if not has_prior_base or (base_stable_identities is not None and stable_identity in base_stable_identities):
+                # already held this occurrence says the edit did not introduce it.
+                if not has_prior_base or index in covered:
                     suppressed_count += 1
                     continue
             elif not _is_finding_intersecting_changed_region(finding, changed):
                 suppressed_count += 1
                 continue
 
-        if base_stable_identities is not None and stable_identity in base_stable_identities:
+        if index in covered:
             continue
 
         kept.append(finding)
 
     return _HookFilterResult(findings=tuple(kept), suppressed_count=suppressed_count)
+
+
+def _base_covered_findings(
+    findings: tuple[Finding, ...],
+    scopes: list[str],
+    base_counts: Counter[str] | None,
+) -> set[int]:
+    """Pick the current findings the base already held, spending each key's base count on its lowest lines first.
+
+    One base occurrence covers one current occurrence, never every occurrence of its key, so a duplicate an edit added
+    stays visible. Counts are spent lowest line first, as baseline matching spends a reviewed count, before any region
+    filter applies.
+
+    Args:
+        findings: Every current finding, before any region filtering.
+        scopes: Each finding's hook scope, aligned by index.
+        base_counts: Occurrences of each hook stable identity in the base; None when no base was compared.
+
+    Returns:
+        Indexes of the findings the base covers; empty without a base.
+    """
+    if base_counts is None:
+        return set()
+    remaining = Counter(base_counts)
+    covered: set[int] = set()
+    # Spend lowest line first, so the occurrences a base already had are the ones it covers when an edit appends one.
+    for index in sorted(range(len(findings)), key=lambda position: (findings[position].line or 0, findings[position].column or 0, position)):
+        identity = _hook_stable_identity(findings[index], scopes[index])
+        if remaining[identity] > 0:
+            remaining[identity] -= 1
+            covered.add(index)
+    return covered
 
 
 def _scope_for_finding(finding: Finding) -> str:
@@ -398,8 +432,8 @@ def stable_identities_from_git_base(
     no_config: bool,
     include_ignored: bool,
     deep_scan_budget: str = "",
-) -> frozenset[str]:
-    """Analyze the git base tree and return hook stable identities.
+) -> Counter[str]:
+    """Analyze the git base tree and count its hook stable identities.
 
     Args:
         project_root: Git working tree where the hook command was invoked.
@@ -414,7 +448,7 @@ def stable_identities_from_git_base(
             when the hook passed no override.
 
     Returns:
-        Hook stable identities present in the requested base tree.
+        How many times each hook stable identity occurs in the requested base tree.
     """
     base_ref = "HEAD" if diff_ref == "working-tree" else diff_ref
     with tempfile.TemporaryDirectory(prefix="gruff-hook-base-") as tmp:
@@ -437,7 +471,7 @@ def stable_identities_from_git_base(
                 deep_scan_budget=deep_scan_budget,
             )
         )
-        return frozenset(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in report.findings)
+        return Counter(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in report.findings)
 
 
 def render_json(payload: dict[str, Any]) -> str:

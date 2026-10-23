@@ -297,6 +297,42 @@ def test_hook_diff_new_only_uses_stable_identity(
     assert "size.file-length" not in _rule_ids(grown)
 
 
+@pytest.mark.skipif(_GIT is None, reason="git is required for hook --diff conformance")
+def test_hook_diff_new_only_keeps_each_occurrence_beyond_the_base_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Report the second ``random.randint`` token while the base still holds only the first.
+
+    Both lines carry one hook key, because ``security.insecure-random`` names no symbol and states the same message. A
+    base that held the key once hid every current occurrence; it now covers exactly one, the lowest line.
+
+    Args:
+        tmp_path: Repository root holding the token module.
+        monkeypatch: Moves the working directory into the repository.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    module = src / "tokens.py"
+    _git("init")
+    _git("config", "user.email", "test@example.com")
+    _git("config", "user.name", "Test User")
+    module.write_text('"""Token helpers."""\n\nimport random\n\ntoken = random.randint(0, 9)\n')
+    _git("add", ".")
+    _git("commit", "-m", "base with one insecure token")
+
+    module.write_text('"""Token helpers."""\n\nimport random\n\ntoken = random.randint(0, 9)\nsecret_key = random.randint(0, 9)\n')
+    surplus = _hook("--no-config", "--diff", "HEAD", "src/tokens.py")
+    _git("add", ".")
+    _git("commit", "-m", "base with two insecure tokens")
+    module.write_text('"""Token helpers."""\n\nimport random\n\ntoken = random.randint(0, 9)\nsecret_key = random.randint(0, 99)\n')
+    equal = _hook("--no-config", "--diff", "HEAD", "src/tokens.py")
+
+    assert [finding["line"] for finding in surplus["findings"] if finding["ruleId"] == "security.insecure-random"] == [6]
+    assert [finding["line"] for finding in equal["findings"] if finding["ruleId"] == "security.insecure-random"] == []
+
+
 @pytest.mark.parametrize("bad_range", ["abc", "5-2"])
 def test_hook_rejects_malformed_changed_ranges(
     bad_range: str,

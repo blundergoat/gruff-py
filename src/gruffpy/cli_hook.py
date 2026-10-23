@@ -8,6 +8,7 @@ the projection logic in :mod:`gruffpy.hook_contract` without growing
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -443,8 +444,8 @@ def _hook_base_identities(
     no_config: bool,
     include_ignored: bool,
     deep_scan_budget: str,
-) -> frozenset[str] | None:
-    """Resolve hook base stable identities for a ``--diff`` run.
+) -> Counter[str] | None:
+    """Resolve hook base stable identities, with their occurrence counts, for a ``--diff`` run.
 
     A ``--baseline`` run no longer goes through here: it applies a ratified
     baseline v3 file, which classifies findings rather than matching hook-local
