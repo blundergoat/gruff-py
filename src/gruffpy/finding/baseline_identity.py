@@ -191,7 +191,60 @@ def declaration_spans(tree: ast.AST | None) -> tuple[DeclarationSpan, ...]:
     return tuple(sorted(spans, key=lambda span: (span.end - span.start, span.start)))
 
 
-def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[DeclarationSpan, ...]]) -> Callable[[Finding], int]:
+class DeclarationPositionResolver:
+    """Place a finding on its declaration, and list every same-named declaration in its file.
+
+    The list is what makes the ordinal count declarations rather than findings. Without it a clean earlier
+    declaration takes no slot, so the day it first warns it takes the later declaration's ordinal and stored review.
+
+    Stable contract: with the parsed spans present, a declaration's ordinal does not depend on which findings this run emitted.
+    """
+
+    def __init__(self, spans_by_file: Mapping[str, tuple[DeclarationSpan, ...]]) -> None:
+        """Keep the parsed declarations of every file in this run.
+
+        Args:
+            spans_by_file: Declarations per display path, from :func:`declaration_spans`.
+        """
+        self._spans_by_file = spans_by_file
+
+    def __call__(self, finding: Finding) -> int:
+        """Return the start line of the declaration a finding sits on.
+
+        Args:
+            finding: The finding to place; the last segment of its symbol names the declaration.
+
+        Returns:
+            The enclosing same-named declaration's start line, or the finding's own line when no declaration names it.
+        """
+        line = finding.line if finding.line is not None and finding.line > 0 else 1
+        symbol = finding.symbol
+        # Without a symbol there is no declaration to rank, and every symbol-less finding of one file shares a key anyway.
+        if not symbol:
+            return line
+        wanted = symbol.rsplit(".", 1)[-1]
+        for span in self._spans_by_file.get(finding.file_path, ()):
+            if span.name == wanted and span.start <= line <= span.end:
+                return span.start
+        return line
+
+    def same_named_positions(self, finding: Finding) -> tuple[int, ...]:
+        """List the start line of every declaration in the finding's file that shares its symbol.
+
+        Args:
+            finding: The finding whose symbol is looked up.
+
+        Returns:
+            Sorted start lines; empty for a symbol-less finding or a qualified symbol such as ``Widget.process``, whose
+            spans carry only the short name, so counting every ``process`` would merge two classes' methods.
+        """
+        symbol = finding.symbol
+        if not symbol or "." in symbol:
+            return ()
+        return tuple(sorted({span.start for span in self._spans_by_file.get(finding.file_path, ()) if span.name == symbol}))
+
+
+def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[DeclarationSpan, ...]]) -> DeclarationPositionResolver:
     """Build the resolver that maps a finding to the line its declaration begins on.
 
     The runner passes the result into baseline matching, so the ordinal counts declarations rather than lines:
@@ -201,22 +254,10 @@ def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[Declaratio
         spans_by_file: Declarations per display path, from :func:`declaration_spans`.
 
     Returns:
-        A resolver returning the enclosing declaration's start line, or the finding's own line when no declaration names it.
+        A resolver returning the enclosing declaration's start line, or the finding's own line when no declaration
+        names it, which also lists every same-named declaration for ranking.
     """
-
-    def position(finding: Finding) -> int:
-        line = finding.line if finding.line is not None and finding.line > 0 else 1
-        symbol = finding.symbol
-        # Without a symbol there is no declaration to rank, and every symbol-less finding of one file shares a key anyway.
-        if not symbol:
-            return line
-        wanted = symbol.rsplit(".", 1)[-1]
-        for span in spans_by_file.get(finding.file_path, ()):
-            if span.name == wanted and span.start <= line <= span.end:
-                return span.start
-        return line
-
-    return position
+    return DeclarationPositionResolver(spans_by_file)
 
 
 def _default_declaration_position(finding: Finding) -> int:
@@ -254,6 +295,17 @@ def finding_identities(
         if not has_baseline_identity(finding):
             identities.append(None)
             continue
+        # The runner names every finding once, over the whole scan. Reusing that name keeps one finding one identity
+        # in every later consumer, such as the hook, which would otherwise re-rank only the findings it was handed.
+        if finding.baseline_identity is not None and finding.baseline_subject is not None:
+            identities.append(
+                FindingIdentity(
+                    identity=finding.baseline_identity,
+                    subject=finding.baseline_subject,
+                    declaration_key=_stored_declaration_key(finding, finding.baseline_subject),
+                )
+            )
+            continue
         subject = baseline_subject(finding, ordinals[index])
         identities.append(
             FindingIdentity(
@@ -272,9 +324,14 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
     name takes the next one, which is what stops one review from covering both.
     """
     positions_by_symbol: dict[tuple[str, str], set[int]] = {}
+    same_named = getattr(position, "same_named_positions", None)
     for finding in findings:
         if finding.symbol and has_baseline_identity(finding):
-            positions_by_symbol.setdefault((finding.file_path, finding.symbol), set()).add(position(finding))
+            positions = positions_by_symbol.setdefault((finding.file_path, finding.symbol), set())
+            positions.add(position(finding))
+            # Every same-named declaration the parser saw takes a slot, whether or not it warned this run.
+            if same_named is not None:
+                positions.update(same_named(finding))
 
     ordinals: list[int] = []
     for finding in findings:
@@ -285,6 +342,17 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
         ranked = sorted(positions_by_symbol[(finding.file_path, finding.symbol)])
         ordinals.append(ranked.index(position(finding)) + 1)
     return tuple(ordinals)
+
+
+def _stored_declaration_key(finding: Finding, subject: str) -> str:
+    """Name the declaration of a finding that already carries its subject, without re-deriving a position.
+
+    The subject already names one declaration, so two findings carrying one subject share a key and are counted,
+    never reported as a collision.
+    """
+    if not finding.symbol:
+        return "declaration:file"
+    return f"declaration:subject:{subject}"
 
 
 def _declaration_key(finding: Finding, position: Callable[[Finding], int]) -> str:

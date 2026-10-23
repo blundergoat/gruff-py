@@ -20,7 +20,13 @@ from gruffpy.analysis.baseline import (
     migrate_baseline,
     require_overwritable_default_path,
 )
-from gruffpy.finding.baseline_identity import compute_identity_for, finding_identities, normalise_measured_values
+from gruffpy.finding.baseline_identity import (
+    DeclarationSpan,
+    compute_identity_for,
+    declaration_position_from_spans,
+    finding_identities,
+    normalise_measured_values,
+)
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -89,6 +95,39 @@ def test_a_line_shifted_finding_stays_hidden_and_a_new_sibling_does_not(tmp_path
     assert result.report.unchanged_count == 1
     assert result.report.new_count == 1
     assert result.report.absent_count == 0
+
+
+def test_an_earlier_same_named_declaration_that_starts_warning_does_not_inherit_the_review(tmp_path: Path) -> None:
+    """Keep a stored review on its own declaration when a clean same-named declaration above it starts warning.
+
+    Args:
+        tmp_path: Project root holding the baseline file.
+    """
+    spans_before = {"src/example.py": (DeclarationSpan(start=2, end=2, name="process"), DeclarationSpan(start=3, end=3, name="process"))}
+    generate_baseline(
+        project_root=tmp_path,
+        path="gruff-baseline.json",
+        findings=[_finding(symbol="process", line=3)],
+        declaration_position=declaration_position_from_spans(spans_before),
+    )
+    stored = json.loads((tmp_path / "gruff-baseline.json").read_text())["occurrences"]
+    assert [row["subject"] for row in stored] == ["process#2"]
+
+    # Removing a comment above the first declaration moves both up a line and makes the first one warn.
+    spans_after = {"src/example.py": (DeclarationSpan(start=1, end=1, name="process"), DeclarationSpan(start=2, end=2, name="process"))}
+    earlier = _finding(symbol="process", line=1)
+    reviewed = _finding(symbol="process", line=2)
+    result = apply_baseline(
+        project_root=tmp_path,
+        path="gruff-baseline.json",
+        findings=[earlier, reviewed],
+        source="explicit",
+        declaration_position=declaration_position_from_spans(spans_after),
+    )
+
+    assert result.findings == [earlier]
+    assert result.report.unchanged_count == 1
+    assert result.report.new_count == 1
 
 
 def test_a_second_occurrence_beyond_the_reviewed_count_is_new_and_the_lowest_line_is_spent(tmp_path: Path) -> None:

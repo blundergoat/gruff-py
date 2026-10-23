@@ -503,7 +503,8 @@ def _with_baseline_identities(findings: list[Finding], units: list[AnalysisUnit]
     resolver = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
     identities = finding_identities(findings, resolver)
     return [
-        finding if named is None else replace(finding, baseline_identity=named.identity) for finding, named in zip(findings, identities, strict=True)
+        finding if named is None else replace(finding, baseline_identity=named.identity, baseline_subject=named.subject)
+        for finding, named in zip(findings, identities, strict=True)
     ]
 
 

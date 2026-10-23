@@ -1420,6 +1420,66 @@ def test_cli_generated_baseline_applies_in_a_copied_checkout(tmp_path: Path, mon
     assert applied_payload["baseline"]["newFindings"] == 0
 
 
+def test_cli_baseline_review_stays_on_its_own_same_named_function(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a newly undocumented function instead of letting it take a same-named function's stored review.
+
+    Ranking only the functions that had findings gave the reviewed second ``process`` ordinal 1 while the first was
+    documented; when the first lost its docstring it took ordinal 1 and the review, and the reviewed one came back.
+
+    Args:
+        tmp_path: Project root holding the two same-named functions.
+        monkeypatch: Moves the working directory into the project.
+    """
+    header = '"""Two same-named helpers."""\n\n\n'
+    documented = (
+        'def process(a):\n    """Return the value unchanged.\n\n'
+        '    Args:\n        a: The value.\n\n    Returns:\n        The value.\n    """\n    return a\n\n\n'
+    )
+    undocumented_first = "def process(a):\n    return a\n\n\n"
+    second = "def process(b):\n    return b\n"
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "pair.py"
+    source.write_text(header + documented + second)
+    monkeypatch.chdir(tmp_path)
+    generated = CliRunner().invoke(main, ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-config", "--generate-baseline"])
+    source.write_text(header + undocumented_first + second)
+
+    applied_arguments = ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-config", "--baseline", "gruff-baseline.json"]
+    applied = CliRunner().invoke(main, applied_arguments)
+
+    assert (generated.exit_code, applied.exit_code) == (0, 0), generated.output + applied.output
+    visible = [finding["line"] for finding in json.loads(applied.output)["findings"] if finding["ruleId"] == "docs.missing-function-docstring"]
+    assert visible == [4]
+
+
+def test_cli_hook_keeps_a_review_analyse_stored_on_a_same_named_function(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide the reviewed second ``process`` in the hook as ``analyse --baseline`` does.
+
+    ``analyse`` stores the review as ``process#2``, because the documented first ``process`` takes the first slot. The
+    hook ranked only the findings it was handed by line, gave the reviewed function ``process#1`` and reported it new.
+
+    Args:
+        tmp_path: Project root holding the two same-named functions.
+        monkeypatch: Moves the working directory into the project.
+    """
+    documented = (
+        '"""Two same-named helpers."""\n\n\n'
+        'def process(a):\n    """Return the value unchanged.\n\n'
+        '    Args:\n        a: The value.\n\n    Returns:\n        The value.\n    """\n    return a\n\n\n'
+        "def process(b):\n    return b\n"
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "pair.py").write_text(documented)
+    monkeypatch.chdir(tmp_path)
+    generated = CliRunner().invoke(main, ["analyse", "src", "--format", "json", "--fail-on", "none", "--no-config", "--generate-baseline"])
+
+    hooked = CliRunner().invoke(main, ["hook", "--no-config", "--baseline", "gruff-baseline.json", "src/pair.py"])
+
+    assert (generated.exit_code, hooked.exit_code) == (0, 0), generated.output + hooked.output
+    docstring_findings = [finding for finding in json.loads(hooked.output)["findings"] if finding["ruleId"] == "docs.missing-function-docstring"]
+    assert docstring_findings == []
+
+
 def test_cli_printed_baseline_commands_use_canonical_spellings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Copy the refusal's migration command and then the migration's tip, and meet no superseded-spelling warning.
 

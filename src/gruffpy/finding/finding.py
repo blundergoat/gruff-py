@@ -35,6 +35,8 @@ class Finding:
         metadata: Rule-specific JSON-compatible metadata.
         baseline_identity: The ratified durable identity this run computed, or ``None`` when the finding is
             sensitive, or when a direct API caller built it outside the analysis pipeline. Never serialized.
+        baseline_subject: The subject that identity hashed, such as ``process#2``; ``None`` whenever
+            ``baseline_identity`` is. Never serialized.
     """
 
     rule_id: str
@@ -52,6 +54,7 @@ class Finding:
     secondary_pillars: tuple[Pillar, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
     baseline_identity: str | None = None
+    baseline_subject: str | None = None
 
     def fingerprint(self) -> str:
         """Compute the stable 16-char identifier used for baselines and dedup.
