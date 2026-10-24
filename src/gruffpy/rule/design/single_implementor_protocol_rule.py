@@ -88,20 +88,12 @@ class SingleImplementorProtocolRule:
             Findings for one-implementor abstractions without external type usage.
         """
         settings = context.settings_for(self.definition())
-        external_bases = {
-            base.lower() for base in settings.string_list_option("externalProtocolBases")
-        }
+        external_bases = {base.lower() for base in settings.string_list_option("externalProtocolBases")}
         excluded_paths = tuple(settings.string_list_option("additionalExcludedPaths"))
-        eligible_units = [
-            unit
-            for unit in units
-            if unit.tree is not None and not _is_excluded(unit.file.display_path, excluded_paths)
-        ]
+        eligible_units = [unit for unit in units if unit.tree is not None and not _is_excluded(unit.file.display_path, excluded_paths)]
         classes = _collect_classes(eligible_units)
         abstractions = [info for info in classes if _is_internal_abstraction(info, external_bases)]
-        abstraction_names = {info.fqn for info in abstractions} | {
-            info.simple_name for info in abstractions
-        }
+        abstraction_names = {info.fqn for info in abstractions} | {info.simple_name for info in abstractions}
         extended_abstractions = _extended_abstractions(abstractions, abstraction_names)
         references = _collect_type_references(eligible_units)
         return _findings_for_abstractions(
@@ -136,9 +128,7 @@ def _findings_for_abstractions(
 
 
 def _is_extended_abstraction(abstraction: _ClassInfo, extended_abstractions: set[str]) -> bool:
-    return (
-        abstraction.fqn in extended_abstractions or abstraction.simple_name in extended_abstractions
-    )
+    return abstraction.fqn in extended_abstractions or abstraction.simple_name in extended_abstractions
 
 
 def _implementors_for(
@@ -166,12 +156,7 @@ def _external_usage_count(
         implementor.fqn,
         implementor.simple_name,
     }
-    return sum(
-        1
-        for reference in references
-        if _is_matching_name(reference.name, abstraction)
-        and reference.owner_class_fqn not in local_names
-    )
+    return sum(1 for reference in references if _is_matching_name(reference.name, abstraction) and reference.owner_class_fqn not in local_names)
 
 
 def _finding_for(
@@ -386,11 +371,7 @@ class _ReferenceVisitor(ast.NodeVisitor):
     def _owner_fqn(self) -> str | None:
         if not self.class_stack:
             return None
-        return (
-            ".".join((self.module, *self.class_stack))
-            if self.module
-            else ".".join(self.class_stack)
-        )
+        return ".".join((self.module, *self.class_stack)) if self.module else ".".join(self.class_stack)
 
 
 def _annotation_names(node: ast.AST) -> set[str]:
@@ -459,9 +440,7 @@ def _sequence_annotation_names(elements: list[ast.expr]) -> set[str]:
 
 
 def _is_matching_name(name: str, abstraction: _ClassInfo) -> bool:
-    return (
-        name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
-    )
+    return name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
 
 
 def _name_for(node: ast.AST) -> str:

@@ -36,13 +36,14 @@ def test_class_with_few_public_methods_emits_no_finding():
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
-def test_class_with_many_public_methods_emits_error():
+def test_class_just_over_public_method_threshold_is_a_lower_band_notice():
     methods = "\n".join([f"    def m{i}(self):\n        return {i}" for i in range(20)])
     source = f"class C:\n{methods}\n"
     findings = PublicMethodCountRule().analyse(_make_unit(source), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.ERROR
+    assert f.severity == Severity.ADVISORY
+    assert f.metadata["limitBand"] == "lower"
     assert f.metadata["publicMethods"] == 20
 
 

@@ -69,6 +69,7 @@ class WeakCryptoRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -98,9 +99,7 @@ class WeakCryptoRule(Rule):
             if candidate is None:
                 continue
             call, algorithm, source_label = candidate
-            findings.append(
-                _finding_for_call(definition, unit.file.display_path, call, algorithm, source_label)
-            )
+            findings.append(_finding_for_call(definition, unit.file.display_path, call, algorithm, source_label))
         return findings
 
 
@@ -123,6 +122,10 @@ def _weak_crypto_call(node: ast.AST) -> tuple[ast.Call, str, str] | None:
     weak_algorithm = _weak_algorithm(call_target)
     # MD5/SHA1 have the standard-library opt-out; no other candidate uses it.
     if weak_algorithm is not None:
+        parent = getattr(node, "parent", None)
+        # Reading an empty constructor's digest size does not hash security material.
+        if not node.args and not node.keywords and isinstance(parent, ast.Attribute) and parent.attr == "digest_size":
+            return None
         # A literal False tells the user-facing rule this hash is intentionally non-security.
         if _has_literal_usedforsecurity_opt_out(node):
             return None
@@ -164,17 +167,11 @@ def _finding_for_call(
     remediation = (
         "Use ``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
         if password_hashing
-        else (
-            "Use ``hashlib.sha256``/``sha512`` for content hashing or "
-            "``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
-        )
+        else ("Use ``hashlib.sha256``/``sha512`` for content hashing or ``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage.")
     )
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`hashlib.{algorithm}` used in a security-smelling context - "
-            f"prefer SHA-256+ or a password-hashing KDF."
-        ),
+        message=(f"`hashlib.{algorithm}` used in a security-smelling context - prefer SHA-256+ or a password-hashing KDF."),
         file_path=file_path,
         line=call.lineno,
         severity=definition.default_severity,
@@ -263,19 +260,11 @@ def _has_security_smelling_parent(call: ast.Call) -> bool:
 
 
 def _has_security_smelling_target(targets: list[ast.expr]) -> bool:
-    return any(
-        name is not None and has_security_smell(name)
-        for target in targets
-        for name in [_target_security_name(target)]
-    )
+    return any(name is not None and has_security_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _has_password_hashing_target(targets: list[ast.expr]) -> bool:
-    return any(
-        name is not None and _has_password_hashing_smell(name)
-        for target in targets
-        for name in [_target_security_name(target)]
-    )
+    return any(name is not None and _has_password_hashing_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _target_security_name(target: ast.expr) -> str | None:

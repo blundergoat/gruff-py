@@ -9,15 +9,7 @@ from gruffpy.config.yaml_loader import load_gruff_py_yaml
 def test_loads_basic_yaml(tmp_path: Path):
     path = tmp_path / ".gruff-py.yaml"
     path.write_text(
-        "paths:\n"
-        "  ignore:\n"
-        "    - build/\n"
-        "    - .venv/\n"
-        "rules:\n"
-        "  size.file-length:\n"
-        "    thresholds:\n"
-        "      warning: 500\n"
-        "      error: 1000\n"
+        "paths:\n  ignore:\n    - build/\n    - .venv/\nrules:\n  size.file-length:\n    thresholds:\n      warning: 500\n      error: 1000\n"
     )
     data = load_gruff_py_yaml(path)
     assert data["paths"]["ignore"] == ["build/", ".venv/"]
@@ -57,14 +49,7 @@ def test_missing_file_raises_config_error(tmp_path: Path):
 
 def test_dotted_rule_keys_preserved(tmp_path: Path):
     path = tmp_path / ".gruff-py.yaml"
-    path.write_text(
-        "rules:\n"
-        "  size.file-length:\n"
-        "    enabled: true\n"
-        "  complexity.cyclomatic:\n"
-        "    thresholds:\n"
-        "      warning: 8\n"
-    )
+    path.write_text("rules:\n  size.file-length:\n    enabled: true\n  complexity.cyclomatic:\n    thresholds:\n      warning: 8\n")
     data = load_gruff_py_yaml(path)
     assert "size.file-length" in data["rules"]
     assert "complexity.cyclomatic" in data["rules"]

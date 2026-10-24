@@ -30,9 +30,7 @@ _REQUIREMENTS_OPTION_PREFIXES = (
 )
 _EDITABLE_PREFIXES = ("-e ", "--editable ")
 _NAME_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?")
-_DIRECT_NAME_RE = re.compile(
-    r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?\s*@\s*(?P<ref>\S+)"
-)
+_DIRECT_NAME_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?\s*@\s*(?P<ref>\S+)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,10 +220,7 @@ def _pyproject_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
             values.extend(_string_list(group_values))
 
     used_offsets: set[int] = set()
-    return tuple(
-        DependencyDeclaration(value, _line_for_value(source, value, used_offsets), "pyproject")
-        for value in values
-    )
+    return tuple(DependencyDeclaration(value, _line_for_value(source, value, used_offsets), "pyproject") for value in values)
 
 
 def _requirements_declarations(source: str) -> tuple[DependencyDeclaration, ...]:

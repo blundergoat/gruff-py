@@ -72,9 +72,7 @@ class DataclassAttributesRule(Rule):
                 definition.default_options["require_all_fields"],
             )
         )
-        allow_bullets = bool(
-            settings.options.get("allow_bullets", definition.default_options["allow_bullets"])
-        )
+        allow_bullets = bool(settings.options.get("allow_bullets", definition.default_options["allow_bullets"]))
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.ClassDef):
@@ -257,10 +255,7 @@ def _dataclass_attributes_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Add an Attributes section or field bullet list explaining the dataclass "
-            "payload fields."
-        ),
+        remediation=("Add an Attributes section or field bullet list explaining the dataclass payload fields."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "fieldCount": len(fields),

@@ -46,6 +46,7 @@ class HeaderInjectionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -67,18 +68,11 @@ class HeaderInjectionRule(Rule):
         if not (frameworks_in_use(unit.tree) & _FRAMEWORK_GATE):
             return []
         definition = self.definition()
-        return [
-            _header_injection_finding(unit, definition, node)
-            for node in _dynamic_header_assignments(unit.tree)
-        ]
+        return [_header_injection_finding(unit, definition, node) for node in _dynamic_header_assignments(unit.tree)]
 
 
 def _dynamic_header_assignments(tree: ast.AST) -> list[ast.Assign]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign) and any(_is_dynamic_header_target(t) for t in node.targets)
-    ]
+    return [node for node in ast.walk(tree) if isinstance(node, ast.Assign) and any(_is_dynamic_header_target(t) for t in node.targets)]
 
 
 def _is_dynamic_header_target(target: ast.expr) -> bool:
@@ -105,10 +99,7 @@ def _header_injection_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=node.end_lineno,
-        remediation=(
-            "Use literal header names. If a runtime-chosen name is "
-            "essential, validate against an explicit allowlist."
-        ),
+        remediation=("Use literal header names. If a runtime-chosen name is essential, validate against an explicit allowlist."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

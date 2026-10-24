@@ -71,6 +71,7 @@ class UnsafePickleRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -104,11 +105,7 @@ class UnsafePickleRule(Rule):
 
 
 def _unsafe_pickle_label(call: ast.Call, target: str | None) -> str | None:
-    if (
-        target is not None
-        and target in _UNSAFE_LOAD_TARGETS
-        and not _has_safe_literal_first_arg(call)
-    ):
+    if target is not None and target in _UNSAFE_LOAD_TARGETS and not _has_safe_literal_first_arg(call):
         return target
     return _unpickler_load_label(call)
 
@@ -146,10 +143,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` deserialises a non-literal input - pickle-family "
-            "deserialisation is a known RCE vector."
-        ),
+        message=(f"`{target}(...)` deserialises a non-literal input - pickle-family deserialisation is a known RCE vector."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,
@@ -158,8 +152,7 @@ def _build_finding(
         confidence=definition.confidence,
         end_line=call.end_lineno,
         remediation=(
-            "Use a structured format (JSON, msgpack with strict schema, "
-            "protobuf) for untrusted data. Reserve pickle for trusted internal IPC."
+            "Use a structured format (JSON, msgpack with strict schema, protobuf) for untrusted data. Reserve pickle for trusted internal IPC."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"target": target},

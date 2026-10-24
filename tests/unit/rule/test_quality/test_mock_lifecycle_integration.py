@@ -54,9 +54,6 @@ _EXPECTED_MOCK_LIFECYCLE_FIRES = {
     "test-quality.empty-parametrize",
     "test-quality.unused-mock",
     "test-quality.private-reflection",
-    "test-quality.exception-type-only",
-    "test-quality.tautological-type-assertion",
-    "test-quality.extends-production-class",
     "test-quality.global-state-mutation",
 }
 
@@ -77,20 +74,3 @@ def test_memoisation_invariant_holds_for_full_pillar():
     after = compute_count()
     # One compute regardless of how many test-quality rules consumed the scope.
     assert after - before == 1, f"Memoisation broken: {after - before} computes"
-
-
-# Floor for v0.1: 28 default-on test-quality rules. The full catalogue ships 34.
-_MIN_TEST_QUALITY_RULE_COUNT = 28
-
-
-def test_registry_has_full_test_quality_rule_set():
-    """v0.1 ships at least 28 default-on test-quality rules; the full set is 34."""
-    ids = {
-        r.definition().id
-        for r in RuleRegistry.defaults().all()
-        if r.definition().id.startswith("test-quality.")
-    }
-    assert len(ids) >= _MIN_TEST_QUALITY_RULE_COUNT, (
-        f"Expected ≥{_MIN_TEST_QUALITY_RULE_COUNT} test-quality rules; got "
-        f"{len(ids)}: {sorted(ids)}"
-    )

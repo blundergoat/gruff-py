@@ -54,8 +54,7 @@ def _root_menu_options(ctx: click.Context) -> list[str]:
         _section("Options:", ctx),
         _option_line(
             "-h, --help",
-            "Display help for the given command. When no command is given display help for the "
-            f"{_style('list', 'green', ctx)} command",
+            f"Display help for the given command. When no command is given display help for the {_style('list', 'green', ctx)} command",
             ctx,
         ),
         _option_line("    --silent", "Do not output any message", ctx),
@@ -69,8 +68,7 @@ def _root_menu_options(ctx: click.Context) -> list[str]:
         _option_line("-n, --no-interaction", "Do not ask any interactive question", ctx),
         _option_line(
             "-v|vv|vvv, --verbose",
-            "Increase the verbosity of messages: 1 for normal output, 2 for more "
-            "verbose output and 3 for debug",
+            "Increase the verbosity of messages: 1 for normal output, 2 for more verbose output and 3 for debug",
             ctx,
         ),
         "",

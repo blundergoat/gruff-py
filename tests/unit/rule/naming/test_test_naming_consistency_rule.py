@@ -63,7 +63,5 @@ def test_non_test_file_does_not_fire():
 
 def test_test_dir_path_recognised():
     src = "def test_foo(): pass\ndef testBar(): pass\n"
-    findings = TestNamingConsistencyRule().analyse(
-        _unit(src, display_path="tests/integration/something.py"), _ctx()
-    )
+    findings = TestNamingConsistencyRule().analyse(_unit(src, display_path="tests/integration/something.py"), _ctx())
     assert len(findings) == 1

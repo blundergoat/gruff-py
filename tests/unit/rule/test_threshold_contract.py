@@ -15,8 +15,6 @@ from gruffpy.source.source_file import SourceFile
 _THRESHOLD_RULE_IDS = {
     "complexity.cognitive",
     "complexity.cyclomatic",
-    "complexity.halstead-volume",
-    "complexity.maintainability-index",
     "complexity.nesting-depth",
     "size.attribute-count",
     "size.average-function-length",
@@ -68,11 +66,7 @@ def _unit(source: str) -> AnalysisUnit:
 
 
 def _severity_threshold_for(rule_id: str) -> SeverityThreshold | None:
-    # maintainability-index is below-is-worse: a threshold of 101 always fires
-    # against the clamped 0-100 metric. Above-is-worse rubrics fire on any value
-    # above 0.
-    if rule_id == "complexity.maintainability-index":
-        return SeverityThreshold(101, Severity.ERROR)
+    # Every surviving severity-threshold rubric fires above zero.
     if rule_id in _THRESHOLD_RULE_IDS:
         return SeverityThreshold(0, Severity.ERROR)
     return None
@@ -104,9 +98,7 @@ def _number_is_rendered(value: Any, message: str) -> bool:
 
 def _findings_by_rule_id() -> dict[str, Finding]:
     findings = RuleRegistry.defaults().analyse([_unit(_SOURCE)], _threshold_ctx())
-    return {
-        finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS
-    }
+    return {finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS}
 
 
 def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:

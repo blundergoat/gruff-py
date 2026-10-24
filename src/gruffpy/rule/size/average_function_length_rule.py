@@ -12,7 +12,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
 _MIN_METHODS = 3
 MethodNode = ast.FunctionDef | ast.AsyncFunctionDef
@@ -65,12 +65,13 @@ class AverageFunctionLengthRule(Rule):
 
         return [
             _average_function_length_finding(unit, definition, node, methods, settings)
-            for node, methods in _classes_with_long_average(unit.tree, threshold)
+            for node, methods in _classes_with_long_average(unit.tree, code_line_numbers(unit.source, unit.tree), threshold)
         ]
 
 
 def _classes_with_long_average(
     tree: ast.AST,
+    code_lines: frozenset[int],
     warning_threshold: int | float,
 ) -> list[tuple[ast.ClassDef, list[MethodNode]]]:
     result: list[tuple[ast.ClassDef, list[MethodNode]]] = []
@@ -78,19 +79,17 @@ def _classes_with_long_average(
         if not isinstance(node, ast.ClassDef):
             continue
         methods = _methods_for(node)
-        if len(methods) >= _MIN_METHODS and _average_lines(methods) > warning_threshold:
+        if len(methods) >= _MIN_METHODS and _average_lines(methods, code_lines) > warning_threshold:
             result.append((node, methods))
     return result
 
 
 def _methods_for(node: ast.ClassDef) -> list[MethodNode]:
-    return [
-        child for child in node.body if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
-    ]
+    return [child for child in node.body if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)]
 
 
-def _average_lines(methods: list[MethodNode]) -> float:
-    return sum(lines_for_size(method) for method in methods) / len(methods)
+def _average_lines(methods: list[MethodNode], code_lines: frozenset[int]) -> float:
+    return sum(lines_for_size(method, code_lines) for method in methods) / len(methods)
 
 
 def _average_function_length_finding(
@@ -100,7 +99,7 @@ def _average_function_length_finding(
     methods: list[MethodNode],
     settings: RuleSettings,
 ) -> Finding:
-    avg = _average_lines(methods)
+    avg = _average_lines(methods, code_line_numbers(unit.source, unit.tree))
     threshold_match = settings.high_value_threshold_match(avg)
     if threshold_match is None:
         raise ValueError("average function length finding requires a threshold match")
@@ -122,10 +121,7 @@ def _average_function_length_finding(
         confidence=definition.confidence,
         end_line=node.end_lineno,
         symbol=symbol,
-        remediation=(
-            "Shorten the typical method or split responsibilities; "
-            "tall averages usually signal a god class."
-        ),
+        remediation=("Shorten the typical method or split responsibilities; tall averages usually signal a god class."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "averageLines": rounded_avg,

@@ -11,6 +11,19 @@ from gruffpy.finding.severity import Severity
 
 _RULE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
+# Knob names gruff-go already publishes for a single-threshold rubric, keyed by rule id. The
+# family listing shape (M09, ratified 2026-09-09) carries every threshold as a named map; a rubric
+# whose id has no knob name anywhere in the family publishes the one-key map ``{"threshold": N}``
+# so no new permanent public identifier is invented.
+_LISTING_THRESHOLD_KNOB_NAMES: dict[str, str] = {
+    "complexity.cognitive": "maxComplexity",
+    "complexity.cyclomatic": "maxComplexity",
+    "complexity.nesting-depth": "maxDepth",
+    "size.file-length": "maxLines",
+    "size.function-length": "maxLines",
+    "size.parameter-count": "maxParameters",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class RuleDefinition:
@@ -84,6 +97,27 @@ class RuleDefinition:
         """
         if self.default_threshold is not None:
             return {"threshold": self.default_threshold}
+        if self.default_thresholds:
+            return {"thresholds": dict(self.default_thresholds)}
+        return {}
+
+    def listing_threshold_payload(self) -> dict[str, Any]:
+        """Return the family listing projection of this rule's thresholds.
+
+        ``list-rules`` and its per-rule detail view publish every threshold as a
+        named knob map under ``thresholds``. A single-threshold rubric borrows the
+        knob name gruff-go publishes for the same rule id, or publishes
+        ``{"threshold": value}`` when no port names that knob; a named-knob rule
+        publishes its map unchanged; a rule with neither publishes nothing, so an
+        absent key means "no threshold". ``threshold_payload`` is untouched and
+        still serves SARIF.
+
+        Returns:
+            ``{"thresholds": {...}}`` to splat into a listing payload, or ``{}``.
+        """
+        if self.default_threshold is not None:
+            knob = _LISTING_THRESHOLD_KNOB_NAMES.get(self.id, "threshold")
+            return {"thresholds": {knob: self.default_threshold}}
         if self.default_thresholds:
             return {"thresholds": dict(self.default_thresholds)}
         return {}

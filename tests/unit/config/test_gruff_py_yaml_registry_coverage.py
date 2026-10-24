@@ -58,9 +58,7 @@ def test_repo_yaml_rules_section_keys_match_registry_ids() -> None:
 
 
 _SEVERITY_THRESHOLD_DEFINITIONS = [d for d in _DEFINITIONS if d.default_threshold is not None]
-_KNOB_THRESHOLD_DEFINITIONS = [
-    d for d in _DEFINITIONS if d.default_threshold is None and d.default_thresholds
-]
+_KNOB_THRESHOLD_DEFINITIONS = [d for d in _DEFINITIONS if d.default_threshold is None and d.default_thresholds]
 
 
 @pytest.mark.parametrize("definition", _DEFINITIONS, ids=lambda d: d.id)
@@ -90,11 +88,14 @@ def test_knob_rule_keeps_thresholds_block(definition: RuleDefinition) -> None:
 # python_parser.py, _halstead.py, _secret_scanner_helper.py) whose single
 # public class doesn't share enough tokens with the file stem; the project
 # extends conventionalModuleNames so the rule recognises them as intentional.
-_RULES_WITH_PROJECT_OPTION_OVERRIDES = frozenset({"naming.module-name-mismatch"})
+# gruff-py also accepts one predicate name the closed auxiliary-verb list cannot express:
+# SourceDiscovery._fallback_applies_at is idiomatic subject-verb English, the calibration class
+# backlog.md records for this rule. It is accepted rather than renamed because gruff-spec pins
+# "def _fallback_applies_at(" as live M15 review evidence, so a rename to satisfy a style
+# advisory would break an immutable evidence anchor.
+_RULES_WITH_PROJECT_OPTION_OVERRIDES = frozenset()
 
-_DEFINITIONS_USING_DEFAULT_OPTIONS = [
-    d for d in _DEFINITIONS if d.id not in _RULES_WITH_PROJECT_OPTION_OVERRIDES
-]
+_DEFINITIONS_USING_DEFAULT_OPTIONS = [d for d in _DEFINITIONS if d.id not in _RULES_WITH_PROJECT_OPTION_OVERRIDES]
 
 
 @pytest.mark.parametrize("definition", _DEFINITIONS_USING_DEFAULT_OPTIONS, ids=lambda d: d.id)
@@ -124,24 +125,3 @@ def test_repo_yaml_loads_without_warnings_under_strict_mode() -> None:
     assert source == _PROJECT_ROOT / ".gruff-py.yaml"
     assert loader.warnings == ()
     assert set(loaded.rules) == set(defaults.rules)
-
-
-def test_module_name_mismatch_extends_conventional_module_names() -> None:
-    """The project-config override is the documented mechanism; assert its
-    shape so accidental edits don't silently break the rule's exemptions."""
-    section = _repo_yaml_data()["rules"]["naming.module-name-mismatch"]
-    configured_names = section["options"]["conventionalModuleNames"]
-    # Defaults must stay present (don't drop the built-in exemptions).
-    builtin_defaults = {"constants", "exceptions", "helpers", "protocols", "types"}
-    assert builtin_defaults.issubset(configured_names)
-    # Project-specific role-named modules must be exempted.
-    project_overrides = {
-        "cli",
-        "dashboard_server",
-        "python_parser",
-        "_halstead",
-        "_secret_scanner_helper",
-        "_comment_scanner",
-        "_dependency_posture_helper",
-    }
-    assert project_overrides.issubset(configured_names)

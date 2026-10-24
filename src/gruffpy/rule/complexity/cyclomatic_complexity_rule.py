@@ -12,6 +12,9 @@ Decision points (each +1):
 
 Base value: 1 per function. Nested function definitions are scored
 independently and do NOT contribute to the parent's count.
+
+The shared count above stays radon-aligned for its other consumers. The finding
+rule discounts non-wildcard match cases after the first in each dispatch.
 """
 
 import ast
@@ -31,13 +34,16 @@ from gruffpy.rule.complexity._walks import (
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+from gruffpy.suppression.sensitive_exclusion_filter import is_built_in_test_path
 
 _CYCLOMATIC_CACHE_ATTR = "_gruffpy_cyclomatic_complexity"
 
 
 class CyclomaticComplexityRule(Rule):
-    """Report functions whose McCabe complexity exceeds configured thresholds."""
+    """Report functions over configured complexity thresholds, discounting extra match cases."""
 
     ID = "complexity.cyclomatic"
 
@@ -55,6 +61,9 @@ class CyclomaticComplexityRule(Rule):
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
             default_threshold=20,
+            # Off unless a project enables it: after its repair, 26 of 50 upper-band findings were worth acting on in the
+            # 0.6.0 precision measurement, under the 0.60 floor; complexity.cognitive covers the same functions.
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -70,13 +79,18 @@ class CyclomaticComplexityRule(Rule):
         if unit.tree is None:
             return []
 
+        # A test's branches are its assertion sequence, which M14's upper-band labels found not worth splitting.
+        if is_built_in_test_path(unit.file.display_path):
+            return []
+
         definition = self.definition()
         settings = context.settings_for(definition)
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
-            cc = cyclomatic_for(fn)
+            cc = cyclomatic_for(fn) - _extra_match_cases(fn)
             threshold_match = settings.high_value_threshold_match(cc)
+            band = limit_band(cc, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -92,16 +106,13 @@ class CyclomaticComplexityRule(Rule):
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Extract decision branches into helper functions; "
-                        "replace nested conditionals with early returns or dispatch tables."
-                    ),
+                    remediation=band_advice(band, _band.LOWER_FUNCTION, _band.SIMPLIFY_PATH),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "complexity": cc,
@@ -109,6 +120,7 @@ class CyclomaticComplexityRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -136,6 +148,26 @@ def cyclomatic_for(fn: FunctionLike) -> int:
         count += _increment_for(node)
     setattr(fn, _CYCLOMATIC_CACHE_ATTR, count)
     return count
+
+
+def _extra_match_cases(fn: FunctionLike) -> int:
+    """Count the match cases after each match's first, which this rule takes back so a match is one decision.
+
+    ``cyclomatic_for`` stays radon-aligned for the maintainability index and the docs rationale rule; only this rule
+    reports a flat dispatch over many cases as the single decision a reader makes.
+
+    Args:
+        fn: Function, async function, or lambda node whose matches are counted.
+
+    Returns:
+        The number of non-wildcard cases beyond one, summed over every match in the function.
+    """
+    extra = 0
+    for node in body_nodes(fn):
+        if isinstance(node, ast.Match):
+            cases = sum(1 for case in node.cases if not is_wildcard_pattern(case.pattern))
+            extra += max(cases - 1, 0)
+    return extra
 
 
 def _increment_for(node: ast.AST) -> int:

@@ -48,10 +48,10 @@ _UNSAFE_XML_TARGETS: frozenset[str] = frozenset(
 )
 _SOURCE_NEEDLES: tuple[str, ...] = ("xml", "lxml", "etree", "minidom", "pulldom", "sax")
 _REMEDIATION = (
-    "Replace stdlib/lxml XML parsers with the corresponding `defusedxml` "
-    "module (e.g. `from defusedxml.ElementTree import parse`). defusedxml "
-    "disables external-entity resolution and DTD processing, blocking XXE, "
-    "billion-laughs, and external-DTD attacks."
+    "Replace stdlib or lxml XML parsers with the matching `defusedxml` module "
+    "(for example `from defusedxml.ElementTree import parse`). defusedxml refuses "
+    "entity declarations and external references by default; pass "
+    "`forbid_dtd=True` to reject DTDs as well."
 )
 _XML_MODULE_PREFIXES: tuple[str, ...] = ("xml.", "lxml.")
 
@@ -79,6 +79,7 @@ class XxeRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -123,11 +124,7 @@ def _has_defusedxml_import(tree: ast.AST) -> bool:
             for alias in node.names:
                 if alias.name == "defusedxml" or alias.name.startswith("defusedxml."):
                     return True
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and (node.module == "defusedxml" or node.module.startswith("defusedxml."))
-        ):
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and (node.module == "defusedxml" or node.module.startswith("defusedxml.")):
             return True
     return False
 
@@ -207,10 +204,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` parses XML without external-entity protections - "
-            "XXE / billion-laughs risk."
-        ),
+        message=(f"`{target}(...)` parses XML without external-entity protections - XXE / billion-laughs risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -1,5 +1,5 @@
 from gruffpy.rule.docs.missing_function_docstring_rule import MissingFunctionDocstringRule
-from tests.unit.rule.docs._helpers import default_ctx, make_unit
+from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_unit
 
 
 def test_function_with_docstring_skipped():
@@ -12,31 +12,24 @@ def test_function_without_docstring_emits():
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "f"
-    assert "needs a brief intent description" in findings[0].message
-    assert "has no docstring" not in findings[0].message
+    assert findings[0].message == "Function 'f' needs a docstring with a brief intent description and a Returns section."
 
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
     src = "def test_service_returns_value():\n    assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "tests/test_service.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_pytest_method_without_docstring_in_test_file_skipped():
     src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "tests/test_service.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_test_named_function_without_docstring_in_production_file_emits():
     src = "def test_service_returns_value():\n    return service()\n"
-    findings = MissingFunctionDocstringRule().analyse(
-        make_unit(src, "src/service_helpers.py"), default_ctx()
-    )
+    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "src/service_helpers.py"), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "test_service_returns_value"
 
@@ -122,13 +115,31 @@ def test_nested_function_called_twice_still_emits():
     # Sanity: when the nested function is called multiple times in the
     # enclosing scope, it's behavioural enough to warrant a docstring.
     # Proves the single-callsite gate is real.
-    src = (
-        "def outer(xs):\n"
-        '    """Outer."""\n'
-        "    def helper(x):\n"
-        "        return x + 1\n"
-        "    return [helper(x) + helper(y) for x, y in xs]\n"
-    )
+    src = 'def outer(xs):\n    """Outer."""\n    def helper(x):\n        return x + 1\n    return [helper(x) + helper(y) for x, y in xs]\n'
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "outer.helper"
+
+
+def test_message_asks_only_for_what_the_function_has():
+    src = (
+        "def act():\n    print(1)\n\n"
+        "def convert(value, unit, _cache=None):\n    if value < 0:\n        raise ValueError\n    return value\n\n"
+        "def walk(root):\n    yield root\n"
+    )
+    messages = {f.symbol: f.message for f in MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())}
+    assert messages == {
+        "act": "Function 'act' needs a docstring with a brief intent description.",
+        "convert": (
+            "Function 'convert' needs a docstring with a brief intent description, "
+            "entries for parameters 'value' and 'unit', a Returns section and a Raises section."
+        ),
+        "walk": "Function 'walk' needs a docstring with a brief intent description, an entry for parameter 'root' and a Yields section.",
+    }
+
+
+def test_private_and_test_functions_reported_with_every_callable():
+    ctx = every_callable_ctx(MissingFunctionDocstringRule.ID)
+    private = MissingFunctionDocstringRule().analyse(make_unit("def _f():\n    return 1\n"), ctx)
+    test = MissingFunctionDocstringRule().analyse(make_unit("def test_service():\n    assert service() == 1\n", "tests/test_service.py"), ctx)
+    assert [f.symbol for f in private + test] == ["_f", "test_service"]

@@ -161,10 +161,7 @@ def _build_finding(
 ) -> Finding:
     return Finding(
         rule_id=definition.id,
-        message=(
-            "Jinja2 `Environment(...)` without `autoescape=True` leaves "
-            "rendered templates exposed to XSS."
-        ),
+        message=("Jinja2 `Environment(...)` without `autoescape=True` leaves rendered templates exposed to XSS."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,
