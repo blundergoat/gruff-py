@@ -518,6 +518,12 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "Dotted module prefixes considered domain code; mocking imports from these paths trips the rule. Empty by default; populate to enable."
         ),
     },
+    "test-quality.repeated-structure-missing-parametrize": {
+        "groupFindings": (
+            "When true, report one finding per group listing every member, and only group tests whose decorators match and whose bodies "
+            "have more than one statement after the docstring. Off by default until measured."
+        ),
+    },
     "test-quality.test-longer-than-sut": {
         "ratio": ("Allowed test-to-SUT length ratio above which the test is flagged (default 2.0)."),
     },

@@ -1590,6 +1590,7 @@ except ValueError:
 - Fix guidance: Address the reported repeated structure without parametrize directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `minGroupSize` = `3`
+- Options: `groupFindings` = `False`
 - Common false-positive shapes:
   - Three named scenarios can share one AST shape while their separate names and failures are the contract, especially when only literal values differ.
     Mitigation: Parametrize the cases or tune `thresholds.minGroupSize`; suppress the group when separate scenario identities are intentionally retained.

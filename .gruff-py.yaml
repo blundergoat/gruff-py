@@ -527,6 +527,8 @@ rules:
     enabled: true
     thresholds:
       minGroupSize: 3
+    options:
+      groupFindings: false
   # Setup bloat
   test-quality.setup-bloat:
     enabled: false

@@ -4,6 +4,14 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
+- **`groupFindings` reports copied tests once per group, off by default** - With
+  `rules.test-quality.repeated-structure-missing-parametrize.options.groupFindings: true`, three or more tests that differ
+  only in literal values produce one finding that lists every member, instead of one finding per test. Tests count as
+  copies only when their decorators and `pytestmark` match and their bodies hold more than one statement after the
+  docstring. Tests sharing the same `@patch(...)` can now group, and long or multiline strings no longer keep copies
+  apart. `conftest.py` fixtures and tests already parametrized through their class or module never join a group, and
+  unittest methods never share one with pytest tests. With the option off, findings are unchanged.
+
 - **Correlated findings without a line share one penalty** - `ScoreCalculator` now bills two or more correlated size or complexity findings on one function as one shared penalty even when they carry no line, as the score's `clusters` list already reported them. Before, it charged each in full, so two warnings cost 8 while their cluster row claimed one root cause. Every correlated rule `analyse` runs reports a line, so this changes scores only for callers that pass line-less findings to the calculator directly.
 
 - **`hook --diff` keeps a newly added duplicate visible** - The hook now counts how often each finding key occurs in the base and hides only that many current occurrences, lowest line first. Two findings can share a key when a rule names no symbol and repeats its message, such as two `random.randint` tokens under `security.insecure-random`. Before, one base occurrence hid every current one, so the occurrence an edit added never reached the agent. `suppressed.count` and the exit code keep their meaning.
