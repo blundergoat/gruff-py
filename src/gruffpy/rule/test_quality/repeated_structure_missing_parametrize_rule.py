@@ -7,8 +7,9 @@ constant values, hash to the same shape. They're candidates for
 With the default-off ``groupFindings`` option, the rule follows family contract
 section 16 instead: one finding per group, members with identical decorators and
 ``pytestmark`` values (their own, then each enclosing class's) and more than one
-statement after the docstring, every literal value replaced by a placeholder for
-its kind, and unittest methods never grouped with pytest tests.
+statement after the docstring. Groups stay within one lexical container and keep
+whitespace-bearing text and literal keys or indices exact. Other literal values
+become placeholders for their kind, and unittest methods never group with pytest tests.
 """
 
 import ast
@@ -161,13 +162,13 @@ def _group_findings(unit: AnalysisUnit, definition: RuleDefinition, min_group: i
         One finding per qualifying group, anchored at its first member, ordered by that member's position.
     """
     # The runner is part of the key: a group's advice names one table idiom, and unittest and pytest each need their own.
-    groups: dict[tuple[bool, tuple[str, ...], str], list[_TestFunction]] = collections.defaultdict(list)
+    groups: dict[tuple[bool, tuple[ast.AST, ...], tuple[str, ...], str], list[_TestFunction]] = collections.defaultdict(list)
     for fn, scope in test_functions(unit):
         body = _body_without_docstring(fn)
         if scope.kind not in _TEST_KINDS or len(body) < 2 or _is_table_driven(fn, body):
             continue
-        groups[(scope.kind is TestScopeKind.UNITTEST_TEST_METHOD, _attribute_key(fn), _body_shape(body))].append(fn)
-    reported = [(unittest, sorted(members, key=_position)) for (unittest, _, _), members in groups.items() if len(members) >= min_group]
+        groups[(scope.kind is TestScopeKind.UNITTEST_TEST_METHOD, _container_key(fn), _attribute_key(fn), _body_shape(body))].append(fn)
+    reported = [(unittest, sorted(members, key=_position)) for (unittest, _, _, _), members in groups.items() if len(members) >= min_group]
     return [
         _group_finding(unit, definition, members, unittest=unittest)
         for unittest, members in sorted(reported, key=lambda group: _position(group[1][0]))
@@ -270,12 +271,17 @@ def _attribute_key(fn: _TestFunction) -> tuple[str, ...]:
     return tuple(ast.dump(mark) for owner in owners for mark in _marks(owner))
 
 
+def _container_key(fn: _TestFunction) -> tuple[ast.AST, ...]:
+    """Keep distinct enclosing declarations apart, even when they have the same name."""
+    return tuple(parent for parent in parent_chain(fn) if isinstance(parent, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef))
+
+
 def _body_shape(body: list[ast.stmt]) -> str:
-    """Serialize the statements with every literal replaced by a placeholder for its kind, keeping names, calls and order."""
+    """Serialize statements, retaining text payloads, keys and indices as section 16 requires."""
     return "\n".join(_shape_of(stmt) for stmt in body)
 
 
-def _shape_of(node: object) -> str:
+def _shape_of(node: object, *, preserve_literals: bool = False) -> str:
     """Serialize one AST value through its syntax fields only.
 
     ``ast.iter_fields`` never yields the ``parent`` link the parser attaches to every node, so the cost stays
@@ -283,16 +289,23 @@ def _shape_of(node: object) -> str:
 
     Args:
         node: An AST node, a list of nodes, or a field value such as an identifier or operator flag.
+        preserve_literals: Keep literal values within a container key or index/slice expression.
 
     Returns:
-        A string equal for two values that differ only in literals of the same kind; ``<string>`` and ``<number>`` never match.
+        A shape retaining significant literal values; other literals match only within their kind.
     """
     if isinstance(node, ast.Constant):
+        if preserve_literals or isinstance(node.value, str) and any(character in " \t\n\r\f\v" for character in node.value):
+            return repr(node.value)
         return f"<{_literal_kind(node.value)}>"
     if isinstance(node, ast.AST):
-        return f"{type(node).__name__}(" + ",".join(f"{name}={_shape_of(value)}" for name, value in ast.iter_fields(node)) + ")"
+        fields = []
+        for name, value in ast.iter_fields(node):
+            selector = isinstance(node, ast.Dict) and name == "keys" or isinstance(node, ast.Subscript) and name == "slice"
+            fields.append(f"{name}={_shape_of(value, preserve_literals=preserve_literals or selector)}")
+        return f"{type(node).__name__}(" + ",".join(fields) + ")"
     if isinstance(node, list):
-        return "[" + ",".join(_shape_of(item) for item in node) + "]"
+        return "[" + ",".join(_shape_of(item, preserve_literals=preserve_literals) for item in node) + "]"
     return repr(node)
 
 

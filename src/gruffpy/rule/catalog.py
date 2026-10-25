@@ -520,8 +520,9 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
     "test-quality.repeated-structure-missing-parametrize": {
         "groupFindings": (
-            "When true, report one finding per group listing every member, and only group tests whose decorators match and whose bodies "
-            "have more than one statement after the docstring. Off by default until measured."
+            "When true, report one finding per group listing every member within the same lexical test container. Members need matching "
+            "decorators and pytestmark and more than one statement after the docstring. Text strings containing ASCII whitespace and "
+            "literal keys or indices stay exact; other literal values normalize by kind. Off by default until measured."
         ),
     },
     "test-quality.test-longer-than-sut": {

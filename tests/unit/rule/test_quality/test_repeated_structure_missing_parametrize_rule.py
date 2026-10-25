@@ -1,3 +1,5 @@
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.finding import Finding
@@ -207,8 +209,9 @@ class TestRemote:
     assert [(f.symbol, f.metadata["groupSize"]) for f in _grouped(src)] == [("TestLocal.test_reads_a", 3), ("TestRemote.test_reads_d", 3)]
 
 
-def test_group_findings_joins_matching_tests_across_classes():
-    src = """
+@pytest.mark.parametrize("other_class", ["TestRemote", "TestLocal"])
+def test_group_findings_keeps_distinct_class_containers_separate(other_class: str):
+    src = f"""
 class TestLocal:
     def test_reads_a(self):
         row = read("a")
@@ -218,17 +221,57 @@ class TestLocal:
         row = read("b")
         assert row.ok
 
-class TestRemote:
+class {other_class}:
     def test_reads_c(self):
         row = read("c")
         assert row.ok
 """
-    findings = _grouped(src)
-    assert [m["symbol"] for f in findings for m in f.metadata["members"]] == [
-        "TestLocal.test_reads_a",
-        "TestLocal.test_reads_b",
-        "TestRemote.test_reads_c",
-    ]
+    assert _grouped(src) == []
+
+
+@pytest.mark.parametrize("whitespace", [" ", "\t", "\n", "\r", "\f", "\v"])
+def test_group_findings_keeps_whitespace_text_exact(whitespace: str):
+    src = "\n\n".join(
+        f"def test_case_{index}():\n    value = parse({('payload' + whitespace + str(index))!r})\n    assert value.ok" for index in range(3)
+    )
+    assert _grouped(src) == []
+
+
+def test_group_findings_keeps_interpolated_text_exact():
+    src = "\n\n".join(f'def test_case_{index}():\n    value = parse(f"payload {index}: {{field}}")\n    assert value.ok' for index in range(3))
+    assert _grouped(src) == []
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        '{{"field_{index}": 1}}',
+        'record["field_{index}"]',
+        "record[{index}]",
+        "record[{index}:]",
+    ],
+)
+def test_group_findings_keeps_literal_keys_and_indices_exact(expression: str):
+    src = "\n\n".join(f"def test_case_{index}():\n    value = {expression.format(index=index)}\n    assert value" for index in range(3))
+    assert _grouped(src) == []
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ("same payload", "same payload", "same payload"),
+        (b"payload a", b"payload b", b"payload c"),
+        ("payload\x1ca", "payload\x1cb", "payload\x1cc"),
+    ],
+)
+def test_group_findings_still_normalizes_eligible_literal_values(values: tuple[str | bytes, ...]):
+    src = "\n\n".join(f"def test_case_{index}():\n    value = parse({value!r})\n    assert value == {index}" for index, value in enumerate(values))
+    assert [finding.metadata["groupSize"] for finding in _grouped(src)] == [3]
+
+
+def test_group_findings_still_normalizes_dictionary_values():
+    src = "\n\n".join(f'def test_case_{index}():\n    value = {{"field": {index}}}\n    assert value' for index in range(3))
+    assert [finding.metadata["groupSize"] for finding in _grouped(src)] == [3]
 
 
 def test_group_findings_skips_one_statement_bodies_after_the_docstring():
