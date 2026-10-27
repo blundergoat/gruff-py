@@ -1,3 +1,5 @@
+import ast
+
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
@@ -527,3 +529,30 @@ def test_parses_large():
 """
     findings = _grouped(src)
     assert [(f.metadata["groupSize"], "self.subTest(...)" in f.message) for f in findings] == [(3, True), (3, False)]
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_groups"),
+    [
+        pytest.param("def helper():\n    return {n}\nvalue = helper()\nassert value", 0, id="nested_function"),
+        pytest.param("async def helper():\n    return {n}\nvalue = helper()\nassert value", 0, id="nested_async_function"),
+        pytest.param("class Helper:\n    value = {n}\nvalue = Helper.value\nassert value", 0, id="nested_class"),
+        pytest.param("if ready:\n    def helper():\n        return {n}\nvalue = helper()\nassert value", 0, id="declaration_in_block"),
+        pytest.param('def helper():\n    """case{n}"""\n    return 1\nvalue = helper()\nassert value', 0, id="nested_documentation"),
+        pytest.param("@mark.case({n})\ndef helper():\n    return 1\nvalue = helper()\nassert value", 0, id="body_decorator"),
+        pytest.param("helper = lambda: {n}\nvalue = helper()\nassert value", 1, id="lambda_values"),
+        pytest.param("def helper():\n    return 1\nvalue = read({n})\nassert value", 1, id="identical_declaration"),
+        pytest.param(
+            'type Token = "Alias{n}"\nvalue = read(1)\nassert value',
+            0,
+            id="type_alias",
+            marks=pytest.mark.skipif(not hasattr(ast, "TypeAlias"), reason="requires Python 3.12 syntax"),
+        ),
+    ],
+)
+def test_group_findings_keep_body_declarations_exact(body: str, expected_groups: int):
+    source = "\n\n".join(f"def test_case_{index}():\n" + "\n".join("    " + line for line in body.format(n=index).splitlines()) for index in range(3))
+    findings = _grouped(source)
+    assert len(findings) == expected_groups
+    if findings:
+        assert findings[0].metadata["groupSize"] == 3

@@ -1586,7 +1586,7 @@ except ValueError:
 - Default severity: `advisory`
 - Confidence: `medium`
 - Default enabled: yes
-- Rationale: `test-quality.repeated-structure-missing-parametrize` protects the test-quality pillar by flagging repeated structure without parametrize before it becomes costly to review, maintain, or trust.
+- Rationale: With `groupFindings`, three or more matching tests produce one consolidation candidate. Declarations anywhere in a body retain their literal values, documentation and decorators; ordinary values still normalize by kind. Group mode is off by default.
 - Fix guidance: Address the reported repeated structure without parametrize directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Named thresholds: `minGroupSize` = `3`

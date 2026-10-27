@@ -9,6 +9,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   only in eligible literal values produce one finding listing every member. Groups stay within one lexical test container,
   with matching decorators and `pytestmark` and more than one statement after the docstring. Strings containing ASCII
   whitespace and literal keys or indices must match exactly. Tests sharing the same `@patch(...)` can group.
+  Declarations anywhere in a body, including their documentation and decorators, now compare exactly.
   `conftest.py` fixtures and tests already parametrized through their class or module stay excluded. With the option off,
   findings are unchanged.
 

@@ -10,6 +10,7 @@ section 16 instead: one finding per group, members with identical decorators and
 statement after the docstring. Groups stay within one lexical container and keep
 whitespace-bearing text and literal keys or indices exact. Other literal values
 become placeholders for their kind, and unittest methods never group with pytest tests.
+Declarations anywhere in a body retain their literal values, documentation and decorators.
 """
 
 import ast
@@ -289,11 +290,14 @@ def _shape_of(node: object, *, preserve_literals: bool = False) -> str:
 
     Args:
         node: An AST node, a list of nodes, or a field value such as an identifier or operator flag.
-        preserve_literals: Keep literal values within a container key or index/slice expression.
+        preserve_literals: Keep literal values within a declaration, container key or index/slice expression.
 
     Returns:
         A shape retaining significant literal values; other literals match only within their kind.
     """
+    # Declarations are structure rather than case data; TypeAlias is available from Python 3.12.
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) or type(node).__name__ == "TypeAlias":
+        preserve_literals = True
     if isinstance(node, ast.Constant):
         if preserve_literals or isinstance(node.value, str) and any(character in " \t\n\r\f\v" for character in node.value):
             return repr(node.value)

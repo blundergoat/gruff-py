@@ -226,6 +226,12 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
 
 
 def _rationale_for(definition: RuleDefinition) -> str:
+    if definition.id == RepeatedStructureMissingParametrizeRule.ID:
+        return (
+            "With `groupFindings`, three or more matching tests produce one consolidation candidate. "
+            "Declarations anywhere in a body retain their literal values, documentation and decorators; "
+            "ordinary values still normalize by kind. Group mode is off by default."
+        )
     return (
         f"`{definition.id}` protects the {definition.pillar.value} pillar by flagging "
         f"{definition.name.lower()} before it becomes costly to review, maintain, or trust."
@@ -522,7 +528,8 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "groupFindings": (
             "When true, report one finding per group listing every member within the same lexical test container. Members need matching "
             "decorators and pytestmark and more than one statement after the docstring. Text strings containing ASCII whitespace and "
-            "literal keys or indices stay exact; other literal values normalize by kind. Off by default until measured."
+            "literal keys or indices stay exact, as do declarations, their documentation and decorators anywhere in the body. "
+            "Other literal values normalize by kind. Off by default until approved for activation."
         ),
     },
     "test-quality.test-longer-than-sut": {
