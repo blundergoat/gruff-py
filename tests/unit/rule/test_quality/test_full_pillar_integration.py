@@ -56,6 +56,7 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
     config = AnalysisConfig.from_registry(registry)
     for rule_id, options in {
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
+        "test-quality.repeated-structure-missing-parametrize": {"groupFindings": False},
         "test-quality.loop-assertion-without-message": {},
         "test-quality.no-assertions": {},
         "test-quality.setup-bloat": {},

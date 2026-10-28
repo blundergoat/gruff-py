@@ -4,14 +4,13 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 
 ## v0.6.0 - Unreleased
 
-- **`groupFindings` reports copied tests once per group, off by default** - With
-  `rules.test-quality.repeated-structure-missing-parametrize.options.groupFindings: true`, three or more tests that differ
+- **`groupFindings` reports copied tests once per group by default** - Three or more tests that differ
   only in eligible literal values produce one finding listing every member. Groups stay within one lexical test container,
   with matching decorators and `pytestmark` and more than one statement after the docstring. Strings containing ASCII
   whitespace and literal keys or indices must match exactly. Tests sharing the same `@patch(...)` can group.
   Declarations anywhere in a body, including their documentation and decorators, now compare exactly.
-  `conftest.py` fixtures and tests already parametrized through their class or module stay excluded. With the option off,
-  findings are unchanged.
+  `conftest.py` fixtures and tests already parametrized through their class or module stay excluded. Set
+  `rules.test-quality.repeated-structure-missing-parametrize.options.groupFindings: false` to retain legacy per-test findings.
 
 - **Correlated findings without a line share one penalty** - `ScoreCalculator` now bills two or more correlated size or complexity findings on one function as one shared penalty even when they carry no line, as the score's `clusters` list already reported them. Before, it charged each in full, so two warnings cost 8 while their cluster row claimed one root cause. Every correlated rule `analyse` runs reports a line, so this changes scores only for callers that pass line-less findings to the calculator directly.
 

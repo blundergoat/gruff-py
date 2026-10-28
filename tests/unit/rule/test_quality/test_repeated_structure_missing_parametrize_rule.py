@@ -12,6 +12,13 @@ from gruffpy.rule.test_quality.repeated_structure_missing_parametrize_rule impor
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
+def _legacy_ctx() -> RuleContext:
+    """Keep explicit opt-out coverage after group mode becomes the default."""
+    context = default_ctx()
+    context.config.rule_settings(RepeatedStructureMissingParametrizeRule.ID).options["groupFindings"] = False
+    return context
+
+
 def test_repeated_same_helper_shape_emits():
     src = """
 def test_alpha():
@@ -23,7 +30,7 @@ def test_beta():
 def test_gamma():
     assert classify("g") == "gamma"
 """
-    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())
     assert len(findings) == 3
     assert {finding.metadata["groupSize"] for finding in findings} == {3}
 
@@ -39,7 +46,7 @@ def test_cognitive():
 def test_nesting():
     assert nesting_depth_for(source) == 2
 """
-    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())
     assert findings == []
 
 
@@ -69,7 +76,7 @@ def test_try_score():
 """
     assert score(source) == 2
 '''
-    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())
     assert findings == []
 
 
@@ -84,7 +91,7 @@ def test_text_reporter():
 def test_markdown_reporter():
     assert MarkdownReporter().render(report) == "ok"
 """
-    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())
     assert findings == []
 
 
@@ -100,7 +107,7 @@ def test_beta():
 def test_gamma():
     assert classify("g") == "gamma"
 """
-    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())
     assert findings == []
 
 
@@ -125,12 +132,12 @@ def test_parses_large():
     value = parse("300")
     assert value == 300
 """
-    findings = _grouped(src)
+    findings = RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())
     assert [(f.symbol, f.line, f.metadata["groupSize"]) for f in findings] == [("test_parses_small", 2, 3)]
     assert [m["symbol"] for m in findings[0].metadata["members"]] == ["test_parses_small", "test_parses_medium", "test_parses_large"]
     assert "'test_parses_large' (line 10)" in findings[0].message
     assert "@pytest.mark.parametrize` test with a descriptive label per case" in findings[0].message
-    assert len(RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), default_ctx())) == 3
+    assert len(RepeatedStructureMissingParametrizeRule().analyse(make_unit(src), _legacy_ctx())) == 3
 
 
 def test_group_findings_pair_reports_only_when_min_group_size_is_two():

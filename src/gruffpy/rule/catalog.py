@@ -230,7 +230,7 @@ def _rationale_for(definition: RuleDefinition) -> str:
         return (
             "With `groupFindings`, three or more matching tests produce one consolidation candidate. "
             "Declarations anywhere in a body retain their literal values, documentation and decorators; "
-            "ordinary values still normalize by kind. Group mode is off by default."
+            "ordinary values still normalize by kind. Group mode is enabled by default; set groupFindings to false for legacy per-test findings."
         )
     return (
         f"`{definition.id}` protects the {definition.pillar.value} pillar by flagging "
@@ -529,7 +529,7 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
             "When true, report one finding per group listing every member within the same lexical test container. Members need matching "
             "decorators and pytestmark and more than one statement after the docstring. Text strings containing ASCII whitespace and "
             "literal keys or indices stay exact, as do declarations, their documentation and decorators anywhere in the body. "
-            "Other literal values normalize by kind. Off by default until approved for activation."
+            "Other literal values normalize by kind. Enabled by default; set groupFindings to false for legacy per-test findings."
         ),
     },
     "test-quality.test-longer-than-sut": {

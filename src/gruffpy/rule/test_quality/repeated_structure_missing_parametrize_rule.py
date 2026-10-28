@@ -1,16 +1,13 @@
-"""``test-quality.repeated-structure-missing-parametrize`` - many near-identical tests.
+"""``test-quality.repeated-structure-missing-parametrize`` - repeated test groups.
 
-Heuristic: 3+ module-level test functions whose AST bodies, after stripping
-constant values, hash to the same shape. They're candidates for
-``@pytest.mark.parametrize``.
+By default, compare complete test bodies under family contract section 16 and
+report one finding for each eligible group. Members share one lexical container,
+matching decorators and ``pytestmark``, and at least two statements after the
+docstring. Preserve whitespace-bearing text, literal keys and indices, and
+declarations with their documentation and decorators. Normalize other literal
+values by kind. Unittest methods never group with pytest tests.
 
-With the default-off ``groupFindings`` option, the rule follows family contract
-section 16 instead: one finding per group, members with identical decorators and
-``pytestmark`` values (their own, then each enclosing class's) and more than one
-statement after the docstring. Groups stay within one lexical container and keep
-whitespace-bearing text and literal keys or indices exact. Other literal values
-become placeholders for their kind, and unittest methods never group with pytest tests.
-Declarations anywhere in a body retain their literal values, documentation and decorators.
+Set ``groupFindings`` to false to retain legacy per-test structural-hash findings.
 """
 
 import ast
@@ -52,7 +49,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
 
         Returns:
             Definition with the ``minGroupSize`` threshold key and the
-            default-off ``groupFindings`` option.
+            default-on ``groupFindings`` option.
         """
         return RuleDefinition(
             id=self.ID,
@@ -62,13 +59,13 @@ class RepeatedStructureMissingParametrizeRule(Rule):
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
             default_thresholds={"minGroupSize": 3},
-            default_options={GROUP_FINDINGS_OPTION: False},
+            default_options={GROUP_FINDINGS_OPTION: True},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tests sharing a body-shape hash with at least ``minGroupSize - 1`` siblings.
+        """Report eligible groups, or per-test findings when ``groupFindings`` is false.
 
-        Hashes each test body's structural skeleton (node types, names,
+        Legacy mode hashes each test body's structural skeleton (node types, names,
         attributes - but not constant values) and groups by hash; skips
         tests that already have a call-style decorator (they're presumed
         intentionally individualised).
