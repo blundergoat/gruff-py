@@ -261,7 +261,14 @@ def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[Declaratio
 
 
 def _default_declaration_position(finding: Finding) -> int:
-    """Rank a symbol on its own line when the caller supplied no parsed declarations, as a direct API call does."""
+    """Rank a symbol on its own line when the caller supplied no parsed declarations, as a direct API call does.
+
+    Args:
+        finding: Finding whose reported line supplies the fallback declaration position.
+
+    Returns:
+        Its positive start line, or 1 when the line is absent or nonpositive.
+    """
     return finding.line if finding.line is not None and finding.line > 0 else 1
 
 
@@ -322,6 +329,13 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
 
     Two findings on one declaration share a position and therefore an ordinal; a second declaration of that
     name takes the next one, which is what stops one review from covering both.
+
+    Args:
+        findings: Findings to rank in their input order; ineligible and symbol-less entries take no slot.
+        position: Declaration-position resolver; its optional same_named_positions method adds parsed declarations without findings.
+
+    Returns:
+        Aligned one-based declaration ordinals, with 0 for entries that need no symbol ordinal.
     """
     positions_by_symbol: dict[tuple[str, str], set[int]] = {}
     same_named = getattr(position, "same_named_positions", None)
@@ -349,6 +363,13 @@ def _stored_declaration_key(finding: Finding, subject: str) -> str:
 
     The subject already names one declaration, so two findings carrying one subject share a key and are counted,
     never reported as a collision.
+
+    Args:
+        finding: Finding whose symbol determines whether the key is file-level.
+        subject: Already stored subject identifying the declaration for a symbol-bearing finding.
+
+    Returns:
+        The shared file-level key for a symbol-less finding, otherwise a key containing its stored subject.
     """
     if not finding.symbol:
         return "declaration:file"
@@ -360,6 +381,13 @@ def _declaration_key(finding: Finding, position: Callable[[Finding], int]) -> st
 
     A file-level finding names no declaration at all, so every symbol-less occurrence shares one key and is
     matched by count; keying them by message would report two measurements of one file as an unresolvable collision.
+
+    Args:
+        finding: Finding whose symbol determines whether a declaration position is needed.
+        position: Resolver called only for symbol-bearing findings to locate their declaration.
+
+    Returns:
+        The shared file-level key for a symbol-less finding, otherwise a key containing its resolved position.
     """
     if not finding.symbol:
         return "declaration:file"

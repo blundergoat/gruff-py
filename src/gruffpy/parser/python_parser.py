@@ -86,6 +86,11 @@ class PythonFileParser:
 
 
 def _attach_parents(tree: ast.AST) -> None:
+    """Attach parent links so AST checks can walk from a child to its enclosing node.
+
+    Args:
+        tree: Parsed tree or subtree whose descendants receive parent references; this pass does not assign the root a parent.
+    """
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
             child.parent = node  # type: ignore[attr-defined]  # AST parent links

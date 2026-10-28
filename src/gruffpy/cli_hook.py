@@ -401,6 +401,14 @@ def _hook_exit_code(payload: dict[str, object], gate: _ExitGate) -> int:
 
 
 def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand repeated comma-separated rule selections without duplicate entries.
+
+    Args:
+        values: Repeated CLI values, each of which may contain comma-separated rule IDs.
+
+    Returns:
+        Trimmed, nonempty selections in first-seen order; empty when no selection remains.
+    """
     items: list[str] = []
     for value in values:
         for item in value.split(","):
@@ -419,6 +427,23 @@ def _run_hook_analysis(
     exclude_rule: tuple[str, ...],
     deep_scan_budget: str,
 ) -> AnalysisReport:
+    """Analyse the working tree for hook output with baseline matching disabled.
+
+    Args:
+        paths: Requested source paths; an empty tuple selects the current directory.
+        config_path: Explicit configuration file, or None for normal discovery.
+        no_config: Whether automatic configuration discovery is disabled.
+        include_ignored: Whether default-ignored and Git-ignored paths enter discovery.
+        exclude_rule: Repeated or comma-separated rule IDs to exclude before rule execution.
+        deep_scan_budget: Raw deep-scan override; empty retains the configured bounds.
+
+    Returns:
+        The working-tree analysis report for subsequent hook filtering and projection.
+
+    Raises:
+        ConfigError: If the analysis configuration cannot be loaded or validated.
+        ValueError: If the parsed minimum Python version is below 3.11.
+    """
     return run_analysis(
         AnalysisRunRequest(
             paths=paths,
@@ -450,6 +475,21 @@ def _hook_base_identities(
     A ``--baseline`` run no longer goes through here: it applies a ratified
     baseline v3 file, which classifies findings rather than matching hook-local
     identities.
+
+    Args:
+        paths: Requested paths to read from the base tree; empty selects its whole tree.
+        diff_ref: Git base ref, with working-tree meaning HEAD; empty disables the comparison.
+        config_path: Explicit configuration file, or None to discover the working-tree default.
+        no_config: Whether automatic configuration discovery is disabled.
+        include_ignored: Whether default-ignored and Git-ignored base paths enter discovery.
+        deep_scan_budget: Raw deep-scan override forwarded to keep base and working-tree bounds aligned.
+
+    Returns:
+        Counts of the base tree's hook identities, or None when no diff ref was supplied.
+
+    Raises:
+        ValueError: If Git cannot resolve or read the requested base.
+        ConfigError: If the base analysis configuration cannot be loaded or validated.
     """
     if diff_ref:
         return stable_identities_from_git_base(

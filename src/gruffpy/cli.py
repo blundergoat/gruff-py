@@ -131,6 +131,12 @@ def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str]:
     Click resolves ``args=None`` to ``sys.argv[1:]`` inside ``Command.main`` after this
     hook would run, so console-script / ``python -m`` calls arrive as ``None`` and bare
     ``--diff`` is never rewritten (CliRunner hid this); resolve ``sys.argv`` here too.
+
+    Args:
+        args: Caller-supplied arguments, or None to use the process command line.
+
+    Returns:
+        A copied argument list with bare --diff expanded for analyse and report only.
     """
     if args is None:
         args = sys.argv[1:]
@@ -233,6 +239,14 @@ _ROOT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 
 def _root_command(function: _F) -> _F:
+    """Apply the shared root options and command-group decorators.
+
+    Args:
+        function: Entry callback that initializes the root invocation state.
+
+    Returns:
+        The decorated entry point carrying the root group and its global flags.
+    """
     return apply_decorators(function, _ROOT_COMMAND_DECORATORS)
 
 
@@ -330,6 +344,17 @@ def dashboard(**kwargs: Any) -> None:
 
 
 def _dashboard_server(request: dashboard_cli._DashboardCliRequest) -> Any:
+    """Create the dashboard server for a validated project and port.
+
+    Args:
+        request: Launch choices; a missing project root uses the current directory.
+
+    Returns:
+        The bound server with the requested project's initial dashboard state.
+
+    Raises:
+        click.ClickException: The project is not a directory or the port is outside 0-65535.
+    """
     launch_root = Path.cwd()
     project = (request.project_root or launch_root).resolve()
     if not project.is_dir():
@@ -388,6 +413,13 @@ def list_rules(rule_format: str, rule_id: str | None) -> None:
 
 
 def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -> None:
+    """Render one rule's detailed guidance through the CLI output policy.
+
+    Args:
+        registry: Rule collection used to resolve the requested identifier.
+        rule_id: Identifier whose metadata and guidance should be displayed.
+        rule_format: Requested detail format, with table handled as text by the renderer.
+    """
     list_rules_detail(registry, rule_id, rule_format, _write_stdout)
 
 
@@ -579,6 +611,16 @@ def _analysis_request(
     output_key: str,
     command_name: str,
 ) -> _AnalysisCliRequest:
+    """Collect analysis or report options into one execution request.
+
+    Args:
+        kwargs: Parsed Click values, including targets, filters and baseline choices.
+        output_key: Option key holding this command's requested report format.
+        command_name: Invocation name used when applying configured exit thresholds.
+
+    Returns:
+        The request with legacy path spellings resolved and stdin diff text read when requested.
+    """
     _warn_superseded_spellings(kwargs)
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
@@ -701,6 +743,15 @@ def _summary_analysis_request(
     *,
     summary_format: str,
 ) -> _AnalysisCliRequest:
+    """Build a summary scan request without baseline or diff filtering.
+
+    Args:
+        kwargs: Parsed targets, config choices and discovery options for the summary.
+        summary_format: Selects JSON output for json and text output otherwise.
+
+    Returns:
+        A request with finding-based failure disabled and no baseline or diff constraints.
+    """
     return _AnalysisCliRequest(
         paths=cast(tuple[str, ...], kwargs["paths"]),
         config_path=cast(Path | None, kwargs["config_path"]),
@@ -801,6 +852,15 @@ def _maybe_prompt_to_init_config(
 
 
 def _write_config_file(path: Path, content: str) -> None:
+    """Write the generated configuration and translate filesystem failures for Click.
+
+    Args:
+        path: Destination selected for the project's configuration file.
+        content: Complete configuration text to write at the destination.
+
+    Raises:
+        click.ClickException: The destination cannot be written because of an operating-system error.
+    """
     try:
         path.write_text(content)
     except OSError as exc:
@@ -950,6 +1010,19 @@ def _path_for_root(project_root: Path, path: Path | None) -> Path | None:
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
     # only the presentation ones reach the display filter.
+    """Execute a CLI request with its display filters and machine-error policy.
+
+    Args:
+        request: Targets, execution selectors, output mode and baseline/diff settings to apply.
+
+    Returns:
+        The analysis report, or a refusal report for JSON-mode target errors and ConfigError failures.
+
+    Raises:
+        SystemExit: A handled target or configuration error prevents a non-JSON run; the exit code is 2.
+        click.BadParameter: A supplied display or execution pillar is not recognized.
+        ValueError: The parsed minimum Python version is below 3.11, even in JSON mode.
+    """
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
         include_pillars=_parse_pillar_values("--show-pillar", request.show_pillar),
@@ -1014,7 +1087,11 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
 
 
 def _echo_config_warnings(report: AnalysisReport) -> None:
-    """Echo config warnings to stderr: visible for summary, clean for JSON stdout."""
+    """Echo config warnings to stderr: visible for summary, clean for JSON stdout.
+
+    Args:
+        report: Analysis result containing the configuration warnings to display.
+    """
     if _state().should_suppress_output:
         return
     for warning in report.config_warnings:
@@ -1027,6 +1104,13 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
     The JSON reporter sends this report through the v3 machine adapter so
     machine-readable callers receive a parseable diagnostic and exit code 2
     instead of stderr prose. Human formats retain the Click exception path.
+
+    Args:
+        request: Failed invocation whose targets and output settings identify the refused scan.
+        exc: Configuration error whose message is normalized relative to the project root.
+
+    Returns:
+        A report containing the configuration diagnostic and exit code 2, with no findings.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
     # The loader names the absolute path it read, which a v3 envelope may not publish, so the machine message names the
@@ -1063,6 +1147,14 @@ def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic)
 
 
 def _read_diff_patch(diff_mode: str) -> str:
+    """Read a diff from standard input only when the selector requests it.
+
+    Args:
+        diff_mode: The literal - consumes stdin; other selectors leave stdin untouched.
+
+    Returns:
+        All stdin text for -, or an empty string for any other selector.
+    """
     if diff_mode != "-":
         return ""
     return sys.stdin.read()
@@ -1076,6 +1168,18 @@ def _render_report(
     report_editor_link: str,
     report_interactive: bool,
 ) -> str:
+    """Render an analysis report in the selected CLI output format.
+
+    Args:
+        report: Completed analysis or refusal report supplied to the format-specific reporter.
+        output: Reporter format to select for the returned text.
+        project_root: Root used to resolve source links in the HTML report.
+        report_editor_link: Editor-link style used by the HTML reporter.
+        report_interactive: Whether the HTML report should include interactive controls.
+
+    Returns:
+        The selected reporter's complete serialized report.
+    """
     match output:
         case OutputFormat.JSON:
             return JsonReporter().render(report)
@@ -1094,6 +1198,14 @@ def _render_report(
 
 
 def _init_success_message(config_path: Path) -> str:
+    """Describe the configuration just written and the next baseline command.
+
+    Args:
+        config_path: Destination to identify in the successful initialization message.
+
+    Returns:
+        Confirmation and baseline guidance with a trailing newline.
+    """
     return (
         f"Wrote {config_path}\n\n"
         "Next: after reviewing current findings, run:\n"
@@ -1118,6 +1230,14 @@ _LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS = frozenset(
 
 
 def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
+    """Build a catalogue entry while preserving legacy false-positive metadata.
+
+    Args:
+        definition: Rule whose native defaults, thresholds and documentation are being listed.
+
+    Returns:
+        Listing fields with nested legacy metadata only for the retained legacy rule identifiers.
+    """
     documentation = documentation_for_rule(definition.id)
     documentation_payload = documentation.to_payload()
     false_positive_shapes_payload = documentation_payload.get("falsePositiveShapes", [])
@@ -1141,6 +1261,14 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
 
 
 def _format_rule_table(definitions: list[RuleDefinition]) -> str:
+    """Lay out rule defaults as an aligned, human-readable table.
+
+    Args:
+        definitions: Nonempty rule list in the order the rows should appear.
+
+    Returns:
+        A table with headers, separators and one row per rule, ending with a newline.
+    """
     headers = ("Rule", "Pillar", "Severity", "Confidence", "Enabled")
     rows = [
         (
@@ -1160,6 +1288,14 @@ def _format_rule_table(definitions: list[RuleDefinition]) -> str:
 
 
 def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Combine repeated comma-separated options without blanks or duplicates.
+
+    Args:
+        values: Option occurrences whose comma-separated items should be combined.
+
+    Returns:
+        Trimmed nonempty items in first-seen order, or an empty tuple when none remain.
+    """
     items: list[str] = []
     for value in values:
         for item in value.split(","):
@@ -1170,6 +1306,18 @@ def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _parse_pillar_values(option: str, values: tuple[str, ...]) -> tuple[Pillar, ...]:
+    """Resolve repeated pillar options and identify invalid values for Click.
+
+    Args:
+        option: Displayed option name to attach to a validation error.
+        values: Repeated, possibly comma-separated pillar values from the command line.
+
+    Returns:
+        Unique pillars in first-seen order, or an empty tuple when no values were supplied.
+
+    Raises:
+        click.BadParameter: An item is not a supported pillar value.
+    """
     parsed: list[Pillar] = []
     valid = sorted(p.value for p in Pillar)
     for raw in _split_repeated_csv(values):
@@ -1184,11 +1332,27 @@ def _parse_pillar_values(option: str, values: tuple[str, ...]) -> tuple[Pillar, 
 
 
 def _write_stdout(text: str) -> None:
+    """Write CLI text unless quiet or silent output policy suppresses it.
+
+    Args:
+        text: Already-rendered output to write verbatim, including any needed newline.
+    """
     if not _state().should_suppress_output:
         sys.stdout.write(text)
 
 
 def _root_group(ctx: click.Context) -> click.Group:
+    """Find the root command group from a nested Click invocation.
+
+    Args:
+        ctx: Active context whose root command is needed for command discovery or help.
+
+    Returns:
+        The root Click group.
+
+    Raises:
+        click.ClickException: The root command is not a group.
+    """
     command = ctx.find_root().command
     if not isinstance(command, click.Group):
         raise click.ClickException("Root command is not a command group.")
@@ -1196,6 +1360,15 @@ def _root_group(ctx: click.Context) -> click.Group:
 
 
 def _command_rows(group: click.Group, namespace: str | None) -> list[tuple[str, str]]:
+    """Collect visible command names and short help for an active invocation.
+
+    Args:
+        group: Root group to enumerate using the current Click context.
+        namespace: Required name prefix; None or an empty string admits every visible command.
+
+    Returns:
+        Name/help pairs in the group's listing order, excluding hidden commands.
+    """
     rows: list[tuple[str, str]] = []
     for name in group.list_commands(click.get_current_context()):
         if namespace is not None and not name.startswith(namespace):
@@ -1214,6 +1387,17 @@ def _render_command_rows(
     list_format: str,
     short: bool,
 ) -> str:
+    """Choose the command-list renderer, with raw names taking precedence.
+
+    Args:
+        rows: Visible command names and short descriptions in listing order.
+        raw: When true, emit names only regardless of the other rendering choices.
+        list_format: Selects json, xml or md; other values use the text renderer.
+        short: Suppresses descriptions in Markdown and text output only.
+
+    Returns:
+        The complete rendered command listing.
+    """
     if raw:
         return "".join(f"{name}\n" for name, _help in rows)
     if list_format == "json":
@@ -1226,6 +1410,14 @@ def _render_command_rows(
 
 
 def _command_rows_json(rows: list[tuple[str, str]]) -> str:
+    """Serialize command names and descriptions in the JSON listing envelope.
+
+    Args:
+        rows: Ordered name/description pairs; an empty list produces an empty commands array.
+
+    Returns:
+        Indented JSON with a trailing newline.
+    """
     return (
         json.dumps(
             {"commands": [{"name": name, "description": help_text} for name, help_text in rows]},
@@ -1236,11 +1428,28 @@ def _command_rows_json(rows: list[tuple[str, str]]) -> str:
 
 
 def _command_rows_xml(rows: list[tuple[str, str]]) -> str:
+    """Serialize command names and help as escaped XML elements.
+
+    Args:
+        rows: Ordered name/description pairs; an empty list leaves the commands element empty.
+
+    Returns:
+        A commands element containing the escaped entries and ending with a newline.
+    """
     commands = "".join(f'<command name="{_xml_escape(name)}">{_xml_escape(help_text)}</command>' for name, help_text in rows)
     return f"<commands>{commands}</commands>\n"
 
 
 def _command_rows_markdown(rows: list[tuple[str, str]], short: bool) -> str:
+    """Render visible commands as a Markdown list under the CLI heading.
+
+    Args:
+        rows: Ordered command names and descriptions; an empty list retains just the heading.
+        short: Omits descriptions when true; empty descriptions are also omitted.
+
+    Returns:
+        The heading and command bullets with a trailing newline.
+    """
     lines = ["# gruff commands", ""]
     for name, help_text in rows:
         lines.append(f"- `{name}`" if short or not help_text else f"- `{name}` - {help_text}")
@@ -1248,6 +1457,15 @@ def _command_rows_markdown(rows: list[tuple[str, str]], short: bool) -> str:
 
 
 def _command_rows_text(rows: list[tuple[str, str]], short: bool) -> str:
+    """Render visible commands as aligned terminal text.
+
+    Args:
+        rows: Ordered command names and descriptions; an empty list retains just the heading.
+        short: Omits descriptions when true while keeping the command names.
+
+    Returns:
+        The heading and aligned rows with a trailing newline.
+    """
     width = max((len(name) for name, _help in rows), default=0)
     lines = ["Available commands:"]
     for name, help_text in rows:
@@ -1256,12 +1474,25 @@ def _command_rows_text(rows: list[tuple[str, str]], short: bool) -> str:
 
 
 def _detect_shell() -> str:
+    """Choose the shell name for completion from the launch environment.
+
+    Returns:
+        The basename of SHELL, falling back to bash when that basename is empty.
+    """
     shell = os.environ.get("SHELL", "")
     name = Path(shell).name
     return name or "bash"
 
 
 def _xml_escape(value: str) -> str:
+    """Escape text used in double-quoted XML attributes and element content.
+
+    Args:
+        value: Unescaped command name or help text to include in the XML listing.
+
+    Returns:
+        Text with ampersands, double quotes and angle brackets replaced by XML entities.
+    """
     return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
 

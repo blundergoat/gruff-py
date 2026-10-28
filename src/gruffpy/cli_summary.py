@@ -45,7 +45,17 @@ def _text_summary_payload(
     *,
     group_by: str,
 ) -> dict[str, Any]:
-    """Build the native aggregate data used only by the human text renderer."""
+    """Build the native aggregate data used only by the human text renderer.
+
+    Args:
+        report: Completed scan supplying findings, path counts, diagnostics and pillar results.
+        top: Row cap passed to counter ranking and grouped-rule slicing.
+        elapsed_seconds: Scan duration rounded to three decimals in the summary fields.
+        group_by: The value "rule" adds grouped-rule rows; other values leave that field absent.
+
+    Returns:
+        Text-view summary fields, pillar rows, ranked rule/file counts and diagnostic payloads.
+    """
     rule_counts = Counter(finding.rule_id for finding in report.findings)
     file_counts = Counter(finding.file_path for finding in report.findings)
     payload: dict[str, Any] = {
@@ -148,6 +158,14 @@ def summary_text(
 
 
 def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
+    """Align grouped rule counts with their severity and confidence labels.
+
+    Args:
+        grouped: Text-summary grouping containing rows plus the shown and total counts for its heading.
+
+    Returns:
+        A heading and aligned rule rows, or the heading and an explicit none marker when rows are empty.
+    """
     rows = cast(list[dict[str, Any]], grouped["rows"])
     shown = cast(int, grouped["shown"])
     total = cast(int, grouped["total"])
@@ -216,6 +234,14 @@ def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
 
 
 def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
+    """Present pillar grades and per-severity counts in aligned terminal rows.
+
+    Args:
+        rows: Native pillar summaries in display order; grade and score may be absent as None.
+
+    Returns:
+        Aligned rows with placeholders for absent grades/scores, or one none marker for an empty input.
+    """
     if not rows:
         return ["  none"]
     pillar_width = max(15, max(len(cast(str, row["pillar"])) for row in rows))
@@ -242,6 +268,12 @@ def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
+    """Append next-step guidance when a text summary has ignored paths or findings.
+
+    Args:
+        lines: Rendered summary lines to extend in place; unchanged when neither hint applies.
+        summary: Aggregate fields whose ignored/findings counts select hints and whose paths build the baseline command.
+    """
     hints: list[str] = []
     if summary["ignored"]:
         hints.append("Ignored paths: add --include-ignored to include built-in and .gitignore exclusions; configured paths.ignore still applies.")
@@ -256,16 +288,41 @@ def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
 
 
 def _generate_baseline_command(paths: list[str]) -> str:
+    """Build a shell-quoted command for accepting the displayed scan as a baseline.
+
+    Args:
+        paths: Scan operands to preserve; an empty list substitutes the current-directory operand.
+
+    Returns:
+        An analyse command with each operand quoted and baseline generation set not to fail on findings.
+    """
     command_paths = paths or ["."]
     joined_paths = " ".join(shlex.quote(path) for path in command_paths)
     return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
 
 
 def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:
+    """Select the most frequent rule or file names for the text-summary ranking.
+
+    Args:
+        counter: Name-to-count totals to rank with Counter's ordering.
+        top: Maximum number of rows; zero or a negative value yields no rows.
+
+    Returns:
+        Name/count dictionaries for the selected entries in descending-frequency order.
+    """
     return [{"name": name, "count": count} for name, count in counter.most_common(top)]
 
 
 def _format_count_rows(rows: list[dict[str, Any]]) -> list[str]:
+    """Render ranked name/count entries beneath an existing summary heading.
+
+    Args:
+        rows: Ranked entries with name and count fields, in their intended display order.
+
+    Returns:
+        Indented name/count lines, or one explicit none marker when no entries were selected.
+    """
     if not rows:
         return ["  none"]
     return [f"  {row['name']}: {row['count']}" for row in rows]

@@ -126,6 +126,14 @@ class ConfigLoader:
 
         The lenient consequence ("ignored; defaults apply") is only true on
         the warning path, so it never appears in the strict-mode error.
+
+        Args:
+            problem: Invalid setting described in both strict errors and lenient warnings.
+            lenient_consequence: Effect of continuing, included only in the recorded warning.
+            hint: Corrective instruction appended to either form of feedback.
+
+        Raises:
+            ConfigError: When this loader is strict; otherwise the warning is retained for the caller.
         """
         if self._strict:
             raise ConfigError(f"{problem} {hint}")
@@ -171,7 +179,18 @@ class ConfigLoader:
         return self._defaults, None
 
     def _load_explicit(self, path: Path) -> tuple[AnalysisConfig, Path | None]:
-        """Load the exact YAML or TOML path supplied by the user, without project discovery."""
+        """Load the exact YAML or TOML path supplied by the user, without project discovery.
+
+        Args:
+            path: User-selected configuration file whose suffix chooses the YAML or TOML reader.
+
+        Returns:
+            Resolved settings and the selected path; empty YAML uses registered defaults.
+
+        Raises:
+            ConfigError: When the file is missing, its format or settings are invalid, or TOML has no Gruff table.
+            ValueError: When the parsed minimum Python version is below 3.11.
+        """
         if not path.exists():
             raise ConfigError(f"Config file does not exist: {path}")
         if path.suffix in {".yaml", ".yml"}:
@@ -188,7 +207,17 @@ class ConfigLoader:
         return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
-        """Read the supported Gruff table from TOML, or return no table for normal discovery."""
+        """Read the supported Gruff table from TOML, or return no table for normal discovery.
+
+        Args:
+            path: TOML file to read, using the modern Gruff table before the legacy table.
+
+        Returns:
+            Validated Gruff settings, or None when neither supported table is present.
+
+        Raises:
+            ConfigError: When reading or parsing fails, a selected table has the wrong shape, or settings are invalid.
+        """
         try:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
@@ -212,7 +241,15 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_top_level(section: dict[str, Any], source: str) -> None:
-        """Validate shared top-level keys before any user setting can affect analysis."""
+        """Validate shared top-level keys before any user setting can affect analysis.
+
+        Args:
+            section: Parsed settings to check for supported keys, schema and shared value shapes.
+            source: File or table label included in feedback so the user can locate the setting.
+
+        Raises:
+            ConfigError: When a key, schema version or present shared setting is unsupported or malformed.
+        """
         unknown = set(section.keys()) - VALID_TOP_LEVEL_KEYS
         if unknown:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
@@ -228,7 +265,15 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_schema_version(section: dict[str, Any], source: str) -> None:
-        """Require the schema version that this binary can interpret for the user."""
+        """Require the schema version that this binary can interpret for the user.
+
+        Args:
+            section: Parsed settings whose required schemaVersion must match this binary.
+            source: File or table label included in migration feedback.
+
+        Raises:
+            ConfigError: When schemaVersion is absent or differs from the supported version.
+        """
         if "schemaVersion" not in section:
             raise ConfigError(
                 f"{source} is missing required 'schemaVersion'. "
@@ -252,6 +297,13 @@ class ConfigLoader:
         The map form is the whole reason this check exists: it is valid YAML that
         used to gate a build, and reading it as a display floor would change what
         a committed file does without changing what it says.
+
+        Args:
+            value: Raw minimumSeverity setting; must name one supported display severity.
+            source: File or table label used to identify an invalid setting.
+
+        Raises:
+            ConfigError: When the value is a legacy per-command map or is not a supported severity string.
         """
         if isinstance(value, dict):
             raise ConfigError(f"{source}: {LEGACY_MINIMUM_SEVERITY_ERROR}")
@@ -260,7 +312,15 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_minimum_severity(block: Any, source: str) -> None:
-        """Validate per-command failure thresholds before a scan can report the wrong exit code."""
+        """Validate per-command failure thresholds before a scan can report the wrong exit code.
+
+        Args:
+            block: Raw failOn table mapping supported gating commands to threshold strings; an empty table is valid.
+            source: File or table label attached to the collected setting errors.
+
+        Raises:
+            ConfigError: When the table shape, command names or threshold strings are invalid.
+        """
         if not isinstance(block, dict):
             raise ConfigError(f"{source} failOn must be a mapping of command name to severity.")
         errors: list[str] = []
@@ -278,7 +338,15 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_output_volume_hint_threshold(value: Any, source: str) -> None:
-        """Validate when text users should see the high-volume findings hint."""
+        """Validate when text users should see the high-volume findings hint.
+
+        Args:
+            value: Raw hint threshold; zero disables the hint and positive integers set its trigger.
+            source: File or table label used in invalid-threshold feedback.
+
+        Raises:
+            ConfigError: When the threshold is a boolean, a non-integer or negative.
+        """
         if isinstance(value, bool) or not isinstance(value, int):
             raise ConfigError(f"{source} outputVolumeHintThreshold must be a non-negative integer; got {type(value).__name__}.")
         if value < 0:
@@ -286,7 +354,15 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_deep_scan_budget(value: Any, source: str) -> None:
-        """Reject a malformed or partial paired deep-scan budget."""
+        """Validate the supplied deep-scan budget fields before merging their defaults.
+
+        Args:
+            value: Raw budget table; omitted fields retain their configured defaults.
+            source: File or table label used in invalid-budget feedback.
+
+        Raises:
+            ConfigError: When the value is not a table, keys are unknown, enabled is not boolean, or a supplied limit is not a positive integer.
+        """
         if not isinstance(value, dict):
             raise ConfigError(f"{source} deepScanBudget must be a mapping.")
         unknown = set(value) - {"enabled", "maxLines", "maxBytes"}
@@ -303,7 +379,18 @@ class ConfigLoader:
                 raise ConfigError(f"{source} deepScanBudget.{key} must be a positive integer.")
 
     def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
-        """Layer every present user section over registered defaults in documented order."""
+        """Layer every present user section over registered defaults in documented order.
+
+        Args:
+            section: Top-level settings already shape-checked by the loader; absent sections keep their defaults.
+
+        Returns:
+            Settings with each present section applied; an empty section returns the registered defaults.
+
+        Raises:
+            ConfigError: When a section applicator rejects an invalid setting or a strict-mode override.
+            ValueError: When the requested minimum Python version is below the supported minimum.
+        """
         config = self._defaults
 
         if "minimumPythonVersion" in section:
@@ -345,7 +432,18 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_paths(config: AnalysisConfig, paths: Any) -> AnalysisConfig:
-        """Apply path ignores that control which files the user's scan discovers."""
+        """Apply path ignores that control which files the user's scan discovers.
+
+        Args:
+            config: Settings whose ignored paths will be replaced.
+            paths: Raw paths table; omitting ignore replaces the patterns with an empty tuple.
+
+        Returns:
+            A new configuration carrying exactly the supplied ignore patterns.
+
+        Raises:
+            ConfigError: When the table has unknown keys or ignore is not a list of strings.
+        """
         if not isinstance(paths, dict):
             raise ConfigError("[tool.gruff-py.paths] must be a table.")
         unknown = set(paths.keys()) - VALID_PATHS_KEYS
@@ -358,7 +456,18 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_allowlists(config: AnalysisConfig, allowlists: Any) -> AnalysisConfig:
-        """Apply supported user exceptions after validating every allowlist shape."""
+        """Apply supported user exceptions after validating every allowlist shape.
+
+        Args:
+            config: Settings retaining any allowlist that the user does not supply.
+            allowlists: Raw allowlist table to validate before applying its present sections.
+
+        Returns:
+            Settings with supplied allowlists replaced; an empty table leaves the configuration unchanged.
+
+        Raises:
+            ConfigError: When the table, its keys or entries are invalid, including the removed preview setting.
+        """
         if not isinstance(allowlists, dict):
             raise ConfigError("[tool.gruff-py.allowlists] must be a table.")
         unknown = set(allowlists.keys()) - VALID_ALLOWLISTS_KEYS
@@ -369,7 +478,14 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_string_list_allowlists(allowlists: dict[str, Any]) -> None:
-        """Validate naming entries and keep the retired preview setting empty for users."""
+        """Validate naming entries and reject any use of the retired preview setting.
+
+        Args:
+            allowlists: Supported allowlist keys; absent acceptedAbbreviations is treated as an empty list for validation.
+
+        Raises:
+            ConfigError: When abbreviations are not a list of strings or secretPreviews is present, even if empty.
+        """
         accepted_abbreviations = allowlists.get("acceptedAbbreviations", [])
         # Invalid naming entries stop the command so the user never sees results based on a
         # partly applied allowlist.
@@ -382,7 +498,18 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_present_allowlists(config: AnalysisConfig, allowlists: dict[str, Any]) -> AnalysisConfig:
-        """Copy validated allowlists into the immutable config used by the user's scan."""
+        """Copy validated allowlists into the immutable config used by the user's scan.
+
+        Args:
+            config: Settings supplying values for allowlists the user leaves absent.
+            allowlists: Present acceptedAbbreviations and deadCode sections to apply after outer validation.
+
+        Returns:
+            Settings with present allowlists replaced; returns config itself when neither section is present.
+
+        Raises:
+            ConfigError: When a supplied deadCode section cannot be parsed.
+        """
         if "acceptedAbbreviations" in allowlists:
             config = config.with_accepted_abbreviations(tuple(allowlists["acceptedAbbreviations"]))
         if "deadCode" in allowlists:
@@ -413,7 +540,18 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_selection(config: AnalysisConfig, selection: Any) -> AnalysisConfig:
-        """Apply the user's include and exclude selectors after rejecting unknown values."""
+        """Apply the user's include and exclude selectors after rejecting unknown values.
+
+        Args:
+            config: Settings defining known rules and receiving the new selector set.
+            selection: Raw selector table; absent lists become empty, clearing their previous selections.
+
+        Returns:
+            A new configuration containing the validated include and exclude lists.
+
+        Raises:
+            ConfigError: When the table, keys, list shapes or referenced selector values are invalid.
+        """
         if not isinstance(selection, dict):
             raise ConfigError("[tool.gruff-py.selection] must be a table.")
         unknown = set(selection.keys()) - VALID_SELECTION_KEYS
@@ -435,7 +573,18 @@ class ConfigLoader:
         )
 
     def _apply_rules(self, config: AnalysisConfig, rules: Any) -> AnalysisConfig:
-        """Merge per-rule user overrides while retaining defaults for unsupported keys."""
+        """Merge per-rule user overrides while retaining defaults for unsupported keys.
+
+        Args:
+            config: Settings providing registered rule ids and the defaults each override builds on.
+            rules: Raw per-rule tables; an empty mapping leaves the configuration unchanged.
+
+        Returns:
+            Settings with supported rule overrides applied in input order.
+
+        Raises:
+            ConfigError: When a table or supported override is malformed, or strict mode rejects an unsupported key.
+        """
         if not isinstance(rules, dict):
             raise ConfigError("[tool.gruff-py.rules] must be a table.")
         for rule_id, rule_section in rules.items():
@@ -536,7 +685,19 @@ class ConfigLoader:
         overrides: dict[str, Any],
         defaults: RuleSettings,
     ) -> dict[str, Any]:
-        """Keep registered threshold overrides and explain unsupported knobs to the user."""
+        """Keep registered threshold overrides and explain unsupported knobs to the user.
+
+        Args:
+            rule_id: Rule whose dotted threshold key identifies feedback.
+            overrides: User threshold table inspected in input order; empty means no overrides.
+            defaults: Registered settings defining the only accepted threshold names.
+
+        Returns:
+            Supported threshold entries without changing their values; empty when no names are retained.
+
+        Raises:
+            ConfigError: When strict mode encounters an unregistered threshold name.
+        """
         kept: dict[str, Any] = {}
         # Each named threshold is checked in the order the user wrote it.
         for key, value in overrides.items():
@@ -583,7 +744,15 @@ class ConfigLoader:
 
 
 def _accepted_keys_sentence(rule_id: str, defaults: RuleSettings) -> str:
-    """Render the accepted config keys for one rule, derived from its defaults."""
+    """Render the accepted config keys for one rule, derived from its defaults.
+
+    Args:
+        rule_id: Rule named in the corrective message.
+        defaults: Registered settings supplying named thresholds, options and support for a single-severity rubric.
+
+    Returns:
+        One feedback sentence listing supported dotted keys in deterministic order.
+    """
     keys = ["enabled"]
     if defaults.severity_threshold is not None:
         keys.extend(("threshold", "severity"))
@@ -593,7 +762,18 @@ def _accepted_keys_sentence(rule_id: str, defaults: RuleSettings) -> str:
 
 
 def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) -> bool:
-    """Return the user's enabled override, or the registered default when it is absent."""
+    """Return the user's enabled override, or the registered default when it is absent.
+
+    Args:
+        rule_settings: Registered settings supplying the fallback enabled state.
+        rule_section: User override table; absence of enabled retains the fallback.
+
+    Returns:
+        The supplied boolean override, or the registered enabled state.
+
+    Raises:
+        ConfigError: When a present enabled value is not a boolean.
+    """
     if "enabled" not in rule_section:
         return rule_settings.enabled
     enabled = rule_section["enabled"]
@@ -603,7 +783,15 @@ def _is_rule_enabled(rule_settings: RuleSettings, rule_section: dict[str, Any]) 
 
 
 def _validate_selection_values(config: AnalysisConfig, selection: dict[str, Any]) -> None:
-    """Reject selectors that cannot match a known tier, pillar, or rule for the user."""
+    """Reject selectors that cannot match a known tier, pillar, or rule for the user.
+
+    Args:
+        config: Settings whose registered rule ids define valid rule selectors.
+        selection: String-list selectors to check; absent lists select no values for validation.
+
+    Raises:
+        ConfigError: When any include or exclude selector names an unknown tier, pillar or rule.
+    """
     valid_tiers = {tier.value for tier in RuleTier}
     valid_pillars = {pillar.value for pillar in Pillar}
     valid_rules = set(config.rules)
@@ -620,7 +808,16 @@ def _reject_unknown_selection_values(
     values: list[str],
     valid_values: set[str],
 ) -> None:
-    """Report unknown values under the exact selection key the user needs to edit."""
+    """Report unknown values under the exact selection key the user needs to edit.
+
+    Args:
+        key: Selector list name included in the error path.
+        values: Requested selector values; an empty list is valid.
+        valid_values: Complete accepted set used to find unsupported requests.
+
+    Raises:
+        ConfigError: When at least one requested value is absent from the accepted set.
+    """
     unknown = sorted(set(values) - valid_values)
     if unknown:
         raise ConfigError(f"Unknown [tool.gruff-py.selection].{key} values: {unknown}")
@@ -631,7 +828,19 @@ def _merged_thresholds(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> dict[str, int | float]:
-    """Merge supported named thresholds into the settings used by rule findings."""
+    """Merge supported named thresholds into the settings used by rule findings.
+
+    Args:
+        rule_id: Rule identified in invalid-override feedback.
+        rule_settings: Registered named thresholds copied before applying overrides.
+        rule_section: Supported override table; absent thresholds retains a copy of all registered values.
+
+    Returns:
+        A new threshold mapping with valid numeric overrides applied.
+
+    Raises:
+        ConfigError: When severity is unpaired, thresholds is not a table, a name is unknown, or a value is non-numeric.
+    """
     if "severity" in rule_section:
         raise ConfigError(f'Config key "rules.{rule_id}.severity" requires "threshold".')
     thresholds = dict(rule_settings.thresholds)
@@ -654,7 +863,19 @@ def _severity_threshold(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> SeverityThreshold | None:
-    """Build a single severity rubric from the user's paired threshold and severity."""
+    """Build a single severity rubric from the user's paired threshold and severity.
+
+    Args:
+        rule_id: Rule identified in invalid-rubric feedback.
+        rule_settings: Registered settings indicating whether a single-severity rubric is supported.
+        rule_section: Override table; absence of threshold returns no replacement rubric.
+
+    Returns:
+        The requested numeric threshold paired with warning or error, or None when no threshold was supplied.
+
+    Raises:
+        ConfigError: When the rubric is unsupported, conflicts with named thresholds, or lacks valid numeric/severity values.
+    """
     if "threshold" not in rule_section:
         return None
     if "thresholds" in rule_section:
@@ -679,7 +900,19 @@ def _merged_options(
     rule_settings: RuleSettings,
     rule_section: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge validated rule options so the user's scan receives each explicit override."""
+    """Merge validated rule options so the user's scan receives each explicit override.
+
+    Args:
+        rule_id: Rule identified when an options value has the wrong shape.
+        rule_settings: Registered options copied before applying the supplied values.
+        rule_section: Supported override table; absent options retains a copy of all registered options.
+
+    Returns:
+        A new options mapping containing registered defaults and explicit overrides.
+
+    Raises:
+        ConfigError: When a present options value is not a table.
+    """
     options = dict(rule_settings.options)
     if "options" not in rule_section:
         return options
@@ -691,7 +924,17 @@ def _merged_options(
 
 
 def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
-    """Parse dead-code exceptions that keep intentional entry points out of user findings."""
+    """Parse dead-code exceptions that keep intentional entry points out of user findings.
+
+    Args:
+        section: Raw deadCode table of symbol, decorator and path string lists; omitted lists become empty tuples.
+
+    Returns:
+        An allowlist retaining the supplied strings and their order.
+
+    Raises:
+        ConfigError: When the table contains unknown keys or a supplied value is not a list of strings.
+    """
     if not isinstance(section, dict):
         raise ConfigError("[tool.gruff-py.allowlists.deadCode] must be a table.")
     unknown = set(section.keys()) - VALID_DEAD_CODE_ALLOWLIST_KEYS
@@ -709,7 +952,17 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
 
 
 def _parse_python_version(value: Any) -> tuple[int, int]:
-    """Parse the minimum Python version used to tailor modernisation findings."""
+    """Parse the minimum Python version used to tailor modernisation findings.
+
+    Args:
+        value: Raw version string with at least two integer components separated by dots; later components are ignored.
+
+    Returns:
+        The major and minor components as integers.
+
+    Raises:
+        ConfigError: When the value is not a string with two components that can be parsed as integers.
+    """
     if isinstance(value, str):
         parts = value.split(".")
         if len(parts) >= 2:

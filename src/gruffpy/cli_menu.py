@@ -35,6 +35,12 @@ def _root_menu_header(ctx: click.Context) -> list[str]:
     """Build the tool identity and usage lines at the top of root help.
 
     Use before options so a CLI user can confirm the version and invocation shape.
+
+    Args:
+        ctx: Context whose effective colour preference styles the version and usage heading.
+
+    Returns:
+        Tool identity, usage heading and invocation hint, with blank section separators.
     """
     return [
         f"{TOOL_NAME} {_style(VERSION, 'green', ctx)}",
@@ -49,6 +55,12 @@ def _root_menu_options(ctx: click.Context) -> list[str]:
     """Build the global option rows shown in root help.
 
     Use after the menu header so users can see terminal controls that apply to every command.
+
+    Args:
+        ctx: Context whose effective colour preference styles option names and headings.
+
+    Returns:
+        The global-options heading and aligned help rows, followed by a blank separator.
     """
     return [
         _section("Options:", ctx),
@@ -78,7 +90,13 @@ def _root_menu_options(ctx: click.Context) -> list[str]:
 def _root_menu_commands(ctx: click.Context) -> list[str]:
     """Build the command list a user can choose from root help.
 
-    Use after global options; an empty command catalog would leave only the section heading.
+    Use after global options so users can choose a command.
+
+    Args:
+        ctx: Context whose effective colour preference styles command names and the heading.
+
+    Returns:
+        The available-commands heading and the fixed command/help rows in menu order.
     """
     return [
         _section("Available commands:", ctx),
@@ -106,7 +124,14 @@ def _root_menu_commands(ctx: click.Context) -> list[str]:
 def _section(label: str, ctx: click.Context) -> str:
     """Style a root-help section label using the user's colour choice.
 
-    Use when joining menu sections; empty text remains empty and receives no visible content.
+    Use when joining menu sections.
+
+    Args:
+        label: Heading text to colour yellow; no punctuation is added.
+        ctx: Context used to resolve whether colour is explicitly disabled.
+
+    Returns:
+        The heading unchanged when colour is disabled, otherwise Click-styled heading text.
     """
     return _style(label, "yellow", ctx)
 
@@ -115,6 +140,14 @@ def _option_line(label: str, description: str, ctx: click.Context) -> str:
     """Align one global option with the explanation shown beside it.
 
     Use while building root help; empty labels still reserve the normal option column.
+
+    Args:
+        label: Option spelling used to size the 22-character label column before styling.
+        description: Help text placed after the label column.
+        ctx: Context used to resolve the label's colour preference.
+
+    Returns:
+        One indented help row, with padding based on the unstyled label length.
     """
     return f"  {_style(label, 'green', ctx)}{' ' * (22 - len(label))}{description}"
 
@@ -123,6 +156,14 @@ def _command_line(name: str, description: str, ctx: click.Context) -> str:
     """Align one command name with the action a CLI user can take.
 
     Use while building the command list; empty names still preserve the display gutter.
+
+    Args:
+        name: Command spelling used to size the 16-character name column before styling.
+        description: Action description displayed after the name column.
+        ctx: Context used to resolve the command name's colour preference.
+
+    Returns:
+        One indented command row, with padding based on the unstyled name length.
     """
     # Pad past the longest command name ("migrate-config", 14) so every description
     # keeps a column gutter; a width equal to the name length renders them flush.
@@ -132,7 +173,15 @@ def _command_line(name: str, description: str, ctx: click.Context) -> str:
 def _style(text: str, color: str, ctx: click.Context) -> str:
     """Apply terminal colour only when the user's effective setting permits it.
 
-    Use for help labels and names; empty text stays empty whether colour is enabled or disabled.
+    Use for help labels and names; explicit colour suppression returns the original text.
+
+    Args:
+        text: Help content to style without changing its visible wording.
+        color: Foreground colour name passed to Click when styling is permitted.
+        ctx: Context whose local, shared or inherited colour choice controls styling.
+
+    Returns:
+        Original text when colour is explicitly disabled, otherwise text with Click's style sequences.
     """
     # Disabled ANSI means the user receives plain text suitable for redirected or colourless output.
     if should_use_color(ctx) is False:

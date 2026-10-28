@@ -289,7 +289,14 @@ def hook_payload(
 
 
 def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
-    """Project one sensitive exclusion, configured or built in, into its section 13a audit row."""
+    """Project one sensitive exclusion, configured or built in, into its section 13a audit row.
+
+    Args:
+        summary: Suppression audit entry, including its count, optional symbol and optional source.
+
+    Returns:
+        Hook audit fields using the first path or an empty path, omitting source only when it is None.
+    """
     return {
         "rule": summary.rule,
         # Section 13a gives each entry exactly one path; the native audit carries it in the family's list shape.
@@ -327,7 +334,21 @@ def _filter_findings_for_hook(
     base_stable_identities: Counter[str] | None = None,
     has_prior_base: bool = False,
 ) -> _HookFilterResult:
-    """Apply hook changed-region and new-only semantics to full-scan findings."""
+    """Apply hook changed-region and new-only semantics to full-scan findings.
+
+    Args:
+        findings: Full-scan findings in the order retained by this filter.
+        paths: Requested paths to which explicit changed ranges apply.
+        changed_ranges: Explicit range text; None disables region filtering, while an empty string is invalid.
+        base_stable_identities: Prior occurrence counts; None disables identity-based new-only filtering.
+        has_prior_base: Whether a Git comparison or applied baseline can attribute file and project findings to the edit.
+
+    Returns:
+        Retained findings in input order and the count removed by changed-region rules, excluding new-only removals alone.
+
+    Raises:
+        ValueError: If explicit changed-range syntax is invalid.
+    """
     changed = _changed_region_set(findings, paths, changed_ranges)
     kept: list[Finding] = []
     suppressed_count = 0
@@ -389,7 +410,14 @@ def _base_covered_findings(
 
 
 def _scope_for_finding(finding: Finding) -> str:
-    """Classify a finding into the hook contract's closed scope enum."""
+    """Classify a finding into the hook contract's closed scope enum.
+
+    Args:
+        finding: Finding whose start line, rule ID and optional symbol determine its scope.
+
+    Returns:
+        Project scope without a start line; otherwise file scope for designated rules, symbol scope for a non-None symbol, or line scope.
+    """
     if finding.line is None:
         return "project"
     if finding.rule_id in _FILE_SCOPE_RULE_IDS:
@@ -400,7 +428,15 @@ def _scope_for_finding(finding: Finding) -> str:
 
 
 def _hook_stable_identity(finding: Finding, scope: str | None = None) -> str:
-    """Return hook identity stable across line shifts and measured-value changes."""
+    """Build the hook comparison key without source-line positions.
+
+    Args:
+        finding: Finding supplying the rule, file, and either its symbol or fallback message.
+        scope: Explicit scope, or None or empty text to infer it from the finding.
+
+    Returns:
+        A 16-character hash of the rule and file plus the symbol, file/project scope, or line-scoped message.
+    """
     resolved_scope = scope or _scope_for_finding(finding)
     if finding.symbol is not None:
         payload: dict[str, Any] = {
@@ -525,6 +561,12 @@ def _end_line_for(finding: Finding) -> int | None:
     A consumer locating a finding cannot treat an absent end as a single line by
     guessing, so the contract makes the field required and the single-line case
     explicit.
+
+    Args:
+        finding: Finding whose reported start and optional end define the published span.
+
+    Returns:
+        None without a start line; otherwise a valid reported end or the start line when the end is absent or earlier.
     """
     if finding.line is None:
         return None
@@ -538,6 +580,12 @@ def _symbol_ordinal_from(identity: Any) -> int:
 
     A finding naming no symbol reports 0, which is what the identity contract
     says a symbol-less subject carries.
+
+    Args:
+        identity: Ratified identity carrying a subject, or None when the finding has no identity.
+
+    Returns:
+        The ASCII-digit suffix after the subject's last #, or 0 when no valid suffix is available.
     """
     if identity is None:
         return 0
@@ -551,6 +599,14 @@ def _symbol_ordinal_from(identity: Any) -> int:
 
 
 def _remediation_for(finding: Finding) -> str:
+    """Choose remediation supplied by the finding or its rule documentation.
+
+    Args:
+        finding: Finding whose nonempty remediation takes precedence over catalogue guidance.
+
+    Returns:
+        The supplied remediation, the rule's fix guidance, or generic review guidance for an unknown rule.
+    """
     if finding.remediation:
         return finding.remediation
     try:
@@ -560,6 +616,14 @@ def _remediation_for(finding: Finding) -> str:
 
 
 def _metadata_for(finding: Finding) -> dict[str, Any]:
+    """Copy finding metadata and fill missing threshold-comparison display fields.
+
+    Args:
+        finding: Finding whose metadata is copied without changing the original mapping.
+
+    Returns:
+        A shallow copy; when threshold is present, missing comparison aliases are filled where available and existing values remain intact.
+    """
     metadata = dict(finding.metadata)
     if "threshold" not in metadata:
         return metadata
@@ -574,6 +638,15 @@ def _metadata_for(finding: Finding) -> dict[str, Any]:
 
 
 def _unit_for_metadata(rule_id: str, metadata: dict[str, Any]) -> str:
+    """Choose the comparison unit from recognised metrics before using the rule fallback.
+
+    Args:
+        rule_id: Rule ID whose size prefix supplies a count fallback when no metric determines the unit.
+        metadata: Comparison metadata inspected in the function's metric-priority order.
+
+    Returns:
+        The metric's unit label, count for an otherwise unclassified size rule, or value for another rule.
+    """
     if _first_present(metadata, _LINE_UNITS_BY_METADATA_KEY) is not None:
         return "lines"
     if "densityPer1000" in metadata:
@@ -590,6 +663,15 @@ def _unit_for_metadata(rule_id: str, metadata: dict[str, Any]) -> str:
 
 
 def _first_present(metadata: dict[str, Any], keys: tuple[str, ...]) -> Any | None:
+    """Read the first requested metadata key that exists, without skipping a None value.
+
+    Args:
+        metadata: Mapping that may contain any of the requested keys.
+        keys: Candidate keys in lookup-priority order; empty means no lookup succeeds.
+
+    Returns:
+        The first existing key's value, including None, or None when every key is absent.
+    """
     for key in keys:
         if key in metadata:
             return metadata[key]
@@ -603,6 +685,19 @@ def _changed_region_set(
 ) -> ChangedRegionSet:
     # Only an absent flag means no filter. An empty value asks to scope the run and names no range, so it
     # goes to the parser, which refuses it, rather than silently widening the scan to the whole tree.
+    """Resolve explicit hook ranges against requested paths and paths named by findings.
+
+    Args:
+        findings: Findings whose file paths join the set receiving explicit ranges.
+        paths: Requested path spellings, normalised to forward slashes with outer slashes removed.
+        changed_ranges: Range text to parse; None disables the filter, while empty text is rejected.
+
+    Returns:
+        An inactive set when no range flag was supplied, otherwise an explicit set for the nonempty normalised paths.
+
+    Raises:
+        ValueError: If explicit changed-range syntax is invalid.
+    """
     if changed_ranges is None:
         return ChangedRegionSet(source="")
     source_paths = {
@@ -613,6 +708,15 @@ def _changed_region_set(
 
 
 def _is_finding_intersecting_changed_region(finding: Finding, changed: ChangedRegionSet) -> bool:
+    """Test a finding against the selected changed file or line span.
+
+    Args:
+        finding: Finding whose file is tested directly when its start line is absent.
+        changed: Resolved changed files and ranges to compare with the finding.
+
+    Returns:
+        Whether its file or reported span intersects the changed scope, using the start when its end is absent or earlier.
+    """
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
     end_line = finding.end_line if finding.end_line is not None and finding.end_line >= finding.line else finding.line
@@ -620,6 +724,18 @@ def _is_finding_intersecting_changed_region(finding: Finding, changed: ChangedRe
 
 
 def _stable_hash(payload: dict[str, Any]) -> str:
+    """Hash a hook identity payload with compact, ASCII-escaped JSON.
+
+    Args:
+        payload: Identity fields in their required insertion order, with JSON-serializable values.
+
+    Returns:
+        The first 16 lowercase SHA-256 hex characters after ASCII and forward-slash escaping.
+
+    Raises:
+        TypeError: If a payload value cannot be encoded as JSON.
+        ValueError: If the payload contains a circular reference.
+    """
     encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
     encoded = encoded.replace("/", r"\/")
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -631,6 +747,18 @@ def _materialize_git_base(
     base_ref: str,
     paths: tuple[str, ...],
 ) -> None:
+    """Write selected files from a Git tree into the base-analysis directory.
+
+    Args:
+        project_root: Repository from which Git resolves the base ref and reads file blobs.
+        target_root: Directory receiving the selected relative paths and their blob bytes.
+        base_ref: Git tree or commit ref whose files are materialised.
+        paths: Git pathspecs selecting files; empty selects the whole tree.
+
+    Raises:
+        ValueError: If a Git command cannot resolve or read the requested tree.
+        OSError: If a destination directory or file cannot be written.
+    """
     pathspecs = list(paths or (".",))
     tree_paths = _git_lines(
         project_root,
@@ -646,11 +774,35 @@ def _materialize_git_base(
 
 
 def _git_lines(project_root: Path, args: list[str]) -> list[str]:
+    """Read nonempty UTF-8 text lines from a Git command's standard output.
+
+    Args:
+        project_root: Repository selected through Git's -C option.
+        args: Git subcommand and arguments to run in that repository.
+
+    Returns:
+        Output lines with empty lines omitted and undecodable bytes replaced.
+
+    Raises:
+        ValueError: If Git cannot start or the command exits unsuccessfully.
+    """
     output = _git_bytes(project_root, args).decode("utf-8", errors="replace")
     return [line for line in output.splitlines() if line]
 
 
 def _git_bytes(project_root: Path, args: list[str]) -> bytes:
+    """Run a Git command and return its raw standard output.
+
+    Args:
+        project_root: Repository selected through Git's -C option.
+        args: Git subcommand and arguments to execute.
+
+    Returns:
+        Standard-output bytes from the successful command.
+
+    Raises:
+        ValueError: If Git cannot start or the command exits unsuccessfully.
+    """
     try:
         completed = subprocess.run(
             ["git", "-C", str(project_root), *args],

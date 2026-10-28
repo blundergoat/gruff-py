@@ -104,7 +104,20 @@ def _parse_entry(
     known_rule_ids: frozenset[str],
     sensitive_rule_ids: frozenset[str],
 ) -> SensitiveExclusion:
-    """Build one validated entry, rejecting every key the contract does not accept."""
+    """Build one validated entry, rejecting every key the contract does not accept.
+
+    Args:
+        index: Original list position retained in diagnostics and the resulting audit entry.
+        entry: Raw entry table containing the rule, path, optional symbol and review reason.
+        known_rule_ids: Registered ids used to reject misspelled rules.
+        sensitive_rule_ids: Registered sensitive-data ids permitted in this suppression channel.
+
+    Returns:
+        An immutable entry with validated fields and its original list index.
+
+    Raises:
+        ConfigError: When the entry shape, keys or any required field is invalid.
+    """
     entry_path = f"{SENSITIVE_EXCLUSIONS_KEY}[{index}]"
     if not isinstance(entry, dict):
         raise ConfigError(f'Config key "{entry_path}" must be a table with "rule", "path", and "reason" keys.')
@@ -119,7 +132,15 @@ def _parse_entry(
 
 
 def _reject_unaccepted_keys(entry_path: str, entry: dict[Any, Any]) -> None:
-    """Stop the scan when an entry carries a key outside the accepted four."""
+    """Stop the scan when an entry carries a key outside the accepted four.
+
+    Args:
+        entry_path: Indexed configuration path identifying the rejected entry.
+        entry: Raw table whose keys must belong to the accepted rule/path/symbol/reason set.
+
+    Raises:
+        ConfigError: When any table key is outside the accepted set.
+    """
     unaccepted = sorted(str(key) for key in entry if key not in VALID_SENSITIVE_EXCLUSION_KEYS)
     if not unaccepted:
         return
@@ -137,7 +158,20 @@ def _parse_rule(
     known_rule_ids: frozenset[str],
     sensitive_rule_ids: frozenset[str],
 ) -> str:
-    """Resolve the one exact sensitive-data rule id the entry may silence."""
+    """Resolve the one exact sensitive-data rule id the entry may silence.
+
+    Args:
+        entry_path: Indexed configuration path used to identify invalid rule values.
+        entry: Raw table supplying the required rule string.
+        known_rule_ids: Registered ids against which the exact rule spelling is checked.
+        sensitive_rule_ids: Subset of registered ids allowed to be suppressed by this entry.
+
+    Returns:
+        The original exact rule id after membership and selector checks.
+
+    Raises:
+        ConfigError: When rule is missing, malformed, unknown, a group selector, or outside the sensitive-data pillar.
+    """
     rule = _required_string(f"{entry_path}.rule", entry, "rule")
     # A wildcard or expression would hide findings the user never enumerated.
     if any(character in rule for character in _RULE_METACHARACTERS):
@@ -159,7 +193,18 @@ def _parse_rule(
 
 
 def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
-    """Resolve the one project-relative file the entry may silence the rule in."""
+    """Resolve the one project-relative file the entry may silence the rule in.
+
+    Args:
+        entry_path: Indexed configuration path used to identify invalid path values.
+        entry: Raw table supplying the required literal path string.
+
+    Returns:
+        Path text with forward slashes and leading ./ segments removed.
+
+    Raises:
+        ConfigError: When the raw value is missing or invalid, or its normalized path is absolute, traversing or a glob.
+    """
     path = _normalise_report_path(_required_string(f"{entry_path}.path", entry, "path"))
     # An absolute path leaks the author's machine layout and escapes the project.
     if path.startswith("/") or _WINDOWS_DRIVE_PATTERN.match(path):
@@ -173,14 +218,36 @@ def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
 
 
 def _parse_symbol(entry_path: str, entry: dict[Any, Any]) -> str | None:
-    """Resolve the optional symbol that narrows the entry beyond rule and path."""
+    """Resolve the optional symbol that narrows the entry beyond rule and path.
+
+    Args:
+        entry_path: Indexed configuration path used in invalid-symbol feedback.
+        entry: Raw table optionally carrying a non-empty symbol string.
+
+    Returns:
+        The supplied symbol unchanged, or None when the key is absent.
+
+    Raises:
+        ConfigError: When a present symbol is not a non-empty string.
+    """
     if "symbol" not in entry:
         return None
     return _required_string(f"{entry_path}.symbol", entry, "symbol")
 
 
 def _parse_reason(entry_path: str, entry: dict[Any, Any]) -> str:
-    """Require the rationale a reviewer needs to judge the suppression."""
+    """Require the rationale a reviewer needs to judge the suppression.
+
+    Args:
+        entry_path: Indexed configuration path used in missing-reason feedback.
+        entry: Raw table supplying a reason containing at least one non-whitespace character.
+
+    Returns:
+        The supplied reason text, retaining its surrounding whitespace.
+
+    Raises:
+        ConfigError: When reason is absent, not a string, or contains only whitespace.
+    """
     reason = entry.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ConfigError(
@@ -190,7 +257,19 @@ def _parse_reason(entry_path: str, entry: dict[Any, Any]) -> str:
 
 
 def _required_string(key_path: str, entry: dict[Any, Any], key: str) -> str:
-    """Return a required non-empty string value, naming the exact key the user must fix."""
+    """Return a required non-empty string value, naming the exact key the user must fix.
+
+    Args:
+        key_path: Full configuration path included in invalid-value feedback.
+        entry: Raw table from which the value is read.
+        key: Required field name; an absent key fails the same check as an empty value.
+
+    Returns:
+        The original non-empty string without stripping whitespace.
+
+    Raises:
+        ConfigError: When the value is absent, empty or not a string.
+    """
     value = entry.get(key)
     if not isinstance(value, str) or not value:
         raise ConfigError(f'Config key "{key_path}" must be a non-empty string.')
