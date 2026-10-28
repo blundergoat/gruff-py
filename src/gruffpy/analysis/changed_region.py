@@ -206,6 +206,17 @@ def _did_consume_file_header(
     changed_files: set[str],
     whole_files: set[str],
 ) -> bool:
+    """Apply file-header metadata before the patch parser considers a line as a hunk.
+
+    Args:
+        line: Current line of the unified diff, without its newline.
+        state: Current file paths and new-file flag, updated in place.
+        changed_files: Paths encountered in the patch, extended by new-side headers.
+        whole_files: New files that should be checked in full, extended in place.
+
+    Returns:
+        True for a recognized file-header line, so the caller skips hunk parsing.
+    """
     if line.startswith("diff --git "):
         _consume_diff_git_header(line, state)
         return True
@@ -222,6 +233,12 @@ def _did_consume_file_header(
 
 
 def _consume_diff_git_header(line: str, state: _PatchState) -> None:
+    """Reset the prior file's state and take paths from the next Git diff header.
+
+    Args:
+        line: Git diff header whose path fields may initialize both sides of the file.
+        state: Current file metadata to reset and populate in place.
+    """
     state.current_path = None
     state.old_path = None
     state.new_file = False
@@ -232,6 +249,12 @@ def _consume_diff_git_header(line: str, state: _PatchState) -> None:
 
 
 def _consume_old_file_header(line: str, state: _PatchState) -> None:
+    """Record the old-side path and recognize an added file from its absent old side.
+
+    Args:
+        line: Old-file header, including the leading three minus signs and space.
+        state: Current file metadata whose old path and new-file flag are updated.
+    """
     state.old_path = _diff_header_path(line[4:])
     state.new_file = state.old_path is None
 
@@ -242,6 +265,14 @@ def _consume_new_file_header(
     changed_files: set[str],
     whole_files: set[str],
 ) -> None:
+    """Register the new-side path and mark newly added files for whole-file analysis.
+
+    Args:
+        line: New-file header, including the leading three plus signs and space.
+        state: Current metadata, retaining the Git header path when this side is absent.
+        changed_files: Paths known to be changed, extended when a path is available.
+        whole_files: New-file paths requiring full analysis, extended in place.
+    """
     parsed = _diff_header_path(line[4:])
     state.current_path = parsed or state.current_path
     if state.current_path is None:
@@ -258,6 +289,15 @@ def _consume_hunk_header(
     whole_files: set[str],
     ranges_by_file: dict[str, list[LineRange]],
 ) -> None:
+    """Record new-side hunk ranges, anchoring deletion-only hunks for symbol filtering.
+
+    Args:
+        line: Candidate unified-diff hunk header; unrelated lines are ignored.
+        state: Current file metadata used to associate the hunk with a path.
+        changed_files: Paths known to be changed, extended when a hunk has a path.
+        whole_files: Paths already covered in full and therefore needing no hunk ranges.
+        ranges_by_file: Inclusive changed ranges to extend for the resolved file path.
+    """
     match = _HUNK_RE.match(line)
     if match is None:
         return
@@ -513,6 +553,15 @@ def _enclosing_declaration(
 
 
 def _symbol_matches(finding_symbol: str | None, declaration_symbol: str | None) -> bool:
+    """Accept unqualified declaration names while allowing location-only matching.
+
+    Args:
+        finding_symbol: Reported symbol, which may include an enclosing class name.
+        declaration_symbol: Parsed declaration name used to refine the location match.
+
+    Returns:
+        True for equal names, a dotted suffix match, or either missing name.
+    """
     if finding_symbol is None or declaration_symbol is None:
         return True
     return finding_symbol == declaration_symbol or finding_symbol.endswith(f".{declaration_symbol}")
@@ -539,6 +588,18 @@ def _parse_range_list(raw_ranges: str) -> tuple[LineRange, ...]:
 
 
 def _parse_positive_line(raw_line: str, original: str) -> int:
+    """Validate a changed-range endpoint and preserve the entered range in error messages.
+
+    Args:
+        raw_line: Endpoint text to interpret as a one-based line number.
+        original: Complete range token to name if its endpoint is invalid.
+
+    Returns:
+        Positive line number accepted for changed-region selection.
+
+    Raises:
+        ValueError: The endpoint is not an integer or is below one.
+    """
     try:
         value = int(raw_line)
     except ValueError as exc:
@@ -549,6 +610,14 @@ def _parse_positive_line(raw_line: str, original: str) -> int:
 
 
 def _merge_ranges(ranges: list[LineRange] | tuple[LineRange, ...]) -> list[LineRange]:
+    """Coalesce overlapping or adjacent changed ranges without altering the caller's list.
+
+    Args:
+        ranges: Inclusive line ranges that may be unsorted or overlap.
+
+    Returns:
+        Sorted disjoint ranges, or an empty list when no ranges were supplied.
+    """
     merged: list[LineRange] = []
     for current in sorted(ranges, key=lambda item: (item.start, item.end)):
         if not merged or current.start > merged[-1].end + 1:

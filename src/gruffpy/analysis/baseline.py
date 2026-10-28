@@ -672,7 +672,18 @@ def _identities_or_error(
     findings: Sequence[Finding],
     declaration_position: Callable[[Finding], int] | None,
 ) -> tuple[FindingIdentity | None, ...]:
-    """Name every eligible finding, reporting an unnameable one as a baseline failure rather than a traceback."""
+    """Name eligible findings and translate identity failures into baseline errors.
+
+    Args:
+        findings: Scan occurrences whose identities will be stored or matched against reviewed debt.
+        declaration_position: Declaration resolver used for occurrence identity, or None for line-based fallback.
+
+    Returns:
+        One identity per finding, with None for occurrences excluded from identity matching.
+
+    Raises:
+        BaselineError: An identity cannot be constructed, preserving the underlying diagnostic.
+    """
     try:
         return finding_identities(findings, declaration_position)
     # For example, a symbol-less finding whose message is empty has nothing left to be named by.
@@ -681,7 +692,15 @@ def _identities_or_error(
 
 
 def _group_by_identity(findings: Sequence[Finding], identities: Sequence[FindingIdentity | None]) -> dict[str, _IdentityGroup]:
-    """Bucket every eligible finding by identity, remembering the declarations and subjects each one covers."""
+    """Collect the occurrences and declarations needed to apply one reviewed identity together.
+
+    Args:
+        findings: Scan occurrences in the order used to classify and report them.
+        identities: Matching identity slots in the same order; None slots are omitted from groups.
+
+    Returns:
+        Groups keyed by identity, retaining occurrence indexes and distinct declarations and subjects.
+    """
     groups: dict[str, _IdentityGroup] = {}
     for index, finding in enumerate(findings):
         named = identities[index]
@@ -705,7 +724,17 @@ def _classify(
     groups: dict[str, _IdentityGroup],
     reviewed_by_identity: dict[str, BaselineEntry],
 ) -> list[str]:
-    """Label every finding new, unchanged, collision, or notEligible, spending each reviewed count in file order."""
+    """Classify reviewed debt without hiding collisions or ineligible findings.
+
+    Args:
+        findings: Scan occurrences whose positions determine which reviewed counts are spent first.
+        identities: Identity slots aligned with findings; None marks an occurrence not eligible for matching.
+        groups: Occurrences and declarations collected for each eligible identity.
+        reviewed_by_identity: Accepted baseline rows that supply each identity's reviewed count.
+
+    Returns:
+        One status per finding in scan order: new, unchanged, collision, or notEligible.
+    """
     statuses = ["new"] * len(findings)
     for index, named in enumerate(identities):
         # A finding with no identity is labelled before any lookup: a sensitive one, so no reviewed row can reach a
@@ -728,13 +757,28 @@ def _classify(
 
 
 def _spend_order(finding: Finding) -> tuple[int, int]:
-    """Order one identity's occurrences by line then column; an unlocated finding sorts last."""
+    """Order one identity's occurrences by line then column; an unlocated finding sorts last.
+
+    Args:
+        finding: Occurrence whose position decides which reviewed count is spent first.
+
+    Returns:
+        Line and column sorting key, using zero for an absent column.
+    """
     line = finding.line if finding.line is not None else _UNLOCATED_SPEND_LINE
     return (line, finding.column if finding.column is not None else 0)
 
 
 def _partition(findings: Sequence[Finding], statuses: Sequence[str]) -> tuple[list[Finding], dict[str, int]]:
-    """Split the findings into the hidden set and the gated set, in scan order, and count each status."""
+    """Keep findings that still affect the gate and count every baseline status.
+
+    Args:
+        findings: Scan occurrences in their original reporting order.
+        statuses: One classification per occurrence, in the same order as findings.
+
+    Returns:
+        Findings other than unchanged occurrences, preserving order, and counts by status.
+    """
     gated: list[Finding] = []
     counts = {"new": 0, "unchanged": 0, "collision": 0, "notEligible": 0}
     for finding, status in zip(findings, statuses, strict=True):
@@ -750,7 +794,16 @@ def _resolved_surplus(
     groups: dict[str, _IdentityGroup],
     statuses: Sequence[str],
 ) -> tuple[tuple[BaselineEntry, ...], int]:
-    """Find every reviewed identity with fewer live occurrences than reviewed, which is debt the user has since fixed."""
+    """Count reviewed occurrences that disappeared, leaving collided identities unresolved.
+
+    Args:
+        baseline: Reviewed rows against which the full scan's remaining debt is compared.
+        groups: Live occurrences grouped by identity; an absent group means no occurrences remain.
+        statuses: Classifications indexed by each group's occurrence indexes, used to skip collisions.
+
+    Returns:
+        Baseline rows carrying their resolved surplus counts, and the total resolved occurrences.
+    """
     resolved: list[BaselineEntry] = []
     occurrences = 0
     for entry in baseline.entries:
@@ -767,7 +820,14 @@ def _resolved_surplus(
 
 
 def _collisions(groups: dict[str, _IdentityGroup]) -> tuple[BaselineCollision, ...]:
-    """List the identities that covered two declarations, so the run can name each one for the user."""
+    """List identities shared by multiple declarations so the run can explain each collision.
+
+    Args:
+        groups: Occurrences grouped by the identity used to match reviewed baseline rows.
+
+    Returns:
+        Collision records with the rule, path and subjects from each ambiguous group.
+    """
     return tuple(
         BaselineCollision(identity=identity, rule_id=group.rule_id, path=group.path, subjects=tuple(group.subjects))
         for identity, group in groups.items()
@@ -779,7 +839,15 @@ def _document_from_findings(
     findings: Sequence[Finding],
     declaration_position: Callable[[Finding], int] | None,
 ) -> BaselineData:
-    """Build the rows and sensitive counts a generated baseline records, ordered so two identical runs write one file."""
+    """Build counted baseline rows while recording sensitive occurrences only as per-rule totals.
+
+    Args:
+        findings: Current scan occurrences from which the accepted-debt document is generated.
+        declaration_position: Declaration resolver for occurrence identity, or None for line-based fallback.
+
+    Returns:
+        Baseline data with identity-sorted rows, sensitive counts, and no assigned output path.
+    """
     identities = _identities_or_error(findings, declaration_position)
     rows: dict[str, BaselineEntry] = {}
     sensitive_by_rule: dict[str, int] = {}
@@ -806,7 +874,14 @@ def _document_from_findings(
 
 
 def _document_payload(data: BaselineData) -> dict[str, Any]:
-    """Render one baseline document, including the sensitive block that explains what it deliberately did not store."""
+    """Render baseline rows and sensitive counts without storing sensitive finding details.
+
+    Args:
+        data: Reviewed occurrences and per-rule sensitive counts to persist.
+
+    Returns:
+        Versioned JSON-ready document with a fresh generation timestamp.
+    """
     return {
         "schemaVersion": BASELINE_SCHEMA_VERSION,
         "toolLanguage": data.tool_language,
@@ -855,7 +930,15 @@ def _accepted_by_legacy(rows: tuple[dict[str, Any], ...], findings: Sequence[Fin
 
 
 def _row_text(row: dict[str, Any], key: str) -> str | None:
-    """Read one stored 0.5 field, treating an absent or non-text value as a field that row never narrowed on."""
+    """Read a legacy baseline field as nonempty text.
+
+    Args:
+        row: Stored 0.5 baseline occurrence whose optional fields limit matching.
+        key: Matching field to read from that occurrence.
+
+    Returns:
+        Nonempty field text, or None if the field is absent, empty, or not a string.
+    """
     value = row.get(key)
     return value if isinstance(value, str) and value else None
 
@@ -890,13 +973,32 @@ def _sensitive_counts_from_payload(payload: dict[str, Any]) -> dict[str, int]:
 
 
 def _optional_text(row: dict[str, Any], key: str) -> str:
-    """Read one optional descriptive string from a stored row; an absent field reads as empty."""
+    """Restore optional baseline descriptions while tolerating absent or non-text values.
+
+    Args:
+        row: Stored baseline occurrence containing optional descriptive fields.
+        key: Description field to restore.
+
+    Returns:
+        Stored string, or an empty string when no string was recorded.
+    """
     value = row.get(key)
     return value if isinstance(value, str) else ""
 
 
 def _read_bytes(path: Path, display_path: str) -> bytes:
-    """Read a file whole, so a migration can prove its input survived byte for byte."""
+    """Read a baseline whole so migration can check that its input survives byte for byte.
+
+    Args:
+        path: Resolved baseline file to read from disk.
+        display_path: User-facing path to name when the read fails.
+
+    Returns:
+        Complete baseline file contents without decoding or normalization.
+
+    Raises:
+        BaselineError: The baseline cannot be read, with the display path in the error.
+    """
     try:
         return path.read_bytes()
     # For example, the user may pass a --migrate-baseline path that was deleted between runs.

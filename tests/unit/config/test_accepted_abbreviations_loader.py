@@ -31,6 +31,11 @@ def _toml(tmp_path: Path, body: str) -> Path:
 
 
 def test_default_accepted_abbreviations_survive_unrelated_allowlists_section(tmp_path: Path):
+    """Keep seeded naming abbreviations when a config changes only the dead-code allowlist.
+
+    Args:
+        tmp_path: Isolated project directory holding the unrelated allowlist override.
+    """
     _yaml(tmp_path, "allowlists:\n  deadCode:\n    symbols: []\n")
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
@@ -40,6 +45,11 @@ def test_default_accepted_abbreviations_survive_unrelated_allowlists_section(tmp
 
 
 def test_explicit_accepted_abbreviations_replace_defaults(tmp_path: Path):
+    """Use exactly the configured naming abbreviations instead of merging the seed list.
+
+    Args:
+        tmp_path: Isolated project directory holding the replacement abbreviation list.
+    """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: ['ctx', 'cfg']\n")
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
@@ -48,6 +58,11 @@ def test_explicit_accepted_abbreviations_replace_defaults(tmp_path: Path):
 
 
 def test_empty_accepted_abbreviations_list_clears_defaults(tmp_path: Path):
+    """Let an explicit empty naming list remove every seeded abbreviation exception.
+
+    Args:
+        tmp_path: Isolated project directory holding the explicit empty naming list.
+    """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: []\n")
 
     config, _ = ConfigLoader(tmp_path, _defaults()).load()
@@ -56,6 +71,11 @@ def test_empty_accepted_abbreviations_list_clears_defaults(tmp_path: Path):
 
 
 def test_accepted_abbreviations_rejects_non_list_value(tmp_path: Path):
+    """Refuse a scalar naming allowlist before it can affect analysis configuration.
+
+    Args:
+        tmp_path: Isolated project directory holding the invalid scalar allowlist.
+    """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: not-a-list\n")
 
     with pytest.raises(ConfigError, match="acceptedAbbreviations"):
@@ -63,6 +83,11 @@ def test_accepted_abbreviations_rejects_non_list_value(tmp_path: Path):
 
 
 def test_accepted_abbreviations_rejects_non_string_entry(tmp_path: Path):
+    """Refuse a naming allowlist containing a number instead of silently accepting it.
+
+    Args:
+        tmp_path: Isolated project directory holding the mixed-type naming list.
+    """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations:\n      - ctx\n      - 7\n")
 
     with pytest.raises(ConfigError, match="acceptedAbbreviations"):
