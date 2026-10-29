@@ -53,6 +53,20 @@ def walk_statement_scope(node: ast.AST) -> Iterator[ast.AST]:
 
 
 def _walk_within_scope(node: ast.AST) -> Iterator[ast.AST]:
+    """Yield node and its descendants in pre-order, never descending into a def, async def, class or lambda.
+
+    The boundary check also applies to node itself: a def, async def, class or lambda node passed in is yielded alone. walk_function_scope therefore
+    calls this on each child of the function rather than on the function node, so that the function's own body is still walked.
+
+    Everything beneath a boundary node is skipped, including its decorators, argument defaults and base classes.
+
+    Args:
+        node: Root of the walk, yielded first; when it is a def, async def, class or lambda node its children are skipped.
+
+    Yields:
+        Each AST node in pre-order: node itself, then every descendant outside a nested scope, with each nested def, async def, class or lambda node
+        included but its contents excluded.
+    """
     yield node
     if isinstance(node, _SCOPE_BOUNDARIES):
         return

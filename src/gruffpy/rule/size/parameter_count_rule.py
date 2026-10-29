@@ -105,6 +105,18 @@ class ParameterCountRule(Rule):
 
 
 def _count_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> int:
+    """Count a function's parameters, dropping a leading self or cls receiver when the function sits inside a class.
+
+    Positional-only, positional and keyword-only parameters each count once, and *args and **kwargs add one each when present. The receiver is dropped
+    only when the first positional parameter is literally named self or cls.
+
+    Args:
+        fn: Function definition whose parameters are counted.
+        parents: Ancestor chain of fn, from outermost to immediate parent, used to decide whether fn is a method.
+
+    Returns:
+        Number of parameters measured against the rule threshold, excluding any dropped receiver.
+    """
     args = fn.args
     positional = list(args.posonlyargs) + list(args.args)
     if positional and _is_method(fn, parents):
@@ -120,10 +132,29 @@ def _count_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[
 
 
 def _is_method(_fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
+    """Report whether any ancestor of the function is a class definition, so its receiver can be excluded.
+
+    The check looks at the whole ancestor chain, not only the immediate parent, so a function nested inside a method also counts as a method.
+
+    Args:
+        _fn: Function definition being checked; it is not read, only the ancestor chain decides the result.
+        parents: Ancestor chain of the function, from outermost to immediate parent.
+
+    Returns:
+        True when any ancestor is a class definition, otherwise False.
+    """
     return any(isinstance(p, ast.ClassDef) for p in parents)
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message, dropping the decimal part when the value is a whole number.
+
+    Args:
+        value: Threshold value to render; an integer or a float.
+
+    Returns:
+        The value as text, keeping the decimals of a non-integer float and printing whole-number floats such as 10.0 as 10.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

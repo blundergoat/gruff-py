@@ -109,6 +109,14 @@ def _decorator_name(decorator: ast.AST) -> str:
     - ``@pytest.fixture`` -> ``pytest.fixture``
     - ``@app.route("/users")`` -> ``app.route`` (Call wraps Attribute)
     - ``@router.get`` -> ``router.get``
+
+    Args:
+        decorator: Expression to name. Callers pass decorator expressions, class base expressions and the test of an if statement. A call is named by
+            its callee, so call arguments are ignored.
+
+    Returns:
+        Dotted name such as pytest.fixture or app.route. When an attribute's base cannot be named, for example a subscript, only the attribute name is
+        returned. Any other expression shape gives an empty string.
     """
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
@@ -224,6 +232,15 @@ def module_all_names(tree: ast.AST) -> frozenset[str]:
 
 
 def _string_seq(value: ast.AST) -> frozenset[str]:
+    """Collect the string constants from a list or tuple literal assigned to a module-level __all__.
+
+    Args:
+        value: Expression on the right-hand side of a plain or annotated __all__ assignment.
+
+    Returns:
+        Frozen set of the literal's string constant elements, with non-string elements skipped. The set is empty when value is not a list or tuple
+        literal, for example a concatenation or a call.
+    """
     if not isinstance(value, ast.List | ast.Tuple):
         return frozenset()
     names: set[str] = set()
@@ -391,7 +408,19 @@ def is_protocol_method_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents:
 
 
 def _is_empty_body(body: list[ast.stmt]) -> bool:
-    """True if *body* is exactly ``pass`` or ``...`` (single Expr-Constant)."""
+    """Report whether a function body is a placeholder made of pass or a bare constant, optionally after a docstring.
+
+    A body qualifies in two cases. The first is a single pass or constant expression statement, so a lone docstring or a lone ... counts. The second
+    is a string docstring followed by exactly one pass or constant expression statement. Any other statement, or more than two statements, makes the
+    body non-empty.
+
+    Args:
+        body: Statement list of a function definition, as passed by the waste.empty-function rule and by the Protocol stub and pluggy hookspec
+            predicates.
+
+    Returns:
+        True when the body matches one of the placeholder shapes; False for any other statement list.
+    """
     if len(body) == 1:
         only = body[0]
         if isinstance(only, ast.Pass):

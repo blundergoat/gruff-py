@@ -132,6 +132,19 @@ def nesting_depth_for(fn: FunctionLike) -> int:
 
 
 def _walk(node: ast.AST, current: int) -> int:
+    """Return the deepest nesting depth reached within a node, given the depth of the block that encloses it.
+
+    Function, class and lambda definitions stop the walk, so nested definitions add nothing to the enclosing function's depth. A node that is not a
+    control-flow block passes the depth unchanged to its children; a control-flow block adds one level before its clauses are walked.
+
+    Args:
+        node: AST node to measure: a statement, or any child node reached while descending, such as an expression, keyword, comprehension, alias,
+            operator, expression context or except handler.
+        current: Nesting depth of the block that encloses node; zero for a top-level statement of the function body.
+
+    Returns:
+        The deepest depth reached within node, never less than current; a function, class or lambda definition returns current unchanged.
+    """
     if _is_scope_boundary(node):
         return current
     if not isinstance(node, _NESTING_KINDS):
@@ -146,10 +159,27 @@ def _walk(node: ast.AST, current: int) -> int:
 
 
 def _is_scope_boundary(node: ast.AST) -> bool:
+    """Decide whether a node opens a separate scope that the enclosing function's depth walk must not enter.
+
+    Args:
+        node: AST node met during the depth walk.
+
+    Returns:
+        True for a function, async function, class or lambda definition; False for any other node.
+    """
     return isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda)
 
 
 def _deepest_child(node: ast.AST, current: int) -> int:
+    """Walk every direct child of a node that opens no level, keeping the enclosing depth unchanged.
+
+    Args:
+        node: Node that is neither a control-flow block nor a scope boundary, such as a plain statement or an expression.
+        current: Nesting depth of the block that encloses node; each child is walked at this same depth.
+
+    Returns:
+        The deepest depth reached among the children, or current when node has no children or none goes deeper.
+    """
     deepest = current
     for child in ast.iter_child_nodes(node):
         deepest = max(deepest, _walk(child, current))
@@ -157,6 +187,17 @@ def _deepest_child(node: ast.AST, current: int) -> int:
 
 
 def _walk_try(node: ast.Try, current: int) -> int:
+    """Return the deepest depth across a try block's body, except handlers, else and finally clauses.
+
+    Every clause is walked at the try's own level, so an except handler body sits at the same level as the try body rather than one deeper.
+
+    Args:
+        node: Try statement whose clauses are measured.
+        current: Depth of the try block itself, already including its own level; the statements of every clause are walked at this depth.
+
+    Returns:
+        The deepest depth reached in any clause, or current when no clause goes deeper.
+    """
     deepest = _deepest_in_statements(node.body, current)
     for handler in node.handlers:
         deepest = max(deepest, _deepest_in_statements(handler.body, current))
@@ -165,6 +206,15 @@ def _walk_try(node: ast.Try, current: int) -> int:
 
 
 def _walk_match(node: ast.Match, current: int) -> int:
+    """Return the deepest depth across every case body of a match statement.
+
+    Args:
+        node: Match statement whose case bodies are measured.
+        current: Depth of the match statement itself, already including its own level; each case body is walked at this depth.
+
+    Returns:
+        The deepest depth reached in any case body, or current when no case body goes deeper.
+    """
     deepest = current
     for case in node.cases:
         deepest = max(deepest, _deepest_in_statements(case.body, current))
@@ -172,6 +222,19 @@ def _walk_match(node: ast.Match, current: int) -> int:
 
 
 def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
+    """Return the deepest depth across the body and else clause of an if, loop or with block.
+
+    An if whose else clause holds a single if starting at the same column is treated as an elif: that branch is walked from the parent's enclosing
+    depth, so once its own level is added it sits at the parent if's level instead of one deeper. An if written inside an indented else block keeps
+    the extra level.
+
+    Args:
+        node: If, for, async for, while, with or async with statement; a missing or empty body or else clause counts as no statements.
+        current: Depth of this block itself, already including its own level; its body and else statements are walked at this depth.
+
+    Returns:
+        The deepest depth reached in the body, the else clause or an elif chain, never less than current.
+    """
     body = getattr(node, "body", []) or []
     orelse = getattr(node, "orelse", None) or []
     # An elif parses as an If inside its parent's orelse, but a reader sees a peer branch, not a level deeper. It starts
@@ -187,6 +250,15 @@ def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
 
 
 def _deepest_in_statements(statements: list[ast.stmt], current: int) -> int:
+    """Return the deepest depth reached by any statement in one clause's statement list.
+
+    Args:
+        statements: Statements of one clause, such as a body, else, except handler, finally or case body; an empty list leaves the depth at current.
+        current: Depth at which each statement is walked: the depth of the block that owns the clause, already including its own level.
+
+    Returns:
+        The deepest depth reached by any statement, or current when the list is empty or no statement goes deeper.
+    """
     deepest = current
     for stmt in statements:
         deepest = max(deepest, _walk(stmt, current))
@@ -194,6 +266,14 @@ def _deepest_in_statements(statements: list[ast.stmt], current: int) -> int:
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message, dropping the decimal part of a whole-number value.
+
+    Args:
+        value: Threshold of the matched severity, given as an int or a float.
+
+    Returns:
+        The value as text: a non-integral float keeps its decimals, while any whole number is written without a decimal point, so 6.0 becomes 6.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

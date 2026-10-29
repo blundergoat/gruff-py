@@ -149,6 +149,19 @@ def fallback_code_line_count(source: str) -> int:
 
 
 def _token_code_lines(source: str, tree: ast.AST | None) -> frozenset[int]:
+    """Find the physical lines that hold a token other than a comment, a layout token or a docstring.
+
+    A token that spans several lines, such as a multi-line string, marks every line it covers. Whitespace-only error tokens do not count. Decorator
+    lines are left in; code_line_numbers removes them afterwards. Source that cannot be tokenized falls back to _fallback_code_lines, where docstring
+    lines count.
+
+    Args:
+        source: Full source text of the analysed file.
+        tree: Parsed AST for the same source, used only to locate docstrings; None means no docstring lines are left out.
+
+    Returns:
+        One-based line numbers that hold code or data, still including decorator lines.
+    """
     docstring_spans = _docstring_source_spans(tree, source.splitlines())
     try:
         tokens = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
@@ -167,10 +180,28 @@ def _token_code_lines(source: str, tree: ast.AST | None) -> frozenset[int]:
 
 
 def _fallback_code_lines(source: str) -> frozenset[int]:
+    """Pick out the nonblank lines that are not full-line # comments, without tokenizing or parsing the source.
+
+    Docstrings are not recognised here, so their lines count.
+
+    Args:
+        source: Source text, possibly invalid or truncated.
+
+    Returns:
+        One-based numbers of the lines whose stripped text is not empty and does not start with #.
+    """
     return frozenset(number for number, line in enumerate(source.splitlines(), start=1) if line.strip() and not line.strip().startswith("#"))
 
 
 def _decorator_lines(tree: ast.AST | None) -> frozenset[int]:
+    """Collect every line covered by a decorator on a function, async function or class anywhere in the file.
+
+    Args:
+        tree: Parsed AST of the file, or None for text files and parse failures, in which case no decorator lines are found.
+
+    Returns:
+        One-based line numbers from each decorator expression's first line to its last; empty when tree is None.
+    """
     if tree is None:
         return frozenset()
     lines: set[int] = set()

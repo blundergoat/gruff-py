@@ -103,6 +103,10 @@ class RuleDocs:
 
         Driven from a table so adding a new optional field is one row and the
         cost stays linear instead of multiplicative.
+
+        Returns:
+            Optional fields keyed by their camelCase JSON name, in table order, containing only fields whose source value is truthy; tuples are copied
+            to lists, dicts are copied, and false-positive shapes become shape and mitigation dicts. Empty when every optional field is empty.
         """
         candidates: tuple[tuple[str, Any, Any], ...] = (
             ("formulaProvenance", self.formula_provenance, self.formula_provenance),
@@ -180,6 +184,14 @@ def custom_docs_for(
 
 
 def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for UnsafeNumericCoercionRule's Unicode-digit guard and int(float(...)) shapes.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for input already validated upstream to ASCII digits.
+    """
     return RuleDocs(
         rationale=(
             "isnumeric()/isdigit() accept characters int() rejects (superscript "
@@ -211,6 +223,14 @@ def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for RuntimeSysPathMutationRule, including its standalone-script top-level exemption.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for configuration files a documentation or build tool executes, such as a Sphinx docs/conf.py.
+    """
     return RuleDocs(
         rationale=(
             "sys.path mutation at import time or inside library functions makes "
@@ -250,6 +270,17 @@ def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    """Build curated RuleDocs for WeakCryptoRule that separates security-sensitive MD5/SHA1 use from plain digests.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+        rule_id: Id of the matched rule, passed by custom_docs_for as definition.id and used to look up the SARIF security metadata attached to the
+            docs.
+
+    Returns:
+        Curated RuleDocs carrying the rule's security metadata and three false-positive shapes: a digest_size query, a non-secret digest with
+        security-sounding names, and the literal usedforsecurity=False escape.
+    """
     return RuleDocs(
         rationale=(
             "MD5 and SHA1 are broken for signatures, tokens, and password "
@@ -317,6 +348,15 @@ def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
 
 
 def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for ExportedButUnreferencedRule, explaining why export plumbing is not a use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for public API or plugin symbols consumed outside the scan, mitigated through
+        options.entryPointPatterns or the dead-code allowlists.
+    """
     return RuleDocs(
         rationale=(
             "Export plumbing makes dead code look alive: a public function "
@@ -358,6 +398,14 @@ def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for SubstringVocabularyMatchRule, explaining mid-word hits in free-text matching.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for free-text-named values where substring matching is the documented intent.
+    """
     return RuleDocs(
         rationale=(
             "Substring containment over free text matches inside words - a "
@@ -394,6 +442,14 @@ def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for SingleImplementorProtocolRule on a Protocol or ABC with one concrete implementor.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "A Protocol or ABC with one concrete implementor adds an abstraction layer reviewers must verify without clear substitution value."
@@ -413,6 +469,17 @@ def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    """Build curated RuleDocs for DatabaseUrlPasswordRule, naming placeholder passwords that examples may use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+        rule_id: Id of the matched rule, passed by custom_docs_for as definition.id and handed to rule_security_metadata, which has no entry for this
+            id and returns an empty mapping.
+
+    Returns:
+        Curated RuleDocs with no false-positive shapes and an empty security_metadata, because rule_security_metadata has no entry for this rule id;
+        the payload therefore omits the security key.
+    """
     return RuleDocs(
         rationale="Credentialed database URLs in source usually expose direct data access.",
         fix_guidance=(
@@ -520,6 +587,15 @@ def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for NoAssertionsRule, naming the assertion forms that count in a collected test.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with two false-positive shapes: a matcher that raises on mismatch without an assert name, and a smoke test that passes by not
+        raising.
+    """
     return RuleDocs(
         rationale="Collected tests without assertions are easy to mistake for coverage.",
         fix_guidance=(
@@ -555,6 +631,15 @@ def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _ignore_directive_reason_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for IgnoreDirectiveReasonRule, naming the reason markers a suppression may use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for a reason written in the full-line comment above the directive rather than on the
+        directive's own line.
+    """
     return RuleDocs(
         rationale=(
             "Suppression comments age badly unless they explain the local "
@@ -585,6 +670,14 @@ def _ignore_directive_reason_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for DataclassAttributesRule, naming the field-documentation forms that satisfy it.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Public dataclasses often become reporter, config, or API payload contracts; "
@@ -599,6 +692,14 @@ def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for ComplexBranchRationaleRule, asking why a highly branched function stays complex.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Highly branched functions are expensive to review; when they cannot be "
@@ -618,7 +719,14 @@ def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for the grouped provider-token rule."""
+    """Return custom docs for the grouped provider-token rule.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Provider-prefixed API keys are high-signal credential leaks; "
@@ -639,7 +747,14 @@ def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for committed GCP service-account JSON keys."""
+    """Return custom docs for committed GCP service-account JSON keys.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Google service-account JSON files combine an account identity with private-key material; committed copies usually grant fleet access."
@@ -658,7 +773,15 @@ def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _private_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Explain which private-key headers remain reportable when this opt-in check runs."""
+    """Explain which private-key headers remain reportable when this opt-in check runs.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for two consecutive uppercase constant assignments that hold only matching BEGIN/END markers,
+        which the rule excludes.
+    """
     return RuleDocs(
         rationale=(
             "Private-key headers can identify committed credentials, including incomplete or escaped key material. "
@@ -684,7 +807,14 @@ def _private_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for HTTP(S) userinfo credentials."""
+    """Return custom docs for HTTP(S) userinfo credentials.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts."
@@ -701,7 +831,14 @@ def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _static_analysis_redundant_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for the static-analysis-redundant-test candidate rule."""
+    """Return custom docs for the static-analysis-redundant-test candidate rule.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for a public API or compatibility contract where runtime existence is the behaviour under test.
+    """
     return RuleDocs(
         rationale=(
             "A test that asserts a class or member is declared restates a fact "

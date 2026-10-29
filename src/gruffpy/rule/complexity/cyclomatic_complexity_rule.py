@@ -171,6 +171,15 @@ def _extra_match_cases(fn: FunctionLike) -> int:
 
 
 def _increment_for(node: ast.AST) -> int:
+    """Return how many decision points one body node adds to the radon-aligned cyclomatic count.
+
+    Args:
+        node: AST node from the body of the function being scored.
+
+    Returns:
+        The node's increment: 1 for an if, for, async for, while, except handler, ternary or assert; 1 for a match case unless its pattern is the bare
+        wildcard; one per operator of a boolean operation; 1 plus one per if clause for a comprehension generator; 0 for any other node.
+    """
     if isinstance(
         node,
         ast.If | ast.For | ast.AsyncFor | ast.While | ast.ExceptHandler | ast.IfExp | ast.Assert,
@@ -186,6 +195,14 @@ def _increment_for(node: ast.AST) -> int:
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message, dropping the decimal point from whole-number floats.
+
+    Args:
+        value: Threshold the measured complexity exceeded, which may arrive as an int or a float.
+
+    Returns:
+        The threshold as text: a fractional float exactly as str renders it, and any whole number, int or float, in integer form such as 20.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

@@ -111,6 +111,15 @@ class RuleRegistry:
     def _partition_rules(
         rules: list[RuleLike],
     ) -> tuple[list[Rule], list[SourceTextRule], list[ProjectRuleProtocol]]:
+        """Split the enabled rules into Python rules, source-text rules and project rules so each rule runs through one analysis path.
+
+        Args:
+            rules: Enabled rules in registry id order, as returned by enabled_rules.
+
+        Returns:
+            A tuple of Python rules, source-text rules and project rules, each keeping the input order; a rule that is neither a project rule nor a
+            SourceTextRule is placed in the Python rule list.
+        """
         # Project-rule check must come first: a rule satisfying ProjectRuleProtocol
         # is dispatched only through analyse_project, mirroring the prior inline
         # `if isinstance(rule, ProjectRuleProtocol): continue` guard.
@@ -128,6 +137,14 @@ class RuleRegistry:
 
     @staticmethod
     def _project_units(units: list[AnalysisUnit]) -> list[AnalysisUnit]:
+        """Select the Python units that parsed cleanly and carry a syntax tree, for project rules to inspect.
+
+        Args:
+            units: Every analysis unit discovered for the run, including non-Python files and units with parse errors.
+
+        Returns:
+            Units whose file is Python, which have no parse errors and whose tree is not None, in input order; empty when no unit qualifies.
+        """
         return [unit for unit in units if not unit.has_parse_errors() and unit.file.is_python() and unit.tree is not None]
 
     @staticmethod
@@ -137,6 +154,18 @@ class RuleRegistry:
         python_rules: list[Rule],
         text_rules: list[SourceTextRule],
     ) -> list[Finding]:
+        """Run the per-file Python rules and source-text rules over every unit and collect their findings.
+
+        Args:
+            units: Every analysis unit discovered for the run; each is passed to _analyse_unit, which decides which rules apply to it.
+            context: Rule context passed unchanged to every rule's analyse call.
+            python_rules: Enabled per-file Python rules; _analyse_unit decides which of them run on each unit.
+            text_rules: Enabled source-text rules, run on every unit, including non-Python files and units with parse errors.
+
+        Returns:
+            Findings grouped by unit in input order, with each unit's Python rule findings before its source-text rule findings; not yet deduplicated
+            or sorted.
+        """
         findings: list[Finding] = []
         for unit in units:
             findings.extend(RuleRegistry._analyse_unit(unit, context, python_rules, text_rules))
@@ -149,7 +178,19 @@ class RuleRegistry:
         python_rules: list[Rule],
         text_rules: list[SourceTextRule],
     ) -> list[Finding]:
-        """Run only the rule families supported by this unit's parse state."""
+        """Run only the rule families supported by this unit's parse state.
+
+        Args:
+            unit: Analysis unit being checked; its file type, parse errors and deep-scan bound decide which Python rules run.
+            context: Rule context passed unchanged to every rule's analyse call.
+            python_rules: Enabled Python rules; all run on a Python unit that parsed cleanly and is not deep-scan bounded, only size.file-length runs
+                on a deep-scan-bounded Python unit, and none run on any other unit.
+            text_rules: Enabled source-text rules, run on every unit, including non-Python files and units with parse errors.
+
+        Returns:
+            Findings from the applicable Python rules followed by those from the source-text rules, each in rule order; empty when no rule reports
+            anything.
+        """
         findings: list[Finding] = []
         # A broken Python file retains useful source text but has no AST that
         # Python rules can inspect honestly.
@@ -172,6 +213,16 @@ class RuleRegistry:
         context: RuleContext,
         rules: list[ProjectRuleProtocol],
     ) -> list[Finding]:
+        """Run each project rule once over the given unit list and collect the findings.
+
+        Args:
+            units: Units the project rules may inspect; analyse passes only the cleanly parsed Python units selected by _project_units.
+            context: Rule context passed unchanged to every project rule's analyse_project call.
+            rules: Enabled project rules.
+
+        Returns:
+            Findings from every project rule in rule order; empty when there are no project rules or none reports anything.
+        """
         findings: list[Finding] = []
         for rule in rules:
             findings.extend(rule.analyse_project(units, context))
@@ -179,6 +230,18 @@ class RuleRegistry:
 
     @staticmethod
     def _deduplicate(findings: list[Finding]) -> list[Finding]:
+        """Drop repeated findings, keeping the first occurrence of each.
+
+        Two findings are duplicates when their rule id, file path, line, end line, column, symbol, message and metadata all match; metadata is
+        compared as JSON with sorted keys, and an absent line, end line, column or symbol compares as an empty value. Fields outside this key are not
+        compared.
+
+        Args:
+            findings: Findings collected from the per-file and project rule passes, in collection order.
+
+        Returns:
+            A new list holding the first finding for each distinct key, in the original order.
+        """
         seen: set[tuple[str, ...]] = set()
         result: list[Finding] = []
         for finding in findings:

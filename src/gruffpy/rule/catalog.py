@@ -185,6 +185,16 @@ class BuiltInRule:
 
 
 def _entry(factory: RuleFactory) -> BuiltInRule:
+    """Build a catalog entry, instantiating the rule once to read its definition and derive its docs.
+
+    The instance created here is discarded; the entry keeps the factory so create can build fresh instances later.
+
+    Args:
+        factory: Zero-argument rule class or callable that builds the rule; it is stored on the entry for later instances.
+
+    Returns:
+        Catalog entry holding the factory, the rule's definition and its resolved documentation metadata.
+    """
     definition = factory().definition()
     return BuiltInRule(
         factory=factory,
@@ -194,6 +204,21 @@ def _entry(factory: RuleFactory) -> BuiltInRule:
 
 
 def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
+    """Resolve a rule's documentation, using curated docs when they exist and generated docs otherwise.
+
+    Config keys are derived first and passed to the curated docs lookup as well as stored in generated docs. Generated docs fill the rationale, fix
+    guidance and bad and good examples from templates that name the rule (the repeated-structure parametrize rule instead gets a fixed group-mode
+    rationale), plus its confidence rationale, config keys, formula provenance, threshold direction, threshold metadata keys and security metadata.
+    Option descriptions listed for the rule in _OPTION_DESCRIPTIONS then replace the docs' option descriptions, curated or generated. The reviewed
+    false-positive guidance in _REVIEWED_FALSE_POSITIVE_GUIDANCE is attached as a single shape only when the docs publish no false-positive shape of
+    their own.
+
+    Args:
+        definition: Rule definition whose id, name, pillar, confidence, thresholds and options drive the documentation.
+
+    Returns:
+        Documentation metadata stored on the rule's catalog entry.
+    """
     subject = definition.name.lower()
     config_keys = _config_keys_for(definition)
     custom_docs = custom_docs_for(definition, config_keys=config_keys)
@@ -226,6 +251,17 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
 
 
 def _rationale_for(definition: RuleDefinition) -> str:
+    """Write the generated rationale for a rule that has no curated docs.
+
+    The repeated-structure parametrize rule gets a fixed rationale describing its group mode; every other rule gets a templated sentence naming its
+    id, pillar and lowercased name.
+
+    Args:
+        definition: Rule definition supplying the id, pillar and name used in the text.
+
+    Returns:
+        Rationale text for the generated docs.
+    """
     if definition.id == RepeatedStructureMissingParametrizeRule.ID:
         return (
             "With `groupFindings`, three or more matching tests produce one consolidation candidate. "
@@ -239,6 +275,14 @@ def _rationale_for(definition: RuleDefinition) -> str:
 
 
 def _fix_guidance_for(definition: RuleDefinition) -> str:
+    """Write generated fix guidance: address the finding, or override the rule in config for a documented exception.
+
+    Args:
+        definition: Rule definition whose lowercased name is inserted into the guidance.
+
+    Returns:
+        Fix guidance text for the generated docs.
+    """
     return (
         f"Address the reported {definition.name.lower()} directly, or tune this rule with "
         "an explicit project configuration override when the project has a documented exception."
@@ -246,6 +290,15 @@ def _fix_guidance_for(definition: RuleDefinition) -> str:
 
 
 def _confidence_rationale(confidence: Confidence) -> str:
+    """Return the fixed sentence that explains a confidence level in generated docs.
+
+    Args:
+        confidence: Confidence level taken from the rule definition.
+
+    Returns:
+        One sentence naming the level and what it means: precise AST or source patterns for high, bounded heuristics with known safe escapes for
+        medium, and an intentionally conservative rule that may need tuning for low.
+    """
     match confidence:
         case Confidence.HIGH:
             return "High confidence: the rule matches precise AST or source patterns."
@@ -256,6 +309,17 @@ def _confidence_rationale(confidence: Confidence) -> str:
 
 
 def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
+    """List the public config keys documented for a rule, derived from its default threshold settings and options.
+
+    A rule with a single default threshold exposes threshold and severity; otherwise each named default threshold becomes a thresholds.<name> key.
+    Each default option then adds an options.<name> key.
+
+    Args:
+        definition: Rule definition whose single default threshold, named default thresholds and default options are read.
+
+    Returns:
+        Config keys with threshold keys before option keys; empty when the rule has no threshold and no options.
+    """
     keys: list[str] = []
     if definition.default_threshold is not None:
         keys.extend(("threshold", "severity"))
@@ -266,12 +330,32 @@ def _config_keys_for(definition: RuleDefinition) -> tuple[str, ...]:
 
 
 def _threshold_direction(definition: RuleDefinition) -> str:
+    """Report which side of its threshold a rule treats as worse, for generated docs.
+
+    Args:
+        definition: Rule definition whose id and default threshold settings are read.
+
+    Returns:
+        Empty string when the rule has neither a single default threshold nor named default thresholds; otherwise the rule's entry in
+        _THRESHOLD_DIRECTIONS, or above when it has none.
+    """
     if definition.default_threshold is None and not definition.default_thresholds:
         return ""
     return _THRESHOLD_DIRECTIONS.get(definition.id, "above")
 
 
 def _threshold_metadata_keys(definition: RuleDefinition) -> tuple[str, ...]:
+    """Choose the threshold metadata keys that generated docs list for a rule.
+
+    A rule with a single default threshold, or with named default thresholds in the size, complexity or maintainability pillar, gets the standard set:
+    measuredValue, threshold, thresholdDirection and thresholdType. A rule with no threshold, or with named thresholds in any other pillar, gets none.
+
+    Args:
+        definition: Rule definition whose default threshold settings and pillar are read.
+
+    Returns:
+        The standard threshold metadata keys, or an empty tuple when the rule qualifies for none.
+    """
     if definition.default_threshold is None and not definition.default_thresholds:
         return ()
     if definition.default_threshold is not None or definition.pillar in {

@@ -109,6 +109,14 @@ def _substantive_line_count(source: str, tree: ast.AST | None) -> int:
 
 
 def _format_number(value: int | float) -> str:
+    """Render the matched threshold for the finding message, showing whole-number floats without a trailing .0.
+
+    Args:
+        value: Threshold value from the matched severity tier; it may be an int or a float, depending on how it was configured.
+
+    Returns:
+        The str form of the value when it is a float with a fractional part. Otherwise, the value as integer digits, so 1000.0 renders as 1000.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

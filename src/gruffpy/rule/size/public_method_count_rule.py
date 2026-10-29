@@ -112,6 +112,12 @@ class PublicMethodCountRule(Rule):
 
 
 def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
+    """Decide whether a class is skipped by the public-method count before any method is counted.
+
+    Returns:
+        True when the class is a test class, extends a known framework-style base, or carries a dataclass or attrs-style decorator, so analyse skips
+        it; False when its methods should be counted.
+    """
     # Test classes have one method per test case by design; counting them
     # against an API-surface threshold yields no useful signal. Schema bases
     # (TypedDict, BaseModel, NamedTuple, Enum-like) also do not represent
@@ -120,6 +126,14 @@ def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
 
 
 def _count_public_methods(cls: ast.ClassDef) -> int:
+    """Count the public methods a class defines directly in its own body, the measured value for this rule.
+
+    Only sync and async function definitions that are direct statements of the class body are considered, so methods of nested classes are not
+    included here.
+
+    Returns:
+        Number of distinct method names that do not start with an underscore; 0 when the class defines no public method.
+    """
     # A property's getter and setter, and an overload's stubs and implementation, share one name: one public method.
     names: set[str] = set()
     for stmt in cls.body:
@@ -134,6 +148,14 @@ def _count_public_methods(cls: ast.ClassDef) -> int:
 
 
 def _format_number(value: int | float) -> str:
+    """Render the matched threshold for the finding message without a trailing .0 on whole numbers.
+
+    Args:
+        value: Threshold taken from the matched severity threshold, as an int or a float.
+
+    Returns:
+        The float text unchanged when value is a float with a fractional part; otherwise the integer text, so 10.0 renders as 10.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))
