@@ -116,7 +116,14 @@ def quoted_names(names: list[str]) -> str:
 
 
 def _is_none_constant(node: ast.AST) -> bool:
-    """Return whether an expression is the literal ``None``."""
+    """Return whether an expression is the literal ``None``.
+
+    Args:
+        node: Expression to test; returns_value passes the value of a return statement here.
+
+    Returns:
+        True only when the node is an ast.Constant whose value is None; False for every other node.
+    """
     return isinstance(node, ast.Constant) and node.value is None
 
 
@@ -270,7 +277,16 @@ def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _decorator_name(decorator: ast.AST) -> str:
-    """Return a dotted form of *decorator* (``app.route`` for ``@app.route(...)``)."""
+    """Return a dotted form of *decorator* (``app.route`` for ``@app.route(...)``).
+
+    Args:
+        decorator: Decorator expression from a function's decorator list, or the callee or attribute base reached while recursing; a call is resolved
+            through its callee and its arguments are ignored.
+
+    Returns:
+        The dotted name joined from Name and Attribute parts; an empty string when the expression, after unwrapping calls, is neither a Name nor an
+        Attribute, and only the attribute name when an attribute's base resolves to an empty string.
+    """
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
     if isinstance(decorator, ast.Name):
@@ -329,5 +345,13 @@ _STOP_WORDS: frozenset[str] = frozenset(
 
 
 def _content_words(summary: str) -> list[str]:
-    """Return lowercased non-stop-word tokens from *summary*."""
+    """Return lowercased non-stop-word tokens from *summary*.
+
+    Args:
+        summary: Text to tokenise; callers pass a parsed docstring summary or the body of a source comment.
+
+    Returns:
+        Each run of ASCII letters, lowercased and kept in order with duplicates, after dropping single-letter words and the module's stop words; empty
+        when no word remains.
+    """
     return [w.lower() for w in _WORD_PATTERN.findall(summary) if w.lower() not in _STOP_WORDS and len(w) > 1]

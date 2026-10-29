@@ -70,6 +70,16 @@ class MissingClassDocstringRule(Rule):
 
 
 def _undocumented_classes(tree: ast.AST, *, dataclass_exempt: bool) -> list[ast.ClassDef]:
+    """Collect every class definition in the tree, at any nesting depth, that the rule should report.
+
+    Args:
+        tree: Parsed module AST, walked with ast.walk so classes nested inside other classes or functions are included.
+        dataclass_exempt: When true, classes carrying a dataclass or attrs-style decorator matched by has_dataclass_decorator are skipped; analyse
+            passes the class_dataclass_exempt option here.
+
+    Returns:
+        Reportable class nodes in ast.walk breadth-first order; an empty list when no class qualifies.
+    """
     return [
         node
         for node in ast.walk(tree)
@@ -82,6 +92,20 @@ def _should_report_missing_class_docstring(
     *,
     dataclass_exempt: bool,
 ) -> bool:
+    """Decide whether one class lacks a docstring and falls outside every exemption the rule applies.
+
+    A class is skipped when is_dunder matches its name, when extract_docstring finds any docstring (an empty string still counts as present), or when
+    has_framework_base matches one of its bases. The dataclass check from has_dataclass_decorator applies only when dataclass_exempt is true.
+
+    Args:
+        node: Class definition to test.
+        dataclass_exempt: When true, a class carrying a dataclass or attrs-style decorator matched by has_dataclass_decorator is not reported; when
+            false, such classes are judged like any other class.
+
+    Returns:
+        True when the class has no docstring and none of the skips above applies, so it should receive a missing class docstring finding; False
+        otherwise.
+    """
     if is_dunder(node.name):
         return False
     if extract_docstring(node) is not None:
@@ -96,6 +120,17 @@ def _missing_class_docstring_finding(
     definition: RuleDefinition,
     node: ast.ClassDef,
 ) -> Finding:
+    """Build the finding for one undocumented class, naming it by its dotted qualified symbol.
+
+    Args:
+        unit: Analysed file whose display path becomes the finding's file path.
+        definition: Rule metadata supplying the rule id, default severity, pillar, tier, confidence and secondary pillars copied into the finding.
+        node: Undocumented class whose parent chain gives the qualified symbol and whose lineno and end_lineno give the finding's line span.
+
+    Returns:
+        Finding whose symbol field holds the qualified symbol, whose message asks for a brief intent description in the class docstring, and whose
+        remediation asks for the class's role and any non-obvious invariants, describing behaviour rather than field types; metadata is empty.
+    """
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,

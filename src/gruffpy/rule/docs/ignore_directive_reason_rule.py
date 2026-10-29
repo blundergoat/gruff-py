@@ -120,6 +120,18 @@ class IgnoreDirectiveReasonRule(Rule):
 
 
 def _unexplained_directive(comment: SourceComment) -> _DirectiveMatch | None:
+    """Return the first directive pattern match in a comment when the text after it is not a substantive reason.
+
+    Patterns are tried in _DIRECTIVE_PATTERNS order, not by position in the body, and the first pattern that matches decides the result. A substantive
+    reason ends the check with None, so a directive that only a later pattern matches is never checked.
+
+    Args:
+        comment: Scanned source comment whose body is searched for a suppression directive.
+
+    Returns:
+        The match carrying the comment, the stripped directive text, the extracted reason and whether that reason is non-empty; None when no directive
+        pattern matches the body or the first matching pattern's reason is substantive.
+    """
     body = comment.body
     for pattern in _DIRECTIVE_PATTERNS:
         match = pattern.search(body)
@@ -139,6 +151,20 @@ def _unexplained_directive(comment: SourceComment) -> _DirectiveMatch | None:
 
 
 def _extract_reason(body: str, directive_end: int) -> str:
+    """Take the text that follows a matched directive in a comment body as its reason, without its separator.
+
+    A ``#`` at the start of the tail or after whitespace opens a second comment, and only the text after it is returned. Otherwise one leading comma,
+    ``--``, ``-`` or ``:`` is dropped, and text after a comma that fully matches another tool's directive shape such as ``isort:skip`` yields an empty
+    reason.
+
+    Args:
+        body: Comment body that contains the matched directive.
+        directive_end: Offset in body where the matched directive ends; only the text after it is read.
+
+    Returns:
+        The stripped reason text; an empty string when nothing or only a separator follows the directive, when nothing follows a second-comment ``#``,
+        or when the only text after a comma is another tool's directive.
+    """
     tail = body[directive_end:].strip()
     if not tail:
         return ""
@@ -158,6 +184,17 @@ def _extract_reason(body: str, directive_end: int) -> str:
 
 
 def _is_substantive_reason(reason: str) -> bool:
+    """Accept a reason that contains a tracker reference or at least two words outside the generic-reason set.
+
+    Words are letter-led runs from _WORD_PATTERN, lowercased before comparison with _GENERIC_REASONS, so digits alone are not words and a one-word
+    reason without a tracker reference is never substantive.
+
+    Args:
+        reason: Stripped reason text extracted after the directive; may be empty.
+
+    Returns:
+        True when the reason matches _TRACKER_REFERENCE or has at least two non-generic words; False otherwise, including empty text.
+    """
     # An issue reference points the reader at the full explanation, however short it is.
     if _TRACKER_REFERENCE.search(reason):
         return True
@@ -175,6 +212,19 @@ def _directive_finding(
     definition: RuleDefinition,
     match: _DirectiveMatch,
 ) -> Finding:
+    """Build the finding reported on the comment line of a directive that lacks a substantive reason.
+
+    The message says the directive is used without a reason when the extracted reason is empty and with a generic reason otherwise; the remediation
+    text is fixed.
+
+    Args:
+        unit: Analysis unit whose display path names the finding's file.
+        definition: Rule definition that supplies the rule id, default severity, pillar, tier, confidence and secondary pillars.
+        match: Unexplained directive whose comment line, directive text and reason fill the finding.
+
+    Returns:
+        A Finding that starts and ends on the directive comment's line, with the directive, reasonPresent and reason recorded in its metadata.
+    """
     reason_message = "without a reason" if not match.has_reason else "with a generic reason"
     return Finding(
         rule_id=definition.id,

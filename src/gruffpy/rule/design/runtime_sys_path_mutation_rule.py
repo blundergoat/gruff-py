@@ -109,6 +109,14 @@ class RuntimeSysPathMutationRule(Rule):
 
 
 def _is_exempt_file(display_path: str) -> bool:
+    """Decide whether a file is exempt from the rule because it is a conftest.py or sits under a tests directory.
+
+    Args:
+        display_path: Display path of the analysed file; backslashes are treated as path separators before the path is split.
+
+    Returns:
+        True when the file name is conftest.py or any directory component is exactly tests; False otherwise, so the file is analysed.
+    """
     path = PurePosixPath(display_path.replace("\\", "/"))
     if path.name == "conftest.py":
         return True
@@ -116,6 +124,17 @@ def _is_exempt_file(display_path: str) -> bool:
 
 
 def _sys_path_mutation_method(node: ast.Call) -> str | None:
+    """Return insert or append when a call's callee is written as ``sys.path.insert`` or ``sys.path.append``.
+
+    The receiver must be the attribute path on the bare name sys, so a call reached through an aliased import such as ``import sys as system`` or
+    ``from sys import path`` does not match.
+
+    Args:
+        node: Call node to inspect.
+
+    Returns:
+        The method name, insert or append, which the caller records in the finding message and metadata; None when the callee is any other expression.
+    """
     callee = node.func
     if not (isinstance(callee, ast.Attribute) and callee.attr in _MUTATING_METHODS):
         return None
@@ -184,6 +203,18 @@ def _main_guard_branch(node: ast.AST) -> Literal["body", "else"] | None:
 
 
 def _is_main_guard(test: ast.expr) -> bool:
+    """Test whether an if condition compares the bare name ``__name__`` with the string ``__main__`` using ``==``.
+
+    Either operand order matches. An ``and`` expression matches when any of its operands matches, checked recursively; ``or``, ``!=`` and chained
+    comparisons do not match.
+
+    Args:
+        test: Condition expression to examine, normally the test of an if statement.
+
+    Returns:
+        True when the condition is a main guard, which callers use to recognise a standalone script and the guard branch that holds a call; False
+        otherwise.
+    """
     # A compound entry-point guard (``__name__ == "__main__" and ...``) still
     # only runs in the script entry point, so it is exempt too.
     if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
@@ -199,6 +230,16 @@ def _is_main_guard(test: ast.expr) -> bool:
 
 
 def _argument_position(call: ast.Call, method: str) -> int | None:
+    """Read the integer index passed as the first positional argument of a sys.path insert call.
+
+    Args:
+        call: Mutating call node whose positional arguments are read.
+        method: Method name returned by _sys_path_mutation_method; only insert carries a position.
+
+    Returns:
+        The index when the first positional argument is an integer constant; None for append, for an insert without positional arguments, or when the
+        first argument is not an integer constant (a negative index such as -1 parses as a unary expression, so it also yields None).
+    """
     if method != "insert" or not call.args:
         return None
     first = call.args[0]
@@ -213,6 +254,21 @@ def _build_finding(
     call: ast.Call,
     method: str,
 ) -> Finding:
+    """Build the finding for one sys.path mutation call, choosing its message from the method and insert index.
+
+    An insert at integer index 0 gets the message about shadowing later imports for the whole process; every other call gets the execution-order
+    message naming its method. Metadata always records method and adds argumentPosition only when _argument_position finds an integer index.
+
+    Args:
+        definition: Rule definition supplying the rule id, severity, pillar, tier, confidence and secondary pillars.
+        unit: Analysed file whose display path becomes the finding's file path.
+        call: The mutating call node; its start and end lines locate the finding.
+        method: insert or append, as returned by _sys_path_mutation_method.
+
+    Returns:
+        The finding located at the call's line span, carrying the shared packaging remediation text and the method and argumentPosition metadata
+        described above.
+    """
     position = _argument_position(call, method)
     if method == "insert" and position == 0:
         message = (

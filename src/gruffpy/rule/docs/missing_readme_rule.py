@@ -81,5 +81,16 @@ class MissingReadmeRule(Rule):
 
 
 def _has_readme(project_root: str) -> bool:
+    """Check whether README.md, README.rst, README.txt or an extensionless README exists in the project root.
+
+    Each candidate name is joined to the root and checked with Path.exists, so an existing directory with one of these names also counts.
+    Subdirectories are not searched.
+
+    Args:
+        project_root: Project root taken from the rule context; each candidate name is resolved directly beneath it.
+
+    Returns:
+        True when at least one candidate name exists under the root; False when none does, which makes the caller emit the missing README finding.
+    """
     root_path = Path(project_root)
     return any((root_path / name).exists() for name in _README_CANDIDATES)

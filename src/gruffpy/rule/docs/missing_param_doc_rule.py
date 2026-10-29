@@ -92,6 +92,17 @@ class MissingParamDocRule(Rule):
 
 
 def _param_doc_candidates(tree: ast.AST, *, every_callable: bool) -> list[_ParamDocCandidate]:
+    """Walk the tree and collect the candidate _param_doc_candidate builds for each function or async function definition.
+
+    The walk uses ast.walk, so nested functions and methods are checked too, and candidates come back in that walk order.
+
+    Args:
+        tree: Parsed module tree to walk.
+        every_callable: Whether the ``everyCallable`` option is on; passed to _param_doc_candidate for each function.
+
+    Returns:
+        One candidate per function that _param_doc_candidate reports as missing parameter entries; empty when it reports none.
+    """
     candidates: list[_ParamDocCandidate] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -103,6 +114,21 @@ def _param_doc_candidates(tree: ast.AST, *, every_callable: bool) -> list[_Param
 
 
 def _param_doc_candidate(node: FunctionNode, *, every_callable: bool) -> _ParamDocCandidate | None:
+    """Build a candidate for one function when its docstring has no entry for one or more of its signature parameters.
+
+    The function is skipped when _should_skip_param_doc_check excludes it, when it has no docstring, or when parse_docstring returns None. Signature
+    parameters come from signature_param_names, and a parameter whose name starts with an underscore is never required. With every_callable on, a
+    docstring entry counts only when _has_description finds description text in it.
+
+    Args:
+        node: Function definition to check.
+        every_callable: Whether the ``everyCallable`` option is on; it brings underscore-private function names into scope and stops an entry without
+            a description from counting.
+
+    Returns:
+        Candidate holding the node, its qualified symbol, the missing parameter names in the order signature_param_names lists them, and the detected
+        docstring style; None when the function is skipped, has no parseable docstring, or has an entry for every required parameter.
+    """
     if _should_skip_param_doc_check(node, every_callable=every_callable):
         return None
     text = extract_docstring(node)
@@ -126,11 +152,29 @@ def _param_doc_candidate(node: FunctionNode, *, every_callable: bool) -> _ParamD
 
 
 def _should_skip_param_doc_check(node: FunctionNode, *, every_callable: bool) -> bool:
+    """Report whether a function is out of name scope, an overload stub, or a property setter or deleter.
+
+    Name scope comes from is_in_documentation_scope, which leaves dunder names out and admits underscore-private names only when every_callable is on.
+
+    Args:
+        node: Function definition to test.
+        every_callable: Whether the ``everyCallable`` option is on; it brings underscore-private function names into scope.
+
+    Returns:
+        True when the rule must not check the function's parameter entries.
+    """
     return not is_in_documentation_scope(node.name, every_callable=every_callable) or is_overload_stub(node) or is_property_setter_or_deleter(node)
 
 
 def _has_description(field: DocstringField) -> bool:
-    """Return whether a docstring entry says something about its parameter."""
+    """Return whether a docstring entry says something about its parameter.
+
+    Args:
+        field: Parameter entry parsed from the docstring.
+
+    Returns:
+        True when the entry's description contains non-whitespace text; False when the description is missing or blank.
+    """
     return bool(field.description and field.description.strip())
 
 
@@ -139,6 +183,20 @@ def _missing_param_finding(
     definition: RuleDefinition,
     candidate: _ParamDocCandidate,
 ) -> Finding:
+    """Build the finding that names every missing parameter of one candidate function.
+
+    The message asks for a docstring entry describing parameter when one name is missing, or docstring entries describing parameters when several are,
+    followed by the names joined with quoted_names. The metadata records the missing names under parameters and the docstring style value under style.
+
+    Args:
+        unit: Analysed file whose display path locates the finding.
+        definition: Rule metadata that supplies the rule ID, default severity, pillar, tier, confidence and secondary pillars.
+        candidate: Function with missing parameter entries, carrying its node, qualified symbol, missing names and docstring style.
+
+    Returns:
+        Finding spanning the function from its def line to its last line, with the candidate's symbol, a fixed remediation and the parameters and
+        style metadata.
+    """
     entries = "a docstring entry describing parameter" if len(candidate.missing) == 1 else "docstring entries describing parameters"
     return Finding(
         rule_id=definition.id,

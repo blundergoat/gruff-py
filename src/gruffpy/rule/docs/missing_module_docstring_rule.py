@@ -79,10 +79,19 @@ class MissingModuleDocstringRule(Rule):
 
 
 def _is_reexport_shim(module: ast.Module, display_path: str) -> bool:
-    """True if *module* looks like an ``__init__.py`` re-export shim.
+    """Report whether an ``__init__.py`` module holds only imports and ``__all__`` assignments (a re-export shim).
 
-    A shim contains only imports and at most a single ``__all__`` assignment.
-    Anything else (classes, functions, executable code) disqualifies it.
+    The path test is a plain suffix match on display_path. The loop accepts any number of import statements, single-target ``__all__`` assignments and
+    annotated ``__all__`` assignments; any other top-level statement, such as a class, a function, an expression or an augmented ``__all__``
+    assignment, makes it return False.
+
+    Args:
+        module: Parsed module whose top-level statements are checked one by one.
+        display_path: Display path of the file; only a path ending in ``__init__.py`` can qualify as a shim.
+
+    Returns:
+        True when the path ends in ``__init__.py`` and every top-level statement is an import or an ``__all__`` assignment, which makes the rule skip
+        the module without a finding; False otherwise.
     """
     if not display_path.endswith("__init__.py"):
         return False

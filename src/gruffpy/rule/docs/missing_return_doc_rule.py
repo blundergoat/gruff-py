@@ -87,6 +87,16 @@ class MissingReturnDocRule(Rule):
 
 
 def _missing_return_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tuple[FunctionNode, DocstringStyle]]:
+    """Walk the module tree and pair each function to report with the style of its docstring.
+
+    Args:
+        tree: Parsed module tree; ast.walk visits every function and async function in it, including methods and nested functions.
+        every_callable: Whether the rule's ``everyCallable`` option is on; passed to _missing_return_doc_style to widen which functions are in scope.
+
+    Returns:
+        Each function that _missing_return_doc_style reports, paired with its parsed docstring style, in ast.walk order; empty when no function
+        qualifies.
+    """
     candidates: list[tuple[FunctionNode, DocstringStyle]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -98,6 +108,16 @@ def _missing_return_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tu
 
 
 def _missing_return_doc_style(node: FunctionNode, *, every_callable: bool) -> DocstringStyle | None:
+    """Decide whether one function is reported, giving its docstring style when no result description is recognized.
+
+    Args:
+        node: Function or async function to inspect.
+        every_callable: Whether the rule's ``everyCallable`` option is on; passed to _should_skip_return_doc_check.
+
+    Returns:
+        The parsed docstring style when the function should be reported. None when _should_skip_return_doc_check skips it, it has no docstring,
+        parse_docstring returns None, the parsed return field has a description or type hint, or _has_prose_return_doc recognizes result prose.
+    """
     if _should_skip_return_doc_check(node, every_callable=every_callable):
         return None
     text = extract_docstring(node)
@@ -175,6 +195,18 @@ def _simple_return_values_are_described(node: FunctionNode, narrative: str) -> b
 
 
 def _should_skip_return_doc_check(node: FunctionNode, *, every_callable: bool) -> bool:
+    """Decide from a function's name, decorators, return annotation and, if unannotated, its body whether to skip it.
+
+    Args:
+        node: Function or async function to classify.
+        every_callable: Whether the rule's ``everyCallable`` option is on; it brings underscore-private names into scope and lets an unannotated
+            function be checked when returns_value finds a return of a non-None value or a yield in its own body.
+
+    Returns:
+        True when is_in_documentation_scope rejects the name, the function is an overload stub or a property setter or deleter, or its return
+        annotation is exactly ``-> None``. False for any other annotated function. For an unannotated function, False only when every_callable is on
+        and returns_value finds a value in its own body; otherwise True.
+    """
     if (
         not is_in_documentation_scope(node.name, every_callable=every_callable)
         or is_overload_stub(node)
@@ -194,6 +226,18 @@ def _missing_return_doc_finding(
     node: FunctionNode,
     style: DocstringStyle,
 ) -> Finding:
+    """Build the finding for a function whose docstring has no recognized result description.
+
+    Args:
+        unit: Analysis unit whose file display path locates the finding.
+        definition: Rule definition supplying the rule ID, default severity, pillar, tier, confidence and secondary pillars.
+        node: Flagged function; its qualified symbol names it in the message and its start and end lines bound the finding.
+        style: Docstring style detected by the parser; its value is recorded under the style metadata key.
+
+    Returns:
+        Finding naming the function's qualified symbol, spanning its start and end lines, with fixed remediation text and the docstring style in its
+        metadata.
+    """
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
