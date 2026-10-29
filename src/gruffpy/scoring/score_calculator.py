@@ -127,6 +127,21 @@ class ScoreCalculator:
         finding_penalties: dict[int, float],
         evaluated_files: int,
     ) -> list[PillarScore]:
+        """Score every static pillar on every run, plus any other pillar a finding names, which joins the composite only when it has findings.
+
+        A static pillar with no findings is still scored, at zero weight, so it earns a perfect grade when files were evaluated instead of dropping
+        out of the composite average. Pillars outside STATIC_PILLARS are appended in the order their first finding appears.
+
+        Args:
+            findings: Scored findings for the run; each is assigned to the pillar its pillar value names.
+            finding_penalties: Clustered weight per finding, keyed by id(); a finding missing from the map falls back to its base
+                severity-by-confidence weight.
+            evaluated_files: Density denominator for every pillar; zero or less leaves every pillar grade None.
+
+        Returns:
+            One applicable PillarScore per pillar, in STATIC_PILLARS order followed by any extra pillars, carrying its finding and severity counts,
+            summed penalty and curve grade; the grade is None when nothing was evaluated.
+        """
         pillar_names = list(STATIC_PILLARS)
         for finding in findings:
             if finding.pillar.value not in pillar_names:
@@ -157,6 +172,22 @@ class ScoreCalculator:
         finding_penalties: dict[int, float],
         evaluated_files: int,
     ) -> list[FileScore]:
+        """Grade each file that carries findings on its own weight and return the ten worst as the top offenders.
+
+        Each file is graded as a one-file project from its own weighted findings, so file and project grades share one curve. Results sort by worst
+        grade, then by more findings, then by path. Files with no findings never appear.
+
+        Args:
+            findings: Scored findings for the run, grouped here by file path.
+            finding_penalties: Clustered weight per finding, keyed by id(); a finding missing from the map falls back to its base
+                severity-by-confidence weight.
+            evaluated_files: Run-level evaluated-file count, used only as a gate: zero or less leaves every file grade None, and the list then ranks
+                by finding count and path alone.
+
+        Returns:
+            At most ten FileScore entries, worst first, each with severity counts, summed penalty, highest cyclomatic and cognitive complexity, and
+            longest reported line count; each of those three metrics is None when the file has no finding carrying it.
+        """
         by_file: dict[str, list[Finding]] = {}
         for finding in findings:
             by_file.setdefault(finding.file_path, []).append(finding)
@@ -190,6 +221,15 @@ class ScoreCalculator:
 
     @staticmethod
     def _complexity_distribution(findings: list[Finding]) -> dict[str, int]:
+        """Sort the complexity value of each cyclomatic-complexity finding into the five fixed bands the score report publishes.
+
+        Args:
+            findings: Scored findings for the run; only complexity.cyclomatic findings with an integer complexity metadata value are counted, and all
+                others are skipped.
+
+        Returns:
+            Counts keyed by the bands 1-5, 6-10, 11-15, 16-20 and 21+; every band is present and stays zero when no finding falls in it.
+        """
         buckets = {"1-5": 0, "6-10": 0, "11-15": 0, "16-20": 0, "21+": 0}
         for finding in findings:
             if finding.rule_id != "complexity.cyclomatic":
@@ -214,10 +254,28 @@ class ScoreCalculator:
         findings: list[Finding],
         finding_penalties: dict[int, float],
     ) -> float:
+        """Total the weight a group of findings, such as one pillar's or one file's, removes from its score.
+
+        Args:
+            findings: The findings to total.
+            finding_penalties: Clustered weight per finding, keyed by id(); a finding absent from the map contributes its base severity-by-confidence
+                weight.
+
+        Returns:
+            The summed weight; zero for an empty list.
+        """
         return sum(finding_penalties.get(id(finding), _base_penalty(finding)) for finding in findings)
 
     @staticmethod
     def _severity_counts(findings: list[Finding]) -> dict[Severity, int]:
+        """Count findings by severity so pillar and file scores can report advisories, warnings and errors separately.
+
+        Args:
+            findings: The findings to count.
+
+        Returns:
+            A count for each of ADVISORY, WARNING and ERROR; all three keys are always present and stay zero when no finding has that severity.
+        """
         counts = {Severity.ADVISORY: 0, Severity.WARNING: 0, Severity.ERROR: 0}
         for finding in findings:
             counts[finding.severity] += 1
@@ -225,6 +283,16 @@ class ScoreCalculator:
 
     @staticmethod
     def _max_metadata_int(findings: list[Finding], rule_id: str, key: str) -> int | None:
+        """Find the largest integer metadata value one rule reported within a set of findings, such as a file's worst cyclomatic complexity.
+
+        Args:
+            findings: The findings to scan, typically one file's.
+            rule_id: Only findings from this rule are considered.
+            key: Metadata key whose integer value is compared; a missing or non-integer value is skipped.
+
+        Returns:
+            The largest integer found, or None when no finding from the rule carries an integer value under the key.
+        """
         result: int | None = None
         for finding in findings:
             if finding.rule_id != rule_id:
@@ -237,6 +305,15 @@ class ScoreCalculator:
 
     @staticmethod
     def _max_line_metric(findings: list[Finding]) -> int | None:
+        """Report the longest line count any file, function or class length finding recorded, for a top offender's max lines figure.
+
+        Args:
+            findings: The findings to scan, typically one file's; only size.file-length, size.function-length and size.class-length findings with an
+                integer lines metadata value count.
+
+        Returns:
+            The largest lines value, or None when no length finding carries an integer lines value.
+        """
         target_rules = {"size.file-length", "size.function-length", "size.class-length"}
         result: int | None = None
         for finding in findings:
@@ -348,6 +425,18 @@ def _curve_grade(weight: float, evaluated_files: int) -> Grade | None:
 
 
 def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
+    """Assign every finding its scoring weight, sharing one weight across correlated size and complexity findings on a symbol.
+
+    Each finding starts at its base severity-by-confidence weight. Findings from CORRELATED_COMPLEXITY_RULES that name the same file and symbol form a
+    group; in a group of two or more, every member is reweighted to the group's highest base weight divided by the group size, so the group bills that
+    highest weight once in total. A finding without a symbol is never grouped.
+
+    Args:
+        findings: Scored findings for the run.
+
+    Returns:
+        Weight per finding keyed by id() of each finding object, so lookups must use the same objects passed here.
+    """
     penalties = {id(finding): _base_penalty(finding) for finding in findings}
     groups: dict[tuple[str, str], list[Finding]] = {}
     for finding in findings:
@@ -369,4 +458,13 @@ def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
 
 
 def _base_penalty(finding: Finding) -> float:
+    """Weigh one finding by its severity multiplied by its confidence, before any correlated-cluster sharing.
+
+    Args:
+        finding: The finding to weigh.
+
+    Returns:
+        The SEVERITY_WEIGHTS value for its severity times the CONFIDENCE_WEIGHTS value for its confidence, from 0.5 for a low-confidence advisory to
+        12.0 for a high-confidence error.
+    """
     return SEVERITY_WEIGHTS[finding.severity] * CONFIDENCE_WEIGHTS[finding.confidence]

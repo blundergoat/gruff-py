@@ -107,6 +107,20 @@ def summary_payload(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _machine_run(report: AnalysisReport) -> dict[str, Any]:
+    """Build the run section of the analysis envelope from the report's settings, with inputs and config path made relative to the project root.
+
+    The config path and any input that cannot be expressed under the project root are omitted rather than published as host paths. Filters appear only
+    when active, includeIgnored only when true, and configuration warnings and the partial-context caveat go under extensions.py.run only when
+    present.
+
+    Args:
+        report: Native run state supplying the fail-on level, output format, requested paths, config path, filters, configuration warnings and
+            partial-context caveat, plus the machine context's project root and include-ignored flag.
+
+    Returns:
+        JSON-compatible run object with failOn, format, inputs and projectRoot set to ., plus config, filters, includeIgnored and extensions only when
+        they apply.
+    """
     root = report.machine_context.project_root
     payload: dict[str, Any] = {
         "failOn": report.fail_on,
@@ -133,6 +147,15 @@ def _machine_run(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _machine_run_filters(values: dict[str, object]) -> dict[str, object]:
+    """Normalise the filter dictionary into the run.filters object, keeping only string entries in each rule and pillar list.
+
+    Args:
+        values: Dictionary from the filter's to_dict, carrying active and the four include and exclude lists, and optionally minSeverity.
+
+    Returns:
+        Filters object with active coerced to a boolean, each list reduced to its string items (empty when the value is not a list), and minSeverity
+        only when it is a non-empty string.
+    """
     payload: dict[str, object] = {
         "active": bool(values["active"]),
         "excludePillars": _machine_string_list(values["excludePillars"]),
@@ -147,6 +170,14 @@ def _machine_run_filters(values: dict[str, object]) -> dict[str, object]:
 
 
 def _machine_string_list(value: object) -> list[str]:
+    """Coerce an untyped filter value into a list of its string items.
+
+    Args:
+        value: Value read from the filter dictionary; anything other than a list yields an empty result.
+
+    Returns:
+        The string items of value in their original order, or an empty list when value is not a list.
+    """
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
@@ -157,6 +188,20 @@ def _machine_summary(
     findings: tuple[Finding, ...],
     details: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Build the summary section of the envelope from file, path, diagnostic and finding counts.
+
+    analysedFiles and parsedFiles both report files_parsed, and ignoredPaths and skippedFiles both report the number of ignored-path details.
+    suppressedFindings appears only when the report recorded a suppressed count.
+
+    Args:
+        report: Native run state supplying file counts, diagnostics, missing paths, parse errors, exit code and the suppressed count.
+        findings: Findings to count by severity and pillar; analysis_payload passes the machine context's summary findings when set, otherwise the
+            reported findings.
+        details: Ignored-path detail objects already built for the paths section, counted for ignoredPaths and skippedFiles.
+
+    Returns:
+        JSON-compatible summary object of run counts.
+    """
     payload: dict[str, Any] = {
         "analysedFiles": report.files_parsed,
         "diagnostics": len(report.diagnostics),
@@ -176,6 +221,14 @@ def _machine_summary(
 
 
 def _finding_counts(findings: tuple[Finding, ...]) -> dict[str, int]:
+    """Count findings per severity alongside their total.
+
+    Args:
+        findings: Findings to tally by severity.
+
+    Returns:
+        Mapping with advisory, warning and error counts, each zero when no finding has that severity, and total set to the number of findings.
+    """
     counts = {"advisory": 0, "warning": 0, "error": 0, "total": len(findings)}
     for finding in findings:
         counts[finding.severity.value] += 1
@@ -183,6 +236,16 @@ def _finding_counts(findings: tuple[Finding, ...]) -> dict[str, int]:
 
 
 def _finding_counts_by_pillar(findings: tuple[Finding, ...]) -> dict[str, int]:
+    """Count findings per primary pillar, ordered by pillar name.
+
+    Only pillars with at least one finding appear, and secondary pillars are not counted.
+
+    Args:
+        findings: Findings to tally by their primary pillar.
+
+    Returns:
+        Mapping from pillar value to finding count sorted by key, or an empty mapping when there are no findings.
+    """
     counts: dict[str, int] = {}
     for finding in findings:
         counts[finding.pillar.value] = counts.get(finding.pillar.value, 0) + 1
@@ -190,6 +253,20 @@ def _finding_counts_by_pillar(findings: tuple[Finding, ...]) -> dict[str, int]:
 
 
 def _machine_finding(finding: Finding, root: str) -> dict[str, Any]:
+    """Project one native finding into the shared machine finding object with a root-relative file path.
+
+    The finding's metadata is copied and given locationPrecision, scanner-pinpointed when a positive column exists and line-only otherwise, so the
+    finding itself is not mutated. The line is clamped to at least 1, endLine and column appear only when set and positive, and symbol only when
+    non-empty. A file outside the project root propagates the ValueError from _machine_path.
+
+    Args:
+        finding: Native finding to project.
+        root: Project root that the finding's file path is made relative to.
+
+    Returns:
+        JSON-compatible finding object with ruleId, message, file, line, severity, pillar, secondaryPillars, tier, confidence, remediation (empty
+        string when absent), fingerprint, stableIdentity and metadata, plus endLine, column and symbol when they apply.
+    """
     metadata = dict(finding.metadata)
     has_column = finding.column is not None and finding.column > 0
     metadata["locationPrecision"] = "scanner-pinpointed" if has_column else "line-only"
@@ -218,6 +295,18 @@ def _machine_finding(finding: Finding, root: str) -> dict[str, Any]:
 
 
 def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
+    """Project one run diagnostic into the machine diagnostic object.
+
+    invalidatesRun defaults to true when the diagnostic leaves it unset. The file comes from file_path, falling back to path, and is omitted when it
+    cannot be expressed under the project root; line appears only when positive.
+
+    Args:
+        diagnostic: Run diagnostic to project.
+        root: Project root used to make the diagnostic's file path relative.
+
+    Returns:
+        JSON-compatible diagnostic object with type, message, invalidatesRun and, when available, file and line.
+    """
     payload: dict[str, Any] = {
         "type": diagnostic.type,
         "message": diagnostic.message,
@@ -236,6 +325,20 @@ def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
 def _machine_ignored_paths(
     report: AnalysisReport,
 ) -> tuple[list[dict[str, Any]], list[str]]:
+    """Build the sorted ignored-path details and the ignored path list, and require both to name the same paths in the same order.
+
+    Details are sorted by path while the ignored path list keeps the report's order after de-duplication, so the report's ignored paths must already
+    be in sorted order and match the details one for one.
+
+    Args:
+        report: Native run state supplying ignored_path_details, ignored_paths and the project root.
+
+    Returns:
+        Pair of the machine detail objects sorted by path and the root-relative ignored path list.
+
+    Raises:
+        ValueError: When the ignored path list and the detail paths differ in membership or order.
+    """
     root = report.machine_context.project_root
     details = [_machine_path_detail(item, root) for item in report.ignored_path_details]
     details.sort(key=lambda item: item["path"])
@@ -247,6 +350,18 @@ def _machine_ignored_paths(
 
 
 def _machine_path_detail(detail: IgnoredPath, root: str) -> dict[str, Any]:
+    """Project one ignored path into a machine detail object carrying its path, canonical reason and source.
+
+    pattern appears only when the record carries a non-empty pattern. A path outside the project root, or a source and pattern with no canonical
+    reason, propagates ValueError from the path and reason helpers.
+
+    Args:
+        detail: Ignored path record from discovery.
+        root: Project root the path is made relative to.
+
+    Returns:
+        JSON-compatible object with path, reason, source and, when set, pattern.
+    """
     payload: dict[str, Any] = {
         "path": _machine_path(detail.path, root),
         "reason": _skip_reason(detail),
@@ -258,6 +373,21 @@ def _machine_path_detail(detail: IgnoredPath, root: str) -> dict[str, Any]:
 
 
 def _skip_reason(detail: IgnoredPath) -> str:
+    """Map an ignored path's source and pattern to the canonical skip reason published in machine output.
+
+    Config, gitignore and generated sources map directly to config-ignore, gitignored and generated; a default ignore takes the reason listed for its
+    pattern in _DEFAULT_SKIP_REASONS.
+
+    Args:
+        detail: Ignored path record whose source and pattern select the reason.
+
+    Returns:
+        Canonical reason string such as config-ignore, gitignored, generated, vcs, tool-cache, dependency, local-tooling or build-output.
+
+    Raises:
+        ValueError: When the source is not one of the four known ignore sources, or a default ignore's pattern has no entry in the canonical reason
+            table.
+    """
     if detail.source == IGNORE_SOURCE_CONFIG:
         return "config-ignore"
     if detail.source == IGNORE_SOURCE_GITIGNORE:
@@ -270,6 +400,18 @@ def _skip_reason(detail: IgnoredPath) -> str:
 
 
 def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, Any]:
+    """Project one suppression summary row into the machine suppression object.
+
+    Paths are made root-relative and de-duplicated. symbol appears only when set, and source whenever the row names one: built-in on a test-path skip
+    row, inline or duplicate on a section 13c row; a configured row carries none.
+
+    Args:
+        summary: Suppression summary row to project.
+        root: Project root the suppression's paths are made relative to.
+
+    Returns:
+        JSON-compatible object with index, rule, paths, reason, suppressed count and, when present, symbol and source.
+    """
     payload: dict[str, Any] = {
         "index": summary.index,
         "rule": summary.rule,
@@ -286,6 +428,19 @@ def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, An
 
 
 def _machine_score(score: ScoreReport | None, root: str) -> dict[str, Any]:
+    """Project the score report into the machine score section, or a null-graded placeholder when no scoring ran.
+
+    Without a score the composite grade and score are null so no failing grade is implied, and coverage carries a caveat that no score was produced. A
+    real score whose composite is None also yields a null grade and score.
+
+    Args:
+        score: Score report for the run, or None when no scoring ran.
+        root: Project root used to make top-offender file paths relative.
+
+    Returns:
+        JSON-compatible score object; the placeholder carries coverage but no complexityDistribution, scope or explanation, while a real score carries
+        those three but no coverage.
+    """
     if score is None:
         return {
             # No scoring ran, so there is no number to report; a 0.0 would read as a failing grade.
@@ -319,6 +474,15 @@ def _machine_score(score: ScoreReport | None, root: str) -> dict[str, Any]:
 
 
 def _machine_pillar_score(score: Any) -> dict[str, Any]:
+    """Project one pillar's score into the machine pillar object with its penalty rounded to two decimals.
+
+    Args:
+        score: PillarScore taken from the score report's pillars.
+
+    Returns:
+        JSON-compatible object with the pillar, finding and per-severity counts, applicability, rounded penalty, and grade letter and score, both null
+        when the pillar has no grade.
+    """
     payload: dict[str, Any] = {
         "pillar": score.pillar,
         "findings": score.findings,
@@ -334,6 +498,18 @@ def _machine_pillar_score(score: Any) -> dict[str, Any]:
 
 
 def _machine_file_score(score: Any, root: str) -> dict[str, Any]:
+    """Project one top-offender file score into the machine object with a root-relative file path.
+
+    maxCyclomatic, maxCognitive, maxLines and mutationScore appear only when the file score carries them.
+
+    Args:
+        score: FileScore taken from the score report's top offenders.
+        root: Project root the file path is made relative to.
+
+    Returns:
+        JSON-compatible object with file, finding and per-severity counts, grade letter and score (null when ungraded), rounded penalty, and
+        maxCyclomatic, maxCognitive, maxLines and mutationScore when present.
+    """
     payload: dict[str, Any] = {
         "file": _machine_path(score.file_path, root),
         "findings": score.findings,
@@ -355,6 +531,14 @@ def _machine_file_score(score: Any, root: str) -> dict[str, Any]:
 
 
 def _add_optional_sections(payload: dict[str, Any], report: AnalysisReport) -> None:
+    """Add the baseline, diff, displayFilter and extensions sections to the envelope when the run produced them.
+
+    Mutates payload in place, setting each key only when its projection is present or non-empty.
+
+    Args:
+        payload: Analysis envelope being built, mutated in place.
+        report: Native run state supplying the baseline, diff, display filter and extension values.
+    """
     baseline = _machine_baseline(report.extensions.baseline, report.machine_context.project_root)
     if baseline is not None:
         payload["baseline"] = baseline
@@ -370,6 +554,18 @@ def _add_optional_sections(payload: dict[str, Any], report: AnalysisReport) -> N
 
 
 def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
+    """Project a baseline report into the machine baseline section.
+
+    applied is false when this run generated the baseline rather than comparing against one. newFindings combines the new, collision and not-eligible
+    counts, and path appears only when it can be expressed under the project root.
+
+    Args:
+        value: Baseline extension value from the report; anything other than a BaselineReport means there is no baseline section.
+        root: Project root used to make the baseline file path relative.
+
+    Returns:
+        JSON-compatible baseline object, or None when value is not a BaselineReport.
+    """
     if not isinstance(value, BaselineReport):
         return None
     payload: dict[str, Any] = {
@@ -392,7 +588,14 @@ def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
 
 
 def _machine_baseline_entry(value: Any) -> dict[str, Any]:
-    """Render one resolved row: the identity, how many occurrences went away, and the descriptive fields it carried."""
+    """Render one resolved row: the identity, how many occurrences went away, and the descriptive fields it carried.
+
+    Args:
+        value: Stale baseline entry from the baseline report, carrying an identity, a count and optional rule, path and subject.
+
+    Returns:
+        JSON-compatible object with identity and count, plus ruleId, path and subject only when non-empty.
+    """
     payload: dict[str, Any] = {"identity": value.identity, "count": value.count}
     # A row's rule, path, and subject exist for the reader, so an absent one is omitted rather than written empty.
     for key, text in (("ruleId", value.rule_id), ("path", value.path), ("subject", value.subject)):
@@ -402,6 +605,19 @@ def _machine_baseline_entry(value: Any) -> dict[str, Any]:
 
 
 def _machine_diff(value: Any, root: str) -> dict[str, Any] | None:
+    """Project the diff extension into the machine diff section when diff mode was enabled.
+
+    The native value is converted through its to_dict when it has one. filteredFindings is the native suppressedCount, mode comes from the native
+    source and appears only when it is a non-empty string, and caveat appears only when it is a string.
+
+    Args:
+        value: Diff extension value from the report, either an object with to_dict or a dictionary, or None when no diff was requested.
+        root: Project root used to make the changed file paths relative and de-duplicate them.
+
+    Returns:
+        JSON-compatible diff object with the changed file count and paths, enabled true and the filtered finding count, or None when the value is not
+        a dictionary or diff mode is not enabled.
+    """
     native = _to_report_value(value)
     if not isinstance(native, dict) or not native.get("enabled"):
         return None
@@ -422,6 +638,14 @@ def _machine_diff(value: Any, root: str) -> dict[str, Any] | None:
 
 
 def _machine_display_filter(report: AnalysisReport) -> dict[str, Any] | None:
+    """Project the active display filter into the machine displayFilter section.
+
+    Args:
+        report: Native run state supplying the filters and the count of findings they hid.
+
+    Returns:
+        Object with applied true, the four include and exclude lists and hiddenFindings, or None when no filter is set or it is inactive.
+    """
     if report.filters is None or not report.filters.is_active():
         return None
     values = report.filters.to_dict()
@@ -436,6 +660,14 @@ def _machine_display_filter(report: AnalysisReport) -> dict[str, Any] | None:
 
 
 def _machine_extensions(report: AnalysisReport) -> dict[str, Any]:
+    """Collect the Python-only mutation, review and trend values under extensions.py.topLevel.
+
+    Args:
+        report: Native run state whose mutation, review and trend extensions are converted to report values.
+
+    Returns:
+        Extensions object holding only the values that are set, or an empty dict when none are, so the caller omits the section.
+    """
     top_level = {
         key: _to_report_value(value)
         for key, value in {
@@ -449,6 +681,14 @@ def _machine_extensions(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _to_report_value(value: Any) -> Any:
+    """Convert a native extension value to its dictionary form when it provides to_dict.
+
+    Args:
+        value: Native extension value or plain data.
+
+    Returns:
+        The result of value.to_dict() when value has a callable to_dict, otherwise value unchanged.
+    """
     to_dict = getattr(value, "to_dict", None)
     if callable(to_dict):
         return to_dict()
@@ -456,6 +696,17 @@ def _to_report_value(value: Any) -> Any:
 
 
 def _machine_paths(values: Any, root: str) -> list[str]:
+    """Make every path root-relative and de-duplicate them in first-seen order, refusing any path outside the project root.
+
+    Unlike _machine_inputs, a path that cannot be expressed under the root propagates ValueError from _machine_path instead of being dropped.
+
+    Args:
+        values: Iterable of paths, each converted with str before projection.
+        root: Project root the paths are made relative to.
+
+    Returns:
+        Root-relative POSIX paths without duplicates, in first-seen order.
+    """
     paths: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -467,6 +718,15 @@ def _machine_paths(values: Any, root: str) -> list[str]:
 
 
 def _machine_inputs(values: Any, root: str) -> list[str]:
+    """Make requested input paths root-relative and de-duplicate them, dropping any input that has no form under the project root.
+
+    Args:
+        values: Requested input paths, each converted with str before projection.
+        root: Project root, or the launch directory when the run never resolved one.
+
+    Returns:
+        Root-relative POSIX input paths without duplicates, in first-seen order, with inputs outside the root omitted.
+    """
     # A run that could not start never resolved a project root, so its envelope is rooted at the launch directory,
     # and a target named from a sibling directory, such as `analyse ../proj`, has no form under it. A host path may
     # not be published, so the input is left out the way the config path beside it already is, instead of raising
@@ -482,6 +742,19 @@ def _machine_inputs(values: Any, root: str) -> list[str]:
 
 
 def _machine_path(value: str, root: str) -> str:
+    """Make one path root-relative, refusing any path that cannot be published under the project root.
+
+    Args:
+        value: Absolute path, or path relative to root, to project.
+        root: Project root the path is made relative to.
+
+    Returns:
+        Root-relative POSIX path.
+
+    Raises:
+        ValueError: When _machine_relative_path finds no form for value under root, such as a path outside the root, an empty or backslash path, or a
+            Windows drive path.
+    """
     path = _machine_relative_path(value, root)
     if path is None:
         raise ValueError(f"machine path {value!r} is outside the project root")
@@ -489,6 +762,19 @@ def _machine_path(value: str, root: str) -> str:
 
 
 def _machine_relative_path(value: str, root: str) -> str | None:
+    """Express a path relative to the project root in POSIX form, or report that it has no publishable form.
+
+    A relative value is resolved against root and symlinks are resolved on both sides. An OSError while resolving the candidate path counts as having
+    no form; resolving root itself is not guarded.
+
+    Args:
+        value: Absolute path, or path relative to root, to project.
+        root: Project root the result is relative to.
+
+    Returns:
+        Root-relative POSIX path, . for the root itself, or None when value is empty, contains a backslash, starts with a Windows drive letter,
+        resolves outside root, or cannot be resolved.
+    """
     if not value or "\\" in value or re.match(r"^[A-Za-z]:", value):
         return None
     root_path = Path(root).resolve()

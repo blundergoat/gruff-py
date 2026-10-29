@@ -451,6 +451,17 @@ def _filter_hunk_findings(
     findings: list[Finding],
     changed: ChangedRegionSet,
 ) -> ChangedRegionFilterResult:
+    """Apply strict hunk scope by keeping only findings whose reported location overlaps a changed hunk and counting the rest as suppressed.
+
+    A finding without a line is kept whenever its file is in the changed scope.
+
+    Args:
+        findings: Findings produced by normal analysis, in report order.
+        changed: Resolved changed-region data; whole-file scopes keep every finding in those files.
+
+    Returns:
+        Retained findings in their original order and the number of findings dropped as out of scope.
+    """
     kept: list[Finding] = []
     suppressed = 0
     for finding in findings:
@@ -466,6 +477,20 @@ def _is_finding_in_symbol_scope(
     changed: ChangedRegionSet,
     declarations: tuple[_DeclarationRange, ...],
 ) -> bool:
+    """Keep a finding in symbol scope when its own location changed or its enclosing declaration overlaps a changed hunk.
+
+    Findings from file-level, class-level or aggregate rules are judged only by their anchor so inherited debt does not reappear on every body edit. A
+    finding without a line is kept when its file is changed at all, and a finding outside every hunk with no enclosing declaration is dropped.
+
+    Args:
+        finding: Finding to test against the changed scope.
+        changed: Resolved changed-region data for the run.
+        declarations: Declaration ranges for the finding's file, smallest first; empty when the file was not parsed or has no declarations, so no
+            enclosing or named declaration can widen the test beyond the finding's own lines.
+
+    Returns:
+        True when the finding should be reported under symbol scope, False when it should be counted as suppressed.
+    """
     if finding.rule_id in _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS:
         return _is_finding_anchor_changed(finding, changed, declarations)
     if _is_finding_location_changed(finding, changed):
@@ -481,6 +506,20 @@ def _is_finding_anchor_changed(
     changed: ChangedRegionSet,
     declarations: tuple[_DeclarationRange, ...],
 ) -> bool:
+    """Test whether the anchor of a file-level or aggregate finding was changed, ignoring edits elsewhere in its reported span.
+
+    The anchor runs from the finding line to the start of the declaration the finding names, or is the finding line alone when no such declaration is
+    found.
+
+    Args:
+        finding: Finding from a rule whose span describes a whole file, class or aggregate.
+        changed: Resolved changed-region data for the run.
+        declarations: Declaration ranges for the finding's file, smallest first, used to locate the named declaration's start line.
+
+    Returns:
+        True when a changed hunk overlaps the anchor lines or the file is whole-file changed; for a finding without a line, True when its file is
+        changed at all.
+    """
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
     anchor_end = _declaration_anchor_line(finding, declarations) or finding.line
@@ -493,6 +532,16 @@ def _declaration_anchor_line(
     finding: Finding,
     declarations: tuple[_DeclarationRange, ...],
 ) -> int | None:
+    """Find the start line of the declaration a finding names, provided that declaration begins inside the finding's reported span.
+
+    Args:
+        finding: Finding whose symbol and line span select the declaration.
+        declarations: Declaration ranges for the finding's file, smallest first, so the smallest matching declaration wins.
+
+    Returns:
+        The matching declaration's start line, or None when the finding lacks a symbol, line or end line or no named declaration starts inside its
+        span, so the caller falls back to the finding line.
+    """
     if finding.symbol is None or finding.end_line is None or finding.line is None:
         return None
     for declaration in declarations:
@@ -502,6 +551,18 @@ def _declaration_anchor_line(
 
 
 def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) -> bool:
+    """Test whether a changed hunk overlaps the lines a finding reports.
+
+    A missing end line, or one before the start line, narrows the test to the finding's first line.
+
+    Args:
+        finding: Finding whose reported line span is compared with the changed hunks.
+        changed: Resolved changed-region data for the run.
+
+    Returns:
+        True when the reported span overlaps a hunk or the file is whole-file changed; for a finding without a line, True when its file is changed at
+        all.
+    """
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
     end_line = finding.end_line if finding.end_line is not None and finding.end_line >= finding.line else finding.line
@@ -509,6 +570,17 @@ def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) ->
 
 
 def _declaration_ranges(unit: AnalysisUnit) -> tuple[_DeclarationRange, ...]:
+    """Collect the line ranges and qualified names of every function, async function and class in a parsed unit for symbol-scope matching.
+
+    The unit must have a parsed tree; the caller skips units that failed to parse.
+
+    Args:
+        unit: Parsed analysis unit whose syntax tree supplies the declarations.
+
+    Returns:
+        Declaration ranges ordered by span length, shortest first, then by start line, so the first range containing a line is the innermost
+        declaration.
+    """
     assert unit.tree is not None
     declarations: list[_DeclarationRange] = []
     for node in ast.walk(unit.tree):
@@ -524,6 +596,14 @@ def _declaration_ranges(unit: AnalysisUnit) -> tuple[_DeclarationRange, ...]:
 
 
 def _qualified_name(node: ast.AST) -> str | None:
+    """Build a declaration's dotted name from the enclosing class and function names reached through the parser's parent links.
+
+    Args:
+        node: Declaration node whose name and enclosing declarations form the result.
+
+    Returns:
+        The dotted name such as Outer.method, or None when the node has no string name.
+    """
     name = getattr(node, "name", None)
     if not isinstance(name, str):
         return None
@@ -541,6 +621,17 @@ def _enclosing_declaration(
     finding: Finding,
     declarations: tuple[_DeclarationRange, ...],
 ) -> _DeclarationRange | None:
+    """Pick the innermost declaration containing a finding's line, preferring one whose name matches the finding's symbol.
+
+    When no containing declaration matches the symbol, the innermost containing declaration of any name is used instead.
+
+    Args:
+        finding: Finding whose line and symbol select the declaration.
+        declarations: Declaration ranges for the finding's file, smallest first, so the first hit is the innermost one.
+
+    Returns:
+        The selected declaration range, or None when the finding has no line or no declaration contains it.
+    """
     if finding.line is None:
         return None
     for declaration in declarations:
@@ -568,6 +659,19 @@ def _symbol_matches(finding_symbol: str | None, declaration_symbol: str | None) 
 
 
 def _parse_range_list(raw_ranges: str) -> tuple[LineRange, ...]:
+    """Parse the comma-separated --changed-ranges value into sorted, merged line ranges.
+
+    Each entry is a single line or a start-end pair; blank entries are skipped, and overlapping or adjacent ranges are coalesced.
+
+    Args:
+        raw_ranges: User-supplied text such as 1-3,8 naming one-based lines.
+
+    Returns:
+        Sorted disjoint inclusive line ranges covering every entry.
+
+    Raises:
+        ValueError: An endpoint is not an integer of at least one, a range ends before it starts, or the text contains no range at all.
+    """
     ranges: list[LineRange] = []
     for chunk in raw_ranges.split(","):
         value = chunk.strip()
@@ -629,6 +733,17 @@ def _merge_ranges(ranges: list[LineRange] | tuple[LineRange, ...]) -> list[LineR
 
 
 def _with_whole_files(changed: ChangedRegionSet, whole_paths: list[str]) -> ChangedRegionSet:
+    """Return a copy of a changed-region set with extra paths, such as untracked files, treated as entirely changed.
+
+    Each added path is normalised and given an empty hunk entry when it has none; the input set is not modified.
+
+    Args:
+        changed: Changed-region set parsed from the diff.
+        whole_paths: Paths to analyse in full; an empty list returns an equivalent copy.
+
+    Returns:
+        A new changed-region set with the same source label, the original hunks, and the added whole-file scopes.
+    """
     whole = set(changed.whole_files)
     ranges_by_file = dict(changed.ranges_by_file)
     for path in whole_paths:
@@ -643,6 +758,18 @@ def _with_whole_files(changed: ChangedRegionSet, whole_paths: list[str]) -> Chan
 
 
 def _git(project_root: Path, args: list[str]) -> str:
+    """Run a Git command against the project repository and return its standard output.
+
+    Args:
+        project_root: Repository directory passed to git -C.
+        args: Git subcommand, options and pathspecs to run.
+
+    Returns:
+        The command's standard output as text.
+
+    Raises:
+        ValueError: Git cannot be launched or exits with a non-zero status; the message carries the underlying error.
+    """
     try:
         completed = subprocess.run(
             ["git", "-C", str(project_root), *args],
@@ -656,11 +783,28 @@ def _git(project_root: Path, args: list[str]) -> str:
 
 
 def _git_lines(project_root: Path, args: list[str]) -> list[str]:
+    """Run a Git command and return its non-empty output lines, used to list untracked files.
+
+    Args:
+        project_root: Repository directory passed to git -C.
+        args: Git subcommand, options and pathspecs to run.
+
+    Returns:
+        Output lines in Git's order with blank lines removed; empty when Git printed nothing.
+    """
     output = _git(project_root, args)
     return [line for line in output.splitlines() if line]
 
 
 def _diff_header_path(raw: str) -> str | None:
+    """Extract the file path from a unified-diff old-side or new-side header, recognising the absent side of an added or deleted file.
+
+    Args:
+        raw: Header text after the leading marker, possibly followed by a tab and timestamp.
+
+    Returns:
+        The normalised display path with Git quoting decoded and any a/ or b/ prefix removed, or None when the header names /dev/null.
+    """
     value = raw.split("\t", 1)[0].strip()
     if value == "/dev/null":
         return None
@@ -668,6 +812,14 @@ def _diff_header_path(raw: str) -> str | None:
 
 
 def _strip_diff_prefix(path: str) -> str:
+    """Turn a Git diff path token into the project-relative display path used to key changed regions.
+
+    Args:
+        path: Path token from a diff --git header or a ---/+++ header, possibly quoted and prefixed.
+
+    Returns:
+        The decoded path without its a/ or b/ prefix, normalised into the changed-region key form.
+    """
     # Decode Git's C-style quoting (``"b/caf\303\251.py"``) before testing the a/ b/
     # prefix. The quotes start the token, so a naive prefix check misses them and the
     # decoded display path keeps ``b/``, silently dropping the file in diff mode.
@@ -717,6 +869,14 @@ def _unquote_diff_path(value: str) -> str:
 
 
 def _normalise_path(path: str) -> str:
+    """Normalise a path into the form used as a changed-region key so diff paths and discovered display paths compare equal.
+
+    Args:
+        path: Path from a diff, a Git listing, an explicit range target, a discovered file or a finding.
+
+    Returns:
+        The path with forward slashes, leading ./ segments removed, and leading and trailing slashes stripped.
+    """
     normalised = path.replace("\\", "/")
     while normalised.startswith("./"):
         normalised = normalised[2:]

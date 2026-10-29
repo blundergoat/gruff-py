@@ -153,7 +153,17 @@ def _first_matching_position(
     finding: Finding,
     exclusions: Sequence[SensitiveExclusion],
 ) -> int | None:
-    """Return the position of the first entry claiming *finding*, so one drop counts once."""
+    """Return the position of the first entry claiming *finding*, so one drop counts once.
+
+    Args:
+        finding: A finding that survived the inline-directive channel, tested against each entry in turn.
+        exclusions: Validated sensitiveExclusions entries in user order; when more than one entry would claim the finding, the earliest wins. An empty
+            sequence claims nothing.
+
+    Returns:
+        Zero-based position of the first claiming entry in exclusions, which the caller uses to increment that entry's suppressed count, or None when
+        no entry claims the finding and the caller keeps it.
+    """
     for position, exclusion in enumerate(exclusions):
         if _matches(finding, exclusion):
             return position
@@ -161,7 +171,17 @@ def _first_matching_position(
 
 
 def _matches(finding: Finding, exclusion: SensitiveExclusion) -> bool:
-    """Return whether one entry claims exactly this finding."""
+    """Return whether one entry claims exactly this finding.
+
+    Args:
+        finding: The finding whose rule id, project-relative display path and symbol are compared against the entry.
+        exclusion: One validated sensitiveExclusions entry; when its symbol is None, it claims every finding of its rule in its file regardless of
+            symbol.
+
+    Returns:
+        True when the finding's rule id and path both equal the entry's and the entry either names no symbol or names the finding's symbol exactly;
+        False otherwise.
+    """
     if finding.rule_id != exclusion.rule:
         return False
     if finding.file_path != exclusion.path:

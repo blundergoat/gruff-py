@@ -420,7 +420,20 @@ class BaselineStore:
         return BaselineMigration(written_baseline=written, accepted=len(accepted), sensitive_counted=written.sensitive_total())
 
     def _read_legacy(self, path: str | Path, contents: bytes) -> tuple[dict[str, Any], ...]:
-        """Read the rows of a 0.5 baseline, the only shape a migration accepts as its input."""
+        """Read the rows of a 0.5 baseline, the only shape a migration accepts as its input.
+
+        Args:
+            path: The migration input as the user named it; it is only used to name the file in errors, because the bytes are already read.
+            contents: Raw bytes of the 0.5 baseline, the same bytes the migration later compares to prove the input was not changed.
+
+        Returns:
+            The rows from the file's single row container that are JSON objects, in file order; a row that is not an object is dropped without an
+            error, and an empty container gives an empty tuple.
+
+        Raises:
+            BaselineError: When the bytes are not UTF-8 or valid JSON, the root is not an object or its schemaVersion is not a 0.5 version, more than
+                one of findings, groups and entries is a list, or none of them is.
+        """
         try:
             payload = json.loads(contents.decode("utf-8"))
         # For example, a hand-edited 0.5 baseline may carry a trailing comma the decoder rejects.
@@ -441,7 +454,17 @@ class BaselineStore:
         return tuple(row for row in rows if isinstance(row, dict))
 
     def _require_distinct_paths(self, input_path: Path, output_path: Path) -> None:
-        """Refuse an output that is the input by spelling, resolved link target, or inode."""
+        """Refuse an output that is the input by spelling, resolved link target, or inode.
+
+        Args:
+            input_path: The 0.5 baseline as _absolute_path returned it (a relative selection joined under the project root, an absolute one
+                unchanged), which the migration must leave intact; it is the path named in the error.
+            output_path: Where the migrated baseline will be written, as _absolute_path returned it; the same-file check runs only when both files
+                already exist.
+
+        Raises:
+            BaselineError: When both paths resolve to the same location, or both exist and are the same file on disk, as a hard link makes them.
+        """
         if input_path.resolve() == output_path.resolve():
             raise BaselineError(f"Migration output must be a different file from its input: {input_path}")
         # A symlink or a hard link would make the "different" output the same bytes, destroying the retreat path.
@@ -449,7 +472,19 @@ class BaselineStore:
             raise BaselineError(f"Migration output must be a different file from its input: {input_path}")
 
     def _decode(self, path: str | Path) -> dict[str, Any]:
-        """Read one baseline file into a JSON object, turning every file failure into a reason the user can act on."""
+        """Read one baseline file into a JSON object, turning every file failure into a reason the user can act on.
+
+        Args:
+            path: Baseline the user selected, relative to the project root or absolute; it is named, with forward slashes, in the not-found,
+                unreadable and encoding errors.
+
+        Returns:
+            The decoded JSON root object; its schemaVersion, toolLanguage and rows are not yet checked.
+
+        Raises:
+            BaselineError: When the path is not an existing regular file, cannot be read, is not valid UTF-8, is not valid JSON, or has a root that is
+                not a JSON object.
+        """
         display_path = _display_path(path)
         absolute_path = self._absolute_path(path)
         # A missing file cannot hide debt, so the user gets an error instead of a run that looks clean.
@@ -471,7 +506,16 @@ class BaselineStore:
         return payload
 
     def _absolute_path(self, path: str | Path) -> Path:
-        """Resolve a selected baseline path against this analysis project."""
+        """Resolve a selected baseline path against this analysis project.
+
+        Args:
+            path: Baseline location the user selected; an absolute path is kept even when it points outside the project, and a relative one is
+                anchored to the project root.
+
+        Returns:
+            The absolute selection unchanged, or the relative selection joined under the store's project root; symlinks and .. segments are not
+            resolved.
+        """
         candidate = Path(path)
         # An absolute selection already identifies the user's file, inside the project or outside it.
         if candidate.is_absolute():
@@ -900,6 +944,15 @@ def _accepted_by_legacy(rows: tuple[dict[str, Any], ...], findings: Sequence[Fin
 
     A 0.5 row is matched on its rule and path, narrowed by its symbol and message when it recorded them, and it
     accepts as many occurrences as the file held. A finding the old baseline never covered stays visible.
+
+    Args:
+        rows: Object rows from the 0.5 file's row container; only ruleId, file or filePath, symbol and message are read, each row accepts one
+            occurrence, and a row without a ruleId or a file path can accept nothing.
+        findings: This run's findings, the only candidates a 0.5 row can accept.
+
+    Returns:
+        The accepted findings in spend order (lowest line, then column, unlocated last) rather than scan order; empty when no row matches a current
+        finding.
     """
     budget_by_key: dict[tuple[str | None, str | None, str | None, str | None], int] = {}
     for row in rows:
@@ -944,7 +997,18 @@ def _row_text(row: dict[str, Any], key: str) -> str | None:
 
 
 def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
-    """Restore every reviewed row from a validated v3 document."""
+    """Restore every reviewed row from a validated v3 document.
+
+    Args:
+        payload: Decoded v3 baseline root whose schemaVersion has already been checked; only its occurrences list is read here.
+
+    Returns:
+        One validated row per occurrence, in file order; empty when the file accepted nothing.
+
+    Raises:
+        BaselineError: When occurrences is missing or not a list, an occurrence is not a JSON object, or a row fails BaselineEntry.from_dict
+            validation.
+    """
     rows = payload.get("occurrences")
     # Without a list of occurrences there is no deterministic set of reviewed findings to apply.
     if not isinstance(rows, list):
@@ -959,7 +1023,15 @@ def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
 
 
 def _sensitive_counts_from_payload(payload: dict[str, Any]) -> dict[str, int]:
-    """Read the per-rule sensitive counts a baseline recorded without storing the findings themselves."""
+    """Read the per-rule sensitive counts a baseline recorded without storing the findings themselves.
+
+    Args:
+        payload: Decoded v3 baseline root; the counts are read from sensitive.counts.byRule.
+
+    Returns:
+        Sensitive counts keyed by rule id as text, keeping only integer values and dropping booleans; empty when the sensitive, counts or byRule
+        object is absent or malformed.
+    """
     sensitive = payload.get("sensitive")
     if not isinstance(sensitive, dict):
         return {}
@@ -1007,7 +1079,17 @@ def _read_bytes(path: Path, display_path: str) -> bytes:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
-    """Replace a baseline only after its complete JSON text reaches disk, so an interrupted write keeps the old file."""
+    """Replace a baseline only after its complete JSON text reaches disk, so an interrupted write keeps the old file.
+
+    Args:
+        path: Final baseline destination; its parent directory must already exist, because the staging file is created there so the replace stays on
+            one filesystem.
+        text: The complete serialised baseline, written as UTF-8 before it replaces the destination.
+
+    Raises:
+        Exception: Any failure while writing, syncing or replacing the staging file, typically an OSError such as a full disk, is re-raised unchanged
+            after an attempt to remove the staging file, leaving the destination as it was.
+    """
     handle_id, staging_path = tempfile.mkstemp(prefix="gruff-baseline-", dir=str(path.parent), text=True)
     try:
         with os.fdopen(handle_id, "w", encoding="utf-8") as handle:
@@ -1024,12 +1106,30 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 
 def _display_path(path: str | Path) -> str:
-    """Render a baseline path consistently in reports and diagnostics."""
+    """Render a baseline path consistently in reports and diagnostics.
+
+    Args:
+        path: Baseline path as the user gave it, or the project-relative or absolute form that _report_path chose to show.
+
+    Returns:
+        The path text with backslashes turned into forward slashes, so Windows and POSIX runs print the same; it is not made relative or resolved.
+    """
     return str(path).replace("\\", "/")
 
 
 def _report_path(project_root: Path, requested: str | Path, absolute_path: Path) -> str:
-    """Choose the shortest stable baseline path to show in analysis output."""
+    """Choose the shortest stable baseline path to show in analysis output.
+
+    Args:
+        project_root: Store's project root, which an absolute selection is shown relative to when it lies inside it.
+        requested: Baseline path as the user selected it; a relative one is shown as given, with backslashes turned into forward slashes.
+        absolute_path: The selection as _absolute_path returned it; it is read only when the requested path is absolute, so it is that path unchanged
+            and may lie outside the project root.
+
+    Returns:
+        Forward-slash display path: the user's relative path as given, a project-relative path for an absolute selection inside the project, or the
+        full absolute path for a baseline outside it.
+    """
     requested_path = Path(requested)
     # A user-entered relative path is already the project-oriented label they expect to see in the report.
     if not requested_path.is_absolute():
@@ -1042,5 +1142,15 @@ def _report_path(project_root: Path, requested: str | Path, absolute_path: Path)
 
 
 def _baseline_source(path: str | Path) -> str:
-    """Label whether the user selected a path or gruff found the conventional one."""
+    """Label a generated or migrated baseline default when its file name is the conventional gruff-baseline.json, and explicit for any other name.
+
+    A bare --generate-baseline flag supplies gruff-baseline.json, which is the default case, but the label comes from the file name alone, so a
+    destination the user typed in any directory is also reported as default when it is named gruff-baseline.json.
+
+    Args:
+        path: Destination of the generated or migrated baseline; only its final name is compared.
+
+    Returns:
+        default when the file name is gruff-baseline.json, otherwise explicit.
+    """
     return "default" if Path(path).name == DEFAULT_BASELINE_FILENAME else "explicit"
