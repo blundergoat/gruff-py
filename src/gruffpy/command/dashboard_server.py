@@ -179,6 +179,23 @@ def _scan_html(
     initial_state: DashboardState,
     query: dict[str, str],
 ) -> str:
+    """Run one dashboard scan for the merged request state and return the HTML page the /scan route serves into the report iframe.
+
+    The scan always runs with the baseline disabled and the default display filter, and the HTML report is rendered without editor links. A project
+    root that resolves to a path that is not an existing directory, or an exception raised while running the analysis or rendering the report,
+    produces a dashboard error page with exit code 2. A project value that path resolution rejects with ValueError, such as one containing a NUL
+    character, is not caught and propagates.
+
+    Args:
+        renderer: Dashboard page renderer that builds error pages and injects scan metadata into the HTML report.
+        launch_root: Resolved directory the dashboard was launched from; relative project values are resolved against it.
+        initial_state: Seed dashboard state from the CLI flags; query values are layered over it before the scan.
+        query: Flattened /scan query parameters, one value per key, that override the seed state.
+
+    Returns:
+        HTML for the iframe: the HTML report with the project root, display command, report exit code and duration injected as dashboard metadata, or
+        a dashboard error page with exit code 2 when the project root is not an existing directory or the scan fails.
+    """
     started_at = time.perf_counter()
     state = initial_state.merge_query(query)
     scan_root = _resolve_project_root(state.project, launch_root)
@@ -231,18 +248,52 @@ def _scan_html(
 
 
 def _flatten_query(values: dict[str, list[str]]) -> dict[str, str]:
+    """Reduce parsed query parameters to one value per key, keeping the last value supplied for each key.
+
+    Args:
+        values: Query parameters from parse_qs, mapping each key to every value it appeared with in the URL.
+
+    Returns:
+        Mapping of each key to its last value, or to the empty string when the key has no values.
+    """
     return {key: items[-1] if items else "" for key, items in values.items()}
 
 
 def _query_bool(value: str) -> bool:
+    """Interpret a dashboard query flag as true only for the exact values 1, true, yes or on.
+
+    Args:
+        value: Raw flag value from the query string, or the 1 or 0 encoding produced by DashboardState.to_query.
+
+    Returns:
+        True when value is exactly 1, true, yes or on (case-sensitive); False for any other value, including 0 and the empty string.
+    """
     return value in {"1", "true", "yes", "on"}
 
 
 def _valid_fail_on(value: str) -> str:
+    """Keep a failOn value only when it matches a FailThreshold value, so URL input cannot select an unknown threshold.
+
+    Args:
+        value: failOn value taken from the query, or the current state's fail_on when the query omits it.
+
+    Returns:
+        value unchanged when it matches a FailThreshold value, otherwise the string none.
+    """
     return value if value in {item.value for item in FailThreshold} else "none"
 
 
 def _resolve_project_root(project: str, launch_root: Path) -> Path | None:
+    """Resolve the dashboard project field to an existing directory, interpreting relative values against the launch root.
+
+    Args:
+        project: Project root text from the dashboard state; a relative value is joined to launch_root, so an empty value resolves to launch_root
+            itself.
+        launch_root: Directory that relative project values are resolved against.
+
+    Returns:
+        The resolved absolute path when it is an existing directory; None when path resolution raises OSError or the resolved path is not a directory.
+    """
     candidate = Path(project)
     if not candidate.is_absolute():
         candidate = launch_root / candidate
@@ -254,6 +305,17 @@ def _resolve_project_root(project: str, launch_root: Path) -> Path | None:
 
 
 def _parse_paths(paths: str) -> list[str]:
+    """Split the dashboard paths field into scan path arguments, dropping anything that looks like a command-line option.
+
+    Shell-style quoting is honoured; text that shlex cannot split, such as an unclosed quote or a trailing backslash, falls back to plain whitespace
+    splitting.
+
+    Args:
+        paths: Raw paths text from the dashboard state.
+
+    Returns:
+        Path arguments with empty parts and parts starting with - removed, or a list holding only . when no path remains.
+    """
     try:
         parts = shlex.split(paths)
     except ValueError:
@@ -263,6 +325,16 @@ def _parse_paths(paths: str) -> list[str]:
 
 
 def _config_path(config: str, project_root: Path, no_config: bool) -> Path | None:
+    """Work out the explicit config file path a dashboard scan passes to analysis, anchoring relative paths at the project root.
+
+    Args:
+        config: Config path text from the dashboard state; empty means no explicit config path.
+        project_root: Resolved project root that a relative config path is joined to.
+        no_config: When true, config loading is disabled and config is ignored.
+
+    Returns:
+        None when no_config is true or config is empty; otherwise config as given when absolute, or joined to project_root when relative.
+    """
     if no_config or config == "":
         return None
     path = Path(config)
@@ -270,6 +342,20 @@ def _config_path(config: str, project_root: Path, no_config: bool) -> Path | Non
 
 
 def _display_command_for(state: DashboardState, paths: list[str]) -> list[str]:
+    """Build the analyse argv that the dashboard displays as the command line for a scan.
+
+    The argv always carries --format html and --fail-on, then --no-config or --config (no_config wins over config), --include-ignored,
+    --report-interactive and --deep-scan-budget only when set, then -- followed by the paths. It is display-only; the scan itself runs through
+    run_analysis.
+
+    Args:
+        state: Merged dashboard state whose fail_on, config, no_config, include_ignored, report_interactive and deep_scan_budget fields select the
+            flags.
+        paths: Parsed scan paths appended after the -- separator.
+
+    Returns:
+        argv list beginning with the tool name and analyse and ending with -- and the paths; the dashboard renderer shell-quotes it for display.
+    """
     command = [TOOL_NAME, "analyse", "--format", "html", "--fail-on", state.fail_on]
     if state.no_config:
         command.append("--no-config")
@@ -287,4 +373,12 @@ def _display_command_for(state: DashboardState, paths: list[str]) -> list[str]:
 
 
 def _duration_ms(started_at: float) -> int:
+    """Measure the wall-clock milliseconds elapsed since a scan started, for the scan metadata and error pages the dashboard renders.
+
+    Args:
+        started_at: time.perf_counter value taken when the scan began.
+
+    Returns:
+        Elapsed milliseconds rounded to the nearest integer, never negative.
+    """
     return max(0, int(round((time.perf_counter() - started_at) * 1000)))

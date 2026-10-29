@@ -49,6 +49,19 @@ class JsonReporter:
 
 
 def _php_json_value(value: Any) -> Any:
+    """Turn every finite integral float in a report projection into an int, matching gruff-php's JSON output.
+
+    json.dumps then writes such values without a trailing .0, the way gruff-php does. Dicts and lists are rebuilt rather than mutated, and dict keys
+    are kept as they are. Tuples come back as lists. Non-finite floats, floats with a fractional part, and all other scalars pass through unchanged.
+
+    Args:
+        value: A projection from AnalysisReport.to_dict or AnalysisReport.to_summary_dict, or any value nested inside one, seen during the recursive
+            walk.
+
+    Returns:
+        A structure of the same shape in which dicts and lists are new containers, tuples become lists, and integral finite floats become ints; every
+        other leaf value is the input object itself.
+    """
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         return int(value)
     if isinstance(value, dict):

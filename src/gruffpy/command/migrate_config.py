@@ -121,6 +121,24 @@ def migrate_config_file(project_root: Path, config_path: Path | None) -> ConfigM
 
 
 def _resolve_target(project_root: Path, config_path: Path | None) -> Path:
+    """Choose the YAML config file to migrate.
+
+    The explicit path wins when one is given; otherwise the first of .gruff-py.yaml and .gruff.yaml found in the project root is used.
+
+    Args:
+        project_root: Directory searched for .gruff-py.yaml, then .gruff.yaml, when config_path is None; it is also checked for pyproject.toml when
+            neither YAML file exists.
+        config_path: Explicit config path supplied by the user, or None to discover one in project_root; an explicit path is validated and never falls
+            back to discovery.
+
+    Returns:
+        The explicit config_path unchanged when given, otherwise the first YAML config found directly in project_root.
+
+    Raises:
+        ConfigError: When the explicit path has a .toml suffix, or discovery finds no YAML config but pyproject.toml exists (both carry the hand-edit
+            guidance for TOML configs); when the explicit path's suffix is not .yaml or .yml; when the explicit path does not exist; or when discovery
+            finds neither a YAML config nor pyproject.toml, in which case the message points to gruff-py init.
+    """
     if config_path is not None:
         if config_path.suffix == ".toml":
             raise ConfigError(_TOML_GUIDANCE)
@@ -142,6 +160,23 @@ def _migrate_document(
     document: dict[str, Any],
     defaults: AnalysisConfig,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Build the migrated form of a parsed config document, with schemaVersion pinned as its first key.
+
+    It also collects the change lines for each rewrite and the notes for unknown rule ids left as-is. The input document is deep-copied and never
+    mutated. A schemaVersion change line is recorded only when the existing value is absent or differs from the current schema version. The 0.6.0 key
+    moves are applied next (a per-command minimumSeverity mapping is renamed to failOn and allowlists.secretPreviews is removed), then each rule
+    section under rules whose id is a known rule gets the legacy threshold rewrite. A rule section that is not a mapping is skipped without a note,
+    while an unknown rule id is passed through unchanged and reported as a note rather than a change line.
+
+    Args:
+        document: The config mapping parsed from the YAML file; it is deep-copied before any rewrite.
+        defaults: Registry-default analysis config whose rules map decides which rule ids are known and supplies each known rule's default settings
+            for the legacy threshold rewrite.
+
+    Returns:
+        A tuple of the migrated document, the change lines for every rewrite applied (empty when the config is already current), and the notes for
+        unknown rule ids left as-is.
+    """
     changes: list[str] = []
     notes: list[str] = []
     working = copy.deepcopy(document)
@@ -211,6 +246,24 @@ def _migrate_rule_section(
     section: dict[str, Any],
     default_settings: RuleSettings,
 ) -> list[str]:
+    """Replace a rule section's legacy warning and error threshold tiers with a single threshold and severity, in place.
+
+    Only warning and error keys that are not threshold names in the rule's default settings count as legacy tiers; other thresholds keys are kept, and
+    the thresholds mapping is deleted when nothing remains in it. The error tier wins when both legacy tiers are present. For a rule without a
+    severity rubric the legacy tiers are only removed. When the section already has a threshold, that threshold and any existing severity are kept and
+    a missing severity is filled from the winning tier name. Otherwise the winning tier's value becomes threshold and its tier name becomes severity,
+    replacing any severity already set.
+
+    Args:
+        rule_id: Rule id used only to label the returned change line.
+        section: The rule's config mapping, mutated in place: legacy tiers are deleted, and threshold and severity may be set.
+        default_settings: Registry-default settings for the rule; its threshold names decide whether a warning or error key is a real knob rather than
+            a legacy tier, and its severity rubric decides whether the legacy value is converted or only removed.
+
+    Returns:
+        A one-item list holding the change line that describes the removal or conversion, or an empty list when the section has no thresholds mapping
+        or no legacy tiers.
+    """
     thresholds = section.get("thresholds")
     if not isinstance(thresholds, dict):
         return []
@@ -242,4 +295,13 @@ def _migrate_rule_section(
 
 
 def _is_rubric(settings: RuleSettings) -> bool:
+    """Report whether a rule's default settings carry a severity rubric that a legacy threshold tier can be converted into.
+
+    Args:
+        settings: Registry-default settings for one rule.
+
+    Returns:
+        True when the settings define a single threshold and severity pair; False when the rule has no severity rubric, so legacy tiers are dropped
+        rather than converted.
+    """
     return settings.severity_threshold is not None

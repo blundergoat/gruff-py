@@ -186,6 +186,17 @@ def display_command(command: list[str]) -> str:
 
 
 def _field(label: str, name: str, value: str, placeholder: str = "") -> str:
+    """Build one labelled text input for the dashboard controls form, escaping every caller-supplied string.
+
+    Args:
+        label: Visible caption rendered inside the label element ahead of the input.
+        name: Form field name the input submits with the scan query.
+        value: Current value from the dashboard state, prefilled into the input.
+        placeholder: Hint text shown while the input is empty; the default empty string renders an empty placeholder attribute.
+
+    Returns:
+        HTML fragment of a label element wrapping the caption and the text input.
+    """
     return (
         f"<label>{_esc(label)}"
         f'<input name="{_escape_attribute(name)}" value="{_escape_attribute(value)}" '
@@ -194,25 +205,72 @@ def _field(label: str, name: str, value: str, placeholder: str = "") -> str:
 
 
 def _option(value: str, selected: str, label: str | None = None) -> str:
+    """Build one option element for the Fail on select, marking it selected when it matches the current state value.
+
+    Args:
+        value: Option value submitted as failOn when this option is chosen.
+        selected: Current failOn value from the dashboard state; the option carries the selected attribute only on an exact string match.
+        label: Visible option text; None shows value itself.
+
+    Returns:
+        HTML fragment of a single option element.
+    """
     is_selected = " selected" if value == selected else ""
     return f'<option value="{_escape_attribute(value)}"{is_selected}>{_esc(label if label is not None else value)}</option>'
 
 
 def _checkbox(name: str, label: str, value: str) -> str:
+    """Build one labelled checkbox for the dashboard controls form that submits 1 when ticked.
+
+    Args:
+        name: Form field name the checkbox submits with the scan query.
+        label: Visible caption rendered in a span beside the checkbox.
+        value: Current value from the dashboard state; only the exact string 1 renders the checkbox checked.
+
+    Returns:
+        HTML fragment of a label element wrapping the checkbox input and its caption span.
+    """
     checked = " checked" if value == "1" else ""
     return f'<label class="check"><input type="checkbox" name="{_escape_attribute(name)}" value="1"{checked}><span>{_esc(label)}</span></label>'
 
 
 def _json_script_payload(payload: dict[str, object]) -> str:
+    """Encode the scan metadata as compact ASCII JSON that can sit inside a script element without ending it early.
+
+    Non-ASCII characters are escaped by the encoder, and every <, > and & is replaced with its JSON unicode escape, so the text never contains a
+    closing script tag or an HTML entity.
+
+    Args:
+        payload: Metadata mapping to encode; every value must be JSON-serialisable.
+
+    Returns:
+        Compact JSON text with no spaces after separators and no raw angle brackets or ampersands.
+    """
     encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     return encoded.replace("<", "\\u003C").replace(">", "\\u003E").replace("&", "\\u0026")
 
 
 def _esc(value: str) -> str:
+    """Escape text for use as HTML element content.
+
+    Args:
+        value: Raw text to place between HTML tags.
+
+    Returns:
+        The text with ampersands, angle brackets, and double and single quotes replaced by HTML character references.
+    """
     return html.escape(value, quote=True)
 
 
 def _escape_attribute(value: str) -> str:
+    """Escape text for use inside a double-quoted HTML attribute value.
+
+    Args:
+        value: Raw text to place inside an attribute value.
+
+    Returns:
+        The text with ampersands, angle brackets, and double and single quotes replaced by HTML character references.
+    """
     return html.escape(value, quote=True)
 
 

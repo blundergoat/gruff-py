@@ -76,6 +76,19 @@ class SarifReporter:
 
 
 def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
+    """Convert one run diagnostic into a SARIF tool execution notification so code-scanning consumers see problems with the run itself.
+
+    The level is note only when invalidates_run is exactly False. True and the unset None legacy fatal default both become error, which matches the
+    test render uses for executionSuccessful. The location uses the diagnostic's file path in preference to its input path, and the line becomes a
+    region startLine only when one of those paths is present.
+
+    Args:
+        diagnostic: Run problem to report; its type becomes the descriptor id and its message the notification text.
+
+    Returns:
+        Notification mapping with descriptor, level and message, plus a single-entry locations list only when the diagnostic names a file or input
+        path; a run-wide diagnostic carries no locations key.
+    """
     notification: dict[str, Any] = {
         "descriptor": {"id": diagnostic.type},
         "level": "note" if diagnostic.invalidates_run is False else "error",
@@ -91,6 +104,19 @@ def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
 
 
 def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
+    """Build the SARIF rule descriptor for a rule in the default registry from its definition and catalogue documentation.
+
+    The short description is the definition's description, or its name when the description is empty. The full description is the documented
+    rationale, and the help text is the rationale followed by a blank line and the fix guidance. Secondary pillars, threshold keys and default options
+    are added to properties only when the definition has them.
+
+    Args:
+        definition: Registered rule definition whose id also selects the catalogue documentation.
+
+    Returns:
+        Rule descriptor mapping with id, name, descriptions, help and a properties bag holding pillar, tier, default severity, confidence, default
+        enablement and the documentation payload.
+    """
     documentation = documentation_for_rule(definition.id)
     return {
         "id": definition.id,
@@ -113,6 +139,20 @@ def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
 
 
 def _fallback_rule_metadata(finding: Finding) -> dict[str, Any]:
+    """Build a stand-in rule descriptor from a finding whose rule id has no default-registry entry.
+
+    It gives the finding's result a rule to index. The name and short description repeat the rule id, the full description and help repeat the
+    finding's message, and the default severity is the finding's own severity. The descriptor always reports defaultEnabled as True and carries no
+    documentation, thresholds or options. When several findings share an unregistered rule id, render keeps the descriptor built from the first one,
+    reported findings before suppressed ones.
+
+    Args:
+        finding: Finding whose rule id, message and classification stand in for the missing rule definition.
+
+    Returns:
+        Rule descriptor mapping with id, name, descriptions, help and a properties bag holding pillar, tier, default severity, confidence and any
+        secondary pillars from the finding, plus defaultEnabled fixed at True.
+    """
     return {
         "id": finding.rule_id,
         "name": finding.rule_id,
@@ -131,6 +171,19 @@ def _fallback_rule_metadata(finding: Finding) -> dict[str, Any]:
 
 
 def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
+    """Convert one finding into a SARIF result that points back to its rule descriptor and source location.
+
+    Symbol, remediation, secondary pillars and metadata are copied into properties only when the finding has them. This function never adds
+    suppressions; render adds them to results built from suppressed findings.
+
+    Args:
+        finding: Finding to render as a result.
+        rule_index: Position of the finding's rule descriptor in the sorted driver rules array.
+
+    Returns:
+        Result mapping with ruleId, ruleIndex, level, message, one physical location and properties, plus partialFingerprints only when the finding
+        has a durable identity.
+    """
     properties: dict[str, Any] = {
         "severity": finding.severity.value,
         "pillar": finding.pillar.value,
@@ -186,6 +239,17 @@ def _partial_fingerprints(finding: Finding) -> dict[str, str] | None:
 
 
 def _physical_location(finding: Finding) -> dict[str, Any]:
+    """Build the SARIF physical location for a finding's file and, when it has a line, its source region.
+
+    The column and end line are added to the region only alongside a start line; a finding without a line keeps only the file location, even when it
+    has a column or end line.
+
+    Args:
+        finding: Finding whose file path, line, column and end line locate the result.
+
+    Returns:
+        Physical location mapping with an artifact location, and a region only when the finding has a line.
+    """
     location: dict[str, Any] = {
         "artifactLocation": {"uri": _uri(finding.file_path)},
     }
@@ -200,6 +264,16 @@ def _physical_location(finding: Finding) -> dict[str, Any]:
 
 
 def _uri(file_path: str) -> str:
+    """Normalise a file path into the forward-slash form written as a SARIF artifact location URI.
+
+    Backslashes become forward slashes and every leading ./ segment is stripped. The path is not percent-encoded and an absolute path stays absolute.
+
+    Args:
+        file_path: Finding or diagnostic path as recorded by the analysis run.
+
+    Returns:
+        Normalised path string used verbatim as the artifactLocation uri.
+    """
     normalized = file_path.replace("\\", "/")
     while normalized.startswith("./"):
         normalized = normalized[2:]
@@ -207,6 +281,15 @@ def _uri(file_path: str) -> str:
 
 
 def _run_properties(report: AnalysisReport) -> dict[str, Any]:
+    """Build the run-level properties bag that carries the gruff analysis schema version and, for a scored report, its composite score and grade.
+
+    Args:
+        report: Analysis report whose score, when present, supplies the composite score and letter grade.
+
+    Returns:
+        Properties mapping that always holds gruffSchemaVersion. It holds score and grade only when the report has a composite score; an unscored
+        report omits both keys.
+    """
     properties: dict[str, Any] = {
         "gruffSchemaVersion": ANALYSIS_SCHEMA_VERSION,
     }
@@ -217,6 +300,14 @@ def _run_properties(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _level(severity: Severity) -> str:
+    """Map a gruff severity to the SARIF result level, with advisory findings reported as note.
+
+    Args:
+        severity: Finding severity to translate.
+
+    Returns:
+        SARIF level string: error for error, warning for warning, note for advisory.
+    """
     return {
         Severity.ERROR: "error",
         Severity.WARNING: "warning",

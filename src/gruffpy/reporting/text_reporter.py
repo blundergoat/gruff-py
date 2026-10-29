@@ -92,6 +92,15 @@ def _append_canonical_block(lines: list[str], report: AnalysisReport, counts: di
 
 
 def _append_output_volume_hint(lines: list[str], report: AnalysisReport) -> None:
+    """Append a hint that points the user at the rule-grouped summary command when the report carries at least the configured number of findings.
+
+    A threshold of zero or less disables the hint. The suggested command quotes each requested path for the shell and drops the trailing space when no
+    paths were requested.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives a blank line, the hint and the suggested command in place.
+        report: Run result supplying the hint threshold, the findings to count and the requested paths repeated in the suggested command.
+    """
     threshold = report.output_volume_hint_threshold
     if threshold <= 0:
         return
@@ -105,6 +114,13 @@ def _append_output_volume_hint(lines: list[str], report: AnalysisReport) -> None
 
 
 def _append_path_section(lines: list[str], title: str, paths: tuple[str, ...]) -> None:
+    """Append a titled listing with one indented line per path, or nothing when the path list is empty.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives a blank line, the title and the paths in place.
+        title: Section heading printed above the paths, such as Missing paths.
+        paths: Paths to list in the order given; an empty tuple suppresses the whole section, heading included.
+    """
     if not paths:
         return
     lines.append("")
@@ -114,6 +130,14 @@ def _append_path_section(lines: list[str], title: str, paths: tuple[str, ...]) -
 
 
 def _append_ignored_section(lines: list[str], report: AnalysisReport) -> None:
+    """Append the Ignored paths listing, annotating each path with the source and matching pattern that excluded it when the report records them.
+
+    A path with no recorded detail prints bare, and a detail without a pattern prints its source alone. Nothing is appended when no path was ignored.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives the section in place.
+        report: Run result supplying the ignored paths in display order and the per-path details matched to them by path.
+    """
     if not report.ignored_paths:
         return
     details = {detail.path: detail for detail in report.ignored_path_details}
@@ -130,6 +154,12 @@ def _append_ignored_section(lines: list[str], report: AnalysisReport) -> None:
 
 
 def _append_config_warnings(lines: list[str], report: AnalysisReport) -> None:
+    """Append the Config warnings section with one indented line per warning, or nothing when the configuration produced no warnings.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives the section in place.
+        report: Run result whose config warnings are printed verbatim in the order recorded.
+    """
     if not report.config_warnings:
         return
     lines.append("")
@@ -139,6 +169,17 @@ def _append_config_warnings(lines: list[str], report: AnalysisReport) -> None:
 
 
 def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]) -> None:
+    """Append the Diagnostics section, one line per run diagnostic.
+
+    Each line prints the upper-cased diagnostic type in brackets, its best available location and its message. The location is the file path with the
+    line appended when both are known, otherwise the file path alone, otherwise the input path; a line number recorded without a file path is dropped
+    from the location. A diagnostic with neither a file path nor an input path prints only its type and message. Nothing is appended when there are no
+    diagnostics.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives the section in place.
+        diagnostics: Run diagnostics recorded on the report, rendered in order; an empty tuple suppresses the section.
+    """
     if not diagnostics:
         return
     lines.append("")
@@ -157,6 +198,18 @@ def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]
 
 
 def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
+    """Append the Baseline section describing the baseline this run used or generated.
+
+    It reports the path, source, entry count, generation flag, suppressed findings, stale evaluation and stale-entry count. When the run generated the
+    baseline, a tip tells the user to commit it and rerun: a plain gruff-py analyse when the baseline source is default, which the baseline module
+    assigns to any file named gruff-baseline.json, otherwise a rerun with the --baseline flag and the shell-quoted path. When the run did not generate
+    the baseline and it has stale entries, the tip suggests regenerating it after review instead. Nothing is appended when the report carries no
+    baseline.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives the section in place.
+        report: Run result whose baseline extension supplies the reported fields; a missing baseline means no section is rendered.
+    """
     baseline = report.extensions.baseline
     if baseline is None:
         return
@@ -287,6 +340,16 @@ def _append_score(lines: list[str], report: AnalysisReport) -> None:
 
 
 def _append_findings(lines: list[str], findings: tuple[Finding, ...]) -> None:
+    """Append the Findings section with one line per finding, or an indented None when the report holds no findings.
+
+    Unlike the optional sections rendered before it, the blank separator and the Findings heading always print. Each finding line is unindented,
+    starts with a dash and carries the severity in brackets, the file path with the line appended when known, the rule ID, and the message after a
+    second dash.
+
+    Args:
+        lines: Terminal output lines collected for the current analysis journey; receives the section in place.
+        findings: Findings to render in the order given; an empty tuple renders the heading followed by None.
+    """
     lines.append("")
     lines.append("Findings")
     if not findings:
