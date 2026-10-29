@@ -93,10 +93,7 @@ class TestNamingConsistencyRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message=(
-                    f"File mixes {len(snake)} snake_case test name(s) and "
-                    f"{len(camel)} camelCase test name(s); pick one style."
-                ),
+                message=(f"File mixes {len(snake)} snake_case test name(s) and {len(camel)} camelCase test name(s); pick one style."),
                 file_path=unit.file.display_path,
                 line=1,
                 severity=definition.default_severity,
@@ -105,9 +102,7 @@ class TestNamingConsistencyRule(Rule):
                 confidence=definition.confidence,
                 end_line=1,
                 symbol=None,
-                remediation=(
-                    "Use one naming convention for tests (snake_case is idiomatic in pytest)."
-                ),
+                remediation=("Use one naming convention for tests (snake_case is idiomatic in pytest)."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "snakeCaseCount": len(snake),
@@ -130,13 +125,9 @@ def _walk_test_functions(
     tree: ast.Module,
 ) -> Iterator[ast.FunctionDef | ast.AsyncFunctionDef]:
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(
-            "test"
-        ):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test"):
             yield node
         elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
             for child in node.body:
-                if isinstance(
-                    child, ast.FunctionDef | ast.AsyncFunctionDef
-                ) and child.name.startswith("test"):
+                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) and child.name.startswith("test"):
                     yield child

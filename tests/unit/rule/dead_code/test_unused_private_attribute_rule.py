@@ -29,26 +29,14 @@ def _ctx() -> RuleContext:
 
 
 def test_assigned_never_read_fires():
-    src = (
-        "class C:\n"
-        "    def __init__(self):\n"
-        "        self._x = 1\n"
-        "    def m(self):\n"
-        "        return 1\n"
-    )
+    src = "class C:\n    def __init__(self):\n        self._x = 1\n    def m(self):\n        return 1\n"
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
     assert findings[0].metadata["attribute"] == "_x"
 
 
 def test_assigned_and_read_does_not_fire():
-    src = (
-        "class C:\n"
-        "    def __init__(self):\n"
-        "        self._x = 1\n"
-        "    def m(self):\n"
-        "        return self._x\n"
-    )
+    src = "class C:\n    def __init__(self):\n        self._x = 1\n    def m(self):\n        return self._x\n"
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx())
     assert findings == []
 
@@ -72,26 +60,12 @@ def test_abc_subclass_skipped():
 
 
 def test_property_backing_field_skipped():
-    src = (
-        "class C:\n"
-        "    @property\n"
-        "    def x(self):\n"
-        "        return self._x\n"
-        "    @x.setter\n"
-        "    def x(self, value):\n"
-        "        self._x = value\n"
-    )
+    src = "class C:\n    @property\n    def x(self):\n        return self._x\n    @x.setter\n    def x(self, value):\n        self._x = value\n"
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_assigned_in_one_method_read_in_another():
-    src = (
-        "class C:\n"
-        "    def setup(self):\n"
-        "        self._cached = compute()\n"
-        "    def use(self):\n"
-        "        return self._cached\n"
-    )
+    src = "class C:\n    def setup(self):\n        self._cached = compute()\n    def use(self):\n        return self._cached\n"
     findings = UnusedPrivateAttributeRule().analyse(_unit(src), _ctx())
     assert findings == []

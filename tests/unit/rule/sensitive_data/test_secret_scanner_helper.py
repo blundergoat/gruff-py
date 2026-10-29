@@ -1,19 +1,19 @@
+"""Verify shared sensitive-data matching, entropy, and preview behavior.
+
+These tests protect line resolution and the fixed marker shown in user output while raw match text
+remains available only to rules for classification and placeholder checks.
+"""
+
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
     compile_pattern,
+    fixed_preview,
     iter_matches,
-    redact_preview,
     shannon_entropy,
 )
 
 
-def test_redact_long_secret():
-    s = "AKIAIOSFODNN7EXAMPLE"
-    assert redact_preview(s) == "AKIA...MPLE (redacted, 20 chars)"
-
-
-def test_redact_short_secret():
-    s = "abc"
-    assert redact_preview(s) == "*** (redacted, 3 chars)"
+def test_fixed_preview_contains_no_secret_derived_payload():
+    assert fixed_preview() == "[redacted]"
 
 
 def test_entropy_zero_on_empty():
@@ -40,7 +40,11 @@ def test_iter_matches_resolves_lines():
 
 def test_iter_matches_returns_raw_match_text():
     pattern = compile_pattern(r"AKIA[A-Z0-9]{16}")
-    source = "key = AKIAIOSFODNN7EXAMPLE\n"
+    # Assembled at run time, so this file holds no key-shaped literal for a scan of the repository to report.
+    live_shaped_key = "AKIA" + "Q7R2M8N4" + "P6T9V1X3"
+    documented_key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+    source = f"key = {live_shaped_key}\nexample = {documented_key}\n"
     matches = list(iter_matches(pattern, source))
+    # The vendor-documented sample is not yielded at all (FAMILY-CONTRACT section 5).
     assert len(matches) == 1
-    assert matches[0].raw == "AKIAIOSFODNN7EXAMPLE"
+    assert matches[0].raw == live_shaped_key

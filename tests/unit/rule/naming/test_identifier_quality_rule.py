@@ -138,9 +138,7 @@ def test_domain_numbers_do_not_fire():
 def test_todo_work_queue_name_does_not_fire() -> None:
     """Keep a populated and consumed user work queue out of placeholder results."""
     # A user may collect actionable tasks and immediately process that queue.
-    user_source = (
-        "todo = [task for task in tasks if task.ready]\nfor task in todo:\n    consume(task)\n"
-    )
+    user_source = "todo = [task for task in tasks if task.ready]\nfor task in todo:\n    consume(task)\n"
 
     user_findings = IdentifierQualityRule().analyse(_unit(user_source), _ctx())
 

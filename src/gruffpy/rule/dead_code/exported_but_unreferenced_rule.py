@@ -12,7 +12,8 @@ honesty - the run-level partial-context caveat still renders).
 Reference model (name-based, conservative): any load of the name - calls,
 attribute access (``module.symbol``), decorator usage, base classes,
 annotations, ``getattr(x, "symbol")`` string literals - counts as use, in any
-file including tests. Aliased imports (``from m import foo as bar``) count as
+file including tests and files ``paths.ignore`` keeps out of the report, which
+contribute references but never produce a finding. Aliased imports (``from m import foo as bar``) count as
 use of ``foo`` (the alias indicates intent the model cannot follow). Same-name
 symbols in different modules collapse together, so collisions produce false
 negatives, never false positives.
@@ -66,6 +67,10 @@ class ExportedButUnreferencedRule:
         Medium confidence: the reference model is name-based rather than
         import-resolved, so it errs toward false negatives (any same-name
         use anywhere counts), and it only runs with full-project context.
+        Opt-in: a library's public API exists for callers outside the
+        repository, and packaging entry points, string registration and
+        framework hooks are references the scan cannot see, so on the family
+        corpus one sampled finding in twelve was real.
 
         Returns:
             Definition for the exported-but-unreferenced rule under the
@@ -78,6 +83,7 @@ class ExportedButUnreferencedRule:
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
             default_options={"entryPointPatterns": []},
         )
 
@@ -101,7 +107,8 @@ class ExportedButUnreferencedRule:
         candidates = _export_candidates(parsed_units)
         if not candidates:
             return []
-        used_names = _used_names([tree for _, tree in parsed_units])
+        # Files that configured ignore globs keep out of the report still call the project's symbols.
+        used_names = _used_names([tree for _, tree in parsed_units] + list(context.reference_trees))
         findings: list[Finding] = []
         for candidate in candidates:
             if candidate.name in used_names:
@@ -115,6 +122,16 @@ class ExportedButUnreferencedRule:
 def _export_candidates(
     parsed_units: list[tuple[AnalysisUnit, ast.Module]],
 ) -> list[_ExportCandidate]:
+    """Collect the public top-level functions and classes of non-test units as candidates for the unreferenced check.
+
+    Args:
+        parsed_units: Each analysis unit paired with its parsed module tree; units that _is_test_unit classifies as test files contribute no
+            candidates.
+
+    Returns:
+        Candidates in unit order and then module body order, one per top-level function, async function or class whose name does not start with an
+        underscore; empty when none qualify.
+    """
     candidates: list[_ExportCandidate] = []
     for unit, tree in parsed_units:
         if _is_test_unit(unit):
@@ -129,15 +146,19 @@ def _export_candidates(
 
 
 def _is_test_unit(unit: AnalysisUnit) -> bool:
+    """Match a unit's display path against test-file naming, so _export_candidates draws no candidates from it.
+
+    Args:
+        unit: Analysis unit whose display path is checked after backslashes are normalised to forward slashes.
+
+    Returns:
+        True when any directory segment of the path is exactly tests, or the file name starts with test_, ends with _test.py, or is conftest.py; False
+        otherwise.
+    """
     display_path = unit.file.display_path.replace("\\", "/")
     parts = display_path.split("/")
     name = parts[-1]
-    return (
-        "tests" in parts[:-1]
-        or name.startswith("test_")
-        or name.endswith("_test.py")
-        or name == "conftest.py"
-    )
+    return "tests" in parts[:-1] or name.startswith("test_") or name.endswith("_test.py") or name == "conftest.py"
 
 
 def _used_names(trees: list[ast.Module]) -> set[str]:
@@ -148,6 +169,13 @@ def _used_names(trees: list[ast.Module]) -> set[str]:
     skipped. Everything else - loads, attribute access, ``getattr`` string
     literals, aliased imports, and names inside quoted/forward-reference
     annotations - marks the name as used.
+
+    Args:
+        trees: Module trees to walk: the scanned units plus the context's reference trees from files kept out of the report.
+
+    Returns:
+        Every name that _node_references contributes from any node in any tree; a candidate whose name is missing from the set has no counted
+        reference.
     """
     used: set[str] = set()
     for tree in trees:
@@ -157,7 +185,16 @@ def _used_names(trees: list[ast.Module]) -> set[str]:
 
 
 def _node_references(node: ast.AST) -> set[str]:
-    """References a single node contributes (loads, attrs, imports, annotations)."""
+    """References a single node contributes (loads, attrs, imports, annotations).
+
+    Args:
+        node: One AST node visited by the project walk in _used_names.
+
+    Returns:
+        The id of a Name load, the attribute name of any Attribute node, the last dotted segment of each import name that has an alias (imports
+        without an alias contribute nothing), the names _forward_reference_names finds in a function's return annotation or a parameter or annotated
+        assignment annotation, or the second-argument string that _getattr_string_literal extracts from a bare getattr call; empty for any other node.
+    """
     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
         return {node.id}
     if isinstance(node, ast.Attribute):
@@ -173,12 +210,15 @@ def _node_references(node: ast.AST) -> set[str]:
 
 
 def _getattr_string_literal(node: ast.AST) -> str | None:
-    if not (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
-        and len(node.args) >= 2
-    ):
+    """Extract the string-literal attribute name passed to a bare getattr call, so that lookup counts as a reference.
+
+    Args:
+        node: AST node to test; only a call whose callee is the bare name getattr with at least two positional arguments qualifies.
+
+    Returns:
+        The string value of the second positional argument; None when the node is not such a call or that argument is not a string constant.
+    """
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr" and len(node.args) >= 2):
         return None
     literal = node.args[1]
     if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
@@ -187,13 +227,18 @@ def _getattr_string_literal(node: ast.AST) -> str | None:
 
 
 def _forward_reference_names(annotation: ast.expr | None) -> set[str]:
-    """Names referenced inside an annotation, including quoted forward refs.
+    """Collect the names written inside string constants of an annotation, which the plain Name walk never sees.
 
-    A fully quoted annotation (``-> "Payload"``) or a quoted element inside a
-    generic (``list["Payload"]``) is an ``ast.Constant`` string that the plain
-    ``Name`` walk never sees. Each string constant in the annotation is parsed
-    as an expression and its ``Name`` loads count as references, so the rule's
-    "annotations count as use" contract holds for forward references too.
+    A fully quoted annotation (``-> "Payload"``) or a quoted element inside a generic (``list["Payload"]``) is a string constant, so each string
+    constant found in the annotation is parsed by _names_in_expression. Unquoted names in the same annotation are not returned here; the project walk
+    already counts them as Name loads.
+
+    Args:
+        annotation: Annotation expression to search, or None when the function has no return annotation or the parameter has no annotation.
+
+    Returns:
+        Names and attribute names parsed from every string constant in the annotation; empty when the annotation is None, contains no string constant,
+        or none of its string constants parse.
     """
     if annotation is None:
         return set()
@@ -205,6 +250,15 @@ def _forward_reference_names(annotation: ast.expr | None) -> set[str]:
 
 
 def _names_in_expression(text: str) -> set[str]:
+    """Parse a quoted annotation string as an expression and collect the names and attribute names it mentions.
+
+    Args:
+        text: Value of a string constant taken from an annotation.
+
+    Returns:
+        The id of every Name node and the attribute name of every Attribute node in the parsed expression; empty when parsing the text raises
+        SyntaxError.
+    """
     try:
         parsed = ast.parse(text, mode="eval")
     except SyntaxError:
@@ -225,23 +279,42 @@ def _is_exempt(
     allowlist: DeadCodeAllowlist,
     entry_point_patterns: tuple[str, ...],
 ) -> bool:
+    """Decide whether a framework decorator, the dead-code allowlist or an entry-point pattern exempts a candidate.
+
+    Args:
+        candidate: Public top-level definition with no counted reference.
+        allowlist: The allowlists.deadCode config, matched against the candidate's display path, its name, and the name forms of its decorators from
+            _decorator_name_forms; the decorator match is skipped when no decorator yields a name form.
+        entry_point_patterns: Values of the rule's entryPointPatterns option, matched case-sensitively with fnmatch against the symbol name; empty
+            disables this check.
+
+    Returns:
+        True when has_framework_decorator accepts the definition, the allowlist matches its display path, name or decorator name forms, or its name
+        matches an entry-point pattern; False otherwise.
+    """
     if has_framework_decorator(candidate.node):
         return True
     if allowlist.matches_path(candidate.unit.file.display_path):
         return True
     if allowlist.matches_symbol(candidate.name):
         return True
-    decorator_names = tuple(
-        name
-        for decorator in candidate.node.decorator_list
-        for name in _decorator_name_forms(decorator)
-    )
+    decorator_names = tuple(name for decorator in candidate.node.decorator_list for name in _decorator_name_forms(decorator))
     if decorator_names and allowlist.matches_decorator(decorator_names):
         return True
     return any(fnmatch.fnmatchcase(candidate.name, pattern) for pattern in entry_point_patterns)
 
 
 def _decorator_name_forms(decorator: ast.expr) -> tuple[str, ...]:
+    """Derive the name forms of one decorator, unwrapping a call, for matching against the dead-code decorator allowlist.
+
+    Args:
+        decorator: Decorator expression; for a call such as ``@app.route("/")`` the callee is used instead.
+
+    Returns:
+        The dotted name joined from the attribute chain and its root name, plus the final segment alone when the dotted name has more than one segment
+        (app.route gives app.route and route); a chain rooted in something other than a name contributes only its attribute segments; empty when the
+        unwrapped expression is neither an attribute nor a name.
+    """
     target = decorator.func if isinstance(decorator, ast.Call) else decorator
     parts: list[str] = []
     while isinstance(target, ast.Attribute):
@@ -256,6 +329,17 @@ def _decorator_name_forms(decorator: ast.expr) -> tuple[str, ...]:
 
 
 def _build_finding(definition: RuleDefinition, candidate: _ExportCandidate) -> Finding:
+    """Build the finding that reports a public function or class with no counted reference in the full-project scan.
+
+    Args:
+        definition: Rule definition whose id, default severity, pillar, tier, confidence and secondary pillars are copied onto the finding.
+        candidate: Unreferenced, non-exempt public definition; its name, unit display path and node line span locate the finding.
+
+    Returns:
+        Finding at the candidate's display path spanning the definition node's start and end lines, with a message naming it as a public class or
+        function, the fixed remediation text, its symbol field set to the candidate name, and metadata recording the symbol, kind and full-project
+        scope.
+    """
     kind = "class" if isinstance(candidate.node, ast.ClassDef) else "function"
     return Finding(
         rule_id=definition.id,

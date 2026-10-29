@@ -109,10 +109,7 @@ class StaticAnalysisRedundantTestRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.HIGH,
-            description=(
-                "Flags tests whose main assertion appears to verify only a static "
-                "source declaration visible in the same parsed file."
-            ),
+            description=("Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file."),
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -366,15 +363,7 @@ def _is_compound_statement(stmt: ast.stmt) -> bool:
     """Return whether a class-body statement has nested bodies the class scope runs."""
     return isinstance(
         stmt,
-        ast.If
-        | ast.For
-        | ast.AsyncFor
-        | ast.While
-        | ast.With
-        | ast.AsyncWith
-        | ast.Try
-        | ast.TryStar
-        | ast.Match,
+        ast.If | ast.For | ast.AsyncFor | ast.While | ast.With | ast.AsyncWith | ast.Try | ast.TryStar | ast.Match,
     )
 
 
@@ -438,9 +427,7 @@ def _collect_attribute_rebinding_path(target: ast.expr, parts: _ClassParts) -> N
 
 def _class_decl_from_parts(qualified: str, parts: _ClassParts) -> _ClassDecl:
     """Build an immutable class declaration from collected mutable parts."""
-    ambiguous_members = frozenset(
-        name for name, kinds in parts.binding_kinds.items() if len(kinds) > 1
-    )
+    ambiguous_members = frozenset(name for name, kinds in parts.binding_kinds.items() if len(kinds) > 1)
     decl = _ClassDecl(
         qualified,
         frozenset(parts.methods),
@@ -460,11 +447,7 @@ def _record_binding(bindings: dict[str, set[str]], name: str, kind: str) -> None
 
 def _bound_names(target: ast.AST) -> set[str]:
     """Return names rebound by an assignment/delete target."""
-    return {
-        node.id
-        for node in ast.walk(target)
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del)
-    }
+    return {node.id for node in ast.walk(target) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del)}
 
 
 def _import_bound_names(node: ast.Import | ast.ImportFrom) -> set[str]:
@@ -636,12 +619,7 @@ def _match_assertion(
     """
     if isinstance(node, ast.Assert):
         return _candidate_for_shape(node.test, classes, ambiguous, local_shadows)
-    if (
-        isinstance(node, ast.Call)
-        and call_target_name(node) == "self.assertTrue"
-        and node.args
-        and not isinstance(node.args[0], ast.Starred)
-    ):
+    if isinstance(node, ast.Call) and call_target_name(node) == "self.assertTrue" and node.args and not isinstance(node.args[0], ast.Starred):
         return _candidate_for_shape(node.args[0], classes, ambiguous, local_shadows)
     return None
 
@@ -847,8 +825,7 @@ def _finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"{symbol} contains a static-analysis-redundant candidate: "
-            f"{match.helper} asserts {match.evidence_symbol}, but {match.static_fact}."
+            f"{symbol} contains a static-analysis-redundant candidate: {match.helper} asserts {match.evidence_symbol}, but {match.static_fact}."
         ),
         file_path=unit.file.display_path,
         line=getattr(node, "lineno", None),
@@ -858,10 +835,7 @@ def _finding(
         confidence=definition.confidence,
         end_line=getattr(node, "end_lineno", None),
         symbol=symbol,
-        remediation=(
-            "Remove only the redundant assertion, or replace it with behavioral "
-            "evidence that static analysis cannot prove."
-        ),
+        remediation=("Remove only the redundant assertion, or replace it with behavioral evidence that static analysis cannot prove."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "variant": match.variant,

@@ -1,7 +1,7 @@
 """``test-quality.setup-bloat`` - ``setUp`` / ``setup_method`` / fixture is too long.
 
 A setup that's longer than the typical test signals over-shared state. Default
-threshold: 30 lines. Uses the ``lines_for_size`` helper.
+threshold: 30 code lines, measured with the shared ``lines_for_size`` helper.
 """
 
 import ast
@@ -16,11 +16,9 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import call_target_name
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 
-_SETUP_NAMES: frozenset[str] = frozenset(
-    {"setUp", "setUpClass", "setup_method", "setup_class", "setup_function", "setup"}
-)
+_SETUP_NAMES: frozenset[str] = frozenset({"setUp", "setUpClass", "setup_method", "setup_class", "setup_function", "setup"})
 
 
 class SetupBloatRule(Rule):
@@ -45,6 +43,7 @@ class SetupBloatRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
             default_thresholds={"maxSetupLines": 30},
         )
 
@@ -52,8 +51,8 @@ class SetupBloatRule(Rule):
         """Flag ``setUp``/``setup_method``/``@pytest.fixture`` bodies over ``maxSetupLines`` lines.
 
         Matches ``setUp``, ``setUpClass``, ``setup_method``, ``setup_class``,
-        ``setup_function``, ``setup`` by name, plus any function decorated
-        with a ``@*.fixture`` call.
+        ``setup_function`` by name. Plain ``setup`` also needs a conventional
+        test path. Any function decorated with a ``@*.fixture`` call remains eligible.
 
         Args:
             unit: Parsed source file to inspect.
@@ -72,9 +71,9 @@ class SetupBloatRule(Rule):
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            if not _is_setup(node):
+            if not _is_setup(node, unit.file.absolute_path):
                 continue
-            lines = lines_for_size(node)
+            lines = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
             if lines <= threshold:
                 continue
             parents = parent_chain(node)
@@ -82,9 +81,7 @@ class SetupBloatRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Setup {symbol!r} is {lines} lines, above the threshold of {threshold}."
-                    ),
+                    message=(f"Setup {symbol!r} is {lines} lines, above the threshold of {threshold}."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,
@@ -93,10 +90,7 @@ class SetupBloatRule(Rule):
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Shrink the shared setup - extract object factories, narrow what "
-                        "each test actually needs."
-                    ),
+                    remediation=("Shrink the shared setup - extract object factories, narrow what each test actually needs."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"lines": lines, "threshold": threshold},
                 ),
@@ -104,11 +98,25 @@ class SetupBloatRule(Rule):
         return findings
 
 
-def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    if fn.name in _SETUP_NAMES:
+def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef, source_path: str) -> bool:
+    if fn.name in _SETUP_NAMES and (fn.name != "setup" or _is_test_setup_path(source_path)):
         return True
-    return any(
-        (call_target_name(d) or "").split(".")[-1] == "fixture"
-        for d in fn.decorator_list
-        if isinstance(d, ast.Call)
+    return any((call_target_name(d) or "").split(".")[-1] == "fixture" for d in fn.decorator_list if isinstance(d, ast.Call))
+
+
+def _is_test_setup_path(source_path: str) -> bool:
+    """Recognize test paths before treating plain ``setup`` as a test hook.
+
+    Args:
+        source_path: Full source path, retaining test directories for explicit-file scans.
+
+    Returns:
+        True for test directories, conftest.py, or conventional test-file names.
+    """
+    *directories, filename = source_path.replace("\\", "/").lower().split("/")
+    return (
+        any(directory in {"test", "tests"} for directory in directories)
+        or filename == "conftest.py"
+        or (filename.startswith("test_") and filename.endswith(".py"))
+        or filename.endswith("_test.py")
     )

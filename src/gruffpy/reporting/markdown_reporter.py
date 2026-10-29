@@ -39,26 +39,27 @@ class MarkdownReporter:
         lines = [
             "# gruff-py report",
             "",
-            (
-                f"**Grade:** {score.composite.letter if score is not None else 'n/a'} "
-                f"({_score_value(score)})"
-            ),
+            (f"**Grade:** {'n/a' if score is None or score.composite is None else score.composite.letter} ({_score_value(score)})"),
             f"**Scoring mode:** {scoring_mode}",
         ]
 
         # No runner caveat means Markdown must not invent a full scan-context claim.
         if report.partial_context_caveat is not None:
             lines.append(f"**Scan context:** {_md(report.partial_context_caveat)}")
-        lines.append(
-            f"**Findings:** {counts['total']} total, {counts['error']} error, "
-            f"{counts['warning']} warning, {counts['advisory']} advisory"
-        )
+        lines.append(f"**Findings:** {counts['total']} total, {counts['error']} error, {counts['warning']} warning, {counts['advisory']} advisory")
 
         # Active filters remain visible so users know why some findings are hidden.
         if report.filters is not None and report.filters.is_active():
-            lines.append(
-                f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`"
-            )
+            lines.append(f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`")
+
+        if report.diagnostics:
+            lines.extend(["", "## Diagnostics", ""])
+            for diagnostic in report.diagnostics:
+                location = diagnostic.file_path or diagnostic.path
+                if diagnostic.file_path is not None and diagnostic.line is not None:
+                    location = f"{diagnostic.file_path}:{diagnostic.line}"
+                suffix = "" if location is None else f" `{_md(location)}`"
+                lines.append(f"- **{_md(diagnostic.type)}**{suffix} - {_md(diagnostic.message)}")
 
         lines.extend(
             [
@@ -82,6 +83,18 @@ class MarkdownReporter:
 
 
 def _score_value(score: object | None) -> str:
+    """Format the composite score shown beside the grade in the report header.
+
+    Args:
+        score: Score report for the run; None for a diagnostic-only report with no score, and any object without a composite attribute is treated the
+            same way.
+
+    Returns:
+        The composite score with two decimals followed by /100, or n/a when there is no score report or it has no composite attribute.
+
+    Raises:
+        AttributeError: When the score report's composite is None, as on a run that scores no file; that case is not mapped to n/a.
+    """
     if score is None or not hasattr(score, "composite"):
         return "n/a"
     composite = score.composite
@@ -109,15 +122,31 @@ def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
 
 
 def _pillar_row(pillar: PillarScore) -> str:
+    """Build one row of the Pillars table from a pillar's grade and its finding counts.
+
+    Args:
+        pillar: Applicable pillar score to show; when its grade is None both the Grade and Score cells read n/a.
+
+    Returns:
+        A pipe-delimited Markdown table row holding the pillar name, grade letter, score with two decimals, and its findings, advisory, warning and
+        error counts, with pipes escaped in the name, grade and score cells.
+    """
     grade = pillar.grade.letter if pillar.grade is not None else "n/a"
     score = f"{pillar.grade.score:.2f}" if pillar.grade is not None else "n/a"
-    return (
-        f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(score)} | "
-        f"{pillar.findings} | {pillar.advisories} | {pillar.warnings} | {pillar.errors} |"
-    )
+    return f"| {_md(pillar.pillar)} | {_md(grade)} | {_md(score)} | {pillar.findings} | {pillar.advisories} | {pillar.warnings} | {pillar.errors} |"
 
 
 def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> None:
+    """Append the finding listing that follows the Findings heading, grouped by severity and then by file.
+
+    The grouping lets reviewers fold each severity in a pull-request comment. Severities are emitted in error, warning, advisory order and a severity
+    with no findings is skipped. Each severity becomes a details element left open, whose summary is the title-cased severity and its finding count;
+    files inside it are sorted by path and each is shown as a bold path line, and findings keep their input order within a file.
+
+    Args:
+        lines: Markdown lines being built for the report; this function extends it in place.
+        findings: Findings to list; the caller only passes a non-empty tuple and writes the No findings. line itself otherwise.
+    """
     groups: dict[str, dict[str, list[Finding]]] = defaultdict(lambda: defaultdict(list))
     for finding in findings:
         groups[finding.severity.value][finding.file_path].append(finding)
@@ -136,13 +165,29 @@ def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> N
 
 
 def _finding_line(finding: Finding) -> str:
+    """Build the Markdown bullet that lists one finding under its bold file path line.
+
+    Args:
+        finding: Finding to show; a None line leaves the location as the bare file path, and a None symbol omits the symbol code span.
+
+    Returns:
+        A bullet holding the bold severity, the rule ID in a code span, the location as path or path:line, the optional symbol in a code span, and the
+        message, with pipes escaped in the rule ID, location, symbol and message but not the severity.
+    """
     location = finding.file_path if finding.line is None else f"{finding.file_path}:{finding.line}"
     symbol = "" if finding.symbol is None else f" `{_md(finding.symbol)}`"
-    return (
-        f"- **{finding.severity.value}** `{_md(finding.rule_id)}` "
-        f"{_md(location)}{symbol} - {_md(finding.message)}"
-    )
+    return f"- **{finding.severity.value}** `{_md(finding.rule_id)}` {_md(location)}{symbol} - {_md(finding.message)}"
 
 
 def _md(value: str) -> str:
+    """Escape pipe characters so a value cannot split a Markdown table cell.
+
+    Only pipes are escaped; every other Markdown character passes through unchanged, even though callers also use this outside the Pillars table.
+
+    Args:
+        value: Text to place in the Markdown output.
+
+    Returns:
+        The value with each pipe preceded by a backslash.
+    """
     return value.replace("|", "\\|")

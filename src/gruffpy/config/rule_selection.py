@@ -45,13 +45,17 @@ class RuleSelection:
         return definition.id not in self.exclude_rules
 
     def _is_included(self, definition: "RuleDefinition") -> bool:
+        """Match a rule against the include lists before exclusions are applied.
+
+        Args:
+            definition: Registered rule whose tier, pillar and id are compared with the include selectors.
+
+        Returns:
+            True when every include list is empty or any include selector matches; exclusions are checked by the caller.
+        """
         if not self.tiers and not self.pillars and not self.rules:
             return True
-        return (
-            definition.tier.value in self.tiers
-            or definition.pillar.value in self.pillars
-            or definition.id in self.rules
-        )
+        return definition.tier.value in self.tiers or definition.pillar.value in self.pillars or definition.id in self.rules
 
     def to_dict(self) -> dict[str, list[str]]:
         """Serialise the selection into the camelCase shape used in report metadata.

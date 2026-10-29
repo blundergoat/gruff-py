@@ -25,9 +25,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import imported_module_names
 
-_REQUEST_ATTRS: frozenset[str] = frozenset(
-    {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
-)
+_REQUEST_ATTRS: frozenset[str] = frozenset({"json", "form", "args", "GET", "POST", "data", "query_params", "values"})
 
 
 class ExtractCompactUserInputRule(Rule):
@@ -88,10 +86,7 @@ class ExtractCompactUserInputRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            "User-controlled dict splatted into a function's keyword "
-                            "arguments (`**request.<attr>`)."
-                        ),
+                        message=("User-controlled dict splatted into a function's keyword arguments (`**request.<attr>`)."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -100,8 +95,7 @@ class ExtractCompactUserInputRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         remediation=(
-                            "Extract explicit fields by name (`request.json['x']`) and "
-                            "pass them positionally or via known keyword arguments."
+                            "Extract explicit fields by name (`request.json['x']`) and pass them positionally or via known keyword arguments."
                         ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},

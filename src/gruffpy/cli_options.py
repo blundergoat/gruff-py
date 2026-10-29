@@ -13,6 +13,7 @@ import click
 
 from gruffpy.analysis.baseline import DEFAULT_BASELINE_FILENAME
 from gruffpy.cli_state import state as _state
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.severity import Severity
@@ -27,7 +28,7 @@ def was_fail_on_set_on_cli() -> bool:
     """Return True when the user explicitly passed ``--fail-on`` on the command line.
 
     Distinguishes the user's deliberate choice from Click's default-value fill-in,
-    so the precedence rule (CLI flag > ``minimumSeverity.<cmd>`` > binary default)
+    so the precedence rule (CLI flag > ``failOn.<cmd>`` > binary default)
     only consults the configured override when no CLI value was supplied.
 
     Returns:
@@ -76,6 +77,15 @@ def apply_decorators(function: _F, decorators: Iterable[ClickDecorator]) -> _F:
 
 
 def _ignored_flag_option(name: str, help_text: str) -> Callable[[_F], _F]:
+    """Accept a compatibility flag without forwarding it to the command implementation.
+
+    Args:
+        name: Option declaration accepted by Click.
+        help_text: User-facing explanation included in command help.
+
+    Returns:
+        An option decorator with a false default and no exposed command argument.
+    """
     return click.option(name, is_flag=True, default=False, expose_value=False, help=help_text)
 
 
@@ -84,10 +94,29 @@ def _ignored_string_option(
     help_text: str,
     default: str | None = None,
 ) -> Callable[[_F], _F]:
+    """Accept a compatibility value without forwarding it to the command implementation.
+
+    Args:
+        name: Option declaration accepted by Click.
+        help_text: User-facing explanation included in command help.
+        default: Value used when the option is omitted, including None when no replacement is supplied.
+
+    Returns:
+        An option decorator that parses the value but does not expose a command argument.
+    """
     return click.option(name, default=default, expose_value=False, help=help_text)
 
 
 def _ignored_path_option(name: str, help_text: str) -> Callable[[_F], _F]:
+    """Accept a compatibility path without forwarding it to the command implementation.
+
+    Args:
+        name: Option declaration accepted by Click.
+        help_text: User-facing explanation included in command help.
+
+    Returns:
+        A Path-valued option decorator with no command argument and None when omitted.
+    """
     return click.option(
         name,
         type=click.Path(path_type=Path),
@@ -98,6 +127,16 @@ def _ignored_path_option(name: str, help_text: str) -> Callable[[_F], _F]:
 
 
 def _path_option(name: str, parameter_name: str, help_text: str) -> Callable[[_F], _F]:
+    """Expose an optional CLI path under the command's chosen parameter name.
+
+    Args:
+        name: Option spelling accepted from the user.
+        parameter_name: Keyword name receiving the parsed path in the command implementation.
+        help_text: User-facing explanation included in command help.
+
+    Returns:
+        A Path-valued option decorator whose omitted value is None.
+    """
     return click.option(
         name,
         parameter_name,
@@ -108,50 +147,135 @@ def _path_option(name: str, parameter_name: str, help_text: str) -> Callable[[_F
 
 
 def _ignored_int_option(name: str, help_text: str) -> Callable[[_F], _F]:
+    """Validate a compatibility integer without exposing it to the command implementation.
+
+    Args:
+        name: Option declaration accepted by Click.
+        help_text: User-facing explanation included in command help.
+
+    Returns:
+        An integer option decorator with no exposed command argument and None when omitted.
+    """
     return click.option(name, type=int, default=None, expose_value=False, help=help_text)
 
 
 def _silent_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+    """Enable full output suppression when the silent flag is supplied.
+
+    Args:
+        ctx: Click context used to locate the shared CLI state.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: True enables silence; False leaves the existing state unchanged.
+    """
     if value:
         _state(ctx).is_silent = True
 
 
 def _quiet_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+    """Enable normal-output suppression when the quiet flag is supplied.
+
+    Args:
+        ctx: Click context used to locate the shared CLI state.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: True enables quiet mode; False leaves the existing state unchanged.
+    """
     if value:
         _state(ctx).is_quiet = True
 
 
 def _ansi_callback(ctx: click.Context, _param: click.Parameter, value: bool | None) -> None:
+    """Apply an explicit colour choice to Click and the shared CLI state.
+
+    Args:
+        ctx: Context receiving the colour choice and used to locate shared state.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: True or False forces colour on or off; None preserves both existing settings.
+    """
     if value is not None:
         ctx.color = value
         _state(ctx).should_use_ansi = value
 
 
 def _no_interaction_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+    """Disable interactive prompts when the no-interaction flag is supplied.
+
+    Args:
+        ctx: Click context used to locate the shared CLI state.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: True disables interaction; False leaves the existing state unchanged.
+    """
     if value:
         _state(ctx).is_interaction_disabled = True
 
 
 def _verbose_callback(ctx: click.Context, _param: click.Parameter, value: int) -> None:
+    """Store a requested verbosity level without clearing an existing level for zero.
+
+    Args:
+        ctx: Click context used to locate the shared CLI state.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: Requested level; a nonzero value replaces the shared verbosity setting.
+    """
     if value:
         _state(ctx).verbosity = value
 
 
 def _command_version_callback(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+    """Print the tool version and finish an ordinary version-only invocation.
+
+    Args:
+        ctx: Context whose resilient-parsing mode suppresses output and whose exit ends the command.
+        _param: Click-supplied parameter descriptor, unused by this callback.
+        value: True requests the version; False leaves command dispatch unchanged.
+
+    Raises:
+        click.exceptions.Exit: With a successful status after printing outside resilient parsing.
+    """
     if value and not ctx.resilient_parsing:
         click.echo(f"{TOOL_NAME} {VERSION}")
         ctx.exit()
 
 
 def _option(*param_decls: str, **attrs: Any) -> ClickDecorator:
+    """Create a Click option decorator with the shared command-decorator type.
+
+    Args:
+        param_decls: Option spellings and any explicit destination name passed to Click.
+        attrs: Click option settings, including parsing, help and callback behavior.
+
+    Returns:
+        The option decorator, without changing Click's parsing or registration behavior.
+    """
     return cast(ClickDecorator, click.option(*param_decls, **attrs))
 
 
 def _argument(*param_decls: str, **attrs: Any) -> ClickDecorator:
+    """Create a Click positional-argument decorator for a command signature.
+
+    Args:
+        param_decls: Argument declaration passed to Click.
+        attrs: Click argument settings such as required status, arity and value type.
+
+    Returns:
+        The argument decorator with the shared command-decorator type.
+    """
     return cast(ClickDecorator, click.argument(*param_decls, **attrs))
 
 
 def _command(*args: Any, **attrs: Any) -> ClickDecorator:
+    """Build a decorator that registers a command on the bound root group.
+
+    Args:
+        args: Positional arguments for root.command; omission lets Click derive the command name.
+        attrs: Click settings; omitted help uses the first docstring paragraph, while help=None lets Click use the full docstring.
+
+    Returns:
+        A registration decorator that fills omitted help from the command implementation's docstring.
+
+    Raises:
+        RuntimeError: When the returned decorator is applied before bind_root_group has supplied a root group.
+    """
+
     def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
         """Register *function* as a subcommand of the bound root group.
 
@@ -174,12 +298,27 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
 
 
 def _doc_summary(function: Callable[..., Any]) -> str:
-    """Return the first docstring paragraph for Click command help."""
+    """Return the first docstring paragraph for Click command help.
+
+    Args:
+        function: Command implementation whose cleaned docstring supplies its default help text.
+
+    Returns:
+        The first paragraph after indentation cleanup, or empty text when no docstring is available.
+    """
     doc = inspect.getdoc(function) or ""
     return doc.split("\n\n", 1)[0]
 
 
 def _pass_context(function: _F) -> _F:
+    """Arrange for Click to pass its current context into a command implementation.
+
+    Args:
+        function: Command callable expecting the context as its first argument.
+
+    Returns:
+        Click's context-passing wrapper, cast to the original callable type for decorator composition.
+    """
     return cast(_F, click.pass_context(function))
 
 
@@ -389,9 +528,7 @@ _GLOBAL_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _ignored_path_option("--infection-report", "Path to a full Infection JSON report to ingest."),
     _ignored_flag_option("--infection-run", "Run Infection before ingesting --infection-report."),
-    _ignored_string_option(
-        "--infection-bin", "Infection executable for --infection-run.", "infection"
-    ),
+    _ignored_string_option("--infection-bin", "Infection executable for --infection-run.", "infection"),
     _ignored_path_option("--infection-config", "Path to infection.json5 for --infection-run."),
     _ignored_string_option(
         "--infection-test-framework-options",
@@ -406,15 +543,13 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "diff_mode",
         default="",
-        help=(
-            "Filter findings to changed regions. Use working-tree, staged, unstaged, "
-            "a base ref, or - for unified diff on stdin."
-        ),
+        help=("Filter findings to changed regions. Use working-tree, staged, unstaged, a base ref, or - for unified diff on stdin."),
     ),
     _option("--since", default="", help="Git base ref for changed-region filtering."),
     _option(
         "--changed-ranges",
-        default="",
+        type=str,
+        default=None,
         help='Explicit changed line ranges such as "3-3,8-10".',
     ),
     _option(
@@ -424,8 +559,8 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         help="Changed-region scope: symbol or hunk.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -434,19 +569,33 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _path_option(
         "--baseline-path",
         "baseline_path",
-        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
+        "Superseded spelling of --baseline; identical behaviour, and it warns.",
     ),
     _option(
         "--generate-baseline",
         "generate_baseline",
-        is_flag=True,
-        default=False,
-        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}".',
+        is_flag=False,
+        flag_value=DEFAULT_BASELINE_FILENAME,
+        default=None,
+        type=click.Path(path_type=Path),
+        help=f'Write current findings to this baseline JSON file, or to "{DEFAULT_BASELINE_FILENAME}" when given no path.',
     ),
     _path_option(
         "--generate-baseline-path",
         "generate_baseline_path",
-        "Write current findings to this baseline JSON file (implies generation).",
+        "Superseded spelling of --generate-baseline; identical behaviour, and it warns.",
+    ),
+    _path_option(
+        "--migrate-baseline",
+        "migrate_baseline_path",
+        "Carry a 0.5 baseline's reviews into --generate-baseline; the original file is left untouched.",
+    ),
+    _option(
+        "--force",
+        "force_baseline_overwrite",
+        is_flag=True,
+        default=False,
+        help="Overwrite a 0.5 baseline at the default path; without it a generate that would destroy the retreat path is refused.",
     ),
     _option(
         "--no-baseline",
@@ -467,8 +616,8 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "--diff",
         "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
     ),
-    _ignored_string_option("--diff-vs", "Compare current findings against a base Git ref."),
-    _ignored_flag_option("--changed-only", "With --diff-vs, compare only changed files."),
+    _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
+    _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
     _ignored_path_option(
         "--paths-relative-to",
         "Normalize absolute finding paths relative to this directory for reports.",
@@ -491,30 +640,84 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_ANALYSIS_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values (score/exit unchanged).",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
+    ),
+    _option(
+        "--hide-rule",
+        multiple=True,
+        help="Hide these comma-separated rule IDs from the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--show-rule",
+        multiple=True,
+        help="Show only these comma-separated rule IDs in the report; execution and score are unchanged.",
+    ),
+    _option(
+        "--hide-pillar",
+        multiple=True,
+        help="Hide these comma-separated pillars from the report.",
+    ),
+    _option(
+        "--show-pillar",
+        multiple=True,
+        help="Show only these comma-separated pillars in the report.",
     ),
     _option(
         "--min-severity",
         type=click.Choice([s.value for s in Severity]),
         default=None,
         help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--min-confidence",
+        type=click.Choice([c.value for c in Confidence]),
+        default=None,
+        help="Lowest confidence that reaches the exit gate: low, medium, or high. Never filters the report.",
+    ),
+    _option(
+        "--fail-on-new",
+        is_flag=True,
+        default=False,
+        help="Exit 1 when any finding is new against the applied baseline, whatever its severity.",
+    ),
+    _ignored_string_option(
+        "--scan-timeout",
+        "Parsed and accepted for cross-port compatibility; gruff-py enforces no scan deadline on analyse.",
+        "",
+    ),
+    _option(
+        "--diff-base",
+        default="",
+        help="The ref a diff is taken against. Canonical spelling of --diff-vs.",
+    ),
+    _option(
+        "--baseline",
+        "baseline",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Apply this baseline v3 file. Canonical spelling of --baseline-path.",
     ),
     _option(
         "--include-ignored",
@@ -544,7 +747,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help=(
             "Finding severity that fails the run: advisory, warning, error, or none. "
             "Gates findings only; parse errors exit 2 even with --fail-on none. "
-            "Overridden by minimumSeverity.analyse in .gruff-py.yaml when --fail-on "
+            "Overridden by failOn.analyse in .gruff-py.yaml when --fail-on "
             "is not passed explicitly."
         ),
     ),
@@ -574,10 +777,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -585,6 +785,11 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--report-interactive",
         is_flag=True,
@@ -610,11 +815,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         default=False,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Diff-only dashboard scans: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDiff-only dashboard scans: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--no-config",
@@ -644,11 +845,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         show_default=True,
         expose_value=False,
         # Keep the ratified phrase searchable on one help line for terminal users.
-        help=(
-            "\b\n"
-            "Dashboard scan timeouts: accepted for cross-port compatibility; "
-            "not implemented in gruff-py."
-        ),
+        help=("\b\nDashboard scan timeouts: accepted for cross-port compatibility; not implemented in gruff-py."),
     ),
     _option(
         "--port",
@@ -661,9 +858,7 @@ _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--allow-public",
         is_flag=True,
         default=False,
-        help=(
-            "Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."
-        ),
+        help=("Acknowledge the risk of binding the unauthenticated dashboard to a non-loopback host."),
     ),
     _option(
         "--host",
@@ -700,24 +895,29 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
     *_REPORT_COMPAT_DECORATORS,
     _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    _option(
         "--exclude-rule",
         multiple=True,
-        help="Hide these comma-separated rule IDs or repeated values.",
+        help="Do not run these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--include-rule",
         multiple=True,
-        help="Display only these comma-separated rule IDs or repeated values.",
+        help="Run only these comma-separated rule IDs or repeated values; the score moves with them.",
     ),
     _option(
         "--exclude-pillar",
         multiple=True,
-        help="Hide these comma-separated pillars or repeated values.",
+        help="Do not run rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--include-pillar",
         multiple=True,
-        help="Display only these comma-separated pillars or repeated values.",
+        help="Run only rules in these comma-separated pillars or repeated values.",
     ),
     _option(
         "--min-severity",
@@ -770,10 +970,7 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _option(
         "--output",
@@ -795,6 +992,11 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
 
 _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
     *_GLOBAL_COMMAND_DECORATORS,
+    _option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
     _option(
         "--include-ignored",
         is_flag=True,
@@ -846,10 +1048,7 @@ _SUMMARY_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "strict_config",
         is_flag=True,
         default=False,
-        help=(
-            "Fail on unknown rule-level config keys instead of warning and "
-            "continuing with that rule's defaults."
-        ),
+        help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
     _command(),
@@ -933,10 +1132,7 @@ _INIT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         "--force",
         is_flag=True,
         default=False,
-        help=(
-            "Regenerate a valid .gruff-py.yaml while preserving all supported settings; "
-            "comments and formatting may change."
-        ),
+        help=("Regenerate a valid .gruff-py.yaml while preserving all supported settings; comments and formatting may change."),
     ),
     _command(),
 )

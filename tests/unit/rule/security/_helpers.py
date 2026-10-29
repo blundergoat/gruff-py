@@ -1,6 +1,7 @@
 """Shared test helpers for security-pillar rule tests."""
 
 import ast
+from dataclasses import replace
 
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.parser.analysis_unit import AnalysisUnit
@@ -58,4 +59,22 @@ def default_ctx() -> RuleContext:
         Default ``RuleContext`` for the security pillar.
     """
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
+    return RuleContext(project_root="/tmp/no-such-root", config=config)
+
+
+def ctx_enabling(*rule_ids: str) -> RuleContext:
+    """Build the default ``RuleContext`` with the named rules switched on, as a project that enables them would.
+
+    Used for rules that ship off by default, so their detection stays tested.
+
+    Args:
+        rule_ids: Ids of built-in rules to enable; an empty call gives the default context.
+
+    Returns:
+        Default ``RuleContext`` with every named rule enabled.
+    """
+    config = AnalysisConfig.from_registry(RuleRegistry.defaults())
+    # Each named rule keeps its default thresholds and options; only ``enabled`` changes.
+    for rule_id in rule_ids:
+        config = config.with_rule_settings(rule_id, replace(config.rule_settings(rule_id), enabled=True))
     return RuleContext(project_root="/tmp/no-such-root", config=config)

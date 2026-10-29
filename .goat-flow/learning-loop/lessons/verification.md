@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-12
+last_reviewed: 2026-10-17
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -101,7 +101,7 @@ hypotheses, not just verification claims.
 ## Lesson: Run targeted formatting before broad verification on dirty surfaces
 
 **Created:** 2026-05-18
-**Updated:** 2026-07-12
+**Updated:** 2026-10-17
 **Incident:** During M25, `uv run ruff format --check src tests` mixed a new
 touched-file formatting issue with pre-existing unrelated formatting drift
 outside the patch. The correction was to run `uv run ruff format` only on the
@@ -131,9 +131,13 @@ the start. Then rerun the touched focused tests. This separates agent-owned
 formatting from unrelated drift and prevents a later assertion split from
 invalidating an otherwise final gate ladder.
 
+**Recurrence 2026-10-17:** The return-documentation repair's formatter left a 151-character remediation string, and Ruff lint rejected it with E501. Split adjacent string literals without changing the emitted text, then rerun both lint and formatter checks on the written paths. Evidence: `src/gruffpy/rule/docs/missing_return_doc_rule.py` (search: `_missing_return_doc_finding`); the corrected focused run passed 25 tests.
+
 ## Lesson: Re-run raw-source analyzers after formatting fixture strings
 
 **Created:** 2026-05-18
+**Incident count:** 5
+**Latest occurrence:** 2026-10-17
 **Incident:** While removing `docs.todo-density` findings from
 `src/gruffpy/rule/sensitive_data/hardcoded_env_value_rule.py`,
 `tests/unit/rule/docs/test_todo_density_rule.py`,
@@ -163,6 +167,14 @@ When a rule scans raw source text and tests need runtime strings containing
 trigger tokens, use a construction that the formatter will not fold back into
 the raw token, such as `"".join(("TO", "DO"))`, and re-run the analyzer after
 formatting rather than trusting the unit test alone.
+
+**Recurrence 2026-10-03:** CI's Gruff self-check failed partly on an existing
+split, `tests/unit/rule/sensitive_data/test_pii_test_fixture_rule.py` (search: `_GROUPED_DECIMAL`):
+`"1,234," + "567.1234567"` still matched `_PHONE_RE` because its second half
+alone is a 3-3-4 digit run. A split must leave no single literal that matches
+the trigger; `"567." + "1234567"` cleared it with the same runtime value.
+
+**Recurrence 2026-10-17:** The silent-except repair and its unfinished-handling test exposed raw marker literals to the density rule. Preserve their runtime words with formatter-stable joins, then format and rerun the selected analyzer. No suppression or density threshold changed. Evidence: `src/gruffpy/rule/security/silent_except_rule.py` (search: `_UNFINISHED_MARKERS`) and `tests/unit/rule/security/test_silent_except_rule.py` (search: `unfinished-handling`).
 
 ## Lesson: Test directive parsers against reason delimiters before dogfood
 
@@ -224,6 +236,23 @@ config must mirror `RuleRegistry.defaults()`.
 When adding or removing a built-in rule, grep and update `.gruff-py.yaml`
 alongside the catalog, generated docs, fixtures, and focused rule tests before
 running broad verification.
+
+**Recurrence 2026-10-17:** The M02 f-string pilot removed the rule's settings and selection but left its sole `modernisation` pillar in `selection.pillars`. Full pytest failed `test_repo_yaml_lists_every_pillar_in_catalog_order` in `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`. Retiring a pillar's last rule also removes that pillar from the mirrored selection; the schema's pillar enum remains unchanged. Run the whole registry-coverage test before full pytest. The pilot also corrected formatter drift before its final proof.
+
+**Recurrence 2026-10-17, remaining M02 retirements:** A broader run found five stale expectations: the security count, generated Markdown settings, retired-rule prose, committed generated docs and a different heuristic's documentation shape. Read count-only assertions and generated prose as well as literal rule IDs. Preserve config, suppression, calculation and shared-rule controls with surviving representatives; rerun the original failing selection.
+
+The full native preflight then rejected four historical rule IDs and its documentation mutation control: historical prose must say "retired" or "removed" and a numeric version on the same line. Mark the actual retirement as 0.6.0 rather than deleting useful history or weakening scripts/preflight-checks.sh (search: phantom). The corrected original gate reports All 13/13 checks passed, including seven rejected documentation mutations.
+
+## Lesson: include surrounding delimiters when pruning catalogue literals
+
+**Created:** 2026-10-17
+**Decision changed:** Remove an entire catalogue entry, including grouping parentheses, and parse every prospective Python edit before applying it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** An AST constant's span ends at its last string token, before optional grouping parentheses. Include the delimiters and entry comma when removing metadata. Keep syntax validation ahead of source writes.
+
+M02's in-memory draft left two closing parentheses after removing the Halstead and maintainability provenance strings. `ast.parse` rejected it before a source write. Corrected spans removed the entries; `src/gruffpy/rule/catalog.py` (search: `_FORMULA_PROVENANCE`) retains cyclomatic provenance. Ruff also caught two long preserved fixture literals and an import-group gap. Splitting the literals kept their source bytes, and the native fixture and calibration checks were rerun.
 
 ## Lesson: Inspect each item's body before bucketing tests for bulk deletion
 
@@ -294,70 +323,6 @@ the false positive before broader checks.
 When converting dynamic rule discovery to source scanning, explicitly exclude
 support contract modules such as `project_rule.py` and keep the predicate tied
 to concrete rule implementation files, not just filename suffixes.
-
-## Lesson: Re-run the dogfood gate after adding branches, even when the change "feels small"
-
-**Created:** 2026-05-25
-**Updated:** 2026-06-10
-**Incident:** While fixing a config-loader bug (Codex PR #3 review), the agent
-added two `if "<key>" in allowlists:` guards inside `_apply_allowlists` to stop
-silently clobbering seeded defaults. The functional change was trivial - two
-membership checks - but the self-check `uv run gruff-py analyse src tests
---fail-on advisory` then surfaced a new `error`-severity finding:
-`complexity.npath` reporting NPATH 972 (>500 error threshold) on
-`ConfigLoader._apply_allowlists`. Evidence anchors: `src/gruffpy/config/loader.py`
-(search: `_validate_string_list_allowlists`) shows the helper split that brought
-NPATH back below 500. The `complexity.npath` rule was later removed in the
-0.3.0 plan, but the verification lesson still applies: the fix was to extract
-two helpers (`_validate_string_list_allowlists` and `_apply_present_allowlists`)
-so each function's branch count stayed local.
-
-When extending any function that already had multiple `if` guards or `or`/`and`
-short-circuits, run `uv run gruff-py analyse <changed-file> --fail-on advisory`
-before claiming the change is low-impact - NPATH multiplies branches, so each
-new `if` can push a function past the project's own complexity gate. Prefer
-extracting a per-key helper over chaining additional conditionals at the same
-nesting level.
-
-The same trap recurred on 2026-06-05 while fixing
-`test-quality.static-analysis-redundant-test` false positives:
-`scripts/preflight-checks.sh` passed lint, mypy, docs, tests, and build, but the
-Gruff self-check failed on `src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`
-(search: `def _build_class_table`, search: `def _class_decl`) for nested,
-cognitive, and cyclomatic complexity introduced by extra AST rebinding guards.
-The correction was to extract statement-target and class-body collection helpers
-(search: `def _module_bound_names`, search: `def _collect_class_child`) so the
-runtime behaviour stayed covered by the same regression tests while the dogfood
-gate could verify the implementation.
-
-The same trap recurred on 2026-06-10 while adding custom generated-docs text
-for `sensitive-data.pii-test-fixture`: focused tests, ruff, mypy, and docs
-checks passed, but `uv run gruff-py analyse src/ tests/ --fail-on none
---format json` reported `size.file-length` and `size.function-length` on
-`src/gruffpy/rule/catalog.py` for the then-monolithic `_custom_docs_for` factory.
-The correction was to compact the new `RuleDocs` text so `catalog.py` stayed
-under 1000 lines and that factory stayed at the 100-line threshold; the per-rule
-custom-docs factories have since been extracted to
-`src/gruffpy/rule/catalog_docs.py` (search: `def custom_docs_for`).
-
-The trap recurred during scalar Boolean annotation work: one new
-`BooleanPrefixRule` match arm raised `custom_docs_for` from the allowed
-cyclomatic complexity of 20 to 21 even though focused tests, ruff, mypy, and
-generated-doc checks were green. The correction shares one naming-rule match
-arm and dispatches both naming documentation factories through
-`_naming_rule_docs` (same file), preserving the existing branch count without
-removing either rule card. Before extending a near-threshold dispatcher, share
-an existing family arm or extract a branch-free keyed dispatch, then rerun root
-dogfood.
-
-The same two shapes recurred during cross-module private-function liveness
-work. A separate dead-code catalog arm again raised `custom_docs_for` to 21,
-while one 118-line import/load collector crossed cyclomatic, cognitive,
-maintainability, and function-length thresholds. Sharing the dead-code arm via
-branch-free keyed dispatch and splitting binding collection from attribute/name
-load handling removed all five errors without changing focused outcomes. Treat
-one materialized AST walk as a data boundary, not a reason to keep both
-in-memory processing stages in one function.
 
 ## Lesson: Suppression directives need a `--` rationale suffix or docs.ignore-directive-reason fires
 
@@ -476,56 +441,6 @@ surfaces and any posture map that asserts whole rule families. Run
 rule-family tests, not only the new rule's focused test, before considering the
 catalogue stable.
 
-## Lesson: Reproduce rule false-positive claims by running `gruff-py analyse` on a crafted fixture
-
-**Created:** 2026-06-04
-**Incident:** Assessing PR #5 coding-agent review claims that the new
-`test-quality.static-analysis-redundant-test` rule emits false positives, the
-agent verified by writing a small crafted test file and running
-`uv run gruff-py analyse <dir> --format json --no-baseline`, then filtering the
-JSON for the rule id. This confirmed four real false positives plus a
-genuine-positive control - far stronger than code-reading alone - and separated a
-real-but-rare bot finding (class-body nested rebind, kept) from a real-but-exotic
-one with an over-broad proposed fix (metaclass hiding a method, fix rejected). The
-first run returned `0` findings and grade A because the scratch path
-`/tmp/gruff_repro` matched gruff-py's default ignore pattern `tmp`: the report
-showed `filesDiscovered: 0`, `exitCode: 0`, `Composite: A (100.00 / 100)` -
-visually identical to a clean pass. Recovered by re-running with
-`--include-ignored`, which parsed the file and flagged all four.
-
-When a review (bot or human) claims a rule fires, misses, or false-positives,
-reproduce it by running `gruff-py analyse` on a minimal crafted fixture and
-reading the findings for that rule id before agreeing or fixing - this is the
-rule-behaviour analog of the `CliRunner` lesson above for CLI claims. Two gotchas:
-(1) put the fixture on a path NOT covered by gruff-py's default ignores (anything
-containing `tmp`, plus gitignored paths) or pass `--include-ignored`, because an
-all-ignored scan reports zero findings, grade A, and exit 0 - check
-`summary.filesParsed`/`filesDiscovered` before trusting a clean result. (2)
-Include a known true-positive control in the fixture so a `0`-findings result
-proves the rule is silent, not that the harness is mis-wired.
-
-**Updated:** 2026-06-10. While implementing
-`test-quality.extends-production-class`, the first CLI true-positive scratch
-used `.goat-flow/scratchpad/0.4.0-M01/test_production_base.py` and returned
-zero target findings even though the source shape was `class TestX(ProductionY)`.
-Reading `src/gruffpy/rule/test_quality/extends_production_class_rule.py`
-(search: `def _is_test_file`) showed the rule only runs for paths under
-`tests/` or a top-level `test_*.py`; a nested filename alone is not enough. The
-scratch repro passed only after moving it to
-`.goat-flow/scratchpad/0.4.0-M01/tests/test_production_base.py`.
-
-When crafting rule repros, mirror the rule's path gate as well as its source
-shape. A true-positive source fixture can still report zero findings when the
-file path prevents the rule from running.
-
-**Updated:** 2026-07-12. The first ambiguous-module CLI proof used `app` and
-`vendor` as duplicate package source roots, but discovery default-ignored the
-latter; only one producer reached the resolver and the expected two LOW
-findings did not appear. Replacing the second temporary root with `lib` made
-the duplicate visible and the full matrix passed. For multi-file ambiguity
-fixtures, verify every intended path appears in discovery (or deliberately use
-`--include-ignored`) before interpreting resolver counts.
-
 ## Lesson: Module-scope invalidation walks must cover nested statement blocks
 
 **Created:** 2026-06-10
@@ -545,6 +460,10 @@ before accepting or rejecting it. Fixed by walking module scope with
 function/class/lambda bodies pruned and invalidating every Store-context
 ALL-CAPS name outside its recording assignment (search:
 `_module_scope_rebound_names`).
+`security.sql-concatenation` was retired in 0.6.0 (ADR-029); the collector
+still feeds `security.variable-import`
+(`src/gruffpy/rule/security/variable_import_rule.py`, search:
+`module_string_constants(unit.tree)`).
 
 When an allowlist depends on "single assignment at module scope", iterating
 `tree.body` alone is not single-assignment proof: rebinds hide in nested
@@ -564,9 +483,9 @@ proving scope pruning still propagates legitimate constants.
 source-text scanners run on unparseable files, so a single file like
 `def f():\n    pass\n  bad = 1` crashed the entire `gruff-py analyse` run with
 an uncaught traceback - the registry has no per-rule exception isolation.
-Second, fixing the rule did not fix the crash: the new integration test
-(`tests/integration/test_cli_smoke.py`, search:
-`tokenizer_error_file_reports_parse_error`) still failed because
+Second, fixing the rule did not fix the crash: the new integration test,
+`tests/integration/test_cli_smoke.py` (search: `test_analyse_parse_error_exits_2_even_with_fail_on_none`),
+still failed because
 `src/gruffpy/suppression/parser.py` (search: `_comment_tokens`) and
 `src/gruffpy/rule/docs/_comment_scanner.py` had copies of the same narrow
 `except tokenize.TokenError`. All three now catch

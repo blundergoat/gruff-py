@@ -55,13 +55,14 @@ class HtmlReporter:
             Complete single-file HTML document (no external assets).
         """
         score = report.score
-        grade = score.composite.letter if score is not None else "n/a"
-        numeric_score = f"{score.composite.score:.2f} / 100" if score is not None else "n/a"
+        # Two different absences: scoring never ran, or it ran and found nothing to evaluate. The
+        # second must not render a number, because that is how an empty scan used to read as perfect.
+        composite = None if score is None else score.composite
+        grade = "n/a" if composite is None else composite.letter
+        numeric_score = ("n/a" if score is None else "not evaluated") if composite is None else f"{composite.score:.2f} / 100"
         counts = report.finding_counts()
         title = f"gruff-py inspection report - {grade}"
-        script = (
-            f'<script type="module">{_INTERACTIVE_SCRIPT}</script>\n' if self.interactive else ""
-        )
+        script = f'<script type="module">{_INTERACTIVE_SCRIPT}</script>\n' if self.interactive else ""
 
         return (
             "<!DOCTYPE html>\n"
@@ -136,6 +137,14 @@ class HtmlReporter:
         )
 
     def _diagnostics(self, report: AnalysisReport) -> str:
+        """Render the diagnostics section that lists every run diagnostic recorded on the report.
+
+        Args:
+            report: Analysis report whose diagnostics are rendered, one row each, in their stored order.
+
+        Returns:
+            Diagnostics section HTML, or an empty string when the report carries no diagnostics.
+        """
         if not report.diagnostics:
             return ""
         rows = "".join(_diagnostic_row(diagnostic) for diagnostic in report.diagnostics)
@@ -152,6 +161,18 @@ class HtmlReporter:
         counts: dict[str, int],
         report: AnalysisReport,
     ) -> str:
+        """Render the verdict section that pairs the grade stamp with the headline summary and the total, error, warning and advisory counts.
+
+        Args:
+            grade: Composite grade letter shown large in the stamp, or n/a when the report has no composite grade.
+            numeric_score: Preformatted score text shown under the grade: the composite score out of 100, n/a when scoring never ran, or not evaluated
+                when scoring found nothing to evaluate.
+            counts: Severity counts from AnalysisReport.finding_counts, read by the total, error, warning and advisory keys.
+            report: Analysis report whose warning and error findings supply the distinct pillar count in the headline summary.
+
+        Returns:
+            Verdict section HTML with every text value escaped.
+        """
         summary = _verdict_summary(report, counts)
         return (
             '<section class="verdict">'
@@ -170,12 +191,18 @@ class HtmlReporter:
         )
 
     def _pillars(self, report: AnalysisReport) -> str:
+        """Render the pillar table: grade, score and per-severity finding counts of each applicable pillar.
+
+        Rows run from most findings to fewest, then by pillar name.
+
+        Args:
+            report: Analysis report whose optional score supplies the applicable pillar rows.
+
+        Returns:
+            Pillar section HTML; the table holds a single No pillars. row when the report has no score or no applicable pillar.
+        """
         rows = _pillar_summary_rows(report)
-        body = (
-            "".join(_pillar_row(row) for row in rows)
-            if rows
-            else '<tr><td colspan="7">No pillars.</td></tr>'
-        )
+        body = "".join(_pillar_row(row) for row in rows) if rows else '<tr><td colspan="7">No pillars.</td></tr>'
         return (
             '<section class="pillars"><h2 class="section-head">pillars '
             '<span class="aside">weighted composite</span></h2>'
@@ -191,6 +218,17 @@ class HtmlReporter:
         )
 
     def _offenders(self, report: AnalysisReport) -> str:
+        """Render the top-offender table of files with their worst complexity, length, finding count and grade.
+
+        Each row shows the highest cyclomatic and cognitive complexity and the largest line count from the file's file, function or class length
+        findings. Rows keep the order of the score's top_offenders list; this method does not sort them.
+
+        Args:
+            report: Analysis report whose optional score supplies the top offenders.
+
+        Returns:
+            Offender section HTML; the table holds a single No offenders found. row when the report has no score or the score lists no offenders.
+        """
         items = () if report.score is None else report.score.top_offenders
         rows = "".join(self._offender_row(item) for item in items)
         if not rows:
@@ -206,19 +244,28 @@ class HtmlReporter:
         )
 
     def _distribution(self, report: AnalysisReport) -> str:
+        """Render the histogram of cyclomatic-complexity findings, one bar per complexity band.
+
+        The caption gives how many of those findings exceed CC 10. Each bar height is the band count as a percentage of the largest band count, never
+        below 4 percent; the 11-15 band uses the warn style and the 16-20 and 21+ bands use the fail style.
+
+        Args:
+            report: Analysis report whose score supplies the band counts; it must carry a score.
+
+        Returns:
+            Distribution section HTML with the caption, one bar per band and the band labels on the axis.
+
+        Raises:
+            TypeError: When report.score is None, because the empty distribution leaves max() only the integer 1.
+        """
         distribution = {} if report.score is None else report.score.complexity_distribution
         max_count = max(1, *distribution.values())
         bars = []
         axis = []
         for label, count in distribution.items():
             height = max(4, round((count / max_count) * 100))
-            class_name = (
-                " fail" if label in {"16-20", "21+"} else " warn" if label == "11-15" else ""
-            )
-            bars.append(
-                f'<div class="bar{class_name}" style="height:{height}%;">'
-                f'<span class="count">{count}</span></div>'
-            )
+            class_name = " fail" if label in {"16-20", "21+"} else " warn" if label == "11-15" else ""
+            bars.append(f'<div class="bar{class_name}" style="height:{height}%;"><span class="count">{count}</span></div>')
             axis.append(f"<span>{_esc(label)}</span>")
         return (
             '<section class="chart-section"><h2 class="section-head">distribution '
@@ -230,6 +277,17 @@ class HtmlReporter:
         )
 
     def _findings(self, report: AnalysisReport) -> str:
+        """Render the flagged-findings section listing every report finding in report order, with the filter form added for interactive reports.
+
+        In interactive mode the list also carries the data-findings-list attribute that the inline filter script looks up.
+
+        Args:
+            report: Analysis report whose findings are listed.
+
+        Returns:
+            Findings section HTML whose heading counts every report finding; the list holds a single No findings. placeholder when the report has
+            none.
+        """
         filters = self._finding_filters(report) if self.interactive else ""
         attributes = " data-findings-list" if self.interactive else ""
         rows = "".join(self._finding_row(finding) for finding in report.findings)
@@ -243,6 +301,14 @@ class HtmlReporter:
         )
 
     def _footer(self, report: AnalysisReport) -> str:
+        """Render the footer that records the gruff-py version stored in the report and the analysis schema version this build writes.
+
+        Args:
+            report: Analysis report supplying the tool version.
+
+        Returns:
+            Footer HTML with both version strings escaped.
+        """
         return (
             '<footer class="footer">'
             f'<div class="left">gruff-py - v{_esc(report.tool_version)}</div>'
@@ -252,7 +318,15 @@ class HtmlReporter:
         )
 
     def _offender_row(self, file_score: FileScore) -> str:
-        grade = file_score.grade.letter.lower()
+        """Render one top-offender table row for a file, linking its path to the configured editor when an editor link is available.
+
+        Args:
+            file_score: Per-file score; a missing metric value or a missing grade renders as n/a.
+
+        Returns:
+            Table row HTML with the file location, the three metric cells, the finding count and the grade pill.
+        """
+        grade = "na" if file_score.grade is None else file_score.grade.letter.lower()
         return (
             "<tr>"
             f'<td class="file-path">{self._location_markup(file_score.file_path, None)}</td>'
@@ -260,11 +334,22 @@ class HtmlReporter:
             f'<td class="num">{_esc(_optional_int(file_score.max_cognitive))}</td>'
             f'<td class="num">{_esc(_optional_int(file_score.max_lines))}</td>'
             f'<td class="num">{file_score.findings}</td>'
-            f'<td class="num"><span class="grade-pill {grade}">{_esc(file_score.grade.letter)}</span></td>'
+            f'<td class="num"><span class="grade-pill {grade}">{_esc("n/a" if file_score.grade is None else file_score.grade.letter)}</span></td>'
             "</tr>"
         )
 
     def _finding_row(self, finding: Finding) -> str:
+        """Render one finding as a block showing its severity, rule ID, message, location and pillar.
+
+        In interactive mode the block also carries data attributes for severity, pillar, file, rule and a search text made of the rule ID and message,
+        which the inline filter script reads.
+
+        Args:
+            finding: Finding to render; its severity selects the fail, warn or note style class.
+
+        Returns:
+            Finding block HTML with every text and attribute value escaped.
+        """
         severity_class = {
             "error": "fail",
             "warning": "warn",
@@ -293,6 +378,17 @@ class HtmlReporter:
         )
 
     def _location_markup(self, file_path: str, line: int | None) -> str:
+        """Render a file location as an editor link when one can be built, otherwise as a focusable span.
+
+        Both forms carry the location text in a data-path attribute.
+
+        Args:
+            file_path: Path as stored on the finding or file score; it is shown as given and made absolute only for the editor link.
+            line: Line number shown as path:line and passed to the editor link, or None to show and link the file alone.
+
+        Returns:
+            Escaped anchor or span HTML whose text is the path or path:line.
+        """
         text = file_path if line is None else f"{file_path}:{line}"
         href = self._editor_href(file_path, line)
         location_attribute = f' data-path="{_escape_attribute(text)}"'
@@ -301,6 +397,19 @@ class HtmlReporter:
         return f'<span class="loc-link" tabindex="0"{location_attribute}>{_esc(text)}</span>'
 
     def _editor_href(self, file_path: str, line: int | None) -> str | None:
+        """Build the editor deep link for a location in the style chosen by the reporter's editor_link setting.
+
+        The vscode style yields vscode://file followed by the URL-quoted absolute path and an optional :line suffix; the phpstorm style yields
+        phpstorm://open?file= with the quoted path and an optional &line= parameter.
+
+        Args:
+            file_path: Report path; a relative path is joined onto the project root, or the current working directory when no root was given, before
+                quoting.
+            line: Line to open at, or None to open the file without a line.
+
+        Returns:
+            The vscode or phpstorm URL, or None when editor_link is none or any other value, which leaves the location unlinked.
+        """
         if self.editor_link == "none":
             return None
         absolute_path = self._absolute_path(file_path)
@@ -313,17 +422,34 @@ class HtmlReporter:
         return None
 
     def _absolute_path(self, file_path: str) -> str:
+        """Resolve a report path for editor links against the project root, or the working directory without one.
+
+        Args:
+            file_path: Report path; a value starting with / is treated as absolute and returned unchanged.
+
+        Returns:
+            The path unchanged when it starts with /, otherwise the root joined with the relative path.
+        """
         if file_path.startswith("/"):
             return file_path
         root = self.project_root or str(Path.cwd())
         return str(Path(root) / file_path)
 
     def _finding_filters(self, report: AnalysisReport) -> str:
+        """Render the interactive finding filter form.
+
+        It has severity and pillar multi-selects, path and free-text search fields, group-by radios and a clear button. The pillar options list only
+        the pillars present in the report's findings, sorted by name, and the pillar select shows between two and six rows. The count output starts
+        with every finding shown; the inline script rewrites it as filters change.
+
+        Args:
+            report: Analysis report whose findings supply the pillar options and the initial count.
+
+        Returns:
+            Filter form HTML placed above the findings list.
+        """
         pillars = sorted({finding.pillar.value for finding in report.findings})
-        pillar_options = "".join(
-            f'<option value="{_escape_attribute(pillar)}">{_esc(pillar)}</option>'
-            for pillar in pillars
-        )
+        pillar_options = "".join(f'<option value="{_escape_attribute(pillar)}">{_esc(pillar)}</option>' for pillar in pillars)
         pillar_size = max(2, min(6, len(pillars)))
         return (
             '<form class="finding-filters" data-finding-filters aria-label="Filter flagged findings">'
@@ -346,6 +472,15 @@ class HtmlReporter:
         )
 
     def _css(self, include_diagnostics: bool = False) -> str:
+        """Assemble the inline stylesheet, appending the diagnostics and filter styles only when the report uses them.
+
+        Args:
+            include_diagnostics: True when the report has diagnostics, which appends the diagnostics styles; the filter styles follow the reporter's
+                interactive flag instead.
+
+        Returns:
+            The base stylesheet text with any optional style blocks appended.
+        """
         css = _BASE_CSS
         if include_diagnostics:
             css += _DIAGNOSTICS_CSS
@@ -375,6 +510,14 @@ def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
 
 
 def _pillar_row(pillar: PillarScore) -> str:
+    """Render one pillar table row with its grade pill, score to two decimals and finding counts by severity.
+
+    Args:
+        pillar: Applicable pillar score; a missing grade renders n/a for both grade and score and uses the muted n style class.
+
+    Returns:
+        Table row HTML with the pillar name, grade pill, score, total findings and the advisory, warning and error counts.
+    """
     grade = pillar.grade.letter if pillar.grade is not None else "n/a"
     grade_class = grade[:1].lower() if pillar.grade is not None else "n"
     score = "n/a" if pillar.grade is None else f"{pillar.grade.score:.2f}"
@@ -392,25 +535,46 @@ def _pillar_row(pillar: PillarScore) -> str:
 
 
 def _meta_row(label: str, value: str) -> str:
-    return (
-        f'<div><span class="label">{_esc(label)}</span><span class="val">{_esc(value)}</span></div>'
-    )
+    """Render one label and value pair for the masthead metadata block.
+
+    Args:
+        label: Caption shown before the value, such as paths or scoring mode.
+        value: Text shown after the label.
+
+    Returns:
+        Escaped label and value HTML.
+    """
+    return f'<div><span class="label">{_esc(label)}</span><span class="val">{_esc(value)}</span></div>'
 
 
 def _stat(number: str, label: str, class_name: str) -> str:
-    return (
-        f'<div class="stat"><div class="num {_escape_attribute(class_name)}">{_esc(number)}</div>'
-        f'<div class="lbl">{_esc(label)}</div></div>'
-    )
+    """Render one counter tile for the statistics row of the verdict section.
+
+    Args:
+        number: Count text shown large.
+        label: Caption under the number, such as findings or errors.
+        class_name: Style class for the number, fail, warn or note, or empty for the neutral total.
+
+    Returns:
+        Escaped stat tile HTML.
+    """
+    return f'<div class="stat"><div class="num {_escape_attribute(class_name)}">{_esc(number)}</div><div class="lbl">{_esc(label)}</div></div>'
 
 
 def _diagnostic_row(diagnostic: RunDiagnostic) -> str:
+    """Render one run diagnostic with its type, message and, when known, its location.
+
+    Args:
+        diagnostic: Diagnostic to render; its location is file_path:line when both are set, else file_path, else path, and the location is omitted
+            when none is available.
+
+    Returns:
+        Diagnostic row HTML with every value escaped.
+    """
     location = diagnostic.file_path or diagnostic.path
     if diagnostic.file_path is not None and diagnostic.line is not None:
         location = f"{diagnostic.file_path}:{diagnostic.line}"
-    location_html = (
-        "" if location is None else f'<span class="diagnostic-location">{_esc(location)}</span>'
-    )
+    location_html = "" if location is None else f'<span class="diagnostic-location">{_esc(location)}</span>'
     return (
         '<div class="diagnostic">'
         f'<span class="diagnostic-type">{_esc(diagnostic.type)}</span>'
@@ -420,44 +584,76 @@ def _diagnostic_row(diagnostic: RunDiagnostic) -> str:
 
 
 def _verdict_summary(report: AnalysisReport, counts: dict[str, int]) -> str:
+    """Write the verdict headline sentence counting warning and error findings and the distinct pillars they span, leaving advisories out.
+
+    Args:
+        report: Analysis report whose warning and error findings determine the pillar count.
+        counts: Severity counts from AnalysisReport.finding_counts; only the warning and error keys are read.
+
+    Returns:
+        No warning or error findings flagged. when neither severity occurs, otherwise a sentence of the form N findings at warning or error severity
+        across M pillars, with the singular word when a count is one.
+    """
     threshold_findings = counts["warning"] + counts["error"]
     if threshold_findings == 0:
         return "No warning or error findings flagged."
-    pillars = {
-        finding.pillar.value
-        for finding in report.findings
-        if finding.severity.value in {"warning", "error"}
-    }
+    pillars = {finding.pillar.value for finding in report.findings if finding.severity.value in {"warning", "error"}}
     finding_label = "finding" if threshold_findings == 1 else "findings"
     pillar_label = "pillar" if len(pillars) == 1 else "pillars"
-    return (
-        f"{threshold_findings} {finding_label} at warning or error severity "
-        f"across {len(pillars)} {pillar_label}."
-    )
+    return f"{threshold_findings} {finding_label} at warning or error severity across {len(pillars)} {pillar_label}."
 
 
 def _cyclomatic_summary(distribution: dict[str, int]) -> str:
+    """Write the histogram caption counting cyclomatic-complexity findings above CC 10 and their split across the 11-15, 16-20 and 21+ bands.
+
+    Args:
+        distribution: Band counts keyed by band label; a missing band counts as zero.
+
+    Returns:
+        One sentence giving the total above CC 10 followed by the per-band counts in parentheses, with singular wording when the total is one.
+    """
     moderate = distribution.get("11-15", 0)
     high = distribution.get("16-20", 0)
     severe = distribution.get("21+", 0)
     exceeds = moderate + high + severe
     method_label = "function" if exceeds == 1 else "functions"
     verb = "exceeds" if exceeds == 1 else "exceed"
-    return (
-        f"{exceeds} {method_label} {verb} CC 10 "
-        f"({moderate} in 11-15, {high} in 16-20, {severe} at 21+)."
-    )
+    return f"{exceeds} {method_label} {verb} CC 10 ({moderate} in 11-15, {high} in 16-20, {severe} at 21+)."
 
 
 def _optional_int(value: int | None) -> str:
+    """Format an optional metric for a table cell, showing n/a when the value is absent.
+
+    Args:
+        value: Metric value, or None when the file has no such measurement.
+
+    Returns:
+        The decimal string, or n/a for None.
+    """
     return "n/a" if value is None else str(value)
 
 
 def _esc(value: str) -> str:
+    """Escape text for HTML element content, including both quote characters.
+
+    Args:
+        value: Raw text to place in the document.
+
+    Returns:
+        The text with &, <, > and both quote characters escaped.
+    """
     return html.escape(value, quote=True)
 
 
 def _escape_attribute(value: str) -> str:
+    """Escape text for a double-quoted HTML attribute value.
+
+    Args:
+        value: Raw text such as a path, rule ID or URL.
+
+    Returns:
+        The text with &, <, > and both quote characters escaped.
+    """
     return html.escape(value, quote=True)
 
 

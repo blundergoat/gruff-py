@@ -29,11 +29,7 @@ def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
         yield from cast(tuple[FunctionLike, ...], cached)
         return
 
-    functions = tuple(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
-    )
+    functions = tuple(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda))
     setattr(tree, _FUNCTION_CACHE_ATTR, functions)
     yield from functions
 
@@ -65,6 +61,18 @@ def body_nodes(fn: FunctionLike) -> Iterator[ast.AST]:
 
 
 def _walk_skip_nested(node: ast.AST) -> Iterator[ast.AST]:
+    """Walk a subtree depth-first, yielding a nested function, lambda, or class node but not its contents.
+
+    The boundary check runs after the node is yielded, so a nested definition node is still produced, but none of its children are visited, including
+    its decorators, default argument values, and body.
+
+    Args:
+        node: Root of the subtree to walk, typically one statement from a function body; it is always yielded first, even when it is itself a nested
+            definition.
+
+    Yields:
+        Each AST node in depth-first pre-order, following ast.iter_child_nodes order below each node.
+    """
     yield node
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
         return

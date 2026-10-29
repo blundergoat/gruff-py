@@ -69,9 +69,7 @@ def classify_paths(
     Raises:
         ConfigError: When config loading fails (propagated to the CLI for exit 2).
     """
-    patterns = _load_ignore_patterns(
-        project_root=project_root, config_path=config_path, no_config=no_config
-    )
+    patterns = _load_ignore_patterns(project_root=project_root, config_path=config_path, no_config=no_config)
     discovery = SourceDiscovery(project_root)
     verdicts: list[CheckIgnoreVerdict] = []
     for raw_path in paths:
@@ -96,6 +94,19 @@ def _load_ignore_patterns(
     config_path: Path | None,
     no_config: bool,
 ) -> tuple[str, ...]:
+    """Resolve the configured paths.ignore patterns that check-ignore passes to SourceDiscovery.classify.
+
+    User config is loaded over the built-in rule defaults.
+
+    Args:
+        project_root: Directory the config loader searches for gruff-py YAML or pyproject.toml settings when no explicit config path is given.
+        config_path: Explicit config file to load instead of project-root discovery, or None to discover config under project_root.
+        no_config: When true, skip config loading entirely so no configured ignore patterns apply.
+
+    Returns:
+        The configured ignore patterns in the order the config lists them; an empty tuple when no_config is set, project-root discovery finds no
+        config file, or the loaded config declares no paths.ignore entries.
+    """
     if no_config:
         return ()
     base = AnalysisConfig.from_registry(RuleRegistry.defaults())

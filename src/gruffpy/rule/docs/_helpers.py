@@ -7,6 +7,124 @@ broader ``_python_dynamism`` helper.
 """
 
 import ast
+import re
+from collections.abc import Iterator
+
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.definition import RuleDefinition
+
+EVERY_CALLABLE_OPTION = "everyCallable"
+"""Rule option that widens a docs rule to every callable; off by default until the port's own code passes it."""
+
+
+def every_callable_enabled(context: RuleContext, definition: RuleDefinition) -> bool:
+    """Return whether a docs rule's ``everyCallable`` option is on for this run.
+
+    Args:
+        context: Rule execution context carrying the resolved rule settings.
+        definition: Definition of the rule that reads the option.
+
+    Returns:
+        True only when the project configuration turned the option on.
+    """
+    return bool(context.settings_for(definition).options.get(EVERY_CALLABLE_OPTION, False))
+
+
+def is_in_documentation_scope(name: str, *, every_callable: bool) -> bool:
+    """Return whether a callable's name puts it in a docs rule's scope.
+
+    Dunder hooks stay out of scope. Underscore-private names come into scope
+    only when the rule's ``everyCallable`` option is on.
+
+    Args:
+        name: Identifier of the function or method.
+        every_callable: Whether the rule's ``everyCallable`` option is on.
+
+    Returns:
+        True when the rule should inspect the callable.
+    """
+    if is_dunder(name):
+        return False
+    return every_callable or not name.startswith("_")
+
+
+def own_body_nodes(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+    """Yield every node in a function's own body, without entering nested scopes.
+
+    A nested function, lambda or class owns its own ``return`` and ``yield``, so
+    the walk stops at them.
+
+    Args:
+        fn: Function node whose body should be walked.
+
+    Yields:
+        Each node that belongs to the function's own scope.
+    """
+    stack: list[ast.AST] = list(fn.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+            continue
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def is_generator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a function yields from its own body.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when the function's own scope contains ``yield`` or ``yield from``.
+    """
+    return any(isinstance(node, ast.Yield | ast.YieldFrom) for node in own_body_nodes(fn))
+
+
+def returns_value(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a function's own body returns or yields a value.
+
+    A bare ``return`` and ``return None`` are not values.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when the function returns a value or is a generator.
+    """
+    for node in own_body_nodes(fn):
+        if isinstance(node, ast.Yield | ast.YieldFrom):
+            return True
+        if isinstance(node, ast.Return) and node.value is not None and not _is_none_constant(node.value):
+            return True
+    return False
+
+
+def quoted_names(names: list[str]) -> str:
+    """Return names as a quoted English list, such as ``'x', 'y' and 'z'``.
+
+    Args:
+        names: Identifiers to list, in order; at least one.
+
+    Returns:
+        The quoted names joined with commas and a final "and".
+    """
+    quoted = [repr(name) for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
+def _is_none_constant(node: ast.AST) -> bool:
+    """Return whether an expression is the literal ``None``.
+
+    Args:
+        node: Expression to test; returns_value passes the value of a return statement here.
+
+    Returns:
+        True only when the node is an ast.Constant whose value is None; False for every other node.
+    """
+    return isinstance(node, ast.Constant) and node.value is None
 
 
 def is_dunder(name: str) -> bool:
@@ -159,7 +277,16 @@ def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _decorator_name(decorator: ast.AST) -> str:
-    """Return a dotted form of *decorator* (``app.route`` for ``@app.route(...)``)."""
+    """Return a dotted form of *decorator* (``app.route`` for ``@app.route(...)``).
+
+    Args:
+        decorator: Decorator expression from a function's decorator list, or the callee or attribute base reached while recursing; a call is resolved
+            through its callee and its arguments are ignored.
+
+    Returns:
+        The dotted name joined from Name and Attribute parts; an empty string when the expression, after unwrapping calls, is neither a Name nor an
+        Attribute, and only the attribute name when an attribute's base resolves to an empty string.
+    """
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
     if isinstance(decorator, ast.Name):
@@ -168,3 +295,63 @@ def _decorator_name(decorator: ast.AST) -> str:
         prefix = _decorator_name(decorator.value)
         return f"{prefix}.{decorator.attr}" if prefix else decorator.attr
     return ""
+
+
+_WORD_PATTERN = re.compile(r"[A-Za-z]+")
+
+_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "as",
+        "at",
+        "be",
+        "by",
+        "do",
+        "does",
+        "docstring",
+        "for",
+        "from",
+        "get",
+        "gets",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "method",
+        "module",
+        "of",
+        "on",
+        "or",
+        "perform",
+        "return",
+        "returns",
+        "run",
+        "runs",
+        "set",
+        "sets",
+        "that",
+        "the",
+        "this",
+        "thing",
+        "to",
+        "value",
+        "values",
+        "with",
+    }
+)
+
+
+def _content_words(summary: str) -> list[str]:
+    """Return lowercased non-stop-word tokens from *summary*.
+
+    Args:
+        summary: Text to tokenise; callers pass a parsed docstring summary or the body of a source comment.
+
+    Returns:
+        Each run of ASCII letters, lowercased and kept in order with duplicates, after dropping single-letter words and the module's stop words; empty
+        when no word remains.
+    """
+    return [w.lower() for w in _WORD_PATTERN.findall(summary) if w.lower() not in _STOP_WORDS and len(w) > 1]
