@@ -115,6 +115,14 @@ class TestNamingConsistencyRule(Rule):
 
 
 def _is_test_file(display_path: str) -> bool:
+    """Select test filenames and tests-directory paths for naming-style comparison.
+
+    Args:
+        display_path: Display path to match without case or slash normalization.
+
+    Returns:
+        True when the basename starts test_ and ends .py, or the path starts tests/ or contains /tests/; otherwise False.
+    """
     name = Path(display_path).name
     if name.startswith("test_") and name.endswith(".py"):
         return True
@@ -124,6 +132,14 @@ def _is_test_file(display_path: str) -> bool:
 def _walk_test_functions(
     tree: ast.Module,
 ) -> Iterator[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Iterate over direct test functions and direct test methods of top-level Test-prefixed classes.
+
+    Args:
+        tree: Module whose immediate body and qualifying classes' immediate bodies are inspected.
+
+    Returns:
+        Iterator of synchronous or asynchronous definitions with names starting test, in source order; nested definitions are not visited.
+    """
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test"):
             yield node

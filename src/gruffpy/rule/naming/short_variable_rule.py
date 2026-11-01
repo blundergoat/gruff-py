@@ -81,6 +81,15 @@ def _accepted_short_names(
     context: RuleContext,
     definition: RuleDefinition,
 ) -> frozenset[str]:
+    """Resolve the short-name allowlist, falling back when its option is invalid.
+
+    Args:
+        context: Rule context used to resolve the definition's configured options.
+        definition: Rule definition identifying which settings to read.
+
+    Returns:
+        Configured acceptedShortNames as a frozen set, or the built-in names when the option is absent or is not a list of strings.
+    """
     settings = context.settings_for(definition)
     configured = settings.options.get("acceptedShortNames", list(_DEFAULT_ACCEPTED))
     if not isinstance(configured, list) or not all(isinstance(s, str) for s in configured):
@@ -93,6 +102,19 @@ def _short_variable_findings(
     definition: RuleDefinition,
     accepted: frozenset[str],
 ) -> list[Finding]:
+    """Report disallowed single-character assignment names once per name and source line.
+
+    Args:
+        unit: Source unit with a parsed AST; its display path is attached to each finding.
+        definition: Rule identity, severity, confidence and pillar metadata for the findings.
+        accepted: Exact name spellings exempt from this rule.
+
+    Returns:
+        Findings for qualifying assignments anywhere in the supplied tree, or an empty list when none qualify.
+
+    Raises:
+        AssertionError: If unit has no parsed AST.
+    """
     assert unit.tree is not None
     findings: list[Finding] = []
     seen: set[tuple[str, int]] = set()
@@ -103,6 +125,14 @@ def _short_variable_findings(
 
 
 def _assigned_names(tree: ast.AST) -> list[tuple[str, int]]:
+    """Collect assignment names from every node in the supplied AST.
+
+    Args:
+        tree: Root of the subtree to traverse, including nested definitions.
+
+    Returns:
+        Name and source-line pairs from ordinary and annotated assignments in traversal order; duplicates are retained.
+    """
     names: list[tuple[str, int]] = []
     for node in ast.walk(tree):
         names.extend(_assignment_names(node))
@@ -110,6 +140,14 @@ def _assigned_names(tree: ast.AST) -> list[tuple[str, int]]:
 
 
 def _assignment_names(node: ast.AST) -> list[tuple[str, int]]:
+    """Extract direct target names from an ordinary or annotated assignment.
+
+    Args:
+        node: AST node to classify as an ordinary assignment, annotated assignment or unrelated node.
+
+    Returns:
+        Name and source-line pairs from supported targets, or an empty list for other nodes.
+    """
     if isinstance(node, ast.Assign):
         return _assign_target_names(node)
     if isinstance(node, ast.AnnAssign):
@@ -118,6 +156,14 @@ def _assignment_names(node: ast.AST) -> list[tuple[str, int]]:
 
 
 def _assign_target_names(node: ast.Assign) -> list[tuple[str, int]]:
+    """Collect direct names from all targets of an ordinary assignment.
+
+    Args:
+        node: Ordinary assignment whose target expressions are inspected in source order.
+
+    Returns:
+        Concatenated name and source-line pairs from _target_names, or an empty list if no target contributes a name.
+    """
     names: list[tuple[str, int]] = []
     for target in node.targets:
         names.extend(_target_names(target))
@@ -125,6 +171,14 @@ def _assign_target_names(node: ast.Assign) -> list[tuple[str, int]]:
 
 
 def _target_names(target: ast.AST) -> list[tuple[str, int]]:
+    """Extract a name or the immediate names in a tuple or list assignment target.
+
+    Args:
+        target: Assignment target to inspect without recursively unpacking nested targets.
+
+    Returns:
+        Name and source-line pairs for direct names; an empty list for unsupported shapes. Nested elements are not unpacked.
+    """
     if isinstance(target, ast.Name):
         return [(target.id, target.lineno)]
     if isinstance(target, ast.Tuple | ast.List):
@@ -138,6 +192,17 @@ def _should_report_short_name(
     accepted: frozenset[str],
     seen: set[tuple[str, int]],
 ) -> bool:
+    """Accept an unseen, disallowed one-character name and remember its source occurrence.
+
+    Args:
+        name: Assigned identifier spelling to test against the allowlist.
+        lineno: Source line distinguishing separate occurrences of the same name.
+        accepted: Exact name spellings exempt from reporting.
+        seen: Previously accepted name-and-line pairs; this pair is added only when the result is True.
+
+    Returns:
+        True for a new single-character name absent from accepted; False leaves seen unchanged.
+    """
     if (name, lineno) in seen:
         return False
     if len(name) != 1 or name in accepted:
@@ -152,6 +217,17 @@ def _short_variable_finding(
     name: str,
     lineno: int,
 ) -> Finding:
+    """Build a short-variable finding for a selected assignment occurrence.
+
+    Args:
+        unit: Source unit supplying the finding's display path.
+        definition: Rule identity, severity, confidence and pillar metadata for the report.
+        name: Disallowed single-character identifier to use as the symbol and metadata value.
+        lineno: One-based source line used for both ends of the finding span.
+
+    Returns:
+        Finding identifying the variable and suggesting a descriptive name or an acceptedShortNames entry.
+    """
     return Finding(
         rule_id=definition.id,
         message=f"Variable {name!r} is single-character; prefer a descriptive name.",
@@ -170,6 +246,14 @@ def _short_variable_finding(
 
 
 def _is_test_file(display_path: str) -> bool:
+    """Apply the short-variable rule's test-directory and root-test-file exemption.
+
+    Args:
+        display_path: Display path whose slashes and case are normalized before matching.
+
+    Returns:
+        True for a test or tests parent directory, or a root-level filename starting test_ and ending .py; otherwise False.
+    """
     normalized = display_path.replace("\\", "/").lower()
     name = normalized.rsplit("/", 1)[-1]
     if any(part in {"test", "tests"} for part in normalized.split("/")[:-1]):

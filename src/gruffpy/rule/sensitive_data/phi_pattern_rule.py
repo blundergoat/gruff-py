@@ -87,7 +87,17 @@ def _build_phi_finding(
     offset: int,
     kind: str,
 ) -> Finding:
-    """Build the fixed-preview PHI finding shown at the matched user source line."""
+    """Build the fixed-preview PHI finding shown at the matched user source line.
+
+    Args:
+        definition: Rule identity, severity, pillar, tier and confidence to attach to the finding.
+        unit: Scanned file and source text used for the finding path and line.
+        offset: Zero-based character position of the match start in unit.source.
+        kind: Detector category used in the message and preview; callers supply ``ssn`` or ``mrn``.
+
+    Returns:
+        Finding on the match's one-based source line, with the rule metadata and a category preview that contains none of the matched source value.
+    """
     line = unit.source.count("\n", 0, offset) + 1
     return Finding(
         rule_id=definition.id,

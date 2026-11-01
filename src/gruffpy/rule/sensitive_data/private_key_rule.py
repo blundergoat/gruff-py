@@ -105,6 +105,13 @@ def _is_placeholder_pem_block(source: str, header_offset: int) -> bool:
     """Recognise the explicit example body before the scan reports this header.
 
     A missing or incomplete block returns false, so unknown key material still receives a warning.
+
+    Args:
+        source: Raw scanned text containing the candidate header and any complete key blocks.
+        header_offset: Zero-based character position of the header whose block is being checked.
+
+    Returns:
+        True only when a complete block starts at header_offset and its stripped body is the case-sensitive word ``placeholder``; otherwise False.
     """
     # Only a block beginning at this header can establish the user's complete placeholder example.
     for block_match in _PEM_BLOCK_RE.finditer(source):
@@ -119,5 +126,12 @@ def _is_marker_only_assignment_pair(source: str, header_offset: int) -> bool:
     """Recognise adjacent uppercase assignments holding only matching PEM markers.
 
     Opaque content between the assignments or an unmatched footer does not qualify for this exemption.
+
+    Args:
+        source: Raw scanned text searched for two adjacent constant assignments containing corresponding markers.
+        header_offset: Zero-based character position of the opening marker to match against a pair.
+
+    Returns:
+        True when a matching adjacent assignment pair has its opening marker at header_offset; otherwise False.
     """
     return any(pair.start("header") == header_offset for pair in _MARKER_ASSIGNMENT_PAIR_RE.finditer(source))

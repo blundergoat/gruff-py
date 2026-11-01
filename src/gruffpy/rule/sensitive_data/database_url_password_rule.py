@@ -159,7 +159,15 @@ def _extract_scheme(url: str) -> str:
 
 
 def _extract_password(url: str) -> str | None:
-    """Return the password segment of a ``scheme://user:password@host`` URL."""
+    """Return the password segment of a ``scheme://user:password@host`` URL.
+
+    Args:
+        url: Candidate connection text; extraction inspects its separator positions without validating the scheme or host.
+
+    Returns:
+        Password text before the first host separator, without decoding. None when a scheme, host or password separator is missing; an empty string
+        when the password segment is empty.
+    """
     scheme_parts = url.split("://", 1)
     # A URL without a scheme boundary cannot provide a reliable credential location to the user.
     if len(scheme_parts) != 2:
@@ -178,7 +186,14 @@ def _extract_password(url: str) -> str | None:
 
 
 def _is_placeholder_password(password: str) -> bool:
-    """Return whether *password* is an exact known fixture placeholder."""
+    """Return whether *password* is an exact known fixture placeholder.
+
+    Args:
+        password: Extracted password to compare after stripping surrounding whitespace and folding case.
+
+    Returns:
+        True when the normalized whole value is a listed placeholder, otherwise False.
+    """
     return password.strip().casefold() in _PLACEHOLDER_PASSWORDS
 
 

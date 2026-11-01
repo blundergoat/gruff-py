@@ -246,7 +246,14 @@ def is_likely_placeholder_secret(secret: str) -> bool:
 
 
 def _line_offsets(source: str) -> list[int]:
-    """Return the byte offset of the start of each line in *source* (0-based)."""
+    """Return the character index of each line start for locating source matches.
+
+    Args:
+        source: Raw source text whose newline characters delimit lines.
+
+    Returns:
+        Zero-based character indices for line starts, beginning with zero even when the source is empty.
+    """
     offsets = [0]
     for i, char in enumerate(source):
         if char == "\n":
@@ -255,7 +262,15 @@ def _line_offsets(source: str) -> list[int]:
 
 
 def _offset_to_line(line_offsets: list[int], offset: int) -> int:
-    """Binary-search *offset* into *line_offsets* and return the 1-based line."""
+    """Binary-search *offset* into *line_offsets* and return the 1-based line.
+
+    Args:
+        line_offsets: Ascending character indices returned by _line_offsets for the same source.
+        offset: Zero-based character position of a match within that source.
+
+    Returns:
+        One-based line containing the position; a position exactly at a line start belongs to that line.
+    """
     lo, hi = 0, len(line_offsets)
     while lo < hi:
         mid = (lo + hi) // 2

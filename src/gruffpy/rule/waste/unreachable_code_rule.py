@@ -94,9 +94,16 @@ class UnreachableCodeRule(Rule):
 
 
 def _iter_blocks(tree: ast.AST) -> Iterator[list[ast.stmt]]:
-    """Yield every list[stmt] block in *tree* - function bodies, if/else/elif,
-    for/while bodies + orelse, try body + handlers + orelse + finalbody,
-    match cases, with/AsyncWith bodies."""
+    """Iterate over the statement lists exposed by the supported block handlers.
+
+    Dispatch uses each node's exact type. A node without an entry in _BLOCK_HANDLERS contributes no statement list.
+
+    Args:
+        tree: AST root whose nodes are visited to find registered statement-block containers.
+
+    Returns:
+        Lazy iterator over the existing statement lists, including empty lists, in AST walk and handler order; lists are not copied.
+    """
     for node in ast.walk(tree):
         handler = _BLOCK_HANDLERS.get(type(node))
         if handler is not None:
@@ -104,17 +111,50 @@ def _iter_blocks(tree: ast.AST) -> Iterator[list[ast.stmt]]:
 
 
 def _body_block(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """Iterate over the body of a module, class or function.
+
+    Args:
+        node: Module, class, synchronous function or asynchronous function node whose body the caller will scan.
+
+    Returns:
+        Lazy iterator yielding the original body list once, even when it is empty.
+
+    Raises:
+        AssertionError: If iteration begins with a node outside the accepted module, class and function types.
+    """
     assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Module)
     yield node.body
 
 
 def _body_and_orelse_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """Iterate over the body and alternate branch of a conditional or loop.
+
+    Args:
+        node: If, For, AsyncFor or While node whose body and orelse lists the caller will scan.
+
+    Returns:
+        Lazy iterator yielding the original body list and then the original orelse list, including empty lists.
+
+    Raises:
+        AssertionError: If iteration begins with a node other than If, For, AsyncFor or While.
+    """
     assert isinstance(node, ast.If | ast.For | ast.AsyncFor | ast.While)
     yield node.body
     yield node.orelse
 
 
 def _try_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """Iterate over a try statement's body, handlers, else and finally blocks.
+
+    Args:
+        node: Try node whose statement lists the caller will scan; TryStar nodes are not accepted.
+
+    Returns:
+        Lazy iterator yielding the original body, each handler body in order, orelse and finalbody lists, including empty lists.
+
+    Raises:
+        AssertionError: If iteration begins with a node that is not an ast.Try.
+    """
     assert isinstance(node, ast.Try)
     yield node.body
     for handler in node.handlers:
@@ -124,11 +164,33 @@ def _try_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
 
 
 def _with_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """Iterate over a synchronous or asynchronous context-manager body.
+
+    Args:
+        node: With or AsyncWith node whose body the caller will scan.
+
+    Returns:
+        Lazy iterator yielding the original body list once, even when it is empty.
+
+    Raises:
+        AssertionError: If iteration begins with a node other than With or AsyncWith.
+    """
     assert isinstance(node, ast.With | ast.AsyncWith)
     yield node.body
 
 
 def _match_blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """Iterate over the statement body of each match case.
+
+    Args:
+        node: Match node whose cases supply the statement lists to scan.
+
+    Returns:
+        Lazy iterator yielding each case's original body list in case order, including any empty body lists.
+
+    Raises:
+        AssertionError: If iteration begins with a node that is not an ast.Match.
+    """
     assert isinstance(node, ast.Match)
     for case in node.cases:
         yield case.body
@@ -144,6 +206,17 @@ def _literal_condition_findings(
     branch of ``if <literal-true>:``. Only ``ast.Constant`` tests qualify;
     dynamic names, calls, comparisons, and boolean operations stay clean so
     runtime-dependent conditions don't get flagged.
+
+    Args:
+        unit: Parsed source with a non-None AST; its display path is attached to each finding.
+        definition: Rule metadata to attach to each unreachable-branch finding.
+
+    Returns:
+        One finding at the first statement of each non-empty literal-false if or while body, or literal-true if alternate branch; empty when none is
+        found.
+
+    Raises:
+        AssertionError: If the source unit has no parsed AST.
     """
     assert unit.tree is not None
     findings: list[Finding] = []
@@ -161,7 +234,14 @@ def _literal_condition_findings(
 
 
 def _is_literal_truthy(test: ast.expr) -> bool | None:
-    """Return the truth value of *test* if it's a syntactic constant; else None."""
+    """Return the truth value of *test* if it's a syntactic constant; else None.
+
+    Args:
+        test: Condition expression to classify; only an ast.Constant is evaluated for truthiness.
+
+    Returns:
+        The constant value's boolean truth value, or None when the expression is not an ast.Constant.
+    """
     if not isinstance(test, ast.Constant):
         return None
     return bool(test.value)
@@ -174,6 +254,18 @@ def _literal_condition_finding(
     condition_node: ast.If | ast.While,
     cause: str,
 ) -> Finding:
+    """Build a finding for the first statement in a branch rejected by a literal condition.
+
+    Args:
+        unit: Source unit supplying the finding display path.
+        definition: Rule metadata supplying the finding identity, classification and confidence.
+        stmt: First statement of the unreachable branch; its span locates the finding.
+        condition_node: Enclosing If or While node; its type and line identify the condition in the message.
+        cause: Caller-supplied reason code recorded in the finding metadata.
+
+    Returns:
+        Finding on the unreachable statement, with the reason code and condition line recorded in its metadata.
+    """
     keyword = "if" if isinstance(condition_node, ast.If) else "while"
     return Finding(
         rule_id=definition.id,

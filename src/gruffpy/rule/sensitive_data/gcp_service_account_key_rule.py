@@ -106,7 +106,15 @@ class GcpServiceAccountKeyRule(SourceTextRule):
 
 
 def _private_key_value(source: str) -> str | None:
-    """Return private-key material used only to classify a service-account finding."""
+    """Return private-key material used only to classify a service-account finding.
+
+    Args:
+        source: Raw scanned text; the first quoted private-key field takes priority over a complete PEM block.
+
+    Returns:
+        Captured field contents with escapes left as written, otherwise the first complete PEM block, or None when neither is found. An empty field is
+        returned as an empty string.
+    """
     match = _PRIVATE_KEY_FIELD_RE.search(source)
     # A JSON private_key field is the clearest evidence users need to review.
     if match is not None:
@@ -116,7 +124,16 @@ def _private_key_value(source: str) -> str | None:
 
 
 def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> bool:
-    """Return whether the candidate is too short to represent a real user credential."""
+    """Return whether the candidate is too short to represent a real user credential.
+
+    Args:
+        private_key_value: Extracted key text; None or an empty string falls back to a PEM block in source.
+        source: Raw scanned text searched for a PEM block when the extracted value is absent or empty.
+
+    Returns:
+        True when key text is available and fewer than 100 base64-alphabet or padding characters remain after armor and other characters are removed.
+        False when no key text is available or the remaining length reaches 100.
+    """
     key_text = private_key_value or _pem_block(source)
     # No key text means there is no placeholder body to suppress at this helper boundary.
     if key_text is None:
@@ -127,6 +144,13 @@ def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> b
 
 
 def _pem_block(source: str) -> str | None:
-    """Return a PEM block when JSON-shaped input carries the key outside a field match."""
+    """Return the first complete private-key PEM block found in source text.
+
+    Args:
+        source: Raw scanned text searched for a private-key opening marker and a later closing marker.
+
+    Returns:
+        First matching block including its markers, or None when no complete block matches.
+    """
     match = _PEM_BLOCK_RE.search(source)
     return None if match is None else match.group(0)

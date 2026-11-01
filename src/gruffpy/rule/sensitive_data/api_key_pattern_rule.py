@@ -122,7 +122,14 @@ class ApiKeyPatternRule(SourceTextRule):
 
 
 def _identify_vendor(api_key: str) -> str:
-    """Return the provider label users see for a matched API key shape."""
+    """Return the provider label users see for a matched API key shape.
+
+    Args:
+        api_key: Complete matched value to classify against the provider patterns.
+
+    Returns:
+        First matching provider label in declared pattern order, with webhook matches grouped under Slack; ``unknown`` when no pattern matches.
+    """
     # Provider order follows the pattern map so the report label stays deterministic.
     for vendor_name, vendor_pattern in _VENDOR_PATTERNS.items():
         # A full-pattern match prevents a key fragment from being assigned to the wrong provider.
@@ -132,7 +139,14 @@ def _identify_vendor(api_key: str) -> str:
 
 
 def _display_vendor(vendor: str) -> str:
-    """Return the provider spelling used in the finding message shown to users."""
+    """Return the provider spelling used in the finding message shown to users.
+
+    Args:
+        vendor: Internal provider label to render in the finding message.
+
+    Returns:
+        Display spelling for explicitly mapped labels, otherwise the capitalized provider label.
+    """
     return {
         "github": "GitHub",
         "gitlab": "GitLab",

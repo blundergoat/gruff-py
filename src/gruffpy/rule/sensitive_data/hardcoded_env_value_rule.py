@@ -153,7 +153,14 @@ class HardcodedEnvValueRule(SourceTextRule):
 
 
 def _is_env_file(display_path: str) -> bool:
-    """Return whether the user's discovered file uses an ``.env`` filename."""
+    """Return whether the user's discovered file uses an ``.env`` filename.
+
+    Args:
+        display_path: Discovered file path split on forward slashes; basename checks are case-sensitive.
+
+    Returns:
+        True when the basename is ``.env`` or starts with ``.env.``; otherwise False.
+    """
     name = display_path.rsplit("/", 1)[-1]
     return name == ".env" or name.startswith(".env.")
 

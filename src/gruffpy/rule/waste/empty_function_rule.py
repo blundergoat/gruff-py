@@ -78,6 +78,15 @@ def _empty_functions(
     tree: ast.AST,
     display_path: str,
 ) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]]:
+    """Collect non-exempt placeholder functions with their enclosing nodes.
+
+    Args:
+        tree: AST to walk for synchronous and asynchronous function definitions; attached parent links provide their enclosing context.
+        display_path: Source path used to recognize exempt test-double methods.
+
+    Returns:
+        Pairs of reportable function nodes and their outermost-to-innermost ancestor lists, in AST walk order; empty when no function qualifies.
+    """
     candidates: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -93,6 +102,17 @@ def _should_report_empty_function(
     parents: list[ast.AST],
     display_path: str,
 ) -> bool:
+    """Decide whether a placeholder function falls outside the supported declaration exemptions.
+
+    Args:
+        node: Function whose body and declaration markers are checked.
+        parents: Outermost-to-innermost ancestors used by the context-dependent exemption predicates.
+        display_path: Source path used to restrict the test-double exemption to recognized test files.
+
+    Returns:
+        True when _is_empty_body accepts the body and none of the called declaration, framework or test-double exemption predicates accepts the
+        function; False otherwise.
+    """
     if not _is_empty_body(node.body):
         return False
     return not (
@@ -107,6 +127,16 @@ def _should_report_empty_function(
 
 
 def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
+    """Recognize a test helper by the name of its nearest enclosing class.
+
+    Args:
+        parents: Ancestors from outermost to immediate parent; the nearest enclosing class supplies the name.
+        display_path: Source path checked by _is_test_path before any class-name exemption is considered.
+
+    Returns:
+        True when the path is recognized as a test path and the nearest class name has a dummy, fake, mock, spy or stub token after tokenization and
+        lowercasing; False otherwise.
+    """
     if not _is_test_path(display_path):
         return False
     # parents runs outermost -> immediate, so reverse to take the innermost enclosing
@@ -119,6 +149,14 @@ def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
 
 
 def _is_test_path(display_path: str) -> bool:
+    """Recognize test locations for the empty-function test-double exemption.
+
+    Args:
+        display_path: Display path whose separators are normalized before checking directory segments and the filename.
+
+    Returns:
+        True for a path starting with tests/, containing /tests/, or having a filename starting with test_; checks are case-sensitive.
+    """
     normalised = display_path.replace("\\", "/")
     filename = normalised.rsplit("/", 1)[-1]
     return normalised.startswith("tests/") or "/tests/" in normalised or filename.startswith("test_")
@@ -130,6 +168,17 @@ def _empty_function_finding(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     parents: list[ast.AST],
 ) -> Finding:
+    """Build a finding for one reportable placeholder function.
+
+    Args:
+        unit: Source unit supplying the finding display path.
+        definition: Rule metadata supplying the finding identity, classification and confidence.
+        node: Reportable function whose declaration line and end line locate the finding.
+        parents: Enclosing nodes used with the function name to build its qualified symbol.
+
+    Returns:
+        Finding for the function source span, carrying its qualified symbol and the supplied rule metadata.
+    """
     symbol = qualified_symbol(node, parents)
     return Finding(
         rule_id=definition.id,
