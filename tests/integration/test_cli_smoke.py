@@ -73,6 +73,7 @@ def test_cli_help_lists_analyse_command():
 
 
 def test_cli_without_command_prints_php_style_menu():
+    """Print the version banner, usage, options and command list, exiting 0, when no command is given."""
     result = CliRunner().invoke(main, [])
 
     assert result.exit_code == 0
@@ -82,6 +83,7 @@ def test_cli_without_command_prints_php_style_menu():
 
 
 def test_cli_root_menu_uses_ansi_colours_when_forced():
+    """Colour the root menu's usage heading and command names with ANSI codes under ``--ansi``."""
     result = CliRunner().invoke(main, ["--ansi"], color=True)
 
     assert result.exit_code == 0
@@ -90,6 +92,7 @@ def test_cli_root_menu_uses_ansi_colours_when_forced():
 
 
 def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
+    """Keep at least two spaces between the longest command name and its description in the plain root menu."""
     result = CliRunner().invoke(main, ["--no-ansi"])
 
     assert result.exit_code == 0
@@ -101,6 +104,11 @@ def test_cli_menu_keeps_a_gutter_after_the_longest_command_name():
 def test_optional_diff_args_resolves_sys_argv_for_real_entrypoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Read ``sys.argv`` when no arguments are passed, turning a bare ``--diff`` into ``--diff=working-tree`` but keeping a named ref.
+
+    Args:
+        monkeypatch: Replaces ``sys.argv`` with a bare ``--diff`` command line, then with one that names a ref.
+    """
     # Console-script / python -m calls reach CliGroup.main with args=None.
 
     # Click would then read sys.argv itself, skipping normalisation. The helper must resolve
@@ -168,6 +176,12 @@ def test_analyse_changed_ranges_returns_only_changed_method_findings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Report only the function a changed range touches, counting the other function's finding as suppressed.
+
+    Args:
+        tmp_path: Project root holding a module with two undocumented functions, the second on lines 5 and 6.
+        monkeypatch: Changes into the project so the relative module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -290,6 +304,12 @@ def test_analyse_changed_region_fail_on_warning_gates_retained_finding(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Exit 1 under ``--fail-on warning`` when a changed range keeps a finding, which a full scan reports without a diff block.
+
+    Args:
+        tmp_path: Project root holding a module whose one function lacks a docstring.
+        monkeypatch: Changes into the project so the relative module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -341,6 +361,12 @@ def test_analyse_changed_region_suppresses_out_of_scope_debt_before_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Suppress findings outside the changed range before the gate, so ``--fail-on warning`` exits 0 and the diff block counts them.
+
+    Args:
+        tmp_path: Project root holding a module with a documented changed function and an undocumented one outside the range.
+        monkeypatch: Changes into the project so the relative module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -380,6 +406,14 @@ def test_analyse_changed_scope_symbol_anchors_file_length_findings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Anchor file length to line 1 under symbol scope: a range there keeps the finding and its metadata, while a far range suppresses it.
+
+    A full scan reports the same finding with no suppression count or diff block.
+
+    Args:
+        tmp_path: Project root holding a README and a module of 1,010 substantive lines built from one long list.
+        monkeypatch: Changes into the project so the relative module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "README.md").write_text("# Test project\n")
     src = tmp_path / "src"
@@ -430,6 +464,12 @@ def test_analyse_changed_scope_symbol_and_hunk_gate_different_surfaces(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Gate a finding elsewhere in the changed function under symbol scope, but suppress it under hunk scope, which covers only the changed line.
+
+    Args:
+        tmp_path: Project root holding a config that enables dangerous-call findings and a function that calls ``eval`` above the changed line.
+        monkeypatch: Changes into the project so the relative module and config paths resolve.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
@@ -571,6 +611,12 @@ def test_analyse_agent_command_ignores_default_baseline_when_disabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Apply the default baseline to a changed-range scan, but let ``--no-baseline`` report and gate the changed function.
+
+    Args:
+        tmp_path: Project root holding a module with one undocumented function and the default baseline generated from it.
+        monkeypatch: Changes into the project so the module path and the default baseline resolve.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -622,6 +668,12 @@ def test_analyse_diff_stdin_filters_to_changed_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Limit findings to the file a stdin diff names, and report the diff mode as ``stdin``.
+
+    Args:
+        tmp_path: Project root whose ``src`` folder holds two files with one undocumented function each; the diff names one.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -670,6 +722,17 @@ def test_analyse_git_changed_region_modes_gate_retained_findings(
     should_stage: bool,
     expected_source: str,
 ) -> None:
+    """Gate the changed function's finding through each git diff source, and report that source and the changed file in the diff block.
+
+    Skipped when ``git`` is not on the path.
+
+    Args:
+        tmp_path: Git repository whose committed module loses its function docstring in the working tree.
+        monkeypatch: Changes into the repository so git and the scan run there.
+        diff_args: Diff-selecting flags; the cases cover the working tree, the index and a ``--since`` ref.
+        should_stage: Whether the edit is staged before the scan.
+        expected_source: Diff mode the payload must report for the case.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -703,6 +766,19 @@ def test_analyse_git_changed_region_modes_gate_retained_findings(
 
 
 def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a git command in a repository and capture its text output.
+
+    Args:
+        cwd: Repository directory the command runs in.
+        args: Git subcommand and its arguments.
+
+    Returns:
+        The completed process.
+
+    Raises:
+        AssertionError: Git is not on the path.
+        subprocess.CalledProcessError: Git exits non-zero.
+    """
     assert _GIT is not None
     return subprocess.run(
         [_GIT, *args],
@@ -714,6 +790,18 @@ def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _init_git_history(cwd: Path, *paths: str) -> None:
+    """Create a repository whose ``HEAD`` is one commit of the given paths, with a fixed author and committer.
+
+    The commit is written with ``commit-tree`` and set as ``HEAD`` directly, so no git user configuration is needed.
+
+    Args:
+        cwd: Directory to initialise as the repository.
+        paths: Paths, relative to that directory, in the commit.
+
+    Raises:
+        AssertionError: Git is not on the path.
+        subprocess.CalledProcessError: Any git command exits non-zero.
+    """
     _run_git(cwd, "init", "-q")
     _run_git(cwd, "add", *paths)
     tree = _run_git(cwd, "write-tree").stdout.strip()
@@ -784,6 +872,7 @@ def _list_rules_payload() -> dict:
 
 
 def test_cli_list_rules_json_lists_rule_metadata():
+    """Give the first rule in the JSON catalogue every required metadata key and its rationale, fix and confidence documentation."""
     rule = _list_rules_payload()["rules"][0]
 
     assert set(rule) >= _REQUIRED_RULE_PAYLOAD_KEYS
@@ -791,6 +880,7 @@ def test_cli_list_rules_json_lists_rule_metadata():
 
 
 def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
+    """Publish a heuristic rule's false-positive shapes at the top of its JSON entry, not inside its documentation block."""
     payload = _list_rules_payload()
 
     heuristic_rule = next(candidate for candidate in payload["rules"] if candidate["id"] == "dead-code.unused-private-attribute")
@@ -799,6 +889,10 @@ def test_cli_list_rules_json_publishes_heuristic_false_positive_shapes():
 
 
 def test_cli_list_rules_json_publishes_thresholds_as_named_knob_maps():
+    """Publish named-knob threshold maps for the checked rules in the JSON catalogue, and the retired scalar ``threshold`` key for none.
+
+    A rule with a family knob name borrows it, another uses a one-key map, and a rule with no threshold omits the key.
+    """
     rules = {rule["id"]: rule for rule in _list_rules_payload()["rules"]}
 
     # A rubric whose rule id has a gruff-go knob name borrows it.
@@ -814,6 +908,7 @@ def test_cli_list_rules_json_publishes_thresholds_as_named_knob_maps():
 
 
 def test_cli_list_rules_explain_json_publishes_the_same_threshold_map():
+    """Publish the same named-knob threshold map, with no scalar ``threshold``, when one rule is explained in JSON."""
     result = CliRunner().invoke(main, ["list-rules", "size.function-length", "--format", "json"])
 
     assert result.exit_code == 0, result.output
@@ -823,6 +918,7 @@ def test_cli_list_rules_explain_json_publishes_the_same_threshold_map():
 
 
 def test_cli_list_rules_accepts_text_alias():
+    """Accept ``text`` as a ``list-rules`` format and print the rule and pillar columns."""
     result = CliRunner().invoke(main, ["list-rules", "--format", "text"])
 
     assert result.exit_code == 0, result.output
@@ -831,6 +927,7 @@ def test_cli_list_rules_accepts_text_alias():
 
 
 def test_cli_list_rules_default_remains_unchanged_by_explain_mode():
+    """Print the plain catalogue table from ``list-rules`` without the single-rule rationale or escape-hatch headings."""
     result = CliRunner().invoke(main, ["list-rules"])
 
     assert result.exit_code == 0, result.output
@@ -842,6 +939,7 @@ def test_cli_list_rules_default_remains_unchanged_by_explain_mode():
 
 
 def test_cli_list_rules_explain_text_renders_full_detail_view():
+    """Explain one rule in text with its severity, rationale, default options, escape hatches, false-positive shapes and related rules."""
     result = CliRunner().invoke(main, ["list-rules", "naming.short-variable"])
 
     assert result.exit_code == 0, result.output
@@ -858,6 +956,7 @@ def test_cli_list_rules_explain_text_renders_full_detail_view():
 
 
 def test_cli_list_rules_explain_table_format_coerces_to_text():
+    """Render the text detail view, not a table, when one rule is explained with ``--format table``."""
     result = CliRunner().invoke(main, ["list-rules", "naming.short-variable", "--format", "table"])
 
     assert result.exit_code == 0, result.output
@@ -866,6 +965,7 @@ def test_cli_list_rules_explain_table_format_coerces_to_text():
 
 
 def test_cli_list_rules_explain_json_emits_structured_payload():
+    """Explain one rule in JSON with its id, pillar, default severity, related rules, option descriptions and false-positive shapes."""
     result = CliRunner().invoke(main, ["list-rules", "naming.short-variable", "--format", "json"])
 
     assert result.exit_code == 0, result.output
@@ -880,6 +980,7 @@ def test_cli_list_rules_explain_json_emits_structured_payload():
 
 
 def test_cli_list_rules_explain_unknown_id_exits_one_with_suggestion():
+    """Exit 1 for a misspelt rule id, printing an unknown-rule message and the closest id to stderr without a traceback."""
     result = CliRunner().invoke(main, ["list-rules", "naming.short-variabel"])
 
     assert result.exit_code == 1
@@ -889,6 +990,7 @@ def test_cli_list_rules_explain_unknown_id_exits_one_with_suggestion():
 
 
 def test_cli_list_rules_explain_rule_with_no_options_omits_options_section():
+    """Omit the default-options section for a rule with no per-rule options, while keeping its false-positive and related-rule sections."""
     # naming.abbreviation reads allowlists.acceptedAbbreviations (global), no per-rule options.
     result = CliRunner().invoke(main, ["list-rules", "naming.abbreviation"])
 
@@ -900,6 +1002,7 @@ def test_cli_list_rules_explain_rule_with_no_options_omits_options_section():
 
 
 def test_cli_list_rules_explain_rule_with_no_related_rules_shows_none_marker():
+    """Show the ``(none)`` marker under related rules for a rule that has none."""
     # docs.todo-density is not a key in RELATED_RULES, so its "Related rules:"
     # block should render the "(none)" marker.
     result = CliRunner().invoke(main, ["list-rules", "docs.todo-density"])
@@ -938,6 +1041,12 @@ def test_cli_init_help_describes_canonical_regeneration_boundary() -> None:
 
 
 def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a starter config that opens with its title comment, notes the built-in ignores and lists the agent and fixture ignore paths.
+
+    Args:
+        tmp_path: Empty project that receives the starter config.
+        monkeypatch: Changes into the project so ``init`` writes there.
+    """
     monkeypatch.chdir(tmp_path)
 
     CliRunner().invoke(main, ["init"])
@@ -950,6 +1059,12 @@ def test_cli_init_default_config_content(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_cli_init_refuses_to_overwrite_existing_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse to replace an existing config: exit non-zero, say that it already exists and leave its bytes unchanged.
+
+    Args:
+        tmp_path: Project root holding a one-line config that must survive.
+        monkeypatch: Changes into the project so ``init`` targets that config.
+    """
     monkeypatch.chdir(tmp_path)
     existing = tmp_path / ".gruff-py.yaml"
     existing.write_text("# do not clobber\n")
@@ -962,6 +1077,12 @@ def test_cli_init_refuses_to_overwrite_existing_config(tmp_path: Path, monkeypat
 
 
 def test_cli_analyse_does_not_prompt_when_stdin_lacks_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analyse a project without a config or a TTY, exiting 0, with no prompt to generate a config and no config written.
+
+    Args:
+        tmp_path: Project root with no config and one small module.
+        monkeypatch: Changes into the project so ``analyse`` looks for its config there.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1306,12 +1427,25 @@ def test_cli_init_force_rejects_unreadable_pyproject_source(
 
 
 def _seed_sample_project(tmp_path: Path) -> None:
+    """Write ``src/sample.py``, a module whose one function has no docstring.
+
+    Args:
+        tmp_path: Project root that receives the ``src`` folder.
+    """
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text("def f():\n    pass\n")
 
 
 def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
+    """Seed the sample project and write the default baseline from a JSON ``analyse`` run.
+
+    Args:
+        tmp_path: Project root that receives the sample module; callers make it the working directory, where the baseline is written.
+
+    Returns:
+        The generating run's parsed JSON report, after asserting that it exited 0.
+    """
     _seed_sample_project(tmp_path)
     result = CliRunner().invoke(
         main,
@@ -1331,6 +1465,12 @@ def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
 
 
 def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a v3 baseline that counts every reported finding, and report a generated, unapplied default baseline with zero movement.
+
+    Args:
+        tmp_path: Project root that receives the sample module and the default baseline.
+        monkeypatch: Changes into the project so the baseline lands at its default path.
+    """
     monkeypatch.chdir(tmp_path)
 
     generated_payload = _generate_default_baseline(tmp_path)
@@ -1355,6 +1495,12 @@ def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monke
 
 
 def test_cli_analyse_auto_applies_default_baseline_when_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apply the default baseline automatically on the next run, suppressing every generated finding so ``--fail-on warning`` exits 0.
+
+    Args:
+        tmp_path: Project root holding the sample module and its generated default baseline.
+        monkeypatch: Changes into the project so the next run finds the default baseline.
+    """
     monkeypatch.chdir(tmp_path)
     generated_payload = _generate_default_baseline(tmp_path)
 
@@ -1511,6 +1657,12 @@ def test_cli_printed_baseline_commands_use_canonical_spellings(tmp_path: Path, m
 
 
 def test_cli_analyse_baseline_option_conflicts_are_diagnostics(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 2 with a ``baseline-error`` diagnostic when ``--baseline`` and ``--generate-baseline`` are combined.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1539,6 +1691,12 @@ def test_cli_analyse_baseline_option_conflicts_are_diagnostics(tmp_path: Path, m
 
 
 def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 2 from ``summary`` with empty stdout and a migrate-config hint, and no traceback, when pyproject config lacks a schema version.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` holds a gruff-py table without ``schemaVersion``.
+        monkeypatch: Changes into the project so ``summary`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1556,6 +1714,12 @@ def test_cli_summary_aborts_cleanly_when_config_missing_schema_version(tmp_path:
 
 
 def test_cli_analyse_aborts_cleanly_when_config_schema_version_wrong(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 2 from ``analyse`` with empty stdout and a migrate-config hint, and no traceback, for an unknown config schema version.
+
+    Args:
+        tmp_path: Project root whose ``.gruff-py.yaml`` names an unknown schema version.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1783,6 +1947,12 @@ def test_cli_baseline_paths_are_read_from_the_launch_directory(tmp_path: Path, m
 
 
 def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Show the top-rules block, and no grouped-by-rule block, in a default text summary.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1796,6 +1966,12 @@ def test_cli_summary_default_group_by_keeps_top_rules_block(tmp_path: Path, monk
 
 
 def test_cli_summary_group_by_rule_text_replaces_top_rules_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the top-rules block with the grouped-by-rule block in a text summary under ``--group-by rule``.
+
+    Args:
+        tmp_path: Project root holding a module with one long, undocumented function name.
+        monkeypatch: Changes into the project so the summary scans its ``src`` folder.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1810,6 +1986,12 @@ def test_cli_summary_group_by_rule_text_replaces_top_rules_block(tmp_path: Path,
 
 
 def test_cli_summary_group_by_rule_json_keeps_canonical_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report the ``gruff.summary.v3`` schema under ``--group-by rule``, with no grouped or top-rules key in the JSON.
+
+    Args:
+        tmp_path: Project root holding one module without a docstring.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1828,6 +2010,12 @@ def test_cli_summary_group_by_rule_json_keeps_canonical_contract(tmp_path: Path,
 
 
 def test_cli_summary_group_by_rule_does_not_change_json_projection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Produce identical JSON summaries and exit codes with and without ``--group-by rule``.
+
+    Args:
+        tmp_path: Project root holding three one-line modules without docstrings.
+        monkeypatch: Changes into the project so both summaries scan the same ``src`` folder.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1851,6 +2039,12 @@ def test_cli_summary_group_by_rule_does_not_change_json_projection(tmp_path: Pat
 
 
 def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print a hint pointing to ``summary --group-by=rule`` when the finding count reaches the configured volume threshold.
+
+    Args:
+        tmp_path: Project root whose config sets the hint threshold to 1, with one module missing its docstring.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1865,6 +2059,12 @@ def test_cli_analyse_text_emits_volume_hint_when_findings_reach_threshold(tmp_pa
 
 
 def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print no volume hint when the finding count stays below the configured threshold.
+
+    Args:
+        tmp_path: Project root whose config sets the hint threshold to 1,000, with one module missing its docstring.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1878,6 +2078,12 @@ def test_cli_analyse_text_suppresses_volume_hint_when_below_threshold(tmp_path: 
 
 
 def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print no volume hint when the configured threshold is 0.
+
+    Args:
+        tmp_path: Project root whose config sets the hint threshold to 0, with one module missing its docstring.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1891,6 +2097,12 @@ def test_cli_analyse_text_suppresses_volume_hint_when_threshold_is_zero(tmp_path
 
 
 def test_cli_analyse_json_does_not_emit_volume_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the volume hint out of JSON output, which stays parseable, even when the threshold is reached.
+
+    Args:
+        tmp_path: Project root whose threshold-1 config would trigger the hint in text output.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1905,6 +2117,12 @@ def test_cli_analyse_json_does_not_emit_volume_hint(tmp_path: Path, monkeypatch:
 
 
 def test_cli_report_writes_json_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write a ``gruff.analysis.v3`` JSON report to the ``--output`` file and print nothing.
+
+    Args:
+        tmp_path: Project root holding one small module and receiving ``report.json``.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -1993,6 +2211,12 @@ def test_cli_summary_text_includes_path_and_elapsed(tmp_path: Path, monkeypatch:
 
 
 def test_cli_summary_text_hints_when_paths_were_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Count a built-in ignored path in the text summary and point to ``--include-ignored``, noting that configured ignores still apply.
+
+    Args:
+        tmp_path: Project root holding one module in ``src`` and one inside a ``.pytest_cache`` folder.
+        monkeypatch: Changes into the project so the ``.`` operand is its root.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2015,6 +2239,13 @@ def test_report_and_summary_publish_bounded_deep_scan_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     command: str,
 ) -> None:
+    """Publish a non-fatal ``bounded-deep-scan`` diagnostic in a report command's JSON output under a CLI deep-scan budget.
+
+    Args:
+        tmp_path: Project root holding a two-line ``large.py`` that exceeds the one-line budget.
+        monkeypatch: Changes into the project so the module operand resolves.
+        command: Command under test; the cases vary which report command runs.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "large.py").write_text("value = 1\nvalue = 2\n")
 
@@ -2038,6 +2269,12 @@ def test_report_and_summary_publish_bounded_deep_scan_diagnostic(
 
 
 def test_cli_metric_calibration_json_is_developer_dump(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dump the metric-calibration JSON schema, function count, three metric names and top function for a one-function project.
+
+    Args:
+        tmp_path: Project root holding one function with a compound condition.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2061,6 +2298,12 @@ def test_cli_metric_calibration_json_is_developer_dump(tmp_path: Path, monkeypat
 
 
 def test_cli_quiet_suppresses_success_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print nothing under ``--quiet`` for a successful JSON analysis.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2081,6 +2324,15 @@ _FINGERPRINT_HEX_LENGTH = 16
 
 
 def _analyse_short_and_long_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Analyse a project holding a one-line module and a 1,600-line module, with no config.
+
+    Args:
+        tmp_path: Project root that receives the short and long modules.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+
+    Returns:
+        The parsed JSON report, after asserting that the command exited 0.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2097,18 +2349,38 @@ def _analyse_short_and_long_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_cli_analyse_emits_schema_version_and_tool_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report the ``gruff.analysis.v3`` schema and the ``gruff-py`` tool name in JSON analysis output.
+
+    Args:
+        tmp_path: Project root that receives the short and long modules.
+        monkeypatch: Lets the helper change into the project.
+    """
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     assert payload["schemaVersion"] == "gruff.analysis.v3"
     assert payload["tool"]["name"] == "gruff-py"
 
 
 def test_cli_analyse_summary_counts_at_least_two_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Count at least the two modules as discovered and parsed in the JSON summary.
+
+    Args:
+        tmp_path: Project root that receives the short and long modules.
+        monkeypatch: Lets the helper change into the project.
+    """
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     assert payload["summary"]["discoveredFiles"] >= 2
     assert payload["summary"]["parsedFiles"] >= 2
 
 
 def test_cli_analyse_emits_file_length_finding_with_full_classification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report one file-length finding for the long module, with a 16-character fingerprint, its measured lines and its full classification.
+
+    The classification is error severity in the size pillar, tier v0.1, with high confidence.
+
+    Args:
+        tmp_path: Project root that receives the short and long modules.
+        monkeypatch: Lets the helper change into the project.
+    """
     payload = _analyse_short_and_long_payload(tmp_path, monkeypatch)
     file_length = [f for f in payload["findings"] if f["ruleId"] == "size.file-length"]
     assert len(file_length) == 1
@@ -2124,6 +2396,12 @@ def test_cli_analyse_emits_file_length_finding_with_full_classification(tmp_path
 
 
 def test_cli_analyse_sarif_format_is_parseable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emit SARIF 2.1.0 naming the ``gruff-py`` driver, with a gruff fingerprint on the first result.
+
+    Args:
+        tmp_path: Project root holding a 1,001-line module that yields findings.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2142,6 +2420,13 @@ def test_cli_analyse_sarif_format_is_parseable(tmp_path: Path, monkeypatch: pyte
 
 
 def _sarif_fixture_payload() -> dict:
+    """Analyse the repository's complexity fixtures in SARIF format with no config.
+
+    The fixture path is relative, so the test session must run from the repository root.
+
+    Returns:
+        The parsed SARIF payload, after asserting that the command exited 0.
+    """
     fixture = Path("tests/fixtures/complexity")
     result = CliRunner().invoke(
         main,
@@ -2160,6 +2445,7 @@ def _sarif_fixture_payload() -> dict:
 
 
 def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
+    """Advertise SARIF 2.1.0, the ``gruff-py`` driver and the ``gruff.analysis.v3`` schema in the fixture run's SARIF output."""
     payload = _sarif_fixture_payload()
     run = payload["runs"][0]
     assert payload["version"] == "2.1.0"
@@ -2168,6 +2454,7 @@ def test_cli_analyse_sarif_fixture_payload_advertises_schema_versions() -> None:
 
 
 def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rule_index() -> None:
+    """Give every SARIF result for the complexity fixtures a gruff fingerprint and a rule index that points at its own rule."""
     run = _sarif_fixture_payload()["runs"][0]
     driver_rules = run["tool"]["driver"]["rules"]
     missing_fp = [r for r in run["results"] if not r["partialFingerprints"]["gruffFingerprint"]]
@@ -2177,6 +2464,7 @@ def test_cli_analyse_sarif_fixture_every_result_has_fingerprint_and_matching_rul
 
 
 def test_cli_analyse_sarif_fixture_artifact_uris_are_normalised() -> None:
+    """Normalise the artifact URI of each SARIF result's first location for the complexity fixtures, with no leading ``./`` or Windows separator."""
     run = _sarif_fixture_payload()["runs"][0]
     uris = [r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for r in run["results"]]
     bad = [uri for uri in uris if uri.startswith("./") or "\\" in uri]
@@ -2184,6 +2472,12 @@ def test_cli_analyse_sarif_fixture_artifact_uris_are_normalised() -> None:
 
 
 def test_cli_analyse_text_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print the tool banner, a findings section and a score section in text analysis output.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2202,6 +2496,12 @@ def test_analyse_text_partial_project_rule_caveat_for_narrow_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Show the partial-project caveat in the text scan context for a ``src`` scan, with full-project scoring and no full-project scope line.
+
+    Args:
+        tmp_path: Project root whose ``src`` folder holds one documented module.
+        monkeypatch: Changes into the project so ``src`` is a narrow path inside it.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2222,6 +2522,12 @@ def test_analyse_json_partial_project_rule_caveat_is_additive_for_narrow_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Add the partial-context caveat as a JSON run extension for a single-file scan, and no extensions for a full-project scan.
+
+    Args:
+        tmp_path: Project root holding one documented module.
+        monkeypatch: Changes into the project so ``.`` is its root and the module path is narrow.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2259,6 +2565,12 @@ def test_analyse_json_project_root_path_spellings_emit_no_partial_caveat(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Emit no partial-context extension when the project root is given as ``./`` or as its absolute path.
+
+    Args:
+        tmp_path: Project root holding one documented module, also passed by its absolute path.
+        monkeypatch: Changes into the project so ``./`` names its root.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2288,6 +2600,12 @@ def test_analyse_diff_scoped_scan_emits_partial_context_caveat(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Add the partial-context caveat to a stdin diff-scoped scan and mark the diff block enabled.
+
+    Args:
+        tmp_path: Project root holding two documented modules; the diff touches one.
+        monkeypatch: Changes into the project so the diff's paths resolve.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2385,6 +2703,14 @@ def test_cli_bounded_deep_scan_retains_text_rules_and_nonfatal_exit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Keep text-based rules running under a one-line deep-scan budget, with a non-fatal diagnostic naming the CLI limits.
+
+    The module still reports the AWS key pattern and file length, never echoes the key, and has no dangerous-call finding.
+
+    Args:
+        tmp_path: Project root holding a 1,002-line module that assigns a synthetic AWS key and calls ``eval``.
+        monkeypatch: Changes into the project so the module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2430,6 +2756,13 @@ def test_cli_deep_scan_budget_overrides_config_atomically(
     monkeypatch: pytest.MonkeyPatch,
     override: str,
 ) -> None:
+    """Let a larger or disabled CLI deep-scan budget override the config's one-byte budget, so the dangerous call reports with no bounded diagnostic.
+
+    Args:
+        tmp_path: Project root holding a one-line ``eval`` module and a config with a one-line, one-byte budget and dangerous calls on.
+        monkeypatch: Changes into the project so the config and module resolve.
+        override: CLI budget; the cases cover a larger limit pair and turning the budget off.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "sample.py").write_text("result = eval('payload')\n")
     (tmp_path / ".gruff-py.yaml").write_text(
@@ -2462,6 +2795,12 @@ def test_cli_rejects_partial_deep_scan_budget_override_as_json(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Exit 2 with a JSON ``config-error`` diagnostic when the deep-scan budget gives lines without bytes.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the module path resolves.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / "sample.py").write_text("value = 1\n")
 
@@ -2485,6 +2824,12 @@ def test_cli_rejects_partial_deep_scan_budget_override_as_json(
 
 
 def test_cli_analyse_docs_messages_describe_intent_not_absence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Word the missing-docstring message as the intent a docstring needs, not as an absence.
+
+    Args:
+        tmp_path: Project root holding one undocumented public function.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2499,6 +2844,12 @@ def test_cli_analyse_docs_messages_describe_intent_not_absence(tmp_path: Path, m
 
 
 def test_cli_analyse_html_format_renders_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render a standalone HTML document with the paper layout, and no text-format label, under ``--format html``.
+
+    Args:
+        tmp_path: Project root holding one small module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2516,6 +2867,12 @@ def test_cli_analyse_html_format_renders_html(tmp_path: Path, monkeypatch: pytes
 
 
 def test_cli_analyse_json_display_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Show only error findings under ``--min-severity error``, and record the active filter in the JSON run.
+
+    Args:
+        tmp_path: Project root holding a 500-line and a 1,600-line module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2550,6 +2907,12 @@ def test_analyse_display_filter_discloses_hidden_text_and_keeps_exit_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Disclose one hidden finding, keep the canonical tally at zero and still exit 1 under ``--fail-on advisory``.
+
+    Args:
+        tmp_path: Project root without a README, holding one documented module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2583,6 +2946,12 @@ def test_analyse_json_display_filter_keeps_full_run_summary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Keep the full-run finding total, exit code and score-pillar counts in JSON while ``--hide-rule`` removes the only finding from the list.
+
+    Args:
+        tmp_path: Project root without a README, holding one documented module.
+        monkeypatch: Changes into the project so the scan runs from its root.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2641,6 +3010,12 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Accept a comma-separated ``--show-pillar`` value and record both pillars, in order, in the JSON run filters.
+
+    Args:
+        tmp_path: Project root holding a 1,001-line module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2667,6 +3042,14 @@ def test_cli_analyse_accepts_comma_separated_pillar_filters(
 
 
 def test_cli_rejects_configured_secret_preview_before_analysis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse a config that sets the removed ``allowlists.secretPreviews`` key: exit 2 with one run-invalidating config error and no findings.
+
+    Neither the synthetic AWS key nor the configured preview text appears in the output.
+
+    Args:
+        tmp_path: Project root holding a module with two synthetic keys and a config that lists a redacted key preview.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2700,6 +3083,12 @@ def test_cli_rejects_configured_secret_preview_before_analysis(tmp_path: Path, m
 
 
 def test_cli_fail_on_error_exits_1_when_errors_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 1 under ``--fail-on error`` for a project holding a 1,600-line module.
+
+    Args:
+        tmp_path: Project root holding a 1,600-line module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2714,6 +3103,12 @@ def test_cli_fail_on_error_exits_1_when_errors_present(tmp_path: Path, monkeypat
 
 
 def test_cli_fail_on_none_exits_0_even_with_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 0 under ``--fail-on none`` for a project holding a 1,001-line module.
+
+    Args:
+        tmp_path: Project root holding a 1,001-line module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2728,6 +3123,12 @@ def test_cli_fail_on_none_exits_0_even_with_errors(tmp_path: Path, monkeypatch: 
 
 
 def test_cli_fail_on_config_applies_when_no_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apply the config's ``error`` gate when no ``--fail-on`` flag is given, so a project holding a 500-line module exits 0.
+
+    Args:
+        tmp_path: Project root holding a 500-line module and a config that gates ``analyse`` at ``error``.
+        monkeypatch: Changes into the project so ``analyse`` loads that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2744,6 +3145,12 @@ def test_cli_fail_on_config_applies_when_no_flag(tmp_path: Path, monkeypatch: py
 
 
 def test_cli_fail_on_flag_wins_over_fail_on_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let an explicit ``--fail-on warning`` override the config's ``error`` gate, so the same 500-line project exits 1.
+
+    Args:
+        tmp_path: Project root holding a 500-line module and a config that gates ``analyse`` at ``error``.
+        monkeypatch: Changes into the project so the flag competes with that config.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2762,6 +3169,12 @@ def test_cli_fail_on_flag_wins_over_fail_on_config(tmp_path: Path, monkeypatch: 
 
 
 def test_cli_fail_on_analyse_binary_default_is_advisory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 1 with no ``--fail-on`` flag or config for a module whose public function lacks a docstring.
+
+    Args:
+        tmp_path: Project root holding one undocumented public function.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()
@@ -2782,6 +3195,11 @@ _UNKNOWN_OPTION_YAML = (
 
 
 def _write_clean_legacy_project(tmp_path: Path) -> None:
+    """Write a README, one documented module and a config that still uses legacy warning and error threshold tiers.
+
+    Args:
+        tmp_path: Project root that receives the three files.
+    """
     (tmp_path / "README.md").write_text("# demo\n")
     src = tmp_path / "src"
     src.mkdir()
@@ -2803,6 +3221,12 @@ def _write_clean_unknown_option_project(project_root: Path) -> None:
 
 
 def test_cli_analyse_warns_on_legacy_rule_keys_and_proceeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 0 on legacy threshold keys, with a config-warnings notice on stdout and the key, accepted keys and migrate-config hint on stderr.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so commands load its legacy config.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2839,6 +3263,12 @@ def test_cli_analyse_warns_on_unknown_option_and_proceeds(
 
 
 def test_cli_analyse_json_carries_additive_config_warnings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Carry two threshold config warnings as a JSON run extension, not as diagnostics, and exit 0.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so commands load its legacy config.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2854,6 +3284,12 @@ def test_cli_analyse_json_carries_additive_config_warnings(tmp_path: Path, monke
 
 
 def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 2 under ``--strict-config`` for legacy threshold keys, naming the unknown key on stderr without a traceback.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so commands load its legacy config.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2865,6 +3301,12 @@ def test_cli_analyse_strict_config_fails_on_legacy_rule_keys(tmp_path: Path, mon
 
 
 def test_cli_analyse_strict_config_json_reports_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a JSON ``config-error`` diagnostic and exit 2 when ``--strict-config`` rejects legacy threshold keys.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so commands load its legacy config.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2876,6 +3318,12 @@ def test_cli_analyse_strict_config_json_reports_config_error(tmp_path: Path, mon
 
 
 def test_cli_migrate_config_dry_run_prints_diff_without_writing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Print the migrated threshold and severity under ``migrate-config --dry-run`` without changing the config file.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so ``migrate-config`` reads its legacy config.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
     config_file = tmp_path / ".gruff-py.yaml"
@@ -2889,6 +3337,12 @@ def test_cli_migrate_config_dry_run_prints_diff_without_writing(tmp_path: Path, 
 
 
 def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write the migrated config to the ``--output`` file, with the error tier as threshold and severity, and leave the original unchanged.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project and receiving ``migrated.yaml``.
+        monkeypatch: Changes into the project so the relative output path lands there.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
 
@@ -2906,6 +3360,12 @@ def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(tmp_path: Path, monk
 
 
 def test_cli_analyse_strict_config_passes_after_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pass ``--strict-config`` once the migrated config replaces the legacy one, with no ``Warning:`` text on stderr.
+
+    Args:
+        tmp_path: Project root whose legacy config is replaced by its migrated copy.
+        monkeypatch: Changes into the project so migration and the strict rerun use its config file.
+    """
     monkeypatch.chdir(tmp_path)
     _write_clean_legacy_project(tmp_path)
     migrate = CliRunner().invoke(main, ["migrate-config", "--output", "migrated.yaml"])

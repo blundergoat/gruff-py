@@ -20,6 +20,10 @@ from gruffpy.source.discovery import IgnoredPath
     reason="php binary not available for JSON byte-equivalence check",
 )
 def test_json_reporter_matches_php_json_encoding_flags():
+    """Render the JSON report as the same text as PHP's pretty-printed, unescaped-slash re-encoding of that payload.
+
+    Skipped when no ``php`` binary is on the path.
+    """
     php = shutil.which("php")
     assert php is not None  # narrowed by skipif above
     report = _fixture_report()
@@ -40,6 +44,11 @@ def test_json_reporter_emits_stable_identity_adjacent_to_fingerprint():
 
 
 def _fixture_report() -> AnalysisReport:
+    """Build a one-finding report that exercises Unicode text, a path in metadata, an ignored path and a rule filter.
+
+    Returns:
+        The analysis report, with its score calculated over that one finding and ten files.
+    """
     finding = Finding(
         rule_id="security.dangerous-function-call",
         message='Dangerous call in path src/example.py with unicode "caf\u00e9".',
@@ -73,6 +82,18 @@ def _fixture_report() -> AnalysisReport:
 
 
 def _php_pretty_json(php: str, json_payload: str) -> str:
+    """Decode a JSON payload in PHP and re-encode it with pretty printing and unescaped slashes.
+
+    Args:
+        php: Path of the PHP executable.
+        json_payload: JSON text passed to PHP on standard input.
+
+    Returns:
+        PHP's re-encoded JSON, ending with a newline.
+
+    Raises:
+        subprocess.CalledProcessError: PHP exits non-zero, including when the payload is not valid JSON.
+    """
     code = (
         "$payload = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);"
         "echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;"

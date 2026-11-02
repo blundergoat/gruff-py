@@ -25,6 +25,18 @@ pytestmark = [
 
 
 def _run_perf_script_quick(json_out: Path, output_dir: Path) -> subprocess.CompletedProcess:
+    """Run ``scripts/test-performance.sh`` in quick mode with three repeats from the repository root.
+
+    Args:
+        json_out: File that receives the script's JSON results.
+        output_dir: Directory that receives the script's other output.
+
+    Returns:
+        The completed process with captured text output; a non-zero exit does not raise.
+
+    Raises:
+        subprocess.TimeoutExpired: The script runs for more than 300 seconds.
+    """
     return subprocess.run(
         [
             "bash",
@@ -79,18 +91,33 @@ _EXPECTED_TOP_LEVEL_KEYS = {
 def test_perf_script_payload_advertises_schema_version_1(
     quick_run_payload: dict[str, object],
 ) -> None:
+    """Report ``schemaVersion`` 1 in the quick run's JSON payload.
+
+    Args:
+        quick_run_payload: Parsed payload from the module's single quick run, read for its schema version.
+    """
     assert quick_run_payload.get("schemaVersion") == 1
 
 
 def test_perf_script_payload_publishes_documented_top_level_keys(
     quick_run_payload: dict[str, object],
 ) -> None:
+    """Include every documented top-level key in the quick run's JSON payload.
+
+    Args:
+        quick_run_payload: Parsed payload from the module's single quick run, checked for the expected keys.
+    """
     assert _EXPECTED_TOP_LEVEL_KEYS.issubset(quick_run_payload), f"missing top-level keys: {_EXPECTED_TOP_LEVEL_KEYS - quick_run_payload.keys()}"
 
 
 def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
     quick_run_payload: dict[str, object],
 ) -> None:
+    """Report the ``cold-start`` and ``analyse-src-text`` workloads in the quick run's payload.
+
+    Args:
+        quick_run_payload: Parsed payload whose workload names are collected.
+    """
     workloads = quick_run_payload["workloads"]
     workload_names = {w["name"] for w in workloads}
     assert {"cold-start", "analyse-src-text"}.issubset(workload_names)
@@ -154,6 +181,11 @@ def test_perf_script_payload_binds_its_runtime_source(
 def test_perf_script_workloads_have_well_formed_timing_record(
     quick_run_payload: dict[str, object],
 ) -> None:
+    """Give every workload a command list, an integer exit code and a positive median between its minimum and maximum.
+
+    Args:
+        quick_run_payload: Parsed payload whose workload timing records are checked.
+    """
     workloads = quick_run_payload["workloads"]
     assert all(
         isinstance(w["command"], list) and isinstance(w["exitCode"], int) and w["median"] > 0 and w["min"] <= w["median"] <= w["max"]
@@ -164,12 +196,24 @@ def test_perf_script_workloads_have_well_formed_timing_record(
 def test_perf_script_cold_start_workload_exits_zero(
     quick_run_payload: dict[str, object],
 ) -> None:
+    """Record exit code 0 for the quick run's ``cold-start`` workload.
+
+    Args:
+        quick_run_payload: Parsed payload that must contain the ``cold-start`` workload.
+    """
     workloads = quick_run_payload["workloads"]
     cold_start = next(w for w in workloads if w["name"] == "cold-start")
     assert cold_start["exitCode"] == 0
 
 
 def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
+    """Exit 1 and print ``regressions detected`` when a quick run is compared with one-millisecond baseline medians.
+
+    The environment sets the regression thresholds to one millisecond and one percent.
+
+    Args:
+        tmp_path: Holds the baseline JSON file and the script's output folder.
+    """
     baseline = tmp_path / "baseline.json"
     baseline.write_text(
         json.dumps(
@@ -224,6 +268,7 @@ _DOCUMENTED_FLAGS = (
 
 
 def test_perf_script_help_lists_documented_flags() -> None:
+    """List every documented flag in the perf script's ``--help`` output."""
     proc = subprocess.run(
         ["bash", str(SCRIPT_PATH), "--help"],
         cwd=str(REPO_ROOT),

@@ -18,6 +18,12 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Suppress only the rule a same-line ``gruff: disable`` comment names, so the dangerous call on that unreachable line still reports.
+
+    Args:
+        tmp_path: Project root holding a config that enables dangerous-call findings and a module with an unreachable ``eval`` call.
+        monkeypatch: Changes into the project so the ``src`` operand and the config path resolve.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
@@ -46,6 +52,12 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
 
 
 def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypatch) -> None:
+    """Apply a ``gruff: disable-next`` comment to the next physical line only, so the second ``eval`` call on line 3 still reports.
+
+    Args:
+        tmp_path: Project root holding a config that enables dangerous-call findings and a module with the directive above two calls.
+        monkeypatch: Changes into the project so the ``src`` operand and the config path resolve.
+    """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
     src = tmp_path / "src"
@@ -75,6 +87,12 @@ def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypat
 
 
 def test_gruff_disable_file_is_file_local(tmp_path: Path, monkeypatch) -> None:
+    """Confine a ``gruff: disable-file`` comment to its own file, so an unmarked module with the same 1,001-line body still reports its length.
+
+    Args:
+        tmp_path: Project root whose ``src`` folder holds the marked and the unmarked long module.
+        monkeypatch: Changes into the project so the ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()

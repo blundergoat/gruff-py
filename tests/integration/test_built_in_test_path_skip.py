@@ -48,7 +48,14 @@ def sample_key_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _analyse(project_root: Path) -> dict[str, Any]:
-    """Run ``analyse --format json`` over *project_root* and return the parsed report."""
+    """Run ``analyse --format json`` over *project_root* and return the parsed report.
+
+    Args:
+        project_root: Project analysed with no config file and ``--fail-on none``.
+
+    Returns:
+        The parsed JSON report, after asserting that the command exited 0.
+    """
     result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--no-config", str(project_root)])
     assert result.exit_code == 0, result.output
     payload: dict[str, Any] = json.loads(result.stdout)

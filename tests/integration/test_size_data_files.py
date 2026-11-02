@@ -10,6 +10,12 @@ from gruffpy.cli import main
 
 
 def test_long_data_files_report_no_size_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep size and complexity findings off long JSON, YAML and TOML files while a 1,600-line Python module still reports one.
+
+    Args:
+        tmp_path: Project root whose ``src`` folder holds the long JSON, YAML and TOML data files and the 1,600-line module.
+        monkeypatch: Changes into the project so the relative ``src`` operand resolves.
+    """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
     src.mkdir()

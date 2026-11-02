@@ -30,7 +30,11 @@ _CONFIG_HEADER = "schemaVersion: gruff-py.config.v0.1\n"
 
 
 def _write_corpus(project_root: Path) -> None:
-    """Create the four-file synthetic corpus every case in this module scans."""
+    """Create the four-file synthetic corpus every case in this module scans.
+
+    Args:
+        project_root: Project root that receives a ``secrets`` folder holding the AWS, AWS-sibling, JWT and clean ``.env`` files.
+    """
     secrets = project_root / "secrets"
     secrets.mkdir()
     # The AWS case file carries the rule twice plus a second sensitive rule, so a case can prove
@@ -42,7 +46,14 @@ def _write_corpus(project_root: Path) -> None:
 
 
 def _analyse(*, use_config: bool) -> dict[str, Any]:
-    """Run ``analyse --format json`` over the corpus and return the parsed report."""
+    """Run ``analyse --format json`` over the corpus and return the parsed report.
+
+    Args:
+        use_config: False adds ``--no-config`` for the baseline run; True lets the command load the project's config file.
+
+    Returns:
+        The parsed JSON report, after asserting that the command exited 0.
+    """
     arguments = ["analyse", "--format", "json", "--fail-on", "none"]
     if not use_config:
         arguments.append("--no-config")
@@ -54,11 +65,24 @@ def _analyse(*, use_config: bool) -> dict[str, Any]:
 
 
 def _finding_scopes(payload: dict[str, Any]) -> set[tuple[str, str, int | None]]:
-    """Reduce a report's findings to comparable (rule, path, line) scopes."""
+    """Reduce a report's findings to comparable (rule, path, line) scopes.
+
+    Args:
+        payload: Parsed JSON report whose findings are reduced.
+
+    Returns:
+        One (rule id, file, line) tuple per distinct finding scope.
+    """
     return {(finding["ruleId"], finding["file"], finding["line"]) for finding in payload["findings"]}
 
 
 def _write_config(project_root: Path, entries: str) -> None:
+    """Write the project config as the schema version line followed by one case's entries.
+
+    Args:
+        project_root: Project root whose ``.gruff-py.yaml`` is created or replaced.
+        entries: YAML text appended after the schema version line.
+    """
     (project_root / ".gruff-py.yaml").write_text(_CONFIG_HEADER + entries)
 
 

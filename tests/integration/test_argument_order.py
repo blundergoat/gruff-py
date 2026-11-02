@@ -47,7 +47,14 @@ def fixture_probe_project(tmp_path: Path) -> Path:
 
 
 def _without_timestamps(output: str) -> str:
-    """Replace every generated timestamp with a fixed marker, so two runs compare on their substance."""
+    """Replace every generated timestamp with a fixed marker, so two runs compare on their substance.
+
+    Args:
+        output: Command output that may contain ISO-8601 timestamps.
+
+    Returns:
+        The output with every timestamp replaced by ``<timestamp>``.
+    """
     return _TIMESTAMP.sub("<timestamp>", output)
 
 

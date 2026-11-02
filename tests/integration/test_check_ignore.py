@@ -13,6 +13,12 @@ _DIFF_TOUCHING_IGNORED = "diff --git a/skipme/bad.py b/skipme/bad.py\n--- a/skip
 
 
 def _write(path: Path, text: str = "") -> None:
+    """Write text to a file, creating any missing parent directories.
+
+    Args:
+        path: File to create or overwrite.
+        text: UTF-8 content; empty by default.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -40,6 +46,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.mark.usefixtures("project")
 def test_control_ignored_file_is_flaggable_without_config() -> None:
+    """Report findings in ``skipme/bad.py`` under ``--no-config`` with no ignore details, so the file is flaggable on its own."""
     result = CliRunner().invoke(
         main,
         [
@@ -62,6 +69,7 @@ def test_control_ignored_file_is_flaggable_without_config() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_analyse_explicit_ignored_arg_yields_no_findings_with_reason() -> None:
+    """Return no findings for an explicitly named file that config ignores, and report its ``skipme/**`` pattern as the reason."""
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline", "skipme/bad.py"],
@@ -82,6 +90,7 @@ def test_analyse_explicit_ignored_arg_yields_no_findings_with_reason() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> None:
+    """Return no findings when a stdin diff touches only a config-ignored file, and list that file with a config source."""
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline", "--diff", "-"],
@@ -96,6 +105,7 @@ def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> 
 
 @pytest.mark.usefixtures("project")
 def test_include_ignored_still_honours_config_paths_ignore() -> None:
+    """Keep ``paths.ignore`` in force under ``--include-ignored``: the configured file yields no findings and a config detail."""
     result = CliRunner().invoke(
         main,
         [
@@ -118,6 +128,7 @@ def test_include_ignored_still_honours_config_paths_ignore() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_reports_config_match_and_non_match_as_json() -> None:
+    """Report one JSON verdict per path: the ignored file with its config pattern, and the kept file with null source and pattern."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "json", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
@@ -130,6 +141,7 @@ def test_check_ignore_reports_config_match_and_non_match_as_json() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_exit_code_is_one_when_nothing_ignored() -> None:
+    """Exit 1 from ``check-ignore`` when none of the named paths is ignored."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "json", "src/kept.py"])
 
     assert result.exit_code == 1, result.output
@@ -137,6 +149,7 @@ def test_check_ignore_exit_code_is_one_when_nothing_ignored() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_exit_code_is_two_with_no_paths() -> None:
+    """Exit 2 from ``check-ignore`` when no path is given."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "json"])
 
     assert result.exit_code == 2
@@ -144,6 +157,7 @@ def test_check_ignore_exit_code_is_two_with_no_paths() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_shares_engine_with_analyse() -> None:
+    """Report the same ``skipme/**`` pattern from ``check-ignore`` and from ``analyse`` for one ignored file."""
     check = CliRunner().invoke(main, ["check-ignore", "--format", "json", "skipme/bad.py"])
     analyse = CliRunner().invoke(
         main,
@@ -194,6 +208,7 @@ def test_ignored_tests_still_count_as_references_for_dead_code(tmp_path: Path, m
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_text_format_is_git_style_for_ignored_paths() -> None:
+    """Print only ignored paths in text format, as one tab-separated path and ``config:`` pattern line, and exit 0."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "text", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
