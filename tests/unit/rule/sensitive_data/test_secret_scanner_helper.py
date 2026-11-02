@@ -13,24 +13,29 @@ from gruffpy.rule.sensitive_data._secret_scanner_helper import (
 
 
 def test_fixed_preview_contains_no_secret_derived_payload():
+    """Return the fixed ``[redacted]`` marker as the preview."""
     assert fixed_preview() == "[redacted]"
 
 
 def test_entropy_zero_on_empty():
+    """Measure zero entropy for an empty string."""
     assert shannon_entropy("") == 0.0
 
 
 def test_entropy_zero_on_single_char_string():
+    """Measure zero entropy for a string of one repeated character."""
     assert shannon_entropy("aaaaa") == 0.0
 
 
 def test_entropy_higher_for_random_string():
+    """Measure higher entropy for a mixed string than for one repeated character."""
     structured = shannon_entropy("aaaaaaaa")
     random_like = shannon_entropy("aB3xF7p1")
     assert random_like > structured
 
 
 def test_iter_matches_resolves_lines():
+    """Yield two matches for a pattern found on lines 2 and 4, carrying those line numbers."""
     pattern = compile_pattern(r"SECRET")
     source = "line 1\nline 2 SECRET\nline 3\nSECRET again\n"
     matches = list(iter_matches(pattern, source))
@@ -39,6 +44,7 @@ def test_iter_matches_resolves_lines():
 
 
 def test_iter_matches_returns_raw_match_text():
+    """Yield the raw text of a live-shaped AWS key match and skip the vendor-documented sample."""
     pattern = compile_pattern(r"AKIA[A-Z0-9]{16}")
     # Assembled at run time, so this file holds no key-shaped literal for a scan of the repository to report.
     live_shaped_key = "AKIA" + "Q7R2M8N4" + "P6T9V1X3"

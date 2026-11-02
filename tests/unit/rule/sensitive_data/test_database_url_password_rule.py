@@ -23,6 +23,12 @@ from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
     ids=["postgres", "mongodb_srv", "rediss", "exact_pass", "substring", "redacted_real"],
 )
 def test_url_with_password_emits(variable: str, url: str) -> None:
+    """Report one finding for a database URL literal with a real password.
+
+    Args:
+        variable: Name the URL is assigned to.
+        url: Database URL with a password; the cases vary the scheme, host and password shape.
+    """
     src = f"{variable} = {url!r}\n"
     findings = DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -54,11 +60,17 @@ def test_url_with_password_emits(variable: str, url: str) -> None:
     ],
 )
 def test_placeholder_password_skipped(password: str) -> None:
+    """Report nothing for a database URL whose password is a placeholder word.
+
+    Args:
+        password: Placeholder in the password position; the cases vary its spelling and case.
+    """
     src = "EXAMPLE = 'postgresql://user:" + password + "@host/db'\n"
     assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_passwordless_url_skipped():
+    """Report nothing for a database URL with a user but no password."""
     src = "URL = 'postgresql://user@host/db'\n"
     assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -74,6 +86,11 @@ def test_passwordless_url_skipped():
     ids=["postgres_localhost", "root_loopback", "service_name_mixed_case", "scott_tiger_any_address"],
 )
 def test_stock_development_pair_on_local_host_skipped(url: str) -> None:
+    """Report nothing for a stock development user and password pair on a local or service-name host.
+
+    Args:
+        url: URL whose pair and host the cases vary: localhost, the loopback address, a service name and the any address.
+    """
     src = f"URL = {url!r}\n"
     assert DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -87,5 +104,10 @@ def test_stock_development_pair_on_local_host_skipped(url: str) -> None:
     ids=["stock_pair_reachable_host", "real_password_local_host"],
 )
 def test_stock_pair_elsewhere_or_real_password_locally_emits(url: str) -> None:
+    """Report one finding for a stock pair on a reachable host, or for a real password on localhost.
+
+    Args:
+        url: URL with either a stock pair on a public host or a real password on localhost.
+    """
     src = f"URL = {url!r}\n"
     assert len(DatabaseUrlPasswordRule().analyse(make_unit(src), default_ctx())) == 1

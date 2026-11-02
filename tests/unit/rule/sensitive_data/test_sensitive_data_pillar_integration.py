@@ -61,6 +61,7 @@ _EXPECTED_RULE_IDS = {
 
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
+    """Report every expected sensitive-data rule at least once on the dangerous fixture, each with a preview in the marker grammar."""
     # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
     ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)

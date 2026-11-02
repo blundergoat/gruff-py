@@ -20,6 +20,7 @@ _SLACK_WEBHOOK = "https://hooks.slack.com/services/" + "T12345678" + "/" + "B123
 
 
 def test_stripe_live_key_emits():
+    """Report one finding, with vendor ``stripe``, for a live-mode Stripe secret key literal."""
     src = f"key = {_STRIPE_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -27,6 +28,7 @@ def test_stripe_live_key_emits():
 
 
 def test_github_personal_token_emits():
+    """Report one finding, with vendor ``github``, for a classic GitHub personal access token literal."""
     src = f"GH_TOKEN = {_GITHUB_TOKEN!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -34,6 +36,7 @@ def test_github_personal_token_emits():
 
 
 def test_slack_bot_token_emits():
+    """Report one finding, with vendor ``slack``, for a Slack bot token literal."""
     token = "xoxb-" + "12345678" + "-abcdef-" + "mySlackToken"
     src = f"SLACK_TOKEN = {token!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
@@ -42,6 +45,7 @@ def test_slack_bot_token_emits():
 
 
 def test_openai_key_emits():
+    """Report one finding, with vendor ``openai``, for an OpenAI API key literal."""
     src = f"OPENAI_API_KEY = {_OPENAI_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -49,6 +53,7 @@ def test_openai_key_emits():
 
 
 def test_openai_project_key_emits():
+    """Report one finding, with vendor ``openai``, for an OpenAI project-scoped key literal."""
     src = f"OPENAI_API_KEY = {_OPENAI_PROJECT_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -56,6 +61,7 @@ def test_openai_project_key_emits():
 
 
 def test_anthropic_key_emits():
+    """Report one finding, with vendor ``anthropic``, for an Anthropic API key literal."""
     src = f"ANTHROPIC_API_KEY = {_ANTHROPIC_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -63,6 +69,7 @@ def test_anthropic_key_emits():
 
 
 def test_gitlab_token_emits():
+    """Report one finding, with vendor ``gitlab``, for a GitLab personal access token literal."""
     src = f"GITLAB_TOKEN = {_GITLAB_TOKEN!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -70,6 +77,7 @@ def test_gitlab_token_emits():
 
 
 def test_npm_token_emits():
+    """Report one finding, with vendor ``npm``, for an npm access token literal."""
     src = f"NPM_TOKEN = {_NPM_TOKEN!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -77,6 +85,7 @@ def test_npm_token_emits():
 
 
 def test_google_api_key_emits():
+    """Report one finding, with vendor ``google``, for a Google API key literal."""
     src = f"GOOGLE_API_KEY = {_GOOGLE_API_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -84,6 +93,7 @@ def test_google_api_key_emits():
 
 
 def test_github_fine_grained_token_emits():
+    """Report one finding, with vendor ``github``, for a fine-grained GitHub token literal."""
     src = f"GITHUB_TOKEN = {_GITHUB_FINE_GRAINED!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -91,6 +101,7 @@ def test_github_fine_grained_token_emits():
 
 
 def test_slack_webhook_emits():
+    """Report one finding, with vendor ``slack``, for a Slack incoming-webhook URL literal."""
     src = f"SLACK_WEBHOOK = {_SLACK_WEBHOOK!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -98,6 +109,7 @@ def test_slack_webhook_emits():
 
 
 def test_provider_metadata_and_message_do_not_leak_raw_key():
+    """Keep the raw Google key out of the finding's message and metadata, which hold only the fixed preview and the vendor."""
     src = f"GOOGLE_API_KEY = {_GOOGLE_API_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -112,10 +124,12 @@ def test_provider_metadata_and_message_do_not_leak_raw_key():
 
 
 def test_unrelated_string_skipped():
+    """Report nothing for an ordinary configuration string."""
     src = "key = 'just-a-regular-config-string-here'\n"
     assert ApiKeyPatternRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_provider_documentation_placeholder_skipped():
+    """Report nothing for a Google key whose body is a documentation placeholder."""
     src = "GOOGLE_API_KEY = 'AIza" + "EXAMPLEKEY" + "PLACEHOLDER" + "123456789012345'\n"
     assert ApiKeyPatternRule().analyse(make_unit(src), default_ctx()) == []
