@@ -12,6 +12,14 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        A unit for ``x.py`` whose AST nodes carry parent links.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -24,6 +32,14 @@ def _unit(source: str) -> AnalysisUnit:
 
 
 def _ctx(options: dict | None = None) -> RuleContext:
+    """Build a rule context with the generic function rule enabled.
+
+    Args:
+        options: Rule options; None applies none.
+
+    Returns:
+        A context whose config enables the generic function rule with those options.
+    """
     rule = GenericFunctionRule()
     return RuleContext(
         project_root="/",
@@ -32,6 +48,7 @@ def _ctx(options: dict | None = None) -> RuleContext:
 
 
 def test_process_fires():
+    """Report a function named ``process`` once, naming it in the metadata."""
     src = "def process(x): return x\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -39,30 +56,35 @@ def test_process_fires():
 
 
 def test_handle_fires():
+    """Report one finding for source whose only function is named ``handle``."""
     src = "def handle(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_do_fires():
+    """Report one finding for source whose only function is named ``do``."""
     src = "def do(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_process_payment_does_not_fire():
+    """Report nothing for ``process_payment``."""
     src = "def process_payment(x): return x\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_handle_request_does_not_fire():
+    """Report nothing for ``handle_request``."""
     src = "def handle_request(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_method_generic_fires():
+    """Report a method named ``execute`` once, as ``C.execute``."""
     src = "class C:\n    def execute(self): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -70,12 +92,14 @@ def test_method_generic_fires():
 
 
 def test_non_generic_does_not_fire():
+    """Report nothing for a function named ``calculate`` under default options."""
     src = "def calculate(): return 1\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_configurable_replacement():
+    """Report one finding for a lone ``calculate`` function when the ``genericFunctions`` option lists it."""
     src = "def calculate(): return 1\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx(options={"genericFunctions": ["calculate"]}))
     assert len(findings) == 1

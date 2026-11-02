@@ -65,6 +65,15 @@ def main() -> None:
 
 
 def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit at display_path.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit; defaults to ``users.py``.
+
+    Returns:
+        A unit at display_path whose AST nodes carry parent links.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -81,6 +90,11 @@ def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
 
 
 def _default_ctx() -> RuleContext:
+    """Build a rule context that enables every registered rule with its default thresholds, options and severity threshold.
+
+    Returns:
+        A context whose config holds those settings for every registered rule.
+    """
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():
@@ -95,6 +109,7 @@ def _default_ctx() -> RuleContext:
 
 
 def test_registry_includes_all_naming_rules():
+    """Register the five naming rules in the default registry."""
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
@@ -123,6 +138,7 @@ def test_naming_rules_fire_on_fixture():
 
 
 def test_module_name_mismatch_silent_when_filename_matches():
+    """Report no module-name mismatch for ``UserService`` in ``user_service.py``."""
     findings = RuleRegistry.defaults().analyse(
         [_unit("class UserService:\n    pass\n", display_path="user_service.py")],
         _default_ctx(),
