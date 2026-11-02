@@ -33,6 +33,28 @@ def test_unittest_assert_method_counts_as_assertion() -> None:
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
+@pytest.mark.parametrize(
+    ("base", "expected_count"),
+    [
+        ("unittest.TestCase", 1),
+        ("IsolatedAsyncioTestCase", 1),
+        ("unittest.IsolatedAsyncioTestCase", 1),
+        ("ut.IsolatedAsyncioTestCase", 1),
+        ("OrdinaryClass", 0),
+    ],
+)
+def test_async_unittest_base_recognition(base: str, expected_count: int) -> None:
+    """Report an assertion-free unittest method for supported base spellings.
+
+    Args:
+        base: Bare or qualified base expression on the test class.
+        expected_count: Expected findings, with ordinary classes excluded.
+    """
+    source = f"class AsyncChecks({base}):\n    async def testRuns(self):\n        pass\n"
+    findings = NoAssertionsRule().analyse(make_unit(source), default_ctx())
+    assert len(findings) == expected_count
+
+
 def test_pytest_raises_block_counts_as_assertion() -> None:
     """Recognise the canonical pytest exception context manager."""
     src = "import pytest\ndef test_foo():\n    with pytest.raises(ValueError):\n        raise ValueError\n"

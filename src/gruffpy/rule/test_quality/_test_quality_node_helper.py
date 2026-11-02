@@ -472,7 +472,7 @@ def _is_unittest_testcase(cls: ast.ClassDef) -> bool:
     The cls argument supplies the class node whose base-expression spellings are inspected; no base class is imported.
 
     Returns:
-        True for recognized TestCase base spellings or bare IsolatedAsyncioTestCase; false when no base matches.
+        True for bare or qualified TestCase and IsolatedAsyncioTestCase spellings; false when no base matches.
     """
     for base in cls.bases:
         name = _dotted_name(base)
@@ -480,7 +480,7 @@ def _is_unittest_testcase(cls: ast.ClassDef) -> bool:
             continue
         if name in {"TestCase", "unittest.TestCase", "IsolatedAsyncioTestCase"}:
             return True
-        if name.endswith(".TestCase"):
+        if name.endswith((".TestCase", ".IsolatedAsyncioTestCase")):
             return True
     return False
 
