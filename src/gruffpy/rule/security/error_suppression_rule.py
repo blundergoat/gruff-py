@@ -83,6 +83,18 @@ class ErrorSuppressionRule(Rule):
         return findings
 
     def _check_with(self, definition: RuleDefinition, unit: AnalysisUnit, with_stmt: ast.With) -> list[Finding]:
+        """Collect wide-exception suppression findings from a with statement.
+
+        A match requires a target ending in suppress and a bare wide-exception name among positional arguments; the target's owner is not resolved.
+
+        Args:
+            definition: Rule identity, severity, and classification to copy into the finding.
+            unit: Analysis unit providing the displayed file path.
+            with_stmt: With statement whose context-manager calls are inspected.
+
+        Returns:
+            One finding per matching context item, or an empty list when none match.
+        """
         out: list[Finding] = []
         for item in with_stmt.items:
             if not isinstance(item.context_expr, ast.Call):
@@ -101,7 +113,14 @@ class ErrorSuppressionRule(Rule):
 
 
 def _is_wide_tuple(handler: ast.ExceptHandler) -> bool:
-    """True if the handler catches a tuple including Exception or BaseException."""
+    """True if the handler catches a tuple including Exception or BaseException.
+
+    Args:
+        handler: Exception handler whose tuple elements are checked for bare wide-exception names.
+
+    Returns:
+        True when a tuple contains a bare Exception or BaseException name; false otherwise.
+    """
     if not isinstance(handler.type, ast.Tuple):
         return False
     return any(isinstance(elt, ast.Name) and elt.id in _WIDE for elt in handler.type.elts)
@@ -113,6 +132,17 @@ def _build_finding(
     node: ast.AST,
     label: str,
 ) -> Finding:
+    """Build a finding for a recognized wide-suppression shape.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        node: Matched with statement or exception handler providing the source span.
+        label: Suppression shape to include in the message and metadata.
+
+    Returns:
+        Finding at the matched node's location with the supplied shape label.
+    """
     return Finding(
         rule_id=definition.id,
         message=f"Wide-exception suppression: `{label}`.",

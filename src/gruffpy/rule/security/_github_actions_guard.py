@@ -65,14 +65,26 @@ def unreachable_secret_lines(source: str) -> set[int]:
 
 
 def _mark_if_rejected(node: _GuardNode, blocked: set[int]) -> None:
-    """Late guards apply to earlier references within the same inclusive scope."""
+    """Late guards apply to earlier references within the same inclusive scope.
+
+    Args:
+        node: Job or step whose direct if child may exclude its entire source range.
+        blocked: One-based line numbers mutated to include the scope when its guard proves false for pull_request_target.
+    """
     guard = node.child("if")
     if guard and _event_is_true(guard.content, "pull_request_target") is False:
         blocked.update(range(node.start, node.end + 1))
 
 
 def _yaml_text(raw: str) -> str | None:
-    """Preserve quoted hashes; unmatched scalar quotes cannot prove ownership."""
+    """Preserve quoted hashes; unmatched scalar quotes cannot prove ownership.
+
+    Args:
+        raw: Workflow line scanned for quotes and whitespace-delimited comments.
+
+    Returns:
+        Stripped text before an unquoted comment, possibly empty; None when a quoted span cannot be read.
+    """
     index = 0
     while index < len(raw):
         if raw[index] in "'\"":
@@ -88,7 +100,14 @@ def _yaml_text(raw: str) -> str | None:
 
 
 def _ownership(source: str) -> _GuardNode | None:
-    """Complete all ranges before proof; ambiguous structure retains all warnings."""
+    """Complete all ranges before proof; ambiguous structure retains all warnings.
+
+    Args:
+        source: Complete workflow text parsed using the supported indentation and entry syntax.
+
+    Returns:
+        Root of the ownership tree with inclusive one-based ranges, or None when the structure is ambiguous.
+    """
     lines = source.split("\n")
     root = _GuardNode(end=len(lines))
     stack = [root]
@@ -121,7 +140,18 @@ def _ownership(source: str) -> _GuardNode | None:
 
 
 def _parent(stack: list[_GuardNode], indent: int, index: int, prefix: str, total: int) -> _GuardNode | None:
-    """Close siblings before attaching a list item so guards cannot leak across steps."""
+    """Close siblings before attaching a list item so guards cannot leak across steps.
+
+    Args:
+        stack: Nonempty ownership stack, mutated by closing ranges, removing finished nodes and adding list items.
+        indent: Leading-space count for the current source line.
+        index: Zero-based current line index, also the one-based end of preceding scopes.
+        prefix: Matched list-item prefix, or an empty string for a mapping entry.
+        total: Total source line count used as a new item's provisional inclusive end.
+
+    Returns:
+        The enclosing node or newly appended list item; None for mixed entry kinds or a scalar parent.
+    """
     while len(stack) > 1 and stack[-1].indent >= indent:
         stack.pop().end = index
     parent = stack[-1]
@@ -136,7 +166,17 @@ def _parent(stack: list[_GuardNode], indent: int, index: int, prefix: str, total
 
 
 def _entry(parent: _GuardNode, text: str, prefix: str, node: _GuardNode) -> _GuardNode | None:
-    """Veto duplicates/aliases and keep scalar list entries out of guard ownership."""
+    """Veto duplicates/aliases and keep scalar list entries out of guard ownership.
+
+    Args:
+        parent: Owner mutated by appending a mapping child or recording scalar list content.
+        text: Stripped workflow line with comments already removed.
+        prefix: List-item prefix removed before parsing the entry, or an empty string for a mapping.
+        node: Provisional child mutated with its key, content and adjusted indentation when a mapping matches.
+
+    Returns:
+        The appended child, or the supplied list item for a scalar entry; None for aliases, duplicate or merge keys, or unsupported entries.
+    """
     if _ALIAS.search(text):
         return None
     entry = _ENTRY.fullmatch(text[len(prefix) :])
@@ -155,7 +195,14 @@ def _entry(parent: _GuardNode, text: str, prefix: str, node: _GuardNode) -> _Gua
 
 
 def _guard_tokens(content: str) -> list[str] | None:
-    """Decode whole YAML strings/wrappers; malformed or unsupported tokens stay unknown."""
+    """Decode whole YAML strings/wrappers; malformed or unsupported tokens stay unknown.
+
+    Args:
+        content: Guard scalar whose optional quotes and expression wrapper are removed before tokenization.
+
+    Returns:
+        Non-whitespace tokens, possibly empty; None for invalid text, unsupported syntax or more than 128 tokens.
+    """
     expression = content.strip()
     if expression.startswith('"'):
         try:
@@ -288,7 +335,15 @@ class _GuardExpression:
 
 
 def _event_is_true(content: str, event: str) -> bool | None:
-    """Require complete valid input before trusting even a false result."""
+    """Require complete valid input before trusting even a false result.
+
+    Args:
+        content: Guard scalar evaluated through the bounded token and expression parsers.
+        event: Event name compared case-insensitively with recognized event-name literals.
+
+    Returns:
+        True or False when the complete supported expression proves it; None for unknown, empty or invalid input.
+    """
     tokens = _guard_tokens(content)
     if not tokens:
         return None

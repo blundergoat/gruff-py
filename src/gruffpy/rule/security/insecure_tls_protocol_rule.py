@@ -109,6 +109,16 @@ def _build_finding(
     unit: AnalysisUnit,
     node: ast.Attribute,
 ) -> Finding:
+    """Build the finding for a matched deprecated ssl protocol attribute.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        node: Matched attribute whose name and source range identify the protocol reference.
+
+    Returns:
+        A finding with the protocol target, TLS remediation and handshake metadata.
+    """
     target = f"ssl.{node.attr}"
     return Finding(
         rule_id=definition.id,

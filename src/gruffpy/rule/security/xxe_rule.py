@@ -117,6 +117,16 @@ class XxeRule(Rule):
 
 
 def _has_defusedxml_import(tree: ast.AST) -> bool:
+    """Check direct module-body imports for defusedxml or one of its submodules.
+
+    A positive result suppresses this rule for the entire file; nested imports are not inspected.
+
+    Args:
+        tree: Syntax tree whose direct module-body import statements are inspected.
+
+    Returns:
+        True for a matching direct import; False for non-module trees or when no direct import matches.
+    """
     if not isinstance(tree, ast.Module):
         return False
     for node in tree.body:
@@ -176,6 +186,12 @@ class _XmlAliases:
 
 
 def _record_import(node: ast.Import, aliases: dict[str, str]) -> None:
+    """Record aliases for direct XML module imports in the supplied map.
+
+    Args:
+        node: Import statement to inspect for xml, lxml or their submodules.
+        aliases: Alias map to mutate; matching imports are recorded only when they have an explicit alias.
+    """
     for alias in node.names:
         if not alias.name.startswith(_XML_MODULE_PREFIXES) and alias.name not in {"xml", "lxml"}:
             continue
@@ -184,6 +200,12 @@ def _record_import(node: ast.Import, aliases: dict[str, str]) -> None:
 
 
 def _record_from_import(node: ast.ImportFrom, aliases: dict[str, str]) -> None:
+    """Record named imports from XML modules in the supplied alias map.
+
+    Args:
+        node: From-import statement to inspect for xml, lxml or their submodules.
+        aliases: Alias map to mutate with qualified imported names; star imports are skipped.
+    """
     module = node.module
     if module is None:
         return
@@ -202,6 +224,17 @@ def _build_finding(
     call: ast.Call,
     target: str,
 ) -> Finding:
+    """Build the finding for a matched XML parser call.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched parser call supplying the source range.
+        target: Normalized parser target to include in the message and metadata.
+
+    Returns:
+        A finding with XML-parser remediation and external-entity metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=(f"`{target}(...)` parses XML without external-entity protections - XXE / billion-laughs risk."),

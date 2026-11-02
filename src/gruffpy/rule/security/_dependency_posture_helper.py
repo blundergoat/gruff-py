@@ -198,7 +198,15 @@ def dependency_metadata(
 
 
 def _pyproject_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
-    """Extract PEP 621 dependency arrays from ``pyproject.toml`` text."""
+    """Extract PEP 621 dependency arrays from ``pyproject.toml`` text.
+
+    Args:
+        source: Complete TOML text containing project, build-system or dependency-group declarations.
+
+    Returns:
+        Dependency-declaration records for string entries in the supported arrays, with estimated source lines; an empty tuple for invalid TOML or no
+        entries.
+    """
     try:
         data = tomllib.loads(source)
     except tomllib.TOMLDecodeError:
@@ -224,7 +232,14 @@ def _pyproject_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
 
 
 def _requirements_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
-    """Extract dependency lines from pip requirements-style text."""
+    """Extract dependency lines from pip requirements-style text.
+
+    Args:
+        source: Requirements text whose lines are normalized without following included files.
+
+    Returns:
+        Declarations for retained lines with their one-based source positions; empty when no lines qualify.
+    """
     declarations: list[DependencyDeclaration] = []
     for line_no, line in enumerate(source.splitlines(), start=1):
         cleaned = _normalise_requirement_line(line)
@@ -234,7 +249,14 @@ def _requirements_declarations(source: str) -> tuple[DependencyDeclaration, ...]
 
 
 def _setup_config_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
-    """Extract dependency lines from ``setup.cfg`` options sections."""
+    """Extract dependency lines from ``setup.cfg`` options sections.
+
+    Args:
+        source: Configuration text scanned for install_requires and extras_require entries.
+
+    Returns:
+        Declarations from supported option and continuation lines, or an empty tuple when none qualify.
+    """
     declarations: list[DependencyDeclaration] = []
     section = ""
     collecting = False
@@ -268,7 +290,14 @@ def _setup_config_declarations(source: str) -> tuple[DependencyDeclaration, ...]
 
 
 def _setup_py_declarations(unit: AnalysisUnit) -> tuple[DependencyDeclaration, ...]:
-    """Extract literal dependency strings from ``setup(...)`` calls in ``setup.py``."""
+    """Extract literal dependency strings from ``setup(...)`` calls in ``setup.py``.
+
+    Args:
+        unit: Parsed source whose AST is scanned for calls with the terminal name setup.
+
+    Returns:
+        Literal declarations from supported setup keywords, or an empty tuple when no AST or values are available.
+    """
     if unit.tree is None:
         return ()
     declarations: list[DependencyDeclaration] = []
@@ -288,7 +317,14 @@ def _setup_py_declarations(unit: AnalysisUnit) -> tuple[DependencyDeclaration, .
 
 
 def _dependency_values_from_ast(node: ast.AST) -> list[DependencyDeclaration]:
-    """Return literal dependency strings nested inside a setup keyword value."""
+    """Return literal dependency strings nested inside a setup keyword value.
+
+    Args:
+        node: Keyword value searched through literal lists, tuples, sets and dictionary values.
+
+    Returns:
+        String-literal declarations with AST source lines; unsupported expressions contribute no entries.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return [DependencyDeclaration(node.value, node.lineno, "setup.py")]
     if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
@@ -311,7 +347,18 @@ def _should_continue_setup_config_option_collection(
     declarations: list[DependencyDeclaration],
     collecting: bool,
 ) -> bool:
-    """Collect ``install_requires`` continuation lines in a setup.cfg options section."""
+    """Collect ``install_requires`` continuation lines in a setup.cfg options section.
+
+    Args:
+        stripped: Current line with surrounding whitespace removed, used to recognize and clean an entry.
+        raw_line: Original line whose leading whitespace identifies a continuation.
+        line_no: One-based source line attached to an appended declaration.
+        declarations: Collected declarations, mutated by appending any retained entry.
+        collecting: Whether the previous line left install_requires collection active.
+
+    Returns:
+        True when collection remains active, even if this line adds no declaration; False when it ends.
+    """
     if stripped.startswith("install_requires"):
         _, _, after = stripped.partition("=")
         cleaned = _normalise_requirement_line(after)
@@ -333,7 +380,18 @@ def _should_continue_setup_config_extra_collection(
     declarations: list[DependencyDeclaration],
     collecting: bool,
 ) -> bool:
-    """Collect dependency continuation lines in a setup.cfg extras section."""
+    """Collect dependency continuation lines in a setup.cfg extras section.
+
+    Args:
+        stripped: Current line with surrounding whitespace removed, used to recognize an extra or dependency.
+        raw_line: Original line whose leading whitespace separates an extra heading from its continuation.
+        line_no: One-based source line attached to an appended declaration.
+        declarations: Collected declarations, mutated by appending any retained entry.
+        collecting: Whether the previous line left an extra's dependency collection active.
+
+    Returns:
+        True for a new extra or accepted continuation, including empty entries; False when collection ends.
+    """
     if "=" in stripped and not raw_line[:1].isspace():
         _, _, after = stripped.partition("=")
         cleaned = _normalise_requirement_line(after)
@@ -349,7 +407,14 @@ def _should_continue_setup_config_extra_collection(
 
 
 def _normalise_requirement_line(line: str) -> str:
-    """Return a requirement declaration with comments/options stripped, or ``""``."""
+    """Return a requirement declaration with comments/options stripped, or ``""``.
+
+    Args:
+        line: One requirements line to strip of supported comments, editable prefixes and trailing hash options.
+
+    Returns:
+        Retained declaration text, or an empty string for a blank, comment or ignored option line.
+    """
     stripped = re.sub(r"\s+#.*$", "", line).strip()
     if not stripped or stripped.startswith("#"):
         return ""
@@ -365,14 +430,32 @@ def _normalise_requirement_line(line: str) -> str:
 
 
 def _string_list(value: object) -> list[str]:
-    """Return string list items from a parsed TOML value."""
+    """Return string list items from a parsed TOML value.
+
+    Args:
+        value: Parsed TOML value whose list entries are filtered without converting other item types.
+
+    Returns:
+        String entries in their existing order, or an empty list when the value is not a list or has no strings.
+    """
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]
     return []
 
 
 def _line_for_value(source: str, value: str, used_offsets: set[int]) -> int:
-    """Return the source line containing a TOML string value."""
+    """Estimate a TOML value's source line using textual matches.
+
+    Quoted matches reserve their offsets; the unquoted fallback may repeat a match or return line one when absent.
+
+    Args:
+        source: Original TOML text searched for quoted and then unquoted value occurrences.
+        value: Parsed string value whose spelling is located in the source.
+        used_offsets: Offsets already assigned to quoted matches; a selected quoted offset is added in place.
+
+    Returns:
+        One-based line of the selected textual match, or one when no spelling is found.
+    """
     patterns = (f'"{value}"', f"'{value}'")
     for pattern in patterns:
         start = 0
@@ -389,7 +472,14 @@ def _line_for_value(source: str, value: str, used_offsets: set[int]) -> int:
 
 
 def _call_name(node: ast.AST) -> str:
-    """Return the terminal call name for a setup.py call expression."""
+    """Return the terminal call name for a setup.py call expression.
+
+    Args:
+        node: Callee expression inspected for a name or final attribute, without resolving its binding.
+
+    Returns:
+        Identifier or terminal attribute name, or an empty string for other expression shapes.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -398,17 +488,38 @@ def _call_name(node: ast.AST) -> str:
 
 
 def _is_requirements_file(filename: str) -> bool:
-    """Return whether *filename* is a pip requirements-style file."""
+    """Return whether *filename* is a pip requirements-style file.
+
+    Args:
+        filename: Lowercased basename supplied by the declaration dispatcher.
+
+    Returns:
+        True when the name starts with requirements and ends with .txt or .in; False otherwise.
+    """
     return filename.startswith("requirements") and filename.endswith((".txt", ".in"))
 
 
 def _normalise_name(name: str) -> str:
-    """Return a normalised package-name spelling for metadata."""
+    """Return a normalised package-name spelling for metadata.
+
+    Args:
+        name: Recovered package name whose underscores are replaced with hyphens and letters lowercased.
+
+    Returns:
+        The transformed spelling; other punctuation is preserved.
+    """
     return name.replace("_", "-").lower()
 
 
 def _egg_name(spec: str) -> str | None:
-    """Return a ``#egg=`` package name from a URL requirement if present."""
+    """Return a ``#egg=`` package name from a URL requirement if present.
+
+    Args:
+        spec: Requirement text whose URL fragment is searched for an egg query value.
+
+    Returns:
+        The first nonblank egg value with normalized spelling, or None when no value is present.
+    """
     fragment = urlsplit(spec).fragment
     if not fragment:
         return None
@@ -419,7 +530,14 @@ def _egg_name(spec: str) -> str | None:
 
 
 def _looks_like_reference(spec: str) -> bool:
-    """Return whether the declaration starts with a URL, VCS, or local path."""
+    """Recognize URL markers and supported VCS or local-path prefixes.
+
+    Args:
+        spec: Declaration text checked for a URL separator anywhere or a supported reference prefix.
+
+    Returns:
+        True when the text matches a reference heuristic; False when no supported marker is found.
+    """
     lowered = spec.lower()
     return (
         "://" in spec
@@ -430,5 +548,12 @@ def _looks_like_reference(spec: str) -> bool:
 
 
 def _looks_like_named_requirement(spec: str) -> bool:
-    """Return whether the declaration starts with a package-name token."""
+    """Return whether the declaration starts with a package-name token.
+
+    Args:
+        spec: Declaration text checked for a package-name token and screened against reference heuristics.
+
+    Returns:
+        True when a leading name token is present and no reference heuristic matches; False otherwise.
+    """
     return _NAME_RE.match(spec) is not None and not _looks_like_reference(spec)

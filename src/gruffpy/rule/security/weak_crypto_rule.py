@@ -163,6 +163,18 @@ def _finding_for_call(
     algorithm: str,
     source_label: str,
 ) -> Finding:
+    """Build a weak-hash finding with remediation selected for the algorithm group.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        file_path: Displayed source path for the finding.
+        call: Matched hash call supplying its source range.
+        algorithm: Recognized hash name; configured fast password hashes select password-storage remediation.
+        source_label: Security-source classification passed into the finding metadata.
+
+    Returns:
+        A finding recording the algorithm, supplied source classification and fast-hash sink.
+    """
     password_hashing = algorithm in _FAST_PASSWORD_HASH_ALGORITHMS
     remediation = (
         "Use ``hashlib.scrypt`` / ``argon2`` / ``bcrypt`` for password storage."
@@ -193,7 +205,14 @@ def _finding_for_call(
 
 
 def _weak_algorithm(target: str) -> str | None:
-    """Return the algorithm name when *target* references hashlib.md5/sha1."""
+    """Return the algorithm name when *target* references hashlib.md5/sha1.
+
+    Args:
+        target: Dotted or bare call-target spelling to compare with the weak-hash names.
+
+    Returns:
+        The matched weak algorithm name, or None when the spelling is not recognized.
+    """
     if target in {"hashlib.md5", "hashlib.sha1"}:
         return target.split(".")[-1]
     if target in _WEAK_ALGORITHMS:
@@ -203,7 +222,14 @@ def _weak_algorithm(target: str) -> str | None:
 
 
 def _fast_password_hash_algorithm(target: str) -> str | None:
-    """Return the algorithm name when *target* references hashlib.sha256/sha512."""
+    """Return the algorithm name when *target* references hashlib.sha256/sha512.
+
+    Args:
+        target: Dotted or bare call-target spelling to compare with the fast password-hash names.
+
+    Returns:
+        The matched fast hash algorithm name, or None when the spelling is not recognized.
+    """
     if target in {"hashlib.sha256", "hashlib.sha512"}:
         return target.split(".")[-1]
     if target in _FAST_PASSWORD_HASH_ALGORITHMS:
@@ -212,11 +238,27 @@ def _fast_password_hash_algorithm(target: str) -> str | None:
 
 
 def _has_security_context_smell(call: ast.Call) -> bool:
-    """True when *call* arguments or enclosing assignment target smell security."""
+    """Find security-smelling names in positional arguments or the nearest relevant parent.
+
+    Args:
+        call: Hash call whose argument names and attached parent chain are inspected.
+
+    Returns:
+        True when an argument name or the first enclosing plain assignment or function matches the security-name heuristic.
+    """
     return _has_security_smelling_argument(call) or _has_security_smelling_parent(call)
 
 
 def _has_security_smelling_argument(call: ast.Call) -> bool:
+    """Look for security-smelling name nodes within positional arguments.
+
+    Args:
+        call: Call whose positional argument subtrees are walked.
+
+    Returns:
+        True when a Name identifier in a positional subtree matches the security heuristic; attribute names and the outer call's keyword arguments are
+        excluded.
+    """
     for arg in call.args:
         for node in ast.walk(arg):
             if isinstance(node, ast.Name) and has_security_smell(node.id):
@@ -225,10 +267,26 @@ def _has_security_smelling_argument(call: ast.Call) -> bool:
 
 
 def _has_password_hashing_context_smell(call: ast.Call) -> bool:
+    """Look for password-material names in positional arguments or the nearest relevant parent.
+
+    Args:
+        call: Hash call whose argument subtrees and attached parent chain are inspected.
+
+    Returns:
+        True when either the argument or parent-name heuristic finds password-related text.
+    """
     return _has_password_hashing_argument(call) or _has_password_hashing_parent(call)
 
 
 def _has_password_hashing_argument(call: ast.Call) -> bool:
+    """Look for password-material names and attribute leaves in positional arguments.
+
+    Args:
+        call: Call whose positional argument subtrees are walked.
+
+    Returns:
+        True when any visited name or attribute leaf contains a configured password-material token.
+    """
     for arg in call.args:
         for node in ast.walk(arg):
             name = _security_name(node)
@@ -238,6 +296,16 @@ def _has_password_hashing_argument(call: ast.Call) -> bool:
 
 
 def _has_password_hashing_parent(call: ast.Call) -> bool:
+    """Check the nearest enclosing plain assignment or function for a password-material name.
+
+    Stop at the first plain assignment or function even when its names do not match; other enclosing node types are skipped.
+
+    Args:
+        call: Call with optional parent links to traverse toward enclosing syntax.
+
+    Returns:
+        The first plain assignment or function's name-test result, or False when no such parent is found.
+    """
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
@@ -249,6 +317,16 @@ def _has_password_hashing_parent(call: ast.Call) -> bool:
 
 
 def _has_security_smelling_parent(call: ast.Call) -> bool:
+    """Check the nearest enclosing plain assignment or function for a security-smelling name.
+
+    Stop at the first plain assignment or function even when its names do not match; other enclosing node types are skipped.
+
+    Args:
+        call: Call with optional parent links to traverse toward enclosing syntax.
+
+    Returns:
+        The first plain assignment or function's name-test result, or False when no such parent is found.
+    """
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):
@@ -260,14 +338,38 @@ def _has_security_smelling_parent(call: ast.Call) -> bool:
 
 
 def _has_security_smelling_target(targets: list[ast.expr]) -> bool:
+    """Check direct assignment names and attribute leaves for security-related text.
+
+    Args:
+        targets: Assignment target expressions to inspect without unpacking tuple or list targets.
+
+    Returns:
+        True when any supported target name matches the security-name heuristic.
+    """
     return any(name is not None and has_security_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _has_password_hashing_target(targets: list[ast.expr]) -> bool:
+    """Check direct assignment names and attribute leaves for password-material text.
+
+    Args:
+        targets: Assignment target expressions to inspect without unpacking tuple or list targets.
+
+    Returns:
+        True when any supported target name contains a configured password-material token.
+    """
     return any(name is not None and _has_password_hashing_smell(name) for target in targets for name in [_target_security_name(target)])
 
 
 def _target_security_name(target: ast.expr) -> str | None:
+    """Extract the direct name or attribute leaf from an assignment target.
+
+    Args:
+        target: Assignment target expression to classify without descending into it.
+
+    Returns:
+        The identifier or terminal attribute name, or None for unsupported target shapes.
+    """
     if isinstance(target, ast.Name):
         return target.id
     if isinstance(target, ast.Attribute):
@@ -276,6 +378,14 @@ def _target_security_name(target: ast.expr) -> str | None:
 
 
 def _security_name(node: ast.AST) -> str | None:
+    """Extract a name identifier or attribute leaf from an expression.
+
+    Args:
+        node: AST node to inspect without traversing its children.
+
+    Returns:
+        The identifier or terminal attribute name, or None for other node types.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -284,5 +394,13 @@ def _security_name(node: ast.AST) -> str | None:
 
 
 def _has_password_hashing_smell(name: str) -> bool:
+    """Match configured password-material tokens within a lowercased name.
+
+    Args:
+        name: Identifier or attribute spelling to search case-insensitively.
+
+    Returns:
+        True when the lowercased name contains any configured password-material token.
+    """
     lowered = name.lower()
     return any(token in lowered for token in _PASSWORD_HASH_TOKENS)

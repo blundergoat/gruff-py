@@ -120,6 +120,14 @@ class _ScopeWalker:
         return tainted
 
     def _walk_stmt(self, stmt: ast.stmt, tainted: set[str]) -> None:
+        """Update taint state for a statement or visit its remaining expressions.
+
+        Supported scopes, assignments and branches receive their dedicated state handling.
+
+        Args:
+            stmt: Statement whose supported effects and expressions are inspected.
+            tainted: Current tainted names, mutated by supported statement handlers.
+        """
         if self._did_handle_scope_or_assignment(stmt, tainted):
             return
         if self._did_handle_branching(stmt, tainted):
@@ -127,6 +135,17 @@ class _ScopeWalker:
         self._visit_expressions_in(stmt, tainted)
 
     def _did_handle_scope_or_assignment(self, stmt: ast.stmt, tainted: set[str]) -> bool:
+        """Handle supported nested scopes and assignment statements.
+
+        Nested scopes use fresh name sets; defining a function or class clears its name in the enclosing set.
+
+        Args:
+            stmt: Statement checked for a function, class or supported assignment form.
+            tainted: Enclosing tainted-name set, updated in place when a supported statement is handled.
+
+        Returns:
+            True when this handler processed the statement; False when another handler must inspect it.
+        """
         if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             self._walk_function(stmt)
             tainted.discard(stmt.name)
@@ -147,6 +166,15 @@ class _ScopeWalker:
         return False
 
     def _did_handle_branching(self, stmt: ast.stmt, tainted: set[str]) -> bool:
+        """Handle supported conditional, loop and try statements.
+
+        Args:
+            stmt: Statement checked for a supported branching construct.
+            tainted: Incoming tainted names, replaced in place with the branch handler's joined result.
+
+        Returns:
+            True when a branch handler processed the statement; False for other statement forms.
+        """
         if isinstance(stmt, ast.If):
             self._walk_if(stmt, tainted)
             return True
@@ -162,17 +190,38 @@ class _ScopeWalker:
         return False
 
     def _walk_function(self, function: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Walk a function with fresh taint state seeded by recognized request parameters.
+
+        Expressions marked in the function are added to the shared taint map.
+
+        Args:
+            function: Function whose parameter syntax seeds a fresh name set before its body is visited.
+        """
         scope: set[str] = set()
         scope.update(_fastapi_param_sources(function))
         self.walk_body(function.body, scope)
 
     def _walk_assign(self, stmt: ast.Assign, tainted: set[str]) -> None:
+        """Visit an assigned value and propagate its taint to supported target names.
+
+        Args:
+            stmt: Plain assignment whose value is inspected before any target state changes.
+            tainted: Current tainted names, updated or cleared for each supported target in place.
+        """
         self._visit_expr(stmt.value, tainted)
         value_tainted = self._is_tainted(stmt.value, tainted)
         for target in stmt.targets:
             self._apply_assignment(target, value_tainted, tainted)
 
     def _walk_ann_assign(self, stmt: ast.AnnAssign, tainted: set[str]) -> None:
+        """Propagate an annotated assignment's value taint to supported target names.
+
+        An annotation without a value clears the supported target names from taint state.
+
+        Args:
+            stmt: Annotated assignment whose optional value is inspected when present.
+            tainted: Current tainted names, mutated to reflect the value or its absence.
+        """
         if stmt.value is not None:
             self._visit_expr(stmt.value, tainted)
             value_tainted = self._is_tainted(stmt.value, tainted)
@@ -181,12 +230,26 @@ class _ScopeWalker:
         self._apply_assignment(stmt.target, value_tainted, tainted)
 
     def _walk_aug_assign(self, stmt: ast.AugAssign, tainted: set[str]) -> None:
+        """Mark a directly named augmented-assignment target when its right side is tainted.
+
+        Existing tainted names are retained when the right side does not add taint.
+
+        Args:
+            stmt: Augmented assignment whose right-side expressions are visited.
+            tainted: Current tainted names, extended in place for a tainted right side and direct name target.
+        """
         self._visit_expr(stmt.value, tainted)
         rhs_tainted = self._is_tainted(stmt.value, tainted)
         if rhs_tainted and isinstance(stmt.target, ast.Name):
             tainted.add(stmt.target.id)
 
     def _walk_if(self, stmt: ast.If, tainted: set[str]) -> None:
+        """Visit both conditional branches and retain their shared tainted names.
+
+        Args:
+            stmt: Conditional whose test is visited before both bodies are walked from separate incoming-state copies.
+            tainted: Incoming names, replaced in place by the intersection of both branch exit sets.
+        """
         self._visit_expr(stmt.test, tainted)
         if_tainted = self.walk_body(stmt.body, set(tainted))
         else_tainted = self.walk_body(stmt.orelse, set(tainted))
@@ -195,6 +258,14 @@ class _ScopeWalker:
         tainted.update(joined)
 
     def _walk_for(self, stmt: ast.For | ast.AsyncFor, tainted: set[str]) -> None:
+        """Visit a for loop and retain taint shared by its incoming, body and else states.
+
+        The iterable is visited without assigning its taint to the loop target.
+
+        Args:
+            stmt: For or async-for loop whose iterable, body and else expressions are inspected.
+            tainted: Incoming names, replaced in place by their intersection with the body and else exit sets.
+        """
         self._visit_expr(stmt.iter, tainted)
         body_tainted = self.walk_body(stmt.body, set(tainted))
         orelse_tainted = self.walk_body(stmt.orelse, set(tainted))
@@ -203,6 +274,12 @@ class _ScopeWalker:
         tainted.update(joined)
 
     def _walk_while(self, stmt: ast.While, tainted: set[str]) -> None:
+        """Visit a while loop and retain taint shared by its incoming, body and else states.
+
+        Args:
+            stmt: Loop whose test is visited before its body and else use separate incoming-state copies.
+            tainted: Incoming names, replaced in place by their intersection with the body and else exit sets.
+        """
         self._visit_expr(stmt.test, tainted)
         body_tainted = self.walk_body(stmt.body, set(tainted))
         orelse_tainted = self.walk_body(stmt.orelse, set(tainted))
@@ -211,6 +288,14 @@ class _ScopeWalker:
         tainted.update(joined)
 
     def _walk_try(self, stmt: ast.Try, tainted: set[str]) -> None:
+        """Join try-flow taint by intersecting the final-body result with handler exits.
+
+        The else body follows the try-body state; the final body follows that result, while handlers start from incoming state.
+
+        Args:
+            stmt: Try statement whose bodies and handlers are visited using the supported state-joining model.
+            tainted: Incoming names, replaced in place with the computed intersection of exit states.
+        """
         body_tainted = self.walk_body(stmt.body, set(tainted))
         handler_sets: list[set[str]] = []
         for handler in stmt.handlers:
@@ -229,6 +314,13 @@ class _ScopeWalker:
         value_tainted: bool,
         tainted: set[str],
     ) -> None:
+        """Add or clear the supported names in an assignment target.
+
+        Args:
+            target: Direct name or nested tuple/list target whose supported names are collected.
+            value_tainted: Whether collected target names should be added rather than removed.
+            tainted: Current tainted names, updated in place for the collected targets.
+        """
         names = _names_from_target(target)
         if value_tainted:
             tainted.update(names)
@@ -236,16 +328,41 @@ class _ScopeWalker:
         tainted.difference_update(names)
 
     def _visit_expressions_in(self, stmt: ast.stmt, tainted: set[str]) -> None:
+        """Visit a statement's child subtrees to record tainted expressions.
+
+        This traversal records expression identities without applying statement assignment or branch semantics.
+
+        Args:
+            stmt: Statement whose direct children start recursive expression visits.
+            tainted: Current name state read when classifying expressions; not mutated by this traversal.
+        """
         for child in ast.iter_child_nodes(stmt):
             self._visit_expr(child, tainted)
 
     def _visit_expr(self, node: ast.AST, tainted: set[str]) -> None:
+        """Record supported tainted expressions throughout an AST subtree.
+
+        Matching expression identities are added to the shared map before their child nodes are visited.
+
+        Args:
+            node: AST subtree whose expressions and descendants are inspected.
+            tainted: Current name state read during classification; not mutated by this traversal.
+        """
         if isinstance(node, ast.expr) and self._is_tainted(node, tainted):
             self._map.mark(node)
         for child in ast.iter_child_nodes(node):
             self._visit_expr(child, tainted)
 
     def _is_tainted(self, expr: ast.expr, tainted: set[str]) -> bool:
+        """Classify an expression using the supported taint sources and propagation shapes.
+
+        Args:
+            expr: Expression checked by the primitive, compound or call classifier.
+            tainted: Current names treated as tainted, read without mutation.
+
+        Returns:
+            True when a supported rule marks the value tainted; False for other shapes or unmarked values.
+        """
         if isinstance(expr, ast.Name | ast.Attribute | ast.Subscript):
             return self._is_primitive_tainted(expr, tainted)
         if isinstance(expr, ast.BinOp | ast.JoinedStr | ast.FormattedValue | ast.IfExp):
@@ -259,6 +376,17 @@ class _ScopeWalker:
         expr: ast.Name | ast.Attribute | ast.Subscript,
         tainted: set[str],
     ) -> bool:
+        """Check taint on names, attribute receivers and subscript components.
+
+        Recognized request attributes supply taint even when their receiver name is not in the current set.
+
+        Args:
+            expr: Name, attribute or subscript whose supported source and component rules are checked.
+            tainted: Current tainted names used when checking the expression and its components.
+
+        Returns:
+            True for a marked name, recognized request source or propagated component; False otherwise.
+        """
         if isinstance(expr, ast.Name):
             return expr.id in tainted
         if isinstance(expr, ast.Attribute):
@@ -272,6 +400,17 @@ class _ScopeWalker:
         expr: ast.BinOp | ast.JoinedStr | ast.FormattedValue | ast.IfExp,
         tainted: set[str],
     ) -> bool:
+        """Propagate taint through supported string-building and conditional expressions.
+
+        Conditional expressions use their result branches rather than their condition to determine value taint.
+
+        Args:
+            expr: Binary, joined-string, formatted-value or conditional expression to classify.
+            tainted: Current tainted names used while classifying the supported value components.
+
+        Returns:
+            True when a supported value component is tainted; False for other binary operators or untainted components.
+        """
         if isinstance(expr, ast.BinOp):
             if not isinstance(expr.op, ast.Add | ast.Mod):
                 return False
@@ -383,6 +522,14 @@ def _is_request_object(request_receiver: ast.expr, imported_modules: frozenset[s
 
 
 def _names_from_target(target: ast.expr) -> set[str]:
+    """Collect assigned names from direct names and nested tuple or list targets.
+
+    Args:
+        target: Assignment target recursively inspected through tuple and list elements.
+
+    Returns:
+        Supported target names, or an empty set for attributes, subscripts, starred targets and other shapes.
+    """
     if isinstance(target, ast.Name):
         return {target.id}
     if isinstance(target, ast.Tuple | ast.List):
@@ -421,6 +568,14 @@ def _fastapi_param_sources(function: ast.FunctionDef | ast.AsyncFunctionDef) -> 
 
 
 def _is_fastapi_source_annotation(annotation: ast.expr | None) -> bool:
+    """Recognize supported request-source spellings in parameter annotations.
+
+    Args:
+        annotation: Optional annotation checked as a recognized bare name or supported subscript payload.
+
+    Returns:
+        True when supported annotation syntax matches; False for None or other shapes, without resolving imports.
+    """
     if annotation is None:
         return False
     if isinstance(annotation, ast.Name):
@@ -431,6 +586,14 @@ def _is_fastapi_source_annotation(annotation: ast.expr | None) -> bool:
 
 
 def _has_fastapi_source_in_subscript(node: ast.Subscript) -> bool:
+    """Look for a recognized request-source marker in a subscript payload.
+
+    Args:
+        node: Annotation subscript whose single payload or tuple items are checked without interpreting its outer name.
+
+    Returns:
+        True when a supported payload item matches; False when no item qualifies.
+    """
     payload = node.slice
     if isinstance(payload, ast.Tuple):
         return any(_is_fastapi_source_subscript_inner(elt) for elt in payload.elts)
@@ -438,6 +601,14 @@ def _has_fastapi_source_in_subscript(node: ast.Subscript) -> bool:
 
 
 def _is_fastapi_source_subscript_inner(node: ast.expr) -> bool:
+    """Recognize a request-source name or call inside annotation metadata.
+
+    Args:
+        node: Payload item checked by its bare name or terminal call spelling without resolving bindings.
+
+    Returns:
+        True for a recognized source spelling; False for other names or expression shapes.
+    """
     if isinstance(node, ast.Name):
         return node.id in _FASTAPI_PARAM_SOURCES
     if isinstance(node, ast.Call):
@@ -447,6 +618,14 @@ def _is_fastapi_source_subscript_inner(node: ast.expr) -> bool:
 
 
 def _is_fastapi_source_default(default: ast.expr | None) -> bool:
+    """Recognize a request-source call used as a parameter default.
+
+    Args:
+        default: Optional default checked for a call with a recognized terminal name.
+
+    Returns:
+        True when the default call spelling matches; False for None or unsupported expressions, without resolving imports.
+    """
     if default is None or not isinstance(default, ast.Call):
         return False
     target = call_target_name(default)

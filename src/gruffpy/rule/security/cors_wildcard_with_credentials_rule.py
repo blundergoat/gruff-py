@@ -104,6 +104,16 @@ class CorsWildcardWithCredentialsRule(Rule):
 
 
 def _is_cors_call(call: ast.Call) -> bool:
+    """Recognize bare or dotted call targets whose final component is CORS.
+
+    This spelling check does not resolve imports or establish which library owns the call.
+
+    Args:
+        call: Call whose target spelling is checked.
+
+    Returns:
+        True when the bare or dotted callee name ends in the component CORS; false otherwise.
+    """
     target = call_target_name(call)
     if target is None:
         return False
@@ -111,10 +121,26 @@ def _is_cors_call(call: ast.Call) -> bool:
 
 
 def _is_credentials_true(value: ast.expr | None) -> bool:
+    """Recognize an explicit true credential setting.
+
+    Args:
+        value: Keyword value to inspect; None means the keyword was omitted.
+
+    Returns:
+        True only for the boolean True constant; false for absent or other values.
+    """
     return isinstance(value, ast.Constant) and value.value is True
 
 
 def _is_wildcard_origins(value: ast.expr | None) -> bool:
+    """Recognize omitted origins or an explicit wildcard origin.
+
+    Args:
+        value: Origins keyword value; None is treated as the wildcard default.
+
+    Returns:
+        True for omission, a wildcard constant, or a list or tuple containing one; false otherwise.
+    """
     if value is None:
         return True
     if isinstance(value, ast.Constant) and value.value == "*":
@@ -129,6 +155,16 @@ def _build_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
+    """Build the finding for a matched wildcard CORS configuration.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        call: Matched call supplying the finding's source span.
+
+    Returns:
+        Finding at the call's source span with the rule classification and CORS metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=(

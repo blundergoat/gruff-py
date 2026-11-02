@@ -110,12 +110,32 @@ class InsecureRandomRule(Rule):
 
 
 def _is_random_call(target: str) -> bool:
+    """Recognize a listed method under the literal random target prefix.
+
+    This check does not resolve import aliases or runtime bindings.
+
+    Args:
+        target: Resolved target spelling to compare with the supported random methods.
+
+    Returns:
+        True when the spelling has the random prefix and a listed remaining method name; false otherwise.
+    """
     if target.startswith("random."):
         return target.split(".", 1)[1] in _RANDOM_METHODS
     return False
 
 
 def _has_security_context_smell(call: ast.Call) -> bool:
+    """Check the nearest plain assignment or function for a security-related name.
+
+    A plain assignment checks only bare-name targets. A nonmatching nearest context stops the search rather than falling through to outer contexts.
+
+    Args:
+        call: Call with parent links used to find the first enclosing plain assignment or function.
+
+    Returns:
+        Whether that first context matches the name heuristic; false if it does not or no such parent exists.
+    """
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):

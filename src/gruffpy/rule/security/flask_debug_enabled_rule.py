@@ -93,6 +93,14 @@ class FlaskDebugEnabledRule(Rule):
 
 
 def _flask_debug_label(node: ast.AST) -> str | None:
+    """Dispatch call and assignment nodes to the debug-setting checks.
+
+    Args:
+        node: Syntax node to inspect for a supported debug-enabling shape.
+
+    Returns:
+        Matched shape label, or None for other nodes or settings.
+    """
     if isinstance(node, ast.Call):
         return _call_debug_label(node)
     if isinstance(node, ast.Assign):
@@ -101,6 +109,16 @@ def _flask_debug_label(node: ast.AST) -> str | None:
 
 
 def _call_debug_label(call: ast.Call) -> str | None:
+    """Recognize supported method calls with a literal true debug keyword.
+
+    The check uses attribute spelling; the caller applies the file's Flask import gate.
+
+    Args:
+        call: Call to inspect for a run method or a config update method.
+
+    Returns:
+        Shape label when the matching debug keyword is the boolean True constant; None otherwise.
+    """
     if not isinstance(call.func, ast.Attribute):
         return None
     attribute = call.func.attr
@@ -117,6 +135,14 @@ def _call_debug_label(call: ast.Call) -> str | None:
 
 
 def _assign_debug_label(assign: ast.Assign) -> str | None:
+    """Recognize a true assignment to a config debug subscript.
+
+    Args:
+        assign: Assignment whose value and targets are checked for the debug-setting shape.
+
+    Returns:
+        Shape label if any target matches and the value is literal True; None otherwise.
+    """
     if not _is_true_literal(assign.value):
         return None
     for target in assign.targets:
@@ -126,6 +152,14 @@ def _assign_debug_label(assign: ast.Assign) -> str | None:
 
 
 def _is_config_debug_subscript(target: ast.expr) -> bool:
+    """Recognize the debug key on an attribute named config.
+
+    Args:
+        target: Assignment target to inspect for a constant DEBUG subscript key.
+
+    Returns:
+        True for the matching subscript shape; false for other targets.
+    """
     if not isinstance(target, ast.Subscript):
         return False
     if not (isinstance(target.value, ast.Attribute) and target.value.attr == "config"):
@@ -135,12 +169,28 @@ def _is_config_debug_subscript(target: ast.expr) -> bool:
 
 
 def _receiver_attribute(callee: ast.Attribute) -> str | None:
+    """Extract the immediate attribute name owning a method call.
+
+    Args:
+        callee: Method attribute whose receiver expression is inspected.
+
+    Returns:
+        Receiver attribute name, or None when the receiver is not itself an attribute.
+    """
     if isinstance(callee.value, ast.Attribute):
         return callee.value.attr
     return None
 
 
 def _is_true_literal(node: ast.expr) -> bool:
+    """Recognize the boolean True constant without treating other values as true.
+
+    Args:
+        node: Expression to inspect for an explicit boolean setting.
+
+    Returns:
+        True only for a constant whose value is the boolean True.
+    """
     return isinstance(node, ast.Constant) and node.value is True
 
 
@@ -150,6 +200,17 @@ def _build_finding(
     node: ast.AST,
     label: str,
 ) -> Finding:
+    """Build the finding for a matched Flask debug-setting shape.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        node: Matched node providing its location, with line one used when absent.
+        label: Debug-setting shape to include in the message and metadata.
+
+    Returns:
+        Finding with the node location, shape label, and Flask configuration metadata.
+    """
     line = getattr(node, "lineno", 1)
     end_line = getattr(node, "end_lineno", None)
     return Finding(

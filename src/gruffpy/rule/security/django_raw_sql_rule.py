@@ -99,6 +99,16 @@ class DjangoRawSqlRule(Rule):
 
 
 def _raw_sql_label(call: ast.Call) -> str | None:
+    """Recognize raw-query call names before the caller checks their SQL argument.
+
+    This helper does not apply the Django import gate or decide whether the SQL argument is dynamic.
+
+    Args:
+        call: Call whose attribute or resolved target spelling is inspected.
+
+    Returns:
+        Shape label for an attribute named raw or a target ending in RawSQL; None otherwise.
+    """
     if isinstance(call.func, ast.Attribute) and call.func.attr == "raw":
         return ".raw"
     target = call_target_name(call)
@@ -115,6 +125,17 @@ def _build_finding(
     call: ast.Call,
     label: str,
 ) -> Finding:
+    """Build the finding for a matched dynamic raw-query call.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        call: Matched call supplying the finding's source span.
+        label: Raw-query shape selected by the call-name check.
+
+    Returns:
+        Finding with the call span, shape label, and dynamic-SQL security metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=(f"`{label}(...)` receives a dynamic SQL string - use parameterised arguments instead."),

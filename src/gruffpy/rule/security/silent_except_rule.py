@@ -154,7 +154,16 @@ class SilentExceptRule(Rule):
 
 
 def _has_explanatory_comment(handler: ast.ExceptHandler, comments: dict[int, str]) -> bool:
-    """Use only real comments belonging to this pass-only handler as rationale."""
+    """Use only real comments belonging to this pass-only handler as rationale.
+
+    Args:
+        handler: Pass-only exception handler whose inclusive source-line range bounds the comment search.
+        comments: Tokenized comment text keyed by one-based source line.
+
+    Returns:
+        True when in-range comments reject code parsing, contain a reason signal and add non-stock words; False for empty, unfinished or code-like
+        text.
+    """
     prose = " ".join(comments[line] for line in range(handler.lineno, (handler.end_lineno or handler.lineno) + 1) if line in comments)
     if not prose or _UNFINISHED_PATTERN.search(prose):
         return False
@@ -170,7 +179,14 @@ def _has_explanatory_comment(handler: ast.ExceptHandler, comments: dict[int, str
 
 
 def _is_wide_exception(handler: ast.ExceptHandler) -> bool:
-    """True if the handler catches no specific type, or catches Exception/BaseException."""
+    """True if the handler catches no specific type, or catches Exception/BaseException.
+
+    Args:
+        handler: Exception handler whose caught-type syntax is classified.
+
+    Returns:
+        True for a bare handler or an Exception/BaseException name or attribute leaf; False for other shapes.
+    """
     if handler.type is None:
         return True
     if isinstance(handler.type, ast.Name):

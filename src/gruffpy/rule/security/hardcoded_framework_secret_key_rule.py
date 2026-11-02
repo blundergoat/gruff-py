@@ -95,6 +95,16 @@ class HardcodedFrameworkSecretKeyRule(Rule):
 
 
 def _iter_secret_key_assignments(stmt: ast.stmt) -> list[ast.stmt]:
+    """Select a direct secret-key assignment with a string-literal value.
+
+    This helper does not recurse into scopes or branches, and does not inspect the string's content.
+
+    Args:
+        stmt: Direct module-body statement supplied after the caller's framework gate.
+
+    Returns:
+        A single-item list containing a matching assignment or annotated assignment; empty otherwise.
+    """
     if isinstance(stmt, ast.Assign):
         if not _is_string_literal_value(stmt.value):
             return []
@@ -110,10 +120,26 @@ def _iter_secret_key_assignments(stmt: ast.stmt) -> list[ast.stmt]:
 
 
 def _is_secret_key_target(target: ast.expr) -> bool:
+    """Recognize the bare framework secret-key setting name.
+
+    Args:
+        target: Assignment target to compare with the setting name.
+
+    Returns:
+        True for a plain name equal to SECRET_KEY; false for attributes or other targets.
+    """
     return isinstance(target, ast.Name) and target.id == _SECRET_KEY_NAME
 
 
 def _is_string_literal_value(value: ast.expr) -> bool:
+    """Recognize a plain string constant assigned to a framework setting.
+
+    Args:
+        value: Assigned expression to inspect without interpreting its string content.
+
+    Returns:
+        True for string constants, including empty strings; false for other expressions.
+    """
     return isinstance(value, ast.Constant) and isinstance(value.value, str)
 
 
@@ -122,6 +148,16 @@ def _build_finding(
     unit: AnalysisUnit,
     assign: ast.stmt,
 ) -> Finding:
+    """Build the finding for a matched framework secret-key assignment.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        assign: Matched assignment supplying the finding's source span.
+
+    Returns:
+        Finding with the setting name and security classification, without copying the assigned value.
+    """
     return Finding(
         rule_id=definition.id,
         message=("Module-scope `SECRET_KEY` is assigned a string literal - read it from the environment instead."),

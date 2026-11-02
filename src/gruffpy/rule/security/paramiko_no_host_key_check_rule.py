@@ -135,6 +135,17 @@ class _ParamikoAliases:
 
 
 def _unsafe_policy_leaf(call: ast.Call, aliases: _ParamikoAliases) -> str | None:
+    """Identify an unsafe host-key policy through the collected paramiko names.
+
+    Qualified targets need a recognized module head and unsafe terminal name; intermediate components are not resolved.
+
+    Args:
+        call: Call expression whose target spelling is checked.
+        aliases: Collected module aliases and directly imported unsafe policy names.
+
+    Returns:
+        The original unsafe policy class name, or None for dynamic or unmatched targets.
+    """
     target = call_target_name(call)
     if target is None:
         return None
@@ -152,6 +163,17 @@ def _build_finding(
     call: ast.Call,
     leaf: str,
 ) -> Finding:
+    """Build the finding for a matched unsafe host-key policy constructor.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched constructor call supplying the source range.
+        leaf: Recognized policy class name to include in the message and metadata.
+
+    Returns:
+        A finding with the host-key remediation and SSH policy metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=f"`paramiko.{leaf}()` accepts unknown SSH host keys - MITM risk.",

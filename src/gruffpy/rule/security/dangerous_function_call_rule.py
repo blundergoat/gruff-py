@@ -72,6 +72,14 @@ class DangerousFunctionCallRule(Rule):
 
 
 def _dangerous_calls(tree: ast.AST) -> list[tuple[ast.Call, str]]:
+    """Collect call sites matching the dangerous-call syntax checks.
+
+    Args:
+        tree: Syntax subtree to search, including nested scopes.
+
+    Returns:
+        Call and target-label pairs in AST traversal order; an empty list when none match.
+    """
     findings: list[tuple[ast.Call, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -83,6 +91,16 @@ def _dangerous_calls(tree: ast.AST) -> list[tuple[ast.Call, str]]:
 
 
 def _dangerous_call_kind(node: ast.Call) -> str | None:
+    """Identify a dangerous target from its spelling and argument syntax.
+
+    Listed execution targets match regardless of arguments; the import target requires a first positional argument that is not a string literal.
+
+    Args:
+        node: Call to check for a listed target or a dynamic import argument.
+
+    Returns:
+        Matched target name, or None for other calls or imports without a nonliteral first positional argument.
+    """
     target = call_target_name(node)
     if target in _UNCONDITIONAL_DANGEROUS:
         return target
@@ -100,6 +118,17 @@ def _dangerous_call_finding(
     node: ast.Call,
     kind: str,
 ) -> Finding:
+    """Build the finding for a matched dangerous call.
+
+    Args:
+        unit: Analysis unit providing the displayed file path.
+        definition: Rule identity, severity, and classification to copy into the finding.
+        node: Matched call supplying the finding's source span.
+        kind: Target label returned by the dangerous-call check.
+
+    Returns:
+        Finding with the call location and target label in its message and metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=(f"Dangerous call to `{kind}()` - arbitrary code execution surface."),

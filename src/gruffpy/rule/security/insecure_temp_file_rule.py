@@ -102,6 +102,16 @@ def _finding_for_call(
     definition: RuleDefinition,
     call: ast.Call,
 ) -> Finding | None:
+    """Choose a temporary-file finding from the call target and literal arguments.
+
+    Args:
+        unit: Source unit supplying the finding's file path.
+        definition: Rule metadata to attach to a matching call.
+        call: Call expression to classify.
+
+    Returns:
+        A mktemp or hardcoded-path finding, or None when neither call shape matches.
+    """
     target = call_target_name(call)
     if target in _MKTEMP_TARGETS:
         return _build_mktemp_finding(definition, unit, call)
@@ -114,6 +124,14 @@ def _finding_for_call(
 
 
 def _hardcoded_temp_argument(call: ast.Call) -> str | None:
+    """Find the first positional string literal with a configured temporary-directory prefix.
+
+    Args:
+        call: Call whose positional arguments are inspected in source order.
+
+    Returns:
+        The matching literal value, or None when no positional string has a configured prefix.
+    """
     for arg in call.args:
         if not isinstance(arg, ast.Constant) or not isinstance(arg.value, str):
             continue
@@ -127,6 +145,16 @@ def _build_mktemp_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
+    """Build the finding for a matched mktemp call.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched call supplying the start and end lines.
+
+    Returns:
+        A finding with the mktemp remediation and temporary-file-creation metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=("`tempfile.mktemp()` returns a path without creating the file - TOCTOU race risk."),
@@ -157,6 +185,18 @@ def _build_temp_path_finding(
     leaf: str,
     matched_literal: str,
 ) -> Finding:
+    """Build the finding for a file call with a hardcoded temporary path.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched call supplying the start and end lines.
+        leaf: Terminal call name to display in the message.
+        matched_literal: First matching path literal, included in the message and metadata.
+
+    Returns:
+        A finding describing the literal path and temporary-file-path sink.
+    """
     return Finding(
         rule_id=definition.id,
         message=(f"`{leaf}('{matched_literal}'...)` uses a hardcoded world-writeable tmp path - symlink / race risk."),
