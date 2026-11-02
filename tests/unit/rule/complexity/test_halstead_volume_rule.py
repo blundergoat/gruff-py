@@ -4,6 +4,17 @@ from gruffpy.rule.complexity._halstead import halstead_for
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
+    """Return the first top-level, non-async function definition in source.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        That function definition.
+
+    Raises:
+        AssertionError: The source has no top-level, non-async function.
+    """
     tree = ast.parse(source)
     for node in tree.body:
         if isinstance(node, ast.FunctionDef):
@@ -12,6 +23,7 @@ def _first_fn(source: str) -> ast.FunctionDef:
 
 
 def test_simple_function_low_volume():
+    """Measure ``x + 1`` as one distinct operator and two distinct operands with a volume of about 4.75."""
     import math
 
     src = "def f(x):\n    return x + 1\n"
@@ -23,6 +35,7 @@ def test_simple_function_low_volume():
 
 
 def test_binop_chain_increases_vocabulary():
+    """Count three operators and four operands in ``a + b * c - d``, all of them distinct."""
     src = "def f(a, b, c, d):\n    return a + b * c - d\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 3  # +, *, -
@@ -32,6 +45,7 @@ def test_binop_chain_increases_vocabulary():
 
 
 def test_compare_operators_counted():
+    """Count ``a < b < c`` as two less-than operators, one distinct, and three distinct operands."""
     src = "def f(a, b, c):\n    return a < b < c\n"
     metrics = halstead_for(_first_fn(src))
     # Compare node has 2 ops (Lt, Lt)
@@ -41,6 +55,7 @@ def test_compare_operators_counted():
 
 
 def test_boolop_counted():
+    """Count ``a and b`` as one distinct operator and two distinct operands."""
     src = "def f(a, b):\n    return a and b\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 1  # And
@@ -48,6 +63,7 @@ def test_boolop_counted():
 
 
 def test_unary_op_counted():
+    """Count ``-x`` as one distinct operator and one distinct operand."""
     src = "def f(x):\n    return -x\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 1  # USub
@@ -55,6 +71,7 @@ def test_unary_op_counted():
 
 
 def test_aug_assign_counted_as_operator():
+    """Count one operator in total for a function that applies ``x += 1`` and returns x."""
     src = "def f(x):\n    x += 1\n    return x\n"
     metrics = halstead_for(_first_fn(src))
     # x += 1 -> one AddAssign operator
@@ -63,6 +80,7 @@ def test_aug_assign_counted_as_operator():
 
 
 def test_nested_function_not_included():
+    """Count no operators for an outer function whose only operator is in its nested function."""
     src = "def outer():\n    def inner(a, b):\n        return a + b\n    return inner\n"
     metrics = halstead_for(_first_fn(src))
     # outer's body has no operators

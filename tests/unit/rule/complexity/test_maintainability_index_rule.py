@@ -6,13 +6,32 @@ from gruffpy.rule.size._lines import code_line_numbers
 
 
 def _mi(source: str) -> float:
+    """Compute the maintainability index of the first top-level, non-async function in source.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        That function's maintainability index.
+
+    Raises:
+        StopIteration: The source has no top-level, non-async function.
+    """
     tree = ast.parse(source)
     fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef))
     return _maintainability_index_for(fn, code_line_numbers(source, tree))
 
 
 def _branched_body(branch_count: int, with_elif: bool = False) -> str:
-    """Return a function body that contains ``branch_count`` if/else branches."""
+    """Return the source of a function ``f`` with ``branch_count`` if/else branches, or if/elif branches when with_elif is set.
+
+    Args:
+        branch_count: Number of branches to generate.
+        with_elif: Whether each branch pairs ``if`` with ``elif`` and longer arithmetic instead of ``else``; defaults to False.
+
+    Returns:
+        The function source, which ends by returning x.
+    """
     lines: list[str] = []
     for i in range(branch_count):
         lines.append(f"    if a{i} > b{i}:")
@@ -28,6 +47,7 @@ def _branched_body(branch_count: int, with_elif: bool = False) -> str:
 
 
 def test_trivial_function_has_max_mi():
+    """Give a function that only returns ``x + 1`` the maximum index of 100."""
     # Simple short function: low HV, CC=1, low LOC -> MI close to 100 (clamped).
     src = "def f(x):\n    return x + 1\n"
     mi = _mi(src)
@@ -56,6 +76,7 @@ def test_mi_formula_matches_canonical_values():
 
 
 def test_complex_function_lowers_mi():
+    """Score a function with 40 if/else branches below 80."""
     # Bigger function should have lower (worse) MI.
     src = _branched_body(40)
     mi = _mi(src)
@@ -63,6 +84,7 @@ def test_complex_function_lowers_mi():
 
 
 def test_documenting_a_function_leaves_its_index_unchanged():
+    """Keep a ten-branch function's index, below 100, unchanged after a long docstring and ten comment lines are added."""
     plain = _branched_body(10)
     notes = "\n".join(f"    Branch {i} is explained here." for i in range(30))
     comments = "".join(f"    # Step {i}.\n" for i in range(10))

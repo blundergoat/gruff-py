@@ -11,6 +11,15 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str = "src/pkg/module.py") -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit at display_path.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit; defaults to a library module under ``src/pkg``.
+
+    Returns:
+        The analysis unit.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -20,6 +29,11 @@ def _unit(source: str, display_path: str = "src/pkg/module.py") -> AnalysisUnit:
 
 
 def _ctx() -> RuleContext:
+    """Build a rule context with the runtime ``sys.path`` mutation rule enabled.
+
+    Returns:
+        The rule context.
+    """
     rule = RuntimeSysPathMutationRule()
     return RuleContext(
         project_root="/",
@@ -28,10 +42,20 @@ def _ctx() -> RuleContext:
 
 
 def _analyse(source: str, display_path: str = "src/pkg/module.py"):
+    """Run the runtime ``sys.path`` mutation rule over source at display_path.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit; defaults to a library module under ``src/pkg``.
+
+    Returns:
+        The rule's findings.
+    """
     return RuntimeSysPathMutationRule().analyse(_unit(source, display_path), _ctx())
 
 
 def test_module_level_insert_zero_fires_with_metadata():
+    """Flag a module-level ``sys.path.insert(0, ...)`` once, recording its method and position and warning that it shadows imports."""
     src = 'import sys\n\nsys.path.insert(0, "/opt/lib")\n'
     findings = _analyse(src)
     assert len(findings) == 1
@@ -41,6 +65,7 @@ def test_module_level_insert_zero_fires_with_metadata():
 
 
 def test_append_inside_library_function_fires():
+    """Flag ``sys.path.append`` inside a library function once, recording the method and no argument position."""
     src = "import sys\n\ndef setup_paths(root):\n    sys.path.append(root)\n"
     findings = _analyse(src)
     assert len(findings) == 1
@@ -49,36 +74,43 @@ def test_append_inside_library_function_fires():
 
 
 def test_insert_inside_main_block_is_clean():
+    """Report nothing for an insert inside a ``__main__`` guard."""
     src = 'import sys\n\nif __name__ == "__main__":\n    sys.path.insert(0, "/opt/lib")\n'
     assert _analyse(src) == []
 
 
 def test_reversed_main_guard_is_clean():
+    """Report nothing for an insert inside a ``__main__`` guard written with its operands reversed."""
     src = 'import sys\n\nif "__main__" == __name__:\n    sys.path.insert(0, "/opt/lib")\n'
     assert _analyse(src) == []
 
 
 def test_append_in_tests_directory_is_clean():
+    """Report nothing for a module-level append in a file under ``tests``."""
     src = 'import sys\n\nsys.path.append("/helpers")\n'
     assert _analyse(src, display_path="tests/helpers.py") == []
 
 
 def test_conftest_is_clean():
+    """Report nothing for a module-level insert in ``conftest.py``."""
     src = 'import sys\n\nsys.path.insert(0, "/src")\n'
     assert _analyse(src, display_path="conftest.py") == []
 
 
 def test_other_list_named_path_is_clean():
+    """Report nothing for an insert into a class attribute named ``path``."""
     src = 'import os\n\nclass Config:\n    path = []\n\nConfig.path.insert(0, "x")\n'
     assert _analyse(src) == []
 
 
 def test_compound_main_guard_is_clean():
+    """Report nothing for an insert under a ``__main__`` check joined to another condition with ``and``."""
     src = 'import sys\n\nif __name__ == "__main__" and __package__ is None:\n    sys.path.insert(0, "/opt/lib")\n'
     assert _analyse(src) == []
 
 
 def test_else_branch_of_main_guard_fires():
+    """Flag an insert in the ``else`` branch of a ``__main__`` guard once."""
     # The else branch runs when the module is imported, so mutation there is
     # not exempt even though the guard marks the file as a script.
     src = 'import sys\n\nif __name__ == "__main__":\n    pass\nelse:\n    sys.path.insert(0, "/opt/lib")\n'
@@ -138,6 +170,7 @@ def test_insert_inside_a_function_of_a_guarded_module_still_fires():
 
 
 def test_definition_is_advisory_high_confidence_design():
+    """Define the rule as an advisory, high-confidence design rule that is enabled by default."""
     definition = RuntimeSysPathMutationRule().definition()
     assert definition.default_severity.value == "advisory"
     assert definition.confidence.value == "high"
