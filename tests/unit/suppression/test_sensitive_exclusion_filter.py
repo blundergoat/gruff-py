@@ -17,6 +17,15 @@ _AWS_RULE = "sensitive-data.aws-access-key"
 
 
 def _finding(*, file_path: str = "secrets/aws.env", symbol: str | None = None) -> Finding:
+    """Build an error-level AWS key finding on line 1, optionally attached to a symbol.
+
+    Args:
+        file_path: Finding path; the excluded ``secrets/aws.env`` by default.
+        symbol: Symbol that holds the key, or None.
+
+    Returns:
+        The finding.
+    """
     return Finding(
         rule_id=_AWS_RULE,
         message="AWS access key ID literal in source.",
@@ -31,6 +40,14 @@ def _finding(*, file_path: str = "secrets/aws.env", symbol: str | None = None) -
 
 
 def _exclusion(*, symbol: str | None = None) -> SensitiveExclusion:
+    """Build the single sensitive exclusion entry for the AWS rule on ``secrets/aws.env``.
+
+    Args:
+        symbol: Symbol the entry narrows to, or None to cover the whole path.
+
+    Returns:
+        The entry at index 0, with its fixed reason.
+    """
     return SensitiveExclusion(
         index=0,
         rule=_AWS_RULE,
@@ -41,6 +58,7 @@ def _exclusion(*, symbol: str | None = None) -> SensitiveExclusion:
 
 
 def test_entry_symbol_suppresses_only_the_finding_carrying_that_symbol() -> None:
+    """Suppress only the finding whose symbol the exclusion entry names, keeping a sibling with another symbol and counting one."""
     matching = _finding(symbol="Fixtures.aws_sample")
     other_symbol = _finding(symbol="Fixtures.other_sample")
 
@@ -54,6 +72,7 @@ def test_entry_symbol_suppresses_only_the_finding_carrying_that_symbol() -> None
 
 
 def test_entry_without_a_symbol_suppresses_regardless_of_the_finding_symbol() -> None:
+    """Suppress every matching finding, with or without a symbol, when the exclusion entry names no symbol."""
     kept, summaries = partition_sensitive_exclusions(
         [_finding(symbol="Fixtures.aws_sample"), _finding()],
         [_exclusion()],
@@ -64,6 +83,7 @@ def test_entry_without_a_symbol_suppresses_regardless_of_the_finding_symbol() ->
 
 
 def test_an_entry_matching_nothing_still_publishes_its_audit_row() -> None:
+    """Publish an audit row with a zero suppressed count for an exclusion entry that matches no finding."""
     kept, summaries = partition_sensitive_exclusions([], [_exclusion()])
 
     assert kept == []

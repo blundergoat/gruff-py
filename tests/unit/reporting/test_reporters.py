@@ -91,6 +91,7 @@ def _report(
     Args:
         findings: Findings to render; None or empty uses one representative default.
         filters: Optional display filter; None means the user requested no filtering.
+        diagnostics: Run diagnostics the report carries; none by default.
 
     Returns:
         Scored analysis report ready for rendering; never None.
@@ -164,6 +165,7 @@ def test_bounded_deep_scan_annotates_github_and_notes_sarif() -> None:
 
 
 def test_json_reporter_records_display_filters():
+    """Record an active display filter's minimum severity and included rules in the JSON run."""
     report = _report(
         filters=FindingDisplayFilter(
             min_severity=Severity.WARNING,
@@ -329,6 +331,7 @@ def test_markdown_and_html_escape_partial_context_with_normal_reporter_rules() -
 
 
 def test_markdown_reporter_groups_findings_and_escapes_table_pipes():
+    """Title the Markdown report and escape the pipe characters in a finding's path and message."""
     finding = _finding(message="Do not render | as a table break", file_path="src/a|b.py")
 
     markdown = MarkdownReporter().render(_report((finding,)))
@@ -339,6 +342,7 @@ def test_markdown_reporter_groups_findings_and_escapes_table_pipes():
 
 
 def test_markdown_reporter_pillars_table_is_canonical_with_seven_columns():
+    """Render the Markdown pillars table with seven canonical columns, the two-finding pillar above the one-finding one, and a two-decimal score."""
     findings = (
         _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
         _finding(
@@ -397,6 +401,7 @@ def test_markdown_reporter_pillars_table_uses_pillar_score_counts():
 
 
 def test_github_annotations_escape_properties_and_data():
+    """Emit an error annotation that escapes the colon and comma in its file property and the percent sign and newline in its message."""
     finding = _finding(
         message="bad % value\nnext",
         file_path="src/a:b,thing.py",
@@ -410,6 +415,7 @@ def test_github_annotations_escape_properties_and_data():
 
 
 def test_hotspot_reporter_uses_hotspot_schema():
+    """Emit the ``gruff-py.hotspot.v1`` hotspot map, listing the default finding's file first."""
     payload = json.loads(HotspotReporter().render(_report()))
 
     assert payload["schemaVersion"] == "gruff-py.hotspot.v1"
@@ -422,6 +428,7 @@ def test_hotspot_reporter_uses_hotspot_schema():
 # id; use gruffFingerprint and gruffSchemaVersion shared with gruff-rs; normalize
 # artifact URIs; omit rich SARIF constructs until native data exists.
 def test_sarif_reporter_emits_rule_metadata_and_fingerprint():
+    """Publish SARIF driver metadata, the default result's location, identity and metadata, its rule's metadata and the shared schema and score."""
     payload = json.loads(SarifReporter().render(_report()))
     driver = payload["runs"][0]["tool"]["driver"]
     result = payload["runs"][0]["results"][0]
@@ -441,6 +448,16 @@ def _assert_sarif_driver_metadata(
     driver: dict[str, Any],
     rule_ids: list[str],
 ) -> None:
+    """Assert the SARIF version, the driver's name and version, the absent information URI and the sorted rule ids.
+
+    Args:
+        payload: Parsed SARIF payload.
+        driver: The payload's tool driver.
+        rule_ids: Driver rule ids in published order.
+
+    Raises:
+        AssertionError: A checked field differs from the contract.
+    """
     assert payload["version"] == "2.1.0"
     assert driver["name"] == "gruff-py"
     assert driver["semanticVersion"] == "0.1.0-test"
@@ -449,13 +466,32 @@ def _assert_sarif_driver_metadata(
 
 
 def _baseline_identity(finding: Finding) -> str:
-    """Return the durable identity a SARIF result must publish for one finding, ranking it as the run would."""
+    """Return the durable identity a SARIF result must publish for one finding, ranking it as the run would.
+
+    Args:
+        finding: Finding identified as the only one in its run.
+
+    Returns:
+        Its baseline identity.
+
+    Raises:
+        AssertionError: The finding has no identity.
+    """
     named = finding_identities([finding])[0]
     assert named is not None
     return named.identity
 
 
 def _assert_sarif_result_contract(result: dict[str, Any], rule_ids: list[str]) -> None:
+    """Assert the dangerous-call result's rule, rule index, level, message, location, baseline-identity fingerprint and metadata.
+
+    Args:
+        result: First SARIF result.
+        rule_ids: Driver rule ids, used to check the result's rule index.
+
+    Raises:
+        AssertionError: A checked field differs from the contract.
+    """
     assert result["ruleId"] == "security.dangerous-function-call"
     assert result["ruleIndex"] == rule_ids.index("security.dangerous-function-call")
     assert result["level"] == "error"
@@ -468,6 +504,14 @@ def _assert_sarif_result_contract(result: dict[str, Any], rule_ids: list[str]) -
 
 
 def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
+    """Assert the dangerous-call rule's six keys, pillar, default severity, default-off state and documentation, and that file length is listed.
+
+    Args:
+        rules: Driver rules keyed by id.
+
+    Raises:
+        AssertionError: A checked field differs from the contract.
+    """
     assert set(rules["security.dangerous-function-call"]) == {
         "id",
         "name",
@@ -484,12 +528,25 @@ def _assert_sarif_rule_metadata(rules: dict[str, dict[str, Any]]) -> None:
 
 
 def _assert_sarif_shared_contract(payload: dict[str, Any]) -> None:
+    """Assert the SARIF run's analysis schema version and composite score, and the JSON report's matching schema version.
+
+    Args:
+        payload: Parsed SARIF payload.
+
+    Raises:
+        AssertionError: A checked field differs from the contract.
+    """
     assert payload["runs"][0]["properties"]["gruffSchemaVersion"] == "gruff.analysis.v3"
     assert payload["runs"][0]["properties"]["score"] == _report().score.composite.score
     assert json.loads(JsonReporter().render(_report()))["schemaVersion"] == "gruff.analysis.v3"
 
 
 def _unknown_rule_payload() -> dict[str, Any]:
+    """Render SARIF for one warning from a rule the registry does not know.
+
+    Returns:
+        The parsed SARIF payload.
+    """
     report = _report(
         (
             _finding(
@@ -505,12 +562,14 @@ def _unknown_rule_payload() -> dict[str, Any]:
 
 
 def test_unknown_rule_fallback_has_same_shape_as_registry_backed_rule() -> None:
+    """Give an unknown rule's SARIF entry the same keys as a registry-backed rule's entry."""
     run = _unknown_rule_payload()["runs"][0]
     rules = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}
     assert set(rules["external.custom-rule"]) == set(rules["security.dangerous-function-call"])
 
 
 def test_unknown_rule_fallback_uses_rule_id_for_name_and_descriptions() -> None:
+    """Fill an unknown rule's SARIF name and short description with its id, and its full description and help with the finding message."""
     run = _unknown_rule_payload()["runs"][0]
     fallback = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}["external.custom-rule"]
     assert fallback["name"] == "external.custom-rule"
@@ -520,6 +579,7 @@ def test_unknown_rule_fallback_uses_rule_id_for_name_and_descriptions() -> None:
 
 
 def test_unknown_rule_fallback_projects_finding_attributes_into_properties() -> None:
+    """Copy an unknown rule's finding classification into its SARIF rule properties as defaults, with no ``severity`` key."""
     run = _unknown_rule_payload()["runs"][0]
     fallback = {rule["id"]: rule for rule in run["tool"]["driver"]["rules"]}["external.custom-rule"]
     assert fallback["properties"] == {
@@ -534,12 +594,14 @@ def test_unknown_rule_fallback_projects_finding_attributes_into_properties() -> 
 
 
 def test_unknown_rule_fallback_result_rule_index_points_to_matching_driver_rule() -> None:
+    """Point an unknown rule's SARIF result index at that rule's driver entry."""
     run = _unknown_rule_payload()["runs"][0]
     result = run["results"][0]
     assert run["tool"]["driver"]["rules"][result["ruleIndex"]]["id"] == result["ruleId"]
 
 
 def test_sarif_reporter_projects_registry_thresholds_and_options():
+    """Publish a registry rule's single threshold and another rule's options in SARIF rule properties, with no tiered thresholds map."""
     payload = json.loads(SarifReporter().render(_report()))
     rules = {rule["id"]: rule for rule in payload["runs"][0]["tool"]["driver"]["rules"] if isinstance(rule, dict)}
 
@@ -551,6 +613,7 @@ def test_sarif_reporter_projects_registry_thresholds_and_options():
 
 
 def test_sarif_reporter_omits_region_when_finding_has_no_line():
+    """Omit the SARIF region for a finding without a line, keeping its artifact URI."""
     payload = json.loads(SarifReporter().render(_report((_finding(line=None),))))
 
     physical_location = payload["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
@@ -565,6 +628,11 @@ _NATIVE_METADATA_FINDING_END_LINE = 15
 
 
 def _native_metadata_finding_payload() -> dict[str, Any]:
+    """Render SARIF for one finding that sets every location field, a symbol, a remediation, a secondary pillar and metadata.
+
+    Returns:
+        The parsed SARIF payload.
+    """
     finding = _finding(
         line=_NATIVE_METADATA_FINDING_LINE,
         end_line=_NATIVE_METADATA_FINDING_END_LINE,
@@ -578,6 +646,7 @@ def _native_metadata_finding_payload() -> dict[str, Any]:
 
 
 def test_sarif_reporter_projects_finding_region_from_native_attributes() -> None:
+    """Project a finding's start line, column and end line into its SARIF region."""
     result = _native_metadata_finding_payload()["runs"][0]["results"][0]
     region = result["locations"][0]["physicalLocation"]["region"]
     assert region == {
@@ -588,6 +657,7 @@ def test_sarif_reporter_projects_finding_region_from_native_attributes() -> None
 
 
 def test_sarif_reporter_projects_finding_classification_into_properties() -> None:
+    """Project a finding's severity, pillar, tier, confidence and secondary pillars into its SARIF result properties."""
     properties = _native_metadata_finding_payload()["runs"][0]["results"][0]["properties"]
     assert properties["severity"] == "error"
     assert properties["pillar"] == "security"
@@ -597,6 +667,7 @@ def test_sarif_reporter_projects_finding_classification_into_properties() -> Non
 
 
 def test_sarif_reporter_projects_finding_remediation_and_metadata() -> None:
+    """Project a finding's symbol, remediation and metadata into its SARIF result properties."""
     properties = _native_metadata_finding_payload()["runs"][0]["results"][0]["properties"]
     assert properties["symbol"] == "load_user"
     assert properties["remediation"] == "Use a safe dispatcher."
@@ -604,6 +675,7 @@ def test_sarif_reporter_projects_finding_remediation_and_metadata() -> None:
 
 
 def test_sarif_reporter_projects_security_taxonomy_without_fingerprint_churn():
+    """Publish a rule's CWE, OWASP and severity taxonomy and the finding's source label in SARIF, keeping its baseline-identity fingerprint."""
     finding = _finding(
         rule_id="security.django-raw-sql",
         message="SQL placeholder is quoted.",
@@ -746,6 +818,7 @@ def _sensitive_data_findings() -> list[Finding]:
 
 
 def test_sarif_reporter_does_not_emit_stale_contract_keys():
+    """Keep the literal names of three retired fingerprint and schema keys out of rendered SARIF."""
     rendered = SarifReporter().render(_report())
     stale_keys = (
         "partialFingerprints." + "primary",
@@ -758,6 +831,7 @@ def test_sarif_reporter_does_not_emit_stale_contract_keys():
 
 
 def test_sarif_reporter_normalizes_paths_and_maps_native_severities():
+    """Strip a leading ``./`` and convert backslash separators in SARIF URIs, and map error, warning and advisory to error, warning and note."""
     report = _report(
         (
             _finding(file_path="./src\\error.py", severity=Severity.ERROR),
@@ -777,6 +851,7 @@ def test_sarif_reporter_normalizes_paths_and_maps_native_severities():
 
 
 def test_sarif_reporter_rule_indexes_point_to_sorted_driver_rules():
+    """Sort SARIF driver rules by id and point every result's rule index at its own rule."""
     payload = json.loads(SarifReporter().render(_report()))
     run = payload["runs"][0]
     rule_ids = [rule["id"] for rule in run["tool"]["driver"]["rules"]]
@@ -792,6 +867,7 @@ def test_sarif_reporter_rule_indexes_point_to_sorted_driver_rules():
 
 
 def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
+    """Escape a finding's markup and quotes in the HTML report, and include the interactive filter controls."""
     finding = _finding(
         message='<img src=x onerror=alert(1)> "quote"',
         file_path='src/"evil".py',
@@ -807,6 +883,7 @@ def test_html_reporter_escapes_untrusted_values_and_interactive_controls():
 
 
 def test_html_reporter_pillars_table_is_canonical_with_seven_columns():
+    """Render the HTML pillars table with its seven column headers, the two-finding pillar above the one-finding one, and a two-decimal score."""
     findings = (
         _finding(severity=Severity.ERROR, pillar=Pillar.SECURITY),
         _finding(
@@ -845,6 +922,7 @@ def test_html_reporter_pillars_table_is_canonical_with_seven_columns():
 
 
 def test_display_filter_applies_minimum_severity_and_rule_filters():
+    """Hide findings below the minimum severity or in an excluded rule, and serialise the filter's settings."""
     findings = (
         _finding(severity=Severity.ERROR),
         _finding(

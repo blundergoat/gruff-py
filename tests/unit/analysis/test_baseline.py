@@ -52,16 +52,33 @@ from gruffpy.finding.severity import Severity
     ],
 )
 def test_identity_matches_the_family_oracle(tool_language: str, rule_id: str, path: str, subject: str, expected: str) -> None:
+    """Compute the family oracle's baseline identity for each recorded input.
+
+    The cases vary the ordinal, a message subject, the tool language and the path.
+
+    Args:
+        tool_language: Port language that enters the identity.
+        rule_id: Rule id of the identity.
+        path: Finding path of the identity.
+        subject: Symbol with its ordinal, or a message, that the identity names.
+        expected: Identity the family oracle records for the case.
+    """
     assert compute_identity_for(tool_language, rule_id, path, subject) == expected
 
 
 def test_measured_values_never_enter_a_symbol_less_identity() -> None:
+    """Replace each measured number, including decimals, grouped thousands and versions, with ``#``, and leave number-free text unchanged."""
     assert normalise_measured_values("File has 1010 lines (limit 1000)") == "File has # lines (limit #)"
     assert normalise_measured_values("12.5% over 1,234 lines in v0.5.2") == "#% over # lines in v#"
     assert normalise_measured_values("File has no module documentation") == "File has no module documentation"
 
 
 def test_generated_baseline_stores_one_line_free_row_per_identity(tmp_path: Path) -> None:
+    """Store one occurrence row per identity, holding its rule, path and ordinal subject but no line number.
+
+    Args:
+        tmp_path: Project root that receives ``gruff-baseline.json``.
+    """
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding()])
     payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
 
@@ -77,6 +94,11 @@ def test_generated_baseline_stores_one_line_free_row_per_identity(tmp_path: Path
 
 
 def test_a_generated_baseline_names_its_schema_writer_and_sensitive_policy(tmp_path: Path) -> None:
+    """Write a baseline with the v3 schema, the ``py`` writer and sensitive findings marked ineligible, and report one generated entry.
+
+    Args:
+        tmp_path: Project root that receives the generated baseline.
+    """
     report = generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding()])
     payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
 
@@ -85,6 +107,11 @@ def test_a_generated_baseline_names_its_schema_writer_and_sensitive_policy(tmp_p
 
 
 def test_a_line_shifted_finding_stays_hidden_and_a_new_sibling_does_not(tmp_path: Path) -> None:
+    """Keep a reviewed finding hidden after it moves to another line, while a new sibling symbol stays reported.
+
+    Args:
+        tmp_path: Project root holding the baseline generated from one reviewed finding.
+    """
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding()])
 
     moved = _finding(line=300)
@@ -131,6 +158,11 @@ def test_an_earlier_same_named_declaration_that_starts_warning_does_not_inherit_
 
 
 def test_a_second_occurrence_beyond_the_reviewed_count_is_new_and_the_lowest_line_is_spent(tmp_path: Path) -> None:
+    """Hide one occurrence for a reviewed count of one, spending it on the lowest line even when the run lists the later one first.
+
+    Args:
+        tmp_path: Project root holding the baseline generated from one reviewed finding.
+    """
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding()])
 
     later = _finding(line=90)
@@ -144,6 +176,11 @@ def test_a_second_occurrence_beyond_the_reviewed_count_is_new_and_the_lowest_lin
 
 
 def test_a_measured_file_level_finding_survives_the_file_growing(tmp_path: Path) -> None:
+    """Keep a symbol-less file-level finding hidden after its measured line count grows.
+
+    Args:
+        tmp_path: Project root holding the baseline generated from the file-length finding at 1,010 lines.
+    """
     reviewed = _finding(symbol=None, message="File has 1010 lines (limit 1000)", line=1)
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[reviewed])
 
@@ -155,6 +192,11 @@ def test_a_measured_file_level_finding_survives_the_file_growing(tmp_path: Path)
 
 
 def test_symbol_less_occurrences_are_counted_never_collided(tmp_path: Path) -> None:
+    """Report one unchanged and one new occurrence, and no collision, for two symbol-less findings whose messages differ only by a number.
+
+    Args:
+        tmp_path: Project root holding the baseline generated from the first parameter-count finding.
+    """
     reviewed = _finding(symbol=None, message="Function has 12 parameters", line=10)
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[reviewed])
 
@@ -167,6 +209,11 @@ def test_symbol_less_occurrences_are_counted_never_collided(tmp_path: Path) -> N
 
 
 def test_a_sensitive_finding_is_never_stored_and_never_hidden(tmp_path: Path) -> None:
+    """Store only the count of a sensitive finding, never its row, and keep it reported when the baseline is applied.
+
+    Args:
+        tmp_path: Project root that receives the baseline generated from one AWS key finding.
+    """
     secret = _finding(rule_id="sensitive-data.aws-access-key", pillar=Pillar.SENSITIVE_DATA, symbol=None, message="Possible AWS key")
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[secret])
     payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
@@ -182,6 +229,7 @@ def test_a_sensitive_finding_is_never_stored_and_never_hidden(tmp_path: Path) ->
 
 
 def test_a_symbol_carrying_the_ordinal_separator_has_no_identity() -> None:
+    """Give no identity to a finding whose symbol already holds the ``#`` ordinal separator, while an ordinary finding keeps one."""
     ordinary, separated = finding_identities([_finding(), _finding(symbol="example#2", line=20)])
 
     # The runner, the hook and SARIF all read this one function, so None here is "no identity" on every surface.
@@ -190,6 +238,11 @@ def test_a_symbol_carrying_the_ordinal_separator_has_no_identity() -> None:
 
 
 def test_a_symbol_carrying_the_ordinal_separator_is_never_stored_and_is_not_a_secret(tmp_path: Path) -> None:
+    """Leave a separator-carrying symbol out of the stored rows and the sensitive counts, and report it as ineligible rather than hide it.
+
+    Args:
+        tmp_path: Project root that receives the baseline generated from an ordinary and a separator-carrying finding.
+    """
     separated = _finding(symbol="example#2", line=20)
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding(), separated])
     payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
@@ -205,6 +258,11 @@ def test_a_symbol_carrying_the_ordinal_separator_is_never_stored_and_is_not_a_se
 
 
 def test_a_baseline_written_by_another_port_is_refused(tmp_path: Path) -> None:
+    """Refuse to apply a baseline whose writer language is another port's, naming that port.
+
+    Args:
+        tmp_path: Project root holding a generated baseline rewritten to claim the ``ts`` writer.
+    """
     generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding()])
     payload = json.loads((tmp_path / "gruff-baseline.json").read_text())
     payload["toolLanguage"] = "ts"
@@ -215,6 +273,11 @@ def test_a_baseline_written_by_another_port_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_row_that_could_expire_or_leak_fails_the_file(tmp_path: Path) -> None:
+    """Refuse a baseline whose occurrence row carries the forbidden ``line`` key.
+
+    Args:
+        tmp_path: Project root holding a hand-written v3 baseline with a line number in its only row.
+    """
     (tmp_path / "gruff-baseline.json").write_text(
         json.dumps(
             {
@@ -230,6 +293,11 @@ def test_a_row_that_could_expire_or_leak_fails_the_file(tmp_path: Path) -> None:
 
 
 def test_a_0_5_baseline_fails_closed_and_names_the_migration_command(tmp_path: Path) -> None:
+    """Refuse to apply a 0.5 baseline, naming the ``--migrate-baseline`` command.
+
+    Args:
+        tmp_path: Project root holding the staged 0.5 baseline.
+    """
     _write_legacy_input(tmp_path)
 
     with pytest.raises(BaselineError, match="--migrate-baseline"):
@@ -237,6 +305,11 @@ def test_a_0_5_baseline_fails_closed_and_names_the_migration_command(tmp_path: P
 
 
 def test_migration_carries_reviews_forward_and_leaves_its_input_byte_identical(tmp_path: Path) -> None:
+    """Migrate a 0.5 baseline to a v3 file with one entry whose first row has the recomputed identity, leaving the input byte-identical.
+
+    Args:
+        tmp_path: Project root holding the 0.5 baseline and receiving ``migrated.json``.
+    """
     legacy_bytes = _write_legacy_input(tmp_path)
     unreviewed = _finding(symbol="unreviewed", line=400)
 
@@ -257,6 +330,11 @@ def test_migration_carries_reviews_forward_and_leaves_its_input_byte_identical(t
 
 
 def test_migration_refuses_to_write_over_its_own_input(tmp_path: Path) -> None:
+    """Refuse a migration whose output is its own input, directly or through a symlink, and leave the input unchanged.
+
+    Args:
+        tmp_path: Project root holding the 0.5 baseline and a symlink to it.
+    """
     legacy_bytes = _write_legacy_input(tmp_path)
     link = tmp_path / "linked.json"
     link.symlink_to(tmp_path / "legacy.json")
@@ -269,6 +347,11 @@ def test_migration_refuses_to_write_over_its_own_input(tmp_path: Path) -> None:
 
 
 def test_migration_refuses_an_ambiguous_input(tmp_path: Path) -> None:
+    """Refuse a legacy input with more than one row container, leaving it unchanged and writing no output.
+
+    Args:
+        tmp_path: Project root holding a legacy file with both ``findings`` and ``entries`` lists.
+    """
     ambiguous = json.dumps({"schemaVersion": "gruff-py.baseline.v1", "findings": [], "entries": []}, indent=4).encode("utf-8")
     (tmp_path / "legacy.json").write_bytes(ambiguous)
 
@@ -281,6 +364,11 @@ def test_migration_refuses_an_ambiguous_input(tmp_path: Path) -> None:
 
 
 def test_migration_refuses_a_hard_linked_output(tmp_path: Path) -> None:
+    """Refuse a migration whose output is a hard link to its input, and leave the input unchanged.
+
+    Args:
+        tmp_path: Project root holding the 0.5 baseline and a hard link to it.
+    """
     legacy_bytes = _write_legacy_input(tmp_path)
     (tmp_path / "hard-link.json").hardlink_to(tmp_path / "legacy.json")
 
@@ -362,7 +450,14 @@ def test_a_written_baseline_carries_no_sentinel(tmp_path: Path) -> None:
 
 
 def _sentinel_forms(sentinel: str) -> dict[str, str]:
-    """Return every shape a leaked secret could take in an artifact."""
+    """Return the four forms of a planted secret that the artifact checks search for.
+
+    Args:
+        sentinel: Secret text a test plants.
+
+    Returns:
+        The raw text, its first eight characters, its SHA-256 hex digest and its base64 encoding, keyed by form name.
+    """
     return {
         "raw": sentinel,
         "partial": sentinel[:8],
@@ -372,7 +467,14 @@ def _sentinel_forms(sentinel: str) -> dict[str, str]:
 
 
 def _write_legacy_input(tmp_path: Path) -> bytes:
-    """Stage the 0.5 baseline a migration reads, and hand back its bytes for the byte-for-byte comparison after."""
+    """Stage the 0.5 baseline a migration reads, and hand back its bytes for the byte-for-byte comparison after.
+
+    Args:
+        tmp_path: Project root that receives ``legacy.json``.
+
+    Returns:
+        The exact bytes written.
+    """
     legacy_bytes = json.dumps(
         {
             "schemaVersion": "gruff-py.baseline.v1",
@@ -402,7 +504,18 @@ def _finding(
     line: int | None = 12,
     pillar: Pillar = Pillar.DOCUMENTATION,
 ) -> Finding:
-    """Build one ordinary finding; each test varies only the field whose effect on the identity it is proving."""
+    """Build one advisory, high-confidence finding in ``src/example.py``; each test overrides only the fields its case needs.
+
+    Args:
+        rule_id: Rule id; ``docs.example`` by default.
+        message: Finding message; with numbers normalised, it names the identity when there is no symbol.
+        symbol: Symbol; ``example`` by default, or None for a symbol-less finding.
+        line: Line; 12 by default.
+        pillar: Pillar; documentation by default.
+
+    Returns:
+        The finding.
+    """
     return Finding(
         rule_id=rule_id,
         message=message,

@@ -12,7 +12,11 @@ CORRELATED_STACK_FINDINGS = 4
 def _correlated_stack() -> list[Finding]:
     """A god-function's real metric findings - long, cyclomatically and
     cognitively complex, deeply nested - all on one symbol and line, so the
-    correlated-rule clustering bills them as one penalty."""
+    correlated-rule clustering bills them as one penalty.
+
+    Returns:
+        Four warning findings on symbol ``run`` at line 1: function length, cyclomatic, cognitive and nesting depth.
+    """
     return [
         _finding("size.function-length", pillar=Pillar.SIZE),
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY),
@@ -31,6 +35,20 @@ def _finding(
     severity: Severity = Severity.WARNING,
     confidence: Confidence = Confidence.HIGH,
 ) -> Finding:
+    """Build a finding in ``x.py`` whose message names its rule, defaulting to symbol ``run`` at line 1.
+
+    Args:
+        rule_id: Rule id, also named in the message.
+        pillar: Pillar the finding scores against.
+        lines: Measured line count stored in metadata, or None to leave metadata empty.
+        symbol: Symbol; ``run`` by default.
+        line: Start line; 1 by default.
+        severity: Severity; warning by default.
+        confidence: Confidence; high by default.
+
+    Returns:
+        The finding.
+    """
     metadata = {}
     if lines is not None:
         metadata["lines"] = lines
@@ -62,6 +80,7 @@ def test_static_pillars_covers_every_catalog_pillar():
 
 
 def test_score_report_grades_every_static_pillar_with_no_findings():
+    """List every static pillar in order, design, modernisation and correctness included, in a report with no findings."""
     report = ScoreCalculator().calculate([], 10)
     pillars = [score.pillar for score in report.pillars]
 
@@ -91,6 +110,7 @@ def test_fixing_the_last_finding_in_a_pillar_cannot_lower_the_composite():
 
 
 def test_fixing_the_last_correctness_finding_cannot_lower_the_composite():
+    """Never lower the composite score by removing the last correctness findings from an otherwise noisy report."""
     noise = [
         _finding(f"{pillar}.noise", pillar=Pillar(pillar), confidence=Confidence.MEDIUM, severity=Severity.ADVISORY)
         for pillar in STATIC_PILLARS
@@ -107,6 +127,7 @@ def test_fixing_the_last_correctness_finding_cannot_lower_the_composite():
 
 
 def test_file_score_max_lines_uses_function_length_findings():
+    """Take a file's max lines from its function-length finding, not from another size rule's line metadata."""
     expected_max_lines = 75
     findings = [
         _finding("size.function-length", pillar=Pillar.SIZE, lines=expected_max_lines),
@@ -119,6 +140,7 @@ def test_file_score_max_lines_uses_function_length_findings():
 
 
 def test_correlated_size_complexity_stack_is_downweighted_for_file_score():
+    """Bill a four-rule size and complexity stack on one symbol as one 4.0 penalty, for a 51.22 file score."""
     report = ScoreCalculator().calculate(_correlated_stack(), 10)
 
     offender = report.top_offenders[0]
@@ -128,6 +150,7 @@ def test_correlated_size_complexity_stack_is_downweighted_for_file_score():
 
 
 def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
+    """Score the correlated stack's composite at 94.79, with size and complexity penalties of 1.0 and 3.0 and none for design."""
     report = ScoreCalculator().calculate(_correlated_stack(), 10)
 
     # With the god-method composite retired, no synthetic design finding is
@@ -143,6 +166,7 @@ def test_correlated_size_complexity_stack_is_downweighted_for_composite_score():
 
 
 def test_correlated_downweighting_requires_same_symbol():
+    """Bill size and complexity findings on different symbols separately, for an 8.0 penalty and a 50.62 file score."""
     findings = [
         _finding("size.function-length", pillar=Pillar.SIZE, symbol="left", line=1),
         _finding("complexity.cyclomatic", pillar=Pillar.COMPLEXITY, symbol="right", line=1),
@@ -174,6 +198,7 @@ def test_correlated_findings_without_a_line_share_one_penalty():
 
 
 def test_correlated_downweighting_groups_decorated_function_across_lines():
+    """Cluster one symbol's findings on its decorator and def lines into one 4.0 penalty, for a 51.22 file score."""
     # size.function-length reports the decorator line and complexity rules the def
     # line, so the same decorated symbol lands on different lines; it must still
     # cluster into a single penalty rather than billing each finding in full.

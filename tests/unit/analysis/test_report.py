@@ -14,6 +14,18 @@ def _finding(
     line: int = 1,
     column: int | None = None,
 ) -> Finding:
+    """Build a complexity finding in ``src/x.py`` with a fixed message.
+
+    Args:
+        rule_id: Rule id of the finding.
+        severity: Severity, which the rule-count rows report; warning by default.
+        confidence: Confidence; high by default.
+        line: Start line; 1 by default.
+        column: Column, or None for a line-only finding.
+
+    Returns:
+        The finding.
+    """
     return Finding(
         rule_id=rule_id,
         message="msg",
@@ -28,6 +40,14 @@ def _finding(
 
 
 def _report(findings: tuple[Finding, ...]) -> AnalysisReport:
+    """Build a one-file text report around the given findings, with no ignored paths, missing paths or diagnostics.
+
+    Args:
+        findings: Findings the report carries.
+
+    Returns:
+        The report, with exit code 0.
+    """
     return AnalysisReport(
         tool_version="0.1.2-test",
         requested_paths=("src",),
@@ -44,6 +64,7 @@ def _report(findings: tuple[Finding, ...]) -> AnalysisReport:
 
 
 def test_finding_counts_by_rule_returns_empty_list_when_no_findings():
+    """Return an empty rule-count list for a report with no findings."""
     rows = _report(()).finding_counts_by_rule()
 
     assert rows == []
@@ -69,6 +90,7 @@ def _location_findings() -> tuple[dict, dict]:
 
 
 def test_machine_contract_pins_a_line_only_location() -> None:
+    """Serialise a line-only finding created at line 0 as line 1 of its file, with ``line-only`` location precision."""
     line_only, _ = _location_findings()
 
     assert line_only["file"] == "src/x.py"
@@ -77,6 +99,7 @@ def test_machine_contract_pins_a_line_only_location() -> None:
 
 
 def test_machine_contract_omits_the_keys_a_line_only_finding_cannot_fill() -> None:
+    """Omit the column, symbol and ``filePath`` keys from a serialised line-only finding."""
     line_only, _ = _location_findings()
 
     assert "column" not in line_only
@@ -85,6 +108,7 @@ def test_machine_contract_omits_the_keys_a_line_only_finding_cannot_fill() -> No
 
 
 def test_machine_contract_pins_a_scanner_column_location() -> None:
+    """Serialise a scanner-pinpointed finding with its column and ``scanner-pinpointed`` location precision."""
     _, pinpointed = _location_findings()
 
     assert pinpointed["column"] == _SCANNER_COLUMN
@@ -92,6 +116,7 @@ def test_machine_contract_pins_a_scanner_column_location() -> None:
 
 
 def test_finding_counts_by_rule_sorts_by_count_desc_then_rule_id_asc():
+    """Sort rule counts from the highest count to the lowest."""
     findings = (
         _finding(rule_id="b.rule"),
         _finding(rule_id="a.rule"),
@@ -111,6 +136,7 @@ def test_finding_counts_by_rule_sorts_by_count_desc_then_rule_id_asc():
 
 
 def test_finding_counts_by_rule_includes_severity_and_confidence_from_findings():
+    """Carry each rule's severity and confidence from its findings into the rule-count rows."""
     findings = (
         _finding(rule_id="naming.x", severity=Severity.ADVISORY, confidence=Confidence.MEDIUM),
         _finding(rule_id="naming.x", severity=Severity.ADVISORY, confidence=Confidence.MEDIUM),

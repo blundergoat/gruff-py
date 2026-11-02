@@ -6,6 +6,12 @@ from gruffpy.source.discovery import IgnoredPath, SourceDiscovery
 
 
 def _write(path: Path, text: str = "") -> None:
+    """Write text to a file, creating any missing parent directories.
+
+    Args:
+        path: File to create or overwrite.
+        text: UTF-8 content; empty by default.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -22,6 +28,11 @@ def _write_hidden_sources(parent: Path, directory_names: tuple[str, ...]) -> Non
 
 
 def test_classify_reports_config_source_and_matched_pattern(tmp_path: Path) -> None:
+    """Classify a config-ignored path with the config source and the matching pattern.
+
+    Args:
+        tmp_path: Project root holding ``gen/out.py``, which the config pattern matches.
+    """
     _write(tmp_path / "gen" / "out.py")
 
     result = SourceDiscovery(tmp_path).classify("gen/out.py", configured_ignore_patterns=["gen/**"])
@@ -30,6 +41,11 @@ def test_classify_reports_config_source_and_matched_pattern(tmp_path: Path) -> N
 
 
 def test_classify_config_match_wins_even_with_include_ignored(tmp_path: Path) -> None:
+    """Keep a config match as the ignore reason even when ignored paths are included.
+
+    Args:
+        tmp_path: Project root holding ``gen/out.py``, which the config pattern matches.
+    """
     _write(tmp_path / "gen" / "out.py")
 
     result = SourceDiscovery(tmp_path).classify("gen/out.py", include_ignored=True, configured_ignore_patterns=["gen/**"])
@@ -39,6 +55,11 @@ def test_classify_config_match_wins_even_with_include_ignored(tmp_path: Path) ->
 
 
 def test_classify_reports_default_directory_source(tmp_path: Path) -> None:
+    """Classify ``node_modules`` as ignored by the built-in default directory list.
+
+    Args:
+        tmp_path: Project root holding an empty ``node_modules`` folder.
+    """
     (tmp_path / "node_modules").mkdir()
 
     result = SourceDiscovery(tmp_path).classify("node_modules")
@@ -47,6 +68,11 @@ def test_classify_reports_default_directory_source(tmp_path: Path) -> None:
 
 
 def test_classify_existing_file_uses_explicit_semantics(tmp_path: Path) -> None:
+    """Report no ignore reason for an existing file named directly, even though ``.gitignore`` lists it.
+
+    Args:
+        tmp_path: Project root whose ignore file names ``secret.py``, beside that file.
+    """
     _write(tmp_path / ".gitignore", "secret.py\n")
     _write(tmp_path / "secret.py")
 
@@ -56,16 +82,31 @@ def test_classify_existing_file_uses_explicit_semantics(tmp_path: Path) -> None:
 
 
 def test_classify_does_not_ignore_lockfile_by_filename(tmp_path: Path) -> None:
+    """Report no ignore reason for ``uv.lock`` from its filename alone.
+
+    Args:
+        tmp_path: Empty project root; the lockfile is never written.
+    """
     result = SourceDiscovery(tmp_path).classify("uv.lock")
 
     assert result is None
 
 
 def test_classify_returns_none_for_non_ignored_path(tmp_path: Path) -> None:
+    """Report no ignore reason for an ordinary source path.
+
+    Args:
+        tmp_path: Empty project root the path is classified against.
+    """
     assert SourceDiscovery(tmp_path).classify("src/app.py") is None
 
 
 def test_classify_works_on_hypothetical_path_not_on_disk(tmp_path: Path) -> None:
+    """Classify a path that does not exist on disk by the config pattern it would match.
+
+    Args:
+        tmp_path: Empty project root; the classified file is never written.
+    """
     result = SourceDiscovery(tmp_path).classify("gen/missing.py", configured_ignore_patterns=["gen/**"])
 
     assert result is not None
@@ -73,6 +114,11 @@ def test_classify_works_on_hypothetical_path_not_on_disk(tmp_path: Path) -> None
 
 
 def test_discover_records_ignore_reason_for_explicit_config_match(tmp_path: Path) -> None:
+    """Discover nothing for an explicitly named config-ignored file, and record it with its config reason.
+
+    Args:
+        tmp_path: Project root holding ``gen/out.py``, which the config pattern matches.
+    """
     _write(tmp_path / "gen" / "out.py")
 
     result = SourceDiscovery(tmp_path).discover(["gen/out.py"], configured_ignore_patterns=["gen/**"])
@@ -83,6 +129,11 @@ def test_discover_records_ignore_reason_for_explicit_config_match(tmp_path: Path
 
 
 def test_explicit_ineligible_lockfile_is_not_reported_as_ignored(tmp_path: Path) -> None:
+    """Discover nothing for an explicitly named ``uv.lock``, and record no ignore reason for it.
+
+    Args:
+        tmp_path: Project root holding a ``uv.lock`` file.
+    """
     _write(tmp_path / "uv.lock", "# lock\n")
 
     result = SourceDiscovery(tmp_path).discover(["uv.lock"])
@@ -92,6 +143,11 @@ def test_explicit_ineligible_lockfile_is_not_reported_as_ignored(tmp_path: Path)
 
 
 def test_walk_treats_ineligible_lockfile_as_unsupported_not_ignored(tmp_path: Path) -> None:
+    """Skip ``uv.lock`` during a directory walk without recording it as ignored, while the module beside it is discovered.
+
+    Args:
+        tmp_path: Project root holding ``uv.lock`` and ``app.py``.
+    """
     _write(tmp_path / "uv.lock", "# lock\n")
     _write(tmp_path / "app.py", "x = 1\n")
 
@@ -102,6 +158,11 @@ def test_walk_treats_ineligible_lockfile_as_unsupported_not_ignored(tmp_path: Pa
 
 
 def test_eligible_json_lockfile_is_scanned(tmp_path: Path) -> None:
+    """Discover a ``package-lock.json`` file during a directory walk.
+
+    Args:
+        tmp_path: Project root holding only an empty JSON lockfile.
+    """
     _write(tmp_path / "package-lock.json", "{}\n")
 
     result = SourceDiscovery(tmp_path).discover(["."])
@@ -112,6 +173,11 @@ def test_eligible_json_lockfile_is_scanned(tmp_path: Path) -> None:
 def test_vcs_internals_remain_blocked_for_explicit_file_and_include_ignored(
     tmp_path: Path,
 ) -> None:
+    """Keep a file under ``.git`` out of discovery when named explicitly with ignored paths included, with the default ``.git`` reason.
+
+    Args:
+        tmp_path: Project root holding a Python file inside ``.git``.
+    """
     _write(tmp_path / ".git" / "config.py")
 
     result = SourceDiscovery(tmp_path).discover([".git/config.py"], include_ignored=True)
@@ -121,6 +187,11 @@ def test_vcs_internals_remain_blocked_for_explicit_file_and_include_ignored(
 
 
 def test_python_fallback_exceptions_apply_at_any_depth(tmp_path: Path) -> None:
+    """Skip nested Python tool and cache folders, reporting each by name, while ``cache``, ``generated`` and ``.goat-flow`` stay in scope.
+
+    Args:
+        tmp_path: Project root holding one module in each skipped folder under ``nested`` and in the three folders that stay.
+    """
     ignored_names = (
         ".mypy_cache",
         ".pyre",
@@ -149,6 +220,11 @@ def test_python_fallback_exceptions_apply_at_any_depth(tmp_path: Path) -> None:
 
 
 def test_discover_ignored_paths_remains_plain_strings(tmp_path: Path) -> None:
+    """Keep the discovery result's ignored paths as plain strings that include the config-ignored module.
+
+    Args:
+        tmp_path: Project root holding a config-ignored module under ``gen`` and an ordinary one under ``src``.
+    """
     _write(tmp_path / "gen" / "out.py")
     _write(tmp_path / "src" / "app.py")
 
@@ -183,6 +259,11 @@ def test_third_party_directories_are_skipped_under_a_governing_gitignore(tmp_pat
 
 
 def test_outermost_third_party_directory_names_the_reason(tmp_path: Path) -> None:
+    """Classify a missing sibling under nested third-party folders by the outermost ``vendor``, while the existing file named directly gets no reason.
+
+    Args:
+        tmp_path: Project root holding one module nested under ``vendor/lib/dist``.
+    """
     _write(tmp_path / "vendor" / "lib" / "dist" / "copied.py")
 
     result = SourceDiscovery(tmp_path).classify("vendor/lib/dist/copied.py", include_ignored=False)
@@ -195,6 +276,11 @@ def test_outermost_third_party_directory_names_the_reason(tmp_path: Path) -> Non
 
 
 def test_minified_files_are_skipped_and_listed_only_when_eligible(tmp_path: Path) -> None:
+    """Skip minified files and list only the minified JSON one as ignored, while the plain JSON file is discovered.
+
+    Args:
+        tmp_path: Project root holding a minified JSON file, a minified script and a plain JSON file.
+    """
     _write(tmp_path / "config" / "settings.min.json", "{}")
     _write(tmp_path / "static" / "jquery.min.js", "var a=1;")
     _write(tmp_path / "config" / "settings.json", "{}")
@@ -207,6 +293,11 @@ def test_minified_files_are_skipped_and_listed_only_when_eligible(tmp_path: Path
 
 
 def test_include_ignored_and_explicit_files_bring_the_classes_back(tmp_path: Path) -> None:
+    """Discover third-party, build-output and minified files under ``include_ignored``, and the named ones when listed explicitly.
+
+    Args:
+        tmp_path: Project root holding one file in ``vendor``, one in ``dist`` and a minified JSON file.
+    """
     _write(tmp_path / "vendor" / "copied.py")
     _write(tmp_path / "dist" / "built.py")
     _write(tmp_path / "config" / "settings.min.json", "{}")
@@ -219,6 +310,11 @@ def test_include_ignored_and_explicit_files_bring_the_classes_back(tmp_path: Pat
 
 
 def test_first_party_names_that_only_resemble_the_classes_stay_in_scope(tmp_path: Path) -> None:
+    """Discover first-party files whose names only resemble the third-party, build-output or minified classes.
+
+    Args:
+        tmp_path: Project root holding eight look-alike modules and a ``.gitignore`` that ignores only logs.
+    """
     for relative in (
         "src/vendor_api.py",
         "src/vendors.py",

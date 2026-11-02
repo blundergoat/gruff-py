@@ -8,6 +8,7 @@ from gruffpy.suppression.parser import parse_suppressions
 
 
 def test_same_line_suppression_hides_only_matching_rule() -> None:
+    """Hide only the finding whose rule a same-line ``gruff: disable`` comment names."""
     parsed = parse_suppressions("# gruff: disable=size.file-length\n")
     hidden = _finding("size.file-length", line=1)
     visible = _finding("security.dangerous-function-call", line=1)
@@ -18,6 +19,7 @@ def test_same_line_suppression_hides_only_matching_rule() -> None:
 
 
 def test_disable_next_targets_only_next_physical_line() -> None:
+    """Hide the matching finding on the line after a ``gruff: disable-next`` comment, but not on the line after that."""
     parsed = parse_suppressions("# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n")
     hidden = _finding("security.dangerous-function-call", line=2)
     visible = _finding("security.dangerous-function-call", line=3)
@@ -28,6 +30,7 @@ def test_disable_next_targets_only_next_physical_line() -> None:
 
 
 def test_disable_file_is_file_local() -> None:
+    """Apply a ``gruff: disable-file`` comment only to findings in its own file."""
     parsed = parse_suppressions("# gruff: disable-file=size.file-length\n")
     hidden = _finding("size.file-length", file_path="x.py", line=None)
     other_file_visible = _finding("size.file-length", file_path="other.py", line=None)
@@ -38,6 +41,7 @@ def test_disable_file_is_file_local() -> None:
 
 
 def test_unsuppressed_payload_and_fingerprint_are_unchanged() -> None:
+    """Return an unsuppressed finding with its payload and fingerprint unchanged."""
     parsed = parse_suppressions("# gruff: disable=size.file-length\n")
     visible = _finding("security.dangerous-function-call", line=1, symbol="load_user")
     before_payload = visible.to_dict()
@@ -57,6 +61,17 @@ def _finding(
     line: int | None,
     symbol: str | None = None,
 ) -> Finding:
+    """Build a warning-level finding for one rule, with fixed tier, confidence and metadata.
+
+    Args:
+        rule_id: Rule id; a ``size.`` prefix selects the size pillar, any other the security pillar.
+        file_path: Finding path, which selects the parsed suppressions that apply; ``x.py`` by default.
+        line: Start and end line, or None for a file-level finding.
+        symbol: Symbol name, or None.
+
+    Returns:
+        The finding.
+    """
     return Finding(
         rule_id=rule_id,
         message=f"{rule_id} message",

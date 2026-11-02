@@ -5,6 +5,14 @@ from gruffpy.command.dashboard_page_renderer import DashboardPageRenderer
 
 
 def _state(**overrides: str) -> dict[str, str]:
+    """Build a dashboard form state whose project, paths and config values carry characters HTML must escape.
+
+    Args:
+        overrides: Field values that replace the defaults.
+
+    Returns:
+        The merged state mapping.
+    """
     state = {
         "project": "/tmp/gruff <root>",
         "paths": 'src "tests"',
@@ -34,6 +42,7 @@ _UNEXPECTED_DASHBOARD_HTML_SUBSTRINGS_LOWERCASE = ("baseline", "mutation")
 
 
 def test_dashboard_html_renders_with_doctype_and_required_substrings():
+    """Render the dashboard page as an HTML document with its controls, escaped form values and the state's selections."""
     html = DashboardPageRenderer().dashboard_html(_state())
     assert html.startswith("<!DOCTYPE html>")
     missing = [s for s in _EXPECTED_DASHBOARD_HTML_SUBSTRINGS if s not in html]
@@ -41,12 +50,14 @@ def test_dashboard_html_renders_with_doctype_and_required_substrings():
 
 
 def test_dashboard_html_omits_unimplemented_feature_words():
+    """Keep the unimplemented-feature words ``baseline`` and ``mutation`` out of the dashboard page, in any letter case."""
     html = DashboardPageRenderer().dashboard_html(_state()).lower()
     present = [s for s in _UNEXPECTED_DASHBOARD_HTML_SUBSTRINGS_LOWERCASE if s in html]
     assert not present, f"unexpected words leaked into dashboard html: {present}"
 
 
 def test_loading_frame_and_error_html_escape_untrusted_text():
+    """Show the ready message in the loading frame, and include an error page's escaped title and detail and its exit code and duration."""
     renderer = DashboardPageRenderer()
 
     loading = renderer.loading_frame()
@@ -64,6 +75,7 @@ def test_loading_frame_and_error_html_escape_untrusted_text():
 
 
 def test_inject_dashboard_metadata_embeds_html_safe_script_block():
+    """Embed scan metadata as a script block right after ``<body>``, with the project root's markup characters Unicode-escaped."""
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
         project_root='/tmp/<project>&"quoted"',
@@ -82,6 +94,7 @@ _SAMPLE_COMMAND_ARGV = ("gruff-py", "analyse", "--format", "html", "path with sp
 
 
 def test_inject_dashboard_metadata_payload_records_scan_provenance():
+    """Record the scan's type, exit code, duration, project root and shell-quoted command in the embedded metadata."""
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
         project_root=_SAMPLE_PROJECT_ROOT,
@@ -100,6 +113,17 @@ def test_inject_dashboard_metadata_payload_records_scan_provenance():
 
 
 def _metadata_payload(html: str) -> dict[str, object]:
+    """Extract and parse the JSON metadata block a dashboard page embeds.
+
+    Args:
+        html: Rendered page that should hold the metadata script.
+
+    Returns:
+        The parsed metadata object.
+
+    Raises:
+        AssertionError: The page has no metadata block, or its JSON is not an object.
+    """
     match = re.search(
         r'<script id="gruff-dashboard-meta" type="application/json">(?P<payload>.*?)</script>',
         html,

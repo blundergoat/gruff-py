@@ -24,6 +24,19 @@ PHP_GROUND_TRUTH = [
     PHP_GROUND_TRUTH,
 )
 def test_fingerprint_matches_php(rule_id, file, line, end_line, column, symbol, expected):
+    """Reproduce gruff-php's fingerprint for each recorded finding identity, byte for byte.
+
+    The cases vary the rule, the path shape and which location fields are set.
+
+    Args:
+        rule_id: Rule id of the recorded identity.
+        file: Finding path of the recorded identity.
+        line: Start line, or None for an identity without one.
+        end_line: End line, or None.
+        column: Column, or None.
+        symbol: Symbol, or None.
+        expected: Fingerprint gruff-php produced for the same identity.
+    """
     actual = fingerprint_for(
         rule_id=rule_id,
         file_path=file,
@@ -36,12 +49,14 @@ def test_fingerprint_matches_php(rule_id, file, line, end_line, column, symbol, 
 
 
 def test_fingerprint_is_16_lowercase_hex_chars():
+    """Produce a fingerprint of exactly 16 lowercase hexadecimal characters."""
     fp = fingerprint_for("r", "f", 1)
     assert len(fp) == 16
     assert all(c in "0123456789abcdef" for c in fp)
 
 
 def test_fingerprint_is_deterministic():
+    """Produce the same fingerprint for identical inputs."""
     assert fingerprint_for("r", "f", 1, 1, 1, "s") == fingerprint_for("r", "f", 1, 1, 1, "s")
 
 
@@ -68,6 +83,12 @@ def test_fingerprint_is_deterministic():
     ids=["line", "file_path", "rule_id", "symbol"],
 )
 def test_fingerprint_distinguishes_by_identifying_field(kwargs_a: dict, kwargs_b: dict) -> None:
+    """Change the fingerprint when exactly one identifying field changes.
+
+    Args:
+        kwargs_a: Keyword arguments for the first identity; the cases vary the line, path, rule id or symbol.
+        kwargs_b: The same identity with that one field changed.
+    """
     assert fingerprint_for(**kwargs_a) != fingerprint_for(**kwargs_b)
 
 

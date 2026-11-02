@@ -13,6 +13,12 @@ from gruffpy.source.source_file import SourceFile
 
 
 def test_ast_value_error_is_reported_as_parse_diagnostic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a ``ValueError`` from ``ast.parse`` as one parse diagnostic carrying its message, leaving no tree.
+
+    Args:
+        tmp_path: Holds the one-line module handed to the parser.
+        monkeypatch: Replaces ``ast.parse`` with a stub that raises the malformed-node ``ValueError``.
+    """
     source_path = tmp_path / "broken.py"
     source_path.write_text("value = 1\n", encoding="utf-8")
 
@@ -60,6 +66,11 @@ def _bounded_python_unit(tmp_path: Path) -> AnalysisUnit:
 def test_python_source_over_either_bound_degrades_before_ast(
     tmp_path: Path,
 ) -> None:
+    """Leave no tree for a source over the line bound, without counting a parse error, and mark the unit as bounded.
+
+    Args:
+        tmp_path: Receives the two-line module parsed under a one-line budget.
+    """
     unit = _bounded_python_unit(tmp_path)
 
     assert unit.tree is None
@@ -70,6 +81,11 @@ def test_python_source_over_either_bound_degrades_before_ast(
 def test_bounded_python_source_reports_a_nonfatal_budget_diagnostic(
     tmp_path: Path,
 ) -> None:
+    """Describe a bounded source with a non-fatal ``bounded-deep-scan`` diagnostic naming its size, the CLI limits and the analysis that ran.
+
+    Args:
+        tmp_path: Receives the oversized module for this parse.
+    """
     unit = _bounded_python_unit(tmp_path)
 
     assert unit.diagnostics[0].type == "bounded-deep-scan"
@@ -82,6 +98,11 @@ def test_bounded_python_source_reports_a_nonfatal_budget_diagnostic(
 
 
 def test_non_python_text_never_enters_deep_scan_guard(tmp_path: Path) -> None:
+    """Return no tree and no diagnostic for a text file, even under a one-line, one-byte deep-scan budget.
+
+    Args:
+        tmp_path: Receives the two-line ``.env`` file parsed as text.
+    """
     source_path = tmp_path / ".env"
     source_path.write_text("A=1\nB=2\n", encoding="utf-8")
 
