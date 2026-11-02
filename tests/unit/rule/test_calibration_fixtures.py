@@ -15,6 +15,14 @@ _EXPECTATIONS = ("positive", "negative")
 
 
 def _fixture_cases(expectation: str) -> list[object]:
+    """Collect one pytest case per calibration fixture under an expectation folder, named by rule and fixture path.
+
+    Args:
+        expectation: Expectation folder to read: ``positive`` or ``negative``.
+
+    Returns:
+        Cases of rule id and fixture path in sorted order; empty when the calibration folder is missing.
+    """
     cases: list[object] = []
     if not _FIXTURE_ROOT.exists():
         return cases
@@ -35,6 +43,18 @@ def _fixture_cases(expectation: str) -> list[object]:
 
 
 def _matching_findings(rule_id: str, fixture_path: Path) -> list:
+    """Run one registered rule over a calibration fixture and keep only that rule's findings.
+
+    Args:
+        rule_id: Rule to run.
+        fixture_path: Fixture source file to analyse.
+
+    Returns:
+        The rule's findings for the fixture.
+
+    Raises:
+        AssertionError: The rule is a project rule, which this harness cannot run.
+    """
     registry = RuleRegistry.defaults()
     rule = registry.get(rule_id)
     assert not isinstance(rule, ProjectRuleProtocol), f"{rule_id} is a project rule; extend the calibration harness before adding fixtures."
@@ -44,17 +64,37 @@ def _matching_findings(rule_id: str, fixture_path: Path) -> list:
 
 @pytest.mark.parametrize(("rule_id", "fixture_path"), _fixture_cases("positive"))
 def test_positive_fixture_triggers_rule(rule_id: str, fixture_path: Path) -> None:
+    """Report at least one finding from the named rule for each positive calibration fixture.
+
+    Args:
+        rule_id: Rule the fixture's folder names; the cases cover every positive fixture.
+        fixture_path: Fixture expected to trigger that rule.
+    """
     matching_findings = _matching_findings(rule_id, fixture_path)
     assert matching_findings, f"{fixture_path} should trigger {rule_id}."
 
 
 @pytest.mark.parametrize(("rule_id", "fixture_path"), _fixture_cases("negative"))
 def test_negative_fixture_does_not_trigger_rule(rule_id: str, fixture_path: Path) -> None:
+    """Report no finding from the named rule for each negative calibration fixture.
+
+    Args:
+        rule_id: Rule the fixture's folder names; the cases cover every negative fixture.
+        fixture_path: Fixture expected to stay clean for that rule.
+    """
     matching_findings = _matching_findings(rule_id, fixture_path)
     assert matching_findings == [], f"{fixture_path} should not trigger {rule_id}."
 
 
 def _unit_from_fixture(fixture_path: Path) -> AnalysisUnit:
+    """Parse a fixture file into a Python analysis unit, linking every non-root AST node to its parent.
+
+    Args:
+        fixture_path: Fixture source file.
+
+    Returns:
+        The unit, whose display path is relative to the fixture's expectation folder.
+    """
     source = fixture_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     for parent in ast.walk(tree):
@@ -72,6 +112,14 @@ def _unit_from_fixture(fixture_path: Path) -> AnalysisUnit:
 
 
 def _display_path(fixture_path: Path) -> str:
+    """Give a fixture's path relative to its nearest expectation folder.
+
+    Args:
+        fixture_path: Fixture source file.
+
+    Returns:
+        That relative path, or the bare file name when no ancestor is an expectation folder.
+    """
     for parent in fixture_path.parents:
         if parent.name in _EXPECTATIONS:
             return fixture_path.relative_to(parent).as_posix()
@@ -79,6 +127,14 @@ def _display_path(fixture_path: Path) -> str:
 
 
 def _context(registry: RuleRegistry) -> RuleContext:
+    """Build a rule context rooted at the calibration fixtures with the registry's default config.
+
+    Args:
+        registry: Registry whose defaults form the config.
+
+    Returns:
+        The rule context.
+    """
     return RuleContext(
         project_root=str(_FIXTURE_ROOT),
         config=AnalysisConfig.from_registry(registry),

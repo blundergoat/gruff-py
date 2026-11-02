@@ -25,6 +25,11 @@ _OPTION_DESCRIPTION_RULES = (
 
 @pytest.mark.parametrize("rule_id", _OPTION_DESCRIPTION_RULES)
 def test_rule_with_options_has_option_descriptions(rule_id: str) -> None:
+    """Describe exactly the default options of each listed rule, with no option description missing or extra.
+
+    Args:
+        rule_id: Rule from the module's option-description list; the cases cover each listed rule.
+    """
     registry = RuleRegistry.defaults()
     definition = registry.get(rule_id).definition()
     docs = documentation_for_rule(rule_id)
@@ -36,6 +41,7 @@ def test_rule_with_options_has_option_descriptions(rule_id: str) -> None:
 
 
 def test_related_rules_only_reference_registered_rule_ids() -> None:
+    """Name only registered rule ids among each rule's related rules."""
     registry = RuleRegistry.defaults()
     valid_ids = {rule.definition().id for rule in registry.all()}
     invalid = {f"{rule_id} -> {sibling}" for rule_id, siblings in RELATED_RULES.items() for sibling in siblings if sibling not in valid_ids}
@@ -43,22 +49,26 @@ def test_related_rules_only_reference_registered_rule_ids() -> None:
 
 
 def test_related_rules_never_list_self() -> None:
+    """Never list a rule among its own related rules."""
     self_refs = [rule_id for rule_id, siblings in RELATED_RULES.items() if rule_id in siblings]
     assert self_refs == []
 
 
 def test_related_rules_caps_siblings_at_four() -> None:
+    """List at most four related rules for each rule."""
     over_cap = {rule_id: len(siblings) for rule_id, siblings in RELATED_RULES.items() if len(siblings) > 4}
     assert over_cap == {}
 
 
 def test_false_positive_shape_is_a_frozen_dataclass() -> None:
+    """Raise ``FrozenInstanceError`` when a field of a false-positive shape is assigned."""
     shape = FalsePositiveShape(shape="x", mitigation="y")
     with pytest.raises(FrozenInstanceError):
         shape.shape = "z"  # type: ignore[misc] -- mutating frozen dataclass is the assertion under test
 
 
 def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> None:
+    """Include option descriptions in a rule's documentation payload when the rule has them."""
     docs = documentation_for_rule("docs.dataclass-attributes")
 
     payload = docs.to_payload()
@@ -68,6 +78,7 @@ def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> Non
 
 
 def test_rule_docs_to_payload_omits_option_descriptions_when_absent() -> None:
+    """Omit the option-descriptions key from a rule's documentation payload when the rule has none."""
     docs = documentation_for_rule("naming.abbreviation")
 
     payload = docs.to_payload()

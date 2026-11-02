@@ -15,16 +15,39 @@ from gruffpy.rule.registry import RuleRegistry
 
 
 def _defaults() -> AnalysisConfig:
+    """Build the analysis config the registry's defaults produce.
+
+    Returns:
+        The default configuration.
+    """
     return AnalysisConfig.from_registry(RuleRegistry.defaults())
 
 
 def _yaml(tmp_path: Path, body: str) -> Path:
+    """Write a project's ``.gruff-py.yaml`` as the schema version line followed by the given body.
+
+    Args:
+        tmp_path: Project root that receives the config.
+        body: YAML text appended after the schema version line.
+
+    Returns:
+        The written config path.
+    """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("schemaVersion: gruff-py.config.v0.1\n" + body)
     return path
 
 
 def _toml(tmp_path: Path, body: str) -> Path:
+    """Write a project's ``pyproject.toml`` as a gruff-py table with its schema version followed by the given body.
+
+    Args:
+        tmp_path: Project root that receives ``pyproject.toml``.
+        body: TOML text appended after the table's schema version line.
+
+    Returns:
+        The written file path.
+    """
     path = tmp_path / "pyproject.toml"
     path.write_text('[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n' + body)
     return path
@@ -100,6 +123,12 @@ def test_accepted_abbreviations_rejects_non_string_entry(tmp_path: Path):
     ids=("nonempty-list", "scalar", "empty-object", "null", "blank-entry", "mixed-list"),
 )
 def test_secret_previews_rejects_every_value_except_an_empty_list(tmp_path: Path, configured_value: str):
+    """Refuse a YAML ``secretPreviews`` value with the fixed removal error, without echoing the configured value.
+
+    Args:
+        tmp_path: Project root whose config sets ``secretPreviews``.
+        configured_value: YAML value for the key; the cases vary its shape across lists, a scalar, an object and null.
+    """
     _yaml(tmp_path, f"allowlists:\n  secretPreviews: {configured_value}\n")
 
     with pytest.raises(ConfigError) as error:
@@ -124,6 +153,11 @@ def test_toml_secret_previews_is_refused_even_when_empty(tmp_path: Path):
 
 
 def test_toml_secret_previews_rejects_a_configured_preview(tmp_path: Path):
+    """Refuse a TOML ``secretPreviews`` list with the fixed removal error, without echoing the configured preview.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` lists one preview.
+    """
     _toml(tmp_path, '\n[tool.gruff-py.allowlists]\nsecretPreviews = ["known-fixture"]\n')
 
     with pytest.raises(ConfigError) as error:

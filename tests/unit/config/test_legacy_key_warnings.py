@@ -30,14 +30,30 @@ _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML = (
 
 
 def _defaults() -> AnalysisConfig:
+    """Build the analysis config the registry's defaults produce.
+
+    Returns:
+        The default configuration.
+    """
     return AnalysisConfig.from_registry(RuleRegistry.defaults())
 
 
 def _write_yaml(tmp_path: Path, body: str) -> None:
+    """Write raw text as the project's ``.gruff-py.yaml``, adding no schema line.
+
+    Args:
+        tmp_path: Project root that receives the config.
+        body: Complete config text.
+    """
     (tmp_path / ".gruff-py.yaml").write_text(body)
 
 
 def test_legacy_tiered_thresholds_warn_and_rule_keeps_defaults(tmp_path: Path):
+    """Warn twice for legacy warning and error tiers loaded from ``.gruff-py.yaml``, and leave the cognitive rule at its defaults.
+
+    Args:
+        tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+    """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())
     config, source = loader.load()
@@ -47,6 +63,11 @@ def test_legacy_tiered_thresholds_warn_and_rule_keeps_defaults(tmp_path: Path):
 
 
 def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_path: Path):
+    """Name the unknown tier key, the accepted keys and the migrate-config command in the first warning, which mentions TOML, not ``init --force``.
+
+    Args:
+        tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+    """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())
     loader.load()
@@ -59,6 +80,11 @@ def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_pat
 
 
 def test_legacy_tiered_thresholds_raise_under_strict(tmp_path: Path):
+    """Raise a ``ConfigError`` under strict loading that names the unknown tier key, includes the ``Accepted keys`` label and never says ``ignored``.
+
+    Args:
+        tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+    """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults(), strict=True)
     with pytest.raises(ConfigError) as excinfo:
@@ -174,6 +200,11 @@ def test_unknown_option_strict_error_lists_registered_alternatives(tmp_path: Pat
 
 
 def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
+    """Warn once for an unknown rule id and leave every rule at its default.
+
+    Args:
+        tmp_path: Project root whose config sets a rule id the registry lacks.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  complexity.npath:\n    enabled: false\n",
@@ -186,6 +217,11 @@ def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
 
 
 def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
+    """Warn once for an unknown key in a rule section while still applying that section's enabled flag.
+
+    Args:
+        tmp_path: Project root whose short-variable section adds an unknown key beside its enabled flag.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.short-variable:\n    enabled: false\n    flavour: spicy\n",
@@ -198,6 +234,11 @@ def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
 
 
 def test_threshold_on_non_rubric_rule_warns_and_is_dropped(tmp_path: Path):
+    """Warn once and drop a threshold and severity set on a rule with no severity rubric.
+
+    Args:
+        tmp_path: Project root whose config gives the short-variable rule a threshold and severity.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  naming.short-variable:\n    threshold: 5\n    severity: warning\n",
@@ -210,6 +251,11 @@ def test_threshold_on_non_rubric_rule_warns_and_is_dropped(tmp_path: Path):
 
 
 def test_severity_without_threshold_warns_and_is_dropped(tmp_path: Path):
+    """Warn once and drop a severity set without a threshold, leaving the rule at its defaults.
+
+    Args:
+        tmp_path: Project root whose config gives the file-length rule a severity alone.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length:\n    severity: error\n",
@@ -222,6 +268,11 @@ def test_severity_without_threshold_warns_and_is_dropped(tmp_path: Path):
 
 
 def test_structural_rule_section_error_still_raises_without_strict(tmp_path: Path):
+    """Raise a ``ConfigError`` for a rule section that is not a table, even without strict loading.
+
+    Args:
+        tmp_path: Project root whose config sets the file-length rule to a number.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nrules:\n  size.file-length: 12\n",
@@ -232,6 +283,11 @@ def test_structural_rule_section_error_still_raises_without_strict(tmp_path: Pat
 
 
 def test_unknown_top_level_key_still_raises_without_strict(tmp_path: Path):
+    """Raise a ``ConfigError`` for an unknown top-level key, even without strict loading.
+
+    Args:
+        tmp_path: Project root whose config adds an unknown top-level key.
+    """
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nbananas: true\n",
@@ -242,6 +298,11 @@ def test_unknown_top_level_key_still_raises_without_strict(tmp_path: Path):
 
 
 def test_warnings_reset_between_loads(tmp_path: Path):
+    """Clear the previous load's warnings when the same loader reads a clean config.
+
+    Args:
+        tmp_path: Project root whose legacy config is replaced by a clean one between loads.
+    """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())
     loader.load()

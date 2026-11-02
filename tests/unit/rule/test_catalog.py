@@ -96,6 +96,7 @@ def test_m02_opt_in_rules_require_configuration_to_emit(rule_id: str, source: st
 
 
 def test_catalog_entries_are_importable_and_unique() -> None:
+    """Give the catalogue one importable definition per built-in rule, with unique ids in catalogue order."""
     definitions = catalog_definitions()
     ids = [definition.id for definition in definitions]
 
@@ -105,6 +106,7 @@ def test_catalog_entries_are_importable_and_unique() -> None:
 
 
 def test_registry_defaults_consumes_catalog_entries() -> None:
+    """Build the default registry and the default config's rules from exactly the catalogue's rule ids."""
     catalog_ids = {definition.id for definition in catalog_definitions()}
     registry_ids = {rule.definition().id for rule in RuleRegistry.defaults().all()}
 
@@ -114,11 +116,17 @@ def test_registry_defaults_consumes_catalog_entries() -> None:
 
 @pytest.mark.parametrize("definition", _ALL_DEFINITIONS, ids=lambda d: d.id)
 def test_rule_id_matches_pillar_prefix_convention(definition: RuleDefinition) -> None:
+    """Start each rule id with a prefix its pillar allows.
+
+    Args:
+        definition: Catalogue rule definition; the cases cover every rule.
+    """
     prefixes = _PREFIXES_BY_PILLAR[definition.pillar]
     assert definition.id.startswith(prefixes)
 
 
 def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
+    """List in the catalogue exactly the concrete rule classes defined in the rule source files."""
     catalog_classes = {f"{type(entry.create()).__module__}.{type(entry.create()).__name__}" for entry in BUILTIN_RULES}
     concrete_classes = set(_concrete_rule_class_paths())
 
@@ -162,6 +170,11 @@ def test_registry_analyse_is_deterministic_across_runs() -> None:
 
 @pytest.mark.parametrize("definition", _ALL_DEFINITIONS, ids=lambda d: d.id)
 def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> None:
+    """Give each built-in rule a rationale, fix guidance, bad and good examples and a confidence rationale.
+
+    Args:
+        definition: Catalogue rule definition; the cases cover every rule.
+    """
     docs = documentation_for_rule(definition.id)
     assert docs.rationale
     assert docs.fix_guidance
@@ -200,12 +213,22 @@ _NON_METRIC_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.id not in _FORMULA_R
 
 @pytest.mark.parametrize("definition", _METRIC_DEFINITIONS, ids=lambda d: d.id)
 def test_metric_rule_publishes_formula_provenance(definition: RuleDefinition) -> None:
+    """Publish formula provenance for each metric rule.
+
+    Args:
+        definition: Metric rule definition; the cases cover each metric rule.
+    """
     docs = documentation_for_rule(definition.id)
     assert docs.formula_provenance
 
 
 @pytest.mark.parametrize("definition", _NON_METRIC_DEFINITIONS, ids=lambda d: d.id)
 def test_non_metric_rule_has_no_formula_provenance(definition: RuleDefinition) -> None:
+    """Publish no formula provenance for a rule that is not a metric.
+
+    Args:
+        definition: Non-metric rule definition; the cases cover each one.
+    """
     docs = documentation_for_rule(definition.id)
     assert docs.formula_provenance == ""
 
@@ -218,6 +241,11 @@ _SIZE_AND_COMPLEXITY_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.pillar in _
 def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
     definition: RuleDefinition,
 ) -> None:
+    """Publish the standard threshold metadata keys and an above or below direction for each size and complexity rule.
+
+    Args:
+        definition: Size or complexity rule definition; the cases cover each one.
+    """
     docs = documentation_for_rule(definition.id)
     assert docs.threshold_metadata_keys == (
         "measuredValue",
@@ -229,6 +257,7 @@ def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
 
 
 def test_selected_security_rules_publish_taxonomy_metadata() -> None:
+    """Publish a CWE and high security severity for the Django raw SQL rule, and a CWE for the unsafe YAML load rule."""
     docs = documentation_for_rule("security.django-raw-sql")
     assert docs.security_metadata["cwe"] == ["CWE-89"]
     assert docs.to_payload()["security"]["securitySeverity"] == "high"
@@ -238,6 +267,11 @@ def test_selected_security_rules_publish_taxonomy_metadata() -> None:
 
 
 def _concrete_rule_class_paths() -> list[str]:
+    """List the top-level rule classes in each ``*_rule.py`` file under the rule source, skipping ``project_rule.py``.
+
+    Returns:
+        Their fully qualified class names, sorted.
+    """
     classes: list[str] = []
     for path in sorted(_RULE_ROOT.rglob("*_rule.py")):
         if path.name == "project_rule.py":
@@ -251,6 +285,11 @@ def _concrete_rule_class_paths() -> list[str]:
 
 
 def _looks_like_rule_class(cls: ast.ClassDef) -> bool:
+    """Decide whether the class definition ``cls`` looks like a rule: it defines ``definition`` and ``analyse`` or ``analyse_project``.
+
+    Returns:
+        True when both kinds of method are present.
+    """
     methods = {node.name for node in cls.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)}
     return "definition" in methods and bool({"analyse", "analyse_project"} & methods)
 
