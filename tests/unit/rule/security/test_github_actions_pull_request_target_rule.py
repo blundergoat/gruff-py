@@ -9,6 +9,7 @@ _WF = ".github/workflows/pr.yml"
 
 
 def test_target_with_head_checkout_fires():
+    """Report one finding, on the trigger line, for a ``pull_request_target`` workflow that checks out the pull request head."""
     src = (
         "on:\n  pull_request_target:\n    types: [opened]\n"
         "jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n"
@@ -20,11 +21,13 @@ def test_target_with_head_checkout_fires():
 
 
 def test_target_without_head_checkout_skipped():
+    """Report nothing for a ``pull_request_target`` workflow that does not check out the head."""
     src = "on:\n  pull_request_target:\n    types: [labeled]\njobs:\n  x:\n    steps:\n      - run: echo hi\n"
     assert GithubActionsPullRequestTargetRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
 
 
 def test_plain_pull_request_with_head_checkout_skipped():
+    """Report nothing for a plain ``pull_request`` workflow that checks out the head."""
     # `pull_request` (not `_target`) does not grant the privileged token, so even
     # a head checkout is the supported, safe pattern - this rule must stay quiet.
     src = (

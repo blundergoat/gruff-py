@@ -26,6 +26,7 @@ _USEDFORSECURITY_ARGUMENT_CASES = (
 
 
 def test_md5_on_password_emits():
+    """Report one finding, with algorithm ``md5``, for an MD5 hash of a password."""
     src = "import hashlib\npassword_hash = hashlib.md5(password.encode())\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -33,22 +34,26 @@ def test_md5_on_password_emits():
 
 
 def test_sha1_in_security_function_emits():
+    """Report one finding for SHA-1 inside a token-signing function."""
     src = "import hashlib\ndef sign_token(payload):\n    return hashlib.sha1(payload).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_md5_for_cache_key_skipped():
+    """Report nothing for MD5 used for a cache key."""
     src = "import hashlib\ncache_key = hashlib.md5(content).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_sha256_signature_not_flagged():
+    """Report nothing for SHA-256 used for a signature."""
     src = "import hashlib\nsignature = hashlib.sha256(payload).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_sha256_on_password_emits_with_kdf_metadata():
+    """Report one finding for SHA-256 on a password, with the ``sha256`` algorithm, ``password-material`` source and ``fast-hash`` sink."""
     src = "import hashlib\npassword_hash = hashlib.sha256(password.encode()).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
 
@@ -59,12 +64,14 @@ def test_sha256_on_password_emits_with_kdf_metadata():
 
 
 def test_sha512_in_password_function_emits():
+    """Report one finding for SHA-512 inside a password-hashing function."""
     src = "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_sha256_for_generic_content_skipped():
+    """Report nothing for SHA-256 over generic file content."""
     src = "import hashlib\ncontent_digest = hashlib.sha256(file_bytes).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 

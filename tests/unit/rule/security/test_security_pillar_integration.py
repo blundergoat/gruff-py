@@ -97,6 +97,7 @@ _EXPECTED_RULE_IDS = {
 
 
 def test_every_dangerous_rule_fires():
+    """Report every expected security rule at least once on the dangerous fixture, with those rules enabled."""
     # Enable every fixture subject so opt-in defaults do not hide a detector regression.
     ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
@@ -133,6 +134,7 @@ def process(items):
 
 
 def test_safe_equivalents_emit_no_security_findings():
+    """Report no security finding on the safe-equivalent fixture with the same rules enabled."""
     # Exercise the same enabled rules against safe forms.
     ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_SAFE_FIXTURE)], ctx)
@@ -141,6 +143,7 @@ def test_safe_equivalents_emit_no_security_findings():
 
 
 def test_security_registry_has_expected_rule_count():
+    """Register 32 security rules, including every expected rule, the three dependency rules and ``security.variable-import``."""
     ids = {rule.definition().id for rule in RuleRegistry.defaults().all() if rule.definition().id.startswith("security.")}
     assert len(ids) == 32
     assert _EXPECTED_RULE_IDS.issubset(ids)

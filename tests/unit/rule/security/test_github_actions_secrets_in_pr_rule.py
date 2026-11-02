@@ -234,6 +234,7 @@ def test_own_workflow_event_guard(body: str, expected: int) -> None:
 
 
 def test_pr_workflow_with_secret_fires():
+    """Report one finding, naming the secret, for a ``pull_request_target`` workflow that reads a repository secret."""
     src = (
         "on: pull_request_target\njobs:\n  publish:\n    steps:\n      - run: npm publish\n"
         "        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
@@ -244,6 +245,7 @@ def test_pr_workflow_with_secret_fires():
 
 
 def test_github_token_skipped():
+    """Report nothing when such a workflow reads only ``GITHUB_TOKEN``."""
     src = (
         "on: pull_request_target\njobs:\n  triage:\n    steps:\n      - run: gh pr view\n"
         "        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
@@ -252,6 +254,7 @@ def test_github_token_skipped():
 
 
 def test_non_pr_workflow_with_secret_skipped():
+    """Report nothing for a push workflow that reads a repository secret."""
     src = "on: push\njobs:\n  publish:\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
     assert GithubActionsSecretsInPrRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
 
