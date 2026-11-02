@@ -126,7 +126,16 @@ class RepeatedStructureMissingParametrizeRule(Rule):
 
 
 def _shape_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    """Hash the *structural* shape of a function body, ignoring constant values."""
+    """Hash the full function AST for the legacy duplicate-test comparison.
+
+    Name and attribute spellings are retained. Most constants retain only their type; long or newline-containing strings retain a value digest.
+
+    Args:
+        fn: Test declaration whose decorators, signature, docstring and body are traversed.
+
+    Returns:
+        SHA-256 hexadecimal digest of the legacy AST traversal, used to group structurally similar tests.
+    """
     parts: list[str] = []
     for node in ast.walk(fn):
         if isinstance(node, ast.Constant):
@@ -142,6 +151,14 @@ def _shape_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 
 
 def _constant_shape(value: Any) -> str:
+    """Represent a constant for the legacy structural hash.
+
+    Args:
+        value: Literal value whose type, and for selected strings its contents, participate in the hash.
+
+    Returns:
+        Type marker, or a type-prefixed digest for strings with a newline or more than 80 characters.
+    """
     if isinstance(value, str) and ("\n" in value or len(value) > 80):
         digest = hashlib.sha256(value.encode()).hexdigest()
         return f"Const:str:{digest}"
@@ -208,11 +225,26 @@ def _group_finding(unit: AnalysisUnit, definition: RuleDefinition, members: list
 
 
 def _position(fn: _TestFunction) -> tuple[int, int]:
+    """Order test functions by source line, then column.
+
+    Args:
+        fn: Test declaration whose position orders group members and findings.
+
+    Returns:
+        The line-and-column pair used for source ordering.
+    """
     return (fn.lineno, fn.col_offset)
 
 
 def _body_without_docstring(fn: _TestFunction) -> list[ast.stmt]:
-    """Return the test's top-level statements after a leading docstring, which is documentation."""
+    """Return the test's top-level statements after a leading docstring, which is documentation.
+
+    Args:
+        fn: Test declaration whose first statement is checked for a string docstring.
+
+    Returns:
+        A shallow slice without the leading docstring, or the original body list when there is no docstring.
+    """
     first = fn.body[0] if fn.body else None
     if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
         return fn.body[1:]
@@ -240,7 +272,14 @@ def _is_table_driven(fn: _TestFunction, body: list[ast.stmt]) -> bool:
 
 
 def _marks(owner: ast.AST) -> list[ast.expr]:
-    """Return an owner's decorators, then for a class or module the value of each ``pytestmark`` assignment in its body."""
+    """Return an owner's decorators, then for a class or module the value of each ``pytestmark`` assignment in its body.
+
+    Args:
+        owner: AST owner; only class and module bodies are searched for pytestmark assignments.
+
+    Returns:
+        New list containing decorators first, followed by qualifying pytestmark values in body order.
+    """
     marks: list[ast.expr] = list(getattr(owner, "decorator_list", []))
     # A function's own body is test code; only class and module bodies declare marks for the tests they hold.
     if isinstance(owner, ast.ClassDef | ast.Module):
@@ -254,6 +293,14 @@ def _marks(owner: ast.AST) -> list[ast.expr]:
 
 
 def _callee_name(node: ast.expr) -> str:
+    """Extract the final name component from a call or callee expression.
+
+    Args:
+        node: Call, name or attribute inspected when recognizing parametrization or subTest syntax.
+
+    Returns:
+        Attribute name or identifier, or an empty string for unsupported expressions.
+    """
     target = node.func if isinstance(node, ast.Call) else node
     if isinstance(target, ast.Attribute):
         return target.attr
@@ -264,18 +311,38 @@ def _attribute_key(fn: _TestFunction) -> tuple[str, ...]:
     """Return the test's marks, then each enclosing class's from the inside out, with arguments and literals kept.
 
     The module's ``pytestmark`` is left out because every test in the file shares it.
+
+    Args:
+        fn: Test function whose marks and enclosing class marks define group compatibility.
+
+    Returns:
+        Serialized marks from the test and enclosing classes, preserving declaration order and visiting classes from inner to outer.
     """
     owners: list[ast.AST] = [fn, *(parent for parent in reversed(parent_chain(fn)) if isinstance(parent, ast.ClassDef))]
     return tuple(ast.dump(mark) for owner in owners for mark in _marks(owner))
 
 
 def _container_key(fn: _TestFunction) -> tuple[ast.AST, ...]:
-    """Keep distinct enclosing declarations apart, even when they have the same name."""
+    """Keep distinct enclosing declarations apart, even when they have the same name.
+
+    Args:
+        fn: Test function with parser-attached parent links used to locate its lexical owners.
+
+    Returns:
+        Module, class and function ancestors in outer-to-inner order, retaining node identity to separate distinct declarations.
+    """
     return tuple(parent for parent in parent_chain(fn) if isinstance(parent, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef))
 
 
 def _body_shape(body: list[ast.stmt]) -> str:
-    """Serialize statements, retaining text payloads, keys and indices as section 16 requires."""
+    """Serialize statements, retaining text payloads, keys and indices as section 16 requires.
+
+    Args:
+        body: Top-level test statements after removal of a leading docstring.
+
+    Returns:
+        Newline-joined group-comparison shape, retaining significant literal text and normalizing other constants by kind.
+    """
     return "\n".join(_shape_of(stmt) for stmt in body)
 
 
@@ -311,6 +378,14 @@ def _shape_of(node: object, *, preserve_literals: bool = False) -> str:
 
 
 def _literal_kind(value: object) -> str:
+    """Classify a literal for group-comparison normalization.
+
+    Args:
+        value: Constant value whose category is preserved when its exact value may be ignored.
+
+    Returns:
+        Normalization label, with booleans separate from numbers and None labeled null; unrecognized values use their type name.
+    """
     # bool is checked before int because it subclasses it.
     if isinstance(value, bool):
         return "boolean"

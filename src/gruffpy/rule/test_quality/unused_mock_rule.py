@@ -98,7 +98,15 @@ class UnusedMockRule(Rule):
 
 
 def _referenced_names(fn: ast.FunctionDef | ast.AsyncFunctionDef, names: set[str]) -> set[str]:
-    """Return the subset of *names* that appear as Load-context Name references."""
+    """Return the subset of *names* that appear as Load-context Name references.
+
+    Args:
+        fn: Test body walked while excluding nested function bodies.
+        names: Candidate mock binding names to match without modifying the supplied set.
+
+    Returns:
+        New subset of names appearing as Load-context Name nodes in the walked body; empty when none are read.
+    """
     found: set[str] = set()
     for node in walk_test_body(fn):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in names:

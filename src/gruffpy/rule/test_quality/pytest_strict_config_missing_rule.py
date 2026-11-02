@@ -84,6 +84,14 @@ class PytestStrictConfigMissingRule(Rule):
 
 
 def _has_tests(unit: AnalysisUnit) -> bool:
+    """Check whether the unit contains a function in a recognized test-related scope.
+
+    Args:
+        unit: Analysis unit whose parsed tree and test scopes are inspected.
+
+    Returns:
+        True when a test-related function is found, including conftest helpers; false for an unparsed unit or no matching functions.
+    """
     if unit.tree is None:
         return False
     return any(True for _fn, _scope in test_functions(unit))

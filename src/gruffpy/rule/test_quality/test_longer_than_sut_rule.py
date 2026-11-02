@@ -114,6 +114,14 @@ class TestLongerThanSutRule(Rule):
 
 
 def _target_from_test_name(test_name: str) -> str | None:
+    """Extract the suffix used to match a test to a same-file function.
+
+    Args:
+        test_name: Test function name checked for a nonempty test_ suffix.
+
+    Returns:
+        The nonempty suffix after test_, or None when the prefix is absent or has no suffix.
+    """
     if not test_name.startswith("test_"):
         return None
     candidate = test_name[len("test_") :]
@@ -121,6 +129,15 @@ def _target_from_test_name(test_name: str) -> str | None:
 
 
 def _function_lengths(tree: ast.AST, code_lines: frozenset[int]) -> dict[str, int]:
+    """Index function code-line counts by their simple names.
+
+    Args:
+        tree: AST containing the synchronous and asynchronous function declarations to measure.
+        code_lines: Line-number set supplied to the shared size measurement.
+
+    Returns:
+        Simple-name to line-count map; later visited functions replace entries with the same name.
+    """
     out: dict[str, int] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):

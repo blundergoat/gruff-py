@@ -103,4 +103,12 @@ class LoopAssertionWithoutMessageRule(Rule):
 
 
 def _iter_loops(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.For | ast.AsyncFor | ast.While]:
+    """Collect loops from a test body without entering nested function bodies.
+
+    Args:
+        fn: Test whose body is walked for for, async-for and while nodes.
+
+    Returns:
+        Loop nodes in traversal order; an empty list when none appear in the walked body.
+    """
     return [n for n in walk_test_body(fn) if isinstance(n, ast.For | ast.AsyncFor | ast.While)]

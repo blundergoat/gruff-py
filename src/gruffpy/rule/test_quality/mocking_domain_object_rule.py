@@ -107,7 +107,14 @@ class MockingDomainObjectRule(Rule):
 
 
 def _spec_target(call: ast.Call) -> str | None:
-    """Return the dotted name of the type passed to Mock(spec=...) / create_autospec."""
+    """Extract the first supported spec-argument spelling from a mock factory call.
+
+    Args:
+        call: Recognized mock factory call whose first positional argument is checked before spec and spec_set keywords.
+
+    Returns:
+        First supported name spelling from those arguments, or None when no argument can be named.
+    """
     if call.args:
         name = _dotted(call.args[0])
         if name is not None:
@@ -121,6 +128,14 @@ def _spec_target(call: ast.Call) -> str | None:
 
 
 def _dotted(node: ast.AST) -> str | None:
+    """Build a bare or dotted spelling from a name or attribute expression.
+
+    Args:
+        node: Argument expression whose name components are inspected without resolving imports.
+
+    Returns:
+        Name spelling, using the leaf attribute if its receiver cannot be named; None for other expression kinds.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):

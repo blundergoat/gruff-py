@@ -99,6 +99,14 @@ class PrivateReflectionRule(Rule):
 
 
 def _is_private_name(name: str) -> bool:
+    """Identify leading-underscore names while excluding double-ended dunder names.
+
+    Args:
+        name: Attribute spelling checked against the rule's private-name convention.
+
+    Returns:
+        True for a leading underscore unless the name both starts and ends with double underscores; false otherwise.
+    """
     if name.startswith("__") and name.endswith("__"):
         return False  # dunder = framework hook, not private
     return name.startswith("_")

@@ -93,6 +93,14 @@ def reset_cache() -> None:
 
 
 def _read(project_root: str) -> PytestConfig:
+    """Read pytest and coverage settings from pyproject.toml without caching.
+
+    Args:
+        project_root: Directory containing the pyproject.toml file to read.
+
+    Returns:
+        Parsed supported settings; an empty snapshot for a missing file, caught OSError, invalid TOML or absent tool table.
+    """
     path = Path(project_root) / "pyproject.toml"
     if not path.is_file():
         return PytestConfig()
@@ -122,12 +130,30 @@ def _read(project_root: str) -> PytestConfig:
 
 
 def _as_table(value: object) -> dict[str, Any] | None:
+    """Accept a decoded TOML value only when it is a dictionary.
+
+    Args:
+        value: Decoded value whose table shape is checked without validating its contents.
+
+    Returns:
+        The same dictionary object, or None for a non-dictionary value.
+    """
     if isinstance(value, dict):
         return value
     return None
 
 
 def _nested_table(table: dict[str, Any], outer_key: str, inner_key: str) -> dict[str, Any] | None:
+    """Look up a two-level dictionary section in decoded TOML.
+
+    Args:
+        table: Outer decoded table from which the section is read.
+        outer_key: Key whose value must be the intermediate dictionary.
+        inner_key: Key in the intermediate dictionary whose value must be the requested table.
+
+    Returns:
+        The original inner dictionary, or None when either key is missing or either value is not a dictionary.
+    """
     outer = _as_table(table.get(outer_key))
     if outer is None:
         return None
@@ -135,13 +161,29 @@ def _nested_table(table: dict[str, Any], outer_key: str, inner_key: str) -> dict
 
 
 def _table_value(table: dict[str, Any] | None, key: str) -> object:
+    """Read an optional configuration table entry.
+
+    Args:
+        table: Decoded table to inspect, or None when its section is absent.
+        key: Configuration key to look up in the supplied table.
+
+    Returns:
+        The stored value, or None when the table or key is absent.
+    """
     if table is None:
         return None
     return table.get(key)
 
 
 def _split_str(value: object) -> list[str]:
-    """Split a TOML ``addopts`` value (either a string or a list)."""
+    """Split a TOML ``addopts`` value (either a string or a list).
+
+    Args:
+        value: Decoded option value; strings are split on whitespace and list elements are converted with str.
+
+    Returns:
+        Whitespace-delimited tokens for a string, stringified elements for a list, or an empty list for other values.
+    """
     if isinstance(value, str):
         return value.split()
     if isinstance(value, list):
@@ -150,7 +192,14 @@ def _split_str(value: object) -> list[str]:
 
 
 def _string_list(value: object) -> list[str]:
-    """Coerce a TOML value to a list of strings."""
+    """Coerce a TOML value to a list of strings.
+
+    Args:
+        value: Decoded option value; a string is kept as one entry and list elements are converted with str.
+
+    Returns:
+        Stringified list elements, a single unchanged string entry, or an empty list for other values.
+    """
     if isinstance(value, list):
         return [str(item) for item in value]
     if isinstance(value, str):

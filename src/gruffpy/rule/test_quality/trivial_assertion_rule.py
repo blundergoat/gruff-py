@@ -96,6 +96,16 @@ class TrivialAssertionRule(Rule):
 
 
 def _is_failure_guard(node: ast.Assert) -> bool:
+    """Recognize an assertion of a falsy constant as an expected-exception guard.
+
+    The try must contain a call and handlers whose spellings are not recognized as catching AssertionError.
+
+    Args:
+        node: Assertion with parser-attached parent links used to inspect enclosing try statements.
+
+    Returns:
+        True for such an assertion in a qualifying try body or else branch before crossing a function boundary; false otherwise.
+    """
     if not isinstance(node.test, ast.Constant) or bool(node.test.value):
         return False
     current: ast.AST = node
@@ -115,6 +125,14 @@ def _is_failure_guard(node: ast.Assert) -> bool:
 
 
 def _can_catch_assertion_error(exception: ast.expr | None) -> bool:
+    """Check whether an except-clause spelling can catch AssertionError.
+
+    Args:
+        exception: Handler type expression, or None for a bare except clause.
+
+    Returns:
+        True for a bare handler, an AssertionError/Exception/BaseException name or attribute leaf, or a tuple containing one; false otherwise.
+    """
     if exception is None:
         return True
     if isinstance(exception, ast.Tuple):
@@ -124,6 +142,14 @@ def _can_catch_assertion_error(exception: ast.expr | None) -> bool:
 
 
 def _is_trivial(expr: ast.expr) -> bool:
+    """Recognize literal-only assertion shapes handled by this rule.
+
+    Args:
+        expr: Assertion condition checked for supported constant and comparison forms.
+
+    Returns:
+        True for boolean, integer or float constants, literal-only comparisons, or nested not expressions over either; false otherwise.
+    """
     if isinstance(expr, ast.Constant):
         return isinstance(expr.value, bool | int | float)
     if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):

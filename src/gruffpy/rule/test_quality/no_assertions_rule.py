@@ -234,6 +234,14 @@ def _has_installed_failure_fake(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> b
 
 
 def _is_assertion_failure(node: ast.AST) -> bool:
+    """Recognize a raise of the bare AssertionError name or its constructor.
+
+    Args:
+        node: AST node inspected for an explicit AssertionError raise.
+
+    Returns:
+        True for raise AssertionError or raise AssertionError(...); false for bare re-raises and other exception spellings.
+    """
     if not isinstance(node, ast.Raise) or node.exc is None:
         return False
     exception = node.exc.func if isinstance(node.exc, ast.Call) else node.exc

@@ -99,6 +99,15 @@ class SetupBloatRule(Rule):
 
 
 def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef, source_path: str) -> bool:
+    """Recognize setup-hook names and call-style fixture decorators.
+
+    Args:
+        fn: Function whose name and decorator calls are checked for setup roles.
+        source_path: Source location used to qualify plain setup as a conventional test hook.
+
+    Returns:
+        True for a supported setup hook or a decorator call whose final name is fixture; false otherwise.
+    """
     if fn.name in _SETUP_NAMES and (fn.name != "setup" or _is_test_setup_path(source_path)):
         return True
     return any((call_target_name(d) or "").split(".")[-1] == "fixture" for d in fn.decorator_list if isinstance(d, ast.Call))
