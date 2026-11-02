@@ -5,6 +5,7 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_noqa_without_reason_emits():
+    """Report a bare ``noqa`` once, recording the directive with no reason."""
     src = "import os  # noqa\n"
 
     findings = IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx())
@@ -14,12 +15,14 @@ def test_noqa_without_reason_emits():
 
 
 def test_noqa_with_substantive_reason_is_skipped():
+    """Report nothing for a ``noqa`` code followed by a dash and a substantive reason."""
     src = "from package import name  # noqa: F401 - re-exported public API\n"
 
     assert IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_type_ignore_with_generic_reason_still_emits():
+    """Report a ``type: ignore`` whose only reason is the word ignore, recording that generic reason."""
     src = "value = plugin.attr  # type: ignore[attr-defined]  # ignore\n"
 
     findings = IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx())
@@ -31,12 +34,14 @@ def test_type_ignore_with_generic_reason_still_emits():
 
 
 def test_pragma_no_cover_with_double_dash_reason_is_skipped():
+    """Report nothing for a ``pragma: no cover`` with a double-dash reason."""
     src = "if __name__ == '__main__':  # pragma: no cover -- subprocess smoke only\n    pass\n"
 
     assert IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_gruff_disable_without_reason_emits():
+    """Report a reasonless ``gruff: disable`` comment once, naming the full directive."""
     src = "# gruff: disable=docs.missing-function-docstring\n"
 
     findings = IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx())
@@ -46,6 +51,7 @@ def test_gruff_disable_without_reason_emits():
 
 
 def test_directive_inside_string_literal_is_skipped():
+    """Report nothing for directive text inside a string literal."""
     src = "text = '# noqa'\n"
 
     assert IgnoreDirectiveReasonRule().analyse(make_unit(src), default_ctx()) == []

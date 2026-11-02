@@ -8,6 +8,14 @@ from tests.unit.rule.docs._helpers import make_unit
 
 
 def _ctx(project_root: Path) -> RuleContext:
+    """Build a rule context from the registry defaults at project_root.
+
+    Args:
+        project_root: Directory the rule checks for a README.
+
+    Returns:
+        The rule context.
+    """
     return RuleContext(
         project_root=str(project_root),
         config=AnalysisConfig.from_registry(RuleRegistry.defaults()),
@@ -15,18 +23,33 @@ def _ctx(project_root: Path) -> RuleContext:
 
 
 def test_readme_md_present_emits_nothing(tmp_path: Path):
+    """Report nothing when the project root holds a ``README.md``.
+
+    Args:
+        tmp_path: Project root holding a ``README.md``.
+    """
     (tmp_path / "README.md").write_text("# Project\n")
     src = "def f():\n    pass\n"
     assert MissingReadmeRule().analyse(make_unit(src), _ctx(tmp_path)) == []
 
 
 def test_readme_rst_present_emits_nothing(tmp_path: Path):
+    """Report nothing when the project root holds a ``README.rst``.
+
+    Args:
+        tmp_path: Project root holding a ``README.rst``.
+    """
     (tmp_path / "README.rst").write_text("Project\n=======\n")
     src = "def f():\n    pass\n"
     assert MissingReadmeRule().analyse(make_unit(src), _ctx(tmp_path)) == []
 
 
 def test_no_readme_emits(tmp_path: Path):
+    """Report one missing-README finding when the project root has no README.
+
+    Args:
+        tmp_path: Empty project root.
+    """
     src = "def f():\n    pass\n"
     findings = MissingReadmeRule().analyse(make_unit(src), _ctx(tmp_path))
     assert len(findings) == 1
@@ -51,6 +74,11 @@ def test_finding_path_is_project_relative(tmp_path: Path) -> None:
 
 
 def test_same_finding_per_unit_for_dedup(tmp_path: Path):
+    """Give the missing-README findings from two units one fingerprint.
+
+    Args:
+        tmp_path: Empty project root shared by both units.
+    """
     # Two units with the same project root must produce byte-identical findings
     # so the registry's dedup collapses them to one. We approximate that by
     # asserting the fingerprints match.

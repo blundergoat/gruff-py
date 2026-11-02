@@ -5,11 +5,13 @@ from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_
 
 
 def test_documented_returns_emits_nothing():
+    """Report nothing when a ``Returns`` section documents the annotated return."""
     src = 'def f() -> int:\n    """Get a thing.\n\n    Returns:\n        int: the thing.\n    """\n    return 1\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_non_none_return_without_section_emits():
+    """Report an ``int``-annotated function without a result description once, saying none was recognized."""
     src = 'def f() -> int:\n    """Get a thing."""\n    return 1\n'
     findings = MissingReturnDocRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -19,27 +21,35 @@ def test_non_none_return_without_section_emits():
 
 
 def test_none_return_skipped():
+    """Report nothing for a function annotated to return None."""
     src = 'def f() -> None:\n    """Side effect."""\n    print(1)\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_no_annotation_skipped():
+    """Report nothing for an unannotated function under default options."""
     src = 'def f():\n    """Get a thing."""\n    return 1\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_private_function_skipped():
+    """Report nothing for an annotated private function under default options."""
     src = 'def _f() -> int:\n    """X."""\n    return 1\n'
     assert MissingReturnDocRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_private_function_reported_with_every_callable():
+    """Report an annotated private function when ``everyCallable`` is set."""
     src = 'def _f() -> int:\n    """X."""\n    return 1\n'
     findings = MissingReturnDocRule().analyse(make_unit(src), every_callable_ctx(MissingReturnDocRule.ID))
     assert [f.symbol for f in findings] == ["_f"]
 
 
 def test_unannotated_value_return_reported_only_with_every_callable():
+    """Report an unannotated function and coroutine that return values only when ``everyCallable`` is set.
+
+    The None-returning function and the generator, which documents what it yields, stay unreported in both runs.
+    """
     src = (
         'def plain(x):\n    """Double."""\n    return x * 2\n\n'
         'async def fetch(x):\n    """Fetch."""\n    return x\n\n'
@@ -60,6 +70,12 @@ def test_unannotated_value_return_reported_only_with_every_callable():
     ),
 )
 def test_explicit_result_prose_needs_no_returns_section(name, docstring):
+    """Accept a summary that describes the returned value in prose instead of a ``Returns`` section.
+
+    Args:
+        name: Function name for the case.
+        docstring: Summary that states the result; the cases vary its wording.
+    """
     source = f'def {name}() -> object:\n    """{docstring}"""\n    return value\n'
     assert MissingReturnDocRule().analyse(make_unit(source), default_ctx()) == []
 
@@ -72,11 +88,19 @@ def test_explicit_result_prose_needs_no_returns_section(name, docstring):
     ),
 )
 def test_nominal_result_prose_names_the_annotated_class(name, annotation, docstring):
+    """Accept a summary that names the class in the return annotation.
+
+    Args:
+        name: Function name for the case.
+        annotation: Return annotation naming a class.
+        docstring: Summary that names that class.
+    """
     source = f'def {name}() -> {annotation}:\n    """{docstring}"""\n    return value\n'
     assert MissingReturnDocRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_property_value_description_needs_no_returns_section():
+    """Accept a property docstring that describes its value instead of a ``Returns`` section."""
     source = '''
 class URL:
     @property
@@ -91,6 +115,11 @@ class URL:
 
 @pytest.mark.parametrize("describe_fallback", (True, False), ids=("both-streams-described", "fallback-undocumented"))
 def test_stream_prose_accounts_for_each_returned_value(describe_fallback):
+    """Report the function only when its prose omits the fallback stream it can return.
+
+    Args:
+        describe_fallback: Whether the docstring also names the fallback stream.
+    """
     fallback = ", otherwise use sys.stderr" if describe_fallback else ""
     source = f'''
 @LocalProxy
@@ -107,6 +136,7 @@ def wsgi_errors_stream() -> t.TextIO:
 
 
 def test_action_prose_without_a_result_description_still_emits():
+    """Report a function whose summary describes only its loading action, not its result."""
     source = '''
 def load_ssh_private_key(data) -> SSHPrivateKeyTypes:
     """Load private key from OpenSSH custom encoding."""
@@ -118,6 +148,11 @@ def load_ssh_private_key(data) -> SSHPrivateKeyTypes:
 
 @pytest.mark.parametrize("key", ("", "id"), ids=("empty-key", "substring-only"))
 def test_return_key_must_be_a_nonempty_reference_in_the_prose(key):
+    """Report the function when the key selecting its returned value is empty or appears in the prose only inside another word.
+
+    Args:
+        key: Key selecting the returned settings value; one case is empty and one occurs only inside a word.
+    """
     source = f'''
 def lookup() -> object:
     """Validate the configured lookup."""

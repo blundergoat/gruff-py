@@ -3,11 +3,13 @@ from tests.unit.rule.docs._helpers import default_ctx, every_callable_ctx, make_
 
 
 def test_function_with_docstring_skipped():
+    """Report nothing for a public function with a docstring."""
     src = 'def f():\n    """It does a thing."""\n    return 1\n'
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_function_without_docstring_emits():
+    """Report an undocumented public function once, asking for an intent description and a ``Returns`` section."""
     src = "def f():\n    return 1\n"
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -16,18 +18,21 @@ def test_function_without_docstring_emits():
 
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
+    """Report nothing for an undocumented test function in a test file under default options."""
     src = "def test_service_returns_value():\n    assert service() == 1\n"
     findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_pytest_method_without_docstring_in_test_file_skipped():
+    """Report nothing for an undocumented test method in a test file under default options."""
     src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
     findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
     assert findings == []
 
 
 def test_test_named_function_without_docstring_in_production_file_emits():
+    """Report an undocumented ``test_``-named function once when it sits in a production file."""
     src = "def test_service_returns_value():\n    return service()\n"
     findings = MissingFunctionDocstringRule().analyse(make_unit(src, "src/service_helpers.py"), default_ctx())
     assert len(findings) == 1
@@ -35,21 +40,25 @@ def test_test_named_function_without_docstring_in_production_file_emits():
 
 
 def test_private_function_skipped():
+    """Report nothing for an undocumented private function under default options."""
     src = "def _helper():\n    return 1\n"
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_dunder_method_skipped():
+    """Report nothing for an undocumented ``__init__`` method."""
     src = "class C:\n    def __init__(self): pass\n"
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_abstract_method_skipped():
+    """Report nothing for an undocumented abstract method."""
     src = "from abc import abstractmethod\n\nclass C:\n    @abstractmethod\n    def m(self): ...\n"
     assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_overload_stub_skipped():
+    """Report nothing for undocumented ``@overload`` stubs beside a documented implementation."""
     src = (
         "from typing import overload\n\n"
         "@overload\n"
@@ -64,6 +73,7 @@ def test_overload_stub_skipped():
 
 
 def test_property_getter_without_docstring_emits():
+    """Report an undocumented property getter once, as ``C.name``."""
     src = "class C:\n    @property\n    def name(self):\n        return 'x'\n"
     findings = MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -71,6 +81,7 @@ def test_property_getter_without_docstring_emits():
 
 
 def test_property_setter_skipped():
+    """Report nothing for an undocumented setter of a documented property."""
     src = (
         "class C:\n"
         "    @property\n"
@@ -85,6 +96,7 @@ def test_property_setter_skipped():
 
 
 def test_nested_single_callsite_regex_callback_skipped():
+    """Report nothing for an undocumented nested callback passed once to ``re.sub``."""
     # The regex callback `replace` is referenced once inside its enclosing
     # function - passed to re.sub. Forcing a docstring on this kind of
     # closure is noise.
@@ -100,6 +112,7 @@ def test_nested_single_callsite_regex_callback_skipped():
 
 
 def test_nested_event_generator_passed_once_skipped():
+    """Report nothing for an undocumented nested async generator passed once to a response."""
     # SSE pattern: inner async generator passed once into StreamingResponse.
     src = (
         "async def stream_endpoint():\n"
@@ -112,6 +125,7 @@ def test_nested_event_generator_passed_once_skipped():
 
 
 def test_nested_function_called_twice_still_emits():
+    """Report an undocumented nested function that is called twice once, as ``outer.helper``."""
     # Sanity: when the nested function is called multiple times in the
     # enclosing scope, it's behavioural enough to warrant a docstring.
     # Proves the single-callsite gate is real.
@@ -122,6 +136,7 @@ def test_nested_function_called_twice_still_emits():
 
 
 def test_message_asks_only_for_what_the_function_has():
+    """Ask each undocumented function only for the entries and sections it needs, skipping an underscore parameter."""
     src = (
         "def act():\n    print(1)\n\n"
         "def convert(value, unit, _cache=None):\n    if value < 0:\n        raise ValueError\n    return value\n\n"
@@ -139,6 +154,7 @@ def test_message_asks_only_for_what_the_function_has():
 
 
 def test_private_and_test_functions_reported_with_every_callable():
+    """Report an undocumented private function and a test function in a test file when ``everyCallable`` is set."""
     ctx = every_callable_ctx(MissingFunctionDocstringRule.ID)
     private = MissingFunctionDocstringRule().analyse(make_unit("def _f():\n    return 1\n"), ctx)
     test = MissingFunctionDocstringRule().analyse(make_unit("def test_service():\n    assert service() == 1\n", "tests/test_service.py"), ctx)

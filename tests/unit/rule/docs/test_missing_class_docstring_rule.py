@@ -6,11 +6,13 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_class_with_docstring_skipped():
+    """Report nothing for a class with a docstring."""
     src = 'class C:\n    """A class."""\n    pass\n'
     assert MissingClassDocstringRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_class_without_docstring_emits():
+    """Report an undocumented class once, asking for a brief intent description rather than saying it has no docstring."""
     src = "class C:\n    x = 1\n"
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -20,12 +22,14 @@ def test_class_without_docstring_emits():
 
 
 def test_protocol_subclass_skipped():
+    """Report nothing for an undocumented ``Protocol`` subclass."""
     src = "from typing import Protocol\n\nclass P(Protocol):\n    def m(self) -> None: ...\n"
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert findings == []
 
 
 def test_dataclass_without_docstring_emits_by_default():
+    """Report an undocumented dataclass once under the default options."""
     src = "from dataclasses import dataclass\n\n@dataclass\nclass D:\n    x: int\n"
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -33,6 +37,7 @@ def test_dataclass_without_docstring_emits_by_default():
 
 
 def test_dataclass_can_be_exempted_by_config():
+    """Report nothing for an undocumented dataclass when ``class_dataclass_exempt`` is set."""
     src = "from dataclasses import dataclass\n\n@dataclass\nclass D:\n    x: int\n"
     rule = MissingClassDocstringRule()
     ctx = RuleContext(
@@ -51,6 +56,7 @@ def test_dataclass_can_be_exempted_by_config():
 
 
 def test_nested_class_emits():
+    """Report an undocumented nested class once, as ``Outer.Inner``."""
     src = '"""Module."""\n\nclass Outer:\n    """Outer doc."""\n    class Inner:\n        x = 1\n'
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
