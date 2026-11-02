@@ -85,7 +85,7 @@ def test_nested_class_emits_qualified_symbol():
 
 
 def test_decorator_lines_are_free_in_class_length():
-    """Measure a decorated class at 6 lines, excluding its decorator, while the finding still starts at line 1."""
+    """Measure a decorated class with five body lines at 6 lines while the finding starts at line 1."""
     body = "\n".join(["    x = 1"] * 5)
     source = f"@dataclass\nclass C:\n{body}\n"
     findings = ClassLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
@@ -97,7 +97,7 @@ def test_decorator_lines_are_free_in_class_length():
 
 
 def test_documented_class_is_measured_by_its_code_lines():
-    """Measure a documented class by its six code lines: no finding at a threshold of 6, one at 5."""
+    """Report a documented class with six code lines at a threshold of 5 but not at 6."""
     docstring = '    """Holds five values.\n\n    Each attribute below is code.\n    """'
     comments = "\n".join(["    # Explain the next value."] * 10)
     body = "\n".join(["    x = 1"] * 5)

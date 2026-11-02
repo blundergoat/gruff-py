@@ -75,7 +75,7 @@ def test_init_self_assignments_counted():
 
 
 def test_class_body_and_init_dedupe_by_name():
-    """Report nothing when five class-body names reassigned in ``__init__`` plus ten new ones leave fifteen distinct attributes."""
+    """Report nothing at a threshold of 15 for five class-body attributes reassigned in ``__init__`` plus ten new ones there."""
     # 5 class-body annotated + 5 self.a0..a4 reassignments + 10 more self.b0..b9
     body = "\n".join(f"    a{i}: int = {i}" for i in range(5))
     init = "\n".join([f"        self.a{i} = {i}" for i in range(5)] + [f"        self.b{i} = {i}" for i in range(10)])

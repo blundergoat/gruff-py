@@ -96,7 +96,7 @@ def test_nested_class_with_too_few_methods_skipped():
 
 
 def _documented_method(name: str) -> str:
-    """Return source for a method named name with a three-line docstring, twenty comment lines and one return statement.
+    """Return source for a method named name with a four-line docstring, twenty comment lines and one return statement.
 
     Args:
         name: Method name.

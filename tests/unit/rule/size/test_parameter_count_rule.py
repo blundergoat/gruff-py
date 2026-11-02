@@ -98,7 +98,7 @@ def test_module_level_function_does_not_exclude_first_arg():
 
 
 def test_varargs_and_kwargs_each_count_as_one():
-    """Count ``*args`` and ``**kwargs`` as one each: three named plus both stays quiet, four named plus both reports 6."""
+    """Report nothing for three named parameters plus ``*args`` and ``**kwargs``, and one finding counting 6 for four named plus both."""
     source = "def f(a, b, c, *args, **kwargs):\n    return a\n"
     # 3 + 1 (*args) + 1 (**kwargs) = 5 -> at threshold, no finding
     assert ParameterCountRule().analyse(_make_unit(source), _ctx()) == []

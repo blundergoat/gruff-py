@@ -204,10 +204,10 @@ def _make_unit(source: str) -> AnalysisUnit:
 
 
 def _default_ctx() -> RuleContext:
-    """Build a rule context from the registry defaults with the parameter-count and both function-length thresholds lowered.
+    """Build a rule context that enables every registered rule, with the parameter-count and both function-length thresholds lowered.
 
     Returns:
-        A context whose config holds every registered rule, three with lowered thresholds.
+        A context whose config enables every registered rule, three with lowered thresholds.
     """
     # PMD-aligned production defaults are too generous for the small fixture to
     # cross. Override the size rubrics that depend on small violations so the
@@ -251,13 +251,13 @@ def _settings_for(rule, override: dict[str, int] | None, *, enabled: bool = True
 def _ctx_with_threshold_overrides(
     overrides: dict[str, dict[str, int]],
 ) -> RuleContext:
-    """Build a rule context from the registry defaults, applying a legacy threshold override to each named rule.
+    """Build a rule context that enables every registered rule, applying a legacy threshold override to each named rule.
 
     Args:
         overrides: Legacy warning and error mappings keyed by rule id.
 
     Returns:
-        A context whose config holds every registered rule, overridden where named.
+        A context whose config enables every registered rule, overridden where named.
     """
     registry = RuleRegistry.defaults()
     rules = {rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id)) for rule in registry.all()}
@@ -287,13 +287,13 @@ def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContex
 
 
 def _ctx_with_disabled(disabled_id: str) -> RuleContext:
-    """Build a rule context from the registry defaults with one rule disabled.
+    """Build a rule context that disables one rule and enables every other registered rule.
 
     Args:
         disabled_id: Rule to disable.
 
     Returns:
-        A context whose config holds every registered rule at its defaults, with that one disabled.
+        A context with that rule disabled and every other rule enabled at its default thresholds.
     """
     registry = RuleRegistry.defaults()
     rules = {rule.definition().id: _settings_for(rule, None, enabled=(rule.definition().id != disabled_id)) for rule in registry.all()}

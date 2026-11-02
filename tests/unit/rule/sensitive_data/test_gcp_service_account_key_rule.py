@@ -16,7 +16,7 @@ _PRIVATE_KEY_ID = "abc123" + "def456" + "abc123" + "def456"
 
 
 def test_gcp_service_account_key_emits_with_redacted_preview():
-    """Report one finding on line 2 whose metadata holds only the category, fixed preview and provider, with no key material in its text."""
+    """Report one finding on line 2 whose metadata holds only the category, fixed preview and provider, without the fixture key or key id."""
     src = _service_account_source(_PRIVATE_KEY_VALUE)
 
     findings = GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx())

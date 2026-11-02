@@ -113,7 +113,7 @@ def test_nested_functions_emit_independent_findings():
 
 
 def test_decorator_lines_are_free_but_still_mark_the_start():
-    """Measure a decorated function at 2 lines, excluding its decorator, while the finding starts at the decorator line."""
+    """Measure a decorated two-line function at 2 lines while the finding starts at the decorator line."""
     source = "@decorator\ndef f():\n    return 1\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=1))
     assert len(findings) == 1
@@ -133,7 +133,7 @@ def test_function_with_101_code_lines_is_reported_whatever_its_documentation():
 
 
 def test_documented_short_function_is_not_reported():
-    """Report nothing for a one-statement function with a fifty-line docstring and 150 comment lines."""
+    """Report nothing for a one-statement function with a 53-line docstring and 150 comment lines."""
     explanation = "\n".join(f"    Line {i} of a long explanation." for i in range(50))
     docstring = f'    """Returns one.\n\n{explanation}\n    """'
     comments = "\n".join(f"    # Step {i} of the reasoning." for i in range(150))

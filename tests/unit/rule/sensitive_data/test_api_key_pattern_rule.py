@@ -109,7 +109,7 @@ def test_slack_webhook_emits():
 
 
 def test_provider_metadata_and_message_do_not_leak_raw_key():
-    """Keep the raw Google key out of the finding's message and metadata, which hold only the fixed preview and the vendor."""
+    """Keep the raw Google key out of the finding's message and metadata, and limit the metadata to the fixed preview and the vendor."""
     src = f"GOOGLE_API_KEY = {_GOOGLE_API_KEY!r}\n"
     findings = ApiKeyPatternRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1

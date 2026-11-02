@@ -186,7 +186,7 @@ def _case_id(case: object) -> str | None:
         case: One parametrize argument value; a rule instance carries ``ID``.
 
     Returns:
-        The ``ID`` string, or None for a value without one.
+        The ``ID`` string, or None so pytest generates that parameter's id itself.
     """
     return getattr(case, "ID", None)
 
@@ -214,10 +214,10 @@ def test_each_rule_just_over_its_limit_reports_the_lower_band_notice(
         rule: Size or complexity rule under test.
         limit: Error threshold the context sets for it.
         lower: Builder argument for a unit measuring under one and a half times the limit.
-        upper: Builder argument for a unit measuring at least one and a half times the limit.
+        upper: Builder argument for an upper-band unit, from the shared cases; unused here.
         build: Function that turns a count into source.
         lower_advice: Remediation expected in the lower band.
-        upper_advice: Remediation expected in the upper band.
+        upper_advice: Upper-band remediation, from the shared cases; unused here.
     """
     near = _only(rule, build(lower), RuleSettings(enabled=True, severity_threshold=SeverityThreshold(limit, Severity.ERROR)))
 
@@ -231,15 +231,15 @@ def test_each_rule_at_twice_its_limit_keeps_its_severity_and_says_split_or_simpl
 ) -> None:
     """Report a unit at one and a half times each rule's limit or more as one error upper-band finding carrying the upper advice.
 
-    Neither advice text mentions raising a threshold, ignoring, excluding or extracting.
+    Neither advice text contains raise, threshold, ignore, exclude or extract, in any letter case.
 
     Args:
         rule: Size or complexity rule under test.
         limit: Error threshold the context sets for it.
-        lower: Builder argument for a unit measuring under one and a half times the limit.
+        lower: Builder argument for a lower-band unit, from the shared cases; unused here.
         upper: Builder argument for a unit measuring at least one and a half times the limit.
         build: Function that turns a count into source.
-        lower_advice: Remediation expected in the lower band.
+        lower_advice: Lower-band remediation, checked with the upper advice for forbidden wording.
         upper_advice: Remediation expected in the upper band.
     """
     far = _only(rule, build(upper), RuleSettings(enabled=True, severity_threshold=SeverityThreshold(limit, Severity.ERROR)))
@@ -254,7 +254,7 @@ def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: 
     """Report a 110-line function as advisory and a 160-line one with the configured warning, each message naming the threshold of 100.
 
     Args:
-        lines: Statement count the function builder receives.
+        lines: Total function lines requested from the builder, the ``def`` line included.
         band: Expected limit band.
         severity: Expected severity: advisory in the lower band, the configured warning in the upper.
     """
@@ -267,7 +267,7 @@ def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: 
 
 
 def test_function_length_counts_a_multi_line_literal_and_call_once() -> None:
-    """Count a 130-line dict literal and a 130-line call as one line each, measuring the function at 12 lines."""
+    """Measure a function holding a 130-entry dict literal and a call with 130 keyword arguments at 12 lines."""
     literal = "".join(f"        'key{i}': {i},\n" for i in range(130))
     arguments = "".join(f"        option{i}={i},\n" for i in range(130))
     statements = "".join("    x += 1\n" for _ in range(8))

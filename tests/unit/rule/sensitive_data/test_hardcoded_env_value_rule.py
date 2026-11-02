@@ -13,7 +13,7 @@ _ENV_SECRET = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1"
 
 
 def test_env_with_high_entropy_secret_emits():
-    """Report one finding, with the fixed preview, for a high-entropy value under a secret-named key in a ``.env`` file."""
+    """Report one finding, with the fixed preview, for a ``.env`` file holding a high-entropy ``API_KEY`` value and ``DEBUG=true``."""
     src = f"API_KEY={_ENV_SECRET}\nDEBUG=true\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx())
     assert len(findings) == 1

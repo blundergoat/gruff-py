@@ -107,7 +107,7 @@ def test_substantive_lines_over_threshold_still_fire():
 
 
 def test_docstring_lines_are_free_but_data_strings_count():
-    """Exclude a sixty-line module docstring from the count, but count the same lines when they are assigned as data."""
+    """Report nothing for 90 code lines after a 62-line module docstring, but one finding when those lines are a data string instead."""
     # PEP 257 docstrings are documentation and free; the same literal as data still counts.
     docstring_body = "\n".join(["'''Module docs.", *(["docs line"] * 60), "'''"])
     source = docstring_body + "\n" + "\n".join(["x = 1"] * 90)
@@ -135,7 +135,7 @@ def test_hash_prefixed_lines_inside_multiline_data_still_count():
 
 
 def test_inline_multiline_docstring_counts_only_code_bearing_header():
-    """Count only the header line of a docstring that starts on the ``def`` line, measuring 1 line."""
+    """Report one finding measuring 1 line for a function whose multi-line docstring starts on the ``def`` line."""
     source = 'def tiny(): """Summary.\nContinuation.\n"""\n'
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -147,7 +147,7 @@ def test_inline_multiline_docstring_counts_only_code_bearing_header():
 
 
 def test_parenthesized_multiline_docstring_is_free():
-    """Count only the ``def`` line when the docstring is a parenthesized string, measuring 1 line."""
+    """Report one finding measuring 1 line for a function whose one-line docstring is wrapped in parentheses across three lines."""
     source = 'def tiny():\n    (\n        "Summary."\n    )\n'
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
