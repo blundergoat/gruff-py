@@ -5,6 +5,7 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_unused_mock_emits():
+    """Report one finding, listing ``mock``, for a test that creates a mock and never uses it."""
     src = "from unittest.mock import Mock\ndef test_foo():\n    mock = Mock()\n    assert 1 + 1 == 2\n"
     findings = UnusedMockRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -12,6 +13,7 @@ def test_unused_mock_emits():
 
 
 def test_used_mock_skipped():
+    """Report nothing for a test that checks a call on its mock."""
     src = "from unittest.mock import Mock\ndef test_foo():\n    mock = Mock()\n    mock.assert_called()\n"
     assert UnusedMockRule().analyse(make_unit(src), default_ctx()) == []
 

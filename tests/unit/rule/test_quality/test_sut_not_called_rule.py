@@ -5,28 +5,33 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_test_with_sut_call_skipped():
+    """Report nothing for a test that calls a function and asserts on its result."""
     src = "def test_foo():\n    result = my_function(42)\n    assert result == 42\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_test_with_only_mocks_emits():
+    """Report one finding for a test that only creates a ``Mock`` and checks it was called."""
     src = "from unittest.mock import Mock\ndef test_foo():\n    mock = Mock()\n    mock.assert_called()\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_test_with_only_assertions_emits():
+    """Report one finding for a test whose only statement is ``assert True``."""
     src = "def test_foo():\n    assert True\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_test_with_pytest_raises_and_sut():
+    """Report nothing for a test that calls a function inside ``pytest.raises``."""
     src = "import pytest\ndef test_foo():\n    with pytest.raises(ValueError):\n        my_function(-1)\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_constant_contract_test_reading_imported_name_skipped():
+    """Report nothing for a test that asserts on the content of an imported constant."""
     # Schema/constant contract tests assert against the *content* of an
     # imported module-level value (a prompt string, a list of allowed
     # values). The test is exercising the import; SUT-call detection
@@ -40,6 +45,7 @@ def test_constant_contract_test_reading_imported_name_skipped():
 
 
 def test_model_fields_inspection_skipped():
+    """Report nothing for a test that reads ``model_fields`` on an imported model."""
     # Reading `.model_fields` on a pydantic model is exercising the schema
     # declaration, even though no method is called.
     src = "from x import ReferralDetails\ndef test_legacy_fields_removed():\n    assert 'specialist_name' not in ReferralDetails.model_fields\n"
@@ -47,6 +53,7 @@ def test_model_fields_inspection_skipped():
 
 
 def test_annotations_access_skipped_regardless_of_receiver():
+    """Report nothing for a test that reads ``__annotations__`` on a class it defines itself."""
     # `__annotations__` access is a schema-inspection accessor; it counts
     # as a SUT touch no matter where the receiver came from.
     src = "def test_annotation_shape():\n    class Local:\n        x: int\n    assert Local.__annotations__['x'] is int\n"
@@ -54,6 +61,7 @@ def test_annotations_access_skipped_regardless_of_receiver():
 
 
 def test_test_using_only_test_framework_imports_still_emits():
+    """Report one finding for a test in a module that imports only ``pytest`` and asserts ``True``."""
     # Sanity: importing pytest/unittest/mock and only invoking framework
     # helpers is still a no-SUT test. The framework-module exclusion
     # prevents the new "imported name read" check from masking these.
@@ -63,6 +71,7 @@ def test_test_using_only_test_framework_imports_still_emits():
 
 
 def test_module_level_computed_constant_read_skipped():
+    """Report nothing for a test that asserts on a module constant computed by a module helper."""
     # Schema/prompt-contract tests read the SUT's source via a module-level
     # helper at import time and stash it in a constant; tests then assert
     # against the constant's content. The constant IS the SUT.

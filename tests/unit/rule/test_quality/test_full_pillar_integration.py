@@ -35,6 +35,11 @@ _EXPECTED_COUNTS = {
 
 
 def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
+    """Report each test-quality rule its expected number of times on the full fixture, and report every registered one.
+
+    Args:
+        tmp_path: Project root holding a ``pyproject.toml`` whose pytest block sets only ``-q``.
+    """
     registry = RuleRegistry.defaults()
     ctx = _ctx_with_opt_in_rules(tmp_path, registry)
     findings = registry.analyse(
@@ -49,6 +54,17 @@ def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
 
 
 def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContext:
+    """Write a minimal pytest ``pyproject.toml`` at tmp_path and build a context that enables each rule in the helper's options mapping.
+
+    It also clears the cached pytest config, sets the billing domain namespace and turns grouped findings off.
+
+    Args:
+        tmp_path: Project root that receives the ``pyproject.toml``.
+        registry: Registry whose defaults seed the config.
+
+    Returns:
+        A context rooted at tmp_path whose config enables those rules with their options.
+    """
     (tmp_path / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\naddopts = "-q"\n',
     )
@@ -78,6 +94,11 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
 
 
 def _full_pillar_source() -> str:
+    """Fill in the full-pillar fixture's setup and long-test bodies.
+
+    Returns:
+        The fixture source, with 31 ``value += 1`` lines in ``setup_method`` and 101 ``step = 1`` lines in ``test_function_too_long_case``.
+    """
     setup_body = "".join("    value += 1\n" for _ in range(31))
     long_test_body = "".join("    step = 1\n" for _ in range(101))
     return _FULL_PILLAR_SOURCE.format(

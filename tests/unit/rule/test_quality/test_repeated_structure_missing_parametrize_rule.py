@@ -13,13 +13,18 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def _legacy_ctx() -> RuleContext:
-    """Keep explicit opt-out coverage after group mode becomes the default."""
+    """Keep explicit opt-out coverage after group mode becomes the default.
+
+    Returns:
+        A default-settings context whose repeated-structure settings turn ``groupFindings`` off.
+    """
     context = default_ctx()
     context.config.rule_settings(RepeatedStructureMissingParametrizeRule.ID).options["groupFindings"] = False
     return context
 
 
 def test_repeated_same_helper_shape_emits():
+    """Report three findings, each with group size 3, for three tests that assert on the same helper, with group findings off."""
     src = """
 def test_alpha():
     assert classify("a") == "alpha"
@@ -36,6 +41,7 @@ def test_gamma():
 
 
 def test_same_statement_shape_with_different_helpers_skipped():
+    """Report nothing, with group findings off, for three tests whose assertions differ only in the helper they call."""
     src = """
 def test_cyclomatic():
     assert cyclomatic_for(source) == 2
@@ -51,6 +57,7 @@ def test_nesting():
 
 
 def test_same_harness_with_different_multiline_source_fixtures_skipped():
+    """Report nothing, with group findings off, for three tests that score different multi-line source strings with one harness."""
     src = '''
 def test_if_score():
     source = """def f():
@@ -81,6 +88,7 @@ def test_try_score():
 
 
 def test_same_statement_shape_with_different_attributes_skipped():
+    """Report nothing, with group findings off, for three tests that call ``render`` on different reporter classes."""
     src = """
 def test_json_reporter():
     assert JsonReporter().render(report) == "ok"
@@ -96,6 +104,7 @@ def test_markdown_reporter():
 
 
 def test_decorated_tests_skipped():
+    """Report nothing, with group findings off, for three ``classify`` tests when the first one is parametrized."""
     src = """
 @pytest.mark.parametrize("value", ["a", "b", "c"])
 def test_alpha(value):
@@ -112,13 +121,26 @@ def test_gamma():
 
 
 def _grouped(src: str, min_group_size: int = 3, display_path: str = "test_x.py") -> list[Finding]:
-    """Analyse *src* with ``groupFindings`` on, as the section 16 measurement enables it."""
+    """Analyse *src* with ``groupFindings`` on, as the section 16 measurement enables it.
+
+    Args:
+        src: Test module source to analyse.
+        min_group_size: Smallest group that reports, set as the ``minGroupSize`` threshold.
+        display_path: Path the analysed unit displays.
+
+    Returns:
+        Findings from a context that holds only this rule's settings.
+    """
     settings = RuleSettings(thresholds={"minGroupSize": min_group_size}, options={"groupFindings": True})
     context = RuleContext(project_root="/tmp/no-such-root", config=AnalysisConfig(rules={RepeatedStructureMissingParametrizeRule.ID: settings}))
     return RepeatedStructureMissingParametrizeRule().analyse(make_unit(src, display_path), context)
 
 
 def test_group_findings_reports_one_finding_listing_every_member():
+    """Report one finding at the first of three matching tests by default, listing every member, and three with group findings off.
+
+    The grouped message names the last member's line and advises a ``@pytest.mark.parametrize`` test.
+    """
     src = """
 def test_parses_small():
     value = parse("1")
@@ -141,6 +163,7 @@ def test_parses_large():
 
 
 def test_group_findings_pair_reports_only_when_min_group_size_is_two():
+    """Report a matching pair only when ``minGroupSize`` is 2, not at the default of 3."""
     src = """
 def test_rounds_down():
     value = round_cents(1.004)
@@ -155,6 +178,7 @@ def test_rounds_up():
 
 
 def test_group_findings_splits_groups_on_a_differing_own_decorator():
+    """Report two groups of three when the second three tests carry a ``pytest.mark.slow`` mark the first three lack."""
     src = """
 def test_reads_a():
     row = read("a")
@@ -187,6 +211,7 @@ def test_reads_f():
 
 
 def test_group_findings_splits_groups_on_a_differing_class_decorator():
+    """Report two groups of three when one class of three tests carries a ``pytest.mark.network`` mark and the other does not."""
     src = """
 class TestLocal:
     def test_reads_a(self):
@@ -220,6 +245,11 @@ class TestRemote:
 
 @pytest.mark.parametrize("other_class", ["TestRemote", "TestLocal"])
 def test_group_findings_keeps_distinct_class_containers_separate(other_class: str):
+    """Report nothing when two matching tests sit in one class body and the third sits in another.
+
+    Args:
+        other_class: Name of the second class: a different name, or ``TestLocal`` again.
+    """
     src = f"""
 class TestLocal:
     def test_reads_a(self):
@@ -240,6 +270,11 @@ class {other_class}:
 
 @pytest.mark.parametrize("whitespace", [" ", "\t", "\n", "\r", "\f", "\v"])
 def test_group_findings_keeps_whitespace_text_exact(whitespace: str):
+    """Report nothing for three tests whose ``parse`` strings contain a whitespace character and end in different digits.
+
+    Args:
+        whitespace: Whitespace character placed between ``payload`` and the test's index.
+    """
     src = "\n\n".join(
         f"def test_case_{index}():\n    value = parse({('payload' + whitespace + str(index))!r})\n    assert value.ok" for index in range(3)
     )
@@ -247,6 +282,7 @@ def test_group_findings_keeps_whitespace_text_exact(whitespace: str):
 
 
 def test_group_findings_keeps_interpolated_text_exact():
+    """Report nothing for three tests whose f-string arguments differ in their literal text."""
     src = "\n\n".join(f'def test_case_{index}():\n    value = parse(f"payload {index}: {{field}}")\n    assert value.ok' for index in range(3))
     assert _grouped(src) == []
 
@@ -261,6 +297,11 @@ def test_group_findings_keeps_interpolated_text_exact():
     ],
 )
 def test_group_findings_keeps_literal_keys_and_indices_exact(expression: str):
+    """Report nothing for three tests that differ only in a dictionary key, a subscript key, an index or a slice bound.
+
+    Args:
+        expression: Template for the assigned expression, with ``{index}`` filled in per test.
+    """
     src = "\n\n".join(f"def test_case_{index}():\n    value = {expression.format(index=index)}\n    assert value" for index in range(3))
     assert _grouped(src) == []
 
@@ -274,16 +315,24 @@ def test_group_findings_keeps_literal_keys_and_indices_exact(expression: str):
     ],
 )
 def test_group_findings_still_normalizes_eligible_literal_values(values: tuple[str | bytes, ...]):
+    """Report one group of three for tests whose ``parse`` arguments are three literals of one kind.
+
+    Args:
+        values: Three identical strings with a space, three distinct bytes values, or three distinct strings that hold a file-separator control
+            character.
+    """
     src = "\n\n".join(f"def test_case_{index}():\n    value = parse({value!r})\n    assert value == {index}" for index, value in enumerate(values))
     assert [finding.metadata["groupSize"] for finding in _grouped(src)] == [3]
 
 
 def test_group_findings_still_normalizes_dictionary_values():
+    """Report one group of three for tests whose dictionaries share a key and differ only in its value."""
     src = "\n\n".join(f'def test_case_{index}():\n    value = {{"field": {index}}}\n    assert value' for index in range(3))
     assert [finding.metadata["groupSize"] for finding in _grouped(src)] == [3]
 
 
 def test_group_findings_skips_one_statement_bodies_after_the_docstring():
+    """Report nothing for three matching tests whose bodies hold one statement after the docstring."""
     src = '''
 def test_accepts_small_amount():
     """A small amount is positive."""
@@ -301,6 +350,7 @@ def test_accepts_large_amount():
 
 
 def test_group_findings_groups_tests_sharing_one_call_decorator():
+    """Report one group of three for tests that share the same ``patch`` decorator."""
     src = """
 @patch("app.clock.now")
 def test_stamps_morning(now):
@@ -321,6 +371,7 @@ def test_stamps_evening(now):
 
 
 def test_group_findings_keeps_literal_kinds_significant():
+    """Report nothing, even at a minimum group of 2, for two tests that pass ``load`` a string and an integer."""
     src = """
 def test_loads_text():
     value = load("7")
@@ -334,6 +385,7 @@ def test_loads_number():
 
 
 def test_group_findings_keeps_callees_significant():
+    """Report nothing, even at a minimum group of 2, for two tests that call ``load`` and ``load_cached``."""
     src = """
 def test_loads_fresh():
     value = load("7")
@@ -347,6 +399,7 @@ def test_loads_cached():
 
 
 def test_group_findings_ignores_conftest_fixtures_and_helpers():
+    """Report nothing for three matching helper functions in ``conftest.py``."""
     src = """
 def make_alpha():
     item = build("alpha")
@@ -364,6 +417,7 @@ def make_gamma():
 
 
 def test_group_findings_leaves_parametrized_tests_out():
+    """Report nothing for three matching tests that each carry a ``parametrize`` decorator."""
     src = """
 @pytest.mark.parametrize("text", ["1", "2"], ids=["one", "two"])
 def test_parses_decimal(text):
@@ -384,6 +438,7 @@ def test_parses_octal(text):
 
 
 def test_group_findings_names_subtest_for_unittest_groups():
+    """Report one finding whose message advises ``self.subTest(...)`` for three matching unittest methods."""
     src = """
 class ParseTest(unittest.TestCase):
     def test_small(self):
@@ -404,6 +459,7 @@ class ParseTest(unittest.TestCase):
 
 
 def test_group_findings_leaves_subtest_and_literal_loop_tests_out():
+    """Report nothing for three tests that loop over inline tables and three unittest methods that use ``subTest``."""
     src = """
 def test_parses_decimal_table():
     parser = make_parser(10)
@@ -440,6 +496,7 @@ class ParseTest(unittest.TestCase):
 
 
 def test_group_findings_leaves_class_and_module_parametrized_tests_out():
+    """Report nothing for matching tests parametrized by a class decorator or by a module ``pytestmark``."""
     class_src = """
 @pytest.mark.parametrize("backend", ["sqlite", "postgres"])
 class TestStore:
@@ -475,6 +532,7 @@ def test_loads_large(backend):
 
 
 def test_group_findings_splits_groups_on_a_differing_class_pytestmark():
+    """Report two groups of three when one class of tests sets ``pytestmark`` and the other does not."""
     src = """
 class TestLocal:
     def test_reads_a(self):
@@ -508,6 +566,10 @@ class TestRemote:
 
 
 def test_group_findings_never_mixes_unittest_and_pytest_tests():
+    """Report two groups of three for three unittest methods followed by three matching pytest functions.
+
+    Only the first group's message advises ``self.subTest(...)``.
+    """
     src = """
 class ParseTest(unittest.TestCase):
     def test_small(self):
@@ -558,6 +620,12 @@ def test_parses_large():
     ],
 )
 def test_group_findings_keep_body_declarations_exact(body: str, expected_groups: int):
+    """Report no group when each test's value sits inside a body declaration, and one group for lambdas or an identical declaration.
+
+    Args:
+        body: Test-body template whose ``{n}`` takes each test's index.
+        expected_groups: Number of groups the rule should report.
+    """
     source = "\n\n".join(f"def test_case_{index}():\n" + "\n".join("    " + line for line in body.format(n=index).splitlines()) for index in range(3))
     findings = _grouped(source)
     assert len(findings) == expected_groups

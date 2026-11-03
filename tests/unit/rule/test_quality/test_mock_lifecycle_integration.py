@@ -59,6 +59,7 @@ _EXPECTED_MOCK_LIFECYCLE_FIRES = {
 
 
 def test_mock_lifecycle_rules_fire_on_cumulative_fixture():
+    """Report the empty-parametrize, unused-mock, private-reflection and global-state rules at least once on the cumulative fixture."""
     findings = RuleRegistry.defaults().analyse([make_unit(_FIXTURE)], default_ctx())
     fired = {f.rule_id for f in findings}
     missing = _EXPECTED_MOCK_LIFECYCLE_FIRES - fired

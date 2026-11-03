@@ -11,18 +11,21 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_no_assert_emits():
+    """Report one finding for a test whose body only assigns a local."""
     src = "def test_foo():\n    x = 1\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_collected_test_without_assertions_still_emits():
+    """Report one finding for a test that only calls the system and asserts nothing."""
     src = "def test_missing_assertion():\n    exercise_system()\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_assert_skipped():
+    """Report nothing for a test with a plain ``assert``."""
     src = "def test_foo():\n    assert 1 + 1 == 2\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -98,11 +101,13 @@ def test_pytest_warns_block_counts_as_assertion() -> None:
 
 
 def test_pytest_fail_counts_as_assertion():
+    """Report nothing for a test whose only check is ``pytest.fail``."""
     src = "import pytest\ndef test_foo():\n    pytest.fail('bad branch')\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_warnings_catch_warnings_counts_as_assertion():
+    """Report nothing for a test that turns ``RuntimeWarning`` into an error inside ``warnings.catch_warnings``."""
     src = (
         "import warnings\n"
         "def test_foo():\n"
@@ -114,6 +119,7 @@ def test_warnings_catch_warnings_counts_as_assertion():
 
 
 def test_warnings_filterwarnings_error_counts_as_assertion():
+    """Report nothing for a test that turns every warning into an error inside ``warnings.catch_warnings``."""
     src = (
         "import warnings\n"
         "def test_foo():\n"
@@ -125,28 +131,33 @@ def test_warnings_filterwarnings_error_counts_as_assertion():
 
 
 def test_bare_catch_warnings_without_error_filter_emits():
+    """Report one finding for a test that opens ``warnings.catch_warnings`` without an error filter."""
     src = "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        do_work()\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_catch_warnings_with_ignore_filter_emits():
+    """Report one finding for a test that only ignores warnings inside ``warnings.catch_warnings``."""
     src = "import warnings\ndef test_foo():\n    with warnings.catch_warnings():\n        warnings.simplefilter('ignore')\n        do_work()\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_bare_assert_helper_counts_as_assertion():
+    """Report nothing for a test whose only call is an ``assert_``-prefixed helper."""
     src = "def test_image():\n    assert_image_mostly_same(actual, expected)\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_dotted_assert_helper_counts_as_assertion():
+    """Report nothing for a test whose only call is an ``assert_``-prefixed helper reached through a module."""
     src = "def test_image():\n    helpers.assert_image_mostly_same(actual, expected)\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_non_assert_helper_does_not_count():
+    """Report one finding for a test whose only call is a helper without the ``assert_`` prefix."""
     src = "def test_image():\n    compare_image(actual, expected)\n"
     findings = NoAssertionsRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -183,26 +194,31 @@ def test_assertion_helpers_and_installed_raising_fakes(body: str, expected: int)
 
 
 def test_fixture_named_test_image_is_not_reported():
+    """Report nothing for a ``pytest.fixture`` function whose name starts with ``test_``."""
     src = "import pytest\n@pytest.fixture\ndef test_image():\n    return load_image()\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_called_fixture_named_test_image_is_not_reported():
+    """Report nothing for a ``test_``-named function decorated with a called ``fixture()``."""
     src = "from pytest import fixture\n@fixture()\ndef test_image():\n    return load_image()\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_conftest_fixture_factory_is_not_reported():
+    """Report nothing for a fixture factory in ``conftest.py``."""
     src = "import pytest\n@pytest.fixture\ndef image_factory():\n    return ImageFactory()\n"
     assert NoAssertionsRule().analyse(make_unit(src, "tests/conftest.py"), default_ctx()) == []
 
 
 def test_conftest_plain_support_function_is_not_reported():
+    """Report nothing for a plain support function in ``conftest.py``."""
     src = "def build_image():\n    return ImageFactory()\n"
     assert NoAssertionsRule().analyse(make_unit(src, "tests/conftest.py"), default_ctx()) == []
 
 
 def test_non_test_function_skipped():
+    """Report nothing for a helper whose name does not start with ``test_``."""
     src = "def helper():\n    x = 1\n"
     assert NoAssertionsRule().analyse(make_unit(src), default_ctx()) == []
 

@@ -5,30 +5,35 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_assert_true_emits():
+    """Report one finding for a test whose only statement is ``assert True``."""
     src = "def test_foo():\n    assert True\n"
     findings = TrivialAssertionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_assert_1_emits():
+    """Report one finding for a test whose only statement is ``assert 1``."""
     src = "def test_foo():\n    assert 1\n"
     findings = TrivialAssertionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_assert_not_false_emits():
+    """Report one finding for a test whose only statement is ``assert not False``."""
     src = "def test_foo():\n    assert not False\n"
     findings = TrivialAssertionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_assert_compare_constants_emits():
+    """Report one finding for a test whose only statement is ``assert 1 == 1``."""
     src = "def test_foo():\n    assert 1 == 1\n"
     findings = TrivialAssertionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_assert_actual_computation_skipped():
+    """Report nothing for an assertion on a computed value."""
     src = "def test_foo():\n    x = compute()\n    assert x == 42\n"
     assert TrivialAssertionRule().analyse(make_unit(src), default_ctx()) == []
 

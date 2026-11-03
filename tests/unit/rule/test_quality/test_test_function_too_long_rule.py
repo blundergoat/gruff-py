@@ -12,6 +12,14 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def _ctx(threshold: int = 100) -> RuleContext:
+    """Build a context whose config sets only this rule, enabled with *threshold* as its error threshold.
+
+    Args:
+        threshold: Error threshold in lines.
+
+    Returns:
+        A context rooted at ``/`` whose config holds only this rule's settings.
+    """
     rule = TestFunctionTooLongRule()
     config = AnalysisConfig(
         rules={
@@ -25,17 +33,23 @@ def _ctx(threshold: int = 100) -> RuleContext:
 
 
 def test_short_test_skipped():
+    """Report nothing for a test whose body is one assertion."""
     src = "def test_foo():\n    assert 1 + 1 == 2\n"
     assert TestFunctionTooLongRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_under_default_threshold_emits_no_finding():
+    """Report nothing for a test with 60 assignments and one assertion, under the default threshold of 100."""
     body = "\n".join(f"    x{i} = {i}" for i in range(60))
     src = f"def test_foo():\n{body}\n    assert True\n"
     assert TestFunctionTooLongRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_above_default_threshold_fires_at_error_severity():
+    """Report one error-severity finding for a test with 120 assignments, over the default threshold of 100.
+
+    The metadata records a line count above 100, the threshold and the ``error`` threshold type.
+    """
     body = "\n".join(f"    x{i} = {i}" for i in range(120))
     src = f"def test_foo():\n{body}\n    assert True\n"
     findings = TestFunctionTooLongRule().analyse(make_unit(src), default_ctx())
@@ -48,6 +62,7 @@ def test_above_default_threshold_fires_at_error_severity():
 
 
 def test_custom_threshold_above_emits_error():
+    """Report one error-severity finding for a test with 75 assignments when the threshold is 50."""
     body = "\n".join(f"    x{i} = {i}" for i in range(75))
     src = f"def test_foo():\n{body}\n    assert True\n"
     findings = TestFunctionTooLongRule().analyse(make_unit(src), _ctx(threshold=50))
@@ -58,6 +73,7 @@ def test_custom_threshold_above_emits_error():
 
 
 def test_documented_test_is_measured_by_its_code_lines():
+    """Report nothing for a test with 95 assignments and one assertion, plus a 20-note docstring and 20 comment lines."""
     notes = "\n".join(f"    Note {i}." for i in range(20))
     doc = f'    """Checks every value.\n\n{notes}\n    """'
     comments = "\n".join(f"    # Step {i}." for i in range(20))
