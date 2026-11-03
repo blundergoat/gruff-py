@@ -77,6 +77,14 @@ class WithPropertyBacking:
 
 
 def _unit(source: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap the result as the ``dynamism.py`` unit.
+
+    Args:
+        source: Python module source to parse.
+
+    Returns:
+        An analysis unit displayed as ``dynamism.py`` whose non-root tree nodes carry ``parent`` links.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -93,6 +101,11 @@ def _unit(source: str) -> AnalysisUnit:
 
 
 def _ctx() -> RuleContext:
+    """Build a context that enables every rule in the default registry with its default thresholds.
+
+    Returns:
+        A context rooted at ``/`` whose config enables every registered rule, default-off rules included.
+    """
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():
@@ -106,6 +119,7 @@ def _ctx() -> RuleContext:
 
 
 def test_registry_includes_surviving_m04_rules():
+    """Expose the unused-private-attribute, empty-function and unreachable-code rules in the default registry."""
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
@@ -117,6 +131,7 @@ def test_registry_includes_surviving_m04_rules():
 
 
 def test_dynamism_fixture_emits_only_acceptable_findings():
+    """Report no dead-code or waste finding on the dynamism fixture when every registered rule is enabled."""
     findings = RuleRegistry.defaults().analyse([_unit(DYNAMISM_FIXTURE)], _ctx())
     # The fixture deliberately includes things that LOOK suspicious but
     # are accepted Python patterns. Restrict the dead-code + waste rules
