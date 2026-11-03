@@ -6,6 +6,7 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_public_dataclass_without_attribute_docs_emits():
+    """Report an undocumented three-field public dataclass once, listing every field as missing."""
     src = """\
 from dataclasses import dataclass
 
@@ -25,6 +26,7 @@ class AnalysisReport:
 
 
 def test_attributes_section_is_accepted():
+    """Report nothing when an ``Attributes`` section documents every field."""
     src = '''\
 from dataclasses import dataclass
 
@@ -47,6 +49,7 @@ class AnalysisReport:
 
 
 def test_bullet_field_list_is_accepted_by_default():
+    """Report nothing when a bullet list documents every field under the default options."""
     src = '''\
 from dataclasses import dataclass
 
@@ -68,6 +71,7 @@ class Payload:
 
 
 def test_min_fields_option_can_raise_threshold():
+    """Report nothing for an undocumented three-field dataclass when ``min_fields`` is 4."""
     src = """\
 from dataclasses import dataclass
 
@@ -80,15 +84,14 @@ class Payload:
     rule = DataclassAttributesRule()
     ctx = RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(options={"min_fields": 4})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(options={"min_fields": 4})}),
     )
 
     assert rule.analyse(make_unit(src), ctx) == []
 
 
 def test_require_all_fields_reports_partial_attribute_section():
+    """Report the two undocumented fields once when ``require_all_fields`` is set and the section covers one field."""
     src = '''\
 from dataclasses import dataclass
 
@@ -107,9 +110,7 @@ class Payload:
     rule = DataclassAttributesRule()
     ctx = RuleContext(
         project_root="/",
-        config=AnalysisConfig(
-            rules={rule.definition().id: RuleSettings(options={"require_all_fields": True})}
-        ),
+        config=AnalysisConfig(rules={rule.definition().id: RuleSettings(options={"require_all_fields": True})}),
     )
 
     findings = rule.analyse(make_unit(src), ctx)
@@ -120,6 +121,7 @@ class Payload:
 
 
 def test_private_dataclass_is_skipped():
+    """Report nothing for an undocumented private dataclass."""
     src = """\
 from dataclasses import dataclass
 

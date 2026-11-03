@@ -91,10 +91,7 @@ class MockOnlyTestRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Make sure the test calls into the SUT, not just into its mocked "
-                        "collaborators."
-                    ),
+                    remediation=("Make sure the test calls into the SUT, not just into its mocked collaborators."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),
@@ -103,6 +100,15 @@ class MockOnlyTestRule(Rule):
 
 
 def _has_non_mock_call(fn: ast.FunctionDef | ast.AsyncFunctionDef, mock_names: set[str]) -> bool:
+    """Find a call outside known mock bindings and framework helpers.
+
+    Args:
+        fn: Test body searched without entering nested function bodies.
+        mock_names: Binding names whose rooted calls count as mock interactions.
+
+    Returns:
+        True for an unresolved callee or a call not classified as a mock, assertion or framework helper; false if none is found.
+    """
     for node in walk_test_body(fn):
         if not isinstance(node, ast.Call):
             continue

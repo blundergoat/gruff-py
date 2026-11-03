@@ -1,7 +1,7 @@
 """Allowlist applied to dead-code findings before reporting.
 
-Filters findings emitted by ``dead-code.unused-private-function`` and
-``dead-code.unused-private-attribute``. See ADR-015 for the design contract.
+Filters findings emitted by ``dead-code.unused-private-attribute`` and
+``dead-code.exported-but-unreferenced``. See ADR-015 for the design contract.
 """
 
 import fnmatch

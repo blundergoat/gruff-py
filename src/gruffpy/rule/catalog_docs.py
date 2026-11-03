@@ -13,7 +13,6 @@ from typing import Any
 from gruffpy.rule.correctness.substring_vocabulary_match_rule import SubstringVocabularyMatchRule
 from gruffpy.rule.correctness.unsafe_numeric_coercion_rule import UnsafeNumericCoercionRule
 from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
-from gruffpy.rule.dead_code.unused_private_function_rule import UnusedPrivateFunctionRule
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
@@ -21,25 +20,18 @@ from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationa
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
-from gruffpy.rule.naming.boolean_prefix_rule import BooleanPrefixRule
-from gruffpy.rule.naming.hungarian_notation_rule import HungarianNotationRule
 from gruffpy.rule.naming.identifier_quality_rule import IdentifierQualityRule
 from gruffpy.rule.security._security_metadata import rule_security_metadata
-from gruffpy.rule.security.sql_concatenation_rule import SqlConcatenationRule
-from gruffpy.rule.security.unsanitized_markdown_interpolation_rule import (
-    UnsanitizedMarkdownInterpolationRule,
-)
 from gruffpy.rule.security.weak_crypto_rule import WeakCryptoRule
 from gruffpy.rule.sensitive_data.api_key_pattern_rule import ApiKeyPatternRule
 from gruffpy.rule.sensitive_data.database_url_password_rule import DatabaseUrlPasswordRule
 from gruffpy.rule.sensitive_data.gcp_service_account_key_rule import GcpServiceAccountKeyRule
-from gruffpy.rule.sensitive_data.pii_test_fixture_rule import PiiTestFixtureRule
+from gruffpy.rule.sensitive_data.private_key_rule import PrivateKeyRule
 from gruffpy.rule.sensitive_data.url_credentials_rule import UrlCredentialsRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
 from gruffpy.rule.test_quality.static_analysis_redundant_test_rule import (
     StaticAnalysisRedundantTestRule,
 )
-from gruffpy.rule.waste.commented_out_code_rule import CommentedOutCodeRule
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +103,10 @@ class RuleDocs:
 
         Driven from a table so adding a new optional field is one row and the
         cost stays linear instead of multiplicative.
+
+        Returns:
+            Optional fields keyed by their camelCase JSON name, in table order, containing only fields whose source value is truthy; tuples are copied
+            to lists, dicts are copied, and false-positive shapes become shape and mitigation dicts. Empty when every optional field is empty.
         """
         candidates: tuple[tuple[str, Any, Any], ...] = (
             ("formulaProvenance", self.formula_provenance, self.formula_provenance),
@@ -125,10 +121,7 @@ class RuleDocs:
             (
                 "falsePositiveShapes",
                 self.false_positive_shapes,
-                [
-                    {"shape": fp.shape, "mitigation": fp.mitigation}
-                    for fp in self.false_positive_shapes
-                ],
+                [{"shape": fp.shape, "mitigation": fp.mitigation} for fp in self.false_positive_shapes],
             ),
         )
         return {key: value for key, present, value in candidates if present}
@@ -157,37 +150,28 @@ def custom_docs_for(
             return _unsafe_numeric_coercion_docs(config_keys)
         case SubstringVocabularyMatchRule.ID:
             return _substring_vocabulary_match_docs(config_keys)
-        case UnsanitizedMarkdownInterpolationRule.ID | WeakCryptoRule.ID:
-            return _security_rule_docs(definition.id, config_keys)
+        case WeakCryptoRule.ID:
+            return _weak_crypto_docs(config_keys, definition.id)
         case RuntimeSysPathMutationRule.ID:
             return _runtime_sys_path_mutation_docs(config_keys)
-        case ExportedButUnreferencedRule.ID | UnusedPrivateFunctionRule.ID:
-            return _dead_code_rule_docs(definition.id, config_keys)
+        case ExportedButUnreferencedRule.ID:
+            return _exported_but_unreferenced_docs(config_keys)
         case ApiKeyPatternRule.ID:
             return _api_key_pattern_docs(config_keys)
         case GcpServiceAccountKeyRule.ID:
             return _gcp_service_account_key_docs(config_keys)
+        case PrivateKeyRule.ID:
+            return _private_key_docs(config_keys)
         case UrlCredentialsRule.ID:
             return _url_credentials_docs(config_keys)
         case SingleImplementorProtocolRule.ID:
             return _single_implementor_protocol_docs(config_keys)
         case DatabaseUrlPasswordRule.ID:
             return _database_url_password_docs(config_keys, definition.id)
-        case (
-            AbbreviationRule.ID
-            | BooleanPrefixRule.ID
-            | HungarianNotationRule.ID
-            | IdentifierQualityRule.ID
-        ):
+        case AbbreviationRule.ID | IdentifierQualityRule.ID:
             return _naming_rule_docs(definition.id, config_keys)
-        case PiiTestFixtureRule.ID:
-            return _pii_test_fixture_docs(config_keys)
         case NoAssertionsRule.ID:
             return _no_assertions_docs(config_keys)
-        case CommentedOutCodeRule.ID:
-            return _commented_out_code_docs(config_keys)
-        case SqlConcatenationRule.ID:
-            return _sql_concatenation_docs(config_keys, definition.id)
         case IgnoreDirectiveReasonRule.ID:
             return _ignore_directive_reason_docs(config_keys)
         case DataclassAttributesRule.ID:
@@ -200,6 +184,14 @@ def custom_docs_for(
 
 
 def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for UnsafeNumericCoercionRule's Unicode-digit guard and int(float(...)) shapes.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for input already validated upstream to ASCII digits.
+    """
     return RuleDocs(
         rationale=(
             "isnumeric()/isdigit() accept characters int() rejects (superscript "
@@ -207,10 +199,7 @@ def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "crashes on real Unicode input; unchecked int(float(...)) raises on "
             "NaN and infinity."
         ),
-        fix_guidance=(
-            "Convert inside try/except ValueError (and OverflowError for "
-            "floats), or gate float conversions with math.isfinite()."
-        ),
+        fix_guidance=("Convert inside try/except ValueError (and OverflowError for floats), or gate float conversions with math.isfinite()."),
         bad_example="`if x.isnumeric():\n    count = int(x)`",
         good_example=("`try:\n    count = int(x)\nexcept ValueError:\n    count = None`"),
         confidence_rationale=(
@@ -222,9 +211,7 @@ def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
-                shape=(
-                    "Input pre-validated upstream to ASCII digits before the guarded conversion."
-                ),
+                shape=("Input pre-validated upstream to ASCII digits before the guarded conversion."),
                 mitigation=(
                     "Suppress with `# gruff: disable=correctness.unsafe-numeric-coercion` "
                     "and a reason, or switch the guard to a try/except so the "
@@ -236,65 +223,64 @@ def _unsafe_numeric_coercion_docs(config_keys: tuple[str, ...]) -> RuleDocs:
 
 
 def _runtime_sys_path_mutation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for RuntimeSysPathMutationRule, including its standalone-script top-level exemption.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for configuration files a documentation or build tool executes, such as a Sphinx docs/conf.py.
+    """
     return RuleDocs(
         rationale=(
             "sys.path mutation at import time or inside library functions makes "
             "imports depend on execution order; insert(0, ...) shadows every "
             "later top-level import for the whole process, so one colliding "
-            "filename in that directory breaks the host application."
+            "filename in that directory breaks the host application. A "
+            "standalone script is its own host process, so a mutation at its "
+            "top level is not reported; one inside a function still is."
         ),
         fix_guidance=(
             "Package the code (editable install, src layout) or set PYTHONPATH "
-            "in the runner; keep unavoidable mutations inside the script's "
-            '`if __name__ == "__main__":` block.'
+            "in the runner. A file that is really a standalone script may change "
+            'sys.path at its top level once it has an `if __name__ == "__main__":` '
+            "guard or a shebang, or lives under scripts/, bin/ or tools/."
         ),
-        bad_example="`sys.path.insert(0, str(Path(__file__).parent))` at module level.",
-        good_example=(
-            '`if __name__ == "__main__":\n    sys.path.insert(0, ...)` inside '
-            "the launching script only."
-        ),
+        bad_example="`sys.path.insert(0, str(Path(__file__).parent))` at the top of an importable library module.",
+        good_example="`pip install -e .`, so `from app import heuristics` resolves without touching sys.path.",
         confidence_rationale=(
             "High confidence: the receiver must be the literal sys.path "
-            "attribute chain, and __main__ blocks, tests/ paths, and "
-            "conftest.py are structurally exempt."
+            "attribute chain, and the top level of a standalone script (a "
+            "__main__ guard, a shebang, or a scripts/, bin/ or tools/ "
+            "directory), tests/ paths, and conftest.py are structurally exempt; "
+            "a mutation inside a function or in a guard's else branch can run "
+            "on import and still reports."
         ),
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
                 shape=(
-                    "Build, packaging, or documentation tooling scripts that "
-                    "legitimately bootstrap their import path outside a "
-                    "__main__ block."
+                    "Configuration files that a documentation or build tool executes, such as a Sphinx docs/conf.py, "
+                    "bootstrapping their import path at top level without a __main__ guard or shebang."
                 ),
-                mitigation=(
-                    "Move the mutation under the __main__ guard, or suppress "
-                    "with `# gruff: disable=design.runtime-sys-path-mutation` "
-                    "plus the reason."
-                ),
+                mitigation=("Suppress with `# gruff: disable=design.runtime-sys-path-mutation` plus the reason."),
             ),
         ),
     )
 
 
-def _security_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
-    """Dispatch curated docs for security rules sharing one catalog arm.
-
-    Grouping these rules keeps ``custom_docs_for`` under the repository
-    cyclomatic-complexity limit, as its docstring requires.
+def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    """Build curated RuleDocs for WeakCryptoRule that separates security-sensitive MD5/SHA1 use from plain digests.
 
     Args:
-        rule_id: Rule being documented.
-        config_keys: Public config keys computed for the rule by the catalog.
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+        rule_id: Id of the matched rule, passed by custom_docs_for as definition.id and used to look up the SARIF security metadata attached to the
+            docs.
 
     Returns:
-        Curated ``RuleDocs`` for the requested security rule.
+        Curated RuleDocs carrying the rule's security metadata and three false-positive shapes: a digest_size query, a non-secret digest with
+        security-sounding names, and the literal usedforsecurity=False escape.
     """
-    if rule_id == WeakCryptoRule.ID:
-        return _weak_crypto_docs(config_keys, rule_id)
-    return _unsanitized_markdown_interpolation_docs(config_keys, rule_id)
-
-
-def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
     return RuleDocs(
         rationale=(
             "MD5 and SHA1 are broken for signatures, tokens, and password "
@@ -311,8 +297,7 @@ def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
         ),
         bad_example="`hashlib.md5(session_token.encode()).hexdigest()`",
         good_example=(
-            "`hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` "
-            "for a non-security digest, or a KDF for password material."
+            "`hashlib.md5(cache_key.encode(), usedforsecurity=False).hexdigest()` for a non-security digest, or a KDF for password material."
         ),
         confidence_rationale=(
             "High confidence: the call target must resolve to a literal weak "
@@ -322,6 +307,13 @@ def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
         config_keys=config_keys,
         security_metadata=rule_security_metadata(rule_id),
         false_positive_shapes=(
+            FalsePositiveShape(
+                shape="Reading `sha1().digest_size` to choose a random salt length queries a size rather than hashing security material.",
+                mitigation=(
+                    "No setting is needed for a no-argument MD5 or SHA1 constructor used directly for `digest_size`. "
+                    "Empty constructors retained for incremental password hashing still report when enabled."
+                ),
+            ),
             FalsePositiveShape(
                 shape=(
                     "A cache key, ETag, or content digest whose surrounding "
@@ -356,6 +348,15 @@ def _weak_crypto_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
 
 
 def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for ExportedButUnreferencedRule, explaining why export plumbing is not a use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for public API or plugin symbols consumed outside the scan, mitigated through
+        options.entryPointPatterns or the dead-code allowlists.
+    """
     return RuleDocs(
         rationale=(
             "Export plumbing makes dead code look alive: a public function "
@@ -368,10 +369,7 @@ def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "allowlists.deadCode.symbols for one-offs, entryPointPatterns for "
             "registration conventions."
         ),
-        bad_example=(
-            "`def render_legacy(...)` in __all__ and re-exported by __init__.py, "
-            "with zero call sites in the project."
-        ),
+        bad_example=("`def render_legacy(...)` in __all__ and re-exported by __init__.py, with zero call sites in the project."),
         good_example="Any load of the name anywhere - call, decorator, base class, getattr string.",
         confidence_rationale=(
             "Medium confidence: the reference model is name-based rather than "
@@ -399,76 +397,15 @@ def _exported_but_unreferenced_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _unused_private_function_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Explain when users can trust or configure private-function findings.
-
-    Args:
-        config_keys: Public settings shown in generated docs; empty means none.
-
-    Returns:
-        Curated guidance for interpreting and resolving this rule's findings.
-    """
-    return RuleDocs(
-        rationale=(
-            "A private function with no local caller may still be live through "
-            "another module's callback registry. Full-project scans therefore "
-            "require a real load after an unambiguously resolved import; narrow "
-            "scans omit module-level deletion advice because external callers "
-            "are outside the evidence boundary."
-        ),
-        fix_guidance=(
-            "Delete a genuinely unused function or add the real caller. For "
-            "framework, plugin, or string-based loading that static imports cannot "
-            "prove, use allowlists.deadCode.symbols, decorators, or paths with the "
-            "project's documented reason."
-        ),
-        bad_example=(
-            "`def _legacy_handler(): ...` with no local call and no loaded import "
-            "anywhere in a full-project scan."
-        ),
-        good_example=(
-            "`from handlers import _format_failed; REGISTRY['failed'] = "
-            "_format_failed` in another scanned module."
-        ),
-        confidence_rationale=(
-            "Medium confidence when full-project import coverage is complete; "
-            "LOW when a real load maps to duplicate scanned module paths. "
-            "Private methods retain class-local evidence in every scan scope."
-        ),
-        config_keys=config_keys,
-        false_positive_shapes=(
-            FalsePositiveShape(
-                shape=(
-                    "A framework or plugin loads the private function dynamically "
-                    "through a string, entry point, or unscanned external package."
-                ),
-                mitigation=(
-                    "Add the exact symbol, framework decorator, or path to "
-                    "allowlists.deadCode rather than adding a fake static caller."
-                ),
-            ),
-        ),
-    )
-
-
-def _dead_code_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
-    """Dispatch one project-scope dead-code card without growing catalog branching.
-
-    Args:
-        rule_id: Matched dead-code rule id; empty or unknown ids never reach here.
-        config_keys: Public settings shown in generated docs; empty means none.
-
-    Returns:
-        Curated guidance for the matched project-scope dead-code rule.
-    """
-    documentation_factory = {
-        ExportedButUnreferencedRule.ID: _exported_but_unreferenced_docs,
-        UnusedPrivateFunctionRule.ID: _unused_private_function_docs,
-    }[rule_id]
-    return documentation_factory(config_keys)
-
-
 def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for SubstringVocabularyMatchRule, explaining mid-word hits in free-text matching.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for free-text-named values where substring matching is the documented intent.
+    """
     return RuleDocs(
         rationale=(
             "Substring containment over free text matches inside words - a "
@@ -482,10 +419,7 @@ def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "stop mid-word hits."
         ),
         bad_example="`any(term in message_lower for term in ROUTING_TERMS)`",
-        good_example=(
-            '`tokens = set(re.findall(r"\\w+", message.lower())); '
-            "any(term in tokens for term in ROUTING_TERMS)`"
-        ),
+        good_example=('`tokens = set(re.findall(r"\\w+", message.lower())); any(term in tokens for term in ROUTING_TERMS)`'),
         confidence_rationale=(
             "Medium confidence: the scan shape is exact, but substring intent "
             "is legitimate for marker/identifier checks, so the rule fires "
@@ -496,11 +430,7 @@ def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
-                shape=(
-                    "Free-text-named values where substring matching is the "
-                    "documented intent (profanity stems, language-agnostic "
-                    "fragments)."
-                ),
+                shape=("Free-text-named values where substring matching is the documented intent (profanity stems, language-agnostic fragments)."),
                 mitigation=(
                     "Suppress with `# gruff: disable=correctness.substring-vocabulary-match` "
                     "and the reason, or rename the value to reflect its "
@@ -511,104 +441,45 @@ def _substring_vocabulary_match_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _unsanitized_markdown_interpolation_docs(
-    config_keys: tuple[str, ...],
-    rule_id: str,
-) -> RuleDocs:
-    """Explain slot-specific sanitizer trust in CLI cards and generated rule docs.
+def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for SingleImplementorProtocolRule on a Protocol or ABC with one concrete implementor.
 
     Args:
-        config_keys: Public option paths; empty would leave users no tuning route.
-        rule_id: Registered rule id used to attach standard security metadata.
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
 
     Returns:
-        User guidance including the deliberate HTML-escaper retained positive.
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
     """
     return RuleDocs(
         rationale=(
-            "A markdown link label of `evil](https://bad.example) trick` turns "
-            "`[{label}]({url})` into markdown whose first parsed link is the "
-            "injected pair, redirecting the rendered target; the rule exists "
-            "to catch the one interpolation site that forgot the project's "
-            "sanitiser."
-        ),
-        fix_guidance=(
-            "Use an exact helper from the matching labelSanitizers or urlSanitizers "
-            "list. Labels must remove `]`, `(`, and `)`; URLs may use the default "
-            "urllib.parse.quote/quote_plus calls without a delimiter-preserving "
-            "`safe` argument."
-        ),
-        bad_example='`f"[{title}]({url})"` with `title`/`url` from parameters.',
-        good_example=(
-            '`f"[{markdown_label(title)}]({urllib.parse.quote(url)})"` with '
-            "markdown_label listed under labelSanitizers."
-        ),
-        confidence_rationale=(
-            "Medium confidence: exact configured call targets, same-function "
-            "assignments, one-hop aliases, and conservative branch/rebinding "
-            "joins replace the former any-call proxy."
-        ),
-        config_keys=config_keys,
-        security_metadata=rule_security_metadata(rule_id),
-        false_positive_shapes=(
-            FalsePositiveShape(
-                shape=(
-                    "Link slots interpolating values already constrained "
-                    "upstream (enum names, validated slugs) without a "
-                    "wrapping call."
-                ),
-                mitigation=(
-                    "Wrap the value in the sanitising helper anyway (cheap "
-                    "and self-documenting), or suppress with "
-                    "`# gruff: disable=security.unsanitized-markdown-interpolation` "
-                    "plus the constraint."
-                ),
-            ),
-            FalsePositiveShape(
-                shape=(
-                    "A label wrapped in html.escape(...) or markupsafe.escape(...) "
-                    "still reports under the strict default. This is deliberate: "
-                    "HTML escaping leaves `]`, `(`, and `)` unchanged, so "
-                    "`evil](https://bad.example)` still injects a Markdown link."
-                ),
-                mitigation=(
-                    "After verifying that the project's renderer makes HTML escaping "
-                    "sufficient, add the exact helper to labelSanitizers; otherwise use "
-                    "a Markdown-aware label sanitizer."
-                ),
-            ),
-        ),
-    )
-
-
-def _single_implementor_protocol_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale=(
-            "A Protocol or ABC with one concrete implementor adds an abstraction "
-            "layer reviewers must verify without clear substitution value."
+            "A Protocol or ABC with one concrete implementor adds an abstraction layer reviewers must verify without clear substitution value."
         ),
         fix_guidance=(
             "Depend on the concrete class, add another real implementor, or keep a "
             "clear external abstraction reference through an annotation or "
             "value-position check."
         ),
-        bad_example=(
-            "`class Renderer(Protocol): ...` with only "
-            "`class HtmlRenderer(Renderer): ...` and no other `Renderer` usage."
-        ),
-        good_example=(
-            "`Renderer` used in a factory annotation, registry value, `isinstance`, "
-            "or `issubclass` check outside the implementor."
-        ),
+        bad_example=("`class Renderer(Protocol): ...` with only `class HtmlRenderer(Renderer): ...` and no other `Renderer` usage."),
+        good_example=("`Renderer` used in a factory annotation, registry value, `isinstance`, or `issubclass` check outside the implementor."),
         confidence_rationale=(
-            "Medium confidence: project-scoped AST evidence counts implementors "
-            "plus annotation and value-position abstraction references."
+            "Medium confidence: project-scoped AST evidence counts implementors plus annotation and value-position abstraction references."
         ),
         config_keys=config_keys,
     )
 
 
 def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
+    """Build curated RuleDocs for DatabaseUrlPasswordRule, naming placeholder passwords that examples may use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+        rule_id: Id of the matched rule, passed by custom_docs_for as definition.id and handed to rule_security_metadata, which has no entry for this
+            id and returns an empty mapping.
+
+    Returns:
+        Curated RuleDocs with no false-positive shapes and an empty security_metadata, because rule_security_metadata has no entry for this rule id;
+        the payload therefore omits the security key.
+    """
     return RuleDocs(
         rationale="Credentialed database URLs in source usually expose direct data access.",
         fix_guidance=(
@@ -618,9 +489,7 @@ def _database_url_password_docs(config_keys: tuple[str, ...], rule_id: str) -> R
         ),
         bad_example="A database URL literal with a real password in the userinfo segment.",
         good_example='`DATABASE_URL = "postgresql://user:change-me@host/db"`',
-        confidence_rationale=(
-            "High confidence: exact URL userinfo pattern with exact placeholder escapes."
-        ),
+        confidence_rationale=("High confidence: exact URL userinfo pattern with exact placeholder escapes."),
         config_keys=config_keys,
         security_metadata=rule_security_metadata(rule_id),
     )
@@ -638,8 +507,6 @@ def _naming_rule_docs(rule_id: str, config_keys: tuple[str, ...]) -> RuleDocs:
     """
     documentation_factory = {
         AbbreviationRule.ID: _abbreviation_docs,
-        BooleanPrefixRule.ID: _boolean_prefix_docs,
-        HungarianNotationRule.ID: _hungarian_notation_docs,
         IdentifierQualityRule.ID: _identifier_quality_docs,
     }[rule_id]
     return documentation_factory(config_keys)
@@ -667,10 +534,7 @@ def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "token to allowlists.acceptedAbbreviations; a configured list replaces "
             "the universal seed rather than extending it."
         ),
-        bad_example=(
-            "`def load_cfg(ctx): ...` uses shorthand without documenting what the "
-            "configuration or context represents."
-        ),
+        bad_example=("`def load_cfg(ctx): ...` uses shorthand without documenting what the configuration or context represents."),
         good_example=(
             "Use `context`, `config`, `request`, and `index`, or document exact "
             "project vocabulary with `acceptedAbbreviations: [ctx, cfg, req, idx]`."
@@ -682,10 +546,7 @@ def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
-                shape=(
-                    "A blocked token such as ctx, cfg, req, or idx is established "
-                    "project vocabulary with one documented meaning."
-                ),
+                shape=("A blocked token such as ctx, cfg, req, or idx is established project vocabulary with one documented meaning."),
                 mitigation=(
                     "Add the exact token to allowlists.acceptedAbbreviations with its "
                     "project meaning; retain any universal seed values the project uses "
@@ -693,59 +554,6 @@ def _abbreviation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
                 ),
             ),
         ),
-    )
-
-
-def _boolean_prefix_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Explain exact scalar Boolean annotation matching to scan users.
-
-    Args:
-        config_keys: Public tuning paths; empty means users cannot preserve an
-            external boundary name through configuration.
-
-    Returns:
-        Rule guidance covering supported shapes and deliberate collisions.
-    """
-    return RuleDocs(
-        rationale=(
-            "Scalar Boolean returns and attributes are easier to review when "
-            "their names reveal predicate intent; container members and callable "
-            "return parameters do not impose that naming contract."
-        ),
-        fix_guidance=(
-            "Rename a scalar Boolean declaration with an is_/has_/can_-style "
-            "predicate, or list an exact external boundary name under "
-            "acceptedBooleanNames."
-        ),
-        bad_example="`def status() -> bool: ...` hides the Boolean result in a noun.",
-        good_example=(
-            "`def is_ready() -> bool: ...`; `def statuses() -> list[bool]: ...` "
-            "is outside this scalar rule."
-        ),
-        confidence_rationale=(
-            "Medium confidence: exact bool, optional-bool, and Annotated scalar "
-            "syntax is matched structurally, including bounded quoted annotations; "
-            "containers, callables, mixed unions, and arbitrary generics stay quiet."
-        ),
-        config_keys=config_keys,
-    )
-
-
-def _hungarian_notation_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale=(
-            "Type prefixes duplicate information that type hints and readable names already carry."
-        ),
-        fix_guidance=(
-            "Drop type prefixes such as `str_`, `dict_`, or `arr_`; keep semantic "
-            "count names such as `num_items` or `n_samples`."
-        ),
-        bad_example='`str_message = "hello"` or `dict_users = {}`',
-        good_example='`message = "hello"` or `num_users = len(users)`',
-        confidence_rationale=(
-            "High confidence: narrow type-prefix vocabulary; count abbreviations are excluded."
-        ),
-        config_keys=config_keys,
     )
 
 
@@ -769,10 +577,7 @@ def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "keep legitimate queue/domain names when they already describe the value."
         ),
         bad_example="`temp = load_tasks()` or `result1 = publish()` hides the value's role.",
-        good_example=(
-            "`pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be "
-            "legitimate work-queue vocabulary."
-        ),
+        good_example=("`pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary."),
         confidence_rationale=(
             "High confidence: only reviewed first-token placeholder families and "
             "numbered base-plus-digit shapes match; exact domain words are not inferred."
@@ -781,22 +586,16 @@ def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _pii_test_fixture_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale="Test fixtures should use placeholders, not realistic third-party PII.",
-        fix_guidance=(
-            "Use reserved domains such as `example.com`, `.test`, `.local`, "
-            "`.invalid`, `.localhost`, or `.example`; use `555` phone placeholders "
-            "and keep epoch or reset timestamps named with timestamp context."
-        ),
-        bad_example='`email = "jane.doe@gmail.com"` or `phone = "4158675309"`',
-        good_example='`email = "admin@app.test"` or `phone = "+1-415-555-0100"`',
-        confidence_rationale="Medium confidence: raw test text scan with explicit escapes.",
-        config_keys=config_keys,
-    )
-
-
 def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for NoAssertionsRule, naming the assertion forms that count in a collected test.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with two false-positive shapes: a matcher that raises on mismatch without an assert name, and a smoke test that passes by not
+        raising.
+    """
     return RuleDocs(
         rationale="Collected tests without assertions are easy to mistake for coverage.",
         fix_guidance=(
@@ -806,83 +605,101 @@ def _no_assertions_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         bad_example="`def test_saves_user(): service.save(user)`",
         good_example="`def test_saves_user(): service.save(user); assert_user_saved(user)`",
         confidence_rationale=(
-            "High confidence: collected-test scope with assertion statements, "
-            "framework assertions, raises/warns contexts, and `assert_*` helpers."
+            "High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers."
         ),
         config_keys=config_keys,
-    )
-
-
-def _commented_out_code_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    return RuleDocs(
-        rationale="Tombstoned source comments make reviewers ask whether dead code still matters.",
-        fix_guidance=(
-            "Delete commented-out source code or turn it into prose documentation; "
-            "docstring examples are ignored because only tokenizer comment tokens are scanned."
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "A test can assert through a matcher that raises on a mismatch without an `assert` name, "
+                    "such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`."
+                ),
+                mitigation=(
+                    "Call the matcher through an `assert_*` helper, or suppress the reviewed test with "
+                    "`# gruff: disable=test-quality.no-assertions` and the matcher that asserts."
+                ),
+            ),
+            FalsePositiveShape(
+                shape=(
+                    "A smoke test can pass by not raising, such as requests' `test_can_access_urllib3_attribute`, "
+                    "whose whole body is one attribute access."
+                ),
+                mitigation="Assert on the value the call or access returns, or suppress the reviewed test with its does-not-raise contract.",
+            ),
         ),
-        bad_example="`# old_value = compute()`",
-        good_example="`# Recompute only after the cache expires.`",
-        confidence_rationale=(
-            "Low confidence: source-comment tokens pass a cheap code-like prefilter "
-            "and parser confirmation, but prose can still resemble Python."
-        ),
-        config_keys=config_keys,
-    )
-
-
-def _sql_concatenation_docs(config_keys: tuple[str, ...], rule_id: str) -> RuleDocs:
-    return RuleDocs(
-        rationale="Dynamic SQL is hard to verify safely without focused sink gates.",
-        fix_guidance="Use driver parameters; validate dynamic SQL structure separately.",
-        bad_example='`cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")`',
-        good_example="`cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))`",
-        confidence_rationale="Medium confidence: keyword, constant, and SQLAlchemy gates.",
-        config_keys=config_keys,
-        security_metadata=rule_security_metadata(rule_id),
     )
 
 
 def _ignore_directive_reason_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for IgnoreDirectiveReasonRule, naming the reason markers a suppression may use.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for a reason written in the full-line comment above the directive rather than on the
+        directive's own line.
+    """
     return RuleDocs(
         rationale=(
             "Suppression comments age badly unless they explain the local "
             "compatibility, framework, or test boundary that made the suppression acceptable."
         ),
         fix_guidance=(
-            "Keep the suppression precise and add a short reason after `-`, `--`, "
-            "or a second `#` comment marker."
+            "Keep the suppression precise and add a short reason after `-`, `--`, or a second `#` comment marker; "
+            "an issue reference such as `mypy#4125` counts as a reason."
         ),
         bad_example="`import plugin  # noqa`",
         good_example="`import plugin  # noqa: F401 - re-exported public API`",
         confidence_rationale=(
-            "High confidence: the rule only matches explicit suppression comment "
-            "directives parsed from Python comment tokens."
+            "High confidence: the rule only matches explicit suppression comment directives parsed from Python "
+            "comment tokens, and skips a file whose header says it is generated."
         ),
         config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape=(
+                    "The reason can sit in a full-line comment directly above the suppressed line, as Django's "
+                    "`from django.conf import SettingsReference  # NOQA` under its backwards-compatibility note, "
+                    "while the rule reads only the directive's own comment."
+                ),
+                mitigation="Move or copy the reason onto the directive's line after `-`, `--`, or a second `#`.",
+            ),
+        ),
     )
 
 
 def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for DataclassAttributesRule, naming the field-documentation forms that satisfy it.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Public dataclasses often become reporter, config, or API payload contracts; "
             "field names alone rarely explain units, nullability, or stability guarantees."
         ),
-        fix_guidance=(
-            "Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field "
-            "bullet list that explains the payload fields."
-        ),
+        fix_guidance=("Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields."),
         bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
         good_example="`Attributes:` section documenting `findings` and `exit_code`.",
-        confidence_rationale=(
-            "Medium confidence: the rule is limited to public dataclasses above a "
-            "configurable field-count threshold."
-        ),
+        confidence_rationale=("Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold."),
         config_keys=config_keys,
     )
 
 
 def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Build curated RuleDocs for ComplexBranchRationaleRule, asking why a highly branched function stays complex.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Highly branched functions are expensive to review; when they cannot be "
@@ -890,21 +707,26 @@ def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "for the branch structure."
         ),
         fix_guidance=(
-            "Extract the branching logic, or add a substantive docstring or nearby "
-            "rationale comment explaining why the complexity remains."
+            "Extract the branching logic, or add a substantive docstring or nearby rationale comment explaining why the complexity remains."
         ),
         bad_example="A public parser function with many `if` branches and no docstring.",
         good_example="A complex compatibility router with a docstring naming the legacy protocol.",
         confidence_rationale=(
-            "Medium confidence: the rule reuses existing complexity helpers and accepts "
-            "substantive docstrings or nearby rationale comments."
+            "Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments."
         ),
         config_keys=config_keys,
     )
 
 
 def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for the grouped provider-token rule."""
+    """Return custom docs for the grouped provider-token rule.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
             "Provider-prefixed API keys are high-signal credential leaks; "
@@ -915,29 +737,30 @@ def _api_key_pattern_docs(config_keys: tuple[str, ...]) -> RuleDocs:
             "Rotate the key with the provider, remove it from source, and load it "
             "from a secret manager or environment-specific runtime configuration."
         ),
-        bad_example=(
-            '`GOOGLE_API_KEY = "AIza..."` or '
-            '`SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`'
-        ),
+        bad_example=('`GOOGLE_API_KEY = "AIza..."` or `SLACK_WEBHOOK = "https://hooks.slack.com/services/..."`'),
         good_example='`GOOGLE_API_KEY = os.environ["GOOGLE_API_KEY"]`',
         confidence_rationale=(
-            "High confidence: each match requires a provider-specific prefix and "
-            "minimum token length, with dummy/example placeholders skipped."
+            "High confidence: each match requires a provider-specific prefix and minimum token length, with dummy/example placeholders skipped."
         ),
         config_keys=config_keys,
     )
 
 
 def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for committed GCP service-account JSON keys."""
+    """Return custom docs for committed GCP service-account JSON keys.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
     return RuleDocs(
         rationale=(
-            "Google service-account JSON files combine an account identity with "
-            "private-key material; committed copies usually grant fleet access."
+            "Google service-account JSON files combine an account identity with private-key material; committed copies usually grant fleet access."
         ),
         fix_guidance=(
-            "Remove the JSON key from source history, rotate it in Google Cloud IAM, "
-            "and prefer Workload Identity or a runtime secret manager."
+            "Remove the JSON key from source history, rotate it in Google Cloud IAM, and prefer Workload Identity or a runtime secret manager."
         ),
         bad_example='`{"type": "service_account", "private_key": "<redacted PEM key>"}`',
         good_example="Load Google credentials from the runtime environment or Workload Identity.",
@@ -949,39 +772,80 @@ def _gcp_service_account_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
     )
 
 
-def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for HTTP(S) userinfo credentials."""
+def _private_key_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Explain which private-key headers remain reportable when this opt-in check runs.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for two consecutive uppercase constant assignments that hold only matching BEGIN/END markers,
+        which the rule excludes.
+    """
     return RuleDocs(
         rationale=(
-            "Inline HTTP(S) userinfo credentials are easy to miss in review and "
-            "often end up copied into logs, package config, or deployment scripts."
+            "Private-key headers can identify committed credentials, including incomplete or escaped key material. "
+            "Two adjacent uppercase parser constants containing only matching BEGIN/END marker literals carry no key body."
         ),
         fix_guidance=(
-            "Remove `user:password@` from the URL and pass authentication via "
-            "headers, environment variables, or a secret store."
+            "Move the private key out of the repository. Rotate the key, store the new one in a secret manager, and reference it at runtime."
         ),
+        bad_example="A private-key header accompanied by opaque key material in repository source.",
+        good_example="Load the private key from a secret manager at runtime.",
+        confidence_rationale=(
+            "High confidence in the presence of a private-key header. Complete placeholder blocks and exact marker-only "
+            "assignment pairs are excluded; bare headers and short opaque bodies still require review."
+        ),
+        config_keys=config_keys,
+        false_positive_shapes=(
+            FalsePositiveShape(
+                shape="Two consecutive uppercase constant assignments containing only matching private-key BEGIN/END markers.",
+                mitigation="The marker-only pair is excluded; opaque content between the assignments and unmatched markers still report.",
+            ),
+        ),
+    )
+
+
+def _url_credentials_docs(config_keys: tuple[str, ...]) -> RuleDocs:
+    """Return custom docs for HTTP(S) userinfo credentials.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
+    """
+    return RuleDocs(
+        rationale=(
+            "Inline HTTP(S) userinfo credentials are easy to miss in review and often end up copied into logs, package config, or deployment scripts."
+        ),
+        fix_guidance=("Remove `user:password@` from the URL and pass authentication via headers, environment variables, or a secret store."),
         bad_example='`REMOTE = "https://deploy:<password>@api.example.test"`',
         good_example='`REMOTE = "https://api.example.test"` plus a runtime Authorization header.',
         confidence_rationale=(
-            "High confidence: the rule scopes to explicit `http(s)://user:password@` "
-            "userinfo and skips common placeholder passwords."
+            "High confidence: the rule scopes to explicit `http(s)://user:password@` userinfo and skips common "
+            "placeholder passwords and template segments such as `{}`, `%s`, or a password holding `/` or `:`."
         ),
         config_keys=config_keys,
     )
 
 
 def _static_analysis_redundant_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Return custom docs for the static-analysis-redundant-test candidate rule."""
+    """Return custom docs for the static-analysis-redundant-test candidate rule.
+
+    Args:
+        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
+
+    Returns:
+        Curated RuleDocs with one false-positive shape for a public API or compatibility contract where runtime existence is the behaviour under test.
+    """
     return RuleDocs(
         rationale=(
             "A test that asserts a class or member is declared restates a fact "
             "the parser already proves; the assertion adds no behavioural "
             "coverage beyond what static analysis gives for free."
         ),
-        fix_guidance=(
-            "Remove only the redundant assertion, or replace it with behavioural "
-            "evidence - call the member and assert on the result."
-        ),
+        fix_guidance=("Remove only the redundant assertion, or replace it with behavioural evidence - call the member and assert on the result."),
         bad_example="`def test_has_render(): assert hasattr(ShapeService, 'render')`",
         good_example="`def test_render(): assert ShapeService().render() == 'shape'`",
         confidence_rationale=(
@@ -992,14 +856,8 @@ def _static_analysis_redundant_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         config_keys=config_keys,
         false_positive_shapes=(
             FalsePositiveShape(
-                shape=(
-                    "Public API or compatibility contract where runtime "
-                    "existence is the behaviour under test."
-                ),
-                mitigation=(
-                    "Keep the test when the runtime contract is intentional; "
-                    "gruff reports this as a candidate, not a deletion command."
-                ),
+                shape=("Public API or compatibility contract where runtime existence is the behaviour under test."),
+                mitigation=("Keep the test when the runtime contract is intentional; gruff reports this as a candidate, not a deletion command."),
             ),
         ),
     )

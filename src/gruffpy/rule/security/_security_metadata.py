@@ -3,11 +3,6 @@
 from typing import Any
 
 _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
-    "security.sql-concatenation": {
-        "cwe": ["CWE-89"],
-        "owasp": ["A03:2021-Injection"],
-        "securitySeverity": "high",
-    },
     "security.disabled-ssl-verification": {
         "cwe": ["CWE-295"],
         "owasp": ["A02:2021-Cryptographic Failures"],
@@ -82,11 +77,6 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "cwe": ["CWE-79"],
         "owasp": ["A03:2021-Injection"],
         "securitySeverity": "high",
-    },
-    "security.django-mark-safe": {
-        "cwe": ["CWE-79"],
-        "owasp": ["A03:2021-Injection"],
-        "securitySeverity": "medium",
     },
     "security.django-raw-sql": {
         "cwe": ["CWE-89"],

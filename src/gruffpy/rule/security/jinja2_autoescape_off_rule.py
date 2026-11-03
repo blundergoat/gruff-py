@@ -128,6 +128,14 @@ class _Jinja2Aliases:
 
 
 def _environment_names_from_import(node: ast.Import) -> set[str]:
+    """Collect Environment call-target spellings from direct jinja2 imports.
+
+    Args:
+        node: Import statement whose module names and aliases are inspected.
+
+    Returns:
+        Qualified Environment names for exact jinja2 imports, or an empty set if none occur.
+    """
     names: set[str] = set()
     for alias in node.names:
         if alias.name != "jinja2":
@@ -138,6 +146,14 @@ def _environment_names_from_import(node: ast.Import) -> set[str]:
 
 
 def _environment_names_from_from_import(node: ast.ImportFrom) -> set[str]:
+    """Collect local Environment names imported from jinja2.
+
+    Args:
+        node: From-import statement whose module and imported names are inspected.
+
+    Returns:
+        Local names or aliases for Environment, or an empty set for other modules and names.
+    """
     if node.module != "jinja2":
         return set()
     names: set[str] = set()
@@ -148,6 +164,14 @@ def _environment_names_from_from_import(node: ast.ImportFrom) -> set[str]:
 
 
 def _is_autoescape_safe(call: ast.Call) -> bool:
+    """Check whether the autoescape argument exempts a constructor from this rule.
+
+    Args:
+        call: Environment constructor call whose named autoescape argument is inspected.
+
+    Returns:
+        False when autoescape is absent or literal False; True for every other supplied expression.
+    """
     value = call_keyword(call, "autoescape")
     if value is None:
         return False
@@ -159,12 +183,19 @@ def _build_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
+    """Build the finding for an Environment call that failed the autoescape check.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched constructor call supplying the source range.
+
+    Returns:
+        A finding with the autoescape remediation and template-output metadata.
+    """
     return Finding(
         rule_id=definition.id,
-        message=(
-            "Jinja2 `Environment(...)` without `autoescape=True` leaves "
-            "rendered templates exposed to XSS."
-        ),
+        message=("Jinja2 `Environment(...)` without `autoescape=True` leaves rendered templates exposed to XSS."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-10
-**Updated:** 2026-07-12
+**Updated:** 2026-10-05 (the worked example, `dead-code.unused-private-function`, was retired in 0.6.0, ADR-029)
 
 ## Decision
 

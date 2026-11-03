@@ -52,6 +52,7 @@ def _ctx() -> RuleContext:
 
 
 def test_temp_variable_fires():
+    """Report ``temp`` once, with a pattern that names it a placeholder token."""
     src = "temp = 1\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -59,12 +60,14 @@ def test_temp_variable_fires():
 
 
 def test_foo_variable_fires():
+    """Report one finding for source whose only statement assigns ``foo``."""
     src = "foo = 1\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_result1_fires():
+    """Report one finding with a numbered-placeholder pattern for source that only assigns ``result1``."""
     src = "result1 = 1\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -72,18 +75,21 @@ def test_result1_fires():
 
 
 def test_data42_fires():
+    """Report one finding for source whose only statement assigns ``data42``."""
     src = "data42 = []\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_descriptive_name_does_not_fire():
+    """Report nothing for ``user_count`` and ``response``."""
     src = "user_count = 1\nresponse = None\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_temperature_does_not_fire():
+    """Report nothing for ``temperature``, which only begins with ``temp``."""
     # 'temperature' tokenizes to ['temperature'] - first token 'temperature'
     # is NOT 'temp'. Make sure we match exact tokens, not prefixes.
     src = "temperature = 20\n"
@@ -92,18 +98,21 @@ def test_temperature_does_not_fire():
 
 
 def test_dunder_does_not_fire():
+    """Report nothing for the dunder class attribute ``__foo__``."""
     src = "class C:\n    __foo__ = None\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_function_name_fires():
+    """Report a function named ``foo`` among the findings."""
     src = "def foo(): return 1\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert any(f.metadata["identifier"] == "foo" for f in findings)
 
 
 def test_camel_case_placeholder_fires():
+    """Report one finding for source whose only statement assigns ``FooBar``."""
     src = "FooBar = 1\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     # tokens = ['Foo', 'Bar'] -> first 'foo' lower-cased -> placeholder
@@ -111,12 +120,14 @@ def test_camel_case_placeholder_fires():
 
 
 def test_parameter_temp_fires():
+    """Report the parameter ``temp`` among the findings."""
     src = "def f(temp): return temp\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert any(f.metadata["identifier"] == "temp" for f in findings)
 
 
 def test_result_without_number_does_not_fire():
+    """Report nothing for ``result`` without a number."""
     src = "result = compute()\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     # 'result' alone is fine; only 'result1' / 'result2' fire.
@@ -124,12 +135,14 @@ def test_result_without_number_does_not_fire():
 
 
 def test_todo_domain_name_does_not_fire():
+    """Report nothing for a class named ``TodoDensityRule``."""
     src = "class TodoDensityRule: pass\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_domain_numbers_do_not_fire():
+    """Report nothing for ``adr020``, ``step0`` and ``V110``, domain names that end in numbers."""
     src = "adr020 = 'accepted'\nstep0 = 'bootstrap'\nV110 = 'protocol'\n"
     findings = IdentifierQualityRule().analyse(_unit(src), _ctx())
     assert findings == []
@@ -138,9 +151,7 @@ def test_domain_numbers_do_not_fire():
 def test_todo_work_queue_name_does_not_fire() -> None:
     """Keep a populated and consumed user work queue out of placeholder results."""
     # A user may collect actionable tasks and immediately process that queue.
-    user_source = (
-        "todo = [task for task in tasks if task.ready]\nfor task in todo:\n    consume(task)\n"
-    )
+    user_source = "todo = [task for task in tasks if task.ready]\nfor task in todo:\n    consume(task)\n"
 
     user_findings = IdentifierQualityRule().analyse(_unit(user_source), _ctx())
 

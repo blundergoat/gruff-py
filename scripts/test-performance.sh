@@ -29,6 +29,8 @@
 set -euo pipefail
 
 # --- defaults ----------------------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 QUICK=0
 EMIT_JSON=0
 JSON_PATH=""
@@ -77,6 +79,7 @@ if [[ -n "$BASELINE_PATH" && ! -f "$BASELINE_PATH" ]]; then
   echo "error: --baseline path does not exist: $BASELINE_PATH" >&2
   exit 2
 fi
+command -v git >/dev/null 2>&1 || { echo "error: git is required for source provenance" >&2; exit 2; }
 
 # --- environment probe -------------------------------------------------------
 mkdir -p "$OUTPUT_DIR"
@@ -86,6 +89,64 @@ OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 PYTHON_VERSION="$(uv run python -c 'import sys; print(".".join(str(x) for x in sys.version_info[:3]))')"
 GRUFF_VERSION="$(uv run gruff-py --version 2>&1 | head -1 | awk '{print $2}')"
+UNAME_STRING="$(uname -srm 2>/dev/null || echo unknown)"
+CPU_MODEL="$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || true)"
+[[ -n "$CPU_MODEL" ]] || CPU_MODEL="unknown"
+GIT_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+if [[ -z "$(git -C "$REPO_ROOT" status --porcelain=v1)" ]]; then
+  GIT_DIRTY=false
+else
+  GIT_DIRTY=true
+fi
+HARNESS_SHA256="$(uv run python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$SCRIPT_DIR/test-performance.sh")"
+GRUFF_WRAPPER="$(uv run python -c 'import shutil; print(shutil.which("gruff-py") or "")')"
+[[ -n "$GRUFF_WRAPPER" && -f "$GRUFF_WRAPPER" ]] || { echo "error: could not resolve gruff-py wrapper" >&2; exit 2; }
+WRAPPER_SHA256="$(uv run python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$GRUFF_WRAPPER")"
+RUNTIME_SOURCE_JSON="$(uv run python - "$REPO_ROOT" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+included = ["src/gruffpy", "pyproject.toml", "uv.lock"]
+files: set[Path] = set()
+
+
+def visit(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        files.add(path)
+        return
+    for child in path.iterdir():
+        visit(child)
+
+
+for relative in included:
+    visit(root / relative)
+
+manifest = []
+for path in sorted(files):
+    data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
+    manifest.append(
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+    )
+canonical = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+print(
+    json.dumps(
+        {
+            "includedPaths": included,
+            "fileCount": len(manifest),
+            "digest": hashlib.sha256(canonical.encode()).hexdigest(),
+        },
+        separators=(",", ":"),
+    )
+)
+PY
+)"
 
 # Locate GNU time.
 TIME_BIN=""
@@ -473,9 +534,18 @@ JSON_DOC="$(cat <<EOF
   "generatedAt": $(json_escape "$START_TS"),
   "host": {
     "platform": $(json_escape "$PLATFORM"),
+    "uname": $(json_escape "$UNAME_STRING"),
+    "cpu": $(json_escape "$CPU_MODEL"),
     "python": $(json_escape "$PYTHON_VERSION"),
     "gruffPy": $(json_escape "$GRUFF_VERSION"),
     "rssAvailable": $RSS_AVAILABLE
+  },
+  "source": {
+    "gitCommit": $(json_escape "$GIT_COMMIT"),
+    "gitDirty": $GIT_DIRTY,
+    "runtimeSource": $RUNTIME_SOURCE_JSON,
+    "artifact": {"kind": "live-wrapper", "sha256": $(json_escape "$WRAPPER_SHA256")},
+    "harnessSha256": $(json_escape "$HARNESS_SHA256")
   },
   "repeat": $REPEAT,
   "scale": $(json_escape "$SCALE"),

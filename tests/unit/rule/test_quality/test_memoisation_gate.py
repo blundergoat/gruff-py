@@ -33,6 +33,7 @@ class MyTestCase:
 
 
 def test_scope_computed_exactly_once_per_unit():
+    """Compute the test scope map exactly once when the default registry analyses one unit."""
     reset_compute_count()
     unit = make_unit(_TEST_FIXTURE)
     registry = RuleRegistry.defaults()
@@ -45,6 +46,7 @@ def test_scope_computed_exactly_once_per_unit():
 
 
 def test_scope_cache_persists_across_calls_for_same_tree():
+    """Compute no further scope map when the same unit is analysed a second time."""
     reset_compute_count()
     unit = make_unit(_TEST_FIXTURE)
     registry = RuleRegistry.defaults()

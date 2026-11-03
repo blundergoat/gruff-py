@@ -48,9 +48,7 @@ _FRAMEWORK_IMPORTS: dict[str, str] = {
     "sqlalchemy": "sqlalchemy",
     "requests": "requests",
 }
-_LOGGING_LEAVES: frozenset[str] = frozenset(
-    {"log", "debug", "info", "warning", "error", "critical", "exception", "print"}
-)
+_LOGGING_LEAVES: frozenset[str] = frozenset({"log", "debug", "info", "warning", "error", "critical", "exception", "print"})
 _MODULE_CONSTANT_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -76,6 +74,14 @@ def call_target_name(call: ast.Call) -> str | None:
 
 
 def _resolve_name(node: ast.AST) -> str | None:
+    """Resolve a syntactic chain of names and attributes to dotted text.
+
+    Args:
+        node: Expression whose names and attribute receivers are inspected without resolving bindings.
+
+    Returns:
+        Dotted spelling for a supported chain, or None when any receiver has another expression shape.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -156,11 +162,7 @@ def module_string_constants(tree: ast.AST) -> dict[str, str]:
             invalid.update(name for name in node.names if _is_module_constant_name(name))
         elif isinstance(node, ast.Delete):
             invalid.update(_deleted_constant_names(node.targets))
-    return {
-        name: value
-        for name, value in candidates.items()
-        if name not in invalid and _is_module_constant_name(name)
-    }
+    return {name: value for name, value in candidates.items() if name not in invalid and _is_module_constant_name(name)}
 
 
 def _collect_module_constant_candidate(
@@ -169,6 +171,14 @@ def _collect_module_constant_candidate(
     owner_targets: dict[str, ast.Name],
     invalid: set[str],
 ) -> None:
+    """Record candidate string constants or disqualifying top-level bindings.
+
+    Args:
+        stmt: Direct module-body statement checked for supported assignment, import or deletion forms.
+        candidates: Candidate names and string values, mutated when a qualifying assignment is found.
+        owner_targets: Candidate names and their original AST target objects, mutated alongside candidates.
+        invalid: Names disqualified by encountered bindings, extended in place.
+    """
     if isinstance(stmt, ast.Assign):
         _collect_plain_assign_candidate(stmt, candidates, owner_targets, invalid)
         return
@@ -193,6 +203,14 @@ def _collect_plain_assign_candidate(
     owner_targets: dict[str, ast.Name],
     invalid: set[str],
 ) -> None:
+    """Record a single ALL-CAPS string assignment or invalidate its name.
+
+    Args:
+        stmt: Plain assignment checked for one direct ALL-CAPS target and a string literal value.
+        candidates: Recorded candidate values, extended for a qualifying name not previously recorded.
+        owner_targets: Original AST targets, extended with the qualifying assignment's target object.
+        invalid: Names disqualified by repeated or unsupported assignments, extended in place.
+    """
     if len(stmt.targets) != 1:
         names = (_constant_target_name(target) for target in stmt.targets)
         invalid.update(name for name in names if name is not None)
@@ -221,6 +239,13 @@ def _module_scope_rebound_names(
     Function and class bodies are skipped: they bind their own scopes, and
     module rebinds from inside a function require ``global``, which the
     caller handles separately.
+
+    Args:
+        tree: Module whose body and nested module-level blocks are scanned, skipping inner scopes.
+        owner_targets: Original candidate target objects exempted by identity from the rebind scan.
+
+    Returns:
+        ALL-CAPS names encountered in other supported store or import bindings; empty when none are found.
     """
     rebound: set[str] = set()
     stack: list[ast.AST] = [tree]
@@ -229,11 +254,7 @@ def _module_scope_rebound_names(
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
             continue
         if isinstance(node, ast.Name):
-            if (
-                isinstance(node.ctx, ast.Store)
-                and _is_module_constant_name(node.id)
-                and node is not owner_targets.get(node.id)
-            ):
+            if isinstance(node.ctx, ast.Store) and _is_module_constant_name(node.id) and node is not owner_targets.get(node.id):
                 rebound.add(node.id)
         elif isinstance(node, ast.Import | ast.ImportFrom):
             rebound.update(_constant_import_names(node.names))
@@ -242,12 +263,28 @@ def _module_scope_rebound_names(
 
 
 def _constant_target_name(target: ast.AST) -> str | None:
+    """Recognize a direct ALL-CAPS assignment target.
+
+    Args:
+        target: Target expression checked as a single name rather than unpacked recursively.
+
+    Returns:
+        The target name when it matches the constant spelling, or None for other targets.
+    """
     if isinstance(target, ast.Name) and _is_module_constant_name(target.id):
         return target.id
     return None
 
 
 def _constant_import_names(aliases: list[ast.alias]) -> set[str]:
+    """Collect ALL-CAPS names bound by import aliases.
+
+    Args:
+        aliases: Import aliases whose explicit alias or first module component supplies the bound spelling.
+
+    Returns:
+        Bound names matching the constant spelling, or an empty set when no alias qualifies.
+    """
     names: set[str] = set()
     for alias in aliases:
         assigned = alias.asname or alias.name.split(".", 1)[0]
@@ -257,6 +294,14 @@ def _constant_import_names(aliases: list[ast.alias]) -> set[str]:
 
 
 def _deleted_constant_names(targets: list[ast.expr]) -> set[str]:
+    """Collect directly named ALL-CAPS deletion targets.
+
+    Args:
+        targets: Deletion targets checked individually without unpacking nested target containers.
+
+    Returns:
+        Qualifying direct names, or an empty set when no target matches.
+    """
     names: set[str] = set()
     for target in targets:
         name = _constant_target_name(target)
@@ -266,6 +311,14 @@ def _deleted_constant_names(targets: list[ast.expr]) -> set[str]:
 
 
 def _is_module_constant_name(name: str) -> bool:
+    """Check a name against the supported ALL-CAPS constant spelling.
+
+    Args:
+        name: Identifier spelling tested from start to end against the constant-name pattern.
+
+    Returns:
+        True for an uppercase initial letter followed by uppercase letters, digits or underscores; False otherwise.
+    """
     return bool(_MODULE_CONSTANT_RE.fullmatch(name))
 
 
@@ -282,22 +335,18 @@ def is_fixed_string_expression(node: ast.expr, constants: Mapping[str, str]) -> 
     return _fixed_string_value(node, constants) is not None
 
 
-def fixed_string_fragments(node: ast.expr, constants: Mapping[str, str]) -> tuple[str, ...]:
-    """Return fixed string fragments visible inside *node*.
+def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
+    """Collect fixed string material from supported expression shapes.
+
+    This supports fixedness checks; formatted material is not an evaluated Python formatting result.
 
     Args:
-        node: Expression to inspect.
-        constants: Same-module string constants from :func:`module_string_constants`.
+        node: Expression inspected for literals, known names or supported string-building syntax.
+        constants: Read-only mapping of same-module names to known string values.
 
     Returns:
-        Literal and constant string fragments found in stable traversal order.
+        Collected string material, including an empty string, or None when any required part is unresolved.
     """
-    fragments: list[str] = []
-    _collect_fixed_string_fragments(node, constants, fragments)
-    return tuple(fragments)
-
-
-def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.Name):
@@ -312,6 +361,15 @@ def _fixed_string_value(node: ast.expr, constants: Mapping[str, str]) -> str | N
 
 
 def _fixed_joined_string_value(node: ast.JoinedStr, constants: Mapping[str, str]) -> str | None:
+    """Collect f-string material when each interpolated value is a fixed string.
+
+    Args:
+        node: Joined string whose literal and interpolated parts are checked in order.
+        constants: Known string values used to resolve names in interpolated expressions.
+
+    Returns:
+        Combined fixed material, possibly empty; None for conversions, format specifications or unresolved parts.
+    """
     parts: list[str] = []
     for value in node.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
@@ -330,6 +388,17 @@ def _fixed_joined_string_value(node: ast.JoinedStr, constants: Mapping[str, str]
 
 
 def _fixed_binop_string_value(node: ast.BinOp, constants: Mapping[str, str]) -> str | None:
+    """Collect fixed string material from addition or percent-formatting syntax.
+
+    Percent formatting combines template and argument material without evaluating formatting directives.
+
+    Args:
+        node: Binary expression whose left side and supported right-side values must resolve to strings.
+        constants: Known string values used while checking both operands.
+
+    Returns:
+        Combined fixed material, possibly empty; None for another operator or an unresolved operand.
+    """
     left = _fixed_string_value(node.left, constants)
     if left is None:
         return None
@@ -343,11 +412,18 @@ def _fixed_binop_string_value(node: ast.BinOp, constants: Mapping[str, str]) -> 
 
 
 def _fixed_format_call_value(node: ast.expr, constants: Mapping[str, str]) -> str | None:
-    if not (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "format"
-    ):
+    """Collect fixed receiver and argument material from a format call.
+
+    The returned material establishes fixedness without executing the receiver's formatting directives.
+
+    Args:
+        node: Expression checked for an attribute call named format with supported fixed arguments.
+        constants: Known string values used to resolve the receiver and argument expressions.
+
+    Returns:
+        Receiver material followed by argument material, possibly empty; None for unresolved parts or expanded keywords.
+    """
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format"):
         return None
     receiver = _fixed_string_value(node.func.value, constants)
     if receiver is None:
@@ -369,6 +445,15 @@ def _fixed_format_call_value(node: ast.expr, constants: Mapping[str, str]) -> st
 
 
 def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[str] | None:
+    """Collect fixed string values for a percent-formatting operand.
+
+    Args:
+        node: Single operand or tuple whose items are checked as fixed strings.
+        constants: Known string values used to resolve the operand or tuple items.
+
+    Returns:
+        Fixed values in operand order, possibly an empty list for an empty tuple; None if a value is unresolved.
+    """
     if isinstance(node, ast.Tuple):
         values: list[str] = []
         for item in node.elts:
@@ -379,45 +464,6 @@ def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[s
         return values
     fixed = _fixed_string_value(node, constants)
     return None if fixed is None else [fixed]
-
-
-def _collect_fixed_string_fragments(
-    node: ast.expr,
-    constants: Mapping[str, str],
-    fragments: list[str],
-) -> None:
-    """Collect only compile-time string fragments from dynamic string builders.
-
-    The branch structure mirrors Python's common string-building AST shapes:
-    f-strings, `+` concatenation, and `.format(...)`. Runtime holes are visited
-    only to recover nested fixed fragments; callers use the resulting keyword
-    evidence without treating dynamic values as safe.
-    """
-    fixed = _fixed_string_value(node, constants)
-    if fixed is not None:
-        fragments.append(fixed)
-        return
-    if isinstance(node, ast.JoinedStr):
-        for value in node.values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                fragments.append(value.value)
-            elif isinstance(value, ast.FormattedValue):
-                _collect_fixed_string_fragments(value.value, constants, fragments)
-        return
-    if isinstance(node, ast.BinOp):
-        _collect_fixed_string_fragments(node.left, constants, fragments)
-        _collect_fixed_string_fragments(node.right, constants, fragments)
-        return
-    if (
-        _is_format_call(node)
-        and isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-    ):
-        _collect_fixed_string_fragments(node.func.value, constants, fragments)
-        for arg in node.args:
-            _collect_fixed_string_fragments(arg, constants, fragments)
-        for keyword in node.keywords:
-            _collect_fixed_string_fragments(keyword.value, constants, fragments)
 
 
 def is_dynamic_string(node: ast.expr) -> bool:
@@ -440,7 +486,14 @@ def is_dynamic_string(node: ast.expr) -> bool:
 
 
 def _is_str_producer(node: ast.expr) -> bool:
-    """Best-effort: does *node* yield a str at runtime?"""
+    """Best-effort: does *node* yield a str at runtime?
+
+    Args:
+        node: Expression checked for supported literal, joined, binary or format/join call syntax.
+
+    Returns:
+        True when a string-producing syntax heuristic matches; False otherwise, without resolving runtime types.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return True
     if isinstance(node, ast.JoinedStr):
@@ -453,17 +506,29 @@ def _is_str_producer(node: ast.expr) -> bool:
 
 
 def _is_dynamic_string_binop(node: ast.BinOp) -> bool:
+    """Recognize addition and percent-formatting shapes involving string syntax.
+
+    Args:
+        node: Binary expression checked for addition with a string-like side or percent formatting with a string-like left side.
+
+    Returns:
+        True when the syntax heuristic matches; False for unsupported operators or operand shapes.
+    """
     if isinstance(node.op, ast.Add):
         return _is_str_producer(node.left) or _is_str_producer(node.right)
     return isinstance(node.op, ast.Mod) and _is_str_producer(node.left)
 
 
 def _is_format_call(node: ast.expr) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "format"
-    )
+    """Recognize an attribute call whose terminal method name is format.
+
+    Args:
+        node: Expression checked by call and attribute shape without resolving its receiver type.
+
+    Returns:
+        True for a call to an attribute named format; False for other expressions.
+    """
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format"
 
 
 def frameworks_in_use(tree: ast.AST) -> frozenset[str]:
@@ -519,6 +584,14 @@ def imported_module_names(tree: ast.AST) -> frozenset[str]:
 
 
 def _frameworks_for_import(node: ast.stmt) -> set[str]:
+    """Map a supported import statement to recognized framework labels.
+
+    Args:
+        node: Statement whose imported module roots are matched against the framework table.
+
+    Returns:
+        Recognized framework labels, or an empty set for other statements and unrecognized roots.
+    """
     if isinstance(node, ast.Import):
         return {_framework_for_name(alias.name) for alias in node.names} - {""}
     if isinstance(node, ast.ImportFrom) and node.module is not None:
@@ -528,6 +601,14 @@ def _frameworks_for_import(node: ast.stmt) -> set[str]:
 
 
 def _framework_for_name(name: str) -> str:
+    """Map an imported module root to its framework label.
+
+    Args:
+        name: Imported dotted name whose first component is lowercased for the lookup.
+
+    Returns:
+        The recognized framework label, or an empty string when the root is not in the table.
+    """
     root = name.split(".")[0].lower()
     return _FRAMEWORK_IMPORTS.get(root, "")
 
@@ -589,4 +670,12 @@ def does_exception_handler_log(handler: ast.ExceptHandler) -> bool:
 
 
 def _is_logging_leaf(target: str) -> bool:
+    """Recognize a logging-like terminal call name.
+
+    Args:
+        target: Dotted call spelling whose final component is compared with the logging-name set.
+
+    Returns:
+        True when the final spelling is recognized; False otherwise, without resolving the callable.
+    """
     return target.split(".")[-1] in _LOGGING_LEAVES

@@ -92,6 +92,18 @@ def stable_identity_for(
 
 
 def _php_compatible_sha256_prefix(payload: dict[str, Any]) -> str:
+    """Hash a finding payload using PHP-compatible compact JSON escaping.
+
+    Args:
+        payload: Fields in their required insertion order, with JSON-serializable values.
+
+    Returns:
+        The first 16 lowercase SHA-256 hex characters after ASCII and forward-slash escaping.
+
+    Raises:
+        TypeError: If a payload value cannot be encoded as JSON.
+        ValueError: If the payload contains a circular reference.
+    """
     encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
     encoded = encoded.replace("/", r"\/")
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]

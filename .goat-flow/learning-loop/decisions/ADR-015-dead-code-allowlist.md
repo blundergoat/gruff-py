@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-18
+**Updated:** 2026-10-05 (`dead-code.unused-private-function` was retired in 0.6.0, ADR-029; the allowlist now serves `dead-code.unused-private-attribute` and `dead-code.exported-but-unreferenced`)
 **Ticket/Context:** M18 dead-code reachability and allowlists; coordinated with
 ADR-006 (cross-impl config shape) and ADR-008 (rule suppression syntax).
 

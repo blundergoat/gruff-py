@@ -62,6 +62,8 @@ class ShellInjectionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: right on 3 of 7 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -103,10 +105,7 @@ class ShellInjectionRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Pass argv as a list with ``shell=False`` (the default), or "
-                        "use ``shlex.quote`` if a shell really is required."
-                    ),
+                    remediation=("Pass argv as a list with ``shell=False`` (the default), or use ``shlex.quote`` if a shell really is required."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),
@@ -115,6 +114,18 @@ class ShellInjectionRule(Rule):
 
 
 def _shell_injection_label(target: str, call: ast.Call) -> str | None:
+    """Classify a supported shell call with a nonliteral first positional argument.
+
+    Configured subprocess targets require literal shell=True. Configured os shell targets do not require that keyword; both groups skip string-literal
+    first arguments.
+
+    Args:
+        target: Resolved call-target spelling to compare with the configured target sets.
+        call: Call supplying positional arguments and the named shell option.
+
+    Returns:
+        A display label for a matching call, or None when its target, arguments or shell option fail the rule's checks.
+    """
     if target in _SUBPROCESS_TARGETS:
         shell_kw = call_keyword(call, "shell")
         if shell_kw is None or not _is_true_constant(shell_kw):
@@ -134,4 +145,12 @@ def _shell_injection_label(target: str, call: ast.Call) -> str | None:
 
 
 def _is_true_constant(node: ast.expr) -> bool:
+    """Recognize the literal boolean True in an expression.
+
+    Args:
+        node: Expression supplying a possible boolean constant.
+
+    Returns:
+        True only for an AST constant whose value is the True singleton.
+    """
     return isinstance(node, ast.Constant) and node.value is True

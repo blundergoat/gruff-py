@@ -16,6 +16,8 @@ from gruffpy.rule._python_dynamism import (
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
@@ -73,6 +75,7 @@ class AttributeCountRule(Rule):
             attrs = _collect_attributes(node)
             count = len(attrs)
             threshold_match = settings.high_value_threshold_match(count)
+            band = limit_band(count, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -88,13 +91,13 @@ class AttributeCountRule(Rule):
                     ),
                     file_path=unit.file.display_path,
                     line=node.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=("Group related attributes into a sub-object or value object."),
+                    remediation=band_advice(band, _band.LOWER_ATTRIBUTE, _band.SPLIT_CLASS),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "attributes": count,
@@ -102,6 +105,7 @@ class AttributeCountRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -110,6 +114,13 @@ class AttributeCountRule(Rule):
 
 
 def _is_exempt_from_attribute_count(cls: ast.ClassDef) -> bool:
+    """Report whether the attribute-count rule skips this class as a test class, framework-base subclass or dataclass.
+
+    Returns:
+        True when the class is a unittest or pytest test class, extends a framework base such as Protocol, ABC, TypedDict, NamedTuple, an Enum type or
+        pydantic BaseModel, or carries a dataclass or attrs-style decorator, so analyse skips it without counting its attributes; False when its
+        attributes are counted.
+    """
     # Schemas (TypedDict, BaseModel, NamedTuple, Enum-like) and dataclasses
     # enumerate their fields by design; counting them against an
     # "unfocused class" threshold misses the intent. Test classes likewise
@@ -132,6 +143,16 @@ def _collect_attributes(cls: ast.ClassDef) -> set[str]:
 
 
 def _class_body_names(stmt: ast.AST) -> set[str]:
+    """Collect the attribute names that one class-body statement binds by assigning or annotating a bare name.
+
+    Args:
+        stmt: One statement from the class body. Only an annotated assignment to a single name, with or without a value, and a plain assignment are
+            inspected; every other statement contributes nothing.
+
+    Returns:
+        The names the statement binds directly, including each name in a chained assignment; empty for other statement kinds and for tuple-unpacking,
+        attribute or subscript targets.
+    """
     if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
         return {stmt.target.id}
     if isinstance(stmt, ast.Assign):
@@ -144,6 +165,18 @@ def _class_body_names(stmt: ast.AST) -> set[str]:
 
 
 def _init_self_assignments(init: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Collect the attribute names that an __init__ method assigns on self.
+
+    The walk covers the whole method, including nested functions and classes, and matches the literal name self rather than the method's first
+    parameter, so any plain or annotated assignment target spelled self.<name> counts.
+
+    Args:
+        init: The __init__ method node found directly in the class body, sync or async.
+
+    Returns:
+        Attribute names from plain and annotated assignments whose target is self.<name>, including names inside tuple or list unpacking targets but
+        not starred elements; empty when the method assigns no such attribute.
+    """
     names: set[str] = set()
     for sub in ast.walk(init):
         if isinstance(sub, ast.Assign):
@@ -155,11 +188,14 @@ def _init_self_assignments(init: ast.FunctionDef | ast.AsyncFunctionDef) -> set[
 
 
 def _collect_self_attribute(target: ast.AST, names: set[str]) -> None:
-    if (
-        isinstance(target, ast.Attribute)
-        and isinstance(target.value, ast.Name)
-        and target.value.id == "self"
-    ):
+    """Add the name from a self.<name> assignment target to the set, descending into tuple and list unpacking.
+
+    Args:
+        target: One assignment target. A self.<name> attribute contributes its name, a tuple or list is searched element by element, and anything
+            else, including a starred element or a deeper chain such as self.a.b, is ignored.
+        names: The attribute-name set being built for the current __init__ method; it is mutated in place with each matched name.
+    """
+    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
         names.add(target.attr)
     elif isinstance(target, ast.Tuple | ast.List):
         for elt in target.elts:
@@ -167,6 +203,14 @@ def _collect_self_attribute(target: ast.AST, names: set[str]) -> None:
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message without a trailing .0 on whole-number values.
+
+    Args:
+        value: The threshold to render, as an int or a float.
+
+    Returns:
+        The float's str form when it has a fractional part, otherwise the value as an integer string, so 15.0 renders as 15.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

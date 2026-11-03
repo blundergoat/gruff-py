@@ -11,44 +11,35 @@ from gruffpy.rule.test_quality._pytest_config import reset_cache
 from tests.unit.rule.test_quality._helpers import make_unit
 
 _EXPECTED_COUNTS = {
-    "test-quality.conditional-logic": 1,
-    "test-quality.eager-test": 2,
     "test-quality.empty-parametrize": 1,
-    "test-quality.exception-type-only": 1,
     "test-quality.excessive-mocking": 1,
-    "test-quality.extends-production-class": 1,
     "test-quality.global-state-mutation": 1,
     "test-quality.loop-assertion-without-message": 1,
-    "test-quality.loop-in-test": 2,
-    "test-quality.magic-number-assertion": 1,
     "test-quality.mock-only-test": 1,
-    "test-quality.mock-without-expectation": 2,
     "test-quality.mocking-domain-object": 1,
-    "test-quality.multiple-aaa-cycles": 1,
-    "test-quality.mystery-guest": 1,
     "test-quality.naming-consistency": 1,
     "test-quality.no-assertions": 1,
-    "test-quality.parametrize-annotation": 1,
     "test-quality.private-reflection": 1,
     "test-quality.pytest-coverage-source-missing": 1,
     "test-quality.pytest-deprecations-not-fatal": 1,
     "test-quality.pytest-strict-config-missing": 1,
     "test-quality.repeated-structure-missing-parametrize": 3,
     "test-quality.setup-bloat": 1,
-    "test-quality.skipped-without-reason": 1,
-    "test-quality.sleep-in-test": 1,
     "test-quality.static-analysis-redundant-test": 1,
     "test-quality.sut-not-called": 1,
-    "test-quality.tautological-type-assertion": 1,
     "test-quality.test-function-too-long": 1,
     "test-quality.test-longer-than-sut": 1,
     "test-quality.trivial-assertion": 1,
-    "test-quality.trivial-snapshot": 1,
     "test-quality.unused-mock": 1,
 }
 
 
 def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
+    """Report each test-quality rule its expected number of times on the full fixture, and report every registered one.
+
+    Args:
+        tmp_path: Project root holding a ``pyproject.toml`` whose pytest block sets only ``-q``.
+    """
     registry = RuleRegistry.defaults()
     ctx = _ctx_with_opt_in_rules(tmp_path, registry)
     findings = registry.analyse(
@@ -56,19 +47,24 @@ def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
         ctx,
     )
 
-    counts = Counter(
-        finding.rule_id for finding in findings if finding.rule_id.startswith("test-quality.")
-    )
+    counts = Counter(finding.rule_id for finding in findings if finding.rule_id.startswith("test-quality."))
 
     assert counts == _EXPECTED_COUNTS
-    assert set(counts) == {
-        rule.definition().id
-        for rule in registry.all()
-        if rule.definition().id.startswith("test-quality.")
-    }
+    assert set(counts) == {rule.definition().id for rule in registry.all() if rule.definition().id.startswith("test-quality.")}
 
 
 def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContext:
+    """Write a minimal pytest ``pyproject.toml`` at tmp_path and build a context that enables each rule in the helper's options mapping.
+
+    It also clears the cached pytest config, sets the billing domain namespace and turns grouped findings off.
+
+    Args:
+        tmp_path: Project root that receives the ``pyproject.toml``.
+        registry: Registry whose defaults seed the config.
+
+    Returns:
+        A context rooted at tmp_path whose config enables those rules with their options.
+    """
     (tmp_path / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\naddopts = "-q"\n',
     )
@@ -76,7 +72,13 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
     config = AnalysisConfig.from_registry(registry)
     for rule_id, options in {
         "test-quality.mocking-domain-object": {"domain_namespaces": ["billing"]},
-        "test-quality.multiple-aaa-cycles": {},
+        "test-quality.repeated-structure-missing-parametrize": {"groupFindings": False},
+        "test-quality.loop-assertion-without-message": {},
+        "test-quality.no-assertions": {},
+        "test-quality.setup-bloat": {},
+        "test-quality.sut-not-called": {},
+        "test-quality.test-function-too-long": {},
+        "test-quality.trivial-assertion": {},
     }.items():
         settings = config.rule_settings(rule_id)
         config = config.with_rule_settings(
@@ -85,12 +87,18 @@ def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContex
                 enabled=True,
                 thresholds=dict(settings.thresholds),
                 options={**dict(settings.options), **options},
+                severity_threshold=settings.severity_threshold,
             ),
         )
     return RuleContext(project_root=str(tmp_path), config=config)
 
 
 def _full_pillar_source() -> str:
+    """Fill in the full-pillar fixture's setup and long-test bodies.
+
+    Returns:
+        The fixture source, with 31 ``value += 1`` lines in ``setup_method`` and 101 ``step = 1`` lines in ``test_function_too_long_case``.
+    """
     setup_body = "".join("    value += 1\n" for _ in range(31))
     long_test_body = "".join("    step = 1\n" for _ in range(101))
     return _FULL_PILLAR_SOURCE.format(

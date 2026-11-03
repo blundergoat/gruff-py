@@ -5,6 +5,7 @@ expected rule_ids fire. Stricter than per-rule tests: catches accidental
 double-fires and registry omissions.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 from gruffpy.config.analysis_config import AnalysisConfig
@@ -15,6 +16,14 @@ from tests.unit.rule.docs._helpers import make_unit
 
 
 def _marker(*parts: str) -> str:
+    """Join parts into one marker word without writing the marker in this file.
+
+    Args:
+        parts: Fragments of the marker word.
+
+    Returns:
+        The joined marker.
+    """
     return "".join(parts)
 
 
@@ -29,10 +38,13 @@ _DENSE_MARKERS = (
 
 
 def _todo_density_fixture_lines() -> str:
+    """Return six comment lines, each pairing a marker word with a label.
+
+    Returns:
+        The comment lines joined by newlines.
+    """
     labels = ("one", "two", "three", "four", "five", "six")
-    return "\n".join(
-        f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True)
-    )
+    return "\n".join(f"# {marker}: {label}" for marker, label in zip(_DENSE_MARKERS, labels, strict=True))
 
 
 # Source crafted to trigger every docs rule at least once.
@@ -125,15 +137,21 @@ _EXPECTED_RULE_IDS = {
     "docs.missing-return-doc",
     "docs.missing-raises-doc",
     "docs.stale-param-doc",
-    "docs.useless-docstring",
     "docs.todo-density",
     "docs.missing-readme",
 }
 
 
 def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
+    """Report every expected docs rule at least once on the cumulative fixture, with the missing-return rule enabled.
+
+    Args:
+        tmp_path: Empty project root, which holds no README.
+    """
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
+    # The cumulative fixture exercises the retained opt-in detector as well as default-on rules.
+    config.rules["docs.missing-return-doc"] = replace(config.rules["docs.missing-return-doc"], enabled=True)
     ctx = RuleContext(project_root=str(tmp_path), config=config)
 
     findings = registry.analyse([make_unit(_FIXTURE, "widget.py")], ctx)
@@ -143,15 +161,19 @@ def test_every_docs_rule_fires_on_cumulative_fixture(tmp_path: Path):
     assert not missing, f"Missing rule fires: {sorted(missing)}"
 
 
-def test_docs_registry_has_thirteen_rules():
+def test_docs_registry_contains_every_expected_rule():
+    """Register exactly the twelve expected rules under the docs prefix."""
     registry = RuleRegistry.defaults()
-    docs_ids = {
-        rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")
-    }
+    docs_ids = {rule.definition().id for rule in registry.all() if rule.definition().id.startswith("docs.")}
     assert docs_ids == _EXPECTED_RULE_IDS
 
 
 def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
+    """Report the missing README once when two units are analysed together.
+
+    Args:
+        tmp_path: Empty project root with no README.
+    """
     # No README in tmp_path. Two units should produce exactly ONE missing-readme
     # finding after registry-level dedup.
     registry = RuleRegistry.defaults()
@@ -164,17 +186,17 @@ def test_missing_readme_dedupes_to_one_across_multiple_units(tmp_path: Path):
 
 
 def test_config_can_disable_missing_function_docstring_for_test_paths(tmp_path: Path):
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\n"
-        "rules:\n  docs.missing-function-docstring:\n    enabled: false\n"
-    )
+    """Report no missing function docstring for a test-file function under a loaded config that disables the rule.
+
+    Args:
+        tmp_path: Project root holding a ``.gruff-py.yaml`` that disables the rule.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  docs.missing-function-docstring:\n    enabled: false\n")
     registry = RuleRegistry.defaults()
     defaults = AnalysisConfig.from_registry(registry)
     config, _ = ConfigLoader(tmp_path, defaults).load()
     ctx = RuleContext(project_root=str(tmp_path), config=config)
 
-    findings = registry.analyse(
-        [make_unit("def test_without_doc():\n    pass\n", "tests/test_x.py")], ctx
-    )
+    findings = registry.analyse([make_unit("def test_without_doc():\n    pass\n", "tests/test_x.py")], ctx)
 
     assert "docs.missing-function-docstring" not in {finding.rule_id for finding in findings}

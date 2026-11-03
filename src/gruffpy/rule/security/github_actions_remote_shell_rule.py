@@ -69,10 +69,7 @@ class GithubActionsRemoteShellRule(SourceTextRule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        "CI step pipes a remote download into a shell - the fetched "
-                        "script is unverified and can change between runs."
-                    ),
+                    message=("CI step pipes a remote download into a shell - the fetched script is unverified and can change between runs."),
                     file_path=unit.file.display_path,
                     line=source_line(unit.source, match.start()),
                     severity=definition.default_severity,

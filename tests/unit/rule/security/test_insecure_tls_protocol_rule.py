@@ -3,6 +3,7 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_ssl_protocol_tlsv1_emits():
+    """Report one finding, with target ``ssl.PROTOCOL_TLSv1``, for an ``SSLContext`` built with that constant."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)\n"
     findings = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -10,6 +11,7 @@ def test_ssl_protocol_tlsv1_emits():
 
 
 def test_ssl_protocol_tlsv1_1_emits():
+    """Report one finding, with target ``ssl.PROTOCOL_TLSv1_1``, for an ``SSLContext`` built with that constant."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_1)\n"
     findings = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -17,29 +19,34 @@ def test_ssl_protocol_tlsv1_1_emits():
 
 
 def test_ssl_protocol_sslv2_emits():
+    """Report one finding for an ``SSLContext`` built with ``PROTOCOL_SSLv2``."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_SSLv2)\n"
     findings = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_ssl_protocol_sslv3_emits():
+    """Report one finding for an ``SSLContext`` built with ``PROTOCOL_SSLv3``."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_SSLv3)\n"
     findings = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_ssl_protocol_sslv23_emits():
+    """Report one finding for an ``SSLContext`` built with ``PROTOCOL_SSLv23``."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)\n"
     findings = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_ssl_protocol_tlsv1_2_safe_skipped():
+    """Report nothing for an ``SSLContext`` built with ``PROTOCOL_TLSv1_2``."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)\n"
     assert InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_ssl_protocol_tls_client_safe_skipped():
+    """Report nothing for an ``SSLContext`` built with ``PROTOCOL_TLS_CLIENT``."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n"
     assert InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -51,6 +58,7 @@ def test_unrelated_attr_with_protocol_name_skipped():
 
 
 def test_carries_security_metadata():
+    """Label the ``PROTOCOL_TLSv1`` finding with the ``tls-handshake`` sink and ``tls-protocol-constant`` source."""
     src = "import ssl\nctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)\n"
     finding = InsecureTlsProtocolRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "tls-handshake"

@@ -30,6 +30,11 @@ _EXPECTED_INTERACTIVE_SCAN_SUBSTRINGS = (
 
 
 def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
+    """Serve ``ok`` from the health route, the control shell from the root page, and the HTML report for plain and interactive scans.
+
+    Args:
+        tmp_path: Project root holding a one-line ``src/app.py`` for the served dashboard to scan.
+    """
     src = tmp_path / "src"
     src.mkdir()
     (src / "app.py").write_text("x = 1\n")
@@ -46,11 +51,45 @@ def test_dashboard_server_health_shell_and_scan(tmp_path: Path):
     assert _missing(interactive_scan, _EXPECTED_INTERACTIVE_SCAN_SUBSTRINGS) == []
 
 
+def test_dashboard_round_trips_deep_scan_budget_and_diagnostic(tmp_path: Path) -> None:
+    """Carry a ``deepScanBudget`` query value into the shell's form field and into the scan report's CLI-override diagnostic.
+
+    Args:
+        tmp_path: Project root holding a one-line module for the budgeted scan.
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text("value = 1\n")
+
+    with _served_dashboard(tmp_path, ("src",)) as base_url:
+        shell = _fetch(base_url + "/?deepScanBudget=1%3A10000")
+        scan = _fetch(base_url + "/scan?deepScanBudget=1%3A10000")
+
+    assert 'name="deepScanBudget" value="1:10000"' in shell
+    assert "bounded-deep-scan" in scan
+    assert "override=cli" in scan
+    assert "--deep-scan-budget 1:10000" in scan
+
+
 def _missing(body: str, expected: tuple[str, ...]) -> list[str]:
+    """List the expected substrings a response body lacks.
+
+    Args:
+        body: Response text to search.
+        expected: Substrings the body must contain.
+
+    Returns:
+        The absent substrings in their given order; empty when every one is present.
+    """
     return [s for s in expected if s not in body]
 
 
 def test_dashboard_scan_returns_error_html_for_invalid_project(tmp_path: Path):
+    """Answer a scan request for a nonexistent project directory with an error page that names the path.
+
+    Args:
+        tmp_path: Launch root of the served dashboard; the scan request names a different, missing project.
+    """
     with _served_dashboard(tmp_path, ("src",)) as base_url:
         body = _fetch(base_url + "/scan?project=/no/such/project")
 
@@ -66,6 +105,18 @@ def _dashboard_request(
     config_path: Path | None = None,
     should_skip_config: bool = False,
 ) -> _DashboardCliRequest:
+    """Build a dashboard CLI request with a ``.`` operand on any free local port, from a project root and the fail-on and config inputs.
+
+    Args:
+        project_root: Project root the request names.
+        fail_on: Fail-on level as the CLI passes it; ``none`` by default.
+        was_fail_on_set_on_cli: Whether that level came from an explicit CLI flag.
+        config_path: Explicit ``--config`` path, or None when no flag is given.
+        should_skip_config: Whether the request carries ``--no-config``.
+
+    Returns:
+        The request, with ignored paths excluded and the interactive report off.
+    """
     return _DashboardCliRequest(
         paths=(".",),
         project_root=project_root,
@@ -80,12 +131,15 @@ def _dashboard_request(
     )
 
 
-def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
+def test_dashboard_initial_state_uses_config_fail_on_when_no_cli_flag(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
-    )
+    """Take the initial fail-on level from the config's dashboard entry when the CLI sets none.
+
+    Args:
+        tmp_path: Project root whose config sets the dashboard fail-on level to ``error``.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -96,9 +150,12 @@ def test_dashboard_initial_state_uses_config_minimum_severity_when_no_cli_flag(
 def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_key(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  analyse: error\n"
-    )
+    """Fall back to ``none`` when the config sets a fail-on level only for ``analyse``.
+
+    Args:
+        tmp_path: Project root whose config has an ``analyse`` fail-on entry and no dashboard entry.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -109,9 +166,12 @@ def test_dashboard_initial_state_falls_back_to_none_when_config_lacks_dashboard_
 def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
-    )
+    """Prefer an explicit CLI fail-on level over the config's dashboard level.
+
+    Args:
+        tmp_path: Project root whose config sets the dashboard fail-on level to ``error``, which the CLI's ``warning`` overrides.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(
         project_root=tmp_path,
         fail_on="warning",
@@ -126,9 +186,12 @@ def test_dashboard_initial_state_respects_explicit_cli_fail_on_over_config(
 def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
-    )
+    """Leave the fail-on level at ``none`` when the request skips config, even though the project config sets one.
+
+    Args:
+        tmp_path: Project root whose config sets the dashboard fail-on level to ``error``, which must not apply.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path, should_skip_config=True)
 
     state = build_initial_dashboard_state(request, tmp_path)
@@ -139,16 +202,19 @@ def test_dashboard_initial_state_skips_config_when_no_config_flag_set(
 def test_dashboard_initial_state_surfaces_config_errors_at_startup(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  dashboard: error\n")
+    """Raise a ``ConfigError`` naming ``schemaVersion`` while building initial state from a config that lacks it.
+
+    Args:
+        tmp_path: Project root whose config sets a dashboard fail-on level but omits the schema version.
+    """
+    (tmp_path / ".gruff-py.yaml").write_text("failOn:\n  dashboard: error\n")
     request = _dashboard_request(project_root=tmp_path)
 
     with pytest.raises(ConfigError, match="schemaVersion"):
         build_initial_dashboard_state(request, tmp_path)
 
 
-def test_dashboard_initial_state_resolves_relative_config_under_project_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_initial_state_resolves_relative_config_under_project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A relative ``--config`` must resolve under the dashboard project root.
 
     Regression for the divergence where the initial form seed read the file at
@@ -164,9 +230,7 @@ def test_dashboard_initial_state_resolves_relative_config_under_project_root(
     """
     project = tmp_path / "project"
     project.mkdir()
-    (project / "custom.yaml").write_text(
-        "schemaVersion: gruff-py.config.v0.1\nminimumSeverity:\n  dashboard: error\n"
-    )
+    (project / "custom.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nfailOn:\n  dashboard: error\n")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
@@ -179,6 +243,17 @@ def test_dashboard_initial_state_resolves_relative_config_under_project_root(
 
 @contextmanager
 def _served_dashboard(project_root: Path, paths: tuple[str, ...]) -> Iterator[str]:
+    """Serve a dashboard for one project on a free local port from a background thread while the with block runs.
+
+    On exit the server shuts down, closes its socket and waits up to five seconds for the thread.
+
+    Args:
+        project_root: Launch root, also the project in the initial state.
+        paths: Operands joined by spaces into the initial state's paths field.
+
+    Yields:
+        The server's base URL.
+    """
     server = create_dashboard_server(
         host="127.0.0.1",
         port=0,
@@ -199,10 +274,29 @@ def _served_dashboard(project_root: Path, paths: tuple[str, ...]) -> Iterator[st
 
 
 def _base_url(server: ThreadingHTTPServer) -> str:
+    """Format a running server's bound address as an HTTP base URL.
+
+    Args:
+        server: Server whose bound host and port are read.
+
+    Returns:
+        The ``http://host:port`` URL, without a trailing slash.
+    """
     host, port = server.server_address[:2]
     return f"http://{host}:{port}"
 
 
 def _fetch(url: str) -> str:
+    """Fetch a URL with a ten-second timeout and decode the body as UTF-8.
+
+    Args:
+        url: Address to request.
+
+    Returns:
+        The decoded response body.
+
+    Raises:
+        urllib.error.URLError: The request fails or the server answers with an error status.
+    """
     with urlopen(url, timeout=10) as response:
         return response.read().decode("utf-8")

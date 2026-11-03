@@ -71,6 +71,7 @@ class UnsafePickleRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -104,16 +105,31 @@ class UnsafePickleRule(Rule):
 
 
 def _unsafe_pickle_label(call: ast.Call, target: str | None) -> str | None:
-    if (
-        target is not None
-        and target in _UNSAFE_LOAD_TARGETS
-        and not _has_safe_literal_first_arg(call)
-    ):
+    """Select a configured deserialization target or a chained Unpickler load label.
+
+    Args:
+        call: Call supplying the literal-argument exemption and possible chained receiver.
+        target: Dotted call-target spelling, or None when the target cannot be resolved syntactically.
+
+    Returns:
+        The configured target without a literal first argument, a recognized chained label, or None when neither matches.
+    """
+    if target is not None and target in _UNSAFE_LOAD_TARGETS and not _has_safe_literal_first_arg(call):
         return target
     return _unpickler_load_label(call)
 
 
 def _has_safe_literal_first_arg(call: ast.Call) -> bool:
+    """Check whether the first positional argument qualifies for the literal exemption.
+
+    This tests syntax only; it does not validate the contents of the literal.
+
+    Args:
+        call: Call whose first positional argument is inspected.
+
+    Returns:
+        True for a string or bytes constant; False if the argument is absent or has another AST shape.
+    """
     if not call.args:
         return False
     first = call.args[0]
@@ -121,7 +137,14 @@ def _has_safe_literal_first_arg(call: ast.Call) -> bool:
 
 
 def _unpickler_load_label(call: ast.Call) -> str | None:
-    """Return ``pickle.Unpickler.load`` (or cPickle/dill variant) for the chained pattern."""
+    """Return ``pickle.Unpickler.load`` (or cPickle/dill variant) for the chained pattern.
+
+    Args:
+        call: Call to inspect for load on a directly called pickle-family Unpickler constructor.
+
+    Returns:
+        The recognized constructor target followed by .load, or None when the chained shape does not match.
+    """
     callee = call.func
     if not isinstance(callee, ast.Attribute) or callee.attr != "load":
         return None
@@ -144,12 +167,20 @@ def _build_finding(
     call: ast.Call,
     target: str,
 ) -> Finding:
+    """Build the finding for a matched pickle-family deserialization call.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched call supplying the source range.
+        target: Recognized target or chained label to include in the message and metadata.
+
+    Returns:
+        A finding with deserialization remediation and the supplied target label.
+    """
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` deserialises a non-literal input - pickle-family "
-            "deserialisation is a known RCE vector."
-        ),
+        message=(f"`{target}(...)` deserialises a non-literal input - pickle-family deserialisation is a known RCE vector."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,
@@ -158,8 +189,7 @@ def _build_finding(
         confidence=definition.confidence,
         end_line=call.end_lineno,
         remediation=(
-            "Use a structured format (JSON, msgpack with strict schema, "
-            "protobuf) for untrusted data. Reserve pickle for trusted internal IPC."
+            "Use a structured format (JSON, msgpack with strict schema, protobuf) for untrusted data. Reserve pickle for trusted internal IPC."
         ),
         secondary_pillars=definition.secondary_pillars,
         metadata={"target": target},

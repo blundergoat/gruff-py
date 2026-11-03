@@ -27,6 +27,20 @@ def _finding(
     column: int | None = 4,
     symbol: str | None = "module.foo",
 ) -> Finding:
+    """Build an advisory naming finding whose identity fields can each be overridden.
+
+    Args:
+        rule_id: Rule id; the identifier-quality rule by default.
+        message: Finding message.
+        file_path: Finding path.
+        line: Start line, or None.
+        end_line: End line, or None.
+        column: Column, or None.
+        symbol: Symbol name, or None to make the identity use the message.
+
+    Returns:
+        The finding.
+    """
     return Finding(
         rule_id=rule_id,
         message=message,
@@ -43,6 +57,7 @@ def _finding(
 
 
 def test_stable_identity_appears_in_to_dict_adjacent_to_fingerprint() -> None:
+    """Serialise ``stableIdentity`` immediately after ``fingerprint`` in a finding's dictionary."""
     payload = _finding().to_dict()
     keys = list(payload.keys())
     assert "stableIdentity" in payload
@@ -50,12 +65,14 @@ def test_stable_identity_appears_in_to_dict_adjacent_to_fingerprint() -> None:
 
 
 def test_stable_identity_is_16_lowercase_hex_chars() -> None:
+    """Produce a stable identity of exactly 16 lowercase hexadecimal characters."""
     identity = _finding().stable_identity()
     assert len(identity) == 16
     assert all(c in "0123456789abcdef" for c in identity)
 
 
 def test_stable_identity_is_deterministic() -> None:
+    """Produce the same stable identity for two identical findings."""
     first = _finding().stable_identity()
     second = _finding().stable_identity()
     assert first == second
@@ -81,6 +98,7 @@ def test_additive_metadata_does_not_change_fingerprint_or_stable_identity() -> N
 
 
 def test_stable_identity_ignores_line_shifts_when_symbol_is_set() -> None:
+    """Keep the stable identity when a finding with a symbol moves to another line, while its fingerprint changes."""
     base = _finding(line=10, end_line=10, column=4)
     shifted = _finding(line=42, end_line=42, column=4)
     assert base.stable_identity() == shifted.stable_identity()
@@ -88,6 +106,7 @@ def test_stable_identity_ignores_line_shifts_when_symbol_is_set() -> None:
 
 
 def test_stable_identity_ignores_end_line_and_column_when_symbol_is_set() -> None:
+    """Keep the stable identity when a finding with a symbol changes end line and column, while its fingerprint changes."""
     base = _finding(line=10, end_line=10, column=4)
     wider = _finding(line=10, end_line=40, column=12)
     assert base.stable_identity() == wider.stable_identity()
@@ -114,12 +133,14 @@ def test_stable_identity_distinguishes_by_identifying_field(kwargs_a: dict, kwar
 
 
 def test_stable_identity_message_independent_when_symbol_is_set() -> None:
+    """Keep the stable identity when a finding with a symbol has its message reworded."""
     base = _finding(message="Identifier 'foo' is generic.")
     reworded = _finding(message="Identifier 'foo' needs a more descriptive name.")
     assert base.stable_identity() == reworded.stable_identity()
 
 
 def test_stable_identity_falls_back_to_message_when_symbol_is_none() -> None:
+    """Distinguish findings without a symbol by message: equal messages share a stable identity and different ones do not."""
     base = _finding(symbol=None, message="Hard-coded secret detected at line 12.")
     same = _finding(symbol=None, message="Hard-coded secret detected at line 12.")
     different = _finding(symbol=None, message="Hard-coded secret detected at line 99.")
@@ -135,6 +156,7 @@ def test_symbol_present_and_symbol_none_produce_different_identities() -> None:
 
 
 def test_stable_identity_helper_matches_method() -> None:
+    """Compute the same stable identity through ``stable_identity_for`` as through the finding's own method."""
     finding = _finding()
     assert finding.stable_identity() == stable_identity_for(
         rule_id=finding.rule_id,

@@ -26,14 +26,9 @@ from gruffpy.rule.security._security_node_helper import (
     is_false_constant,
 )
 
-_REQUESTS_METHODS: frozenset[str] = frozenset(
-    {"get", "post", "put", "delete", "patch", "head", "options", "request"}
-)
+_REQUESTS_METHODS: frozenset[str] = frozenset({"get", "post", "put", "delete", "patch", "head", "options", "request"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("verify", "_create_unverified_context", "disable_warnings")
-_TLS_REMEDIATION = (
-    "Use a properly verified TLS context. If you need a custom trust "
-    "store, configure CA bundles instead of disabling verification."
-)
+_TLS_REMEDIATION = "Use a properly verified TLS context. If you need a custom trust store, configure CA bundles instead of disabling verification."
 
 
 class DisabledSslVerificationRule(Rule):
@@ -158,11 +153,27 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _visit_scope_body(self, body: list[ast.stmt], false_aliases: set[str]) -> None:
+        """Visit a statement sequence with a private copy of its initial aliases.
+
+        Calls found during traversal are appended to the visitor's findings.
+
+        Args:
+            body: Statements to visit in source order.
+            false_aliases: Initial false-value names, copied so the caller's set is unchanged.
+        """
         aliases = set(false_aliases)
         for stmt in body:
             self._visit_scope_statement(stmt, aliases)
 
     def _visit_scope_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        """Dispatch a statement while carrying the current false-value aliases.
+
+        Specialized handlers preserve scope boundaries; other statements use the supplied aliases during normal traversal.
+
+        Args:
+            stmt: Statement whose calls and bindings are inspected.
+            aliases: Current scope's mutable alias set, updated by handled bindings and branches.
+        """
         if self._did_visit_definition_or_assignment(stmt, aliases):
             return
         if self._did_visit_conditional_or_branching_statement(stmt, aliases):
@@ -170,6 +181,15 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         self._visit_with_aliases(stmt, aliases)
 
     def _did_visit_definition_or_assignment(self, stmt: ast.stmt, aliases: set[str]) -> bool:
+        """Handle definitions and assignments before generic statement traversal.
+
+        Args:
+            stmt: Statement to dispatch when it defines a scope or assigns a value.
+            aliases: Mutable current-scope aliases to invalidate or record.
+
+        Returns:
+            True when a specialized handler visited the statement; false when dispatch remains necessary.
+        """
         if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             self._visit_nested_scope(stmt, aliases)
             return True
@@ -189,6 +209,15 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         stmt: ast.stmt,
         aliases: set[str],
     ) -> bool:
+        """Handle conditional and loop or exception suites with branch-local aliases.
+
+        Args:
+            stmt: Statement to check for an if, loop, or try suite.
+            aliases: Mutable outer aliases from which branch state is copied and later invalidated.
+
+        Returns:
+            True when the statement was handled; false for unsupported statement shapes.
+        """
         if isinstance(stmt, ast.If):
             self._visit_if_statement(stmt, aliases)
             return True
@@ -202,33 +231,79 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         stmt: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
         aliases: set[str],
     ) -> None:
+        """Visit a nested definition without inheriting outer false-value aliases.
+
+        Args:
+            stmt: Function or class definition whose body starts a fresh alias scope.
+            aliases: Outer alias set from which the definition's bound name is removed.
+        """
         aliases.discard(stmt.name)
         self.visit(stmt)
 
     def _visit_assignment(self, stmt: ast.Assign, aliases: set[str]) -> None:
+        """Inspect an assigned value before recording its new false-value bindings.
+
+        Args:
+            stmt: Assignment whose value is visited before its targets change state.
+            aliases: Current alias set, mutated to reflect the assigned value.
+        """
         self._visit_with_aliases(stmt.value, aliases)
         self._record_assignment(stmt.targets, stmt.value, aliases)
 
     def _visit_annotated_assignment(self, stmt: ast.AnnAssign, aliases: set[str]) -> None:
+        """Inspect an annotated assignment and refresh its target's alias state.
+
+        Args:
+            stmt: Annotated assignment; an absent value still invalidates its target aliases.
+            aliases: Current alias set, mutated after any value is visited.
+        """
         if stmt.value is not None:
             self._visit_with_aliases(stmt.value, aliases)
         self._record_assignment([stmt.target], stmt.value, aliases)
 
     def _visit_augmented_assignment(self, stmt: ast.AugAssign, aliases: set[str]) -> None:
+        """Inspect an augmented value and invalidate aliases for its targets.
+
+        Args:
+            stmt: Augmented assignment whose value is inspected for calls.
+            aliases: Current alias set from which the assigned target names are removed.
+        """
         self._visit_with_aliases(stmt.value, aliases)
         aliases.difference_update(_target_names(stmt.target))
 
     def _visit_if_statement(self, stmt: ast.If, aliases: set[str]) -> None:
+        """Inspect an if test and isolate alias changes in each branch.
+
+        Each branch starts with a copy of the incoming aliases, so branch assignments do not establish outer aliases.
+
+        Args:
+            stmt: Conditional whose test, body, and alternative suite are visited.
+            aliases: Outer aliases; names assigned anywhere in the conditional are removed afterward.
+        """
         self._visit_with_aliases(stmt.test, aliases)
         self._visit_scope_body(stmt.body, set(aliases))
         self._visit_scope_body(stmt.orelse, set(aliases))
         aliases.difference_update(_assigned_names(stmt))
 
     def _visit_branching_scope_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        """Visit a loop or try statement and invalidate its outer assigned names.
+
+        Args:
+            stmt: Loop or try statement delegated to the branching visitor.
+            aliases: Outer alias set from which names assigned within the statement are removed.
+        """
         self._visit_branching_statement(stmt, aliases)
         aliases.difference_update(_assigned_names(stmt))
 
     def _visit_branching_statement(self, stmt: ast.stmt, aliases: set[str]) -> None:
+        """Inspect supported loop and exception suites using independent alias copies.
+
+        Loop iterables or tests are inspected before their suites; try bodies, handlers, alternatives, and finalizers each receive separate copies.
+
+        Args:
+            stmt: For, async-for, while, or try statement; other shapes receive no traversal here.
+            aliases: Initial aliases copied for each suite and used while inspecting loop expressions.
+        """
         if isinstance(stmt, ast.For | ast.AsyncFor):
             self._visit_with_aliases(stmt.iter, aliases)
             self._visit_scope_body(stmt.body, set(aliases))
@@ -247,6 +322,14 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
             self._visit_scope_body(stmt.finalbody, set(aliases))
 
     def _visit_with_aliases(self, node: ast.AST, aliases: set[str]) -> None:
+        """Visit a subtree with temporary alias state and restore the prior state.
+
+        The visitor's previous alias reference is restored in finally, including when traversal fails.
+
+        Args:
+            node: Syntax subtree to visit using the supplied aliases.
+            aliases: Alias set exposed to nested call checks during this visit.
+        """
         previous = self._false_aliases
         self._false_aliases = aliases
         try:
@@ -260,6 +343,15 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         value: ast.expr | None,
         aliases: set[str],
     ) -> None:
+        """Refresh target aliases from a directly assigned false-like constant.
+
+        False or zero-valued constants establish aliases; assigning another name does not propagate its alias state.
+
+        Args:
+            targets: Assignment targets from which plain or destructured names are collected.
+            value: Assigned expression; None or a value outside the false-constant check clears the names.
+            aliases: Mutable alias set receiving or losing the collected target names.
+        """
         assigned = {name for target in targets for name in _target_names(target)}
         if value is not None and is_false_constant(value):
             aliases.update(assigned)
@@ -272,6 +364,18 @@ def _ssl_verification_disabled_reason(
     call: ast.Call,
     false_aliases: set[str],
 ) -> tuple[str | None, str]:
+    """Label recognized TLS-related call syntax using the current false aliases.
+
+    Request calls accept a false-like literal or recorded alias; the other supported targets match by spelling alone.
+
+    Args:
+        target: Resolved call-target spelling to match against supported names.
+        call: Call whose verification keyword is inspected for supported request methods.
+        false_aliases: Names currently recorded from false-like assignments.
+
+    Returns:
+        Reason and source label for a match, or (None, an empty string) when no shape matches.
+    """
     if target.startswith("requests."):
         last = target.split(".")[-1]
         if last in _REQUESTS_METHODS:
@@ -300,6 +404,14 @@ class _SslFindingParts:
 
 
 def _finding(parts: _SslFindingParts) -> Finding:
+    """Build a TLS finding from the visitor's matched call details.
+
+    Args:
+        parts: Rule, unit, call location, target, reason, and source label collected for the match.
+
+    Returns:
+        Finding carrying the matched call span, TLS remediation, and derived metadata.
+    """
     definition = parts.definition
     return Finding(
         rule_id=definition.id,
@@ -318,6 +430,14 @@ def _finding(parts: _SslFindingParts) -> Finding:
 
 
 def _finding_metadata(parts: _SslFindingParts) -> dict[str, str]:
+    """Describe a TLS match for the finding metadata.
+
+    Args:
+        parts: Matched target and reason plus the rule and source label used for security metadata.
+
+    Returns:
+        New metadata dictionary containing the target, reason, and TLS source and sink classification.
+    """
     return {
         "target": parts.target,
         "reason": parts.reason,
@@ -330,6 +450,14 @@ def _finding_metadata(parts: _SslFindingParts) -> dict[str, str]:
 
 
 def _target_names(target: ast.expr) -> set[str]:
+    """Collect plain names from an assignment target or nested tuple or list.
+
+    Args:
+        target: Target expression to inspect recursively through tuple and list elements.
+
+    Returns:
+        Distinct bound names; an empty set for unsupported targets such as attributes.
+    """
     if isinstance(target, ast.Name):
         return {target.id}
     if isinstance(target, ast.Tuple | ast.List):
@@ -338,6 +466,14 @@ def _target_names(target: ast.expr) -> set[str]:
 
 
 def _assigned_names(node: ast.AST) -> set[str]:
+    """Collect bindings that invalidate aliases after a branching statement.
+
+    Args:
+        node: Statement subtree to inspect for stored names and nested definition bindings.
+
+    Returns:
+        Set of stored names and nested definition names, excluding bindings inside nested definition bodies.
+    """
     collector = _AssignedNameCollector()
     collector.visit(node)
     return collector.names

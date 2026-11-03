@@ -109,10 +109,7 @@ class StaticAnalysisRedundantTestRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.HIGH,
-            description=(
-                "Flags tests whose main assertion appears to verify only a static "
-                "source declaration visible in the same parsed file."
-            ),
+            description=("Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file."),
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -226,12 +223,26 @@ def _is_dynamic_class(node: ast.ClassDef) -> bool:
 
 
 def _is_star_import(stmt: ast.stmt) -> bool:
-    """Return whether a module statement is a star import."""
+    """Return whether a module statement is a star import.
+
+    Args:
+        stmt: Module-scope statement to check for an import-from wildcard.
+
+    Returns:
+        True for an import-from statement containing a wildcard alias; false for other statements.
+    """
     return isinstance(stmt, ast.ImportFrom) and any(alias.name == "*" for alias in stmt.names)
 
 
 def _module_bound_names(stmt: ast.stmt) -> set[str]:
-    """Return top-level names that make same-name class evidence ambiguous."""
+    """Return top-level names that make same-name class evidence ambiguous.
+
+    Args:
+        stmt: Statement visited in module execution scope whose bindings may shadow class evidence.
+
+    Returns:
+        Names bound or deleted by the supported statement shape; empty when it contributes no names.
+    """
     if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
         return {stmt.name}
     if isinstance(stmt, ast.Import | ast.ImportFrom):
@@ -247,6 +258,12 @@ def _match_capture_names(match: ast.Match) -> set[str]:
     A bare-name pattern such as ``case Widget:`` is a capture, not a value
     match: it rebinds ``Widget`` to the subject rather than comparing against
     the existing class, so the same-file class can no longer be trusted.
+
+    Args:
+        match: Match statement whose case patterns are inspected for capture bindings.
+
+    Returns:
+        Distinct names captured by the case patterns, including star and mapping-rest captures; empty when none are named.
     """
     names: set[str] = set()
     for case in match.cases:
@@ -258,7 +275,14 @@ def _match_capture_names(match: ast.Match) -> set[str]:
 
 
 def _capture_name(node: ast.AST) -> str | None:
-    """Return the name a structural-pattern node binds, or None when it binds nothing."""
+    """Return the name a structural-pattern node binds, or None when it binds nothing.
+
+    Args:
+        node: Pattern node to inspect for a named capture or mapping-rest binding.
+
+    Returns:
+        The captured name, or None for an unnamed capture or a node without a supported binding.
+    """
     if isinstance(node, ast.MatchAs | ast.MatchStar):
         return node.name
     if isinstance(node, ast.MatchMapping):
@@ -267,7 +291,14 @@ def _capture_name(node: ast.AST) -> str | None:
 
 
 def _statement_targets(stmt: ast.stmt) -> tuple[ast.expr, ...]:
-    """Return assignment/delete targets from a statement, or empty for other statements."""
+    """Return assignment/delete targets from a statement, or empty for other statements.
+
+    Args:
+        stmt: Statement whose assignment, augmented-assignment or deletion targets are needed.
+
+    Returns:
+        The original target nodes for supported assignments or deletions; an empty tuple for other statements.
+    """
     if isinstance(stmt, ast.Assign):
         return tuple(stmt.targets)
     if isinstance(stmt, ast.AnnAssign | ast.AugAssign):
@@ -278,7 +309,14 @@ def _statement_targets(stmt: ast.stmt) -> tuple[ast.expr, ...]:
 
 
 def _targets_bound_names(targets: tuple[ast.expr, ...]) -> set[str]:
-    """Return every name bound by a sequence of assignment/delete targets."""
+    """Return every name bound by a sequence of assignment/delete targets.
+
+    Args:
+        targets: Assignment or deletion target nodes whose stored/deleted names are combined.
+
+    Returns:
+        Distinct stored or deleted names found within the supplied targets; empty when none occur.
+    """
     bound: set[str] = set()
     for target in targets:
         bound.update(_bound_names(target))
@@ -307,7 +345,13 @@ def _class_decl(node: ast.ClassDef, *, prefix: str = "") -> _ClassDecl:
 
 
 def _collect_class_child(child: ast.stmt, parts: _ClassParts, qualified: str) -> None:
-    """Collect one class-body statement into *parts*."""
+    """Collect one class-body statement into *parts*.
+
+    Args:
+        child: Direct class-body statement to classify as a declaration, import or binding effect.
+        parts: Accumulator mutated with collected members, binding kinds and attribute-rebinding paths.
+        qualified: Qualified name of the containing class, used to prefix nested declarations.
+    """
     if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
         _collect_class_method(child, parts)
         return
@@ -327,7 +371,12 @@ def _collect_class_method(
     child: ast.FunctionDef | ast.AsyncFunctionDef,
     parts: _ClassParts,
 ) -> None:
-    """Collect a method declaration or descriptor accessor."""
+    """Collect a method declaration or descriptor accessor.
+
+    Args:
+        child: Direct method declaration whose decorator spellings determine descriptor treatment.
+        parts: Accumulator mutated with the binding kind and, for a non-descriptor method, its method name.
+    """
     is_descriptor = _is_descriptor_method(child)
     kind = "descriptor" if is_descriptor else "method"
     _record_binding(parts.binding_kinds, child.name, kind)
@@ -340,6 +389,11 @@ def _collect_nested_class(child: ast.ClassDef, parts: _ClassParts, qualified: st
 
     A decorator or metaclass on the nested class makes its runtime shape dynamic,
     so it is recorded as an ambiguous member rather than trusted evidence.
+
+    Args:
+        child: Direct nested class to collect, including its dynamic-class binding marker when applicable.
+        parts: Accumulator mutated with the nested declaration and its binding kinds.
+        qualified: Qualified name of the containing class, used as the nested declaration prefix.
     """
     _record_binding(parts.binding_kinds, child.name, "nested")
     if _is_dynamic_class(child):
@@ -348,13 +402,23 @@ def _collect_nested_class(child: ast.ClassDef, parts: _ClassParts, qualified: st
 
 
 def _collect_class_import(node: ast.Import | ast.ImportFrom, parts: _ClassParts) -> None:
-    """Collect names bound by a class-body import."""
+    """Collect names bound by a class-body import.
+
+    Args:
+        node: Class-body import whose locally bound names are recorded; wildcard imports contribute no names.
+        parts: Accumulator whose binding-kind sets are extended with import bindings.
+    """
     for name in _import_bound_names(node):
         _record_binding(parts.binding_kinds, name, "import")
 
 
 def _collect_class_statement_bindings(stmt: ast.stmt, parts: _ClassParts) -> None:
-    """Collect assignment/delete effects from a class-body statement."""
+    """Collect assignment/delete effects from a class-body statement.
+
+    Args:
+        stmt: Class-body statement to inspect for assignment/delete targets and binding kinds.
+        parts: Accumulator mutated with attribute names, binding kinds and dotted rebinding paths from supported targets.
+    """
     binding_kind = _class_name_binding_kind(stmt)
     for target in _statement_targets(stmt):
         if binding_kind is not None:
@@ -363,18 +427,17 @@ def _collect_class_statement_bindings(stmt: ast.stmt, parts: _ClassParts) -> Non
 
 
 def _is_compound_statement(stmt: ast.stmt) -> bool:
-    """Return whether a class-body statement has nested bodies the class scope runs."""
+    """Return whether a class-body statement has nested bodies the class scope runs.
+
+    Args:
+        stmt: Class-body statement to check against the supported compound-statement types.
+
+    Returns:
+        True for a supported conditional, loop, with, try or match statement; false for other statement types.
+    """
     return isinstance(
         stmt,
-        ast.If
-        | ast.For
-        | ast.AsyncFor
-        | ast.While
-        | ast.With
-        | ast.AsyncWith
-        | ast.Try
-        | ast.TryStar
-        | ast.Match,
+        ast.If | ast.For | ast.AsyncFor | ast.While | ast.With | ast.AsyncWith | ast.Try | ast.TryStar | ast.Match,
     )
 
 
@@ -388,6 +451,10 @@ def _record_conditional_class_bindings(stmt: ast.stmt, parts: _ClassParts) -> No
     binding is never added to the trusted method/attribute sets, and nested
     function and class scopes are not entered - their members are collected on
     their own. Mirrors the module-scope descent in ``_module_scope_statements``.
+
+    Args:
+        stmt: Compound class-body statement whose subtree is inspected without descending into nested scopes.
+        parts: Accumulator mutated with conditional binding markers and dotted attribute-rebinding paths.
     """
     for node in _walk_local_scope(stmt):
         for name in _conditional_bound_names(node):
@@ -397,7 +464,14 @@ def _record_conditional_class_bindings(stmt: ast.stmt, parts: _ClassParts) -> No
 
 
 def _conditional_bound_names(node: ast.AST) -> set[str]:
-    """Return names a single node binds inside a conditional class-body subtree."""
+    """Return names a single node binds inside a conditional class-body subtree.
+
+    Args:
+        node: One visited node in a conditional class-body subtree, rather than the whole subtree.
+
+    Returns:
+        Names bound or deleted by this node, including declaration, import, exception and pattern captures; empty otherwise.
+    """
     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del):
         return {node.id}
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
@@ -411,7 +485,14 @@ def _conditional_bound_names(node: ast.AST) -> set[str]:
 
 
 def _class_name_binding_kind(stmt: ast.stmt) -> str | None:
-    """Return the class-body binding kind for names in *stmt*."""
+    """Return the class-body binding kind for names in *stmt*.
+
+    Args:
+        stmt: Class-body statement whose assignment or deletion syntax is classified.
+
+    Returns:
+        The attribute kind for an assignment carrying a value, the deleted kind for a deletion, or None for other statements.
+    """
     if isinstance(stmt, ast.Assign | ast.AugAssign):
         return "attribute"
     if isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
@@ -422,7 +503,13 @@ def _class_name_binding_kind(stmt: ast.stmt) -> str | None:
 
 
 def _collect_class_name_bindings(target: ast.expr, kind: str, parts: _ClassParts) -> None:
-    """Collect names introduced or removed by one class-body target."""
+    """Collect names introduced or removed by one class-body target.
+
+    Args:
+        target: Assignment/delete target whose stored or deleted names are collected.
+        kind: Binding category to record; the attribute category also adds names to the attribute set.
+        parts: Accumulator mutated with binding kinds and any attribute evidence contributed by the target.
+    """
     for name in _bound_names(target):
         if kind == "attribute":
             parts.attributes.add(name)
@@ -430,17 +517,28 @@ def _collect_class_name_bindings(target: ast.expr, kind: str, parts: _ClassParts
 
 
 def _collect_attribute_rebinding_path(target: ast.expr, parts: _ClassParts) -> None:
-    """Remember dotted member writes/deletes for later ambiguity marking."""
+    """Remember dotted member writes/deletes for later ambiguity marking.
+
+    Args:
+        target: Assignment/delete target; only attribute chains rooted in a name are recorded.
+        parts: Accumulator whose rebinding-path list receives the dotted target when it has at least two components.
+    """
     path = _attribute_path(target)
     if len(path) >= 2:
         parts.attribute_rebinding_paths.append(path)
 
 
 def _class_decl_from_parts(qualified: str, parts: _ClassParts) -> _ClassDecl:
-    """Build an immutable class declaration from collected mutable parts."""
-    ambiguous_members = frozenset(
-        name for name, kinds in parts.binding_kinds.items() if len(kinds) > 1
-    )
+    """Build a class declaration from collected members and binding effects.
+
+    Args:
+        qualified: Qualified name to place on the resulting declaration.
+        parts: Collected member and binding data to read; its nested mapping is reused unless a rebinding requires a copied path.
+
+    Returns:
+        A frozen declaration with member-name snapshots and ambiguity markers, plus the retained or path-copied nested mapping.
+    """
+    ambiguous_members = frozenset(name for name, kinds in parts.binding_kinds.items() if len(kinds) > 1)
     decl = _ClassDecl(
         qualified,
         frozenset(parts.methods),
@@ -454,21 +552,37 @@ def _class_decl_from_parts(qualified: str, parts: _ClassParts) -> _ClassDecl:
 
 
 def _record_binding(bindings: dict[str, set[str]], name: str, kind: str) -> None:
-    """Record one class-body binding kind for ambiguity detection."""
+    """Record one class-body binding kind for ambiguity detection.
+
+    Args:
+        bindings: Mapping mutated by creating the name entry if needed and adding the binding category.
+        name: Local class-member name whose binding category is being recorded.
+        kind: Binding category added to the name's set for later ambiguity detection.
+    """
     bindings.setdefault(name, set()).add(kind)
 
 
 def _bound_names(target: ast.AST) -> set[str]:
-    """Return names rebound by an assignment/delete target."""
-    return {
-        node.id
-        for node in ast.walk(target)
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del)
-    }
+    """Return names rebound by an assignment/delete target.
+
+    Args:
+        target: Assignment/delete target subtree to inspect for names with Store or Del context.
+
+    Returns:
+        Distinct stored or deleted names in the target subtree; empty when it contains none.
+    """
+    return {node.id for node in ast.walk(target) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del)}
 
 
 def _import_bound_names(node: ast.Import | ast.ImportFrom) -> set[str]:
-    """Return local names bound by an import statement."""
+    """Return local names bound by an import statement.
+
+    Args:
+        node: Import statement whose aliases or imported names determine local bindings.
+
+    Returns:
+        Local import names, using the root name for unaliased ordinary imports; an empty set for wildcard import-from statements.
+    """
     if isinstance(node, ast.ImportFrom):
         if any(alias.name == "*" for alias in node.names):
             return set()
@@ -477,7 +591,14 @@ def _import_bound_names(node: ast.Import | ast.ImportFrom) -> set[str]:
 
 
 def _attribute_path(target: ast.AST) -> tuple[str, ...]:
-    """Return a dotted attribute assignment path such as ``Class.member``."""
+    """Return a dotted attribute assignment path such as ``Class.member``.
+
+    Args:
+        target: Name or attribute-chain target to decompose without evaluating its receiver.
+
+    Returns:
+        Name components from root to leaf, including a one-component bare name; empty when the chain has no named root.
+    """
     if isinstance(target, ast.Name):
         return (target.id,)
     if isinstance(target, ast.Attribute):
@@ -491,7 +612,13 @@ def _mark_attribute_rebinding(
     ambiguous: set[str],
     target: ast.AST,
 ) -> None:
-    """Mark ``Class.member`` assignment/delete targets as ambiguous evidence."""
+    """Mark ``Class.member`` assignment/delete targets as ambiguous evidence.
+
+    Args:
+        classes: Class table whose root declaration may be replaced with one carrying an ambiguous-member marker.
+        ambiguous: Root names excluded from trusted evidence; this set is consulted without mutation.
+        target: Assignment/delete target to resolve as a name-rooted member path in the class table.
+    """
     path = _attribute_path(target)
     if len(path) < 2 or path[0] in ambiguous:
         return
@@ -506,7 +633,16 @@ def _with_ambiguous_member(
     owner_path: tuple[str, ...],
     member: str,
 ) -> _ClassDecl:
-    """Return *decl* with a member marked ambiguous on the requested owner path."""
+    """Return *decl* with a member marked ambiguous on the requested owner path.
+
+    Args:
+        decl: Declaration to read without mutating its fields or nested mappings.
+        owner_path: Nested-class path locating the member owner; empty means the supplied declaration itself.
+        member: Member name to mark ambiguous on the resolved owner.
+
+    Returns:
+        The original declaration for an unavailable or already-marked path; otherwise a replacement with copied mappings along the changed path.
+    """
     if not owner_path:
         if member in decl.ambiguous_members:
             return decl
@@ -533,6 +669,12 @@ def _local_rebindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     any ``Class.member`` write or delete in the body (an in-test monkeypatch makes
     the member a runtime mutation, not a static declaration), alongside local name
     binds, nested defs/classes, and imports.
+
+    Args:
+        fn: Test function whose signature and body are inspected for supported local bindings and attribute writes.
+
+    Returns:
+        Names from the parameters and supported body bindings or attribute-write roots, without descending into nested scope bodies.
     """
     rebound: set[str] = _parameter_names(fn)
     for stmt in fn.body:
@@ -551,7 +693,14 @@ def _local_rebindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
 
 
 def _parameter_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-    """Return every parameter name bound by a test function's signature."""
+    """Return every parameter name bound by a test function's signature.
+
+    Args:
+        fn: Function whose positional, keyword-only and variadic parameter names are collected.
+
+    Returns:
+        All declared parameter names, including variadic names; an empty set for a parameterless function.
+    """
     args = fn.args
     names = {arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)}
     if args.vararg is not None:
@@ -562,7 +711,14 @@ def _parameter_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
 
 
 def _walk_local_scope(node: ast.AST) -> list[ast.AST]:
-    """Walk a function body statement without entering nested scopes."""
+    """Walk a function body statement without entering nested scopes.
+
+    Args:
+        node: Root node to include, visiting descendants except inside function, lambda and class boundaries.
+
+    Returns:
+        Nodes in preorder, including encountered scope-boundary nodes but none of their children.
+    """
     nodes = [node]
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
         return nodes
@@ -572,12 +728,26 @@ def _walk_local_scope(node: ast.AST) -> list[ast.AST]:
 
 
 def _is_descriptor_method(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a method is a property/descriptor accessor the rule defers."""
+    """Return whether a method is a property/descriptor accessor the rule defers.
+
+    Args:
+        node: Method whose decorator leaf spellings are checked against the configured descriptor names.
+
+    Returns:
+        True when a decorator leaf matches a recognized descriptor spelling; false otherwise, without resolving imports.
+    """
     return any(_decorator_leaf(dec) in _DESCRIPTOR_DECORATORS for dec in node.decorator_list)
 
 
 def _decorator_leaf(decorator: ast.expr) -> str | None:
-    """Return the trailing name of a decorator (``functools.cached_property`` -> ...)."""
+    """Return the trailing name of a decorator (``functools.cached_property`` -> ...).
+
+    Args:
+        decorator: Decorator expression whose terminal name is extracted after unwrapping calls.
+
+    Returns:
+        The bare name or final attribute component, or None when the expression has no supported name form.
+    """
     if isinstance(decorator, ast.Call):
         return _decorator_leaf(decorator.func)
     if isinstance(decorator, ast.Name):
@@ -636,12 +806,7 @@ def _match_assertion(
     """
     if isinstance(node, ast.Assert):
         return _candidate_for_shape(node.test, classes, ambiguous, local_shadows)
-    if (
-        isinstance(node, ast.Call)
-        and call_target_name(node) == "self.assertTrue"
-        and node.args
-        and not isinstance(node.args[0], ast.Starred)
-    ):
+    if isinstance(node, ast.Call) and call_target_name(node) == "self.assertTrue" and node.args and not isinstance(node.args[0], ast.Starred):
         return _candidate_for_shape(node.args[0], classes, ambiguous, local_shadows)
     return None
 
@@ -657,6 +822,15 @@ def _candidate_for_shape(
     Skips the assertion when the helper itself (``hasattr``/``callable``/the
     ``inspect`` module) is rebound in the test's local scope, since the call no
     longer resolves to the builtin or stdlib helper the rule reasons about.
+
+    Args:
+        expr: Asserted expression to dispatch only when it is a recognized call shape.
+        classes: Same-file class declarations used to resolve the candidate operand.
+        ambiguous: Names excluded from trusted class evidence because they are shadowed or rebound.
+        local_shadows: Local bindings used to reject an asserted call whose helper root is shadowed.
+
+    Returns:
+        The match from a supported shape recognizer, or None for an unsupported, shadowed or unresolved candidate.
     """
     if not isinstance(expr, ast.Call):
         return None
@@ -677,7 +851,16 @@ def _isclass_candidate(
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
 ) -> _ShapeMatch | None:
-    """Recognise ``inspect.isclass(LocalClass)`` over a same-file class."""
+    """Recognise ``inspect.isclass(LocalClass)`` over a same-file class.
+
+    Args:
+        call: Candidate call already identified as inspect.isclass, whose single plain argument is checked.
+        classes: Same-file declarations used to resolve a bare or nested-class operand.
+        ambiguous: Names excluded from trusted class evidence during operand resolution.
+
+    Returns:
+        A class-declaration match, or None when the arguments or class operand do not provide supported evidence.
+    """
     args = _plain_args(call, 1)
     if args is None:
         return None
@@ -697,7 +880,16 @@ def _hasattr_candidate(
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
 ) -> _ShapeMatch | None:
-    """Recognise ``hasattr(LocalClass, "member")`` over a declared method or attribute."""
+    """Recognise ``hasattr(LocalClass, "member")`` over a declared method or attribute.
+
+    Args:
+        call: Candidate hasattr call checked for two plain arguments and a literal member name.
+        classes: Same-file declarations used to resolve the class operand.
+        ambiguous: Names excluded from trusted class evidence during operand resolution.
+
+    Returns:
+        A declared public method or attribute match, or None for unsupported arguments, unresolved classes or ineligible members.
+    """
     args = _plain_args(call, 2)
     if args is None:
         return None
@@ -726,7 +918,16 @@ def _callable_candidate(
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
 ) -> _ShapeMatch | None:
-    """Recognise ``callable(getattr(C, "m"))`` and ``callable(C.m)`` over a declared method."""
+    """Recognise ``callable(getattr(C, "m"))`` and ``callable(C.m)`` over a declared method.
+
+    Args:
+        call: Candidate callable call checked for one plain getattr call or attribute-access argument.
+        classes: Same-file declarations used to resolve the inner class operand.
+        ambiguous: Names excluded from trusted class evidence during operand resolution.
+
+    Returns:
+        A declared-method match from the supported inner shape, or None when that shape or its evidence is ineligible.
+    """
     args = _plain_args(call, 1)
     if args is None:
         return None
@@ -744,7 +945,17 @@ def _callable_method_match(
     ambiguous: set[str],
     variant: str,
 ) -> _ShapeMatch | None:
-    """Resolve ``getattr(LocalClass, "member")`` to a declared method, or None."""
+    """Resolve ``getattr(LocalClass, "member")`` to a declared method, or None.
+
+    Args:
+        getattr_call: Inner getattr call checked for two plain arguments, including a literal member name.
+        classes: Same-file declarations used to resolve the class operand.
+        ambiguous: Names excluded from trusted class evidence during operand resolution.
+        variant: Variant identifier to carry unchanged in the returned match.
+
+    Returns:
+        A match for a declared public, unambiguous method; None for unsupported arguments, unresolved classes or other members.
+    """
     args = _plain_args(getattr_call, 2)
     if args is None:
         return None
@@ -763,7 +974,16 @@ def _callable_attribute_match(
     classes: dict[str, _ClassDecl],
     ambiguous: set[str],
 ) -> _ShapeMatch | None:
-    """Resolve ``LocalClass.member`` to a declared method, or None for non-methods."""
+    """Resolve ``LocalClass.member`` to a declared method, or None for non-methods.
+
+    Args:
+        attribute: Attribute access whose receiver is resolved as a same-file class and whose leaf names the method.
+        classes: Same-file declarations used to resolve the receiver.
+        ambiguous: Names excluded from trusted class evidence during receiver resolution.
+
+    Returns:
+        A callable-attribute match for a declared public, unambiguous method, or None when that evidence is unavailable.
+    """
     decl = _resolve_class(attribute.value, classes, ambiguous)
     if decl is None or _member_kind(decl, attribute.attr) != "method":
         return None
@@ -813,14 +1033,28 @@ def _plain_args(call: ast.Call, count: int) -> list[ast.expr] | None:
 
 
 def _string_value(node: ast.expr) -> str | None:
-    """Return the value of a plain string-literal node, or None for anything dynamic."""
+    """Return the value of a plain string-literal node, or None for anything dynamic.
+
+    Args:
+        node: Argument expression to accept only when it is a string-valued Constant node.
+
+    Returns:
+        The literal string value, including an empty string, or None for other expression forms or constant types.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return None
 
 
 def _method_fact(evidence: str) -> str:
-    """Render the static fact sentence for a declared-method assertion."""
+    """Render the static fact sentence for a declared-method assertion.
+
+    Args:
+        evidence: Qualified method name inserted into the fact sentence; the caller has already selected its declaration evidence.
+
+    Returns:
+        A sentence stating that the named method is declared in the same parsed file.
+    """
     return f"method {evidence}() is declared in the same parsed file"
 
 
@@ -847,8 +1081,7 @@ def _finding(
     return Finding(
         rule_id=definition.id,
         message=(
-            f"{symbol} contains a static-analysis-redundant candidate: "
-            f"{match.helper} asserts {match.evidence_symbol}, but {match.static_fact}."
+            f"{symbol} contains a static-analysis-redundant candidate: {match.helper} asserts {match.evidence_symbol}, but {match.static_fact}."
         ),
         file_path=unit.file.display_path,
         line=getattr(node, "lineno", None),
@@ -858,10 +1091,7 @@ def _finding(
         confidence=definition.confidence,
         end_line=getattr(node, "end_lineno", None),
         symbol=symbol,
-        remediation=(
-            "Remove only the redundant assertion, or replace it with behavioral "
-            "evidence that static analysis cannot prove."
-        ),
+        remediation=("Remove only the redundant assertion, or replace it with behavioral evidence that static analysis cannot prove."),
         secondary_pillars=definition.secondary_pillars,
         metadata={
             "variant": match.variant,

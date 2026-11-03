@@ -65,6 +65,15 @@ def main() -> None:
 
 
 def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit at display_path.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit; defaults to ``users.py``.
+
+    Returns:
+        A unit at display_path whose AST nodes carry parent links.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -81,6 +90,11 @@ def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
 
 
 def _default_ctx() -> RuleContext:
+    """Build a rule context that enables every registered rule with its default thresholds, options and severity threshold.
+
+    Returns:
+        A context whose config holds those settings for every registered rule.
+    """
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
     for rule in registry.all():
@@ -89,26 +103,19 @@ def _default_ctx() -> RuleContext:
             enabled=True,
             thresholds=dict(d.default_thresholds),
             options=dict(d.default_options),
-            severity_threshold=(
-                SeverityThreshold(d.default_threshold, d.default_severity)
-                if d.default_threshold is not None
-                else None
-            ),
+            severity_threshold=(SeverityThreshold(d.default_threshold, d.default_severity) if d.default_threshold is not None else None),
         )
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
 def test_registry_includes_all_naming_rules():
+    """Register the five naming rules in the default registry."""
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
         "naming.abbreviation",
-        "naming.boolean-prefix",
-        "naming.confusing-name",
         "naming.generic-function",
-        "naming.hungarian-notation",
         "naming.identifier-quality",
-        "naming.module-name-mismatch",
         "naming.short-variable",
         "naming.test-naming-consistency",
     }
@@ -116,10 +123,7 @@ def test_registry_includes_all_naming_rules():
 
 
 _EXPECTED_NAMING_RULE_IDS_FIRED = {
-    "naming.confusing-name",
-    "naming.hungarian-notation",
     "naming.generic-function",
-    "naming.boolean-prefix",
     "naming.abbreviation",
     "naming.identifier-quality",
     "naming.short-variable",
@@ -127,31 +131,14 @@ _EXPECTED_NAMING_RULE_IDS_FIRED = {
 
 
 def test_naming_rules_fire_on_fixture():
-    """Expose every naming rule and the Boolean shape a user must act on."""
+    """Expose the surviving naming rules on the existing mixed fixture."""
     findings = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), (
-        f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
-    )
-    # The fixture has one scalar Boolean return whose shape explains the rename.
-    boolean_findings = [
-        finding for finding in findings if finding.rule_id == "naming.boolean-prefix"
-    ]
-    assert len(boolean_findings) == 1
-    assert boolean_findings[0].metadata["annotationShape"] == "bool"
-
-
-def test_module_name_mismatch_fires_when_filename_wrong():
-    # Single-class module named users.py with class UserService
-    findings = RuleRegistry.defaults().analyse(
-        [_unit("class UserService:\n    pass\n", display_path="users.py")],
-        _default_ctx(),
-    )
-    mismatch = [f for f in findings if f.rule_id == "naming.module-name-mismatch"]
-    assert len(mismatch) == 1
+    assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
 
 
 def test_module_name_mismatch_silent_when_filename_matches():
+    """Report no module-name mismatch for ``UserService`` in ``user_service.py``."""
     findings = RuleRegistry.defaults().analyse(
         [_unit("class UserService:\n    pass\n", display_path="user_service.py")],
         _default_ctx(),

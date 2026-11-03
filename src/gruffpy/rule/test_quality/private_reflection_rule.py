@@ -89,10 +89,7 @@ class PrivateReflectionRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Test through the public API. If the private behaviour is "
-                            "load-bearing, extract it into a public helper."
-                        ),
+                        remediation=("Test through the public API. If the private behaviour is load-bearing, extract it into a public helper."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"attribute": node.attr},
                     ),
@@ -102,6 +99,14 @@ class PrivateReflectionRule(Rule):
 
 
 def _is_private_name(name: str) -> bool:
+    """Identify leading-underscore names while excluding double-ended dunder names.
+
+    Args:
+        name: Attribute spelling checked against the rule's private-name convention.
+
+    Returns:
+        True for a leading underscore unless the name both starts and ends with double underscores; false otherwise.
+    """
     if name.startswith("__") and name.endswith("__"):
         return False  # dunder = framework hook, not private
     return name.startswith("_")

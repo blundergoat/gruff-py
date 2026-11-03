@@ -46,6 +46,7 @@ class HeaderInjectionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -67,21 +68,32 @@ class HeaderInjectionRule(Rule):
         if not (frameworks_in_use(unit.tree) & _FRAMEWORK_GATE):
             return []
         definition = self.definition()
-        return [
-            _header_injection_finding(unit, definition, node)
-            for node in _dynamic_header_assignments(unit.tree)
-        ]
+        return [_header_injection_finding(unit, definition, node) for node in _dynamic_header_assignments(unit.tree)]
 
 
 def _dynamic_header_assignments(tree: ast.AST) -> list[ast.Assign]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign) and any(_is_dynamic_header_target(t) for t in node.targets)
-    ]
+    """Collect assignments with at least one dynamic header-key target.
+
+    Args:
+        tree: Syntax subtree searched after the caller applies its framework gate.
+
+    Returns:
+        Matching plain assignment nodes in AST traversal order; empty when no target matches.
+    """
+    return [node for node in ast.walk(tree) if isinstance(node, ast.Assign) and any(_is_dynamic_header_target(t) for t in node.targets)]
 
 
 def _is_dynamic_header_target(target: ast.expr) -> bool:
+    """Recognize a non-string-literal subscript key on an attribute named headers.
+
+    The check concerns the key's syntax and does not establish the receiver's type or the assigned value's origin.
+
+    Args:
+        target: Assignment target whose attribute name and subscript key are inspected.
+
+    Returns:
+        True for the matching target with a non-string-literal key; false otherwise.
+    """
     if not isinstance(target, ast.Subscript):
         return False
     value = target.value
@@ -95,6 +107,16 @@ def _header_injection_finding(
     definition: RuleDefinition,
     node: ast.Assign,
 ) -> Finding:
+    """Build the finding for a dynamic header-key assignment.
+
+    Args:
+        unit: Analysis unit providing the displayed file path.
+        definition: Rule identity, severity, and classification to copy into the finding.
+        node: Matched assignment supplying the finding's source span.
+
+    Returns:
+        Finding at the assignment location with the rule classification and header-key remediation.
+    """
     return Finding(
         rule_id=definition.id,
         message="Response header key is dynamic - header injection risk.",
@@ -105,10 +127,7 @@ def _header_injection_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=node.end_lineno,
-        remediation=(
-            "Use literal header names. If a runtime-chosen name is "
-            "essential, validate against an explicit allowlist."
-        ),
+        remediation=("Use literal header names. If a runtime-chosen name is essential, validate against an explicit allowlist."),
         secondary_pillars=definition.secondary_pillars,
         metadata={},
     )

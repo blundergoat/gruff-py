@@ -96,4 +96,12 @@ class EmptyParametrizeRule(Rule):
 
 
 def _is_empty_sequence(node: ast.AST) -> bool:
+    """Recognize empty list or tuple literals used as parametrized case tables.
+
+    Args:
+        node: Case expression supplied to a parametrization decorator.
+
+    Returns:
+        True only for an empty list or tuple literal; false for other expressions.
+    """
     return isinstance(node, ast.List | ast.Tuple) and len(node.elts) == 0

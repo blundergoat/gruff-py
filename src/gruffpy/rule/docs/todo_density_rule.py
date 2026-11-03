@@ -86,9 +86,7 @@ class TodoDensityRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 end_line=line_count,
-                remediation=(
-                    "Triage outstanding TODOs into tracked issues, or fix and remove them inline."
-                ),
+                remediation=("Triage outstanding TODOs into tracked issues, or fix and remove them inline."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "markers": marker_count,
@@ -104,5 +102,18 @@ class TodoDensityRule(Rule):
 
 
 def _is_rule_definition_file(display_path: str) -> bool:
+    """Report whether a display path ends with the TODO density or commented-out code rule module path.
+
+    Backslashes are converted to forward slashes before a plain string suffix match against _RULE_DEFINITION_FILE_SUFFIXES. Because the match does not
+    check for a directory boundary, any path ending in gruffpy/rule/docs/todo_density_rule.py or gruffpy/rule/waste/commented_out_code_rule.py
+    matches, whatever text comes before that suffix.
+
+    Args:
+        display_path: Display path of the scanned file, taken from unit.file.display_path; Windows-style backslash separators are accepted.
+
+    Returns:
+        True when the normalized path ends with one of the two rule-module suffixes, in which case analyse returns no findings for the file; False
+        otherwise.
+    """
     normalized = display_path.replace("\\", "/").removeprefix("./")
     return any(normalized.endswith(suffix) for suffix in _RULE_DEFINITION_FILE_SUFFIXES)

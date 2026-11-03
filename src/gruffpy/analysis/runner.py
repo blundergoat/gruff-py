@@ -1,18 +1,28 @@
-"""End-to-end pipeline (`run_analysis`) shared by `gruff-py analyse` and dashboard scans."""
+"""Run the analysis pipeline shared by ``gruff-py analyse`` and dashboard scans.
 
+The pipeline turns a user's paths and options into deterministic findings, diagnostics, scores,
+and exit status. Reporters receive one complete result without reapplying config or suppression.
+"""
+
+import ast
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import (
+    BaselineCollision,
     BaselineError,
     BaselineOptions,
     BaselineReport,
     apply_baseline,
     default_baseline_path,
     generate_baseline,
+    migrate_baseline,
+    require_overwritable_default_path,
 )
 from gruffpy.analysis.changed_region import (
+    CHANGED_REGION_DIAGNOSTIC_TYPE,
     ChangedRegionSet,
     changed_regions_from_git,
     filter_findings_for_changed_regions,
@@ -20,16 +30,20 @@ from gruffpy.analysis.changed_region import (
     parse_explicit_ranges,
     parse_unified_diff,
 )
-from gruffpy.analysis.report import AnalysisReport, ReportExtensions
+from gruffpy.analysis.report import AnalysisReport, MachineReportContext, ReportExtensions
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
-from gruffpy.config.analysis_config import AnalysisConfig
+from gruffpy.analysis.suppression_summary import SuppressedFinding, SuppressionSummary
+from gruffpy.config.analysis_config import AnalysisConfig, DeepScanBudget
+from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
+from gruffpy.finding.baseline_identity import declaration_position_from_spans, declaration_spans, finding_identities
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.finding import Finding
-from gruffpy.finding.pillar import Pillar
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.parser.python_parser import PythonFileParser
+from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 from gruffpy.rule.context import RuleContext
+from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnreferencedRule
 from gruffpy.rule.project_rule import ProjectRuleProtocol
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.scoring.score_calculator import ScoreCalculator
@@ -37,17 +51,24 @@ from gruffpy.scoring.score_report import ScoreReport
 from gruffpy.source.discovery import SourceDiscovery, SourceDiscoveryResult
 from gruffpy.source.source_file import SourceFile
 from gruffpy.suppression.filter import apply_suppressions
+from gruffpy.suppression.inline_suppression_filter import apply_inline_suppressions
 from gruffpy.suppression.parser import ParsedSuppressions, parse_suppressions
+from gruffpy.suppression.sensitive_exclusion_filter import (
+    apply_built_in_test_path_skip,
+    partition_sensitive_exclusions,
+)
 from gruffpy.version import VERSION
 
-_PARTIAL_PROJECT_CONTEXT_CAVEAT = (
-    "partial project scan: project-wide rules may need full-project context"
-)
+_PARTIAL_PROJECT_CONTEXT_CAVEAT = "partial project scan: project-wide rules may need full-project context"
 
 
 @dataclass(frozen=True, slots=True)
 class _ReportAssembly:
-    """Values needed to project a completed pipeline run into an analysis report."""
+    """Hold the completed scan state used to build one user-facing report.
+
+    This keeps report rendering separate from discovery, analysis, and filtering.
+    CLI and dashboard consumers receive the same assembled view.
+    """
 
     request: AnalysisRunRequest
     config: AnalysisConfig
@@ -56,15 +77,35 @@ class _ReportAssembly:
     discovery_result: SourceDiscoveryResult
     files_parsed: int
     diagnostics: list[RunDiagnostic]
+    summary_findings: list[Finding]
     display_findings: list[Finding]
     exit_code: int
     score: ScoreReport
+    display_filter: FindingDisplayFilter
     hidden_by_display_filter: int
     partial_context_caveat: str | None
     baseline_report: BaselineReport | None
     changed: ChangedRegionSet
     changed_suppressed_count: int
     config_warnings: tuple[str, ...]
+    suppressions: tuple[SuppressionSummary, ...]
+    suppressed_findings: tuple[SuppressedFinding, ...]
+
+
+def _evaluated_file_count(units: list[AnalysisUnit]) -> int:
+    """Count the Python files this run evaluated - the ratified scoring denominator.
+
+    Deliberately narrower than ``files_parsed``, which also counts the text inputs the raw-text
+    rules read: a README is scanned but carries no Python to score, so including it would divide
+    real findings by files no Python rule ever evaluated.
+
+    Args:
+        units: Parsed analysis units for the run, including any that failed to parse.
+
+    Returns:
+        Python files that parsed successfully; zero means nothing was evaluated.
+    """
+    return sum(1 for unit in units if not unit.has_parse_errors() and unit.file.is_python())
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
@@ -76,7 +117,6 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     Returns:
         Fully-populated report ready to be handed to a reporter.
     """
-    baseline_options = request.baseline if request.baseline is not None else BaselineOptions()
     registry = RuleRegistry.defaults()
     config, config_loaded_from, diagnostics, config_warnings = _load_analysis_config(
         project_root=request.project_root,
@@ -86,6 +126,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         strict_config=request.strict_config,
     )
     config, fail_threshold = _resolve_threshold_and_exclusions(request, config)
+    config = _apply_deep_scan_budget_override(config, request.deep_scan_budget)
 
     (
         discovery_result,
@@ -108,26 +149,22 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
     diagnostics.extend(parse_diagnostics)
 
     scan_scope = _resolve_scan_scope(request, changed)
-    context = RuleContext(
-        project_root=str(request.project_root),
-        config=config,
-        scan_scope=scan_scope,
-    )
-    suppressions_by_file = _parse_suppressions(units, registry)
-    diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
-    findings = _collect_findings(
+    findings, suppressions, suppressed_findings = _name_findings(
         registry=registry,
         units=units,
-        context=context,
         config=config,
-        suppressions_by_file=suppressions_by_file,
+        project_root=request.project_root,
+        scan_scope=scan_scope,
+        diagnostics=diagnostics,
+        reference_trees=_reference_only_trees(request, config, registry, scan_scope, discovery_result),
     )
     baseline_report = _handle_baseline(
         project_root=request.project_root,
         findings=findings,
         diagnostics=diagnostics,
-        options=baseline_options,
+        options=request.baseline if request.baseline is not None else BaselineOptions(),
         scan_scope=scan_scope,
+        units=units,
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
@@ -136,10 +173,15 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         request.changed_scope,
     )
     findings = changed_filter_result.findings
-    score = ScoreCalculator().calculate(findings, diff_active=changed.active)
+    # A scope the run could not read leaves nothing scoped to report. Publishing the unscoped findings beside
+    # the diagnostic would read as a successful narrow scan at a scope the run never applied.
+    if any(diagnostic.type == CHANGED_REGION_DIAGNOSTIC_TYPE for diagnostic in diagnostics):
+        findings = []
+    score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
 
     exit_code = compute_exit_code(findings, diagnostics, fail_threshold)
-    display_findings = request.display_filter.filter_findings(findings)
+    display_filter = request.display_filter.with_configured_floor(config.display_floor)
+    display_findings = display_filter.filter_findings(findings)
     hidden_by_display_filter = len(findings) - len(display_findings)
     partial_context_caveat = _partial_project_context_caveat(registry, config, scan_scope)
 
@@ -152,20 +194,89 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
             discovery_result=discovery_result,
             files_parsed=files_parsed,
             diagnostics=diagnostics,
+            summary_findings=findings,
             display_findings=display_findings,
             exit_code=exit_code,
             score=score,
+            display_filter=display_filter,
             hidden_by_display_filter=hidden_by_display_filter,
             partial_context_caveat=partial_context_caveat,
             baseline_report=baseline_report,
             changed=changed,
             changed_suppressed_count=changed_filter_result.suppressed_count,
             config_warnings=config_warnings,
+            suppressions=suppressions,
+            suppressed_findings=suppressed_findings,
         )
     )
 
 
+def _name_findings(
+    *,
+    registry: RuleRegistry,
+    units: list[AnalysisUnit],
+    config: AnalysisConfig,
+    project_root: Path,
+    scan_scope: str,
+    diagnostics: list[RunDiagnostic],
+    reference_trees: tuple[ast.Module, ...] = (),
+) -> tuple[list[Finding], tuple[SuppressionSummary, ...], tuple[SuppressedFinding, ...]]:
+    """Run the rules over the parsed units and name every finding before anything filters it.
+
+    Args:
+        registry: Rule registry whose enabled rules run.
+        units: Parsed source units in scan order.
+        config: Effective analysis configuration, including sensitive-data exclusions.
+        project_root: Project root the rule context reports paths against.
+        scan_scope: Resolved scope label the rule context carries.
+        diagnostics: Run diagnostics; inline-suppression diagnostics are appended in place.
+        reference_trees: Modules the configured ignore globs keep out of the report, which project rules may
+            read references from; empty means none apply.
+
+    Returns:
+        Tuple ``(findings, suppressions, removed)``: findings surviving gruff's own directives, reviewed
+        exclusions, the test-path skip and section 13c, each with its baseline identity; audit rows in order;
+        and the findings section 13c removed, with their audit reasons.
+    """
+    context = RuleContext(
+        project_root=str(project_root),
+        config=config,
+        scan_scope=scan_scope,
+        reference_trees=reference_trees,
+    )
+    suppressions_by_file = _parse_suppressions(units, registry)
+    diagnostics.extend(_suppression_diagnostics(suppressions_by_file))
+    findings = _collect_findings(
+        registry=registry,
+        units=units,
+        context=context,
+        suppressions_by_file=suppressions_by_file,
+    )
+    # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
+    # exactly like the inline directive channel, and every drop is counted for the report.
+    findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
+    # A configured entry claims its findings first, so its count stays what the user wrote it for.
+    findings, suppressions = apply_built_in_test_path_skip(findings, suppressions)
+    # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
+    # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
+    findings = _with_baseline_identities(findings, units)
+    # Another tool's comment and a repeated claim are judged on named findings, so a suppressed result keeps its
+    # identity in SARIF and the findings left keep the ordinals they had without the comment (section 13c).
+    sources = {unit.file.display_path: unit.source for unit in units}
+    return apply_inline_suppressions(findings, suppressions, sources)
+
+
 def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
+    """Project completed scan state into the report consumed by CLI and dashboard users.
+
+    Args:
+        assembly: Completed scan state for one run; its display findings become the report findings, while its summary findings travel in the machine
+            context.
+
+    Returns:
+        Report ready for a reporter, with requested paths defaulting to the project root when none were given and the diff extension and suppressed
+        count present only when changed-region filtering is active.
+    """
     return AnalysisReport(
         tool_version=VERSION,
         requested_paths=tuple(assembly.request.paths) if assembly.request.paths else (".",),
@@ -181,7 +292,8 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         exit_code=assembly.exit_code,
         config_path=assembly.config_loaded_from,
         score=assembly.score,
-        filters=assembly.request.display_filter,
+        # The effective filter, so a configured minimumSeverity floor is reported exactly as the flag is.
+        filters=assembly.display_filter,
         hidden_by_display_filter=assembly.hidden_by_display_filter,
         partial_context_caveat=assembly.partial_context_caveat,
         extensions=ReportExtensions(
@@ -191,6 +303,13 @@ def _build_report(assembly: _ReportAssembly) -> AnalysisReport:
         output_volume_hint_threshold=assembly.config.output_volume_hint_threshold,
         suppressed_count=(assembly.changed_suppressed_count if assembly.changed.active else None),
         config_warnings=assembly.config_warnings,
+        suppressions=assembly.suppressions,
+        suppressed_findings=assembly.suppressed_findings,
+        machine_context=MachineReportContext(
+            project_root=str(assembly.request.project_root),
+            include_ignored=assembly.request.include_ignored,
+            summary_findings=tuple(assembly.summary_findings),
+        ),
     )
 
 
@@ -213,8 +332,7 @@ def _resolve_threshold_and_exclusions(
         configured = config.minimum_severity.get(request.config_severity_command)
         if configured is not None:
             fail_threshold = configured
-    if request.execution_exclude_rules:
-        config = _with_execution_exclude_rules(config, request.execution_exclude_rules)
+    config = _with_execution_selectors(config, request)
     return config, fail_threshold
 
 
@@ -223,6 +341,16 @@ def _partial_project_context_caveat(
     config: AnalysisConfig,
     scan_scope: str,
 ) -> str | None:
+    """Return the caveat users need when project-wide rules receive only part of a project.
+
+    Args:
+        registry: Rule registry whose enabled rules are checked for project-wide rules.
+        config: Effective analysis configuration that decides which rules are enabled.
+        scan_scope: Resolved scope label; a full-project scan never needs the caveat.
+
+    Returns:
+        The partial project scan caveat text when the scan is partial and at least one enabled rule is project-wide; None otherwise.
+    """
     if scan_scope == "full-project":
         return None
     if any(isinstance(rule, ProjectRuleProtocol) for rule in registry.enabled_rules(config)):
@@ -230,13 +358,44 @@ def _partial_project_context_caveat(
     return None
 
 
-def _with_execution_exclude_rules(
-    config: AnalysisConfig,
-    exclude_rules: tuple[str, ...],
-) -> AnalysisConfig:
+def _with_execution_selectors(config: AnalysisConfig, request: AnalysisRunRequest) -> AnalysisConfig:
+    """Merge the command's execution selectors into the config this run executes.
+
+    These choose which rules run, so the score and any generated baseline move
+    with them. The presentation filters live on the display filter and never
+    reach here, which is what keeps the two ideas apart.
+
+    Args:
+        config: Config resolved from the project file.
+        request: The user's run request, carrying any selectors they typed.
+
+    Returns:
+        The config narrowed to what the user asked to run.
+    """
     selection = config.rule_selection
-    merged = tuple(dict.fromkeys((*selection.exclude_rules, *exclude_rules)))
-    return config.with_rule_selection(replace(selection, exclude_rules=merged))
+    excluded = tuple(dict.fromkeys((*selection.exclude_rules, *request.execution_exclude_rules)))
+    included = tuple(dict.fromkeys((*selection.rules, *request.execution_include_rules)))
+    included_pillars = tuple(dict.fromkeys((*selection.pillars, *request.execution_include_pillars)))
+    excluded_pillars = tuple(dict.fromkeys((*selection.exclude_pillars, *request.execution_exclude_pillars)))
+
+    # An unrestricted run keeps the configured selection rather than rebuilding an identical one.
+    if (excluded, included, included_pillars, excluded_pillars) == (
+        selection.exclude_rules,
+        selection.rules,
+        selection.pillars,
+        selection.exclude_pillars,
+    ):
+        return config
+
+    return config.with_rule_selection(
+        replace(
+            selection,
+            exclude_rules=excluded,
+            rules=included,
+            pillars=included_pillars,
+            exclude_pillars=excluded_pillars,
+        )
+    )
 
 
 def _discover_and_parse_sources(
@@ -245,7 +404,7 @@ def _discover_and_parse_sources(
     paths: tuple[str, ...],
     include_ignored: bool,
     config: AnalysisConfig,
-    changed_ranges: str,
+    changed_ranges: str | None,
     since: str,
     diff_mode: str,
     diff_patch: str,
@@ -257,6 +416,27 @@ def _discover_and_parse_sources(
     list[RunDiagnostic],
     ChangedRegionSet,
 ]:
+    """Discover requested files, narrow diff scans, and parse sources for rule execution.
+
+    Args:
+        project_root: Project root that discovery and Git diff resolution run against.
+        paths: Paths the user asked to scan, also used to limit a Git diff.
+        include_ignored: When true, discovery also returns gitignored and default-excluded paths; configured ignore globs and VCS directories still
+            apply.
+        config: Effective configuration supplying the configured ignore globs and the deep-scan budget the parser applies.
+        changed_ranges: Explicit changed-ranges value; None when not given. When set, discovered files are not narrowed here because findings are
+            filtered later.
+        since: Git ref from the since option; empty when not given.
+        diff_mode: Diff option value: a dash means diff_patch holds the patch read from standard input, any other non-empty value is a Git selector,
+            and empty means no diff mode.
+        diff_patch: Unified diff text already read for the run; empty when none was supplied.
+        diagnostics: Run diagnostics; a changed-region resolution failure is appended in place.
+
+    Returns:
+        Tuple (discovery_result, units, files_parsed, parse_diagnostics, changed): the discovery result, narrowed to changed files for diff and since
+        runs; one parsed unit per discovered file; the count of files that parsed without errors; parser diagnostics for the caller to append; and the
+        changed-region set, inactive when no changed-region option applied or it could not be resolved.
+    """
     discovery = SourceDiscovery(project_root)
     discovery_result = discovery.discover(
         list(paths),
@@ -273,12 +453,15 @@ def _discover_and_parse_sources(
         diff_patch=diff_patch,
         diagnostics=diagnostics,
     )
-    if changed.active and not changed_ranges:
+    if changed.active and changed_ranges is None:
         discovery_result = replace(
             discovery_result,
             files=filter_sources_for_changed_regions(discovery_result.files, changed),
         )
-    units, files_parsed, parse_diagnostics = _parse_sources(discovery_result.files)
+    units, files_parsed, parse_diagnostics = _parse_sources(
+        discovery_result.files,
+        config.deep_scan_budget,
+    )
     return discovery_result, units, files_parsed, parse_diagnostics, changed
 
 
@@ -287,14 +470,34 @@ def _resolve_changed_regions(
     project_root: Path,
     paths: tuple[str, ...],
     source_paths: tuple[str, ...],
-    changed_ranges: str,
+    changed_ranges: str | None,
     since: str,
     diff_mode: str,
     diff_patch: str,
     diagnostics: list[RunDiagnostic],
 ) -> ChangedRegionSet:
+    """Resolve the user's explicit ranges, patch, or Git selector into changed source regions.
+
+    Args:
+        project_root: Project root that the since ref and Git diff selectors are resolved in, passed to git -C.
+        paths: Requested paths that limit a Git diff.
+        source_paths: Display paths of the discovered files; explicit ranges apply to each of them.
+        changed_ranges: Explicit changed-ranges value; None when not given, while a given but empty value is refused by the parser and becomes a
+            diagnostic.
+        since: Git ref from the since option; empty when not given.
+        diff_mode: Diff option value: a dash parses diff_patch as standard input, any other non-empty value is a Git selector, and empty means no diff
+            mode.
+        diff_patch: Unified diff text read for the run; parsed as the patch whenever it is non-empty and no explicit ranges were given, even without a
+            dash.
+        diagnostics: Run diagnostics; a ValueError from parsing or Git resolution is appended in place as a changed-region diagnostic.
+
+    Returns:
+        Changed-region set from the first option that applies, checked in the order explicit ranges, a dash diff mode, non-empty patch text, the since
+        ref, then a diff selector; an empty, inactive set when no option was given or resolution failed.
+    """
     try:
-        if changed_ranges:
+        # A given-but-empty value reaches the parser, which refuses it: the caller scoped the run to nothing.
+        if changed_ranges is not None:
             return parse_explicit_ranges(source_paths, changed_ranges)
         if diff_mode == "-":
             return parse_unified_diff("stdin", diff_patch)
@@ -304,8 +507,10 @@ def _resolve_changed_regions(
             return changed_regions_from_git(project_root, since, paths)
         if diff_mode:
             return changed_regions_from_git(project_root, diff_mode, paths)
+    # For example, a malformed ``--changed-ranges`` value becomes a CLI diagnostic rather than
+    # a traceback.
     except ValueError as exc:
-        diagnostics.append(RunDiagnostic(type="diff-error", message=str(exc)))
+        diagnostics.append(RunDiagnostic(type=CHANGED_REGION_DIAGNOSTIC_TYPE, message=str(exc)))
         return ChangedRegionSet(source="")
     return ChangedRegionSet(source="")
 
@@ -314,6 +519,16 @@ def _changed_region_payload(
     changed: ChangedRegionSet,
     suppressed_count: int,
 ) -> dict[str, object] | None:
+    """Describe active changed-region filtering in the JSON extension shown to users.
+
+    Args:
+        changed: Resolved changed-region set; only an active set produces a payload.
+        suppressed_count: Number of findings changed-region filtering removed, reported as suppressedCount.
+
+    Returns:
+        Diff extension mapping with enabled, source, changedFiles, suppressedCount and a caveat about project-wide rules; None when changed-region
+        filtering is inactive.
+    """
     if not changed.active:
         return None
     return {
@@ -330,16 +545,42 @@ def _collect_findings(
     registry: RuleRegistry,
     units: list[AnalysisUnit],
     context: RuleContext,
-    config: AnalysisConfig,
     suppressions_by_file: dict[str, ParsedSuppressions],
 ) -> list[Finding]:
+    """Run enabled rules and inline suppressions, then order the findings shown to the user.
+
+    Args:
+        registry: Rule registry that analyses the units.
+        units: Parsed source units in scan order.
+        context: Rule context carrying the project root, config, scan scope and reference trees.
+        suppressions_by_file: Parsed suppression directives keyed by display path; a file absent from it has no directives applied.
+
+    Returns:
+        Findings that survive the directives, sorted by file path, line (a finding without a line sorts as line 0), rule id and message.
+    """
     findings = registry.analyse(units, context)
     findings = apply_suppressions(findings, suppressions_by_file)
-    findings = _filter_allowed_secret_previews(findings, config)
-    findings.sort(
-        key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message)
-    )
+    # Findings without a source line sort at the file start so repeated CLI runs remain stable.
+    findings.sort(key=lambda f: (f.file_path, f.line if f.line is not None else 0, f.rule_id, f.message))
     return findings
+
+
+def _with_baseline_identities(findings: list[Finding], units: list[AnalysisUnit]) -> list[Finding]:
+    """Attach each ordinary finding's durable identity, which SARIF publishes as its code-scanning fingerprint.
+
+    Args:
+        findings: This run's findings, before any baseline filtering.
+        units: Parsed units, so a declaration is ranked by its own span rather than by the finding's line.
+
+    Returns:
+        The same findings in the same order; a sensitive finding keeps ``None``, because it has no durable name.
+    """
+    resolver = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
+    identities = finding_identities(findings, resolver)
+    return [
+        finding if named is None else replace(finding, baseline_identity=named.identity, baseline_subject=named.subject)
+        for finding, named in zip(findings, identities, strict=True)
+    ]
 
 
 def _handle_baseline(
@@ -349,17 +590,40 @@ def _handle_baseline(
     diagnostics: list[RunDiagnostic],
     options: BaselineOptions,
     scan_scope: str,
+    units: list[AnalysisUnit],
 ) -> BaselineReport | None:
+    """Apply the user's baseline choice and append actionable diagnostics when it cannot run.
+
+    The parsed units come along so every finding is named by the declaration it sits on: that is what keeps two
+    findings inside one function on one identity while a second same-named function takes its own.
+
+    Args:
+        project_root: Project root that baseline paths are resolved against.
+        findings: This run's named findings; replaced in place with the surviving findings when a baseline is applied.
+        diagnostics: Run diagnostics; option conflicts, baseline errors and identity collisions are appended in place.
+        options: The user's baseline flags; generation wins over applying, and disabled skips applying.
+        scan_scope: Resolved scope label passed to baseline application.
+        units: Parsed units whose declaration spans name each finding by its declaration.
+
+    Returns:
+        Report for the generated or applied baseline; None when the flags conflict, the baseline is disabled, no explicit path was given and no
+        default baseline exists, or generation or application failed and left a diagnostic.
+    """
     conflict = _baseline_option_conflict(options)
     if conflict is not None:
         diagnostics.append(conflict)
         return None
+    declaration_position = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
+    # The user asked to capture the current state, so write a baseline rather than compare against one; generation wins.
     if options.generate_path is not None:
         return _generate_baseline_safely(
             project_root=project_root,
             findings=findings,
             diagnostics=diagnostics,
             path=options.generate_path,
+            migrate_path=options.migrate_path,
+            force_overwrite=options.force_overwrite,
+            declaration_position=declaration_position,
         )
     if options.disabled:
         return None
@@ -369,18 +633,67 @@ def _handle_baseline(
         diagnostics=diagnostics,
         explicit_path=options.apply_path,
         scan_scope=scan_scope,
+        declaration_position=declaration_position,
     )
+
+
+def _reference_only_trees(
+    request: AnalysisRunRequest,
+    config: AnalysisConfig,
+    registry: RuleRegistry,
+    scan_scope: str,
+    discovery_result: SourceDiscoveryResult,
+) -> tuple[ast.Module, ...]:
+    """Parse the Python files that configured ``paths.ignore`` globs keep out of the report.
+
+    ``dead-code.exported-but-unreferenced`` counts references in them, so a symbol used only from an ignored
+    test tree is not reported as dead, while those files still produce no finding of their own. The existing
+    discovery runs a second time without the configured globs, so gitignore and default exclusions still apply.
+
+    Args:
+        request: Run request whose paths and ignore flag the second discovery repeats.
+        config: Effective configuration carrying the configured ignore globs.
+        registry: Rule registry used to confirm the rule that reads references is enabled.
+        scan_scope: Resolved scope; only a full-project run has whole-project references to add.
+        discovery_result: The run's own discovery, whose files are already analysed units.
+
+    Returns:
+        Parsed modules found only once the configured globs are dropped; empty when nothing applies.
+    """
+    enabled_rule_ids = {rule.definition().id for rule in registry.enabled_rules(config)}
+    # Only a full-project scan that ignores paths, with the reference-reading rule on, has references to add.
+    if scan_scope != "full-project" or not config.ignored_path_patterns or ExportedButUnreferencedRule.ID not in enabled_rule_ids:
+        return ()
+    analysed = {source_file.absolute_path for source_file in discovery_result.files}
+    unfiltered = SourceDiscovery(request.project_root).discover(list(request.paths), include_ignored=request.include_ignored)
+    trees: list[ast.Module] = []
+    # Every file the configured globs removed contributes references, and nothing else is parsed twice.
+    for source_file in unfiltered.files:
+        # Analysed files contribute through their units, and text files carry no Python references.
+        if source_file.absolute_path in analysed or not source_file.is_python():
+            continue
+        try:
+            trees.append(ast.parse(Path(source_file.absolute_path).read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+            # An unreadable ignored file cannot add references, and it never produces a finding either.
+            continue
+    return tuple(trees)
 
 
 def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
     """Classify the run as full-project or partial for caveats and baseline staleness.
 
-    ``--diff`` / ``--since`` narrow discovery to changed files before rules
-    run, so those runs are partial regardless of the requested paths.
-    Explicit ``--changed-ranges`` only filters findings after analysis, so
-    the requested paths decide.
+    ``--diff`` and ``--since`` make the run partial before rules execute; explicit
+    ``--changed-ranges`` filters later, so the user's requested paths decide.
+
+    Args:
+        request: Run request whose changed ranges, paths and project root decide the scope.
+        changed: Resolved changed-region set; an active set without explicit changed ranges makes the run partial.
+
+    Returns:
+        The scope label partial-scope or full-project.
     """
-    if changed.active and not request.changed_ranges:
+    if changed.active and request.changed_ranges is None:
         return "partial-scope"
     return _scan_scope(request.paths, request.project_root)
 
@@ -388,9 +701,15 @@ def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) 
 def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
     """Classify the requested paths as a full-project or partial scan.
 
-    A path counts as full-project when it resolves to the project root, so
-    ``.``, ``./``, ``src/..``, and an absolute path to the root all classify
-    the same way discovery treats them.
+    Paths such as ``.``, ``./``, ``src/..``, and the absolute project root all give
+    users the same full-project behavior.
+
+    Args:
+        paths: Requested paths; empty means the whole project.
+        project_root: Project root each requested path is resolved against.
+
+    Returns:
+        full-project when no paths were given or any path resolves to the project root; otherwise partial-scope.
     """
     if not paths:
         return "full-project"
@@ -401,19 +720,32 @@ def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
 
 
 def _baseline_option_conflict(options: BaselineOptions) -> RunDiagnostic | None:
+    """Explain mutually exclusive baseline flags before users receive a misleading scan.
+
+    Args:
+        options: The user's baseline flags to check for incompatible combinations.
+
+    Returns:
+        A baseline-error diagnostic for the first conflict found (baseline with generate-baseline, no-baseline with baseline, or migrate-baseline
+        without generate-baseline); None when the flags are compatible.
+    """
     if options.generate_path is not None and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message=(
-                "--baseline-path and --generate-baseline/--generate-baseline-path "
-                "are mutually exclusive."
-            ),
+            message="--baseline and --generate-baseline are mutually exclusive.",
         )
     if options.disabled and options.apply_path is not None:
         return RunDiagnostic(
             type="baseline-error",
-            message="--no-baseline cannot be combined with --baseline-path.",
+            message="--no-baseline cannot be combined with --baseline.",
             path=str(options.apply_path),
+        )
+    # Migration writes a second file rather than converting one, so it needs the destination the user chose for it.
+    if options.migrate_path is not None and options.generate_path is None:
+        return RunDiagnostic(
+            type="baseline-error",
+            message="--migrate-baseline requires --generate-baseline <new path>; the 0.5 file is never converted in place.",
+            path=str(options.migrate_path),
         )
     return None
 
@@ -424,9 +756,40 @@ def _generate_baseline_safely(
     findings: list[Finding],
     diagnostics: list[RunDiagnostic],
     path: Path,
+    migrate_path: Path | None,
+    force_overwrite: bool,
+    declaration_position: Callable[[Finding], int],
 ) -> BaselineReport | None:
+    """Write the requested baseline, from this run alone or carried across from a 0.5 file, reporting failures in-band.
+
+    Args:
+        project_root: Project root the baseline is written for.
+        findings: This run's named findings to record.
+        diagnostics: Run diagnostics; a baseline failure is appended in place as a baseline-error diagnostic for path.
+        path: Destination the new baseline is written to.
+        migrate_path: A 0.5 baseline whose reviews are carried into path while the original stays untouched; None generates from this run alone.
+        force_overwrite: When true, writing may replace a file at the shared default path that this version would not read, such as a 0.5 baseline;
+            otherwise that write is refused.
+        declaration_position: Resolver giving the declaration position each finding is named by.
+
+    Returns:
+        Report for the written baseline; None when the destination cannot be overwritten or writing or migration failed, with the reason in
+        diagnostics.
+    """
     try:
-        return generate_baseline(project_root=project_root, path=path, findings=findings)
+        # A generate at the shared default path never destroys a 0.5 baseline by accident; --force is the way to mean it.
+        require_overwritable_default_path(project_root, path, force_overwrite)
+        # A migration re-identifies the 0.5 reviews from this scan and writes them beside the original, which is untouched.
+        if migrate_path is not None:
+            return migrate_baseline(
+                project_root=project_root,
+                input_path=migrate_path,
+                output_path=path,
+                findings=findings,
+                declaration_position=declaration_position,
+            )
+        return generate_baseline(project_root=project_root, path=path, findings=findings, declaration_position=declaration_position)
+    # For example, an unwritable path, or a migration output that is its own input, explains itself without a traceback.
     except BaselineError as exc:
         diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(path)))
         return None
@@ -439,7 +802,22 @@ def _apply_baseline_if_present(
     diagnostics: list[RunDiagnostic],
     explicit_path: Path | None,
     scan_scope: str,
+    declaration_position: Callable[[Finding], int],
 ) -> BaselineReport | None:
+    """Apply an available baseline while keeping malformed or unreadable files visible to users.
+
+    Args:
+        project_root: Project root whose default baseline is looked up when no explicit path is given.
+        findings: This run's named findings; replaced in place with the findings the baseline leaves visible.
+        diagnostics: Run diagnostics; baseline errors and identity collisions are appended in place.
+        explicit_path: Baseline path the user supplied; None uses the default baseline when that file exists.
+        scan_scope: Resolved scope label passed to baseline application.
+        declaration_position: Resolver giving the declaration position each finding is named by.
+
+    Returns:
+        Report for the applied baseline; None when no default baseline exists or the file could not be applied, in which case findings are left
+        intact.
+    """
     selected_path, source = _resolve_baseline_selection(project_root, explicit_path)
     if selected_path is None:
         return None
@@ -450,19 +828,54 @@ def _apply_baseline_if_present(
             findings=findings,
             source=source,
             scan_scope=scan_scope,
+            declaration_position=declaration_position,
         )
+    # For example, invalid JSON, a 0.5 layout, or another port's file becomes a diagnostic and leaves findings intact.
     except BaselineError as exc:
-        diagnostics.append(
-            RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path))
-        )
+        diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path)))
         return None
+    diagnostics.extend(_collision_diagnostics(result.collisions))
     findings[:] = result.findings
     return result.report
 
 
-def _resolve_baseline_selection(
-    project_root: Path, explicit_path: Path | None
-) -> tuple[Path | None, str]:
+def _collision_diagnostics(collisions: tuple[BaselineCollision, ...]) -> list[RunDiagnostic]:
+    """Name every identity that covered two declarations, so a user sees which ones could not be told apart.
+
+    Neither finding is suppressed: hiding either would let one review cover a finding nobody read.
+
+    Args:
+        collisions: Identity collisions found while applying the baseline.
+
+    Returns:
+        One baseline-collision diagnostic per collision, each marked as not invalidating the run and naming the identity, subjects, rule and path;
+        empty when there are none.
+    """
+    return [
+        RunDiagnostic(
+            type="baseline-collision",
+            message=(
+                f"collision: identity {collision.identity} covers {len(collision.subjects)} declarations of "
+                f"{', '.join(collision.subjects)} for rule {collision.rule_id} in {collision.path}; none is suppressed"
+            ),
+            file_path=collision.path,
+            invalidates_run=False,
+        )
+        for collision in collisions
+    ]
+
+
+def _resolve_baseline_selection(project_root: Path, explicit_path: Path | None) -> tuple[Path | None, str]:
+    """Choose the explicit or default baseline path a user asked the scan to apply.
+
+    Args:
+        project_root: Project root whose default baseline file is checked.
+        explicit_path: Baseline path the user supplied; when given it is returned without checking that it exists.
+
+    Returns:
+        Tuple (path, source) with source explicit or default; the default baseline is returned as its bare file name, and path is None when no default
+        baseline file exists.
+    """
     if explicit_path is not None:
         return explicit_path, "explicit"
     default_path = default_baseline_path(project_root)
@@ -479,6 +892,20 @@ def _load_analysis_config(
     registry: RuleRegistry,
     strict_config: bool = False,
 ) -> tuple[AnalysisConfig, str | None, list[RunDiagnostic], tuple[str, ...]]:
+    """Load settings for this request and preserve the config source and warnings for users.
+
+    Args:
+        project_root: Project root the config loader searches from.
+        config_path: Explicit config path; None lets the loader discover the project config.
+        no_config: When true, no config file is read and registry defaults apply; combined with config_path it produces a config-error diagnostic
+            instead.
+        registry: Rule registry the default configuration is built from.
+        strict_config: When true, any problem the loader would record as a warning stops the load with a ConfigError instead.
+
+    Returns:
+        Tuple (config, config_loaded_from, diagnostics, warnings): the effective config, defaults when no file is used; the loaded file path, or None
+        when no file was read; a config-error diagnostic when no_config conflicts with config_path, otherwise empty; and the loader warnings.
+    """
     config = AnalysisConfig.from_registry(registry)
     if no_config and config_path is not None:
         return (
@@ -503,24 +930,35 @@ def _load_analysis_config(
 
 def _parse_sources(
     source_files: tuple[SourceFile, ...],
+    deep_scan_budget: DeepScanBudget,
 ) -> tuple[list[AnalysisUnit], int, list[RunDiagnostic]]:
+    """Parse discovered files and retain parse failures for the final CLI report.
+
+    Args:
+        source_files: Discovered files in scan order.
+        deep_scan_budget: Line and byte budget the parser applies to each file.
+
+    Returns:
+        Tuple (units, files_parsed, diagnostics): one unit per source file, including those that failed to parse; the count of files parsed without
+        errors; and the parser diagnostics tagged with their file path, with non-fatal ones marked as not invalidating the run.
+    """
     parser = PythonFileParser()
     units: list[AnalysisUnit] = []
     diagnostics: list[RunDiagnostic] = []
     files_parsed = 0
 
     for source_file in source_files:
-        unit = parser.parse(source_file)
+        unit = parser.parse(source_file, deep_scan_budget)
         units.append(unit)
         if not unit.has_parse_errors():
             files_parsed += 1
-            continue
         diagnostics.extend(
             RunDiagnostic(
-                type="parse-error",
+                type=diagnostic.type,
                 message=diagnostic.message,
                 file_path=source_file.display_path,
                 line=diagnostic.line,
+                invalidates_run=False if diagnostic.non_fatal else None,
             )
             for diagnostic in unit.diagnostics
         )
@@ -529,16 +967,30 @@ def _parse_sources(
 
 
 def _missing_path_diagnostics(missing_paths: tuple[str, ...]) -> list[RunDiagnostic]:
-    return [
-        RunDiagnostic(type="missing-path", message="path not found", path=missing)
-        for missing in missing_paths
-    ]
+    """Turn requested paths that do not exist into diagnostics users can act on.
+
+    Args:
+        missing_paths: Requested paths that discovery could not find.
+
+    Returns:
+        One missing-path diagnostic per path; empty when every requested path exists.
+    """
+    return [RunDiagnostic(type="missing-path", message="path not found", path=missing) for missing in missing_paths]
 
 
 def _parse_suppressions(
     units: list[AnalysisUnit],
     registry: RuleRegistry,
 ) -> dict[str, ParsedSuppressions]:
+    """Parse inline suppression directives before findings are prepared for the user.
+
+    Args:
+        units: Parsed units; a unit with no source or a bounded deep scan is skipped.
+        registry: Rule registry whose full rule list, disabled rules included, defines the rule ids a directive may name.
+
+    Returns:
+        Parsed directives keyed by display path; skipped units have no entry.
+    """
     known_rule_ids = frozenset(rule.definition().id for rule in registry.all())
     return {
         unit.file.display_path: parse_suppressions(
@@ -546,13 +998,21 @@ def _parse_suppressions(
             known_rule_ids=known_rule_ids,
         )
         for unit in units
-        if unit.source
+        if unit.source and not unit.is_deep_scan_bounded()
     }
 
 
 def _suppression_diagnostics(
     suppressions_by_file: dict[str, ParsedSuppressions],
 ) -> list[RunDiagnostic]:
+    """Expose malformed or unknown suppression directives alongside scan findings.
+
+    Args:
+        suppressions_by_file: Parsed suppression directives keyed by display path.
+
+    Returns:
+        One diagnostic per malformed or unknown directive, tagged with its file path and line; empty when every directive is valid.
+    """
     diagnostics: list[RunDiagnostic] = []
     for file_path, suppressions in suppressions_by_file.items():
         diagnostics.extend(
@@ -586,7 +1046,7 @@ def compute_exit_code(
         ``2`` when diagnostics exist, ``1`` when any finding meets the
         threshold, otherwise ``0``.
     """
-    if diagnostics:
+    if any(diagnostic.invalidates_run is not False for diagnostic in diagnostics):
         return 2
     for finding in findings:
         if fail_threshold.is_triggered_by(finding.severity):
@@ -594,19 +1054,49 @@ def compute_exit_code(
     return 0
 
 
-def _filter_allowed_secret_previews(
-    findings: list[Finding],
+def _apply_deep_scan_budget_override(
     config: AnalysisConfig,
-) -> list[Finding]:
-    if not config.allowed_secret_previews:
-        return findings
-    allowed = set(config.allowed_secret_previews)
-    return [
-        finding
-        for finding in findings
-        if (
-            finding.pillar != Pillar.SENSITIVE_DATA
-            or not isinstance(finding.metadata.get("preview"), str)
-            or finding.metadata["preview"] not in allowed
+    value: str,
+) -> AnalysisConfig:
+    """Apply the atomic CLI budget after config so both limits share provenance.
+
+    Args:
+        config: Effective configuration after the config file is applied.
+        value: Deep-scan budget option value: empty keeps the configured budget, off disables the budget while keeping the configured limits, and
+            LINES:BYTES enables the budget with both limits set.
+
+    Returns:
+        The config unchanged when value is empty; otherwise a copy whose deep-scan budget carries the CLI override.
+
+    Raises:
+        ConfigError: When value is not empty, not off, and not two positive integers in LINES:BYTES form.
+    """
+    if value == "":
+        return config
+    current = config.deep_scan_budget
+    if value == "off":
+        return config.with_deep_scan_budget(
+            DeepScanBudget(
+                enabled=False,
+                max_lines=current.max_lines,
+                max_bytes=current.max_bytes,
+                override="cli",
+            )
         )
-    ]
+    parts = value.split(":")
+    if len(parts) != 2:
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.")
+    try:
+        max_lines, max_bytes = (int(part) for part in parts)
+    except ValueError as exc:
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.") from exc
+    if max_lines <= 0 or max_bytes <= 0:
+        raise ConfigError("--deep-scan-budget must be two positive integers as LINES:BYTES, or off.")
+    return config.with_deep_scan_budget(
+        DeepScanBudget(
+            enabled=True,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
+            override="cli",
+        )
+    )

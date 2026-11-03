@@ -9,6 +9,15 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit under ``/workspace``.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit.
+
+    Returns:
+        The analysis unit.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -25,6 +34,14 @@ def _unit(source: str, display_path: str) -> AnalysisUnit:
 
 
 def _analyse(*units: AnalysisUnit):
+    """Run only the single-implementor protocol rule, at its registry defaults, over the units as one project.
+
+    Args:
+        units: Analysis units to analyse together.
+
+    Returns:
+        The rule's findings.
+    """
     registry = RuleRegistry([SingleImplementorProtocolRule()])
     config = AnalysisConfig.from_registry(registry)
     context = RuleContext(project_root="/workspace", config=config)
@@ -32,17 +49,13 @@ def _analyse(*units: AnalysisUnit):
 
 
 def test_single_implementor_protocol_without_external_usage_is_flagged():
+    """Flag a protocol with one implementor in another file once, at the protocol, naming that implementor."""
     contract = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    def render(self, value: str) -> str: ...\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    def render(self, value: str) -> str: ...\n",
         "src/contracts.py",
     )
     implementation = _unit(
-        "from .contracts import Renderer\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    def render(self, value: str) -> str:\n"
-        "        return value\n",
+        "from .contracts import Renderer\n\nclass HtmlRenderer(Renderer):\n    def render(self, value: str) -> str:\n        return value\n",
         "src/html_renderer.py",
     )
 
@@ -57,16 +70,13 @@ def test_single_implementor_protocol_without_external_usage_is_flagged():
 
 
 def test_multiple_implementors_skip_protocol():
+    """Report nothing for a protocol with two implementors."""
     contract = _unit(
         "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n",
         "src/contracts.py",
     )
     implementations = _unit(
-        "from .contracts import Renderer\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n\n"
-        "class TextRenderer(Renderer):\n"
-        "    pass\n",
+        "from .contracts import Renderer\n\nclass HtmlRenderer(Renderer):\n    pass\n\nclass TextRenderer(Renderer):\n    pass\n",
         "src/renderers.py",
     )
 
@@ -74,6 +84,7 @@ def test_multiple_implementors_skip_protocol():
 
 
 def test_external_type_hint_usage_skips_protocol():
+    """Report nothing when a function annotates a parameter with the protocol."""
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -89,12 +100,9 @@ def test_external_type_hint_usage_skips_protocol():
 
 
 def test_base_list_reference_alone_still_flags():
+    """Flag a protocol used only in its one implementor's base list once."""
     source = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    pass\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
     )
 
@@ -105,6 +113,7 @@ def test_base_list_reference_alone_still_flags():
 
 
 def test_implementor_registry_alone_still_flags():
+    """Flag the protocol once when a registry dictionary references only its implementor."""
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -122,6 +131,7 @@ def test_implementor_registry_alone_still_flags():
 
 
 def test_value_reference_to_abstraction_skips_protocol():
+    """Report nothing when a registry dictionary references the protocol itself."""
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -136,6 +146,7 @@ def test_value_reference_to_abstraction_skips_protocol():
 
 
 def test_isinstance_tuple_reference_skips_protocol():
+    """Report nothing when the protocol appears in an ``isinstance`` type tuple."""
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -151,12 +162,9 @@ def test_isinstance_tuple_reference_skips_protocol():
 
 
 def test_attribute_store_target_alone_still_flags():
+    """Flag the protocol once when another file only assigns to it as a module attribute."""
     contract = _unit(
-        "from typing import Protocol\n\n"
-        "class Renderer(Protocol):\n"
-        "    pass\n\n"
-        "class HtmlRenderer(Renderer):\n"
-        "    pass\n",
+        "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
     )
     patcher = _unit(
@@ -171,6 +179,7 @@ def test_attribute_store_target_alone_still_flags():
 
 
 def test_attribute_load_usage_skips_protocol():
+    """Report nothing when code calls a method on the protocol class."""
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"

@@ -1,6 +1,6 @@
 ---
 category: docs
-last_reviewed: 2026-06-14
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: `architecture.md` / `README.md` rule counts and default-off claims drift from the live catalogue
@@ -16,7 +16,7 @@ The non-obvious failure mode is that an agent reading these docs for rule facts 
 
 **Status:** active | **Created:** 2026-05-18 | **Evidence:** OBSERVED
 
-`src/gruffpy/rule/docs/_helpers.py` (`signature_param_names`) intentionally
+`src/gruffpy/rule/docs/_helpers.py` (search: `def signature_param_names`) intentionally
 removes a leading `self` or `cls` parameter before docstring matching. That
 policy also applies to module-level helper functions whose first parameter is
 named `cls`.
@@ -56,8 +56,7 @@ in a managed file is only as durable as the vendor's next release, so evidence
 for this footgun should anchor in project-owned files.
 
 The 2026-08-09 drop is the repair of the last `src`/`tests` occurrence: a
-comment in `tests/unit/finding/test_stable_identity.py` (now search:
-`emits stable identities`) cited a gitignored milestone as the precondition for
+comment in `tests/unit/finding/test_stable_identity.py` (search: `emits stable identities`) cited a gitignored milestone as the precondition for
 a cross-port ground-truth fixture. It blocked release closeout's stale-name
 audit twice before an operator approved the comment-only reword to name the
 real precondition instead. No committed code or test now carries a milestone

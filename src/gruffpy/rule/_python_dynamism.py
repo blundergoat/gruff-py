@@ -109,6 +109,14 @@ def _decorator_name(decorator: ast.AST) -> str:
     - ``@pytest.fixture`` -> ``pytest.fixture``
     - ``@app.route("/users")`` -> ``app.route`` (Call wraps Attribute)
     - ``@router.get`` -> ``router.get``
+
+    Args:
+        decorator: Expression to name. Callers pass decorator expressions, class base expressions and the test of an if statement. A call is named by
+            its callee, so call arguments are ignored.
+
+    Returns:
+        Dotted name such as pytest.fixture or app.route. When an attribute's base cannot be named, for example a subscript, only the attribute name is
+        returned. Any other expression shape gives an empty string.
     """
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
@@ -218,17 +226,21 @@ def module_all_names(tree: ast.AST) -> frozenset[str]:
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "__all__":
                     return _string_seq(node.value)
-        if (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "__all__"
-            and node.value is not None
-        ):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__" and node.value is not None:
             return _string_seq(node.value)
     return frozenset()
 
 
 def _string_seq(value: ast.AST) -> frozenset[str]:
+    """Collect the string constants from a list or tuple literal assigned to a module-level __all__.
+
+    Args:
+        value: Expression on the right-hand side of a plain or annotated __all__ assignment.
+
+    Returns:
+        Frozen set of the literal's string constant elements, with non-string elements skipped. The set is empty when value is not a list or tuple
+        literal, for example a concatenation or a call.
+    """
     if not isinstance(value, ast.List | ast.Tuple):
         return frozenset()
     names: set[str] = set()
@@ -274,9 +286,109 @@ def is_overload_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return any(_decorator_name(d).split(".")[-1] == "overload" for d in fn.decorator_list)
 
 
-def is_protocol_method_stub(
-    fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]
-) -> bool:
+def is_type_checking_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
+    """Recognize ellipsis declarations directly in a typing-only branch.
+
+    Args:
+        fn: Declaration to check; runtime statements keep it reportable.
+        parents: Outer-to-inner ancestors, used to distinguish the else branch.
+
+    Returns:
+        True only for a direct TYPE_CHECKING body containing an ellipsis.
+    """
+    if not parents or not isinstance(parents[-1], ast.If):
+        return False
+    branch = parents[-1]
+    if fn not in branch.body or not isinstance(branch.test, ast.Name | ast.Attribute):
+        return False
+    if _decorator_name(branch.test) not in {"TYPE_CHECKING", "typing.TYPE_CHECKING"}:
+        return False
+    body = fn.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    return len(body) == 1 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and body[0].value.value is Ellipsis
+
+
+def is_pluggy_hookspec(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
+    """Recognize an empty module hook from its imported pluggy marker.
+
+    Args:
+        fn: Function whose project prefix must match a literal marker binding.
+        parents: Outer-to-inner ancestors; methods and nested functions do not qualify.
+
+    Returns:
+        True when the same module proves the hook's pluggy project namespace.
+    """
+    if not parents or not isinstance(parents[-1], ast.Module) or not _is_empty_body(fn.body):
+        return False
+    return any(fn.name.startswith(project + "_") for project in _pluggy_projects(parents[-1]))
+
+
+def _pluggy_projects(module: ast.Module) -> set[str]:
+    """Collect literal project names from module-level pluggy marker assignments.
+
+    Args:
+        module: Parsed source; absent or overwritten imports prove no projects.
+
+    Returns:
+        Project names for which the module binds a pluggy hook marker.
+    """
+    marker_names = _pluggy_marker_names(module) - _module_shadowed_marker_names(module)
+    projects: set[str] = set()
+    for statement in module.body:
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+            continue
+        value = statement.value
+        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name) or value.func.id not in marker_names:
+            continue
+        if len(value.args) != 1 or value.keywords:
+            continue
+        project = value.args[0]
+        if isinstance(project, ast.Constant) and isinstance(project.value, str) and project.value:
+            projects.add(project.value)
+    return projects
+
+
+def _pluggy_marker_names(module: ast.Module) -> set[str]:
+    """Find local names imported from pluggy's hook marker.
+
+    Args:
+        module: Source module; relative and unrelated imports are unproved.
+
+    Returns:
+        The imported marker's local names, including explicit aliases.
+    """
+    return {
+        alias.asname or alias.name
+        for statement in module.body
+        if isinstance(statement, ast.ImportFrom) and statement.module == "pluggy" and statement.level == 0
+        for alias in statement.names
+        if alias.name == "HookspecMarker"
+    }
+
+
+def _module_shadowed_marker_names(module: ast.Module) -> set[str]:
+    """Find bindings that prevent trusting a pluggy marker import.
+
+    Args:
+        module: Source module; nested assignments are conservatively included.
+
+    Returns:
+        Names rebound by assignments, declarations or unrelated imports.
+    """
+    rebound = {node.id for statement in module.body for node in ast.walk(statement) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)}
+    rebound.update(statement.name for statement in module.body if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef))
+    rebound.update(
+        alias.asname or alias.name.split(".")[0]
+        for statement in module.body
+        if isinstance(statement, ast.Import | ast.ImportFrom)
+        and not (isinstance(statement, ast.ImportFrom) and statement.module == "pluggy" and statement.level == 0)
+        for alias in statement.names
+    )
+    return rebound
+
+
+def is_protocol_method_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
     """Return whether a function is an empty Protocol method stub.
 
     Args:
@@ -296,7 +408,19 @@ def is_protocol_method_stub(
 
 
 def _is_empty_body(body: list[ast.stmt]) -> bool:
-    """True if *body* is exactly ``pass`` or ``...`` (single Expr-Constant)."""
+    """Report whether a function body is a placeholder made of pass or a bare constant, optionally after a docstring.
+
+    A body qualifies in two cases. The first is a single pass or constant expression statement, so a lone docstring or a lone ... counts. The second
+    is a string docstring followed by exactly one pass or constant expression statement. Any other statement, or more than two statements, makes the
+    body non-empty.
+
+    Args:
+        body: Statement list of a function definition, as passed by the waste.empty-function rule and by the Protocol stub and pluggy hookspec
+            predicates.
+
+    Returns:
+        True when the body matches one of the placeholder shapes; False for any other statement list.
+    """
     if len(body) == 1:
         only = body[0]
         if isinstance(only, ast.Pass):
@@ -304,12 +428,7 @@ def _is_empty_body(body: list[ast.stmt]) -> bool:
         if isinstance(only, ast.Expr) and isinstance(only.value, ast.Constant):
             return True
     # Allow [docstring, pass] or [docstring, ...] as also empty.
-    if (
-        len(body) == 2
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
+    if len(body) == 2 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         second = body[1]
         if isinstance(second, ast.Pass):
             return True

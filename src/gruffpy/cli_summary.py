@@ -12,7 +12,7 @@ from collections import Counter
 from typing import Any, cast
 
 from gruffpy.analysis.report import AnalysisReport
-from gruffpy.analysis.schema import SUMMARY_SCHEMA_VERSION
+from gruffpy.reporting.text_reporter import append_sensitive_exclusions
 from gruffpy.version import TOOL_NAME
 
 
@@ -23,22 +23,42 @@ def summary_payload(
     *,
     group_by: str = "none",
 ) -> dict[str, Any]:
-    """Build the ``gruff.summary.v2`` payload for the summary command.
+    """Return the exact ``gruff.summary.v3`` projection for the summary command.
 
     Args:
         report: Analysis report to summarise.
-        top: Row cap applied to ``topRules`` / ``topFiles`` / ``groupedRules``.
-        elapsed_seconds: Wall-clock duration of the underlying analyse run.
-        group_by: ``"rule"`` to add the ``groupedRules`` block; anything else
-            leaves the default shape intact.
+        top: Text-only row cap retained in the shared command signature.
+        elapsed_seconds: Text-only elapsed time retained in the shared command signature.
+        group_by: Text-only grouping mode retained in the shared command signature.
 
     Returns:
-        JSON-ready dict matching the ``gruff.summary.v2`` schema.
+        Canonical analysis payload with only ``findings`` removed.
+    """
+    del top, elapsed_seconds, group_by
+    return report.to_summary_dict()
+
+
+def _text_summary_payload(
+    report: AnalysisReport,
+    top: int,
+    elapsed_seconds: float,
+    *,
+    group_by: str,
+) -> dict[str, Any]:
+    """Build the native aggregate data used only by the human text renderer.
+
+    Args:
+        report: Completed scan supplying findings, path counts, diagnostics and pillar results.
+        top: Row cap passed to counter ranking and grouped-rule slicing.
+        elapsed_seconds: Scan duration rounded to three decimals in the summary fields.
+        group_by: The value "rule" adds grouped-rule rows; other values leave that field absent.
+
+    Returns:
+        Text-view summary fields, pillar rows, ranked rule/file counts and diagnostic payloads.
     """
     rule_counts = Counter(finding.rule_id for finding in report.findings)
     file_counts = Counter(finding.file_path for finding in report.findings)
     payload: dict[str, Any] = {
-        "schemaVersion": SUMMARY_SCHEMA_VERSION,
         "summary": {
             "paths": list(report.requested_paths),
             "filesDiscovered": report.files_discovered,
@@ -53,6 +73,7 @@ def summary_payload(
         "pillars": _summary_pillar_rows(report),
         "topRules": _counter_rows(rule_counts, top),
         "topFiles": _counter_rows(file_counts, top),
+        "diagnostics": [diagnostic.to_dict() for diagnostic in report.diagnostics],
     }
     if group_by == "rule":
         rule_rows = report.finding_counts_by_rule()
@@ -73,6 +94,11 @@ def summary_text(
 ) -> str:
     """Render the summary command's text output.
 
+    Sensitive exclusions filter this command's findings, so the audit section ``analyse`` prints is
+    rendered below the canonical block through the same helper: FAMILY-CONTRACT.md (search:
+    ``**Where the audit must appear**``) forbids filtering a surface without publishing its count
+    there.
+
     Args:
         report: Analysis report to summarise.
         top: Row cap applied to ``topRules`` / ``topFiles`` / ``groupedRules``.
@@ -83,12 +109,18 @@ def summary_text(
     Returns:
         Multi-line text payload ending in a single trailing newline.
     """
-    payload = summary_payload(report, top, elapsed_seconds, group_by=group_by)
+    payload = _text_summary_payload(report, top, elapsed_seconds, group_by=group_by)
     summary = payload["summary"]
     counts = report.finding_counts()
     paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
+    # FAMILY-CONTRACT section 1: masthead, then the two-line composite block, then the scan card.
+    # `summary` and `analyse` lead with the same three lines so a reader moving between the two views
+    # never has to hunt for the grade in a different place.
+    composite = None if report.score is None else report.score.composite
     lines = [
         f"{TOOL_NAME} {report.tool_version} summary",
+        ("Composite: n/a (nothing evaluated)" if composite is None else f"Composite: {composite.letter} ({composite.score:.2f} / 100)"),
+        f"Findings: {counts['total']} total · {counts['error']} error · {counts['warning']} warning · {counts['advisory']} advisory",
         f"Path: {paths_display}",
         (
             f"Files: {summary['filesDiscovered']} discovered, {summary['filesParsed']} parsed, "
@@ -96,14 +128,6 @@ def summary_text(
             f"{summary['parseErrors']} parse errors"
         ),
     ]
-    if report.score is not None:
-        lines.append(
-            f"Composite: {report.score.composite.letter} ({report.score.composite.score:.2f} / 100)"
-        )
-    lines.append(
-        f"Findings: {counts['total']} total · {counts['error']} error · "
-        f"{counts['warning']} warning · {counts['advisory']} advisory"
-    )
     lines.extend(
         [
             f"Elapsed: {summary['elapsedSeconds']:.3f}s",
@@ -120,11 +144,28 @@ def summary_text(
         lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topRules"])))
     lines.extend(["", "Top files:"])
     lines.extend(_format_count_rows(cast(list[dict[str, Any]], payload["topFiles"])))
+    if report.diagnostics:
+        lines.extend(["", "Diagnostics"])
+        for diagnostic in report.diagnostics:
+            location = diagnostic.file_path or diagnostic.path
+            if diagnostic.file_path is not None and diagnostic.line is not None:
+                location = f"{diagnostic.file_path}:{diagnostic.line}"
+            suffix = "" if location is None else f" {location}"
+            lines.append(f"  [{diagnostic.type.upper()}]{suffix} {diagnostic.message}")
+    append_sensitive_exclusions(lines, report)
     _append_summary_hints(lines, summary)
     return "\n".join(lines) + "\n"
 
 
 def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
+    """Align grouped rule counts with their severity and confidence labels.
+
+    Args:
+        grouped: Text-summary grouping containing rows plus the shown and total counts for its heading.
+
+    Returns:
+        A heading and aligned rule rows, or the heading and an explicit none marker when rows are empty.
+    """
     rows = cast(list[dict[str, Any]], grouped["rows"])
     shown = cast(int, grouped["shown"])
     total = cast(int, grouped["total"])
@@ -134,12 +175,7 @@ def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
     rule_id_width = max(len(row["ruleId"]) for row in rows)
     formatted = [header]
     for row in rows:
-        line = (
-            f"  {row['count']:>4}  "
-            f"{row['ruleId']:<{rule_id_width}}  "
-            f"{row['severity']:<8}  "
-            f"{row['confidence']}"
-        )
+        line = f"  {row['count']:>4}  {row['ruleId']:<{rule_id_width}}  {row['severity']:<8}  {row['confidence']}"
         formatted.append(line.rstrip())
     return formatted
 
@@ -155,7 +191,7 @@ def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
         report: Analysis report to summarise.
 
     Returns:
-        List of pillar dicts shaped per ``gruff.summary.v2``.
+        List of native pillar dicts used by the text summary.
     """
     rows: list[dict[str, Any]] = []
     if report.score is None:
@@ -198,6 +234,14 @@ def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
 
 
 def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
+    """Present pillar grades and per-severity counts in aligned terminal rows.
+
+    Args:
+        rows: Native pillar summaries in display order; grade and score may be absent as None.
+
+    Returns:
+        Aligned rows with placeholders for absent grades/scores, or one none marker for an empty input.
+    """
     if not rows:
         return ["  none"]
     pillar_width = max(15, max(len(cast(str, row["pillar"])) for row in rows))
@@ -224,17 +268,18 @@ def _format_pillar_text_rows(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
+    """Append next-step guidance when a text summary has ignored paths or findings.
+
+    Args:
+        lines: Rendered summary lines to extend in place; unchanged when neither hint applies.
+        summary: Aggregate fields whose ignored/findings counts select hints and whose paths build the baseline command.
+    """
     hints: list[str] = []
     if summary["ignored"]:
-        hints.append(
-            "Ignored paths: add --include-ignored to include built-in and .gitignore "
-            "exclusions; configured paths.ignore still applies."
-        )
+        hints.append("Ignored paths: add --include-ignored to include built-in and .gitignore exclusions; configured paths.ignore still applies.")
     if summary["findings"]:
         hints.append(
-            "Baseline: after review, run "
-            f"`{_generate_baseline_command(cast(list[str], summary['paths']))}` "
-            "to accept current findings as known debt."
+            f"Baseline: after review, run `{_generate_baseline_command(cast(list[str], summary['paths']))}` to accept current findings as known debt."
         )
     if not hints:
         return
@@ -243,16 +288,41 @@ def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
 
 
 def _generate_baseline_command(paths: list[str]) -> str:
+    """Build a shell-quoted command for accepting the displayed scan as a baseline.
+
+    Args:
+        paths: Scan operands to preserve; an empty list substitutes the current-directory operand.
+
+    Returns:
+        An analyse command with each operand quoted and baseline generation set not to fail on findings.
+    """
     command_paths = paths or ["."]
     joined_paths = " ".join(shlex.quote(path) for path in command_paths)
     return f"{TOOL_NAME} analyse {joined_paths} --generate-baseline --fail-on none"
 
 
 def _counter_rows(counter: Counter[str], top: int) -> list[dict[str, Any]]:
+    """Select the most frequent rule or file names for the text-summary ranking.
+
+    Args:
+        counter: Name-to-count totals to rank with Counter's ordering.
+        top: Maximum number of rows; zero or a negative value yields no rows.
+
+    Returns:
+        Name/count dictionaries for the selected entries in descending-frequency order.
+    """
     return [{"name": name, "count": count} for name, count in counter.most_common(top)]
 
 
 def _format_count_rows(rows: list[dict[str, Any]]) -> list[str]:
+    """Render ranked name/count entries beneath an existing summary heading.
+
+    Args:
+        rows: Ranked entries with name and count fields, in their intended display order.
+
+    Returns:
+        Indented name/count lines, or one explicit none marker when no entries were selected.
+    """
     if not rows:
         return ["  none"]
     return [f"  {row['name']}: {row['count']}" for row in rows]

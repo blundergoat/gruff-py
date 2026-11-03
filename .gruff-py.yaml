@@ -4,11 +4,15 @@
 # After reviewing findings, `gruff-py analyse . --generate-baseline` records known debt.
 # See docs/configuration.md for the full key reference.
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   analyse: advisory
   report: none
   dashboard: none
 minimumPythonVersion: '3.11'
+deepScanBudget:
+  enabled: true
+  maxLines: 20000
+  maxBytes: 2000000
 paths:
   ignore:
   - .agents/
@@ -19,6 +23,8 @@ paths:
   - .goat-flow/
   - tests/fixtures/**
 allowlists:
+  # The family's sixteen seeded words, none of which naming.abbreviation reports today, plus
+  # ctx: every ctx here is a click.Context parameter, the name Click's own documentation uses.
   acceptedAbbreviations:
   - age
   - app
@@ -37,7 +43,6 @@ allowlists:
   - tx
   - ui
   - url
-  secretPreviews: []
   deadCode:
     symbols: []
     # Click command functions are consumed by the decorator-registration
@@ -60,12 +65,10 @@ selection:
   - v0.1
   pillars:
   - complexity
-  - maintainability
   - correctness
   - dead-code
   - design
   - documentation
-  - modernisation
   - naming
   - security
   - sensitive-data
@@ -74,14 +77,11 @@ selection:
   rules:
   - complexity.cognitive
   - complexity.cyclomatic
-  - complexity.halstead-volume
-  - complexity.maintainability-index
   - complexity.nesting-depth
   - correctness.substring-vocabulary-match
   - correctness.unsafe-numeric-coercion
   - dead-code.exported-but-unreferenced
   - dead-code.unused-private-attribute
-  - dead-code.unused-private-function
   - design.runtime-sys-path-mutation
   - design.single-implementor-protocol
   - docs.complex-branch-rationale
@@ -96,15 +96,9 @@ selection:
   - docs.missing-return-doc
   - docs.stale-param-doc
   - docs.todo-density
-  - docs.useless-docstring
-  - modernisation.f-string-candidate
   - naming.abbreviation
-  - naming.boolean-prefix
-  - naming.confusing-name
   - naming.generic-function
-  - naming.hungarian-notation
   - naming.identifier-quality
-  - naming.module-name-mismatch
   - naming.short-variable
   - naming.test-naming-consistency
   - security.cors-wildcard-with-credentials
@@ -113,7 +107,6 @@ selection:
   - security.dependency-local-path
   - security.dependency-url-reference
   - security.disabled-ssl-verification
-  - security.django-mark-safe
   - security.django-raw-sql
   - security.error-suppression
   - security.extract-compact-user-input
@@ -134,11 +127,9 @@ selection:
   - security.path-traversal
   - security.shell-injection
   - security.silent-except
-  - security.sql-concatenation
   - security.ssrf
   - security.unsafe-pickle
   - security.unsafe-yaml-load
-  - security.unsanitized-markdown-interpolation
   - security.variable-import
   - security.weak-crypto
   - security.xxe
@@ -147,10 +138,8 @@ selection:
   - sensitive-data.database-url-password
   - sensitive-data.gcp-service-account-key
   - sensitive-data.hardcoded-env-value
-  - sensitive-data.high-entropy-string
   - sensitive-data.jwt-token
   - sensitive-data.phi-pattern
-  - sensitive-data.pii-test-fixture
   - sensitive-data.private-key
   - sensitive-data.url-credentials
   - size.attribute-count
@@ -160,50 +149,35 @@ selection:
   - size.function-length
   - size.parameter-count
   - size.public-method-count
-  - test-quality.conditional-logic
-  - test-quality.eager-test
   - test-quality.empty-parametrize
-  - test-quality.exception-type-only
   - test-quality.excessive-mocking
-  - test-quality.extends-production-class
   - test-quality.global-state-mutation
   - test-quality.loop-assertion-without-message
-  - test-quality.loop-in-test
-  - test-quality.magic-number-assertion
   - test-quality.mock-only-test
-  - test-quality.mock-without-expectation
   - test-quality.mocking-domain-object
-  - test-quality.multiple-aaa-cycles
-  - test-quality.mystery-guest
   - test-quality.naming-consistency
   - test-quality.no-assertions
-  - test-quality.parametrize-annotation
   - test-quality.private-reflection
   - test-quality.pytest-coverage-source-missing
   - test-quality.pytest-deprecations-not-fatal
   - test-quality.pytest-strict-config-missing
   - test-quality.repeated-structure-missing-parametrize
   - test-quality.setup-bloat
-  - test-quality.skipped-without-reason
-  - test-quality.sleep-in-test
   - test-quality.static-analysis-redundant-test
   - test-quality.sut-not-called
-  - test-quality.tautological-type-assertion
   - test-quality.test-function-too-long
   - test-quality.test-longer-than-sut
   - test-quality.trivial-assertion
-  - test-quality.trivial-snapshot
   - test-quality.unused-mock
-  - waste.commented-out-code
-  - waste.empty-class
   - waste.empty-function
-  - waste.one-line-function
-  - waste.redundant-variable
   - waste.unreachable-code
-  - waste.unused-import
-  - waste.unused-parameter
   excludePillars: []
   excludeRules: []
+# sensitiveExclusions is the only way to silence a sensitive-data finding.
+# Write each entry by hand with rule, path, and reason; symbol is optional.
+# No preview or matched value is ever turned into an entry automatically,
+# and every entry reports how many findings it suppressed.
+sensitiveExclusions: []
 rules:
   # Cognitive complexity
   complexity.cognitive:
@@ -212,18 +186,8 @@ rules:
     severity: error
   # Cyclomatic complexity
   complexity.cyclomatic:
-    enabled: true
+    enabled: false
     threshold: 20
-    severity: error
-  # Halstead volume
-  complexity.halstead-volume:
-    enabled: true
-    threshold: 400
-    severity: error
-  # Maintainability index
-  complexity.maintainability-index:
-    enabled: true
-    threshold: 70
     severity: error
   # Nesting depth
   complexity.nesting-depth:
@@ -238,14 +202,11 @@ rules:
     enabled: true
   # Exported but unreferenced
   dead-code.exported-but-unreferenced:
-    enabled: true
+    enabled: false
     options:
       entryPointPatterns: []
   # Unused private attribute
   dead-code.unused-private-attribute:
-    enabled: true
-  # Unused private function
-  dead-code.unused-private-function:
     enabled: true
   # Runtime sys.path mutation
   design.runtime-sys-path-mutation:
@@ -293,21 +254,29 @@ rules:
   # Missing function docstring
   docs.missing-function-docstring:
     enabled: true
+    options:
+      everyCallable: false
   # Missing module docstring
   docs.missing-module-docstring:
     enabled: true
   # Missing parameter documentation
   docs.missing-param-doc:
     enabled: true
+    options:
+      everyCallable: false
   # Missing raises documentation
   docs.missing-raises-doc:
     enabled: true
+    options:
+      everyCallable: false
   # Missing README
   docs.missing-readme:
     enabled: true
   # Missing return documentation
   docs.missing-return-doc:
-    enabled: true
+    enabled: false
+    options:
+      everyCallable: false
   # Stale parameter documentation
   docs.stale-param-doc:
     enabled: true
@@ -316,59 +285,12 @@ rules:
     enabled: true
     threshold: 10
     severity: error
-  # Useless docstring
-  docs.useless-docstring:
-    enabled: true
-    options:
-      min_summary_words:
-        module: 6
-        class: 4
-        function: 4
-  # F-string candidate
-  modernisation.f-string-candidate:
-    enabled: true
   # Abbreviation
   naming.abbreviation:
     enabled: true
-  # Boolean prefix
-  naming.boolean-prefix:
-    enabled: true
-    options:
-      acceptedBooleanNames:
-      - all
-      - apply
-      - check
-      - dev
-      - enabled
-      - force
-      - fresh
-      - harness
-      - json
-      - ok
-      - verbose
-      - 'yes'
-  # Confusing class name
-  naming.confusing-name:
-    enabled: true
-    options:
-      confusingNames:
-      - Handler
-      - Processor
-      - Manager
-      - Util
-      - Utils
-      - Helper
-      - Helpers
-      - Data
-      - Info
-      - Service
-      - Stuff
-      - Thing
-      - Object
-      - Item
   # Generic function name
   naming.generic-function:
-    enabled: true
+    enabled: false
     options:
       genericFunctions:
       - process
@@ -380,29 +302,9 @@ rules:
       - apply
       - manage
       - operate
-  # Hungarian notation
-  naming.hungarian-notation:
-    enabled: true
   # Identifier quality
   naming.identifier-quality:
     enabled: true
-  # Module name mismatch
-  naming.module-name-mismatch:
-    enabled: true
-    options:
-      conventionalModuleNames:
-      - constants
-      - exceptions
-      - helpers
-      - protocols
-      - types
-      - cli
-      - dashboard_server
-      - python_parser
-      - _halstead
-      - _secret_scanner_helper
-      - _comment_scanner
-      - _dependency_posture_helper
   # Short variable name
   naming.short-variable:
     enabled: true
@@ -427,7 +329,7 @@ rules:
     enabled: true
   # Dangerous function call
   security.dangerous-function-call:
-    enabled: true
+    enabled: false
   # Dependency installed from Git reference
   security.dependency-git-reference:
     enabled: true
@@ -440,12 +342,9 @@ rules:
   # Disabled SSL verification
   security.disabled-ssl-verification:
     enabled: true
-  # Django mark_safe on dynamic content
-  security.django-mark-safe:
-    enabled: true
   # Django raw SQL with dynamic string
   security.django-raw-sql:
-    enabled: true
+    enabled: false
   # Wide error suppression
   security.error-suppression:
     enabled: true
@@ -466,7 +365,7 @@ rules:
     enabled: true
   # Repository secret in a PR-triggered workflow
   security.github-actions-secrets-in-pr:
-    enabled: true
+    enabled: false
   # Unpinned GitHub Actions reference
   security.github-actions-unpinned-action:
     enabled: true
@@ -475,16 +374,16 @@ rules:
     enabled: true
   # Hardcoded framework SECRET_KEY
   security.hardcoded-framework-secret-key:
-    enabled: true
+    enabled: false
   # Header injection
   security.header-injection:
-    enabled: true
+    enabled: false
   # Insecure random source
   security.insecure-random:
     enabled: true
   # Insecure temporary file
   security.insecure-temp-file:
-    enabled: true
+    enabled: false
   # Insecure TLS protocol
   security.insecure-tls-protocol:
     enabled: true
@@ -499,56 +398,42 @@ rules:
     enabled: true
   # Shell injection
   security.shell-injection:
-    enabled: true
+    enabled: false
   # Silent except
   security.silent-except:
-    enabled: true
-  # SQL concatenation
-  security.sql-concatenation:
-    enabled: true
+    enabled: false
   # Server-side request forgery (SSRF)
   security.ssrf:
     enabled: true
-  # Unsafe pickle deserialisation
+  # Unsafe pickle remains opt-in while local cache provenance is unresolved.
   security.unsafe-pickle:
-    enabled: true
+    enabled: false
   # Unsafe YAML load
   security.unsafe-yaml-load:
-    enabled: true
-  # Unsanitized markdown interpolation
-  security.unsanitized-markdown-interpolation:
-    enabled: true
-    options:
-      labelSanitizers: []
-      urlSanitizers:
-      - urllib.parse.quote
-      - urllib.parse.quote_plus
+    enabled: false
   # Variable import
   security.variable-import:
-    enabled: true
-  # Weak cryptographic hash
+    enabled: false
+  # Weak cryptographic hash remains opt-in while the enabled corpus is too small to assess its precision floor.
   security.weak-crypto:
-    enabled: true
+    enabled: false
   # XML external entity (XXE)
   security.xxe:
-    enabled: true
+    enabled: false
   # API key pattern
   sensitive-data.api-key-pattern:
-    enabled: true
+    enabled: false
   # AWS access key
   sensitive-data.aws-access-key:
     enabled: true
   # Database URL with password
   sensitive-data.database-url-password:
-    enabled: true
+    enabled: false
   # GCP service-account key
   sensitive-data.gcp-service-account-key:
     enabled: true
   # Hardcoded env-file secret
   sensitive-data.hardcoded-env-value:
-    enabled: true
-  # High-entropy string
-  sensitive-data.high-entropy-string:
     enabled: true
   # JWT token
   sensitive-data.jwt-token:
@@ -556,15 +441,12 @@ rules:
   # PHI pattern
   sensitive-data.phi-pattern:
     enabled: true
-  # PII in test fixture
-  sensitive-data.pii-test-fixture:
-    enabled: true
-  # Private key
+  # Private-key detection remains opt-in while the enabled corpus is too small to assess its precision floor.
   sensitive-data.private-key:
-    enabled: true
+    enabled: false
   # URL embedded credentials
   sensitive-data.url-credentials:
-    enabled: true
+    enabled: false
   # Attribute count
   size.attribute-count:
     enabled: true
@@ -600,95 +482,34 @@ rules:
     enabled: true
     threshold: 10
     severity: error
-  # Conditional logic in test
-  test-quality.conditional-logic:
-    enabled: true
-  # Eager test
-  test-quality.eager-test:
-    enabled: true
-    thresholds:
-      maxAssertions: 5
   # Empty parametrize
   test-quality.empty-parametrize:
-    enabled: true
-  # Exception type-only assertion
-  test-quality.exception-type-only:
     enabled: true
   # Excessive mocking
   test-quality.excessive-mocking:
     enabled: true
     thresholds:
       maxMocks: 4
-  # Test class extends production class
-  test-quality.extends-production-class:
-    enabled: true
-    options:
-      additionalTestBases: []
   # Global state mutation in test
   test-quality.global-state-mutation:
     enabled: true
   # Loop assertion without message
   test-quality.loop-assertion-without-message:
-    enabled: true
-  # Loop in test
-  test-quality.loop-in-test:
-    enabled: true
-  # Magic-number assertion
-  test-quality.magic-number-assertion:
-    enabled: true
-    options:
-      allowed_numbers:
-      - -1
-      - 0
-      - 1
-      - 2
-      - 3
-      - 200
-      - 201
-      - 204
-      - 301
-      - 302
-      - 400
-      - 401
-      - 403
-      - 404
-      - 409
-      - 422
-      - 429
-      - 500
-      - 502
-      - 503
-      - 504
+    enabled: false
   # Mock-only test
   test-quality.mock-only-test:
-    enabled: true
-  # Mock without expectation
-  test-quality.mock-without-expectation:
     enabled: true
   # Mocking domain object
   test-quality.mocking-domain-object:
     enabled: true
     options:
       domain_namespaces: []
-  # Multiple AAA cycles
-  test-quality.multiple-aaa-cycles:
-    enabled: true
-    thresholds:
-      maxCycles: 2
-  # Mystery guest in test
-  test-quality.mystery-guest:
-    enabled: true
   # Test-naming consistency
   test-quality.naming-consistency:
     enabled: true
   # Test without assertions
   test-quality.no-assertions:
-    enabled: true
-  # Parametrize without `ids`
-  test-quality.parametrize-annotation:
-    enabled: true
-    thresholds:
-      maxCasesWithoutIds: 2
+    enabled: false
   # Private reflection in test
   test-quality.private-reflection:
     enabled: true
@@ -706,29 +527,22 @@ rules:
     enabled: true
     thresholds:
       minGroupSize: 3
+    options:
+      groupFindings: true
   # Setup bloat
   test-quality.setup-bloat:
-    enabled: true
+    enabled: false
     thresholds:
       maxSetupLines: 30
-  # Skipped without reason
-  test-quality.skipped-without-reason:
-    enabled: true
-  # Sleep in test
-  test-quality.sleep-in-test:
-    enabled: true
   # Flags tests whose main assertion appears to verify only a static source declaration visible in the same parsed file.
   test-quality.static-analysis-redundant-test:
     enabled: true
   # System under test never called
   test-quality.sut-not-called:
-    enabled: true
-  # Tautological type assertion
-  test-quality.tautological-type-assertion:
-    enabled: true
+    enabled: false
   # Test function too long
   test-quality.test-function-too-long:
-    enabled: true
+    enabled: false
     threshold: 100
     severity: error
   # Test longer than SUT
@@ -738,34 +552,13 @@ rules:
       ratio: 2.0
   # Trivial assertion
   test-quality.trivial-assertion:
-    enabled: true
-  # Trivial snapshot assertion
-  test-quality.trivial-snapshot:
-    enabled: true
+    enabled: false
   # Unused mock
   test-quality.unused-mock:
-    enabled: true
-  # Commented-out code
-  waste.commented-out-code:
-    enabled: true
-  # Empty class
-  waste.empty-class:
     enabled: true
   # Empty function
   waste.empty-function:
     enabled: true
-  # One-line function wrapper
-  waste.one-line-function:
-    enabled: true
-  # Redundant variable
-  waste.redundant-variable:
-    enabled: true
   # Unreachable code
   waste.unreachable-code:
-    enabled: true
-  # Unused import
-  waste.unused-import:
-    enabled: true
-  # Unused parameter
-  waste.unused-parameter:
     enabled: true

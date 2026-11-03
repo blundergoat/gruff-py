@@ -93,10 +93,7 @@ class InsecureRandomRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"`{target}` used for a security-smelling value - "
-                        f"`random` is not cryptographically secure."
-                    ),
+                    message=(f"`{target}` used for a security-smelling value - `random` is not cryptographically secure."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,
@@ -104,10 +101,7 @@ class InsecureRandomRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Use the ``secrets`` module: ``secrets.token_hex(32)``, "
-                        "``secrets.choice(...)``, ``secrets.randbelow(...)``."
-                    ),
+                    remediation=("Use the ``secrets`` module: ``secrets.token_hex(32)``, ``secrets.choice(...)``, ``secrets.randbelow(...)``."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),
@@ -116,12 +110,32 @@ class InsecureRandomRule(Rule):
 
 
 def _is_random_call(target: str) -> bool:
+    """Recognize a listed method under the literal random target prefix.
+
+    This check does not resolve import aliases or runtime bindings.
+
+    Args:
+        target: Resolved target spelling to compare with the supported random methods.
+
+    Returns:
+        True when the spelling has the random prefix and a listed remaining method name; false otherwise.
+    """
     if target.startswith("random."):
         return target.split(".", 1)[1] in _RANDOM_METHODS
     return False
 
 
 def _has_security_context_smell(call: ast.Call) -> bool:
+    """Check the nearest plain assignment or function for a security-related name.
+
+    A plain assignment checks only bare-name targets. A nonmatching nearest context stops the search rather than falling through to outer contexts.
+
+    Args:
+        call: Call with parent links used to find the first enclosing plain assignment or function.
+
+    Returns:
+        Whether that first context matches the name heuristic; false if it does not or no such parent exists.
+    """
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):

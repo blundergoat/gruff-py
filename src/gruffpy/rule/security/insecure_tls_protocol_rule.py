@@ -39,10 +39,11 @@ _SOURCE_NEEDLES: tuple[str, ...] = (
     "PROTOCOL_SSLv23",
 )
 _REMEDIATION = (
-    "Use a modern TLS protocol - prefer `ssl.PROTOCOL_TLS_CLIENT` or "
-    "`ssl.PROTOCOL_TLS_SERVER`, or `ssl.PROTOCOL_TLSv1_2` if a specific "
-    "version is required. SSLv2, SSLv3, TLSv1, and TLSv1.1 have known "
-    "vulnerabilities and are deprecated."
+    "Use `ssl.create_default_context()` or `ssl.PROTOCOL_TLS_CLIENT` / "
+    "`ssl.PROTOCOL_TLS_SERVER`, and when a floor is required set "
+    "`context.minimum_version = ssl.TLSVersion.TLSv1_2`. SSLv2, SSLv3, TLSv1 "
+    "and TLSv1.1 have known weaknesses, and every version-pinned `PROTOCOL_*` "
+    "constant is deprecated."
 )
 
 
@@ -108,6 +109,16 @@ def _build_finding(
     unit: AnalysisUnit,
     node: ast.Attribute,
 ) -> Finding:
+    """Build the finding for a matched deprecated ssl protocol attribute.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        node: Matched attribute whose name and source range identify the protocol reference.
+
+    Returns:
+        A finding with the protocol target, TLS remediation and handshake metadata.
+    """
     target = f"ssl.{node.attr}"
     return Finding(
         rule_id=definition.id,

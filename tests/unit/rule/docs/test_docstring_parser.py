@@ -2,14 +2,17 @@ from gruffpy.rule.docs._docstring_parser import DocstringStyle, parse_docstring
 
 
 def test_empty_returns_none():
+    """Parse an empty docstring to None."""
     assert parse_docstring("") is None
 
 
 def test_whitespace_only_returns_none():
+    """Parse a whitespace-only docstring to None."""
     assert parse_docstring("   \n\t\n  ") is None
 
 
 def test_plain_summary_only():
+    """Parse a one-line docstring to its summary with no parameters, return or raises."""
     parsed = parse_docstring("Just a one-liner.")
     assert parsed is not None
     assert parsed.summary == "Just a one-liner."
@@ -31,12 +34,14 @@ _GOOGLE_TEXT = (
 
 
 def test_google_style_detected():
+    """Detect the Google style and its summary line."""
     parsed = parse_docstring(_GOOGLE_TEXT)
     assert parsed is not None
     assert (parsed.style, parsed.summary) == (DocstringStyle.GOOGLE, "Summary line.")
 
 
 def test_google_style_extracts_params():
+    """Read both Google ``Args`` entries in order, with a type hint only where one is given."""
     parsed = parse_docstring(_GOOGLE_TEXT)
     assert parsed is not None
     assert [(p.name, p.type_hint, p.description) for p in parsed.params] == [
@@ -46,6 +51,7 @@ def test_google_style_extracts_params():
 
 
 def test_google_style_extracts_returns():
+    """Read the type hint and description from a Google ``Returns`` section."""
     parsed = parse_docstring(_GOOGLE_TEXT)
     assert parsed is not None
     assert parsed.returns is not None
@@ -53,6 +59,7 @@ def test_google_style_extracts_returns():
 
 
 def test_google_style_extracts_raises():
+    """Read the exception name and description from a Google ``Raises`` section."""
     parsed = parse_docstring(_GOOGLE_TEXT)
     assert parsed is not None
     assert [(r.name, r.description) for r in parsed.raises] == [
@@ -60,28 +67,18 @@ def test_google_style_extracts_raises():
     ]
 
 
-_NUMPY_TEXT = (
-    "Summary.\n\n"
-    "Parameters\n"
-    "----------\n"
-    "x : int\n"
-    "    The x value.\n"
-    "y\n"
-    "    The y value.\n\n"
-    "Returns\n"
-    "-------\n"
-    "str\n"
-    "    A description.\n"
-)
+_NUMPY_TEXT = "Summary.\n\nParameters\n----------\nx : int\n    The x value.\ny\n    The y value.\n\nReturns\n-------\nstr\n    A description.\n"
 
 
 def test_numpy_style_detected():
+    """Detect the NumPy style and its summary line."""
     parsed = parse_docstring(_NUMPY_TEXT)
     assert parsed is not None
     assert (parsed.style, parsed.summary) == (DocstringStyle.NUMPY, "Summary.")
 
 
 def test_numpy_style_extracts_params_and_returns():
+    """Read both NumPy ``Parameters`` names in order and the ``Returns`` description."""
     parsed = parse_docstring(_NUMPY_TEXT)
     assert parsed is not None
     assert [p.name for p in parsed.params] == ["x", "y"]
@@ -101,12 +98,14 @@ _SPHINX_TEXT = (
 
 
 def test_sphinx_rest_style_detected():
+    """Detect the Sphinx field-list style."""
     parsed = parse_docstring(_SPHINX_TEXT)
     assert parsed is not None
     assert parsed.style is DocstringStyle.SPHINX
 
 
 def test_sphinx_rest_style_extracts_params_returns_and_raises():
+    """Read both Sphinx parameters, the return description and a ``ValueError`` raise."""
     parsed = parse_docstring(_SPHINX_TEXT)
     assert parsed is not None
     assert {p.name for p in parsed.params} == {"x", "y"}
@@ -116,13 +115,8 @@ def test_sphinx_rest_style_extracts_params_returns_and_raises():
 
 
 def test_long_description_captured():
-    text = (
-        "Summary.\n\n"
-        "This is a longer prose paragraph that should\n"
-        "be captured in the description field.\n\n"
-        "Args:\n"
-        "    x: a value\n"
-    )
+    """Keep the summary apart and capture text from the following prose paragraph in the description."""
+    text = "Summary.\n\nThis is a longer prose paragraph that should\nbe captured in the description field.\n\nArgs:\n    x: a value\n"
     parsed = parse_docstring(text)
     assert parsed is not None
     assert parsed.summary == "Summary."
@@ -131,6 +125,7 @@ def test_long_description_captured():
 
 
 def test_returns_without_type():
+    """Read a Google ``Returns`` description that has no type."""
     text = "Summary.\n\nReturns:\n    Just a description without a type.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
@@ -139,6 +134,7 @@ def test_returns_without_type():
 
 
 def test_google_style_minimal():
+    """Detect the Google style from one ``Args`` entry and read its name."""
     parsed = parse_docstring("Sum two values.\n\nArgs:\n    x: a value.\n")
     assert parsed is not None
     assert parsed.style is DocstringStyle.GOOGLE
@@ -146,6 +142,7 @@ def test_google_style_minimal():
 
 
 def test_google_style_with_descriptions_only():
+    """Detect the Google style when ``Args`` entries carry descriptions but no types, reading both names."""
     text = "Compute the total.\n\nArgs:\n    items: the inputs.\n    weight: the scaling factor.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
@@ -154,6 +151,7 @@ def test_google_style_with_descriptions_only():
 
 
 def test_numpy_style_with_returns_only():
+    """Detect the NumPy style from a lone ``Returns`` section and read its type."""
     text = "Summary.\n\nReturns\n-------\nint\n    The result.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
@@ -163,6 +161,7 @@ def test_numpy_style_with_returns_only():
 
 
 def test_numpy_style_raises_section():
+    """Detect the NumPy style from a lone ``Raises`` section and read its ``ValueError``."""
     text = "Summary.\n\nRaises\n------\nValueError\n    When inputs are out of range.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
@@ -171,6 +170,7 @@ def test_numpy_style_raises_section():
 
 
 def test_sphinx_style_returns_only():
+    """Detect the Sphinx style from a return field and its type field, and read the description."""
     parsed = parse_docstring("Summary.\n\n:returns: the count.\n:rtype: int\n")
     assert parsed is not None
     assert parsed.style is DocstringStyle.SPHINX
@@ -179,11 +179,8 @@ def test_sphinx_style_returns_only():
 
 
 def test_sphinx_style_multiple_raises():
-    text = (
-        "Summary.\n\n"
-        ":raises ValueError: when input is bad.\n"
-        ":raises RuntimeError: when state is bad.\n"
-    )
+    """Read both exception names from two Sphinx raises fields."""
+    text = "Summary.\n\n:raises ValueError: when input is bad.\n:raises RuntimeError: when state is bad.\n"
     parsed = parse_docstring(text)
     assert parsed is not None
     assert parsed.style is DocstringStyle.SPHINX
@@ -191,6 +188,7 @@ def test_sphinx_style_multiple_raises():
 
 
 def test_extract_docstring_round_trip():
+    """Extract a function's one-line docstring text from its AST node."""
     import ast
 
     from gruffpy.rule.docs._docstring_parser import extract_docstring
@@ -207,6 +205,7 @@ def f(x):
 
 
 def test_extract_docstring_returns_none_when_absent():
+    """Extract None from a function without a docstring."""
     import ast
 
     from gruffpy.rule.docs._docstring_parser import extract_docstring

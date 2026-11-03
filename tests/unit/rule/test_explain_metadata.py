@@ -16,14 +16,8 @@ _OPTION_DESCRIPTION_RULES = (
     "docs.complex-branch-rationale",
     "docs.dataclass-attributes",
     "docs.missing-class-docstring",
-    "docs.useless-docstring",
-    "naming.confusing-name",
     "naming.generic-function",
-    "naming.module-name-mismatch",
     "naming.short-variable",
-    "security.unsanitized-markdown-interpolation",
-    "test-quality.extends-production-class",
-    "test-quality.magic-number-assertion",
     "test-quality.mocking-domain-object",
     "test-quality.test-longer-than-sut",
 )
@@ -31,6 +25,11 @@ _OPTION_DESCRIPTION_RULES = (
 
 @pytest.mark.parametrize("rule_id", _OPTION_DESCRIPTION_RULES)
 def test_rule_with_options_has_option_descriptions(rule_id: str) -> None:
+    """Describe exactly the default options of each listed rule, with no option description missing or extra.
+
+    Args:
+        rule_id: Rule from the module's option-description list; the cases cover each listed rule.
+    """
     registry = RuleRegistry.defaults()
     definition = registry.get(rule_id).definition()
     docs = documentation_for_rule(rule_id)
@@ -42,36 +41,34 @@ def test_rule_with_options_has_option_descriptions(rule_id: str) -> None:
 
 
 def test_related_rules_only_reference_registered_rule_ids() -> None:
+    """Name only registered rule ids among each rule's related rules."""
     registry = RuleRegistry.defaults()
     valid_ids = {rule.definition().id for rule in registry.all()}
-    invalid = {
-        f"{rule_id} -> {sibling}"
-        for rule_id, siblings in RELATED_RULES.items()
-        for sibling in siblings
-        if sibling not in valid_ids
-    }
+    invalid = {f"{rule_id} -> {sibling}" for rule_id, siblings in RELATED_RULES.items() for sibling in siblings if sibling not in valid_ids}
     assert invalid == set()
 
 
 def test_related_rules_never_list_self() -> None:
+    """Never list a rule among its own related rules."""
     self_refs = [rule_id for rule_id, siblings in RELATED_RULES.items() if rule_id in siblings]
     assert self_refs == []
 
 
 def test_related_rules_caps_siblings_at_four() -> None:
-    over_cap = {
-        rule_id: len(siblings) for rule_id, siblings in RELATED_RULES.items() if len(siblings) > 4
-    }
+    """List at most four related rules for each rule."""
+    over_cap = {rule_id: len(siblings) for rule_id, siblings in RELATED_RULES.items() if len(siblings) > 4}
     assert over_cap == {}
 
 
 def test_false_positive_shape_is_a_frozen_dataclass() -> None:
+    """Raise ``FrozenInstanceError`` when a field of a false-positive shape is assigned."""
     shape = FalsePositiveShape(shape="x", mitigation="y")
     with pytest.raises(FrozenInstanceError):
         shape.shape = "z"  # type: ignore[misc] -- mutating frozen dataclass is the assertion under test
 
 
 def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> None:
+    """Include option descriptions in a rule's documentation payload when the rule has them."""
     docs = documentation_for_rule("docs.dataclass-attributes")
 
     payload = docs.to_payload()
@@ -81,6 +78,7 @@ def test_rule_docs_to_payload_includes_option_descriptions_when_present() -> Non
 
 
 def test_rule_docs_to_payload_omits_option_descriptions_when_absent() -> None:
+    """Omit the option-descriptions key from a rule's documentation payload when the rule has none."""
     docs = documentation_for_rule("naming.abbreviation")
 
     payload = docs.to_payload()
@@ -107,24 +105,6 @@ def test_abbreviation_docs_expose_false_positive_shape() -> None:
     assert "project vocabulary" in docs.false_positive_shapes[0].shape
     assert "allowlists.acceptedAbbreviations" in docs.false_positive_shapes[0].mitigation
     assert "falsePositiveShapes" in payload
-
-
-def test_markdown_rule_explains_slot_specific_sanitizer_options() -> None:
-    """Give users separate label and URL guidance in explain-mode payloads."""
-    docs = documentation_for_rule("security.unsanitized-markdown-interpolation")
-
-    assert "labelSanitizers" in docs.option_descriptions
-    assert "urlSanitizers" in docs.option_descriptions
-    assert any("html.escape" in shape.shape for shape in docs.false_positive_shapes)
-
-
-def test_boolean_prefix_docs_explain_scalar_annotation_boundary() -> None:
-    """Tell users why containers and callables receive no predicate-name finding."""
-    docs = documentation_for_rule("naming.boolean-prefix")
-
-    assert "Scalar Boolean" in docs.rationale
-    assert "containers" in docs.confidence_rationale
-    assert "acceptedBooleanNames" in docs.fix_guidance
 
 
 def test_identifier_quality_docs_separate_domain_names_from_placeholders() -> None:

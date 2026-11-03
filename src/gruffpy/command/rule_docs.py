@@ -33,15 +33,13 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
 
 _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
-    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
-    Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
+    Pillar.COMPLEXITY: "Cyclomatic, cognitive, and nesting",
+    Pillar.MAINTAINABILITY: "Reserved after the maintainability-index rule retired",
     Pillar.CORRECTNESS: "Mechanically detectable runtime-defect shapes",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
-    Pillar.DOCUMENTATION: (
-        "Docstring presence and quality, stale docs, TODO density, README presence"
-    ),
+    Pillar.DOCUMENTATION: ("Docstring presence and quality, stale docs, TODO density, README presence"),
     Pillar.SECURITY: "Heuristic AST-level dangerous patterns",
     Pillar.SENSITIVE_DATA: "Secret, key, PII, and PHI patterns",
     Pillar.TEST_QUALITY: "Pytest-aware test smells and project config checks",
@@ -61,6 +59,78 @@ _GROUP_ORDER = (
     "Test Quality",
     "Design",
 )
+
+_M02_DEFAULT_OFF_REASONS = {
+    "test-quality.test-function-too-long": (
+        "Opt-in after M02's bounded repair: nine of twenty-five judged findings were worth acting on, below the 0.70 test-quality floor. "
+        "Explicit enablement retains the literal response-snapshot exemption; default scans omit this rule's findings."
+    ),
+    "test-quality.setup-bloat": (
+        "Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. "
+        "Explicit enablement retains the production-hook repair; default scans omit this rule's findings."
+    ),
+    "security.unsafe-pickle": (
+        "Opt-in under M02 while its 0.80 security precision floor remains unestablished. "
+        "The local detector cannot infer whether a non-literal payload is a trusted internal cache. "
+        "Explicit enablement retains the existing checks."
+    ),
+    "naming.generic-function": (
+        "Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. "
+        "Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings."
+    ),
+    "sensitive-data.private-key": (
+        "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
+        "below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair."
+    ),
+    "security.weak-crypto": (
+        "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
+        "below the minimum needed to assess the 0.80 security precision floor. Explicit enablement retains the repair."
+    ),
+    "security.hardcoded-framework-secret-key": (
+        "Opt-in under M02: only one current corpus finding remains after the shared test-path exclusion, "
+        "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
+    ),
+    "security.insecure-temp-file": (
+        "Opt-in under M02: no current corpus findings remain after the shared test-path exclusion, "
+        "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
+    ),
+    "security.silent-except": (
+        "Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. "
+        "The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled."
+    ),
+    "docs.missing-return-doc": (
+        "Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish "
+        "the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending."
+    ),
+    "complexity.cyclomatic": (
+        "Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor."
+    ),
+    "security.dangerous-function-call": (
+        "Opt-in after M02's blind provenance review remained insufficient: 10 right of 15 judged, with 10 unresolved labels."
+    ),
+    "security.header-injection": (
+        "Opt-in after M02's blind provenance review remained insufficient: neither of two judged findings was right, "
+        "and one label remained unresolved."
+    ),
+    "security.unsafe-yaml-load": (
+        "Opt-in after M02's blind provenance review remained insufficient: two right of three judged, with one unresolved label."
+    ),
+    "security.variable-import": (
+        "Opt-in after M02's blind provenance review remained insufficient: three right of eleven judged, with eight unresolved labels."
+    ),
+    "security.xxe": (
+        "Opt-in after M02: only three default findings, two right and one unresolved, leave too little evidence for the precision floor."
+    ),
+    "sensitive-data.database-url-password": (
+        "Opt-in after M02: none of seven judged findings was right, but only eight default findings were available, too few for deletion."
+    ),
+    "test-quality.no-assertions": (
+        "Remains opt-in under M02's accepted table: seven right of 36 judged findings do not establish its 0.70 precision floor."
+    ),
+    "test-quality.sut-not-called": (
+        "Remains opt-in under M02's accepted table: nine right of 28 judged findings do not establish its 0.70 precision floor."
+    ),
+}
 
 
 def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> str:
@@ -82,10 +152,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     lines = [
         "# Rules",
         "",
-        (
-            f"gruff-py `{VERSION}` registers {len(definitions)} rules across "
-            f"{len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."
-        ),
+        (f"gruff-py `{VERSION}` registers {len(definitions)} rules across {len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."),
         "",
         "This file is generated from the first-party built-in rule catalog.",
         "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
@@ -100,9 +167,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         registered_rule_count = rule_counts_by_pillar.get(pillar, 0)
         # An empty pillar is reserved and gives users no rule row to configure.
         if registered_rule_count:
-            lines.append(
-                f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |"
-            )
+            lines.append(f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |")
     lines.extend(["", "## Rule IDs", ""])
     by_group = _definitions_by_group(definitions)
     # Readers browse familiar feature sections before opening individual rule details.
@@ -121,8 +186,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         [
             "## Rule Details",
             "",
-            "Each rule detail includes the runtime defaults, documentation metadata, "
-            "and threshold contract where applicable.",
+            "Each rule detail includes the runtime defaults, documentation metadata, and threshold contract where applicable.",
             "",
         ]
     )
@@ -261,13 +325,11 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
+    if not definition.default_enabled and definition.id in _M02_DEFAULT_OFF_REASONS:
+        lines.append(f"- Default-off reason: {_M02_DEFAULT_OFF_REASONS[definition.id]}")
     # Metric rules show the threshold a user can tune for finding severity.
     if _has_severity_thresholds(definition):
-        lines.append(
-            "- Config threshold: "
-            f"`threshold` = `{definition.default_threshold!r}`, "
-            f"`severity` = `{definition.default_severity.value}`"
-        )
+        lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")
     # Named thresholds expose several user-tunable limits instead of one metric cutoff.
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
@@ -284,6 +346,11 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     # Security metadata gives users the sink/source context attached to a finding.
     if docs.security_metadata:
         lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
+    if docs.false_positive_shapes:
+        lines.append("- Common false-positive shapes:")
+        for false_positive_shape in docs.false_positive_shapes:
+            lines.append(f"  - {false_positive_shape.shape}")
+            lines.append(f"    Mitigation: {false_positive_shape.mitigation}")
     lines.extend(
         [
             f"- Bad example: {docs.bad_example}",
@@ -349,7 +416,7 @@ def _suppression_lines() -> list[str]:
         "Suppress one rule on the same line:",
         "",
         "```python",
-        "import os  # gruff: disable=waste.unused-import",
+        'app.run(host="0.0.0.0")  # gruff: disable=security.hardcoded-bind-all-interfaces',
         "```",
         "",
         "Suppress one or more rules on the next physical line:",
@@ -406,9 +473,9 @@ def _choosing_rules_lines() -> list[str]:
         "",
         "```yaml",
         "rules:",
-        "  test-quality.eager-test:",
+        "  test-quality.excessive-mocking:",
         "    thresholds:",
-        "      maxAssertions: 5",
+        "      maxMocks: 4",
         "```",
         "",
     ]

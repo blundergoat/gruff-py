@@ -3,6 +3,7 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_private_attribute_access_emits():
+    """Report one finding, naming ``_private``, for a test that reads a private attribute of another object."""
     src = "def test_foo():\n    assert obj._private == 1\n"
     findings = PrivateReflectionRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -10,10 +11,12 @@ def test_private_attribute_access_emits():
 
 
 def test_dunder_access_skipped():
+    """Report nothing for a test that reads dunder attributes."""
     src = "def test_foo():\n    assert obj.__class__.__name__ == 'X'\n"
     assert PrivateReflectionRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_self_private_access_skipped():
+    """Report nothing for a test method that reads a private attribute of ``self``."""
     src = "class TestX:\n    def test_a(self):\n        assert self._helper == 1\n"
     assert PrivateReflectionRule().analyse(make_unit(src), default_ctx()) == []

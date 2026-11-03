@@ -44,6 +44,7 @@ class TrivialAssertionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -70,14 +71,14 @@ class TrivialAssertionRule(Rule):
                     continue
                 if not _is_trivial(node.test):
                     continue
+                if _is_failure_guard(node):
+                    continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            f"Test {symbol!r} has a trivial assertion that is always true/false."
-                        ),
+                        message=(f"Test {symbol!r} has a trivial assertion that is always true/false."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -94,7 +95,61 @@ class TrivialAssertionRule(Rule):
         return findings
 
 
+def _is_failure_guard(node: ast.Assert) -> bool:
+    """Recognize an assertion of a falsy constant as an expected-exception guard.
+
+    The try must contain a call and handlers whose spellings are not recognized as catching AssertionError.
+
+    Args:
+        node: Assertion with parser-attached parent links used to inspect enclosing try statements.
+
+    Returns:
+        True for such an assertion in a qualifying try body or else branch before crossing a function boundary; false otherwise.
+    """
+    if not isinstance(node.test, ast.Constant) or bool(node.test.value):
+        return False
+    current: ast.AST = node
+    while hasattr(current, "parent"):
+        parent = current.parent
+        if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef):
+            return False
+        if (
+            isinstance(parent, ast.Try)
+            and current in [*parent.body, *parent.orelse]
+            and parent.handlers
+            and not any(_can_catch_assertion_error(handler.type) for handler in parent.handlers)
+        ):
+            return any(isinstance(value, ast.Call) for statement in parent.body for value in ast.walk(statement))
+        current = parent
+    return False
+
+
+def _can_catch_assertion_error(exception: ast.expr | None) -> bool:
+    """Check whether an except-clause spelling can catch AssertionError.
+
+    Args:
+        exception: Handler type expression, or None for a bare except clause.
+
+    Returns:
+        True for a bare handler, an AssertionError/Exception/BaseException name or attribute leaf, or a tuple containing one; false otherwise.
+    """
+    if exception is None:
+        return True
+    if isinstance(exception, ast.Tuple):
+        return any(_can_catch_assertion_error(value) for value in exception.elts)
+    name = exception.id if isinstance(exception, ast.Name) else exception.attr if isinstance(exception, ast.Attribute) else ""
+    return name in {"AssertionError", "Exception", "BaseException"}
+
+
 def _is_trivial(expr: ast.expr) -> bool:
+    """Recognize literal-only assertion shapes handled by this rule.
+
+    Args:
+        expr: Assertion condition checked for supported constant and comparison forms.
+
+    Returns:
+        True for boolean, integer or float constants, literal-only comparisons, or nested not expressions over either; false otherwise.
+    """
     if isinstance(expr, ast.Constant):
         return isinstance(expr.value, bool | int | float)
     if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):

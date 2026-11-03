@@ -93,10 +93,7 @@ class TestNamingConsistencyRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message=(
-                    f"File mixes {len(snake)} snake_case test name(s) and "
-                    f"{len(camel)} camelCase test name(s); pick one style."
-                ),
+                message=(f"File mixes {len(snake)} snake_case test name(s) and {len(camel)} camelCase test name(s); pick one style."),
                 file_path=unit.file.display_path,
                 line=1,
                 severity=definition.default_severity,
@@ -105,9 +102,7 @@ class TestNamingConsistencyRule(Rule):
                 confidence=definition.confidence,
                 end_line=1,
                 symbol=None,
-                remediation=(
-                    "Use one naming convention for tests (snake_case is idiomatic in pytest)."
-                ),
+                remediation=("Use one naming convention for tests (snake_case is idiomatic in pytest)."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "snakeCaseCount": len(snake),
@@ -120,6 +115,14 @@ class TestNamingConsistencyRule(Rule):
 
 
 def _is_test_file(display_path: str) -> bool:
+    """Select test filenames and tests-directory paths for naming-style comparison.
+
+    Args:
+        display_path: Display path to match without case or slash normalization.
+
+    Returns:
+        True when the basename starts test_ and ends .py, or the path starts tests/ or contains /tests/; otherwise False.
+    """
     name = Path(display_path).name
     if name.startswith("test_") and name.endswith(".py"):
         return True
@@ -129,14 +132,18 @@ def _is_test_file(display_path: str) -> bool:
 def _walk_test_functions(
     tree: ast.Module,
 ) -> Iterator[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Iterate over direct test functions and direct test methods of top-level Test-prefixed classes.
+
+    Args:
+        tree: Module whose immediate body and qualifying classes' immediate bodies are inspected.
+
+    Returns:
+        Iterator of synchronous or asynchronous definitions with names starting test, in source order; nested definitions are not visited.
+    """
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(
-            "test"
-        ):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test"):
             yield node
         elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
             for child in node.body:
-                if isinstance(
-                    child, ast.FunctionDef | ast.AsyncFunctionDef
-                ) and child.name.startswith("test"):
+                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) and child.name.startswith("test"):
                     yield child

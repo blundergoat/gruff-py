@@ -3,43 +3,47 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_environment_no_autoescape_kwarg_emits():
+    """Report one finding for ``jinja2.Environment`` without an ``autoescape`` argument."""
     src = "import jinja2\nenv = jinja2.Environment(loader=loader)\n"
     findings = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_environment_autoescape_false_emits():
+    """Report one finding for ``jinja2.Environment(autoescape=False)``."""
     src = "import jinja2\nenv = jinja2.Environment(autoescape=False)\n"
     findings = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_environment_autoescape_true_skipped():
+    """Report nothing for ``jinja2.Environment(autoescape=True)``."""
     src = "import jinja2\nenv = jinja2.Environment(autoescape=True)\n"
     assert Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_environment_with_select_autoescape_skipped():
-    src = (
-        "from jinja2 import Environment, select_autoescape\n"
-        "env = Environment(autoescape=select_autoescape(['html', 'xml']))\n"
-    )
+    """Report nothing for an ``Environment`` that uses ``select_autoescape``."""
+    src = "from jinja2 import Environment, select_autoescape\nenv = Environment(autoescape=select_autoescape(['html', 'xml']))\n"
     assert Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_environment_from_import_no_autoescape_emits():
+    """Report one finding for ``Environment`` imported from ``jinja2`` without ``autoescape``."""
     src = "from jinja2 import Environment\nenv = Environment(loader=loader)\n"
     findings = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_environment_aliased_from_import_emits():
+    """Report one finding for an aliased ``Environment`` import without ``autoescape``."""
     src = "from jinja2 import Environment as Env\nenv = Env(loader=loader)\n"
     findings = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_environment_aliased_module_import_emits():
+    """Report one finding for ``Environment`` reached through an aliased ``jinja2`` import."""
     src = "import jinja2 as j2\nenv = j2.Environment(loader=loader)\n"
     findings = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -58,6 +62,7 @@ def test_environment_dynamic_autoescape_skipped_conservative():
 
 
 def test_carries_security_metadata():
+    """Label the finding with the ``html-output`` sink, ``template-context`` source and ``jinja2.Environment`` target."""
     src = "import jinja2\nenv = jinja2.Environment(loader=loader)\n"
     finding = Jinja2AutoescapeOffRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "html-output"

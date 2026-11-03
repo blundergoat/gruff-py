@@ -8,19 +8,17 @@ from click.testing import CliRunner
 
 from gruffpy.cli import main
 
-_FLAGGABLE_MODULE = (
-    "import os\n\n\ndef process(a, b, c, d, e, f, g, h):\n    result = a + b\n    return result\n"
-)
-_DIFF_TOUCHING_IGNORED = (
-    "diff --git a/skipme/bad.py b/skipme/bad.py\n"
-    "--- a/skipme/bad.py\n"
-    "+++ b/skipme/bad.py\n"
-    "@@ -1 +1,2 @@\n"
-    "+import sys\n"
-)
+_FLAGGABLE_MODULE = "import os\n\n\ndef process(a, b, c, d, e, f, g, h):\n    result = a + b\n    return result\n"
+_DIFF_TOUCHING_IGNORED = "diff --git a/skipme/bad.py b/skipme/bad.py\n--- a/skipme/bad.py\n+++ b/skipme/bad.py\n@@ -1 +1,2 @@\n+import sys\n"
 
 
 def _write(path: Path, text: str = "") -> None:
+    """Write text to a file, creating any missing parent directories.
+
+    Args:
+        path: File to create or overwrite.
+        text: UTF-8 content; empty by default.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -48,6 +46,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.mark.usefixtures("project")
 def test_control_ignored_file_is_flaggable_without_config() -> None:
+    """Report findings in ``skipme/bad.py`` under ``--no-config`` with no ignore details, so the file is flaggable on its own."""
     result = CliRunner().invoke(
         main,
         [
@@ -65,11 +64,12 @@ def test_control_ignored_file_is_flaggable_without_config() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert len(payload["findings"]) > 0
-    assert payload["ignoredPathDetails"] == []
+    assert payload["paths"]["details"] == []
 
 
 @pytest.mark.usefixtures("project")
 def test_analyse_explicit_ignored_arg_yields_no_findings_with_reason() -> None:
+    """Return no findings for an explicitly named file that config ignores, and report its ``skipme/**`` pattern as the reason."""
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline", "skipme/bad.py"],
@@ -78,13 +78,19 @@ def test_analyse_explicit_ignored_arg_yields_no_findings_with_reason() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert payload["ignoredPathDetails"] == [
-        {"path": "skipme/bad.py", "source": "config", "pattern": "skipme/**"}
+    assert payload["paths"]["details"] == [
+        {
+            "path": "skipme/bad.py",
+            "reason": "config-ignore",
+            "source": "config",
+            "pattern": "skipme/**",
+        }
     ]
 
 
 @pytest.mark.usefixtures("project")
 def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> None:
+    """Return no findings when a stdin diff touches only a config-ignored file, and list that file with a config source."""
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline", "--diff", "-"],
@@ -94,14 +100,12 @@ def test_analyse_diff_touching_ignored_file_yields_no_findings_with_reason() -> 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert any(
-        detail["path"] == "skipme/bad.py" and detail["source"] == "config"
-        for detail in payload["ignoredPathDetails"]
-    )
+    assert any(detail["path"] == "skipme/bad.py" and detail["source"] == "config" for detail in payload["paths"]["details"])
 
 
 @pytest.mark.usefixtures("project")
 def test_include_ignored_still_honours_config_paths_ignore() -> None:
+    """Keep ``paths.ignore`` in force under ``--include-ignored``: the configured file yields no findings and a config detail."""
     result = CliRunner().invoke(
         main,
         [
@@ -119,14 +123,13 @@ def test_include_ignored_still_honours_config_paths_ignore() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["findings"] == []
-    assert any(detail["source"] == "config" for detail in payload["ignoredPathDetails"])
+    assert any(detail["source"] == "config" for detail in payload["paths"]["details"])
 
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_reports_config_match_and_non_match_as_json() -> None:
-    result = CliRunner().invoke(
-        main, ["check-ignore", "--format", "json", "skipme/bad.py", "src/kept.py"]
-    )
+    """Report one JSON verdict per path: the ignored file with its config pattern, and the kept file with null source and pattern."""
+    result = CliRunner().invoke(main, ["check-ignore", "--format", "json", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -138,6 +141,7 @@ def test_check_ignore_reports_config_match_and_non_match_as_json() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_exit_code_is_one_when_nothing_ignored() -> None:
+    """Exit 1 from ``check-ignore`` when none of the named paths is ignored."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "json", "src/kept.py"])
 
     assert result.exit_code == 1, result.output
@@ -145,6 +149,7 @@ def test_check_ignore_exit_code_is_one_when_nothing_ignored() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_exit_code_is_two_with_no_paths() -> None:
+    """Exit 2 from ``check-ignore`` when no path is given."""
     result = CliRunner().invoke(main, ["check-ignore", "--format", "json"])
 
     assert result.exit_code == 2
@@ -152,6 +157,7 @@ def test_check_ignore_exit_code_is_two_with_no_paths() -> None:
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_shares_engine_with_analyse() -> None:
+    """Report the same ``skipme/**`` pattern from ``check-ignore`` and from ``analyse`` for one ignored file."""
     check = CliRunner().invoke(main, ["check-ignore", "--format", "json", "skipme/bad.py"])
     analyse = CliRunner().invoke(
         main,
@@ -162,14 +168,48 @@ def test_check_ignore_shares_engine_with_analyse() -> None:
     analyse_payload = json.loads(analyse.output)
     assert check_verdict["ignored"] is True
     assert check_verdict["pattern"] == "skipme/**"
-    assert analyse_payload["ignoredPathDetails"][0]["pattern"] == "skipme/**"
+    assert analyse_payload["paths"]["details"][0]["pattern"] == "skipme/**"
+
+
+def test_ignored_tests_still_count_as_references_for_dead_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a symbol used only from an ignored test tree out of dead-code findings, and report a truly unused one.
+
+    The rule is opt-in, so a default run reports nothing from it and the configured run enables it.
+
+    Args:
+        tmp_path: Pytest-provided project root.
+        monkeypatch: Used to ``chdir`` into the project so the scan is full-project.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write(tmp_path / ".gruff-py.yaml", 'schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - "tests/**"\n')
+    _write(tmp_path / "pkg" / "__init__.py", '"""Package."""\n')
+    _write(
+        tmp_path / "pkg" / "api.py",
+        '"""API."""\n\n\ndef used_only_by_tests() -> int:\n    """Return one."""\n    return 1\n\n\n'
+        'def used_by_nobody() -> int:\n    """Return two."""\n    return 2\n',
+    )
+    _write(tmp_path / "tests" / "test_api.py", "from pkg.api import used_only_by_tests\n\n\ndef test_one():\n    assert used_only_by_tests() == 1\n")
+
+    default_run = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline"])
+    _write(
+        tmp_path / ".gruff-py.yaml",
+        'schemaVersion: gruff-py.config.v0.1\npaths:\n  ignore:\n    - "tests/**"\n'
+        "rules:\n  dead-code.exported-but-unreferenced:\n    enabled: true\n",
+    )
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "none", "--no-baseline"])
+
+    assert default_run.exit_code == 0, default_run.output
+    assert all(finding["ruleId"] != "dead-code.exported-but-unreferenced" for finding in json.loads(default_run.output)["findings"])
+    assert result.exit_code == 0, result.output
+    dead = [finding for finding in json.loads(result.output)["findings"] if finding["ruleId"] == "dead-code.exported-but-unreferenced"]
+    assert [finding["symbol"] for finding in dead] == ["used_by_nobody"]
+    assert all(not finding["file"].startswith("tests/") for finding in json.loads(result.output)["findings"])
 
 
 @pytest.mark.usefixtures("project")
 def test_check_ignore_text_format_is_git_style_for_ignored_paths() -> None:
-    result = CliRunner().invoke(
-        main, ["check-ignore", "--format", "text", "skipme/bad.py", "src/kept.py"]
-    )
+    """Print only ignored paths in text format, as one tab-separated path and ``config:`` pattern line, and exit 0."""
+    result = CliRunner().invoke(main, ["check-ignore", "--format", "text", "skipme/bad.py", "src/kept.py"])
 
     assert result.exit_code == 0, result.output
     assert result.output == "skipme/bad.py\tconfig:skipme/**\n"

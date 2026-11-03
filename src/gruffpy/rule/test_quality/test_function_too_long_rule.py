@@ -4,6 +4,8 @@ Consumes the ``lines_for_size`` helper per ADR-002 so the line count
 matches the size pillar's policy byte-for-byte.
 """
 
+import ast
+
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -13,7 +15,7 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
-from gruffpy.rule.size._lines import lines_for_size, parent_chain, qualified_symbol
+from gruffpy.rule.size._lines import code_line_numbers, lines_for_size, parent_chain, qualified_symbol
 from gruffpy.rule.test_quality._test_quality_node_helper import test_functions
 
 
@@ -39,6 +41,7 @@ class TestFunctionTooLongRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
             default_threshold=100,
         )
 
@@ -48,8 +51,11 @@ class TestFunctionTooLongRule(Rule):
         Uses the size-pillar's shared ``lines_for_size`` helper per ADR-002
         so the line metric stays consistent with other size rules. With the
         default same-value threshold a finding emits as the default severity
-        (warning); projects that split the ``warning``/``error`` keys can
+        (error); projects that split the ``warning``/``error`` keys can
         get severity escalation past the higher tier.
+
+        A single GET/status/literal inline-snapshot response check is exempt.
+        Extra operations and uncertain snapshot bindings retain length findings.
 
         Args:
             unit: Parsed source file to inspect.
@@ -65,9 +71,9 @@ class TestFunctionTooLongRule(Rule):
         settings = context.settings_for(definition)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            lines = lines_for_size(fn)
+            lines = lines_for_size(fn, code_line_numbers(unit.source, unit.tree))
             threshold_match = settings.high_value_threshold_match(lines)
-            if threshold_match is None:
+            if threshold_match is None or _is_literal_response_snapshot(fn, unit.tree):
                 continue
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
@@ -75,9 +81,7 @@ class TestFunctionTooLongRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Test {symbol!r} is {lines} lines, above the "
-                        f"{threshold_match.severity.value} threshold of "
-                        f"{threshold_match.threshold}."
+                        f"Test {symbol!r} is {lines} lines, above the {threshold_match.severity.value} threshold of {threshold_match.threshold}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
@@ -87,9 +91,7 @@ class TestFunctionTooLongRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Split the test into focused cases or extract setup into a fixture."
-                    ),
+                    remediation=("Split the test into focused cases or extract setup into a fixture."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "lines": lines,
@@ -101,3 +103,95 @@ class TestFunctionTooLongRule(Rule):
                 ),
             )
         return findings
+
+
+def _is_literal_response_snapshot(function: ast.FunctionDef | ast.AsyncFunctionDef, tree: ast.AST) -> bool:
+    """Recognize one response check whose bulk is literal snapshot data.
+
+    Args:
+        function: Test function whose size crossed its configured limit.
+        tree: Parsed file supplying the snapshot import and competing bindings.
+
+    Returns:
+        True for the supported single GET/status/snapshot shape.
+    """
+    body = function.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    match body:
+        case [
+            ast.Assign(
+                targets=[ast.Name(id=response_name)],
+                value=ast.Call(func=ast.Attribute(value=ast.Name(), attr="get"), args=[ast.Constant(value=str())], keywords=[]),
+            ),
+            ast.Assert(
+                test=ast.Compare(
+                    left=ast.Attribute(value=ast.Name(id=status_name), attr="status_code"),
+                    ops=[ast.Eq()],
+                    comparators=[ast.Constant()],
+                ),
+                msg=None | ast.Attribute(value=ast.Name(), attr="text"),
+            ),
+            ast.Assert(
+                test=ast.Compare(
+                    left=ast.Call(func=ast.Attribute(value=ast.Name(id=json_name), attr="json"), args=[], keywords=[]),
+                    ops=[ast.Eq()],
+                    comparators=[ast.Call(func=ast.Name(id=snapshot_name), args=[expected], keywords=[])],
+                ),
+                msg=None,
+            ),
+        ] if response_name == status_name == json_name:
+            return _is_literal_snapshot_data(expected) and _has_unambiguous_snapshot_import(tree, snapshot_name)
+    return False
+
+
+def _is_literal_snapshot_data(value: ast.AST) -> bool:
+    """Keep computed expected values outside the snapshot-only exemption.
+
+    Args:
+        value: Snapshot argument to inspect without executing it.
+
+    Returns:
+        True when every node belongs to a literal data expression.
+    """
+    literal_nodes = (ast.Constant, ast.Dict, ast.List, ast.Tuple, ast.Set, ast.UnaryOp, ast.UAdd, ast.USub, ast.Load)
+    return all(isinstance(node, literal_nodes) for node in ast.walk(value))
+
+
+def _has_unambiguous_snapshot_import(tree: ast.AST, snapshot_name: str) -> bool:
+    """Require a direct inline_snapshot import without competing static bindings.
+
+    Args:
+        tree: Parsed file containing the test and its import.
+        snapshot_name: Callee spelling used by the response comparison.
+
+    Returns:
+        True for one module-level import with no other binding in the file.
+    """
+    if not isinstance(tree, ast.Module):
+        return False
+    imports = [
+        (node, alias)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        for alias in node.names
+        if alias.name == "*" or (alias.asname or alias.name.split(".")[0]) == snapshot_name
+    ]
+    if len(imports) != 1:
+        return False
+    statement, alias = imports[0]
+    if not (
+        isinstance(statement, ast.ImportFrom)
+        and statement in tree.body
+        and statement.level == 0
+        and statement.module == "inline_snapshot"
+        and alias.name == "snapshot"
+    ):
+        return False
+    return not any(
+        (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del) and node.id == snapshot_name)
+        or (isinstance(node, ast.arg) and node.arg == snapshot_name)
+        or (not isinstance(node, ast.alias) and getattr(node, "name", None) == snapshot_name)
+        or (isinstance(node, ast.MatchMapping) and node.rest == snapshot_name)
+        for node in ast.walk(tree)
+    )

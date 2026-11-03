@@ -138,6 +138,17 @@ class _DirectiveParts:
 
 
 def _comment_tokens(source: str) -> list[_CommentToken]:
+    """Collect every comment with its physical line number, using the tokenizer so string contents are never read as comments.
+
+    A TokenError or SyntaxError from the tokenizer, including IndentationError on a bad dedent, does not propagate. The comments collected before the
+    failure are returned instead, because suppressions are also parsed for files that do not parse.
+
+    Args:
+        source: Full source text of the file being scanned.
+
+    Returns:
+        Comment tokens in source order. The list is partial when tokenization stopped early, and empty when the source has no comments.
+    """
     tokens: list[_CommentToken] = []
     try:
         stream = io.StringIO(source).readline
@@ -157,6 +168,21 @@ def _parse_comment(
     line: int,
     known_rule_ids: frozenset[str] | None,
 ) -> _ParsedComment:
+    """Turn one source comment into its suppression directive, the rule ids that may suppress findings, and any parser diagnostics.
+
+    The gruff: marker is matched case-insensitively wherever gruff starts a word in the comment, with optional whitespace around the colon. A comment
+    without the marker is ignored silently, without diagnostics.
+
+    Args:
+        comment_text: Raw comment token text, including the leading hash.
+        line: One-based physical line of the comment, recorded on every diagnostic.
+        known_rule_ids: Rule ids that a suppression may name. When None, the unknown-rule check is skipped and every well-formed id is accepted.
+
+    Returns:
+        A parsed comment whose directive is None and whose rule ids are empty when the comment has no gruff marker (no diagnostics) or a malformed
+        directive (one parse-error diagnostic). Otherwise it holds the directive, the ids that passed validation, and a diagnostic for each rejected
+        id.
+    """
     marker = _GRUFF_COMMENT_RE.search(comment_text)
     if marker is None:
         return _ParsedComment(directive=None, rule_ids=frozenset())
@@ -182,6 +208,20 @@ def _parse_directive_parts(
     body: str,
     line: int,
 ) -> tuple[_DirectiveParts | None, tuple[SuppressionDiagnostic, ...]]:
+    """Check that the text after a gruff: marker names a supported directive and at least one rule id, and split out the raw ids.
+
+    A trailing reason starts with whitespace followed by -, -- or #, and it is removed before matching. Directive names are matched case-insensitively
+    and then lowercased.
+
+    Args:
+        body: Comment text that follows the gruff: marker.
+        line: One-based comment line, recorded on any diagnostic.
+
+    Returns:
+        A pair of directive parts and diagnostics. The parts are None, with one suppression-parse-error diagnostic, when the body is malformed, names
+        an unknown directive, or has an empty or blank rule-id item. Otherwise the parts hold the directive and raw ids, and the diagnostics tuple is
+        empty.
+    """
     match = _DIRECTIVE_RE.match(_REASON_SUFFIX_RE.sub("", body))
     if match is None:
         return None, _invalid_comment(line, "Malformed gruff suppression comment.").diagnostics
@@ -204,6 +244,15 @@ def _parse_directive_parts(
 
 
 def _split_rule_ids(rule_ids_text: str) -> tuple[str, ...]:
+    """Split a comma-separated rule-id list into trimmed ids, and reject the whole list if any item is blank.
+
+    Args:
+        rule_ids_text: The text after the equals sign of a directive, with any reason suffix already removed.
+
+    Returns:
+        Trimmed ids in their written order. The tuple is empty when the text is empty or has a blank item, such as a trailing or doubled comma, and
+        the caller reports that as a missing rule id.
+    """
     raw_rule_ids = tuple(item.strip() for item in rule_ids_text.split(","))
     if not raw_rule_ids or any(not item for item in raw_rule_ids):
         return ()
@@ -217,6 +266,18 @@ def _accepted_rule_ids(
     line: int,
     known_rule_ids: frozenset[str] | None,
 ) -> tuple[set[str], tuple[SuppressionDiagnostic, ...]]:
+    """Split a directive's raw rule ids into the ids that may suppress findings and diagnostics for the ids that were rejected.
+
+    Args:
+        raw_rule_ids: Trimmed rule ids named by the directive, in their written order.
+        directive: Validated directive name, attached to each diagnostic.
+        line: One-based comment line, recorded on each diagnostic.
+        known_rule_ids: Rule ids that a suppression may name. When None, any id that matches the rule-id grammar is accepted.
+
+    Returns:
+        The accepted ids as a set, with duplicates collapsed, and a tuple holding one diagnostic for each rejected item in written order, so a
+        rejected id that is repeated is reported once per occurrence. A rejected id suppresses nothing.
+    """
     accepted: set[str] = set()
     diagnostics: list[SuppressionDiagnostic] = []
     for rule_id in raw_rule_ids:
@@ -234,6 +295,18 @@ def _rule_id_diagnostic(
     line: int,
     known_rule_ids: frozenset[str] | None,
 ) -> SuppressionDiagnostic | None:
+    """Check one suppression rule id against the lowercase id grammar and, when a known set is given, against registered rules.
+
+    Args:
+        rule_id: Trimmed rule id taken from the directive.
+        directive: Validated directive name, attached to the diagnostic.
+        line: One-based comment line, recorded on the diagnostic.
+        known_rule_ids: Rule ids that a suppression may name. When None, only the grammar check runs.
+
+    Returns:
+        A suppression-parse-error diagnostic when the id breaks the grammar, which includes ids with uppercase letters. A suppression-unknown-rule
+        diagnostic when a known set is given and does not contain the id. None when the id is accepted.
+    """
     if not _RULE_ID_RE.match(rule_id):
         return SuppressionDiagnostic(
             type="suppression-parse-error",
@@ -254,6 +327,15 @@ def _rule_id_diagnostic(
 
 
 def _invalid_comment(line: int, message: str) -> _ParsedComment:
+    """Build a parse result that suppresses nothing and carries a single suppression-parse-error diagnostic for a malformed gruff comment.
+
+    Args:
+        line: One-based comment line, recorded on the diagnostic.
+        message: Human-readable explanation of why the comment was rejected.
+
+    Returns:
+        A parsed comment with no directive, no rule ids, and one parse-error diagnostic that has no directive or rule id attached.
+    """
     return _ParsedComment(
         directive=None,
         rule_ids=frozenset(),
@@ -268,14 +350,41 @@ def _invalid_comment(line: int, message: str) -> _ParsedComment:
 
 
 def _as_directive(value: str) -> SuppressionDirective:
+    """Narrow a directive name that has already been validated to the SuppressionDirective literal type.
+
+    Args:
+        value: Lowercased directive name taken from the comment.
+
+    Returns:
+        The same string, typed as a SuppressionDirective.
+
+    Raises:
+        ValueError: Raised when the value is not disable, disable-next or disable-file. This acts as a guard, because the only caller has already
+            rejected unsupported names.
+    """
     if value not in _VALID_DIRECTIVES:
         raise ValueError(f"Unsupported suppression directive: {value}")
     return value  # type: ignore[return-value]  # directive literal validated
 
 
 def _add_line_rule_ids(target: dict[int, set[str]], line: int, rule_ids: frozenset[str]) -> None:
+    """Merge rule ids into the set for one line of a line-keyed suppression map, and create that set on first use.
+
+    Args:
+        target: Mutable map from line to rule ids, updated in place.
+        line: One-based line that the ids apply to: the comment's own line for disable, or the following line for disable-next.
+        rule_ids: Accepted rule ids to add for that line.
+    """
     target.setdefault(line, set()).update(rule_ids)
 
 
 def _freeze_line_map(value: dict[int, set[str]]) -> dict[int, frozenset[str]]:
+    """Convert a mutable map from line to rule-id sets into the frozenset-valued dict stored on ParsedSuppressions, ordered by line.
+
+    Args:
+        value: Mutable map from line to rule ids, built while scanning comments. It is not modified.
+
+    Returns:
+        A new dict keyed by line in ascending order, with frozenset values. The dict is empty when the input is empty.
+    """
     return {line: frozenset(rule_ids) for line, rule_ids in sorted(value.items())}

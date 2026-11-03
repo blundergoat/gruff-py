@@ -1,35 +1,103 @@
+import pytest
+
 from gruffpy.rule.security.silent_except_rule import SilentExceptRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_bare_except_pass_emits():
+    """Report one finding for a bare ``except`` whose body is only ``pass``."""
     src = "try:\n    x = 1\nexcept:\n    pass\n"
     findings = SilentExceptRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_except_exception_pass_emits():
+    """Report one finding for ``except Exception`` whose body is only ``pass``."""
     src = "try:\n    x = 1\nexcept Exception:\n    pass\n"
     findings = SilentExceptRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_except_ellipsis_emits():
+    """Report one finding for ``except Exception`` whose body is only an ellipsis."""
     src = "try:\n    x = 1\nexcept Exception:\n    ...\n"
     findings = SilentExceptRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_specific_exception_skipped():
+    """Report nothing for a specific exception handled with ``pass``."""
     src = "try:\n    x = 1\nexcept KeyError:\n    pass\n"
     assert SilentExceptRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_except_with_logging_skipped():
-    src = (
-        "import logging\n"
-        "logger = logging.getLogger(__name__)\n"
-        "try:\n    x = 1\nexcept Exception:\n    logger.exception('oops')\n    pass\n"
-    )
+    """Report nothing when the handler logs the exception before ``pass``."""
+    src = "import logging\nlogger = logging.getLogger(__name__)\ntry:\n    x = 1\nexcept Exception:\n    logger.exception('oops')\n    pass\n"
     # Note: body is not pass-only when logger.exception precedes pass, so rule doesn't fire.
     assert SilentExceptRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "try:\n    value = loads(value)\nexcept Exception:\n    # Keep the value as a string if loading failed.\n    pass\n",
+        (
+            "try:\n    return_value = signing.loads(session_data)\nexcept Exception:\n"
+            "    # ValueError, unpickling exceptions. If any of these happen, just\n"
+            "    # return an empty dictionary (an empty session).\n    pass\n"
+        ),
+        (
+            "try:\n    conn.close()\nexcept Exception:\n"
+            "    # pysqlite won't even let you close a conn from a thread\n"
+            "    # that didn't create it\n    pass\n"
+        ),
+    ],
+    ids=["flask-string-fallback", "django-empty-session", "sqlalchemy-thread-cleanup"],
+)
+def test_documented_corpus_fallback_skipped(source):
+    """Report nothing for a broad ``pass`` handler whose comment explains the fallback.
+
+    Args:
+        source: Handler from a real project whose comment gives the reason; the cases vary the project and wording.
+    """
+    assert SilentExceptRule().analyse(make_unit(source), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [
+        "ignore",
+        "ignore if error",
+        f"{''.join(('TO', 'DO'))}: Keep the value as a string if loading failed.",
+        "value = loads(value) if loading_failed else value",
+        "if loading_failed:",
+    ],
+    ids=["stock-phrase", "condition-without-reason", "unfinished-handling", "disabled-assignment", "disabled-compound-header"],
+)
+def test_comment_without_explanation_still_reports(comment):
+    """Report one finding when the handler's comment is vague, marks unfinished work or is disabled code.
+
+    Args:
+        comment: Comment placed in the handler; the cases cover a stock phrase, a bare condition, an unfinished-work note and disabled code.
+    """
+    source = f"try:\n    value = loads(value)\nexcept Exception:\n    # {comment}\n    pass\n"
+    assert len(SilentExceptRule().analyse(make_unit(source), default_ctx())) == 1
+
+
+def test_comment_text_inside_string_does_not_explain_handler():
+    """Report one finding when the explaining text sits in a string literal, not a comment."""
+    source = 'reason = "# Keep the value as a string if loading failed."\ntry:\n    value = loads(value)\nexcept Exception:\n    pass\n'
+    assert len(SilentExceptRule().analyse(make_unit(source), default_ctx())) == 1
+
+
+def test_explanation_does_not_belong_to_later_handler():
+    """Report one finding, at line 8, when only the first of two broad ``pass`` handlers has an explaining comment."""
+    source = (
+        "try:\n    value = loads(value)\nexcept Exception:\n"
+        "    # Keep the value as a string if loading failed.\n    pass\n"
+        "try:\n    value = loads(value)\nexcept Exception:\n    pass\n"
+    )
+    findings = SilentExceptRule().analyse(make_unit(source), default_ctx())
+    assert len(findings) == 1
+    assert findings[0].line == 8

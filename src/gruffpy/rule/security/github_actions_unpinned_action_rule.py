@@ -113,7 +113,14 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
 
 
 def _unpinned_action(spec: str) -> tuple[str, str] | None:
-    """Return ``(path, ref)`` when *spec* is an unpinned third-party action, else ``None``."""
+    """Return ``(path, ref)`` when *spec* is an unpinned third-party action, else ``None``.
+
+    Args:
+        spec: Reference text captured from a workflow uses entry.
+
+    Returns:
+        Action path and ref when the reference passes the third-party and unpinned checks; None for exempt or unrecognized references.
+    """
     if spec.startswith((".", "/")) or spec.startswith("docker://"):
         return None  # Local or container action - different supply chain.
     if "@" not in spec:

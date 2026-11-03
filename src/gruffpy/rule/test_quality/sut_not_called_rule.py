@@ -61,15 +61,11 @@ _MOCK_LEAVES: frozenset[str] = frozenset(
         "reset_mock",
     }
 )
-_BUILTIN_LEAVES: frozenset[str] = frozenset(
-    {"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"}
-)
+_BUILTIN_LEAVES: frozenset[str] = frozenset({"print", "len", "isinstance", "hasattr", "getattr", "setattr", "type", "id"})
 # Schema-inspection accessors: a test that reads any of these IS exercising
 # the schema declaration, even when there's no callable SUT (e.g. a contract
 # test asserting on ``MyModel.model_fields``).
-_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset(
-    {"model_fields", "__annotations__", "__fields__", "model_config"}
-)
+_SCHEMA_INSPECTION_ATTRS: frozenset[str] = frozenset({"model_fields", "__annotations__", "__fields__", "model_config"})
 
 
 class SutNotCalledRule(Rule):
@@ -95,6 +91,7 @@ class SutNotCalledRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -120,17 +117,14 @@ class SutNotCalledRule(Rule):
         module_names = _collect_module_level_names(unit.tree)
         findings: list[Finding] = []
         for fn, _scope in test_functions(unit):
-            if _has_sut_call(fn, module_names):
+            if _has_sut_call(fn, module_names) or _has_local_helper_sut_call(fn, module_names):
                 continue
             parents = parent_chain(fn)
             symbol = qualified_symbol(fn, parents)
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} never calls a non-framework, non-mock function "
-                        f"- is the SUT exercised?"
-                    ),
+                    message=(f"Test {symbol!r} never calls a non-framework, non-mock function - is the SUT exercised?"),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -139,10 +133,7 @@ class SutNotCalledRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Make sure the test actually calls into the function or class "
-                        "it claims to verify."
-                    ),
+                    remediation=("Make sure the test actually calls into the function or class it claims to verify."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={},
                 ),
@@ -154,6 +145,15 @@ def _has_sut_call(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     module_names: frozenset[str],
 ) -> bool:
+    """Find SUT-like calls, collected-name reads or schema access in a test body.
+
+    Args:
+        fn: Test or helper body searched without entering nested function bodies.
+        module_names: Collected candidate names whose reads count as SUT touches.
+
+    Returns:
+        True when any supported syntactic SUT touch is found; false when the walked body contains none.
+    """
     for node in walk_test_body(fn):
         if _is_sut_call(node):
             return True
@@ -164,7 +164,45 @@ def _has_sut_call(
     return False
 
 
+def _has_local_helper_sut_call(fn: ast.FunctionDef | ast.AsyncFunctionDef, module_names: frozenset[str]) -> bool:
+    """Check directly called assertion helpers in the owning class for SUT-like evidence.
+
+    Args:
+        fn: Test whose receiver calls and directly enclosing class helpers are inspected.
+        module_names: Collected candidate names passed into each helper-body check.
+
+    Returns:
+        True when a directly called assertion helper in the same class contains SUT-like evidence; false for unsupported receivers or no match.
+    """
+    parent = getattr(fn, "parent", None)
+    parameters = [*fn.args.posonlyargs, *fn.args.args]
+    if not isinstance(parent, ast.ClassDef) or not parameters:
+        return False
+    receiver = parameters[0].arg
+    if any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn)):
+        return False
+    helpers = {
+        f"{receiver}.{node.name}": node
+        for node in parent.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(("assert", "_assert"))
+    }
+    for node in walk_test_body(fn):
+        if isinstance(node, ast.Call):
+            helper = helpers.get(call_target_name(node) or "")
+            if helper is not None and _has_sut_call(helper, module_names):
+                return True
+    return False
+
+
 def _is_sut_call(node: ast.AST) -> bool:
+    """Recognize calls outside assertion and framework, mock or builtin spellings.
+
+    Args:
+        node: AST node checked for a call that this rule treats as SUT-like.
+
+    Returns:
+        True for an unresolved callee or a non-ignored call; false for non-call nodes, assertions and ignored spellings.
+    """
     if not isinstance(node, ast.Call):
         return False
     if is_assertion_call(node):
@@ -176,6 +214,14 @@ def _is_sut_call(node: ast.AST) -> bool:
 
 
 def _is_ignored_call_target(target: str) -> bool:
+    """Check whether a call spelling belongs to the rule's helper exclusions.
+
+    Args:
+        target: Bare or dotted call spelling whose root and final component are compared with helper names.
+
+    Returns:
+        True for a framework root, an excluded framework/mock/builtin leaf, or an assert-prefixed leaf; false otherwise.
+    """
     leaf = target.split(".")[-1]
     root = target.split(".")[0]
     if root in {"pytest", "unittest", "mock"}:
@@ -186,6 +232,15 @@ def _is_ignored_call_target(target: str) -> bool:
 
 
 def _is_module_level_name_read(node: ast.AST, module_names: frozenset[str]) -> bool:
+    """Recognize a read of a name collected as a possible SUT touch.
+
+    Args:
+        node: AST node checked for a Load-context name reference.
+        module_names: Collected candidate names that the rule treats as SUT evidence.
+
+    Returns:
+        True only for a loaded name present in module_names; false otherwise.
+    """
     # A read of any name introduced at module level - whether by `import`,
     # `from X import Y`, or a module-level `NAME = ...` / `NAME: T = ...`
     # assignment - is a SUT touch. The test author put it at module level
@@ -197,18 +252,34 @@ def _is_module_level_name_read(node: ast.AST, module_names: frozenset[str]) -> b
 
 
 def _is_schema_inspection_access(node: ast.AST) -> bool:
+    """Recognize an attribute spelling used as schema-inspection evidence.
+
+    Args:
+        node: AST node whose attribute name is compared with the supported schema accessors.
+
+    Returns:
+        True for a supported schema attribute spelling regardless of receiver origin; false for other nodes or attributes.
+    """
     # `Foo.model_fields` / `Foo.__annotations__` / `Foo.__fields__` - pydantic
     # / dataclass / TypedDict schema-inspection accessors. A test that reads
     # them is exercising the schema declaration regardless of receiver origin.
     return isinstance(node, ast.Attribute) and node.attr in _SCHEMA_INSPECTION_ATTRS
 
 
-_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset(
-    {"pytest", "unittest", "mock", "unittest.mock"}
-)
+_TEST_FRAMEWORK_MODULE_ROOTS: frozenset[str] = frozenset({"pytest", "unittest", "mock", "unittest.mock"})
 
 
 def _collect_module_level_names(tree: ast.AST) -> frozenset[str]:
+    """Collect candidate names from module statements and all if bodies.
+
+    Framework imports are excluded. The if traversal also reaches nested scopes and is not restricted to TYPE_CHECKING guards.
+
+    Args:
+        tree: Module tree whose direct statements and recursively found if bodies are inspected for supported bindings.
+
+    Returns:
+        Frozen names bound by supported imports and assignments in those statements; empty for non-module input.
+    """
     # Collects (a) names bound by module-level imports, plus (b) names bound
     # by module-level ``X = ...`` / ``X: T = ...`` assignments. Both shapes
     # represent the test author's chosen "things this file is about" - reading

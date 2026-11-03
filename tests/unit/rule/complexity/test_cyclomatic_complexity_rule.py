@@ -29,6 +29,14 @@ RADON_GROUND_TRUTH = {
 
 
 def _make_unit(source: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        The analysis unit.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
@@ -38,6 +46,14 @@ def _make_unit(source: str) -> AnalysisUnit:
 
 
 def _ctx(threshold: int = 10) -> RuleContext:
+    """Build a rule context with the cyclomatic complexity rule enabled at an error threshold.
+
+    Args:
+        threshold: Complexity the rule allows before it reports; defaults to 10.
+
+    Returns:
+        The rule context.
+    """
     rule = CyclomaticComplexityRule()
     config = AnalysisConfig(
         rules={
@@ -58,6 +74,9 @@ def _function_by_name(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
 
     Returns:
         The matching ``FunctionDef`` / ``AsyncFunctionDef`` node.
+
+    Raises:
+        AssertionError: The fixture defines no function with that name.
     """
     fixture = Path(__file__).resolve().parents[3] / "fixtures" / "complexity" / "cc_fixture.py"
     tree = ast.parse(fixture.read_text())
@@ -86,24 +105,28 @@ def test_matches_radon_ground_truth(function_name: str, expected: int) -> None:
 
 
 def test_simple_function_returns_1():
+    """Report nothing for a function with no branches."""
     src = "def f():\n    return 1\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert findings == []
 
 
-def test_high_complexity_emits_error():
-    # Build a function with 11 if-statements -> cc = 12 (> default threshold 10)
+def test_complexity_just_over_threshold_is_a_lower_band_notice():
+    """Report a complexity of 12 against a threshold of 10 as one advisory lower-band finding on ``f``."""
+    # 11 if-statements -> cc = 12: over this test's threshold of 10 (the rule's default is 20), under one and a half times it
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(11)])
     src = f"def f(x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert len(findings) == 1
     f = findings[0]
-    assert f.severity == Severity.ERROR
+    assert f.severity == Severity.ADVISORY
+    assert f.metadata["limitBand"] == "lower"
     assert f.metadata["complexity"] == 12
     assert f.symbol == "f"
 
 
 def test_above_error_threshold_emits_error():
+    """Report error severity for a function with 25 ``if`` statements against a threshold of 10."""
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(25)])
     src = f"def f(x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
@@ -111,6 +134,7 @@ def test_above_error_threshold_emits_error():
 
 
 def test_nested_function_emits_separate_finding():
+    """Report a complex nested function as ``outer.inner`` and leave its simple outer function unreported."""
     inner = "\n".join([f"        if x == {i}: return {i}" for i in range(11)])
     src = f"def outer(x):\n    def inner(x):\n{inner}\n    return inner\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
@@ -121,7 +145,39 @@ def test_nested_function_emits_separate_finding():
 
 
 def test_method_symbol_qualified():
+    """Qualify a complex method's finding symbol with its class, as ``C.m``."""
     body = "\n".join([f"        if x == {i}: return {i}" for i in range(11)])
     src = f"class C:\n    def m(self, x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert findings[0].symbol == "C.m"
+
+
+def test_rule_counts_a_match_once_and_an_if_chain_per_branch():
+    """Report a ``match`` with twelve cases and a wildcard at 2, and a chain of twelve ``if`` statements at 13."""
+    # Twelve match cases are one decision (cc 2); twelve if statements stay twelve decisions (cc 13).
+    branch_count = 12
+    cases = "\n".join(f"        case {i}:\n            return {i}" for i in range(branch_count))
+    matched = f"def dispatch(x):\n    match x:\n{cases}\n        case _:\n            return -1\n"
+    branches = "\n".join(f"    if x == {i}: return {i}" for i in range(branch_count))
+    chained = f"def chain(x):\n{branches}\n    return -1\n"
+    reported = {
+        finding.symbol: finding.metadata["complexity"]
+        for finding in CyclomaticComplexityRule().analyse(_make_unit(matched + "\n\n" + chained), _ctx(1))
+    }
+    assert reported == {"dispatch": 2, "chain": branch_count + 1}
+
+
+def test_rule_skips_test_files():
+    """Report nothing for complex source at four test-file paths, but one finding for the same source at ``x.py``."""
+    body = "\n".join([f"    if x == {i}: assert x" for i in range(30)])
+    src = f"def test_many(x):\n{body}\n"
+    unit = _make_unit(src)
+    # The family's test-path class: a test directory anywhere on the path, or a test file name in any folder.
+    for display_path in ("tests/test_x.py", "test/orm/test_collection.py", "testing/code/test_excinfo.py", "pkg/x_test.py"):
+        test_unit = AnalysisUnit(
+            file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
+            source=src,
+            tree=unit.tree,
+        )
+        assert CyclomaticComplexityRule().analyse(test_unit, _ctx()) == [], display_path
+    assert len(CyclomaticComplexityRule().analyse(unit, _ctx())) == 1

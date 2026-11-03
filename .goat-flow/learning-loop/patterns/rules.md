@@ -9,7 +9,8 @@ last_reviewed: 2026-06-10
 quietly changing serialized labels or dropping attack shapes. M02 for
 `security.sql-concatenation` had to silence three audit false positives
 without changing `sourceLabel="dynamic-sql"` / `sinkLabel="sql-execution"` for
-surviving findings.
+surviving findings. That rule was retired in 0.6.0 (ADR-029); the approach
+applies to any rule relaxation.
 
 **Approach:** Add attack counter-fixtures before the rule change, then keep
 separate scratch files for allowed false positives and attack shapes. Run the

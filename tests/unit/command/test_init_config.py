@@ -21,6 +21,7 @@ from gruffpy.command.init_config import (
 from gruffpy.config.analysis_config import (
     MINIMUM_SEVERITY_BINARY_DEFAULTS,
     AnalysisConfig,
+    DeepScanBudget,
 )
 from gruffpy.config.exceptions import ConfigError
 from gruffpy.config.loader import ConfigLoader
@@ -53,12 +54,11 @@ _USER_CHOSEN_TARGET_MODE = 0o640
 _FULLY_CUSTOMISED_YAML = (
     "schemaVersion: gruff-py.config.v0.1\n"
     "minimumPythonVersion: '3.12'\n"
-    "minimumSeverity:\n  analyse: error\n  report: warning\n  dashboard: advisory\n"
+    "failOn:\n  analyse: error\n  report: warning\n  dashboard: advisory\n"
     "outputVolumeHintThreshold: 7\n"
     "paths:\n  ignore:\n    - custom/**\n"
     "allowlists:\n"
     "  acceptedAbbreviations:\n    - biz\n"
-    "  secretPreviews:\n    - safe-preview\n"
     "  deadCode:\n"
     "    symbols:\n    - retained_symbol\n"
     "    decorators:\n    - retained_decorator\n"
@@ -74,14 +74,14 @@ _FULLY_CUSTOMISED_YAML = (
     "    enabled: false\n"
     "    threshold: 777\n"
     "    severity: warning\n"
-    "  test-quality.eager-test:\n"
+    "  test-quality.excessive-mocking:\n"
     "    enabled: false\n"
     "    thresholds:\n"
-    "      maxAssertions: 9\n"
-    "  naming.boolean-prefix:\n"
+    "      maxMocks: 9\n"
+    "  naming.short-variable:\n"
     "    enabled: true\n"
     "    options:\n"
-    "      acceptedBooleanNames:\n"
+    "      acceptedShortNames:\n"
     "      - ready\n"
 )
 
@@ -119,11 +119,17 @@ def _strict_loaded_config(project_root: Path) -> AnalysisConfig:
 
 
 def test_render_default_config_yaml_starts_with_header() -> None:
+    """Open the rendered default config with its title comment."""
     rendered = render_default_config_yaml()
     assert rendered.startswith("# gruff-py configuration - .gruff-py.yaml\n")
 
 
 def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -> None:
+    """Load the rendered default config, found as the project's ``.gruff-py.yaml``, back to exactly the defaults it was rendered from.
+
+    Args:
+        tmp_path: Project root that receives the rendered config.
+    """
     target = tmp_path / ".gruff-py.yaml"
     target.write_text(render_default_config_yaml())
 
@@ -131,6 +137,7 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
         AnalysisConfig.from_registry(RuleRegistry.defaults())
         .with_ignored_path_patterns(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
         .with_minimum_severity(MINIMUM_SEVERITY_BINARY_DEFAULTS)
+        .with_deep_scan_budget(DeepScanBudget(override="config"))
     )
     loader = ConfigLoader(tmp_path, defaults)
     loaded, source = loader.load()
@@ -140,34 +147,40 @@ def test_render_default_config_yaml_round_trips_through_loader(tmp_path: Path) -
 
 
 def test_render_default_config_yaml_lists_every_registered_rule() -> None:
+    """List exactly the registered rules in the rendered config's rules section."""
     document = yaml.safe_load(render_default_config_yaml())
     registered_ids = {rule.definition().id for rule in RuleRegistry.defaults().all()}
     assert set(document["rules"]) == registered_ids
 
 
 def test_render_default_config_yaml_prefills_starter_ignore_patterns() -> None:
+    """Prefill the rendered config's ignore list with the starter patterns, in order."""
     document = yaml.safe_load(render_default_config_yaml())
     assert document["paths"]["ignore"] == list(DEFAULT_INIT_IGNORED_PATH_PATTERNS)
 
 
+def test_render_default_config_yaml_omits_the_removed_secret_previews_key() -> None:
+    """Section 5 removed the key, so a generated file offering it would fail to load on the port that wrote it."""
+    document = yaml.safe_load(render_default_config_yaml())
+
+    assert "secretPreviews" not in document["allowlists"]
+
+
 def test_render_default_config_yaml_omits_empty_threshold_and_option_dicts() -> None:
+    """Render a rule with no thresholds or options as its enabled flag alone."""
     document = yaml.safe_load(render_default_config_yaml())
     bare_rule = document["rules"]["dead-code.unused-private-attribute"]
     assert bare_rule == {"enabled": True}
 
 
-def test_render_default_config_yaml_shows_markdown_sanitizer_defaults() -> None:
-    """Show strict labels and vetted URL encoders in a user's generated config."""
+def test_render_default_config_yaml_omits_retired_markdown_rule() -> None:
+    """Keep the retired Markdown rule out of a user's generated config."""
     document = yaml.safe_load(render_default_config_yaml())
-    markdown_rule = document["rules"]["security.unsanitized-markdown-interpolation"]
-
-    assert markdown_rule["options"] == {
-        "labelSanitizers": [],
-        "urlSanitizers": ["urllib.parse.quote", "urllib.parse.quote_plus"],
-    }
+    assert "security.unsanitized-markdown-interpolation" not in document["rules"]
 
 
 def test_render_default_config_yaml_uses_single_threshold_and_severity() -> None:
+    """Render the cyclomatic rule with one threshold of 20 at error severity and no tiered thresholds map."""
     document = yaml.safe_load(render_default_config_yaml())
     cyclomatic = document["rules"]["complexity.cyclomatic"]
     assert cyclomatic["threshold"] == 20
@@ -176,39 +189,74 @@ def test_render_default_config_yaml_uses_single_threshold_and_severity() -> None
 
 
 def test_existing_config_source_returns_none_for_empty_directory(tmp_path: Path) -> None:
+    """Find no existing config in an empty directory.
+
+    Args:
+        tmp_path: Empty project root.
+    """
     assert existing_config_source(tmp_path) is None
 
 
 def test_existing_config_source_finds_modern_yaml(tmp_path: Path) -> None:
+    """Find a ``.gruff-py.yaml`` file as the existing config.
+
+    Args:
+        tmp_path: Project root holding a minimal ``.gruff-py.yaml``.
+    """
     target = tmp_path / ".gruff-py.yaml"
     target.write_text("rules: {}\n")
     assert existing_config_source(tmp_path) == target
 
 
 def test_existing_config_source_finds_legacy_yaml(tmp_path: Path) -> None:
+    """Find a legacy ``.gruff.yaml`` file as the existing config.
+
+    Args:
+        tmp_path: Project root holding a minimal ``.gruff.yaml``.
+    """
     target = tmp_path / ".gruff.yaml"
     target.write_text("rules: {}\n")
     assert existing_config_source(tmp_path) == target
 
 
 def test_existing_config_source_finds_pyproject_table(tmp_path: Path) -> None:
+    """Find a ``pyproject.toml`` with a ``tool.gruff-py`` table as the existing config.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` holds a ``tool.gruff-py`` table.
+    """
     target = tmp_path / "pyproject.toml"
     target.write_text("[tool.gruff-py]\nminimumPythonVersion = '3.11'\n")
     assert existing_config_source(tmp_path) == target
 
 
 def test_existing_config_source_finds_legacy_pyproject_table(tmp_path: Path) -> None:
+    """Find a ``pyproject.toml`` with a legacy ``tool.gruff`` table as the existing config.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` holds an empty ``tool.gruff`` table.
+    """
     target = tmp_path / "pyproject.toml"
     target.write_text("[tool.gruff]\n")
     assert existing_config_source(tmp_path) == target
 
 
 def test_existing_config_source_ignores_pyproject_without_gruff_table(tmp_path: Path) -> None:
+    """Find no existing config in a ``pyproject.toml`` without a gruff table.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` holds only a project table.
+    """
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
     assert existing_config_source(tmp_path) is None
 
 
 def test_existing_config_source_reports_unparseable_pyproject(tmp_path: Path) -> None:
+    """Report an unparseable ``pyproject.toml`` as the existing config rather than skipping it.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` is not valid TOML.
+    """
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("this is = not = valid toml\n[[")
     assert existing_config_source(tmp_path) == pyproject
@@ -219,6 +267,13 @@ def test_existing_config_source_reports_unparseable_pyproject(tmp_path: Path) ->
     reason="chmod 0 read-denial only enforced on POSIX as a non-root user.",
 )
 def test_existing_config_source_reports_unreadable_pyproject(tmp_path: Path) -> None:
+    """Report an unreadable ``pyproject.toml`` as the existing config rather than skipping it.
+
+    Skipped where read denial is not enforced: without ``os.geteuid`` or when running as root.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` has every permission removed during the check.
+    """
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[tool.gruff-py]\n")
     pyproject.chmod(0)
@@ -231,7 +286,7 @@ def test_existing_config_source_reports_unreadable_pyproject(tmp_path: Path) -> 
 def test_init_default_render_emits_canonical_three_key_block_when_no_user_input() -> None:
     """Without a prior config, the renderer writes all three binary defaults."""
     document = yaml.safe_load(render_default_config_yaml())
-    assert document["minimumSeverity"] == {
+    assert document["failOn"] == {
         "analyse": "advisory",
         "report": "none",
         "dashboard": "none",
@@ -247,12 +302,8 @@ def test_rendered_accepted_abbreviation_seed_matches_family_contract() -> None:
     lines = rendered.splitlines()
 
     assert document["allowlists"]["acceptedAbbreviations"] == list(_FAMILY_ACCEPTED_ABBREVIATIONS)
-    assert lines[accepted_key_index - 2] == (
-        "  # acceptedAbbreviations lets naming rules accept project vocabulary."
-    )
-    assert lines[accepted_key_index - 1] == (
-        "  # Configured values replace this seed; they do not merge with it."
-    )
+    assert lines[accepted_key_index - 2] == ("  # acceptedAbbreviations lets naming rules accept project vocabulary.")
+    assert lines[accepted_key_index - 1] == ("  # Configured values replace this seed; they do not merge with it.")
 
 
 def test_init_force_preserves_all_supported_semantics(tmp_path: Path) -> None:

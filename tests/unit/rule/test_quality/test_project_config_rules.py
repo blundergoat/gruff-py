@@ -5,12 +5,10 @@ from pathlib import Path
 import pytest
 
 from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.test_quality._pytest_config import reset_cache
 from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
-from gruffpy.rule.test_quality.multiple_aaa_cycles_rule import MultipleAaaCyclesRule
 from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
 )
@@ -27,6 +25,15 @@ _NON_TEST_FIXTURE = "def helper():\n    return 1\n"
 
 
 def _ctx_with_pyproject(tmp_path: Path, contents: str) -> RuleContext:
+    """Write contents as tmp_path's ``pyproject.toml``, clear the cached pytest config and build a context rooted there.
+
+    Args:
+        tmp_path: Project root that receives the file.
+        contents: Text of the ``pyproject.toml``.
+
+    Returns:
+        A context rooted at tmp_path with the registry's default settings.
+    """
     (tmp_path / "pyproject.toml").write_text(contents)
     reset_cache()
     return RuleContext(
@@ -36,6 +43,11 @@ def _ctx_with_pyproject(tmp_path: Path, contents: str) -> RuleContext:
 
 
 def test_strict_config_missing_emits_when_pytest_block_lacks_flags(tmp_path: Path):
+    """Report one finding against ``pyproject.toml`` when its pytest block sets neither strict flag.
+
+    Args:
+        tmp_path: Project root whose pytest block sets only ``-ra -q``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '-ra -q'\n",
@@ -46,6 +58,11 @@ def test_strict_config_missing_emits_when_pytest_block_lacks_flags(tmp_path: Pat
 
 
 def test_strict_config_present_skips(tmp_path: Path):
+    """Report nothing when the pytest block sets both strict flags.
+
+    Args:
+        tmp_path: Project root whose pytest block sets ``--strict-config`` and ``--strict-markers``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         '[tool.pytest.ini_options]\naddopts = "--strict-config --strict-markers"\n',
@@ -67,6 +84,11 @@ def test_strict_config_rule_skipped_on_non_test_unit(tmp_path: Path):
 
 
 def test_all_project_config_rules_skip_non_test_units(tmp_path: Path):
+    """Report nothing from the three project-config rules for a non-test unit.
+
+    Args:
+        tmp_path: Project root whose pytest block sets only ``-ra``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '-ra'\n",
@@ -79,6 +101,11 @@ def test_all_project_config_rules_skip_non_test_units(tmp_path: Path):
 
 
 def test_deprecations_not_fatal_emits_when_filterwarnings_silent(tmp_path: Path):
+    """Report one finding against ``pyproject.toml`` when the pytest block sets no ``filterwarnings``.
+
+    Args:
+        tmp_path: Project root whose pytest block sets only ``--strict-config``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '--strict-config'\n",
@@ -89,6 +116,11 @@ def test_deprecations_not_fatal_emits_when_filterwarnings_silent(tmp_path: Path)
 
 
 def test_deprecations_not_fatal_skipped_with_filterwarnings(tmp_path: Path):
+    """Report nothing when ``filterwarnings`` turns deprecation warnings into errors.
+
+    Args:
+        tmp_path: Project root whose pytest block sets that filter.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         ('[tool.pytest.ini_options]\nfilterwarnings = ["error::DeprecationWarning"]\n'),
@@ -97,6 +129,11 @@ def test_deprecations_not_fatal_skipped_with_filterwarnings(tmp_path: Path):
 
 
 def test_coverage_source_missing_emits(tmp_path: Path):
+    """Report one finding against ``pyproject.toml`` when no coverage source is configured.
+
+    Args:
+        tmp_path: Project root whose pytest block sets only ``-q``.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         "[tool.pytest.ini_options]\naddopts = '-q'\n",
@@ -107,6 +144,11 @@ def test_coverage_source_missing_emits(tmp_path: Path):
 
 
 def test_project_config_rules_skip_when_pyproject_has_no_pytest_config(tmp_path: Path):
+    """Report nothing from the three project-config rules when ``pyproject.toml`` has no pytest block.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` holds only a coverage source.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         '[tool.coverage.run]\nsource = ["my_package"]\n',
@@ -119,6 +161,11 @@ def test_project_config_rules_skip_when_pyproject_has_no_pytest_config(tmp_path:
 
 
 def test_coverage_source_present_skips(tmp_path: Path):
+    """Report nothing from the coverage rule when ``pyproject.toml`` sets a coverage source.
+
+    Args:
+        tmp_path: Project root whose ``pyproject.toml`` sets a coverage source and no pytest block.
+    """
     ctx = _ctx_with_pyproject(
         tmp_path,
         '[tool.coverage.run]\nsource = ["my_package"]\n',
@@ -128,7 +175,7 @@ def test_coverage_source_present_skips(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "rule_cls",
-    [MockingDomainObjectRule, MultipleAaaCyclesRule],
+    [MockingDomainObjectRule],
     ids=lambda c: c.__name__,
 )
 def test_test_quality_rules_default_on(rule_cls: type) -> None:
@@ -138,37 +185,3 @@ def test_test_quality_rules_default_on(rule_cls: type) -> None:
         rule_cls: Rule class expected to ship with ``default_enabled=True``.
     """
     assert rule_cls().definition().default_enabled is True
-
-
-def test_multiple_aaa_cycles_enabled_by_default():
-    """Default config keeps multiple-AAA-cycles enabled in the registry."""
-    config = AnalysisConfig.from_registry(RuleRegistry.defaults())
-    settings = config.rule_settings(MultipleAaaCyclesRule.ID)
-    assert settings.enabled is True
-
-
-def test_multiple_aaa_cycles_fires_when_configured(tmp_path: Path):
-    """The rule fires on multi-cycle tests when its threshold is tight.
-
-    Args:
-        tmp_path: Pytest-provided per-test directory used as the project root.
-    """
-    rule = MultipleAaaCyclesRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(enabled=True, thresholds={"maxCycles": 1}),
-        }
-    )
-    ctx = RuleContext(project_root=str(tmp_path), config=config)
-    src = (
-        "def test_x():\n"
-        "    x = compute()\n"
-        "    assert x == 1\n"
-        "    y = compute()\n"
-        "    assert y == 2\n"
-        "    z = compute()\n"
-        "    assert z == 3\n"
-    )
-    findings = rule.analyse(make_unit(src), ctx)
-    assert len(findings) == 1
-    assert findings[0].metadata["cycles"] >= 2
