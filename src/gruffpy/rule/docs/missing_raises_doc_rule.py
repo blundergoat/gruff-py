@@ -1,7 +1,7 @@
 """``docs.missing-raises-doc`` - documented function that raises but lacks a Raises section.
 
-Public functions only, unless the ``everyCallable`` option, off by default,
-brings underscore-private functions and methods into scope. Walks the body for
+Checks public functions and, while the ``everyCallable`` option is on, as it is
+by default, underscore-private functions and methods too. Walks the body for
 ``raise`` statements, stopping at nested function/lambda boundaries (those
 raises belong to the nested scope).
 """
@@ -53,7 +53,7 @@ class MissingRaisesDocRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.LOW,
-            default_options={EVERY_CALLABLE_OPTION: False},
+            default_options={EVERY_CALLABLE_OPTION: True},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

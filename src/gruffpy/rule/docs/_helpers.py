@@ -14,7 +14,7 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 
 EVERY_CALLABLE_OPTION = "everyCallable"
-"""Rule option that widens a docs rule to every callable; off by default until the port's own code passes it."""
+"""Rule option that widens a docs rule to every callable; each rule's ``default_options`` sets its own default."""
 
 
 def every_callable_enabled(context: RuleContext, definition: RuleDefinition) -> bool:
@@ -25,7 +25,7 @@ def every_callable_enabled(context: RuleContext, definition: RuleDefinition) -> 
         definition: Definition of the rule that reads the option.
 
     Returns:
-        True only when the project configuration turned the option on.
+        True when the resolved settings turn the option on, from the rule's default or the project configuration.
     """
     return bool(context.settings_for(definition).options.get(EVERY_CALLABLE_OPTION, False))
 

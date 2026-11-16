@@ -255,7 +255,7 @@ rules:
   docs.missing-function-docstring:
     enabled: true
     options:
-      everyCallable: false
+      everyCallable: true
   # Missing module docstring
   docs.missing-module-docstring:
     enabled: true
@@ -263,12 +263,12 @@ rules:
   docs.missing-param-doc:
     enabled: true
     options:
-      everyCallable: false
+      everyCallable: true
   # Missing raises documentation
   docs.missing-raises-doc:
     enabled: true
     options:
-      everyCallable: false
+      everyCallable: true
   # Missing README
   docs.missing-readme:
     enabled: true

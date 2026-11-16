@@ -53,13 +53,14 @@ def default_ctx(project_root: str = "/tmp/no-such-root") -> RuleContext:
     return RuleContext(project_root=project_root, config=config)
 
 
-def every_callable_ctx(rule_id: str) -> RuleContext:
-    """Build a ``RuleContext`` with one docs rule's ``everyCallable`` option turned on.
+def every_callable_ctx(rule_id: str, *, enabled: bool = True) -> RuleContext:
+    """Build a ``RuleContext`` that sets one docs rule's ``everyCallable`` option explicitly.
 
     Args:
-        rule_id: Rule whose widened scope the test exercises.
+        rule_id: Rule whose callable scope the test exercises.
+        enabled: Value written for the option; false pins the public-only scope.
 
     Returns:
-        Context whose settings for *rule_id* carry ``everyCallable: true``.
+        Context whose settings for *rule_id* carry ``everyCallable`` set to *enabled*.
     """
-    return RuleContext(project_root="/", config=AnalysisConfig(rules={rule_id: RuleSettings(options={"everyCallable": True})}))
+    return RuleContext(project_root="/", config=AnalysisConfig(rules={rule_id: RuleSettings(options={"everyCallable": enabled})}))

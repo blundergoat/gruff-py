@@ -66,11 +66,13 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
   more than one entry.
 - **Missing-docstring messages say what the docstring needs** - `docs.missing-function-docstring` names each parameter,
   and asks for a Returns or Yields section and a Raises section only when the function returns a value or raises.
-- **`everyCallable` widens four documentation rules, off by default** - With `rules.<id>.options.everyCallable: true`,
-  `docs.missing-function-docstring`, `docs.missing-param-doc`, `docs.missing-return-doc` and `docs.missing-raises-doc`
-  also check underscore-private functions and methods. The docstring rule then also asks `test_*` functions in test files
-  for a docstring, the return rule checks an unannotated function that returns or yields a value, and the parameter rule
-  stops counting an entry with no description. Nothing changes until a configuration turns it on.
+- **BREAKING: three documentation rules check private functions by default** - `docs.missing-function-docstring`,
+  `docs.missing-param-doc` and `docs.missing-raises-doc` turn `everyCallable` on by default, so they also check
+  underscore-private functions and methods. The docstring rule also asks `test_*` functions in test files for a
+  docstring, and the parameter rule stops counting an entry with no description. A configuration that omits the option
+  takes the new default, and `init` writes it as true. Set `rules.<id>.options.everyCallable: false` to keep a rule to
+  public functions. `docs.missing-return-doc` stays off with `everyCallable` false; with both on, it also checks private
+  functions and an unannotated function that returns or yields a value.
 
 - **BREAKING: two more test-quality checks are opt-in** - `test-quality.no-assertions` and `test-quality.sut-not-called` have insufficient precision evidence, with 16/50 and 17/50 unresolved cards. Enable either with `rules.<id>.enabled: true`; existing explicit settings remain effective. No-assertions retains its failed first after audit and passing retry. This policy decision makes no new floor-failure or deletion claim.
 

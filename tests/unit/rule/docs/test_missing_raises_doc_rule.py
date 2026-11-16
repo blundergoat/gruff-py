@@ -39,9 +39,10 @@ def test_function_without_docstring_skipped():
 
 
 def test_private_function_reported_only_with_every_callable():
-    """Report a raising private function only when ``everyCallable`` is set."""
+    """Report a raising private function only when ``everyCallable`` is on, which is its default."""
     src = 'def _f(x):\n    """Do."""\n    if x < 0:\n        raise ValueError\n    return x\n'
-    assert MissingRaisesDocRule().analyse(make_unit(src), default_ctx()) == []
+    assert MissingRaisesDocRule().analyse(make_unit(src), every_callable_ctx(MissingRaisesDocRule.ID, enabled=False)) == []
+    assert [f.symbol for f in MissingRaisesDocRule().analyse(make_unit(src), default_ctx())] == ["_f"]
     findings = MissingRaisesDocRule().analyse(make_unit(src), every_callable_ctx(MissingRaisesDocRule.ID))
     assert [f.symbol for f in findings] == ["_f"]
 

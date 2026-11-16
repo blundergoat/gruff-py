@@ -27,9 +27,15 @@ def test_no_param_section_emits_single_consolidated_finding():
 
 
 def test_private_function_skipped():
-    """Report nothing for a private function's undocumented parameter under default options."""
+    """Report nothing for a private function's undocumented parameter with ``everyCallable`` off."""
     src = 'def _f(x):\n    """Does X."""\n    return x\n'
-    assert MissingParamDocRule().analyse(make_unit(src), default_ctx()) == []
+    assert MissingParamDocRule().analyse(make_unit(src), every_callable_ctx(MissingParamDocRule.ID, enabled=False)) == []
+
+
+def test_default_options_check_private_functions():
+    """Report a private function's undocumented parameter at default options, as ``everyCallable`` is on by default."""
+    src = 'def _f(x):\n    """Does X."""\n    return x\n'
+    assert [f.symbol for f in MissingParamDocRule().analyse(make_unit(src), default_ctx())] == ["_f"]
 
 
 def test_underscore_params_skipped():
@@ -58,10 +64,10 @@ def test_private_function_reported_with_every_callable():
 
 
 def test_entry_without_description_counts_only_without_every_callable():
-    """Accept a description-less Google or Sphinx entry by default, but report it when ``everyCallable`` is set."""
+    """Accept a description-less Google or Sphinx entry with ``everyCallable`` off, but report it when the option is on."""
     google = 'def f(x, y):\n    """Doc.\n\n    Args:\n        x:\n        y: the second value.\n    """\n    return x\n'
     sphinx = 'def f(x, y):\n    """Doc.\n\n    :param x:\n    :param y: the second value.\n    """\n    return x\n'
     for src in (google, sphinx):
-        assert MissingParamDocRule().analyse(make_unit(src), default_ctx()) == []
+        assert MissingParamDocRule().analyse(make_unit(src), every_callable_ctx(MissingParamDocRule.ID, enabled=False)) == []
         findings = MissingParamDocRule().analyse(make_unit(src), every_callable_ctx(MissingParamDocRule.ID))
         assert [f.metadata["parameters"] for f in findings] == [["x"]]

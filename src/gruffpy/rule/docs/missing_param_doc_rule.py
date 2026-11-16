@@ -5,7 +5,7 @@ Fires once per documented public function whose docstring has no matching
 parameters, and names every such parameter. Skips ``self`` / ``cls``,
 ``_``-prefixed params, dunder methods, and functions without docstrings.
 
-The ``everyCallable`` option, off by default, brings underscore-private
+The ``everyCallable`` option, on by default, brings underscore-private
 functions and methods into scope and stops an entry with no description from
 counting as documentation.
 """
@@ -70,7 +70,7 @@ class MissingParamDocRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
-            default_options={EVERY_CALLABLE_OPTION: False},
+            default_options={EVERY_CALLABLE_OPTION: True},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

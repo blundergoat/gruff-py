@@ -18,16 +18,20 @@ def test_function_without_docstring_emits():
 
 
 def test_pytest_function_without_docstring_in_test_file_skipped():
-    """Report nothing for an undocumented test function in a test file under default options."""
+    """Report nothing for an undocumented test function in a test file with ``everyCallable`` off."""
     src = "def test_service_returns_value():\n    assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), every_callable_ctx(MissingFunctionDocstringRule.ID, enabled=False)
+    )
     assert findings == []
 
 
 def test_pytest_method_without_docstring_in_test_file_skipped():
-    """Report nothing for an undocumented test method in a test file under default options."""
+    """Report nothing for an undocumented test method in a test file with ``everyCallable`` off."""
     src = "class TestService:\n    def test_returns_value(self):\n        assert service() == 1\n"
-    findings = MissingFunctionDocstringRule().analyse(make_unit(src, "tests/test_service.py"), default_ctx())
+    findings = MissingFunctionDocstringRule().analyse(
+        make_unit(src, "tests/test_service.py"), every_callable_ctx(MissingFunctionDocstringRule.ID, enabled=False)
+    )
     assert findings == []
 
 
@@ -40,9 +44,15 @@ def test_test_named_function_without_docstring_in_production_file_emits():
 
 
 def test_private_function_skipped():
-    """Report nothing for an undocumented private function under default options."""
+    """Report nothing for an undocumented private function with ``everyCallable`` off."""
     src = "def _helper():\n    return 1\n"
-    assert MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx()) == []
+    assert MissingFunctionDocstringRule().analyse(make_unit(src), every_callable_ctx(MissingFunctionDocstringRule.ID, enabled=False)) == []
+
+
+def test_default_options_check_private_functions():
+    """Report an undocumented private function at default options, as ``everyCallable`` is on by default."""
+    src = "def _helper():\n    return 1\n"
+    assert [f.symbol for f in MissingFunctionDocstringRule().analyse(make_unit(src), default_ctx())] == ["_helper"]
 
 
 def test_dunder_method_skipped():

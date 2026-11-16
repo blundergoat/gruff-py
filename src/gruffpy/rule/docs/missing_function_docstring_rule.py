@@ -1,12 +1,12 @@
-"""``docs.missing-function-docstring`` - public function/method without a docstring.
+"""``docs.missing-function-docstring`` - function/method without a docstring.
 
-Public = the name does not start with ``_``. Dunder methods, abstract methods,
-pytest-style ``test_*`` functions in test files, ``@typing.overload`` stubs,
-and ``@<name>.setter``/``@<name>.deleter`` methods are exempt. ``@property``
-getters require a docstring like any public method.
+Dunder methods, abstract methods, ``@typing.overload`` stubs, and
+``@<name>.setter``/``@<name>.deleter`` methods are always exempt. ``@property``
+getters require a docstring like any other method.
 
-The ``everyCallable`` option, off by default, brings underscore-private
-functions and methods and ``test_*`` functions in test files into scope. The
+The ``everyCallable`` option is on by default. Set to false, it limits the rule
+to public names, those not starting with ``_``, and also exempts pytest-style
+``test_*`` functions in test files. The
 message names what the docstring should hold: the intent, an entry for each
 parameter, and a Returns or Yields and a Raises section only when the function
 returns a value or raises.
@@ -70,7 +70,7 @@ class MissingFunctionDocstringRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
-            default_options={EVERY_CALLABLE_OPTION: False},
+            default_options={EVERY_CALLABLE_OPTION: True},
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
