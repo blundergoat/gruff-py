@@ -47,8 +47,7 @@ class RuleSettings:
     def numeric_threshold(self, name: str) -> int | float:
         """Return the threshold value for *name*, raising if missing or non-numeric.
 
-        Booleans are rejected explicitly because ``bool`` is a subclass of
-        ``int`` in Python and would otherwise pass the type check.
+        Booleans are rejected because bool subclasses int and would otherwise pass the numeric type check.
 
         Args:
             name: Threshold key (e.g. ``"warning"``, ``"maxAssertions"``).
@@ -67,17 +66,13 @@ class RuleSettings:
     def high_value_threshold_match(self, value: int | float) -> ThresholdMatch | None:
         """Match *value* against high-side thresholds (fires when value exceeds them).
 
-        If a single ``severity_threshold`` override is set, only that pair
-        is checked. Otherwise compares against ``warning`` then ``error``
-        keys, escalating to ``Severity.ERROR`` when the error threshold is
-        passed.
+        Only the configured severity threshold is checked; absent configuration yields no match.
 
         Args:
             value: Measured metric value (lines, complexity, etc.).
 
         Returns:
-            Matching ``ThresholdMatch`` when *value* is over a threshold,
-            else ``None``.
+            The configured threshold and severity when value exceeds it, or None when no rubric is set or its threshold is not exceeded.
         """
         if self.severity_threshold is None or value <= self.severity_threshold.threshold:
             return None
@@ -89,15 +84,13 @@ class RuleSettings:
     def low_value_threshold_match(self, value: int | float) -> ThresholdMatch | None:
         """Match *value* against low-side thresholds (fires when value falls below them).
 
-        Mirror of :meth:`high_value_threshold_match` used by metrics like
-        maintainability index where smaller numbers are worse.
+        Mirror of high_value_threshold_match for metrics like maintainability index where smaller numbers are worse.
 
         Args:
             value: Measured metric value.
 
         Returns:
-            Matching ``ThresholdMatch`` when *value* is under a threshold,
-            else ``None``.
+            A ThresholdMatch when value is below the configured threshold; None when no threshold is set or value is not below it.
         """
         if self.severity_threshold is None or value >= self.severity_threshold.threshold:
             return None
@@ -107,13 +100,13 @@ class RuleSettings:
         )
 
     def has_option(self, name: str) -> bool:
-        """Return whether the option *name* was set (distinct from defaulting).
+        """Return whether the resolved options contain the requested key.
 
         Args:
-            name: Option key.
+            name: Key to look up in the resolved options.
 
         Returns:
-            True when the option was explicitly configured.
+            True when the key is present, including keys supplied by registered defaults.
         """
         return name in self.options
 
@@ -138,9 +131,7 @@ class RuleSettings:
     def string_list_option(self, name: str) -> list[str]:
         """Return *name* as a list-of-strings, validating element types.
 
-        Defaults to an empty list when *name* is absent. Raises
-        ``TypeError`` if the option is set but not a ``list[str]`` - a
-        config error worth surfacing loudly.
+        An absent option returns an empty list; a present value must be a list containing only strings.
 
         Args:
             name: Option key.

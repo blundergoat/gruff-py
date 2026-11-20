@@ -49,11 +49,7 @@ class HardcodedBindAllInterfacesRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the wildcard-bind rule as a medium-confidence WARNING.
 
-        WARNING severity because the address is intentional in many
-        legitimate deploys (containers, reverse-proxy backends); medium
-        confidence because the string literal is unambiguous but the
-        deployment context that makes it acceptable is invisible to the
-        analyser.
+        WARNING allows for intentional container and proxy bindings; medium confidence reflects the missing deployment context.
 
         Returns:
             Definition for the wildcard-bind rule under the security
@@ -69,19 +65,16 @@ class HardcodedBindAllInterfacesRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``host=`` kwargs and ``socket.bind`` first-args holding wildcard literals.
+        """Flag wildcard literals in the host keyword of .run or in the first item of a tuple passed as the first positional argument to .bind.
 
-        No framework gate - the wildcard address literal is unambiguous
-        enough to stand alone. Fires once per call site, not once per
-        wildcard occurrence inside a call (so ``run(host='0.0.0.0',
-        debug=False)`` is one finding, not two).
+        Matching uses the attribute name without resolving the receiver type.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per wildcard-bind call site.
+            One finding per matching call. Empty when the parsed tree, a recognised address marker in the source or a matching call is absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []

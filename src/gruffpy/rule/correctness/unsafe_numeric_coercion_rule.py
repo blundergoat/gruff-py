@@ -76,10 +76,7 @@ class UnsafeNumericCoercionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unsafe-numeric-coercion rule as a high-confidence advisory.
 
-        Advisory severity per the new-rule rollout policy; high confidence
-        because both matched shapes are exact AST patterns with verified
-        crash reproductions and the try/except / isfinite escapes are
-        honoured before a finding is emitted.
+        Advisory severity follows the rollout policy; exception handlers and isfinite checks can suppress findings.
 
         Returns:
             Definition for the unsafe-numeric-coercion rule under the
@@ -95,14 +92,15 @@ class UnsafeNumericCoercionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag int() conversions whose isnumeric/isdigit or float guard is unsound.
+        """Flag int() conversions guarded by isnumeric() or isdigit(), and unchecked conversions of float-derived locals.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsound conversion site.
+            The first finding for each distinct start line, end line and message. Empty without a module AST, int( marker or qualifying conversion.
+            Also empty when a recognised binding in a direct module statement shadows int.
         """
         if not isinstance(unit.tree, ast.Module) or "int(" not in unit.source:
             return []
@@ -122,9 +120,7 @@ class UnsafeNumericCoercionRule(Rule):
 def _deduplicated(findings: list[Finding]) -> list[Finding]:
     """Drop repeats of the same conversion site.
 
-    The direct-guard and early-exit passes overlap when a conversion sits under redundant or nested guards, or under both an early-exit guard and a
-    direct guard, so the same int() call can be collected more than once. Keying on line span plus message, which encodes the converted name, the
-    guard method, and the shape, collapses those to one finding.
+    The direct-guard and early-exit passes can report the same conversion under overlapping guards.
 
     Args:
         findings: Findings collected from the direct-guard, unchecked-float, and early-exit passes, in collection order.
@@ -144,7 +140,7 @@ def _deduplicated(findings: list[Finding]) -> list[Finding]:
 
 
 def _has_module_level_int_rebind(tree: ast.Module) -> bool:
-    """Report whether a top-level module statement binds the name int, which silences the rule for the whole file.
+    """Check for an int binding that _bound_names recognises in a direct module statement, which silences the rule for the file.
 
     Only direct statements of the module body are checked, so a def, class, import alias, or plain or annotated assignment named int counts, while a
     binding inside a function or nested under a module-level if or try does not.
@@ -153,7 +149,7 @@ def _has_module_level_int_rebind(tree: ast.Module) -> bool:
         tree: Parsed module whose top-level statements are inspected.
 
     Returns:
-        True when a top-level statement binds int, in which case analyse returns no findings for the file; False otherwise.
+        True when _bound_names finds int in a direct module statement, so analyse returns no findings for the file. False otherwise.
     """
     for node in tree.body:
         for name in _bound_names(node):
@@ -163,7 +159,7 @@ def _has_module_level_int_rebind(tree: ast.Module) -> bool:
 
 
 def _bound_names(node: ast.stmt) -> list[str]:
-    """List the names one statement binds directly, used to detect int rebinding and to expire early-exit guards.
+    """List the direct bindings this rule tracks to detect int rebinding and expire early-exit guards.
 
     Covers def, async def, and class names, import aliases (the top-level package for an unaliased dotted import), and bare-name targets of plain and
     annotated assignments. Tuple targets, augmented assignments, for loops, with statements, and walrus bindings contribute nothing.
@@ -172,7 +168,7 @@ def _bound_names(node: ast.stmt) -> list[str]:
         node: Statement whose direct bindings are read.
 
     Returns:
-        Names bound by the statement; empty for any other statement kind.
+        Names tracked for rebinding. A wildcard import contributes "*". An empty list means the statement supplied no tracked names.
     """
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         return [node.name]
@@ -192,9 +188,8 @@ def _guarded_coercion_findings(
 ) -> list[Finding]:
     """Flag int(name) in the true branch of an if or ternary whose test calls isnumeric() or isdigit() on name.
 
-    Only the true branch is searched (the if body, or the ternary's body expression); the else branch is ignored, and nested def, class, and lambda
-    scopes in the branch are not descended into. A name that also has an isascii() call in the same test is exempt, as is a conversion inside the body
-    of an enclosing try, up to the nearest function or the module, whose handlers cover ValueError.
+    Nested function, class and lambda scopes are skipped. A name with an isascii() call in the test is exempt.
+    A conversion is also exempt in an enclosing try body whose handlers cover ValueError, stopping at the nearest function or module.
 
     Args:
         definition: Rule definition stamped on each finding.
@@ -225,17 +220,17 @@ def _early_exit_guard_findings(
     definition: RuleDefinition,
     unit: AnalysisUnit,
 ) -> list[Finding]:
-    """Catch the early-exit form: ``if not x.isdigit(): raise ...`` then ``int(x)``.
+    """Flag integer conversions after an early-exit guard, such as int(x) after a guard that raises when x.isdigit() is false.
 
     Args:
         definition: Rule definition stamped on each finding.
         unit: Analysed file whose whole tree is scanned for statement lists.
 
     Returns:
-        Guarded-string findings for conversions of a name in later statements of the same statement list as a negated early-exit guard on that name,
-        up to and including the first later statement that _bound_names reports as binding it. Which tests count as guards follows
-        _negated_guarded_names, which bindings end a guard follows _bound_names, and try protection follows _is_protected_by_try. Conversions inside
-        nested def, async def, class or lambda bodies, and in a later if that itself has the early-exit shape, are not reported here; a conversion
+        Findings for conversions after a guard from _negated_guarded_names in the same statement list, through the first statement that
+        _bound_names says rebinds the name. Conversions protected by _is_protected_by_try are skipped.
+
+        Each list skips conversions inside nested functions, classes or lambdas and in its own later early-exit if statements. A conversion
         guarded in both an enclosing and a nested statement list is returned once per list.
     """
     findings: list[Finding] = []
@@ -436,11 +431,10 @@ def _is_protected_by_try(
     required: frozenset[str],
     stop_at: ast.AST | None = None,
 ) -> bool:
-    """Report whether a node sits in the body of an enclosing try whose handlers catch every required exception.
+    """Check whether an enclosing try body with ordinary except handlers covers the required exceptions under the rule's name matching.
 
-    Walks parent links upward from the node. A try protects only when the walk reaches it from one of its direct body statements, so a conversion in
-    its handlers, else, or finally clause is not protected by that try, though an outer try may still protect it. The walk ends without protection at
-    the nearest enclosing function or the module, or on reaching stop_at.
+    Only a try body protects the node; exceptions in its handlers, else or finally need an outer try.
+    Parent links are followed up to stop_at, the nearest enclosing function or the module; reaching a limit returns False.
 
     Args:
         node: The int() call whose enclosing try statements are checked.
@@ -454,8 +448,8 @@ def _is_protected_by_try(
     child: ast.AST = node
     current: ast.AST | None = getattr(node, "parent", None)
     while current is not None and current is not stop_at:
-        # Only the try body is protected: handlers do not catch exceptions
-        # raised from the same try's else/finally clauses.
+        # A handler cannot catch failures in its own except, else or finally clause.
+        # The walk can still credit a protecting handler in an outer try.
         if isinstance(current, ast.Try) and child in current.body and _has_protective_handler(current, required):
             return True
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
@@ -510,12 +504,10 @@ def _unchecked_float_findings(
     unit: AnalysisUnit,
     function: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> list[Finding]:
-    """Flag int() of a float(<non-literal>) local in a defensive-signature function without an isfinite check.
+    """Flag int(name) in functions with defensive signatures when a plain name = float(...) assignment has a nonconstant first positional argument.
 
-    The function is skipped unless _has_defensive_signature accepts it. A conversion is exempt when isfinite() is called anywhere in the function's
-    own scope, before or after the conversion, on the converted name or on any name in its float() source expression, or when it sits in a try body
-    inside the function whose handlers together cover ValueError and OverflowError. Nested def, class, and lambda bodies are not searched; each nested
-    function gets its own pass.
+    The local or a name from its source is exempt when passed as a bare positional argument to isfinite(), or when a try body covers both failures.
+    The failures are ValueError and OverflowError. Nested def, class and lambda bodies are skipped. Each nested function gets its own pass.
 
     Args:
         definition: Rule definition stamped on each finding.
@@ -523,7 +515,7 @@ def _unchecked_float_findings(
         function: Function definition whose own scope is checked.
 
     Returns:
-        One unchecked-float finding per unprotected conversion; empty when the signature is not defensive or no float() local exists.
+        One unchecked-float finding per unprotected conversion; empty when the signature is not defensive or no conversion qualifies.
     """
     if not _has_defensive_signature(function):
         return []
@@ -570,8 +562,8 @@ def _has_defensive_signature(function: ast.FunctionDef | ast.AsyncFunctionDef) -
         function: Function definition whose parameters are inspected.
 
     Returns:
-        True when at least one counted parameter exists and all counted parameters have a defensive annotation; False otherwise, including for
-        functions with no counted parameters.
+        True when at least one parameter is counted and each is unannotated or has an annotation accepted by _is_defensive_annotation.
+        False otherwise, including when no parameters are counted.
     """
     parameters = [
         *function.args.posonlyargs,
@@ -591,8 +583,7 @@ def _is_defensive_annotation(annotation: ast.expr | None) -> bool:
         annotation: Parameter annotation; None means the parameter is unannotated.
 
     Returns:
-        True for no annotation or a name or dotted name ending in Any or object, such as typing.Any; False otherwise, including subscripted and string
-        annotations.
+        True for no annotation or any name or attribute named Any or object. False for other forms, including subscripts and string annotations.
     """
     if annotation is None:
         return True
@@ -601,10 +592,10 @@ def _is_defensive_annotation(annotation: ast.expr | None) -> bool:
 
 
 def _isfinite_argument_names(function: ast.AST) -> set[str]:
-    """Names passed positionally to an ``isfinite``-style guard in *function*.
+    """Collect names passed to calls that the unchecked-float pass treats as finiteness checks.
 
     Args:
-        function: Function node whose own scope is searched; nested def, class, and lambda bodies are excluded.
+        function: Function to search, including its decorators and defaults. The walk stops at nested functions, classes and lambdas.
 
     Returns:
         Bare names passed positionally to any call whose callee name or last attribute is isfinite; empty when there is none.
@@ -617,10 +608,10 @@ def _isfinite_argument_names(function: ast.AST) -> set[str]:
 
 
 def _float_assignment_sources(function: ast.AST) -> dict[str, set[str]]:
-    """Map each ``x = float(<non-literal>)`` local to the names in its source expr.
+    """Map names assigned a bare float call to names in its first positional argument when that argument is outside ast.Constant.
 
     Args:
-        function: Function node whose own scope is searched; nested def, class, and lambda bodies are excluded.
+        function: Function whose scope is searched for assignments. That search excludes nested functions, classes and lambdas.
 
     Returns:
         Each assigned name mapped to the set of names in float()'s first argument, which is empty when that argument contains no names; only single

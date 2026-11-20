@@ -85,19 +85,18 @@ class ApiKeyPatternRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Scan the raw source text for vendor-specific API key shapes.
 
-        Users receive a vendor and source line for each non-placeholder match, including keys in
-        strings, comments, and docs; the preview remains a fixed marker.
+        Findings include the vendor and source line for matches in strings, comments, or documentation.
+        The preview uses the vendor's redaction category when available and the bare marker otherwise.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per detected vendor key, with a redacted preview.
+            One finding per matched key shape that survives the sample and placeholder filters.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        # Each provider-shaped token becomes an independently actionable item in the user's report.
         for api_key_match in iter_matches(_PATTERN, unit.source):
             # Documentation placeholders stay silent so examples do not clutter real secret review.
             if is_likely_placeholder_secret(api_key_match.raw):
@@ -122,13 +121,13 @@ class ApiKeyPatternRule(SourceTextRule):
 
 
 def _identify_vendor(api_key: str) -> str:
-    """Return the provider label users see for a matched API key shape.
+    """Classify a matched API key shape before the finding formats its provider label.
 
     Args:
         api_key: Complete matched value to classify against the provider patterns.
 
     Returns:
-        First matching provider label in declared pattern order, with webhook matches grouped under Slack; ``unknown`` when no pattern matches.
+        First matching provider label in declared pattern order, with webhook matches grouped under Slack; unknown when no pattern matches.
     """
     # Provider order follows the pattern map so the report label stays deterministic.
     for vendor_name, vendor_pattern in _VENDOR_PATTERNS.items():

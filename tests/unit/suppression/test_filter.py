@@ -8,7 +8,11 @@ from gruffpy.suppression.parser import parse_suppressions
 
 
 def test_same_line_suppression_hides_only_matching_rule() -> None:
-    """Hide only the finding whose rule a same-line ``gruff: disable`` comment names."""
+    """Hide only the finding whose rule a same-line gruff: disable comment names.
+
+    Returns:
+        None. Checks that filtering keeps the other rule's finding on the same line.
+    """
     parsed = parse_suppressions("# gruff: disable=size.file-length\n")
     hidden = _finding("size.file-length", line=1)
     visible = _finding("security.dangerous-function-call", line=1)
@@ -19,7 +23,11 @@ def test_same_line_suppression_hides_only_matching_rule() -> None:
 
 
 def test_disable_next_targets_only_next_physical_line() -> None:
-    """Hide the matching finding on the line after a ``gruff: disable-next`` comment, but not on the line after that."""
+    """Hide the matching finding on the line after a gruff: disable-next comment, but not on the line after that.
+
+    Returns:
+        None. Checks that filtering removes the line 2 finding and keeps the line 3 finding.
+    """
     parsed = parse_suppressions("# gruff: disable-next=security.dangerous-function-call\neval('payload')\neval('payload')\n")
     hidden = _finding("security.dangerous-function-call", line=2)
     visible = _finding("security.dangerous-function-call", line=3)
@@ -30,7 +38,11 @@ def test_disable_next_targets_only_next_physical_line() -> None:
 
 
 def test_disable_file_is_file_local() -> None:
-    """Apply a ``gruff: disable-file`` comment only to findings in its own file."""
+    """Apply a gruff: disable-file comment only to findings in its own file.
+
+    Returns:
+        None. Checks that a file-wide directive leaves the same rule's finding in another file visible.
+    """
     parsed = parse_suppressions("# gruff: disable-file=size.file-length\n")
     hidden = _finding("size.file-length", file_path="x.py", line=None)
     other_file_visible = _finding("size.file-length", file_path="other.py", line=None)
@@ -41,7 +53,11 @@ def test_disable_file_is_file_local() -> None:
 
 
 def test_unsuppressed_payload_and_fingerprint_are_unchanged() -> None:
-    """Return an unsuppressed finding with its payload and fingerprint unchanged."""
+    """Return an unsuppressed finding with its payload and fingerprint unchanged.
+
+    Returns:
+        None. Checks that filtering preserves both the surviving finding's payload and its fingerprint.
+    """
     parsed = parse_suppressions("# gruff: disable=size.file-length\n")
     visible = _finding("security.dangerous-function-call", line=1, symbol="load_user")
     before_payload = visible.to_dict()
@@ -64,13 +80,13 @@ def _finding(
     """Build a warning-level finding for one rule, with fixed tier, confidence and metadata.
 
     Args:
-        rule_id: Rule id; a ``size.`` prefix selects the size pillar, any other the security pillar.
-        file_path: Finding path, which selects the parsed suppressions that apply; ``x.py`` by default.
+        rule_id: Rule id; a size. prefix selects the size pillar, any other the security pillar.
+        file_path: Finding path, which selects the parsed suppressions that apply; x.py by default.
         line: Start and end line, or None for a file-level finding.
-        symbol: Symbol name, or None.
+        symbol: Symbol attached to the finding; None leaves it without an associated symbol.
 
     Returns:
-        The finding.
+        A finding with the supplied rule and location and fixed test metadata.
     """
     return Finding(
         rule_id=rule_id,

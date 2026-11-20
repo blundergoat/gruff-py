@@ -17,23 +17,26 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(tmp_path: Path, monkeyp
 
     Args:
         tmp_path: Holds the one-line module handed to the parser.
-        monkeypatch: Replaces ``ast.parse`` with a stub that raises the malformed-node ``ValueError``.
+        monkeypatch: Replaces ``ast.parse`` with a stub that raises the malformed-node ValueError.
+
+    Returns:
+        None. Checks that the parser reports the stub's exact message once and produces no syntax tree.
     """
     source_path = tmp_path / "broken.py"
     source_path.write_text("value = 1\n", encoding="utf-8")
 
     def raise_value_error(*_args: Any, **_kwargs: Any) -> ast.AST:
-        """Stub for ``ast.parse`` that surfaces the canonical CPython post-3.12 shape error.
+        """Raise a fixed ValueError to exercise the parser's diagnostic path.
 
-        Real CPython raises ``ValueError`` (not ``SyntaxError``) for this
-        family of malformed AST node - the parser's diagnostic path must
-        catch both.
+        Args:
+            _args: Positional parser inputs accepted and ignored by the stub.
+            _kwargs: Keyword parser inputs accepted and ignored by the stub.
 
         Returns:
-            Never returns - always raises.
+            Never returns.
 
         Raises:
-            ValueError: Always, mimicking CPython's malformed-Constant error.
+            ValueError: Always, with the fixed malformed-Constant message.
         """
         raise ValueError("field 'value' is required for Constant")
 
@@ -47,13 +50,13 @@ def test_ast_value_error_is_reported_as_parse_diagnostic(tmp_path: Path, monkeyp
 
 
 def _bounded_python_unit(tmp_path: Path) -> AnalysisUnit:
-    """Parse a source that crosses the line bound, so the budget degrades it before the AST.
+    """Exercise the parser fallback for Python source that exceeds a one-line CLI budget.
 
     Args:
         tmp_path: Directory the oversized source is written into.
 
     Returns:
-        The parsed unit, bounded by a one-line CLI budget.
+        An analysis unit with no AST and a nonfatal bounded-deep-scan diagnostic.
     """
     source_path = tmp_path / "large.py"
     source_path.write_text("value = 1\nvalue = 2\n", encoding="utf-8")
@@ -70,6 +73,9 @@ def test_python_source_over_either_bound_degrades_before_ast(
 
     Args:
         tmp_path: Receives the two-line module parsed under a one-line budget.
+
+    Returns:
+        None. Checks that parsing marks the unit as bounded and leaves no tree or parse error.
     """
     unit = _bounded_python_unit(tmp_path)
 
@@ -85,6 +91,9 @@ def test_bounded_python_source_reports_a_nonfatal_budget_diagnostic(
 
     Args:
         tmp_path: Receives the oversized module for this parse.
+
+    Returns:
+        None. Checks the diagnostic type, nonfatal status, and exact message.
     """
     unit = _bounded_python_unit(tmp_path)
 
@@ -102,6 +111,9 @@ def test_non_python_text_never_enters_deep_scan_guard(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Receives the two-line ``.env`` file parsed as text.
+
+    Returns:
+        None. Checks that parsing the text file leaves the tree absent and diagnostics empty under the configured budget.
     """
     source_path = tmp_path / ".env"
     source_path.write_text("A=1\nB=2\n", encoding="utf-8")

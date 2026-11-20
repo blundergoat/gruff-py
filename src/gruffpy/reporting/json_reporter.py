@@ -21,15 +21,12 @@ class JsonReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as the ``gruff.analysis.v3`` JSON document.
+        """Serialize the report's gruff.analysis.v3 projection as JSON.
 
-        Output is byte-compatible with gruff-php - 4-space indent,
-        ASCII-escaped non-ASCII, unescaped forward slashes. Finite floats
-        with integer values are coerced to ``int`` so PHP's looser JSON
-        rules don't break consumers.
+        Use four-space indentation, ASCII escaping and unescaped slashes; emit finite integral floats as integers for PHP compatibility.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Report whose canonical analysis projection is serialized.
 
         Returns:
             Pretty-printed JSON document with a trailing newline.
@@ -37,10 +34,10 @@ class JsonReporter:
         return json.dumps(_php_json_value(report.to_dict()), indent=4) + "\n"
 
     def render_summary(self, report: AnalysisReport) -> str:
-        """Render the exact findings-free ``gruff.summary.v3`` projection.
+        """Render the exact findings-free gruff.summary.v3 projection.
 
         Args:
-            report: Fully-populated canonical analysis report.
+            report: Report whose canonical summary projection is serialized without findings.
 
         Returns:
             Pretty-printed summary projection with a trailing newline.

@@ -41,19 +41,15 @@ class FileLengthRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per file whose substantive line count exceeds the configured threshold.
 
-        Counts substantive lines: blank lines, full-line ``#`` comments, PEP 257
-        docstrings and decorator lines are free (FAMILY-CONTRACT.md section 12,
-        search "Code lines in every line count"), so
-        required documentation can never push a file over the size bar.
-        String literals outside docstring positions are data and still count.
+        The syntax-aware count excludes documentation and decorators under FAMILY-CONTRACT.md section 12, Code lines in every line count.
+        Blank and comment-only lines are free. Docstrings and decorators may count in a fallback. String literals used as data count.
 
         Args:
-            unit: Parsed source file whose line count is checked.
+            unit: Source file to measure. The syntax-aware count may cache its code line numbers on the file's AST.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            Empty list when under threshold; otherwise a single
-            file-anchored finding spanning the whole file.
+            An empty list if no threshold is active or the count is at or below it. Otherwise, one finding spans the file.
         """
         definition = self.definition()
         settings = context.settings_for(definition)
@@ -93,17 +89,17 @@ class FileLengthRule(Rule):
 
 
 def _substantive_line_count(source: str, tree: ast.AST | None) -> int:
-    """Count the file's code lines; blanks, ``#`` comments, PEP 257 docstrings and decorators are free.
+    """Count physical code lines for the file-length rule.
 
-    Uses the code-line set every length rule shares (``code_line_numbers``), so string literals used as data keep
-    counting and a parse-failed unit falls back to blank and comment stripping alone.
+    Successful tokenization ignores layout and comments, counts lines inside data strings and uses any AST to exclude docstrings.
+    On tokenization failure, skip blanks and full-line comments. In both cases, a supplied AST excludes decorators and caches the line set.
 
     Args:
         source: Full source text of the analysed file.
         tree: Parsed AST when available; None for text files or parse failures.
 
     Returns:
-        Number of code lines, as ``code_line_numbers`` counts them.
+        Number of code lines reported by code_line_numbers.
     """
     return len(code_line_numbers(source, tree))
 
@@ -115,7 +111,7 @@ def _format_number(value: int | float) -> str:
         value: Threshold value from the matched severity tier; it may be an int or a float, depending on how it was configured.
 
     Returns:
-        The str form of the value when it is a float with a fractional part. Otherwise, the value as integer digits, so 1000.0 renders as 1000.
+        Integer text for integers and finite whole-number floats, so 1000.0 renders as 1000. Other floats use their usual Python text.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

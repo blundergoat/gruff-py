@@ -10,18 +10,19 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for x.py.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        A unit for ``x.py`` whose AST nodes carry parent links.
+        A unit for x.py whose AST nodes carry parent links. Shared AST operator and context nodes retain the last assigned parent.
+        This can overwrite parent links visible in previously parsed trees.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # Match the parser's dynamically added parent links.
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -48,13 +49,21 @@ def _ctx(threshold: int = 15) -> RuleContext:
 
 
 def test_class_with_few_public_methods_emits_no_finding():
-    """Report nothing for a class with one public method."""
+    """Report nothing for a class with one public method.
+
+    Returns:
+        None. Asserts that a class with one public method produces no finding.
+    """
     source = "class C:\n    def m(self):\n        return 1\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
 def test_class_just_over_public_method_threshold_is_a_lower_band_notice():
-    """Report twenty public methods once as an advisory lower-band finding counting 20."""
+    """Report twenty public methods once as an advisory lower-band finding counting 20.
+
+    Returns:
+        None. Asserts the sole finding's public-method count, advisory severity and lower band.
+    """
     methods = "\n".join([f"    def m{i}(self):\n        return {i}" for i in range(20)])
     source = f"class C:\n{methods}\n"
     findings = PublicMethodCountRule().analyse(_make_unit(source), _ctx())
@@ -66,21 +75,33 @@ def test_class_just_over_public_method_threshold_is_a_lower_band_notice():
 
 
 def test_private_methods_excluded():
-    """Report nothing for twenty private methods."""
+    """Report nothing for twenty private methods.
+
+    Returns:
+        None. Asserts that the class containing only private methods produces no finding.
+    """
     methods = "\n".join([f"    def _m{i}(self):\n        return {i}" for i in range(20)])
     source = f"class C:\n{methods}\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
 def test_dunder_methods_excluded():
-    """Report nothing for twenty dunder methods."""
+    """Report nothing for twenty dunder methods.
+
+    Returns:
+        None. Asserts that the class containing only double-underscore methods produces no finding.
+    """
     methods = "\n".join([f"    def __m{i}__(self):\n        return {i}" for i in range(20)])
     source = f"class C:\n{methods}\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
 def test_above_error_threshold_emits_error():
-    """Give the first finding error severity and a count of 30 for thirty public methods."""
+    """Give the first finding error severity and a count of 30 for thirty public methods.
+
+    Returns:
+        None. Asserts that the first finding has error severity and records thirty public methods.
+    """
     methods = "\n".join([f"    def m{i}(self):\n        return {i}" for i in range(30)])
     source = f"class C:\n{methods}\n"
     findings = PublicMethodCountRule().analyse(_make_unit(source), _ctx())
@@ -89,7 +110,11 @@ def test_above_error_threshold_emits_error():
 
 
 def test_unittest_testcase_subclass_is_exempt():
-    """Report nothing for a ``unittest.TestCase`` subclass with twenty test methods."""
+    """Report nothing for a unittest.TestCase subclass with twenty test methods.
+
+    Returns:
+        None. Asserts that the unittest.TestCase subclass produces no public-method-count finding.
+    """
     # TestCase subclasses have one method per test case by design.
     methods = "\n".join([f"    def test_a{i}(self):\n        pass" for i in range(20)])
     source = f"import unittest\nclass MyTest(unittest.TestCase):\n{methods}\n"
@@ -97,14 +122,22 @@ def test_unittest_testcase_subclass_is_exempt():
 
 
 def test_pytest_test_prefix_class_is_exempt():
-    """Report nothing for a ``Test``-prefixed class with twenty test methods."""
+    """Report nothing for a Test-prefixed class with twenty test methods.
+
+    Returns:
+        None. Asserts that the Test-prefixed fixture class produces no public-method-count finding.
+    """
     methods = "\n".join([f"    def test_a{i}(self):\n        pass" for i in range(20)])
     source = f"class TestFoo:\n{methods}\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []
 
 
 def test_pydantic_basemodel_subclass_is_exempt():
-    """Report nothing for a pydantic ``BaseModel`` subclass with twenty public methods."""
+    """Report nothing for a pydantic BaseModel subclass with twenty public methods.
+
+    Returns:
+        None. Asserts that the Pydantic BaseModel subclass produces no public-method-count finding.
+    """
     body = "\n".join(f"    def m{i}(self):\n        return {i}" for i in range(20))
     source = f"from pydantic import BaseModel\nclass S(BaseModel):\n{body}\n"
     assert PublicMethodCountRule().analyse(_make_unit(source), _ctx()) == []

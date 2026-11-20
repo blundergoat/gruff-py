@@ -99,32 +99,31 @@ def god_method(a, b, c, d, e, f, g, h):
 
 
 def _make_unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``integration.py``.
+    """Build an integration.py fixture for complexity checks that follow AST parent links.
+
+    In CPython, assigning parent links also updates shared operator and context nodes.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        The analysis unit.
+        Analysis unit containing the original source and parsed tree under integration.py.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # -- ast.AST supports dynamic attributes; parent is not a declared attribute.
     file = SourceFile(absolute_path="/integration.py", display_path="integration.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def _default_ctx() -> RuleContext:
-    """Build a rule context from the registry defaults with five size and complexity thresholds lowered for the fixture.
+    """Build a rule context from the registry defaults with size and complexity thresholds lowered for the fixture.
 
     Returns:
-        The rule context.
+        Rule context with the selected size and complexity rules enabled at the fixture's lower error thresholds.
     """
-    # Single-threshold defaults are too generous for the compact fixture.
-    # Override the size + complexity rubrics low enough that the fixture's
-    # complex functions fire overlapping size + complexity findings, but high
-    # enough that ``shallow`` stays clean.
+    # The lowered limits report the fixture's complex functions while keeping shallow below the size and complexity limits.
     overrides = {
         "size.function-length": 15,
         "size.parameter-count": 5,
@@ -141,10 +140,10 @@ def _ctx_with_threshold_overrides(overrides: dict[str, int]) -> RuleContext:
     Each overridden rule keeps its default options.
 
     Args:
-        overrides: Error threshold to set for each rule id.
+        overrides: Registered rule IDs mapped to their replacement error thresholds.
 
     Returns:
-        The rule context.
+        A context with the requested overrides and the registry defaults for unlisted rules.
     """
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
     for rule_id, threshold in overrides.items():
@@ -160,12 +159,12 @@ def _ctx_with_threshold_overrides(overrides: dict[str, int]) -> RuleContext:
 
 
 def _ctx_for_complexity_metadata() -> RuleContext:
-    """Build a rule context that enables only the three complexity rules, each at an error threshold of 0.
+    """Enable the complexity rules selected for metadata checks at an error threshold of 0.
 
     Every other default rule is disabled.
 
     Returns:
-        The rule context.
+        A context for checking the selected complexity rules' error finding metadata.
     """
     registry = RuleRegistry.defaults()
     rules = {}
@@ -183,19 +182,26 @@ def _ctx_for_complexity_metadata() -> RuleContext:
 
 
 def test_registry_defaults_includes_all_complexity_rules():
-    """Register the cognitive, cyclomatic and nesting-depth rules in the default registry."""
+    """Register the cognitive, cyclomatic and nesting-depth rules in the default registry.
+
+    Returns:
+        None after the assertion passes.
+    """
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     assert COMPLEXITY_RULE_IDS.issubset(ids)
 
 
 def test_complexity_rules_emit_findings_on_fixture():
-    """Report at least one cyclomatic, cognitive and nesting-depth finding on the fixture under lowered thresholds."""
+    """Report at least one cyclomatic, cognitive and nesting-depth finding on the fixture under lowered thresholds.
+
+    Returns:
+        None. Checks for at least one finding from each of the three complexity rules across the fixture.
+    """
     unit = _make_unit(COMPLEXITY_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
-    # too_complex should fire at minimum cyclomatic, cognitive, and
-    # nesting-depth.
+    # Findings on either too_complex or god_method can supply the rule IDs for this fixture-wide check.
     assert "complexity.cyclomatic" in rule_ids
     assert "complexity.cognitive" in rule_ids
     assert "complexity.nesting-depth" in rule_ids
@@ -221,25 +227,41 @@ def _complexity_findings_with_metadata_ctx() -> list:
 
 
 def test_complexity_metadata_covers_all_complexity_rules():
-    """Report a finding from each of the three complexity rules on the metadata fixture."""
+    """Report a finding from each of the three complexity rules on the metadata fixture.
+
+    Returns:
+        None after the assertion passes.
+    """
     complexity_findings = _complexity_findings_with_metadata_ctx()
     assert COMPLEXITY_RULE_IDS.issubset({f.rule_id for f in complexity_findings})
 
 
 def test_complexity_findings_carry_numeric_measured_value():
-    """Give every complexity finding a numeric ``measuredValue``."""
+    """Give every complexity finding a numeric measuredValue.
+
+    Returns:
+        None after the assertion passes.
+    """
     complexity_findings = _complexity_findings_with_metadata_ctx()
     assert all(isinstance(f.metadata["measuredValue"], int | float) for f in complexity_findings)
 
 
 def test_complexity_findings_carry_error_threshold_type():
-    """Mark every complexity finding's threshold type as ``error``."""
+    """Mark every complexity finding's threshold type as error.
+
+    Returns:
+        None after the assertion passes.
+    """
     complexity_findings = _complexity_findings_with_metadata_ctx()
     assert all(f.metadata["thresholdType"] == "error" for f in complexity_findings)
 
 
 def test_above_threshold_complexity_findings_carry_above_direction():
-    """Record a threshold of 0 and the direction ``above`` on every complexity finding."""
+    """Record a threshold of 0 and the direction above on every complexity finding.
+
+    Returns:
+        None after the assertions pass.
+    """
     complexity_findings = _complexity_findings_with_metadata_ctx()
     assert all(f.metadata["threshold"] == 0 for f in complexity_findings)
     assert all(f.metadata["thresholdDirection"] == "above" for f in complexity_findings)
@@ -253,7 +275,11 @@ _COMPLEXITY_RULES_FOR_SHALLOW = (
 
 
 def test_shallow_function_no_complexity_findings():
-    """Report no complexity finding on ``shallow`` under the lowered fixture thresholds."""
+    """Report no complexity finding on shallow under the lowered fixture thresholds.
+
+    Returns:
+        None after the assertion passes.
+    """
     unit = _make_unit(COMPLEXITY_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     shallow_complexity_findings = [f for f in findings if f.symbol == "shallow" and f.rule_id in _COMPLEXITY_RULES_FOR_SHALLOW]

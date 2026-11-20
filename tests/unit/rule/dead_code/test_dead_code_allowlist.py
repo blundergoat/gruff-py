@@ -17,19 +17,21 @@ _UNREAD_ATTRIBUTE = "class Service:\n    def __init__(self):\n        self._cach
 
 
 def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit at display_path.
+    """Build an analysis unit at display_path with parent links for the rule's symbol checks.
+
+    Assigning parents also updates shared AST markers such as Load and Store, which keep only the last parent assigned.
 
     Args:
         source: Python source to parse.
-        display_path: Project-relative path of the unit; defaults to ``x.py``.
+        display_path: Project-relative path of the unit; defaults to x.py.
 
     Returns:
-        The analysis unit.
+        Unit containing the supplied source, its parent-linked AST, and a file record for display_path.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # ast.AST omits parent, which the rule uses to qualify class symbols.
     return AnalysisUnit(
         file=SourceFile(absolute_path="/" + display_path, display_path=display_path, type="python"),
         source=source,
@@ -44,7 +46,7 @@ def _ctx(*, allowlist: DeadCodeAllowlist | None = None) -> RuleContext:
         allowlist: Dead-code allowlist to apply; None applies an empty allowlist.
 
     Returns:
-        The rule context.
+        A context that applies the configured allowlist to the unused private attribute rule.
     """
     attribute_rule = UnusedPrivateAttributeRule()
     config = AnalysisConfig(
@@ -55,7 +57,7 @@ def _ctx(*, allowlist: DeadCodeAllowlist | None = None) -> RuleContext:
 
 
 def _decorated_handler(decorator: str) -> str:
-    """Return module source defining a ``Handler`` class under decorator, whose private attribute is written and never read.
+    """Return module source defining a Handler class under decorator, whose private attribute is written and never read.
 
     Args:
         decorator: Decorator expression placed above the class.
@@ -77,14 +79,22 @@ def _decorated_handler(decorator: str) -> str:
 
 
 def test_attribute_allowlisted_by_qualified_symbol():
-    """Suppress the unread ``Service._cached`` finding when the allowlist names that qualified symbol."""
+    """Suppress the unread Service._cached finding when the allowlist names that qualified symbol.
+
+    Returns:
+        None after all assertions pass.
+    """
     allowlist = DeadCodeAllowlist(symbols=("Service._cached",))
     findings = UnusedPrivateAttributeRule().analyse(_unit(_UNREAD_ATTRIBUTE), _ctx(allowlist=allowlist))
     assert findings == []
 
 
 def test_attribute_not_allowlisted_when_symbol_differs():
-    """Still report the unread attribute once when the allowlist names a different symbol."""
+    """Still report the unread attribute once when the allowlist names a different symbol.
+
+    Returns:
+        None after all assertions pass.
+    """
     allowlist = DeadCodeAllowlist(symbols=("Service._other",))
     findings = UnusedPrivateAttributeRule().analyse(_unit(_UNREAD_ATTRIBUTE), _ctx(allowlist=allowlist))
     assert len(findings) == 1
@@ -101,6 +111,9 @@ def test_attribute_allowlisted_by_class_decorator(decorator: str, allowlisted: s
     Args:
         decorator: Decorator applied to the class.
         allowlisted: Decorator name the allowlist holds for that case.
+
+    Returns:
+        None after all assertions pass.
     """
     allowlist = DeadCodeAllowlist(decorators=(allowlisted,))
     findings = UnusedPrivateAttributeRule().analyse(_unit(_decorated_handler(decorator)), _ctx(allowlist=allowlist))
@@ -108,7 +121,11 @@ def test_attribute_allowlisted_by_class_decorator(decorator: str, allowlisted: s
 
 
 def test_attribute_allowlisted_by_path():
-    """Suppress the finding for a file under an allowlisted ``src/legacy/**`` glob."""
+    """Suppress the finding for a file under an allowlisted src/legacy/** glob.
+
+    Returns:
+        None after all assertions pass.
+    """
     allowlist = DeadCodeAllowlist(paths=("src/legacy/**",))
     findings = UnusedPrivateAttributeRule().analyse(
         _unit(_UNREAD_ATTRIBUTE, display_path="src/legacy/service.py"),
@@ -118,7 +135,11 @@ def test_attribute_allowlisted_by_path():
 
 
 def test_attribute_path_glob_does_not_match_other_paths():
-    """Still report the attribute once when the allowlisted path glob does not match the file."""
+    """Still report the attribute once when the allowlisted path glob does not match the file.
+
+    Returns:
+        None after all assertions pass.
+    """
     allowlist = DeadCodeAllowlist(paths=("tests/fixtures/*.py",))
     findings = UnusedPrivateAttributeRule().analyse(
         _unit(_UNREAD_ATTRIBUTE, display_path="src/app.py"),
@@ -128,13 +149,21 @@ def test_attribute_path_glob_does_not_match_other_paths():
 
 
 def test_empty_allowlist_does_not_affect_findings():
-    """Report the unread attribute once with an empty allowlist."""
+    """Report the unread attribute once with an empty allowlist.
+
+    Returns:
+        None after all assertions pass.
+    """
     findings = UnusedPrivateAttributeRule().analyse(_unit(_UNREAD_ATTRIBUTE), _ctx())
     assert len(findings) == 1
 
 
 def test_decorator_allowlist_does_not_fire_when_decorator_absent():
-    """Still report the attribute once when the allowlist names a decorator the class does not carry."""
+    """Still report the attribute once when the allowlist names a decorator the class does not carry.
+
+    Returns:
+        None after all assertions pass.
+    """
     # The allowlist names a decorator, but this class carries none, so its unread attribute still reports.
     allowlist = DeadCodeAllowlist(decorators=("register_event",))
     findings = UnusedPrivateAttributeRule().analyse(_unit(_UNREAD_ATTRIBUTE), _ctx(allowlist=allowlist))

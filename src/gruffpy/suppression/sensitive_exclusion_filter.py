@@ -20,25 +20,22 @@ def partition_sensitive_exclusions(
     findings: Sequence[Finding],
     exclusions: Sequence[SensitiveExclusion],
 ) -> tuple[list[Finding], tuple[SuppressionSummary, ...]]:
-    """Split findings into the ones users still see and the audit of the ones they do not.
+    """Apply configured sensitive-data exclusions and build their suppression audit.
 
-    A finding is removed only when its rule id, its project-relative display path, and - when the
-    entry names one - its symbol all match a single entry exactly. The same rule in another file
-    and another rule in the same file both keep reporting.
+    Removal requires an exact rule and path match plus any specified symbol. Only the first matching entry receives the count.
 
     Args:
         findings: Findings that survived the inline-directive channel.
-        exclusions: Validated ``sensitiveExclusions`` entries in user order.
+        exclusions: Validated entries in user order; an empty sequence keeps every finding and produces no audit rows.
 
     Returns:
-        Tuple ``(kept, summaries)`` where ``summaries`` has one row per entry, including entries
-        that matched nothing.
+        Findings that matched no entry and one audit row per exclusion, including entries that matched nothing.
     """
     counts = [0] * len(exclusions)
     kept: list[Finding] = []
     for finding in findings:
         position = _first_matching_position(finding, exclusions)
-        # An unclaimed finding stays in the user's results, their score, and their exit code.
+        # An unclaimed finding remains eligible for the built-in test-path check.
         if position is None:
             kept.append(finding)
             continue
@@ -143,7 +140,6 @@ def is_built_in_test_path(file_path: str) -> bool:
         True for a directory named in the family list, compared case-insensitively, or a test-file base name.
     """
     *directories, base_name = file_path.replace("\\", "/").split("/")
-    # Any directory on the path, compared case-insensitively, or the file name alone can mark test code.
     return any(directory.lower() in _BUILT_IN_TEST_PATH_DIRECTORIES for directory in directories) or (
         _BUILT_IN_TEST_FILE_NAME.fullmatch(base_name) is not None
     )

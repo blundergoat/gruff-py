@@ -35,9 +35,9 @@ class PhiPatternRule(SourceTextRule):
     ID = "sensitive-data.phi-pattern"
 
     def definition(self) -> RuleDefinition:
-        """Describe the PHI-pattern rule as a medium-confidence ERROR.
+        """Describe the PHI-pattern rule as a medium-confidence warning.
 
-        Users receive an error for the privacy risk, but medium confidence makes clear that the
+        Users receive a warning for the privacy risk, but medium confidence makes clear that the
         narrow SSN and MRN shapes require review and do not promise compliance.
 
         Returns:
@@ -54,28 +54,23 @@ class PhiPatternRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag US SSN literals and ``MRN: <digits>`` patterns in source.
-
-        Canonical SSA documentation placeholders (``000-00-0000``,
-        ``123-45-6789``, ``999-99-9999``) are recognised and skipped.
+        """Flag US SSN-shaped text and MRN labels separated from 6 to 10 digits by colons or whitespace.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per non-placeholder SSN or MRN match.
+            One finding per SSN match outside the placeholder list and per MRN match.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        # Each SSN-shaped occurrence gets an independent source location in the user's report.
         for ssn_match in _SSN_RE.finditer(unit.source):
             social_security_number = ssn_match.group(0)
-            # Standard documentation values stay silent because they do not identify a real person.
+            # The SSN exception keeps common examples out of privacy review.
             if social_security_number in _SSN_PLACEHOLDERS:
                 continue
             findings.append(_build_phi_finding(definition, unit, ssn_match.start(), "ssn"))
-        # Every labelled medical-record number remains visible for manual privacy review.
         for medical_record_match in _MRN_RE.finditer(unit.source):
             findings.append(_build_phi_finding(definition, unit, medical_record_match.start(), "mrn"))
         return findings

@@ -93,9 +93,12 @@ def _analyse(output_format: str) -> str:
 
 @pytest.mark.usefixtures("project")
 def test_comments_suppress_only_what_they_name_and_an_import_reports_once() -> None:
-    """Report only the five security findings no bare ``nosec`` or zizmor comment covers, with ``__import__`` reported once.
+    """Report only the five security findings remaining after inline suppression and deduplication, with ``__import__`` reported once.
 
     The JSON audit rows count one inline unpinned-action removal, two inline pickle removals and one duplicate variable-import removal.
+
+    Returns:
+        None. Checks the exact JSON security findings and suppression audit rows.
     """
     payload: dict[str, Any] = json.loads(_analyse("json"))
 
@@ -117,7 +120,11 @@ def test_comments_suppress_only_what_they_name_and_an_import_reports_once() -> N
 
 @pytest.mark.usefixtures("project")
 def test_text_and_sarif_keep_every_removal_visible() -> None:
-    """Show the inline and duplicate removal counts in text output, and mark four SARIF results as suppressed in source with their reason."""
+    """Show pickle and variable-import removal counts in text and mark four SARIF results as suppressed in source with their reasons.
+
+    Returns:
+        None. Checks the two text audit entries and all four SARIF suppression records.
+    """
     text = _analyse("text")
     assert f"inline[app/loader.py] security.unsafe-pickle: 2 ({INLINE_REASON})" in text
     assert f"duplicate[app/loader.py] security.variable-import: 1 ({DUPLICATE_REASON})" in text

@@ -53,10 +53,7 @@ class ScoreReport:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the native score container used by report renderers.
 
-        The container retains native grade objects, scoring scope, explanation,
-        pillar rows, offender rows, and complexity buckets. The v3 machine
-        adapter projects the canonical composite and offender shapes without
-        recalculating a value.
+        Nested grades are serialized; an absent composite becomes a mapping whose score and grade are both None.
 
         Returns:
             JSON-ready native score data.

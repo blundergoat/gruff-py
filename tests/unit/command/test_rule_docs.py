@@ -37,15 +37,14 @@ def _live_catalog_total_in(relative_doc_path: Path) -> str | None:
     """Find a hand-maintained rule-and-pillar total in current project memory.
 
     Args:
-        relative_doc_path: Non-empty repository path to one current-truth document.
+        relative_doc_path: Document to inspect; relative paths resolve from the repository root.
 
     Returns:
-        Matching total text, or ``None`` when users can only reach generated totals.
+        The first matching total, or None when the normalized document contains no matching pattern.
     """
     document_text = (_PROJECT_ROOT / relative_doc_path).read_text()
     normalized_document_text = " ".join(document_text.split())
     live_total_match = _LIVE_CATALOG_TOTAL_PATTERN.search(normalized_document_text)
-    # A clean document gives reviewers no duplicate total to report.
     if live_total_match is None:
         return None
     return live_total_match.group(0)
@@ -55,7 +54,7 @@ def test_rendered_rule_docs_carry_the_catalog_structure() -> None:
     """Keep the generated catalog navigable for a user looking a rule up.
 
     Returns:
-        None; a missing heading raises an assertion for the reviewer.
+        None. Checks the opening Rules heading and the presence of the Rule Details and complexity.cyclomatic heading markers.
     """
     assert _RENDERED_DOCS.startswith("# Rules\n\n")
     assert "## Rule Details" in _RENDERED_DOCS
@@ -66,7 +65,7 @@ def test_rendered_rule_docs_explain_how_a_rule_measures_and_misfires() -> None:
     """Keep the generated catalog useful for a user judging and fixing a finding.
 
     Returns:
-        None; missing provenance or false-positive guidance raises an assertion.
+        None. Checks for the formula provenance, threshold metadata, false-positive label and private-attribute example.
     """
     threshold_metadata = "Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`"
 
@@ -107,7 +106,7 @@ def test_generated_docs_check_rejects_stale_header(tmp_path: Path) -> None:
         tmp_path: Temporary location for the stale catalog a user might commit.
 
     Returns:
-        None; the existing byte check must reject the deliberately stale file.
+        None; the generated-text check must reject the deliberately stale file.
     """
     current_header = _RENDERED_DOCS.splitlines()[2]
     stale_header = current_header.replace(
@@ -127,13 +126,13 @@ def test_generated_docs_check_rejects_stale_header(tmp_path: Path) -> None:
     ids=("readme", "architecture", "code-map", "glossary"),
 )
 def test_live_catalog_totals_are_generated_only(relative_doc_path: Path) -> None:
-    """Keep current project memory linked to generated totals instead of copies.
+    """Reject numeric rule-and-pillar totals in current project documents.
 
     Args:
         relative_doc_path: Current-truth document checked for wrapped numeric totals.
 
     Returns:
-        None; a duplicate total fails with the matching repository path.
+        None; a detected total fails with the matching repository path.
     """
     live_catalog_total = _live_catalog_total_in(relative_doc_path)
     # A match means users could read a stale total instead of the generated catalog.
@@ -141,13 +140,13 @@ def test_live_catalog_totals_are_generated_only(relative_doc_path: Path) -> None
 
 
 def test_live_catalog_totals_detector_rejects_wrapped_fixture(tmp_path: Path) -> None:
-    """Recognize the wrapped stale-total shape that motivated the invariant.
+    """Recognize a rule-and-pillar total split across physical lines.
 
     Args:
         tmp_path: Temporary current-memory location holding the stale example.
 
     Returns:
-        None; the detector must reject a total split across physical lines.
+        None; the detector must return the complete total with normalized spaces.
     """
     stale_architecture_path = tmp_path / "architecture.md"
     stale_architecture_path.write_text("The runtime catalog has 125 rules across\n11 active pillars for reviewers.\n")
@@ -159,12 +158,12 @@ def test_live_catalog_totals_detector_rejects_wrapped_fixture(tmp_path: Path) ->
 
 @pytest.mark.parametrize("rule_id", _DEFAULT_RULE_IDS, ids=lambda r: r)
 def test_rendered_rule_docs_name_default_rule_once(rule_id: str) -> None:
-    """Give users exactly one generated detail heading for each shipped rule.
+    """Check that each shipped rule's detail heading marker occurs once in the generated catalog.
 
     Args:
         rule_id: Non-empty id from the runtime catalog being checked.
 
     Returns:
-        None; a missing or duplicate user-facing rule heading raises an assertion.
+        None. Asserts that the rendered text contains exactly one occurrence of the marker for rule_id.
     """
     assert _RENDERED_DOCS.count(f"### `{rule_id}`") == 1

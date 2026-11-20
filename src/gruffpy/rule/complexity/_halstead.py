@@ -79,18 +79,15 @@ _HALSTEAD_CACHE_ATTR = "_gruffpy_halstead_metrics"
 
 
 def halstead_for(fn: FunctionLike) -> HalsteadMetrics:
-    """Compute Halstead metrics for a function-like node's body.
+    """Compute or reuse Halstead metrics, caching new results on the function-like AST node.
 
-    Operands are only counted when they appear inside an operator-bearing
-    expression (BinOp, UnaryOp, BoolOp, Compare, AugAssign). Bare Names and
-    Constants in statements (``return x``, ``x = 1``) do NOT contribute -
-    matching radon's expression-focused interpretation.
+    Operands count within operator expressions and augmented assignments. Standalone names and constants add no counts.
 
     Args:
         fn: Function, async function, or lambda node to score.
 
     Returns:
-        Halstead metrics for the node body.
+        Cached metrics when present, otherwise newly computed metrics; changing the node later does not invalidate the cache.
     """
     cached = getattr(fn, _HALSTEAD_CACHE_ATTR, None)
     if isinstance(cached, HalsteadMetrics):
@@ -124,6 +121,9 @@ def _walk_stmt(node: ast.AST, operators: list[str], operands: list[str]) -> None
             Operators inside a Call, Subscript or Attribute that is itself an operand are not counted. Mutated in place.
         operands: Accumulator that receives one operand key per operand found inside an operator-bearing node or an augmented assignment. Mutated in
             place.
+
+    Returns:
+        None. Appends counted operators and operands to the supplied lists in place.
     """
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
         return
@@ -135,24 +135,24 @@ def _walk_stmt(node: ast.AST, operators: list[str], operands: list[str]) -> None
     if isinstance(node, ast.BinOp | ast.UnaryOp | ast.BoolOp | ast.Compare):
         _collect_operands(node, operators, operands)
         return
-    # Statement-level node: keep descending into children
     for child in ast.iter_child_nodes(node):
         _walk_stmt(child, operators, operands)
 
 
 def _collect_operands(node: ast.AST, operators: list[str], operands: list[str]) -> None:
-    """Add the operators and operands of one expression sub-tree to the shared accumulators.
+    """Add expression operators and operand keys to the shared accumulators.
 
-    An operator-bearing node (BinOp, UnaryOp, BoolOp or Compare) records its operator names and recurses into its operands. A Name or Constant is
-    recorded as one operand. A Call, Subscript or Attribute is recorded as one opaque operand keyed by its unparsed source, so the Names, Constants
-    and operators inside it are not counted. Any other node, such as a Tuple, List or IfExp, is descended into, so its own Names, Constants and nested
-    operators are counted.
+    Names and constants add one key each. Calls, subscripts and attributes each count as one operand and their children are skipped.
+    These whole expressions use unparsed source as the key, or the node type name if unparsing fails. Other nodes are traversed recursively.
 
     Args:
         node: Node to count: an operator-bearing node, one of its operand sub-trees or their children, or the target or value of an augmented
             assignment.
         operators: Accumulator that receives the operator names counted in the sub-tree. Mutated in place.
         operands: Accumulator that receives the operand keys counted in the sub-tree. Mutated in place.
+
+    Returns:
+        None. Adds operator names and operand keys to the supplied lists in place.
     """
     operator_collector = _operator_collector(node)
     if operator_collector is not None:
@@ -194,6 +194,9 @@ def _collect_binop_operands(node: ast.AST, operators: list[str], operands: list[
         node: BinOp node chosen by _operator_collector. It is typed as ast.AST to fit the OperandCollector signature.
         operators: Accumulator that receives this operation's operator name plus the operator names counted from either side. Mutated in place.
         operands: Accumulator that receives the operand keys from both sides. Mutated in place.
+
+    Returns:
+        None. Appends the binary operator name and any operator names and operand keys collected from both sides to the supplied lists.
     """
     assert isinstance(node, ast.BinOp)
     operators.append(type(node.op).__name__)
@@ -208,6 +211,9 @@ def _collect_unary_operands(node: ast.AST, operators: list[str], operands: list[
         node: UnaryOp node chosen by _operator_collector. It is typed as ast.AST to fit the OperandCollector signature.
         operators: Accumulator that receives this operation's operator name plus the operator names counted from its operand. Mutated in place.
         operands: Accumulator that receives the operand keys from the operand sub-tree. Mutated in place.
+
+    Returns:
+        None. Adds operator names and operand keys to the supplied accumulators.
     """
     assert isinstance(node, ast.UnaryOp)
     operators.append(type(node.op).__name__)
@@ -223,6 +229,9 @@ def _collect_boolop_operands(node: ast.AST, operators: list[str], operands: list
         node: BoolOp node chosen by _operator_collector. It is typed as ast.AST to fit the OperandCollector signature.
         operators: Accumulator that receives this operation's operator name plus the operator names counted from its values. Mutated in place.
         operands: Accumulator that receives the operand keys from every joined value. Mutated in place.
+
+    Returns:
+        None. Adds the boolean operator and the joined values' contributions to the supplied accumulators.
     """
     assert isinstance(node, ast.BoolOp)
     operators.append(type(node.op).__name__)
@@ -240,6 +249,9 @@ def _collect_compare_operands(node: ast.AST, operators: list[str], operands: lis
         operators: Accumulator that receives one operator name per comparison plus the operator names counted from the compared expressions. Mutated
             in place.
         operands: Accumulator that receives the operand keys from the left side and each comparator. Mutated in place.
+
+    Returns:
+        None. Adds the comparison operators and compared expressions' contributions to the supplied accumulators.
     """
     assert isinstance(node, ast.Compare)
     for op in node.ops:
@@ -284,13 +296,10 @@ def _has_collected_opaque_operand(node: ast.AST, operands: list[str]) -> bool:
         True when the node was a Call, Subscript or Attribute and its operand key was appended, so the caller stops descending. False when nothing was
         recorded.
     """
-    # Call / Subscript / Attribute / Tuple / etc. - treat as opaque operand
-    # atoms keyed by their `ast.unparse` representation. This matches radon's
-    # behaviour: ``f(x) + g(x)`` contributes 2 operand atoms, not 4.
     if isinstance(node, ast.Call | ast.Subscript | ast.Attribute):
         try:
             operands.append(ast.unparse(node))
-        except Exception:  # pragma: no cover - ast.unparse rarely raises on valid source nodes
+        except Exception:  # pragma: no cover - A failed source render still leaves a usable class key, so counting needs no diagnostic.
             operands.append(type(node).__name__)
         return True
     return False

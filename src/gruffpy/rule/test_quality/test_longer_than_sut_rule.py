@@ -29,15 +29,12 @@ class TestLongerThanSutRule(Rule):
     ID = "test-quality.test-longer-than-sut"
 
     def definition(self) -> RuleDefinition:
-        """Describe the test-longer-than-sut rule with a configurable ``ratio`` option.
+        """Describe the test-longer-than-sut rule with a configurable ratio option.
 
-        Medium confidence because the SUT lookup is best-effort: only tests
-        named ``test_<sut>`` get matched against an in-unit function named
-        ``<sut>`` - cross-module SUTs and method tests don't pair up.
+        Matching uses simple names within the same AST, including methods and nested functions; cross-module targets are unavailable.
 
         Returns:
-            Definition with the ``ratio`` option (test-to-SUT line ratio
-            threshold).
+            Definition with the ratio option controlling the test-to-SUT line-count threshold.
         """
         return RuleDefinition(
             id=self.ID,
@@ -50,21 +47,18 @@ class TestLongerThanSutRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tests whose line count exceeds ``ratio`` times the matching SUT function's lines.
+        """Flag tests whose line count exceeds ratio times the matching SUT function's lines.
 
-        Skips tests where the SUT can't be located, where the SUT is
-        trivial (≤5 lines, since a 50-line test for a 5-line SUT is
-        plausible), or where the test name doesn't follow the
-        ``test_<name>`` shape.
+        Match each test suffix to a function name in the same file. Skip cases with no match or a target of five code lines or fewer.
+        Short targets are exempt because reasonable test setup can be much longer than the function itself.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the ``ratio`` option
+            unit: Source file containing the tests and candidate targets. The scan can cache code-line numbers on its AST.
+            context: Rule execution context supplying the ratio option
                 (test-to-SUT line ratio threshold).
 
         Returns:
-            One finding per test that exceeds the configured ratio against
-            its inferred SUT.
+            One finding per test that exceeds the ratio against its inferred target. Empty when no AST is available or no test qualifies.
         """
         if unit.tree is None:
             return []
@@ -80,7 +74,7 @@ class TestLongerThanSutRule(Rule):
                 continue
             sut_len = target_lengths.get(target_name)
             if sut_len is None or sut_len <= 5:
-                continue  # trivial SUT or no match; skip
+                continue  # The ratio needs a matched target whose length makes the test comparison meaningful.
             test_len = lines_for_size(fn, code_lines)
             if test_len <= sut_len * ratio:
                 continue

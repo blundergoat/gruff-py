@@ -36,9 +36,7 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
     def definition(self) -> RuleDefinition:
         """Describe the unpinned-action rule as a high-confidence posture warning.
 
-        High confidence because "the ref is not a 40-char SHA" is an exact
-        textual test, not a heuristic; warning severity because an unpinned
-        action is a supply-chain posture smell rather than an active exploit.
+        High confidence reflects the exact 40-character hexadecimal SHA check; WARNING reflects supply-chain risk rather than a known exploit.
 
         Returns:
             Definition for the github-actions-unpinned-action rule under the
@@ -54,19 +52,16 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag each ``uses:`` step that pins a third-party action to a movable ref.
+        """Flag third-party action references that are not pinned to a full 40-character hexadecimal commit SHA.
 
-        Only runs on files under ``.github/workflows/`` ending in
-        ``.yml``/``.yaml``. Local (``./``), ``docker://``, and GitHub-owned
-        (``actions/*``, ``github/*``) references are skipped, as are actions
-        already pinned to a full 40-character commit SHA.
+        Scan workflow YAML text; local paths, docker references, and references owned by actions or github are exempt.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unpinned third-party ``uses:`` reference.
+            One finding per recognized third-party uses reference with a non-SHA ref. Empty for non-workflow paths or when no reference matches.
         """
         if not is_workflow_file(unit.file.display_path):
             return []
@@ -113,18 +108,19 @@ class GithubActionsUnpinnedActionRule(SourceTextRule):
 
 
 def _unpinned_action(spec: str) -> tuple[str, str] | None:
-    """Return ``(path, ref)`` when *spec* is an unpinned third-party action, else ``None``.
+    """Return the path and ref for an unpinned third-party action, or None.
 
     Args:
         spec: Reference text captured from a workflow uses entry.
 
     Returns:
-        Action path and ref when the reference passes the third-party and unpinned checks; None for exempt or unrecognized references.
+        Action path and ref for a non-exempt third-party reference without a full SHA pin. A trailing @ yields an empty ref.
+        None for exempt, fully pinned or unrecognized references.
     """
     if spec.startswith((".", "/")) or spec.startswith("docker://"):
         return None  # Local or container action - different supply chain.
     if "@" not in spec:
-        return None  # No ref to evaluate.
+        return None  # A missing @ excludes the reference. An empty ref after @ can still be reported.
     path, _, ref = spec.partition("@")
     if "/" not in path:
         return None  # Not an owner/repo action reference.

@@ -64,13 +64,8 @@ class ExportedButUnreferencedRule:
     def definition(self) -> RuleDefinition:
         """Describe the exported-but-unreferenced rule as a medium-confidence advisory.
 
-        Medium confidence: the reference model is name-based rather than
-        import-resolved, so it errs toward false negatives (any same-name
-        use anywhere counts), and it only runs with full-project context.
-        Opt-in: a library's public API exists for callers outside the
-        repository, and packaging entry points, string registration and
-        framework hooks are references the scan cannot see, so on the family
-        corpus one sampled finding in twelve was real.
+        Name-based matching counts any same-name use as a reference and requires a full-project scan.
+        Disabled by default because external callers, entry points, string registration and framework hooks may escape detection.
 
         Returns:
             Definition for the exported-but-unreferenced rule under the
@@ -88,14 +83,14 @@ class ExportedButUnreferencedRule:
         )
 
     def analyse_project(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
-        """Flag public top-level symbols with no real reference across the project.
+        """Find public top-level functions and classes with no counted name reference in a full-project scan.
 
         Args:
             units: Parsed project units to inspect together.
-            context: Rule execution context carrying ``scan_scope`` and config.
+            context: Supplies scan_scope, exemption settings and reference-only trees.
 
         Returns:
-            Findings for export-only public symbols; empty for partial scans.
+            Findings for non-exempt definitions in parsed non-test units with no counted reference. Empty for partial scans or when none qualify.
         """
         if context.scan_scope != "full-project":
             return []
@@ -107,7 +102,7 @@ class ExportedButUnreferencedRule:
         candidates = _export_candidates(parsed_units)
         if not candidates:
             return []
-        # Files that configured ignore globs keep out of the report still call the project's symbols.
+        # References from files excluded by configured ignore globs can still keep a definition from being reported.
         used_names = _used_names([tree for _, tree in parsed_units] + list(context.reference_trees))
         findings: list[Finding] = []
         for candidate in candidates:
@@ -164,11 +159,8 @@ def _is_test_unit(unit: AnalysisUnit) -> bool:
 def _used_names(trees: list[ast.Module]) -> set[str]:
     """Collect every name with a non-export reference anywhere in the project.
 
-    Export plumbing deliberately does not count: ``__all__`` entries are
-    string constants (never ``Name`` loads), and plain import aliases are
-    skipped. Everything else - loads, attribute access, ``getattr`` string
-    literals, aliased imports, and names inside quoted/forward-reference
-    annotations - marks the name as used.
+    String entries in __all__ and imports without an as alias do not count as references.
+    Loads, attribute names, literal getattr lookups, aliased imports and names parsed from quoted annotations do count.
 
     Args:
         trees: Module trees to walk: the scanned units plus the context's reference trees from files kept out of the report.
@@ -191,9 +183,9 @@ def _node_references(node: ast.AST) -> set[str]:
         node: One AST node visited by the project walk in _used_names.
 
     Returns:
-        The id of a Name load, the attribute name of any Attribute node, the last dotted segment of each import name that has an alias (imports
-        without an alias contribute nothing), the names _forward_reference_names finds in a function's return annotation or a parameter or annotated
-        assignment annotation, or the second-argument string that _getattr_string_literal extracts from a bare getattr call; empty for any other node.
+        A set containing a loaded name, an attribute name, the final segments of aliased imports' original names, or the names found in
+        return, parameter or assignment annotations by _forward_reference_names. A bare getattr call contributes its second argument when it is
+        a string literal. A node with no contributing names, such as an unannotated parameter, gives an empty set.
     """
     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
         return {node.id}
@@ -229,16 +221,14 @@ def _getattr_string_literal(node: ast.AST) -> str | None:
 def _forward_reference_names(annotation: ast.expr | None) -> set[str]:
     """Collect the names written inside string constants of an annotation, which the plain Name walk never sees.
 
-    A fully quoted annotation (``-> "Payload"``) or a quoted element inside a generic (``list["Payload"]``) is a string constant, so each string
-    constant found in the annotation is parsed by _names_in_expression. Unquoted names in the same annotation are not returned here; the project walk
-    already counts them as Name loads.
+    Each string constant in the annotation is parsed by _names_in_expression, including quoted annotations and quoted generic arguments.
+    The project walk counts unquoted name loads and attribute names separately.
 
     Args:
         annotation: Annotation expression to search, or None when the function has no return annotation or the parameter has no annotation.
 
     Returns:
-        Names and attribute names parsed from every string constant in the annotation; empty when the annotation is None, contains no string constant,
-        or none of its string constants parse.
+        Names and attribute names parsed from the annotation's string constants. Empty when the annotation is absent or its strings yield no names.
     """
     if annotation is None:
         return set()
@@ -256,8 +246,8 @@ def _names_in_expression(text: str) -> set[str]:
         text: Value of a string constant taken from an annotation.
 
     Returns:
-        The id of every Name node and the attribute name of every Attribute node in the parsed expression; empty when parsing the text raises
-        SyntaxError.
+        Name identifiers and attribute names from the expression. An expression with no names yields an empty set.
+        A SyntaxError also yields an empty set without a diagnostic because annotation strings can contain literal data.
     """
     try:
         parsed = ast.parse(text, mode="eval")
@@ -268,8 +258,7 @@ def _names_in_expression(text: str) -> set[str]:
         if isinstance(node, ast.Name):
             names.add(node.id)
         elif isinstance(node, ast.Attribute):
-            # ``"models.Payload"`` references ``Payload`` via the attribute, the
-            # same way an unquoted ``models.Payload`` load would.
+            # Treat "models.Payload" like an unquoted annotation so quoting it preserves the reference to Payload.
             names.add(node.attr)
     return names
 

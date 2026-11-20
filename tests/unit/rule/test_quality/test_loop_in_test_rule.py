@@ -18,7 +18,7 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 )
 @pytest.mark.parametrize("rule", [LoopAssertionWithoutMessageRule()], ids=["assertion-message"])
 def test_subtest_loop_keeps_case_context_and_unsafe_controls(body: str, expected: int, rule: Rule) -> None:
-    """Accept the report's subTest idiom while retaining assertion-hiding loops.
+    """Accept named self.subTest contexts while reporting loops with unprotected or conditional assertions.
 
     Args:
         body: Loop body exercising case context or one unsafe variation.
@@ -26,7 +26,7 @@ def test_subtest_loop_keeps_case_context_and_unsafe_controls(body: str, expected
         rule: Loop detector whose failure-context contract is checked.
 
     Returns:
-        None.
+        None. Checks for zero findings with the named, unconditional self.subTest assertion and one for each of the other fixture variants.
     """
     source = (
         "import unittest\n"

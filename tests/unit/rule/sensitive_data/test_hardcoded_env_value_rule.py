@@ -13,7 +13,11 @@ _ENV_SECRET = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1"
 
 
 def test_env_with_high_entropy_secret_emits():
-    """Report one finding, with the fixed preview, for a ``.env`` file holding a high-entropy ``API_KEY`` value and ``DEBUG=true``."""
+    """Report one finding, with the fixed preview, for a .env file holding a high-entropy API_KEY value and DEBUG=true.
+
+    Returns:
+        None after verifying the finding count and fixed preview.
+    """
     src = f"API_KEY={_ENV_SECRET}\nDEBUG=true\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx())
     assert len(findings) == 1
@@ -21,26 +25,41 @@ def test_env_with_high_entropy_secret_emits():
 
 
 def test_env_placeholder_skipped():
-    """Report nothing for placeholder values in a ``.env`` file."""
+    """Report nothing for placeholder values in a .env file.
+
+    Returns:
+        None after verifying that the placeholder assignments produce no findings.
+    """
     src = "SECRET=changeme\nTOKEN=your_secret_here\n"
     assert HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx()) == []
 
 
 def test_env_variable_substitution_skipped():
-    """Report nothing for a ``.env`` value that substitutes another variable."""
+    """Report nothing for a .env value that substitutes another variable.
+
+    Returns:
+        None after verifying that the variable reference produces no findings.
+    """
     src = "API_KEY=${REAL_KEY_FROM_VAULT}\n"
     assert HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx()) == []
 
 
 def test_non_env_file_skipped():
-    """Report nothing for the same secret-shaped value in a Python file."""
+    """Report nothing for the same secret-shaped value in a Python file.
+
+    Returns:
+        None after verifying that the Python file produces no findings.
+    """
     src = f"API_KEY={_ENV_SECRET}\n"
-    # Same content but in a .py file - rule should skip.
     assert HardcodedEnvValueRule().analyse(make_unit(src, "config.py"), default_ctx()) == []
 
 
 def test_non_secret_key_skipped():
-    """Report nothing for ``.env`` keys whose names do not suggest a secret."""
+    """Report nothing for .env keys whose names do not suggest a secret.
+
+    Returns:
+        None after verifying that the non-secret settings produce no findings.
+    """
     src = "DEBUG=true\nLOG_LEVEL=info\n"
     assert HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx()) == []
 
@@ -57,10 +76,13 @@ def test_non_secret_key_skipped():
     ids=["end-of-file", "region-on-next-line", "comment-after-blank-line", "empty-key-on-next-line", "crlf-next-line"],
 )
 def test_empty_value_never_reads_the_next_line(source: str) -> None:
-    """Keep an empty right-hand side quiet, the downstream brief's ``AWS_SECRET_ACCESS_KEY=`` shape.
+    """Keep empty or whitespace-only secret values quiet regardless of the following line.
 
     Args:
-        source: Env file whose secret-named key has nothing after the equals sign.
+        source: Env file whose secret-named key has an empty or whitespace-only value.
+
+    Returns:
+        None after verifying that the source produces no findings.
     """
     assert HardcodedEnvValueRule().analyse(make_unit(source, ".env", "text"), default_ctx()) == []
 
@@ -71,10 +93,13 @@ def test_empty_value_never_reads_the_next_line(source: str) -> None:
     ids=["your-key-here", "your-prefix", "angle-brackets", "replace-me-upper", "replace-me-mixed", "repeated-character", "example"],
 )
 def test_placeholder_value_is_skipped(value: str) -> None:
-    """Treat widened placeholder spellings as stand-ins in any env file.
+    """Report no findings for the listed placeholder spellings in a .env file.
 
     Args:
         value: Placeholder written where the secret belongs.
+
+    Returns:
+        None after verifying that the placeholder value produces no findings.
     """
     src = f"API_KEY={value}\n"
     assert HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx()) == []
@@ -90,20 +115,31 @@ def test_template_sample_value_is_skipped(filename: str) -> None:
 
     Args:
         filename: Template filename the sample value sits in.
+
+    Returns:
+        None after verifying that the template sample produces no findings.
     """
     src = "STRIPE_SECRET_KEY=sk_test_stripe_secret_key_goes_here\n"
     assert HardcodedEnvValueRule().analyse(make_unit(src, f"deploy/{filename}", "text"), default_ctx()) == []
 
 
 def test_template_with_generated_credential_still_emits():
-    """Report a credential-shaped value committed to a template, which leaks as surely as one in ``.env``."""
+    """Report one API_KEY finding for a credential-shaped value in .env.example.
+
+    Returns:
+        None after verifying that the template produces the API_KEY finding.
+    """
     src = f"API_KEY={_ENV_SECRET}\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env.example", "text"), default_ctx())
     assert [finding.metadata["key"] for finding in findings] == ["API_KEY"]
 
 
 def test_sample_value_outside_a_template_still_emits():
-    """Hold ``.env`` itself to the length and entropy gates, where a sample-looking value may be live."""
+    """Report a STRIPE_SECRET_KEY finding for the sample-looking value in .env.
+
+    Returns:
+        None after verifying that the sample-looking value produces the STRIPE_SECRET_KEY finding.
+    """
     src = "STRIPE_SECRET_KEY=sk_test_stripe_secret_key_goes_here\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env", "text"), default_ctx())
     assert [finding.metadata["key"] for finding in findings] == ["STRIPE_SECRET_KEY"]

@@ -29,9 +29,7 @@ class SetupBloatRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the setup-bloat rule with a ``maxSetupLines`` threshold (default 30).
 
-        Medium confidence because a longer setup is sometimes warranted
-        (complex domain object construction); the rule reports the size
-        signal and lets reviewers judge.
+        Medium confidence leaves reviewers to judge whether longer setup is warranted for complex object construction.
 
         Returns:
             Definition with the ``maxSetupLines`` threshold key.
@@ -48,16 +46,13 @@ class SetupBloatRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``setUp``/``setup_method``/``@pytest.fixture`` bodies over ``maxSetupLines`` lines.
+        """Flag setup and fixture functions with more than maxSetupLines code lines, counting the function declaration.
 
-        Matches ``setUp``, ``setUpClass``, ``setup_method``, ``setup_class``,
-        ``setup_function`` by name. Plain ``setup`` also needs a conventional
-        test path. Any function decorated with a ``@*.fixture`` call remains eligible.
+        The name setup qualifies as a hook only on a conventional test path. Call-style fixture decorators qualify independently.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the ``maxSetupLines``
-                numeric threshold.
+            unit: Source file to check for oversized setup functions. A missing AST yields no findings. The scan can cache code lines on the AST.
+            context: Rule execution context supplying the maxSetupLines threshold.
 
         Returns:
             One finding per oversized setup/fixture function.

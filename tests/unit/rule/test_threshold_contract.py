@@ -50,18 +50,19 @@ def sample(value, other):
 
 
 def _unit(source: str) -> AnalysisUnit:
-    """Parse source into a Python analysis unit for ``threshold_contract.py``, linking every non-root AST node to its parent.
+    """Parse source into a Python analysis unit for threshold_contract.py, linking every non-root AST node to its parent.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        The unit, whose non-root tree nodes carry a ``parent`` attribute.
+        The unit, whose non-root tree nodes carry a parent attribute.
+        Attaching links can overwrite parents on shared AST operator and context nodes, including nodes in previously parsed trees.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # Rules use this dynamic AST attribute to recover enclosing symbols.
     return AnalysisUnit(
         file=SourceFile(
             absolute_path="/threshold_contract.py",
@@ -82,7 +83,7 @@ def _severity_threshold_for(rule_id: str) -> SeverityThreshold | None:
     Returns:
         An error threshold of 0 for a rule in the threshold set; None for any other rule.
     """
-    # Every surviving severity-threshold rubric fires above zero.
+    # These overrides let the contract tests inspect threshold metadata on findings from the shared fixture.
     if rule_id in _THRESHOLD_RULE_IDS:
         return SeverityThreshold(0, Severity.ERROR)
     return None
@@ -92,7 +93,7 @@ def _threshold_ctx() -> RuleContext:
     """Build a rule context that enables only the size and complexity threshold rules, each set to fire above 0.
 
     Returns:
-        The rule context, rooted at ``/``.
+        The rule context, rooted at /.
     """
     registry = RuleRegistry.defaults()
     rules = {
@@ -113,7 +114,7 @@ def _number_is_rendered(value: Any, message: str) -> bool:
         message: Finding message to search.
 
     Returns:
-        True when one of those spellings appears; False for a value that is not a number.
+        True when one of those spellings appears as a substring; False otherwise, including for nonnumeric values.
     """
     if not isinstance(value, (int, float)):
         return False
@@ -127,17 +128,21 @@ def _number_is_rendered(value: Any, message: str) -> bool:
 
 
 def _findings_by_rule_id() -> dict[str, Finding]:
-    """Run the enabled threshold rules over the shared source and keep one finding per threshold rule.
+    """Run the enabled threshold rules over the shared source and keep at most one finding per rule.
 
     Returns:
-        The last finding for each threshold rule, keyed by rule id.
+        The last finding for each reporting threshold rule, keyed by rule ID. Rules that emit no findings have no entry.
     """
     findings = RuleRegistry.defaults().analyse([_unit(_SOURCE)], _threshold_ctx())
     return {finding.rule_id: finding for finding in findings if finding.rule_id in _THRESHOLD_RULE_IDS}
 
 
 def test_threshold_findings_cover_every_size_and_complexity_rule() -> None:
-    """Report a finding for every size and complexity threshold rule from the shared source."""
+    """Report a finding for every size and complexity threshold rule from the shared source.
+
+    Returns:
+        None. Checks that the shared fixture produces a finding for every configured size and complexity threshold rule.
+    """
     findings = _findings_by_rule_id()
     assert findings.keys() >= _THRESHOLD_RULE_IDS
 
@@ -152,6 +157,9 @@ def test_size_and_complexity_finding_has_standard_threshold_metadata(rule_id: st
 
     Args:
         rule_id: Size or complexity threshold rule; the cases cover each one.
+
+    Returns:
+        None. Checks the two numeric metadata fields and the allowed direction and severity values.
     """
     metadata = _findings_by_rule_id()[rule_id].metadata
     assert isinstance(metadata["measuredValue"], int | float)
@@ -172,6 +180,9 @@ def test_size_and_complexity_finding_message_mentions_measured_and_threshold(
 
     Args:
         rule_id: Size or complexity threshold rule; the cases cover each one.
+
+    Returns:
+        None. Checks that the finding message contains a rendering of both the measured value and the threshold.
     """
     finding = _findings_by_rule_id()[rule_id]
     metadata = finding.metadata

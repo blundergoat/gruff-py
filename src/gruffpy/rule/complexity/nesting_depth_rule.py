@@ -61,11 +61,11 @@ class NestingDepthRule(Rule):
         """Analyze function-like nodes for nesting depth findings.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect; the function list may be cached on its AST.
             context: Rule execution context with threshold settings.
 
         Returns:
-            Findings for functions above the configured nesting threshold.
+            Findings above the configured nesting threshold; empty when the AST is missing or no function qualifies.
         """
         if unit.tree is None:
             return []
@@ -121,7 +121,7 @@ def nesting_depth_for(fn: FunctionLike) -> int:
         fn: Function, async function, or lambda node to score.
 
     Returns:
-        Maximum nesting depth, or zero when there is no control flow.
+        Maximum block nesting depth; zero for every lambda and for function bodies without counted control-flow blocks.
     """
     if isinstance(fn, ast.Lambda):
         return 0
@@ -224,9 +224,8 @@ def _walk_match(node: ast.Match, current: int) -> int:
 def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
     """Return the deepest depth across the body and else clause of an if, loop or with block.
 
-    An if whose else clause holds a single if starting at the same column is treated as an elif: that branch is walked from the parent's enclosing
-    depth, so once its own level is added it sits at the parent if's level instead of one deeper. An if written inside an indented else block keeps
-    the extra level.
+    An if's single else-branch if at the same column is treated as an elif at the parent's depth.
+    An indented if inside an else clause keeps the extra level.
 
     Args:
         node: If, for, async for, while, with or async with statement; a missing or empty body or else clause counts as no statements.
@@ -237,8 +236,7 @@ def _walk_body_and_orelse(node: ast.AST, current: int) -> int:
     """
     body = getattr(node, "body", []) or []
     orelse = getattr(node, "orelse", None) or []
-    # An elif parses as an If inside its parent's orelse, but a reader sees a peer branch, not a level deeper. It starts
-    # at its if's column; an if written inside an else block is indented, and stays one level deeper.
+    # The AST gives elif and a lone if inside else the same shape, so their columns decide whether nesting increases.
     is_elif = len(orelse) == 1 and isinstance(orelse[0], ast.If) and orelse[0].col_offset == getattr(node, "col_offset", -1)
     if isinstance(node, ast.If) and is_elif:
         return max(current, _deepest_in_statements(body, current), _walk(orelse[0], current - 1))

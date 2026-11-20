@@ -93,26 +93,24 @@ class _ReportAssembly:
 
 
 def _evaluated_file_count(units: list[AnalysisUnit]) -> int:
-    """Count the Python files this run evaluated - the ratified scoring denominator.
+    """Count successfully parsed Python files for the scoring denominator.
 
-    Deliberately narrower than ``files_parsed``, which also counts the text inputs the raw-text
-    rules read: a README is scanned but carries no Python to score, so including it would divide
-    real findings by files no Python rule ever evaluated.
+    Text inputs contribute to files_parsed but carry no Python to score.
 
     Args:
         units: Parsed analysis units for the run, including any that failed to parse.
 
     Returns:
-        Python files that parsed successfully; zero means nothing was evaluated.
+        Number of Python files without fatal parser diagnostics. Zero means there are no Python files in the scoring denominator.
     """
     return sum(1 for unit in units if not unit.has_parse_errors() and unit.file.is_python())
 
 
 def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
-    """Run the end-to-end analysis pipeline and return a single ``AnalysisReport``.
+    """Run the analysis pipeline, including requested baseline writes, and return a single report.
 
     Args:
-        request: Validated analysis options from the CLI, dashboard, or another caller.
+        request: Selects the project and inputs, rule settings, baseline operation and report filters.
 
     Returns:
         Fully-populated report ready to be handed to a reporter.
@@ -173,8 +171,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         request.changed_scope,
     )
     findings = changed_filter_result.findings
-    # A scope the run could not read leaves nothing scoped to report. Publishing the unscoped findings beside
-    # the diagnostic would read as a successful narrow scan at a scope the run never applied.
+    # If the requested scope fails to resolve, omit findings so the report cannot be mistaken for a successful scoped scan.
     if any(diagnostic.type == CHANGED_REGION_DIAGNOSTIC_TYPE for diagnostic in diagnostics):
         findings = []
     score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
@@ -221,7 +218,7 @@ def _name_findings(
     diagnostics: list[RunDiagnostic],
     reference_trees: tuple[ast.Module, ...] = (),
 ) -> tuple[list[Finding], tuple[SuppressionSummary, ...], tuple[SuppressedFinding, ...]]:
-    """Run the rules over the parsed units and name every finding before anything filters it.
+    """Run enabled rules, apply exclusions and attach available baseline identities before baseline filtering.
 
     Args:
         registry: Rule registry whose enabled rules run.
@@ -234,9 +231,9 @@ def _name_findings(
             read references from; empty means none apply.
 
     Returns:
-        Tuple ``(findings, suppressions, removed)``: findings surviving gruff's own directives, reviewed
-        exclusions, the test-path skip and section 13c, each with its baseline identity; audit rows in order;
-        and the findings section 13c removed, with their audit reasons.
+        Tuple (findings, suppressions, removed): findings surviving native directives, sensitive-data exclusions,
+        test-path skipping, other tools' comments and repeated-claim merging, with available baseline identities;
+        accumulated audit rows; and findings removed by those comments or claim merging, with their reasons.
     """
     context = RuleContext(
         project_root=str(project_root),
@@ -252,16 +249,13 @@ def _name_findings(
         context=context,
         suppressions_by_file=suppressions_by_file,
     )
-    # Reviewed sensitive-data exclusions drop out before baselining, scoring, and the exit code,
-    # exactly like the inline directive channel, and every drop is counted for the report.
+    # Configured sensitive-data exclusions remove findings before baselining and gating and keep their counts in the report.
     findings, suppressions = partition_sensitive_exclusions(findings, config.sensitive_exclusions)
     # A configured entry claims its findings first, so its count stays what the user wrote it for.
     findings, suppressions = apply_built_in_test_path_skip(findings, suppressions)
-    # Naming every finding before the baseline filters any of them keeps one alert one alert: code scanning reads
-    # the same identity the baseline does, and a finding hidden from this report keeps the ordinal it was ranked with.
+    # Assign available baseline identities before filtering so SARIF and baseline matching can reuse the same occurrence ordinals.
     findings = _with_baseline_identities(findings, units)
-    # Another tool's comment and a repeated claim are judged on named findings, so a suppressed result keeps its
-    # identity in SARIF and the findings left keep the ordinals they had without the comment (section 13c).
+    # Preserve assigned identities on findings removed by another tool's comment or claim merging so SARIF can still report them.
     sources = {unit.file.display_path: unit.source for unit in units}
     return apply_inline_suppressions(findings, suppressions, sources)
 
@@ -317,15 +311,14 @@ def _resolve_threshold_and_exclusions(
     request: AnalysisRunRequest,
     config: AnalysisConfig,
 ) -> tuple[AnalysisConfig, FailThreshold]:
-    """Apply the configured per-command fail threshold and execution rule exclusions.
+    """Apply the command-specific fail threshold and execution rule selectors.
 
     Args:
-        request: The active run request.
+        request: Supplies the requested fail threshold, command-specific config key and execution rule selectors.
         config: Config resolved from defaults and the user's config file.
 
     Returns:
-        The config (with any execution-level rule exclusions merged) and the
-        effective fail threshold.
+        The config with execution selectors merged and the command's configured fail threshold, falling back to the request threshold.
     """
     fail_threshold = request.fail_threshold
     if request.config_severity_command:
@@ -359,18 +352,16 @@ def _partial_project_context_caveat(
 
 
 def _with_execution_selectors(config: AnalysisConfig, request: AnalysisRunRequest) -> AnalysisConfig:
-    """Merge the command's execution selectors into the config this run executes.
+    """Merge the command's execution selectors into the effective configuration.
 
-    These choose which rules run, so the score and any generated baseline move
-    with them. The presentation filters live on the display filter and never
-    reach here, which is what keeps the two ideas apart.
+    Selection changes affect scoring and baseline generation; display filters are handled separately.
 
     Args:
-        config: Config resolved from the project file.
+        config: Effective configuration from defaults and any project file.
         request: The user's run request, carrying any selectors they typed.
 
     Returns:
-        The config narrowed to what the user asked to run.
+        The original config when the merged selectors match the configured ones. Otherwise, a copy whose selectors can widen or narrow the rule set.
     """
     selection = config.rule_selection
     excluded = tuple(dict.fromkeys((*selection.exclude_rules, *request.execution_exclude_rules)))
@@ -378,7 +369,7 @@ def _with_execution_selectors(config: AnalysisConfig, request: AnalysisRunReques
     included_pillars = tuple(dict.fromkeys((*selection.pillars, *request.execution_include_pillars)))
     excluded_pillars = tuple(dict.fromkeys((*selection.exclude_pillars, *request.execution_exclude_pillars)))
 
-    # An unrestricted run keeps the configured selection rather than rebuilding an identical one.
+    # Requests that repeat configured selectors can reuse the original configuration object.
     if (excluded, included, included_pillars, excluded_pillars) == (
         selection.exclude_rules,
         selection.rules,
@@ -420,22 +411,23 @@ def _discover_and_parse_sources(
 
     Args:
         project_root: Project root that discovery and Git diff resolution run against.
-        paths: Paths the user asked to scan, also used to limit a Git diff.
+        paths: Requested scan targets that also limit a Git diff. An empty tuple starts discovery at the project root.
         include_ignored: When true, discovery also returns gitignored and default-excluded paths; configured ignore globs and VCS directories still
             apply.
         config: Effective configuration supplying the configured ignore globs and the deep-scan budget the parser applies.
-        changed_ranges: Explicit changed-ranges value; None when not given. When set, discovered files are not narrowed here because findings are
-            filtered later.
+        changed_ranges: Explicit line ranges used to filter findings after parsing. None leaves scope selection to the patch or Git options.
+            An empty or invalid value adds a diagnostic and leaves the discovered files unfiltered.
         since: Git ref from the since option; empty when not given.
         diff_mode: Diff option value: a dash means diff_patch holds the patch read from standard input, any other non-empty value is a Git selector,
             and empty means no diff mode.
-        diff_patch: Unified diff text already read for the run; empty when none was supplied.
+        diff_patch: Unified diff text. Without explicit ranges, a dash parses it as stdin and non-empty text takes precedence over Git selectors.
+            Empty text with a dash selects no files. In other modes, empty text leaves scope selection to the other options.
         diagnostics: Run diagnostics; a changed-region resolution failure is appended in place.
 
     Returns:
-        Tuple (discovery_result, units, files_parsed, parse_diagnostics, changed): the discovery result, narrowed to changed files for diff and since
-        runs; one parsed unit per discovered file; the count of files that parsed without errors; parser diagnostics for the caller to append; and the
-        changed-region set, inactive when no changed-region option applied or it could not be resolved.
+        The tuple contains the discovery result, one unit per selected file, the count of units without fatal parser diagnostics, parser diagnostics
+        for the caller to append, and the changed-region set. An active patch or Git scope narrows discovery to changed files. All discovered files
+        are retained when no scope is active, including after a resolution failure.
     """
     discovery = SourceDiscovery(project_root)
     discovery_result = discovery.discover(
@@ -507,8 +499,7 @@ def _resolve_changed_regions(
             return changed_regions_from_git(project_root, since, paths)
         if diff_mode:
             return changed_regions_from_git(project_root, diff_mode, paths)
-    # For example, a malformed ``--changed-ranges`` value becomes a CLI diagnostic rather than
-    # a traceback.
+    # For example, a malformed --changed-ranges value becomes a CLI diagnostic rather than a traceback.
     except ValueError as exc:
         diagnostics.append(RunDiagnostic(type=CHANGED_REGION_DIAGNOSTIC_TYPE, message=str(exc)))
         return ChangedRegionSet(source="")
@@ -566,14 +557,15 @@ def _collect_findings(
 
 
 def _with_baseline_identities(findings: list[Finding], units: list[AnalysisUnit]) -> list[Finding]:
-    """Attach each ordinary finding's durable identity, which SARIF publishes as its code-scanning fingerprint.
+    """Attach each baseline-eligible finding's durable identity for SARIF code scanning.
 
     Args:
         findings: This run's findings, before any baseline filtering.
         units: Parsed units, so a declaration is ranked by its own span rather than by the finding's line.
 
     Returns:
-        The same findings in the same order; a sensitive finding keeps ``None``, because it has no durable name.
+        A new list in input order, with identity and subject set for eligible findings.
+        Sensitive findings and findings whose symbols contain the ordinal separator reuse their input objects.
     """
     resolver = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
     identities = finding_identities(findings, resolver)
@@ -592,16 +584,15 @@ def _handle_baseline(
     scan_scope: str,
     units: list[AnalysisUnit],
 ) -> BaselineReport | None:
-    """Apply the user's baseline choice and append actionable diagnostics when it cannot run.
+    """Write a requested baseline or apply an existing one, recording problems in the run diagnostics.
 
-    The parsed units come along so every finding is named by the declaration it sits on: that is what keeps two
-    findings inside one function on one identity while a second same-named function takes its own.
+    Parsed declaration spans let baseline generation and matching distinguish same-named declarations by position.
 
     Args:
         project_root: Project root that baseline paths are resolved against.
         findings: This run's named findings; replaced in place with the surviving findings when a baseline is applied.
         diagnostics: Run diagnostics; option conflicts, baseline errors and identity collisions are appended in place.
-        options: The user's baseline flags; generation wins over applying, and disabled skips applying.
+        options: The user's baseline flags; conflicts are refused, generation precedes disabling, and disabled skips application.
         scan_scope: Resolved scope label passed to baseline application.
         units: Parsed units whose declaration spans name each finding by its declaration.
 
@@ -614,7 +605,7 @@ def _handle_baseline(
         diagnostics.append(conflict)
         return None
     declaration_position = declaration_position_from_spans({unit.file.display_path: declaration_spans(unit.tree) for unit in units})
-    # The user asked to capture the current state, so write a baseline rather than compare against one; generation wins.
+    # After conflict checks, generation captures the current findings even when baseline application is disabled.
     if options.generate_path is not None:
         return _generate_baseline_safely(
             project_root=project_root,
@@ -644,11 +635,9 @@ def _reference_only_trees(
     scan_scope: str,
     discovery_result: SourceDiscoveryResult,
 ) -> tuple[ast.Module, ...]:
-    """Parse the Python files that configured ``paths.ignore`` globs keep out of the report.
+    """Parse Python files excluded by paths.ignore as references for dead-code.exported-but-unreferenced.
 
-    ``dead-code.exported-but-unreferenced`` counts references in them, so a symbol used only from an ignored
-    test tree is not reported as dead, while those files still produce no finding of their own. The existing
-    discovery runs a second time without the configured globs, so gitignore and default exclusions still apply.
+    These files emit no findings; repeated discovery follows the request's include_ignored flag.
 
     Args:
         request: Run request whose paths and ignore flag the second discovery repeats.
@@ -667,7 +656,7 @@ def _reference_only_trees(
     analysed = {source_file.absolute_path for source_file in discovery_result.files}
     unfiltered = SourceDiscovery(request.project_root).discover(list(request.paths), include_ignored=request.include_ignored)
     trees: list[ast.Module] = []
-    # Every file the configured globs removed contributes references, and nothing else is parsed twice.
+    # Successfully parsed Python files removed by the configured globs contribute references, and nothing else is parsed twice.
     for source_file in unfiltered.files:
         # Analysed files contribute through their units, and text files carry no Python references.
         if source_file.absolute_path in analysed or not source_file.is_python():
@@ -675,7 +664,7 @@ def _reference_only_trees(
         try:
             trees.append(ast.parse(Path(source_file.absolute_path).read_text(encoding="utf-8")))
         except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
-            # An unreadable ignored file cannot add references, and it never produces a finding either.
+            # Unreadable or invalid ignored files add no references; failures stay unreported because these files are outside the scan.
             continue
     return tuple(trees)
 
@@ -683,8 +672,8 @@ def _reference_only_trees(
 def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) -> str:
     """Classify the run as full-project or partial for caveats and baseline staleness.
 
-    ``--diff`` and ``--since`` make the run partial before rules execute; explicit
-    ``--changed-ranges`` filters later, so the user's requested paths decide.
+    An active Git diff or patch makes the run partial before rules execute.
+    Explicit --changed-ranges filters later, so the requested paths decide its scope.
 
     Args:
         request: Run request whose changed ranges, paths and project root decide the scope.
@@ -701,8 +690,7 @@ def _resolve_scan_scope(request: AnalysisRunRequest, changed: ChangedRegionSet) 
 def _scan_scope(paths: tuple[str, ...], project_root: Path) -> str:
     """Classify the requested paths as a full-project or partial scan.
 
-    Paths such as ``.``, ``./``, ``src/..``, and the absolute project root all give
-    users the same full-project behavior.
+    Spellings such as ./ or src/.. count as full-project when they resolve to the project root.
 
     Args:
         paths: Requested paths; empty means the whole project.
@@ -840,9 +828,9 @@ def _apply_baseline_if_present(
 
 
 def _collision_diagnostics(collisions: tuple[BaselineCollision, ...]) -> list[RunDiagnostic]:
-    """Name every identity that covered two declarations, so a user sees which ones could not be told apart.
+    """Name every identity shared by multiple declarations so users can identify findings the baseline cannot distinguish.
 
-    Neither finding is suppressed: hiding either would let one review cover a finding nobody read.
+    No colliding finding is suppressed, so one review cannot hide another declaration's finding.
 
     Args:
         collisions: Identity collisions found while applying the baseline.
@@ -903,8 +891,8 @@ def _load_analysis_config(
         strict_config: When true, any problem the loader would record as a warning stops the load with a ConfigError instead.
 
     Returns:
-        Tuple (config, config_loaded_from, diagnostics, warnings): the effective config, defaults when no file is used; the loaded file path, or None
-        when no file was read; a config-error diagnostic when no_config conflicts with config_path, otherwise empty; and the loader warnings.
+        Tuple of the effective config, selected config file path, diagnostics list and loader warnings. Without a selected config source, the path is
+        None and the config uses registry defaults. The diagnostics list is empty unless no_config conflicts with config_path.
     """
     config = AnalysisConfig.from_registry(registry)
     if no_config and config_path is not None:
@@ -939,8 +927,8 @@ def _parse_sources(
         deep_scan_budget: Line and byte budget the parser applies to each file.
 
     Returns:
-        Tuple (units, files_parsed, diagnostics): one unit per source file, including those that failed to parse; the count of files parsed without
-        errors; and the parser diagnostics tagged with their file path, with non-fatal ones marked as not invalidating the run.
+        The tuple contains one unit per source file, the count of units without fatal parser diagnostics, and file-tagged parser diagnostics.
+        The count includes non-Python files read as text and Python files whose deep scan was skipped. Non-fatal diagnostics leave the run valid.
     """
     parser = PythonFileParser()
     units: list[AnalysisUnit] = []
@@ -1011,7 +999,7 @@ def _suppression_diagnostics(
         suppressions_by_file: Parsed suppression directives keyed by display path.
 
     Returns:
-        One diagnostic per malformed or unknown directive, tagged with its file path and line; empty when every directive is valid.
+        Parser diagnostics tagged with file paths and lines; a directive can yield multiple errors. Empty when no errors were recorded.
     """
     diagnostics: list[RunDiagnostic] = []
     for file_path, suppressions in suppressions_by_file.items():
@@ -1034,17 +1022,15 @@ def compute_exit_code(
 ) -> int:
     """Derive the CLI exit code from the analysis outcome.
 
-    Exit code 2 (diagnostics) wins over 1 (findings) - a parse error
-    surfaces even when the project is otherwise clean.
+    Diagnostics with invalidates_run set to True or None take precedence over findings; explicitly non-invalidating diagnostics do not.
 
     Args:
-        findings: All findings from the run (post-suppression).
+        findings: Findings remaining after suppression, baseline and changed-region handling, before display filtering.
         diagnostics: Run-level diagnostics (config errors, parse failures, missing paths).
-        fail_threshold: Severity threshold from ``--fail-on``.
+        fail_threshold: Effective failure threshold after any command-specific configuration override.
 
     Returns:
-        ``2`` when diagnostics exist, ``1`` when any finding meets the
-        threshold, otherwise ``0``.
+        2 if any diagnostic's invalidates_run is True or None; otherwise 1 if a finding meets the threshold, or 0.
     """
     if any(diagnostic.invalidates_run is not False for diagnostic in diagnostics):
         return 2

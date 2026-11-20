@@ -23,9 +23,12 @@ def test_json_reporter_matches_php_json_encoding_flags():
     """Render the JSON report as the same text as PHP's pretty-printed, unescaped-slash re-encoding of that payload.
 
     Skipped when no ``php`` binary is on the path.
+
+    Returns:
+        None. Compares the full Python report text with PHP's re-encoded text.
     """
     php = shutil.which("php")
-    assert php is not None  # narrowed by skipif above
+    assert php is not None  # Narrow the separate lookup to the executable path the encoder requires.
     report = _fixture_report()
     python_json = JsonReporter().render(report)
     php_json = _php_pretty_json(php, python_json)
@@ -34,7 +37,11 @@ def test_json_reporter_matches_php_json_encoding_flags():
 
 
 def test_json_reporter_emits_stable_identity_adjacent_to_fingerprint():
-    """ADR-020: stableIdentity is additive next to fingerprint, with the same 16-char shape."""
+    """Check that JSON publishes the finding's computed 16-character stableIdentity as specified by ADR-020.
+
+    Returns:
+        None. Checks the computed stable identity and its rendering in the JSON report.
+    """
     report = _fixture_report()
     python_json = JsonReporter().render(report)
     finding_payload = report.findings[0].to_dict()

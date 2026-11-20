@@ -15,8 +15,7 @@ class FailThreshold(StrEnum):
     def from_input(cls, value: str) -> "FailThreshold | None":
         """Parse a user-supplied string into a threshold, returning ``None`` on miss.
 
-        Used for ``--fail-on`` validation where invalid input should fall
-        back to a default rather than crash.
+        Unknown values return None; callers decide whether to reject them or select a default.
 
         Args:
             value: Raw CLI string.

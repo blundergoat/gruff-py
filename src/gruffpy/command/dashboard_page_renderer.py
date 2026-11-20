@@ -15,13 +15,12 @@ class DashboardPageRenderer:
     """Builds the self-contained HTML shell served by the local dashboard."""
 
     def dashboard_html(self, state: dict[str, str]) -> str:
-        """Return the dashboard shell page seeded with *state* in the form fields.
+        """Return the dashboard shell page seeded with state in the form fields.
 
-        Inlines CSS and JS so the shell is fully self-contained - no external
-        asset fetches, mirroring gruff-php's no-assets dashboard.
+        The shell inlines its CSS and JavaScript so the browser can load it without separate asset requests.
 
         Args:
-            state: Query-shaped state dict (from :meth:`DashboardState.to_query`).
+            state: Query values from DashboardState.to_query that fill the form. If deepScanBudget is absent, the budget field is blank.
 
         Returns:
             Single complete HTML document.
@@ -82,22 +81,19 @@ class DashboardPageRenderer:
         exit_code: int,
         duration_ms: int,
     ) -> str:
-        """Splice a JSON-payload ``<script>`` + post-message bridge into the scan iframe.
+        """Inject scan metadata and a bridge that sends it to the parent dashboard without rescanning.
 
-        The injected script reads the JSON tag and forwards it to
-        ``window.parent`` so the dashboard shell can show exit-code and
-        timing metadata without rescanning. Falls back to prepending the
-        metadata when no ``<body>`` tag is present.
+        Prepend the scripts when the report has no exact <body> tag.
 
         Args:
             html_text: The freshly rendered HTML report.
             project_root: Resolved project root (for display in the shell).
             command: Command-line argv that produced this scan.
-            exit_code: ``run_analysis`` exit code (0 = clean, 1 = findings, 2 = errors).
+            exit_code: Analysis exit code forwarded to the shell; 0 can include findings below the failure threshold.
             duration_ms: Wall-clock duration of the scan.
 
         Returns:
-            The original HTML with the metadata script injected at body open.
+            HTML with scripts after the first exact <body> tag, or prepended when that tag is absent.
         """
         payload = _json_script_payload(
             {
@@ -156,8 +152,7 @@ class DashboardPageRenderer:
     def loading_frame(self) -> str:
         """Return the ``Ready to scan.`` placeholder injected via the iframe ``srcdoc``.
 
-        Shown until the first ``/scan`` response loads - keeps the dashboard
-        visually consistent on initial paint.
+        The dashboard switches the iframe from srcdoc to the scan URL when the first scan starts.
 
         Returns:
             Self-contained HTML document acting as a loading placeholder.
@@ -171,16 +166,13 @@ class DashboardPageRenderer:
 
 
 def display_command(command: list[str]) -> str:
-    """Render an argv list as a copy-pasteable shell command string.
-
-    Each part is run through :func:`shlex.quote` so whitespace and quotes
-    survive a round-trip back into a real shell.
+    """Render an argv list as a command that preserves argument boundaries in a POSIX-compatible shell.
 
     Args:
-        command: argv list as produced by ``_display_command_for``.
+        command: argv list as produced by _display_command_for.
 
     Returns:
-        Single line shell-quoted command string.
+        Shell-quoted command text, empty for an empty list; argument newlines are preserved.
     """
     return " ".join(shlex.quote(part) for part in command)
 

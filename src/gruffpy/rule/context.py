@@ -38,15 +38,17 @@ class RuleContext:
     reference_trees: tuple[ast.Module, ...] = ()
 
     def settings_for(self, definition: RuleDefinition) -> RuleSettings:
-        """Return the per-rule settings for *definition*'s id.
+        """Return the per-rule settings selected by definition.id.
 
-        Convenience indirection so rules can call ``context.settings_for(self.definition())``
-        without reaching into the config dict themselves.
+        Rules can pass their definition directly without reading the configuration dictionary.
 
         Args:
-            definition: The rule's definition record.
+            definition: Rule definition whose id selects the settings.
 
         Returns:
-            Resolved ``RuleSettings`` (thresholds, options, enabled flag).
+            Resolved RuleSettings (thresholds, options, enabled flag).
+
+        Raises:
+            KeyError: The definition's ID has no entry in the configuration.
         """
         return self.config.rule_settings(definition.id)

@@ -25,7 +25,7 @@ _DEFAULT_TODO_DENSITY_THRESHOLD = 10
 
 
 def _todo_marker() -> str:
-    """Return the first of the five marker words.
+    """Return the first marker for use in a fixture with one marker comment.
 
     Returns:
         That marker word.
@@ -44,22 +44,34 @@ def _dense_marker_source() -> str:
 
 
 def test_no_markers_emits_nothing():
-    """Report nothing for source without markers."""
+    """Report nothing for source without markers.
+
+    Returns:
+        None. Checks that marker-free source produces no density finding.
+    """
     src = "def f():\n    return 1\n"
     assert TodoDensityRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_low_density_emits_nothing():
-    """Report nothing for one marker comment followed by 100 assignments."""
+    """Report nothing for one marker comment followed by 100 assignments.
+
+    Returns:
+        None. Checks that the below-threshold marker density produces no finding.
+    """
     body = "\n".join(f"x{i} = {i}" for i in range(100))
     src = f"# {_todo_marker()}: refactor\n{body}\n"
     findings = TodoDensityRule().analyse(make_unit(src), default_ctx())
-    # 1 marker in ~101 lines = ~10/1000 - at threshold, NOT above. No finding.
+    # One marker across more than 100 lines stays below 10 per thousand, so no finding is expected.
     assert findings == []
 
 
 def test_high_density_emits():
-    """Report five markers once, with a density above 10 per thousand lines."""
+    """Report five markers once, with a density above 10 per thousand lines.
+
+    Returns:
+        None. Checks that one finding reports five markers and a density above 10 per thousand lines.
+    """
     src = _dense_marker_source()
     findings = TodoDensityRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -68,7 +80,11 @@ def test_high_density_emits():
 
 
 def test_rule_defining_docs_file_is_exempt():
-    """Report nothing for dense markers at the marker-density rule's own source path."""
+    """Report nothing for dense markers at the marker-density rule's own source path.
+
+    Returns:
+        None. Checks that dense markers yield no finding when the fixture uses the density rule's own display path.
+    """
     src = _dense_marker_source()
     unit = make_unit(src, display_path="src/gruffpy/rule/docs/todo_density_rule.py")
 
@@ -76,7 +92,11 @@ def test_rule_defining_docs_file_is_exempt():
 
 
 def test_rule_defining_commented_out_code_file_is_exempt():
-    """Report nothing for dense markers at the commented-out-code rule's source path."""
+    """Report nothing for dense markers at the commented-out-code rule's source path.
+
+    Returns:
+        None. Checks that dense markers yield no finding when the fixture uses the commented-out-code rule's display path.
+    """
     src = _dense_marker_source()
     unit = make_unit(src, display_path="src/gruffpy/rule/waste/commented_out_code_rule.py")
 
@@ -84,7 +104,11 @@ def test_rule_defining_commented_out_code_file_is_exempt():
 
 
 def test_same_filename_outside_rule_package_still_emits():
-    """Report dense markers in a ``tools`` file that shares the marker-density rule's file name."""
+    """Report dense markers in a tools file that shares the marker-density rule's file name.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = _dense_marker_source()
     unit = make_unit(src, display_path="tools/todo_density_rule.py")
 
@@ -92,6 +116,10 @@ def test_same_filename_outside_rule_package_still_emits():
 
 
 def test_default_threshold():
-    """Default the marker-density threshold to 10."""
+    """Default the marker-density threshold to 10.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     rule = TodoDensityRule()
     assert rule.definition().default_threshold == _DEFAULT_TODO_DENSITY_THRESHOLD

@@ -35,9 +35,6 @@ class JwtTokenRule(SourceTextRule):
     def definition(self) -> RuleDefinition:
         """Describe the JWT-token rule as a high-confidence warning.
 
-        The ``eyJ`` prefix corresponds to the base64 of the standard JWT
-        header ``{"`` - false positives are rare even on large corpora.
-
         Returns:
             Definition for the JWT-token rule under the sensitive-data pillar.
         """
@@ -58,11 +55,10 @@ class JwtTokenRule(SourceTextRule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per JWT-shaped triplet, with a redacted preview.
+            One finding per JWT-shaped triplet other than exact vendor-documented samples, with a redacted preview.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        # Each token occurrence remains visible so users can invalidate every committed credential.
         for token_match in iter_matches(_PATTERN, unit.source):
             findings.append(
                 Finding(

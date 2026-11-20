@@ -34,11 +34,10 @@ def limit_in_force(settings: RuleSettings) -> int | float:
     """Return the limit a "higher is worse" measurement is banded against.
 
     Args:
-        settings: The rule's effective settings.
+        settings: Effective rule settings that supply the severity override or warning limit used for banding.
 
     Returns:
-        The single-threshold override when one is set, otherwise the warning tier: the lowest limit at which the
-        rule reports.
+        The single-threshold override when one is set, otherwise the numeric warning threshold.
     """
     if settings.severity_threshold is not None:
         return settings.severity_threshold.threshold

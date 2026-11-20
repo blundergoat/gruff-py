@@ -32,17 +32,16 @@ _TOKEN_PATTERN = re.compile(
 
 
 def tokenize(identifier: str) -> list[str]:
-    """Return *identifier*'s semantic tokens, preserving acronyms and numbers.
+    """Split an identifier into tokens while preserving acronym casing and separating numeric runs.
 
-    Leading/trailing/internal underscores are dropped. Numeric runs are
-    returned as separate tokens so callers can detect ``temp1`` / ``result2``
-    placeholder patterns.
+    Underscores are ignored.
+    Separate numeric tokens let callers recognize placeholder suffixes such as temp1 and result2.
 
     Args:
         identifier: Python identifier-like name to split.
 
     Returns:
-        Semantic tokens with original acronym casing preserved.
+        Tokens with original acronym casing; empty for empty or underscore-only input, or when no pattern matches.
     """
     stripped = identifier.strip("_")
     if not stripped:
@@ -51,7 +50,7 @@ def tokenize(identifier: str) -> list[str]:
 
 
 def lower_tokens(identifier: str) -> list[str]:
-    """Return :func:`tokenize` output with every token lowercased.
+    """Return tokenize output with every token lowercased.
 
     Convenient when only the semantic content matters, not the casing.
 
@@ -59,6 +58,6 @@ def lower_tokens(identifier: str) -> list[str]:
         identifier: Python identifier-like name to split.
 
     Returns:
-        Lowercased semantic tokens.
+        Lowercased tokens; empty when the identifier is empty, contains only underscores or has no matches in tokenize.
     """
     return [t.lower() for t in tokenize(identifier)]

@@ -52,7 +52,7 @@ class ChangedRegionSet:
         """Return whether changed-region filtering was requested.
 
         Returns:
-            True when the set should constrain analysis output.
+            True for a nonempty source label, even when no files changed. An empty source label disables filtering.
         """
         return self.source != ""
 
@@ -61,7 +61,7 @@ class ChangedRegionSet:
         """Return deterministic changed file paths.
 
         Returns:
-            Sorted display paths from hunk and whole-file scopes.
+            Sorted, unique display paths tracked by the set, including whole-file paths and diff entries without hunks.
         """
         return tuple(sorted(set(self.ranges_by_file) | set(self.whole_files)))
 
@@ -72,13 +72,13 @@ class ChangedRegionSet:
             file_path: Project-relative display path to test.
 
         Returns:
-            True when the file has changed hunks or is whole-file changed.
+            True for a whole-file change or an entry in the range map, including an entry with no changed hunks.
         """
         key = _normalise_path(file_path)
         return key in self.whole_files or key in self.ranges_by_file
 
     def has_changed_range(self, file_path: str, start: int, end: int) -> bool:
-        """Return whether any changed hunk overlaps ``file_path:start-end``.
+        """Check whether the requested range overlaps a changed hunk or belongs to a file marked wholly changed.
 
         Args:
             file_path: Project-relative display path to test.
@@ -150,17 +150,17 @@ CHANGED_REGION_DIAGNOSTIC_TYPE = "changed-region"
 
 
 def parse_explicit_ranges(source_paths: tuple[str, ...], raw_ranges: str) -> ChangedRegionSet:
-    """Build a changed-region set from ``1-3,8`` style ranges.
+    """Build a changed-region set from 1-3,8 style ranges.
 
     Args:
-        source_paths: Display paths the explicit ranges apply to.
+        source_paths: Display paths the explicit ranges apply to; an empty tuple selects no files.
         raw_ranges: Comma-separated one-based line ranges.
 
     Returns:
         Changed-region set covering the supplied paths and ranges.
 
     Raises:
-        ValueError: Raised when the range syntax is invalid.
+        ValueError: When a range is invalid or the input contains no line or range.
     """
     ranges = _parse_range_list(raw_ranges)
     return ChangedRegionSet(
@@ -173,11 +173,12 @@ def parse_unified_diff(source: str, patch: str | bytes) -> ChangedRegionSet:
     """Parse unified diff text into new-side changed ranges.
 
     Args:
-        source: Human-readable source label to record on the result.
-        patch: Unified diff text or bytes.
+        source: Label recorded on the result; an empty label makes changed-region filtering inactive.
+        patch: Diff content whose headers and hunks select changed files; empty content produces an empty changed-file set.
 
     Returns:
-        Changed-region set keyed by new-side file paths.
+        Changed regions keyed by the new-side path when available, with an old-side fallback for hunks.
+        Added files get whole-file coverage when a new-side file header supplies or retains a known path.
     """
     text = patch.decode("utf-8", errors="replace") if isinstance(patch, bytes) else patch
     ranges_by_file: dict[str, list[LineRange]] = {}
@@ -238,6 +239,9 @@ def _consume_diff_git_header(line: str, state: _PatchState) -> None:
     Args:
         line: Git diff header whose path fields may initialize both sides of the file.
         state: Current file metadata to reset and populate in place.
+
+    Returns:
+        None. Resets state and seeds candidate paths from the header, leaving them unset if fewer than four fields are present.
     """
     state.current_path = None
     state.old_path = None
@@ -254,6 +258,9 @@ def _consume_old_file_header(line: str, state: _PatchState) -> None:
     Args:
         line: Old-file header, including the leading three minus signs and space.
         state: Current file metadata whose old path and new-file flag are updated.
+
+    Returns:
+        None. Updates state with the old path and marks the file as added when that path is absent.
     """
     state.old_path = _diff_header_path(line[4:])
     state.new_file = state.old_path is None
@@ -269,9 +276,12 @@ def _consume_new_file_header(
 
     Args:
         line: New-file header, including the leading three plus signs and space.
-        state: Current metadata, retaining the Git header path when this side is absent.
+        state: Metadata updated with the new-side path, retaining the Git header path when this side is absent.
         changed_files: Paths known to be changed, extended when a path is available.
         whole_files: New-file paths requiring full analysis, extended in place.
+
+    Returns:
+        None. Updates the current path and both applicable sets in place. If neither header supplies a path, neither set gains an entry.
     """
     parsed = _diff_header_path(line[4:])
     state.current_path = parsed or state.current_path
@@ -297,6 +307,9 @@ def _consume_hunk_header(
         changed_files: Paths known to be changed, extended when a hunk has a path.
         whole_files: Paths already covered in full and therefore needing no hunk ranges.
         ranges_by_file: Inclusive changed ranges to extend for the resolved file path.
+
+    Returns:
+        None. Registers hunks with a known path in changed_files and records ranges for paths that still need hunk-level coverage.
     """
     match = _HUNK_RE.match(line)
     if match is None:
@@ -312,9 +325,7 @@ def _consume_hunk_header(
     if count > 0:
         ranges_by_file.setdefault(path, []).append(LineRange(start, start + count - 1))
     else:
-        # Deletion-only hunks (``@@ -2 +1,0 @@``) carry no new-side lines; anchor a
-        # zero-width range at the new-side position so symbol scope still surfaces
-        # findings for the edited declaration instead of suppressing all of them.
+        # Anchor deletion-only hunks to one line so symbol scope can still surface findings for the edited declaration.
         anchor = max(start, 1)
         ranges_by_file.setdefault(path, []).append(LineRange(anchor, anchor))
 
@@ -328,14 +339,14 @@ def changed_regions_from_git(
 
     Args:
         project_root: Repository root used as Git's working directory.
-        mode: ``working-tree``, ``staged``, ``unstaged``, or a base ref.
-        paths: Optional pathspecs that limit Git's diff.
+        mode: working-tree compares with HEAD, staged checks the index, unstaged compares with the index, and a base ref selects a merge-base diff.
+        paths: Pathspecs that limit Git's selection. An empty tuple leaves the repository unrestricted.
 
     Returns:
-        Changed-region set parsed from Git output.
+        Changed regions from the selected Git diff. In working-tree mode, non-ignored untracked files also get whole-file coverage.
 
     Raises:
-        ValueError: Raised when Git cannot resolve the diff.
+        ValueError: Git could not produce the diff or, in working-tree mode, list untracked files.
     """
     if mode == "working-tree":
         changed = parse_unified_diff(
@@ -400,7 +411,7 @@ def filter_sources_for_changed_regions(
 
     Args:
         files: Discovered source files before diff scoping.
-        changed: Resolved changed-region data.
+        changed: Scope used to select files; inactive data returns all input files unchanged.
 
     Returns:
         Source files that should be parsed and analysed.
@@ -420,9 +431,10 @@ def filter_findings_for_changed_regions(
 
     Args:
         findings: Findings produced by normal analysis.
-        units: Parsed analysis units used to recover enclosing declarations.
-        changed: Resolved changed-region data.
-        scope: ``symbol`` for declaration-aware filtering or ``hunk`` for strict hunks.
+        units: Analysis units used to recover enclosing declarations. A unit without a tree supplies no declaration ranges.
+        changed: Scope used to retain findings; inactive data keeps every finding with zero suppressions.
+        scope: symbol can widen scope to a changed declaration. hunk checks the finding's reported location only.
+            Both modes include whole-file changes and check file membership for findings without a line.
 
     Returns:
         Retained findings and out-of-scope suppression count.
@@ -451,7 +463,7 @@ def _filter_hunk_findings(
     findings: list[Finding],
     changed: ChangedRegionSet,
 ) -> ChangedRegionFilterResult:
-    """Apply strict hunk scope by keeping only findings whose reported location overlaps a changed hunk and counting the rest as suppressed.
+    """Keep findings whose reported spans overlap changed hunks or whose files are marked wholly changed. Count findings outside the scope.
 
     A finding without a line is kept whenever its file is in the changed scope.
 
@@ -479,12 +491,12 @@ def _is_finding_in_symbol_scope(
 ) -> bool:
     """Keep a finding in symbol scope when its own location changed or its enclosing declaration overlaps a changed hunk.
 
-    Findings from file-level, class-level or aggregate rules are judged only by their anchor so inherited debt does not reappear on every body edit. A
-    finding without a line is kept when its file is changed at all, and a finding outside every hunk with no enclosing declaration is dropped.
+    Designated file-level, class-level and aggregate rules use only their anchor so body edits do not resurface inherited debt.
+    Line-less findings use file membership. For other rules, a finding outside changed lines needs an overlapping declaration.
 
     Args:
         finding: Finding to test against the changed scope.
-        changed: Resolved changed-region data for the run.
+        changed: Changed hunks and whole-file scopes used to decide whether the finding remains in scope.
         declarations: Declaration ranges for the finding's file, smallest first; empty when the file was not parsed or has no declarations, so no
             enclosing or named declaration can widen the test beyond the finding's own lines.
 
@@ -508,12 +520,11 @@ def _is_finding_anchor_changed(
 ) -> bool:
     """Test whether the anchor of a file-level or aggregate finding was changed, ignoring edits elsewhere in its reported span.
 
-    The anchor runs from the finding line to the start of the declaration the finding names, or is the finding line alone when no such declaration is
-    found.
+    The anchor ends at a matching declaration start inside the reported span; without a symbol, end line or match, it is the finding line alone.
 
     Args:
         finding: Finding from a rule whose span describes a whole file, class or aggregate.
-        changed: Resolved changed-region data for the run.
+        changed: Changed hunks and whole-file scopes to compare with the finding's anchor.
         declarations: Declaration ranges for the finding's file, smallest first, used to locate the named declaration's start line.
 
     Returns:
@@ -539,8 +550,8 @@ def _declaration_anchor_line(
         declarations: Declaration ranges for the finding's file, smallest first, so the smallest matching declaration wins.
 
     Returns:
-        The matching declaration's start line, or None when the finding lacks a symbol, line or end line or no named declaration starts inside its
-        span, so the caller falls back to the finding line.
+        The matching declaration's start line, or None when a symbol or span endpoint is missing or no named declaration starts inside the span.
+        Without a declaration anchor, the caller tests the finding's own line if present, or checks whether its file is in the changed scope.
     """
     if finding.symbol is None or finding.end_line is None or finding.line is None:
         return None
@@ -557,7 +568,7 @@ def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) ->
 
     Args:
         finding: Finding whose reported line span is compared with the changed hunks.
-        changed: Resolved changed-region data for the run.
+        changed: Changed hunks and whole-file scopes compared with the finding's reported location.
 
     Returns:
         True when the reported span overlaps a hunk or the file is whole-file changed; for a finding without a line, True when its file is changed at
@@ -790,7 +801,7 @@ def _git_lines(project_root: Path, args: list[str]) -> list[str]:
         args: Git subcommand, options and pathspecs to run.
 
     Returns:
-        Output lines in Git's order with blank lines removed; empty when Git printed nothing.
+        Nonempty output lines in Git's order, with spacing preserved. The list is empty when there are no nonempty lines.
     """
     output = _git(project_root, args)
     return [line for line in output.splitlines() if line]
@@ -820,9 +831,7 @@ def _strip_diff_prefix(path: str) -> str:
     Returns:
         The decoded path without its a/ or b/ prefix, normalised into the changed-region key form.
     """
-    # Decode Git's C-style quoting (``"b/caf\303\251.py"``) before testing the a/ b/
-    # prefix. The quotes start the token, so a naive prefix check misses them and the
-    # decoded display path keeps ``b/``, silently dropping the file in diff mode.
+    # Unquote tokens like "b/caf\303\251.py" first so the b/ prefix is stripped and diff filtering can match the decoded path.
     decoded = _unquote_diff_path(path)
     if decoded.startswith("a/") or decoded.startswith("b/"):
         decoded = decoded[2:]
@@ -830,17 +839,13 @@ def _strip_diff_prefix(path: str) -> str:
 
 
 def _unquote_diff_path(value: str) -> str:
-    """Decode a Git C-quoted path token, or return *value* unchanged when unquoted.
-
-    Git wraps paths with non-ASCII bytes or control characters in double quotes and
-    octal-escapes the offending bytes (``"b/caf\\303\\251.py"``). Plain paths - even
-    those containing spaces - are emitted unquoted, so only quoted tokens are decoded.
+    """Decode a Git C-quoted path token, leaving unquoted tokens unchanged.
 
     Args:
-        value: Raw path token taken from a ``diff --git`` or ``+++``/``---`` header.
+        value: Path token from a diff --git, +++ or --- header, decoded only when enclosed in double quotes.
 
     Returns:
-        The decoded UTF-8 path, matching the project-relative discovery display path.
+        The decoded token with any a/ or b/ prefix preserved and invalid UTF-8 bytes replaced, or the original unquoted token.
     """
     if len(value) < 2 or value[0] != '"' or value[-1] != '"':
         return value

@@ -33,9 +33,8 @@ class PillarScore:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the native per-pillar score row.
 
-        `grade` is `None` when the pillar does not apply, and `penalty`
-        is rounded to two decimals. The v3 machine adapter omits unavailable
-        optional grade data.
+        A missing grade remains None, including when no files were evaluated; penalty is rounded to two decimals.
+        The v3 adapter retains null grade and score fields when the grade is unavailable.
 
         Returns:
             JSON-ready native pillar fields and severity counts.

@@ -20,23 +20,18 @@ class TextReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as the terminal-friendly default ``gruff-py analyse`` output.
+        """Render terminal analysis output with the tool header, canonical score and finding tally first.
 
-        Layout: tool/version header, file counts, ignored/missing path
-        listings, run diagnostics, the score block, every finding, the
-        sensitive-exclusion total, and a summary footer with severity
-        counts and the exit code.
+        Run details, optional sections, pillar scores and findings follow; the footer reports the exit code.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Analysis results supplying the displayed counts, scores, diagnostics, paths and findings.
 
         Returns:
             Trailing-newline-terminated text suitable for stdout.
         """
         counts = report.finding_counts()
-        # FAMILY-CONTRACT section 1: masthead, then the two-line composite block, then every gruff-py
-        # extension. The run metadata used to sit between them, which put the number a reader came
-        # for further down than the contract allows and out of line with the sibling ports.
+        # FAMILY-CONTRACT section 1 keeps the composite and finding tally immediately below the masthead.
         lines: list[str] = [f"{TOOL_NAME} {report.tool_version} analyse"]
         _append_canonical_block(lines, report, counts)
         lines += [
@@ -71,13 +66,12 @@ class TextReporter:
 def _append_canonical_block(lines: list[str], report: AnalysisReport, counts: dict[str, int]) -> None:
     """Append the two canonical score lines the family contract puts under every masthead.
 
-    FAMILY-CONTRACT section 1 fixes both lines byte-for-byte: the composite carries two decimals and
-    the tally is error-first with middot separators. A run that evaluated nothing has no composite,
-    and printing 100.00 there would call an empty scan perfect.
+    FAMILY-CONTRACT section 1 requires two-decimal scores and an error-first tally with middot separators.
+    A missing composite prints n/a so an empty scan is not presented as perfect.
 
     Args:
         lines: Output accumulator receiving the two lines in place.
-        report: Fully-populated analysis report.
+        report: Run result supplying the composite grade; a missing composite prints n/a.
         counts: Severity tally for the run.
 
     Returns:
@@ -100,6 +94,9 @@ def _append_output_volume_hint(lines: list[str], report: AnalysisReport) -> None
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives a blank line, the hint and the suggested command in place.
         report: Run result supplying the hint threshold, the findings to count and the requested paths repeated in the suggested command.
+
+    Returns:
+        None; appends the hint to lines only when the enabled threshold is reached.
     """
     threshold = report.output_volume_hint_threshold
     if threshold <= 0:
@@ -120,6 +117,9 @@ def _append_path_section(lines: list[str], title: str, paths: tuple[str, ...]) -
         lines: Terminal output lines collected for the current analysis journey; receives a blank line, the title and the paths in place.
         title: Section heading printed above the paths, such as Missing paths.
         paths: Paths to list in the order given; an empty tuple suppresses the whole section, heading included.
+
+    Returns:
+        None; appends the titled listing to lines only when paths exist.
     """
     if not paths:
         return
@@ -137,6 +137,9 @@ def _append_ignored_section(lines: list[str], report: AnalysisReport) -> None:
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives the section in place.
         report: Run result supplying the ignored paths in display order and the per-path details matched to them by path.
+
+    Returns:
+        None; appends the listing to lines only when ignored paths exist.
     """
     if not report.ignored_paths:
         return
@@ -159,6 +162,9 @@ def _append_config_warnings(lines: list[str], report: AnalysisReport) -> None:
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives the section in place.
         report: Run result whose config warnings are printed verbatim in the order recorded.
+
+    Returns:
+        None; appends the section to lines only when warnings exist.
     """
     if not report.config_warnings:
         return
@@ -171,14 +177,15 @@ def _append_config_warnings(lines: list[str], report: AnalysisReport) -> None:
 def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]) -> None:
     """Append the Diagnostics section, one line per run diagnostic.
 
-    Each line prints the upper-cased diagnostic type in brackets, its best available location and its message. The location is the file path with the
-    line appended when both are known, otherwise the file path alone, otherwise the input path; a line number recorded without a file path is dropped
-    from the location. A diagnostic with neither a file path nor an input path prints only its type and message. Nothing is appended when there are no
-    diagnostics.
+    Each line shows the upper-cased type, selected location and message. A file location includes its line when known.
+    An empty file path still takes precedence. Only a None file path falls back to the input path. Two None paths omit the location.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives the section in place.
         diagnostics: Run diagnostics recorded on the report, rendered in order; an empty tuple suppresses the section.
+
+    Returns:
+        None; appends the diagnostic section to lines when diagnostics exist.
     """
     if not diagnostics:
         return
@@ -198,17 +205,17 @@ def _append_diagnostics(lines: list[str], diagnostics: tuple[RunDiagnostic, ...]
 
 
 def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
-    """Append the Baseline section describing the baseline this run used or generated.
+    """Append baseline details to the terminal report.
 
-    It reports the path, source, entry count, generation flag, suppressed findings, stale evaluation and stale-entry count. When the run generated the
-    baseline, a tip tells the user to commit it and rerun: a plain gruff-py analyse when the baseline source is default, which the baseline module
-    assigns to any file named gruff-baseline.json, otherwise a rerun with the --baseline flag and the shell-quoted path. When the run did not generate
-    the baseline and it has stale entries, the tip suggests regenerating it after review instead. Nothing is appended when the report carries no
-    baseline.
+    A generated baseline gets a commit and rerun tip. The default name gruff-baseline.json uses plain gruff-py analyse.
+    Other generated names use a shell-quoted --baseline path. Stale entries in an existing baseline prompt a regeneration tip.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives the section in place.
-        report: Run result whose baseline extension supplies the reported fields; a missing baseline means no section is rendered.
+        report: Run result whose baseline extension supplies the reported fields. A missing baseline leaves lines unchanged.
+
+    Returns:
+        None. Appends the section to lines in place when a baseline is present.
     """
     baseline = report.extensions.baseline
     if baseline is None:
@@ -232,28 +239,23 @@ def _append_baseline(lines: list[str], report: AnalysisReport) -> None:
 
 
 def append_sensitive_exclusions(lines: list[str], report: AnalysisReport) -> None:
-    """Show how many findings configured exclusions, the test-path skip and section 13c removed, and why.
+    """Show how many findings were suppressed and why, across configured exclusions, the built-in test-path skip and section 13c.
 
-    Follows the family total gruff-rs renders (``gruff-rs/src/render/text.rs``, search:
-    ``Suppressed findings:``) so no configured suppression is invisible in terminal output.
-
-    Shared with the ``summary`` command: FAMILY-CONTRACT.md (search: ``**Where the audit must
-    appear**``) requires every surface that applies an exclusion to publish the count on that same
-    surface, so both text surfaces render this one section instead of two wordings.
+    Analyse and summary share this section to publish the count where the exclusions apply, as FAMILY-CONTRACT.md requires.
+    The corresponding Rust renderer is in gruff-rs/src/render/text.rs.
 
     Args:
         lines: Terminal output lines collected for the current analyse or summary journey.
-        report: Run result carrying one audit row per configured exclusion.
+        report: Run result whose suppression audit rows supply the counts, scopes and reasons.
 
     Returns:
         None; the supplied output list gains a section only when a finding was suppressed.
     """
     total = sum(summary.suppressed for summary in report.suppressions)
-    # A run where no configured scope matched has no suppression total to reconcile.
+    # With no findings hidden, the terminal report has no suppression total to reconcile.
     if total == 0:
         return
-    # A built-in or section 13c row names the file it covers, since no config entry exists to point at:
-    # ``builtInTestPath[...]``, ``inline[...]`` or ``duplicate[...]``.
+    # Built-in, inline and duplicate rows name the covered file because they have no configuration entry to cite.
     labels = {"built-in": "builtInTestPath", "inline": "inline", "duplicate": "duplicate"}
     details = "; ".join(
         (
@@ -279,7 +281,7 @@ def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> 
     Returns:
         None; the supplied output list is updated only when a caveat exists.
     """
-    # No caveat means the runner cannot claim either partial or full scan context.
+    # Full-project scans and partial scans without enabled project-wide rules need no caveat.
     if report.partial_context_caveat is None:
         return
     lines.append("")
@@ -288,7 +290,7 @@ def _append_partial_context_caveat(lines: list[str], report: AnalysisReport) -> 
 
 
 def _append_scoring_mode(lines: list[str], report: AnalysisReport) -> None:
-    """Show how the displayed score was calculated after frozen finding output.
+    """Append the scoring mode after the Findings section.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey.
@@ -307,8 +309,7 @@ def _append_scoring_mode(lines: list[str], report: AnalysisReport) -> None:
 def _append_score(lines: list[str], report: AnalysisReport) -> None:
     """Append the per-pillar score detail for the user's quality review.
 
-    The composite and the tally now lead the view as the canonical block, so this block carries only
-    the detail beneath them; it no longer needs the severity counts it once printed.
+    The canonical block carries the composite and finding tally; this section shows each pillar's grade and finding count.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey.
@@ -322,8 +323,8 @@ def _append_score(lines: list[str], report: AnalysisReport) -> None:
         return
     lines.append("")
     lines.append("Score")
-    # The composite and tally lead the view under the canonical contract, so the Score block carries
-    # only the per-pillar detail; repeating them here would give a reader two answers to one question.
+    # Keep the composite and finding tally in the canonical block so readers see each headline value once.
+    # If display filters hid findings, explain that the score and exit code still reflect the full finding set.
     if report.hidden_by_display_filter > 0:
         lines.append(f"  Display filters hid {report.hidden_by_display_filter} findings; score and exit code reflect all findings.")
     lines.append("  Pillars:")
@@ -342,13 +343,14 @@ def _append_score(lines: list[str], report: AnalysisReport) -> None:
 def _append_findings(lines: list[str], findings: tuple[Finding, ...]) -> None:
     """Append the Findings section with one line per finding, or an indented None when the report holds no findings.
 
-    Unlike the optional sections rendered before it, the blank separator and the Findings heading always print. Each finding line is unindented,
-    starts with a dash and carries the severity in brackets, the file path with the line appended when known, the rule ID, and the message after a
-    second dash.
+    The separator and heading always appear. Each finding uses the shared one-line format and shows a line number when known.
 
     Args:
         lines: Terminal output lines collected for the current analysis journey; receives the section in place.
-        findings: Findings to render in the order given; an empty tuple renders the heading followed by None.
+        findings: Findings to render in the order given. An empty tuple renders the heading followed by None.
+
+    Returns:
+        None. Appends the complete Findings section to lines.
     """
     lines.append("")
     lines.append("Findings")
@@ -359,7 +361,5 @@ def _append_findings(lines: list[str], findings: tuple[Finding, ...]) -> None:
         location = finding.file_path
         if finding.line is not None:
             location = f"{location}:{finding.line}"
-        # FAMILY-CONTRACT section 1 made the rs/ts dash-line the family canon at this break:
-        # `- [severity] file:line ruleId - message`. gruff-py emitted a three-line block, so the same
-        # finding took three lines here and one line in two sibling ports.
+        # FAMILY-CONTRACT section 1 specifies the shared row format - [severity] file:line ruleId - message.
         lines.append(f"- [{finding.severity.value}] {location} {finding.rule_id} - {finding.message}")

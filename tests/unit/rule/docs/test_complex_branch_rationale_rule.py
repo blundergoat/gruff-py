@@ -6,10 +6,10 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def _complex_function(name: str = "route_payload", comment: str = "") -> str:
-    """Return source for a function with eleven ``if`` branches, optionally preceded by one comment line.
+    """Return source for a function with eleven if branches, optionally preceded by one comment line.
 
     Args:
-        name: Function name; defaults to ``route_payload``.
+        name: Function name; defaults to route_payload.
         comment: Comment line placed before the branches; empty adds none.
 
     Returns:
@@ -21,7 +21,11 @@ def _complex_function(name: str = "route_payload", comment: str = "") -> str:
 
 
 def test_complex_public_function_without_rationale_emits():
-    """Report an undocumented eleven-branch public function once, recording cyclomatic above 10 and no docstring."""
+    """Report an undocumented eleven-branch public function once, recording cyclomatic above 10 and no docstring.
+
+    Returns:
+        None. Asserts one finding for route_payload with cyclomatic complexity above 10 and hasDocstring set to false.
+    """
     findings = ComplexBranchRationaleRule().analyse(make_unit(_complex_function()), default_ctx())
 
     assert len(findings) == 1
@@ -31,7 +35,11 @@ def test_complex_public_function_without_rationale_emits():
 
 
 def test_substantive_docstring_skips_complex_function():
-    """Report nothing when the complex function has a docstring that explains its branches."""
+    """Report nothing when the complex function has a docstring that explains its branches.
+
+    Returns:
+        None. Asserts an empty finding list for the fixture with a branch rationale docstring.
+    """
     src = (
         "def route_payload(value):\n"
         '    """Route compatibility payloads across legacy protocol branches.\n\n'
@@ -45,14 +53,22 @@ def test_substantive_docstring_skips_complex_function():
 
 
 def test_branch_rationale_comment_skips_complex_function():
-    """Report nothing when a compatibility rationale comment precedes the branches."""
+    """Report nothing when a compatibility rationale comment precedes the branches.
+
+    Returns:
+        None. Asserts an empty finding list for the fixture with the compatibility rationale comment.
+    """
     src = _complex_function(comment="# Compatibility fallback for legacy payload branches.")
 
     assert ComplexBranchRationaleRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_generic_branch_comment_still_emits():
-    """Report the function once when its only comment is a generic one."""
+    """Report the function once when its only comment is a generic one.
+
+    Returns:
+        None. Asserts one finding for the fixture containing only a generic comment.
+    """
     src = _complex_function(comment="# check condition")
 
     findings = ComplexBranchRationaleRule().analyse(make_unit(src), default_ctx())
@@ -61,14 +77,22 @@ def test_generic_branch_comment_still_emits():
 
 
 def test_private_function_uses_higher_threshold():
-    """Report nothing for the same eleven-branch function when it is private."""
+    """Report nothing for the same eleven-branch function when it is private.
+
+    Returns:
+        None. Asserts an empty finding list for the private fixture under default settings.
+    """
     src = _complex_function(name="_route_payload")
 
     assert ComplexBranchRationaleRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_config_can_lower_private_threshold():
-    """Report the private eleven-branch function once after options lower the private thresholds to the public values."""
+    """Report the private eleven-branch function once after options lower the private thresholds to the public values.
+
+    Returns:
+        None. Asserts one finding for the private fixture under the configured thresholds.
+    """
     src = _complex_function(name="_route_payload")
     rule = ComplexBranchRationaleRule()
     ctx = RuleContext(

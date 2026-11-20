@@ -20,21 +20,19 @@ class MarkdownReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as Markdown with collapsible severity sections (GitHub-compatible).
+        """Render the report as GitHub-compatible Markdown with collapsible severity sections.
 
-        Findings are grouped by severity (error / warning / advisory) and
-        then by file, wrapped in ``<details open>`` so reviewers can fold
-        sections in PR comments.
+        Group findings by severity and file in open details elements so pull-request reviewers can fold each severity section.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Report supplying findings, diagnostics, filters and scores.
+                With no score report, the header shows n/a for grade and score and uses full-project mode.
 
         Returns:
             Markdown document with a trailing newline.
         """
         score = report.score
         counts = report.finding_counts()
-        # A diagnostic-only report has no score, so preserve the existing fallback mode.
         scoring_mode = score.scope if score is not None else "full-project"
         lines = [
             "# gruff-py report",
@@ -48,7 +46,7 @@ class MarkdownReporter:
             lines.append(f"**Scan context:** {_md(report.partial_context_caveat)}")
         lines.append(f"**Findings:** {counts['total']} total, {counts['error']} error, {counts['warning']} warning, {counts['advisory']} advisory")
 
-        # Active filters remain visible so users know why some findings are hidden.
+        # Show active filters so readers can tell which findings the report can omit.
         if report.filters is not None and report.filters.is_active():
             lines.append(f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`")
 
@@ -102,17 +100,15 @@ def _score_value(score: object | None) -> str:
 
 
 def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
-    """Return applicable pillar scores sorted by findings DESC, then pillar ASC.
+    """Return applicable pillar scores ordered by decreasing finding count, then pillar name.
 
-    Mirrors the canonical Phase 2 summary shape used by the HTML reporter: only
-    applicable pillars are included, sourced from the existing ``PillarScore``
-    data without recomputing severity counts or scores.
+    Reuse existing score objects without recomputing severity counts or scores.
 
     Args:
-        report: Analysis report providing the optional ``ScoreReport``.
+        report: Analysis report supplying the optional ScoreReport.
 
     Returns:
-        Applicable ``PillarScore`` entries ordered for the canonical table.
+        Ordered PillarScore entries, or an empty list when there is no score or no applicable pillar.
     """
     if report.score is None:
         return []
@@ -139,13 +135,15 @@ def _pillar_row(pillar: PillarScore) -> str:
 def _append_finding_groups(lines: list[str], findings: tuple[Finding, ...]) -> None:
     """Append the finding listing that follows the Findings heading, grouped by severity and then by file.
 
-    The grouping lets reviewers fold each severity in a pull-request comment. Severities are emitted in error, warning, advisory order and a severity
-    with no findings is skipped. Each severity becomes a details element left open, whose summary is the title-cased severity and its finding count;
-    files inside it are sorted by path and each is shown as a bold path line, and findings keep their input order within a file.
+    The grouping lets reviewers fold each severity in a pull-request comment. Emit nonempty groups in error, warning, advisory order.
+    Use open details elements with title-cased severity and count, then bold sorted file paths; preserve finding order within each file.
 
     Args:
         lines: Markdown lines being built for the report; this function extends it in place.
         findings: Findings to list; the caller only passes a non-empty tuple and writes the No findings. line itself otherwise.
+
+    Returns:
+        None; the report lines are extended in place.
     """
     groups: dict[str, dict[str, list[Finding]]] = defaultdict(lambda: defaultdict(list))
     for finding in findings:
@@ -180,7 +178,7 @@ def _finding_line(finding: Finding) -> str:
 
 
 def _md(value: str) -> str:
-    """Escape pipe characters so a value cannot split a Markdown table cell.
+    """Escape pipe characters for use in Markdown table cells.
 
     Only pipes are escaped; every other Markdown character passes through unchanged, even though callers also use this outside the Pillars table.
 

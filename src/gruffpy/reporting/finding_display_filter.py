@@ -32,19 +32,15 @@ class FindingDisplayFilter:
     exclude_rules: tuple[str, ...] = ()
 
     def with_configured_floor(self, configured_floor: Severity | None) -> "FindingDisplayFilter":
-        """Return a copy carrying the project's floor, unless the user already named one on the command line.
+        """Apply the configured severity floor unless this filter already has one.
 
-        The flag wins because it is the more specific instruction: a project
-        floor is a default, and typing ``--min-severity`` is the user overriding
-        that default for one run.
+        A command-line floor takes precedence over the project default.
 
         Args:
-            configured_floor: Floor from the project's ``minimumSeverity`` key,
-                or None when it set none.
+            configured_floor: Project minimumSeverity value, or None to keep this filter unchanged.
 
         Returns:
-            This filter when a flag already set the floor, otherwise a copy
-            carrying the configured one.
+            This filter when a floor is already set or configured_floor is None; otherwise a copy with the configured floor.
         """
         if self.min_severity is not None or configured_floor is None:
             return self
@@ -62,10 +58,7 @@ class FindingDisplayFilter:
         return [finding for finding in findings if self.is_allowed(finding)]
 
     def is_active(self) -> bool:
-        """Return whether any selector would actually filter findings.
-
-        Used by reporters to skip the per-finding loop when nothing's
-        configured.
+        """Return whether any display selector is configured.
 
         Returns:
             True if at least one min-severity / pillar / rule selector is set.
@@ -81,11 +74,10 @@ class FindingDisplayFilter:
     def to_dict(self) -> dict[str, object]:
         """Serialise the filter shape for inclusion in JSON / SARIF report metadata.
 
-        Enum members are flattened to their ``.value`` strings so the
-        output is JSON-native.
+        Enum members use their value strings so the output is JSON-native.
 
         Returns:
-            Plain dict containing the filter configuration plus an ``active`` flag.
+            Plain dict containing the filter configuration plus an active flag.
         """
         return {
             "active": self.is_active(),

@@ -29,18 +29,20 @@ def _first_fn(source: str) -> ast.FunctionDef:
 
 
 def _make_unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+    """Build an x.py fixture for testing nesting depth and qualified function names.
+
+    In CPython, assigning parent links also updates operator and context nodes shared across parsed trees.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        The analysis unit.
+        Analysis unit with the original source and a parsed tree annotated with parent references.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # -- ast.AST supports dynamic attributes; parent is not a declared attribute.
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -52,7 +54,7 @@ def _ctx(threshold: int = 4) -> RuleContext:
         threshold: Depth the rule allows before it reports; defaults to 4.
 
     Returns:
-        The rule context.
+        A context with settings for the nesting depth rule alone.
     """
     rule = NestingDepthRule()
     config = AnalysisConfig(
@@ -67,50 +69,81 @@ def _ctx(threshold: int = 4) -> RuleContext:
 
 
 def test_no_nesting_depth_zero():
-    """Measure depth 0 for a function with no control-flow blocks."""
+    """Measure depth 0 for a function with no control-flow blocks.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f():\n    return 1\n"
     assert nesting_depth_for(_first_fn(src)) == 0
 
 
 def test_single_if_depth_one():
-    """Measure depth 1 for a single ``if``."""
+    """Measure depth 1 for a single if.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f(x):\n    if x:\n        return 1\n"
     assert nesting_depth_for(_first_fn(src)) == 1
 
 
 def test_nested_if_depth_two():
-    """Measure depth 2 for an ``if`` inside another ``if``."""
+    """Measure depth 2 for an if inside another if.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f(x, y):\n    if x:\n        if y:\n            return 1\n"
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
 def test_for_inside_if_depth_two():
-    """Measure depth 2 for a ``for`` loop inside an ``if``."""
+    """Measure depth 2 for a for loop inside an if.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f(xs):\n    if xs:\n        for x in xs:\n            print(x)\n"
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
 def test_try_except_increments_depth():
-    """Measure depth 2 for an ``if`` inside a ``try`` block."""
+    """Measure depth 2 for an if inside a try block.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f():\n    try:\n        if x:\n            pass\n    except ValueError:\n        pass\n"
-    # try at depth 1; if inside try at depth 2
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
 def test_match_increments_depth():
-    """Measure depth 2 for an ``if`` inside a ``match`` case."""
+    """Measure depth 2 for an if inside a match case.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f(x):\n    match x:\n        case 1:\n            if x:\n                return 1\n"
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
 def test_with_block_increments_depth():
-    """Measure depth 2 for an ``if`` inside a ``with`` block."""
+    """Measure depth 2 for an if inside a with block.
+
+    Returns:
+        None after checking the measured depth.
+    """
     src = "def f():\n    with open('x') as f:\n        if f:\n            return 1\n"
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
 def test_depth_just_over_threshold_is_a_lower_band_notice():
-    """Report depth 5 against a threshold of 4 as one advisory finding in the lower limit band."""
+    """Report depth 5 against a threshold of 4 as one advisory finding in the lower limit band.
+
+    Returns:
+        None after the assertions pass.
+    """
     # 5-deep: if/if/if/if/if, over the threshold but under one and a half times it
     src = (
         "def f(a, b, c, d, e):\n"
@@ -129,14 +162,22 @@ def test_depth_just_over_threshold_is_a_lower_band_notice():
 
 
 def test_extremely_nested_emits_error():
-    """Report error severity for eight nested ``if`` statements against a threshold of 4."""
+    """Report error severity for eight nested if statements against a threshold of 4.
+
+    Returns:
+        None after checking the finding's severity.
+    """
     src = "def f():\n" + "\n".join("    " * i + f"if x{i}:" for i in range(1, 9)) + "\n        " + "    " * 7 + "return 1\n"
     findings = NestingDepthRule().analyse(_make_unit(src), _ctx())
     assert findings[0].severity == Severity.ERROR
 
 
 def test_nested_function_evaluated_separately():
-    """Report a deeply nested inner function as ``outer.inner`` and leave its flat outer function unreported."""
+    """Report a deeply nested inner function as outer.inner and leave its flat outer function unreported.
+
+    Returns:
+        None after checking the reported function symbols.
+    """
     src = (
         "def outer():\n"
         "    def inner():\n"
@@ -156,8 +197,12 @@ def test_nested_function_evaluated_separately():
 
 
 def test_elif_chain_is_one_level_not_one_per_branch():
-    """Measure depth 2 for an ``if``, ``elif`` and ``else`` chain whose four branches each hold one more ``if``."""
-    # Four peer branches, each holding one more if: depth 2, not the 5 an elif-as-nesting count would give.
+    """Measure depth 2 for an if, elif and else chain whose four branches each hold one more if.
+
+    Returns:
+        None after the assertion passes.
+    """
+    # The elif arms are peers, so only each arm's inner if adds another nesting level.
     src = (
         "def f(x, y):\n"
         "    if x == 1:\n        if y:\n            return 1\n"
@@ -170,7 +215,11 @@ def test_elif_chain_is_one_level_not_one_per_branch():
 
 
 def test_nested_ifs_still_count_each_level():
-    """Measure depth 3 for two nested ``if`` statements inside an ``else`` block."""
-    # The close control: an if inside an else block is a real level, so three nested ifs stay depth 3.
+    """Measure depth 3 for two nested if statements inside an else block.
+
+    Returns:
+        None after checking the measured depth.
+    """
+    # An if indented inside else adds a nesting level, while an elif stays at its parent if's depth.
     src = "def f(a, b, c):\n    if a:\n        pass\n    else:\n        if b:\n            if c:\n                return 1\n    return 0\n"
     assert nesting_depth_for(_first_fn(src)) == 3

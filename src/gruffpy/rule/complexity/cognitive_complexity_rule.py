@@ -55,7 +55,7 @@ class CognitiveComplexityRule(Rule):
         """Analyze function-like nodes for cognitive complexity findings.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Source file to inspect; no AST means no findings. Function and complexity caches are stored on its AST nodes.
             context: Rule execution context with threshold settings.
 
         Returns:
@@ -115,7 +115,7 @@ def cognitive_for(fn: FunctionLike) -> int:
     """Compute cognitive complexity for a function-like node per ADR-003.
 
     Args:
-        fn: Function, async function, or lambda node to score.
+        fn: Function, async function, or lambda node to score; computed scores are stored on this node and reused on later calls.
 
     Returns:
         Cognitive complexity score for the node body.
@@ -148,32 +148,38 @@ class _Counter:
         Args:
             node: AST node to inspect.
             nesting: Current control-flow nesting depth.
+
+        Returns:
+            None; the selected visitor may update this counter's score.
         """
         handler = getattr(self, f"_visit_{type(node).__name__}", self._generic_visit)
         handler(node, nesting)
 
     def _generic_visit(self, node: ast.AST, nesting: int) -> None:
-        """Visit every child of a node that has no dedicated handler, keeping the current nesting depth.
+        """Visit unhandled nodes' children at the same depth, adding their contributions to self.score.
 
         Args:
             node: AST node whose type has no dedicated visitor method.
             nesting: Nesting depth passed unchanged to each child node.
+
+        Returns:
+            None. Any contributions from child nodes update this counter's score.
         """
         for child in ast.iter_child_nodes(node):
             self.visit(child, nesting)
 
     def _visit_If(self, node: ast.If, nesting: int) -> None:
-        """Score an if statement and its elif or else branches, then visit their bodies and conditions.
+        """Score the opening if as 1 plus its nesting depth, and each elif and final else as 1.
 
-        The if adds 1 plus the nesting depth, and each elif and a final else add 1 with no nesting depth. Branch bodies are visited one level deeper
-        and conditions at the current depth, so boolean operators in them still count.
-
-        The visitor checks only node structure, which is identical for an elif and for an else block whose only statement is an if, so that shape is
-        also scored as an elif.
+        Visit branch bodies one level deeper and conditions at the current depth so their boolean operators still count.
+        An else containing just an if has the same AST shape as an elif and is scored the same way.
 
         Args:
             node: If statement to score.
             nesting: Nesting depth of the if statement, added to its increment; branch bodies are visited one level deeper.
+
+        Returns:
+            None. Updates the running score for the branches and the nodes they contain.
         """
         self.score += 1 + nesting  # B1 + B2
         for stmt in node.body:
@@ -204,9 +210,11 @@ class _Counter:
         Args:
             orelse: Non-empty else-branch statements of an elif; a single if statement is treated as the next elif.
             nesting: Nesting depth of the if statement heading the chain.
+
+        Returns:
+            None; branch increments and visited nodes contribute to this counter's score.
         """
         if len(orelse) == 1 and isinstance(orelse[0], ast.If):
-            # nested elif
             self.score += 1
             elif_node = orelse[0]
             for stmt in elif_node.body:
@@ -220,29 +228,38 @@ class _Counter:
                 self.visit(stmt, nesting + 1)
 
     def _visit_For(self, node: ast.For, nesting: int) -> None:
-        """Hand a for loop to the shared loop scoring.
+        """Add a for loop's contribution to self.score and visit its iterable, body and else branch.
 
         Args:
             node: For loop to score.
-            nesting: Nesting depth of the loop.
+            nesting: Depth added to the loop's increment. The iterable uses this depth, and the body and else use the next level.
+
+        Returns:
+            None. Updates this counter's score with the loop's contributions.
         """
         self._visit_loop(node, nesting)
 
     def _visit_AsyncFor(self, node: ast.AsyncFor, nesting: int) -> None:
-        """Hand an async for loop to the shared loop scoring.
+        """Add an async loop's contribution to self.score and visit its iterable, body and else branch.
 
         Args:
             node: Async for loop to score.
-            nesting: Nesting depth of the loop.
+            nesting: Depth added to the loop's increment. The iterable uses this depth, and the body and else use the next level.
+
+        Returns:
+            None. Updates this counter's score with the async loop's contributions.
         """
         self._visit_loop(node, nesting)
 
     def _visit_While(self, node: ast.While, nesting: int) -> None:
-        """Hand a while loop to the shared loop scoring.
+        """Accumulate cognitive complexity for a while loop, including its condition, body and else clause.
 
         Args:
             node: While loop to score.
             nesting: Nesting depth of the loop.
+
+        Returns:
+            None; the loop's contributions update this counter's score.
         """
         self._visit_loop(node, nesting)
 
@@ -255,16 +272,17 @@ class _Counter:
         Args:
             node: Loop statement to score.
             nesting: Nesting depth of the loop, added to its increment.
+
+        Returns:
+            None; loop, else and descendant contributions update this counter's score.
         """
         self.score += 1 + nesting
         for stmt in node.body:
             self.visit(stmt, nesting + 1)
         if node.orelse:
-            # `for ... else` / `while ... else` - count the else as +1 (no nesting)
             self.score += 1
             for stmt in node.orelse:
                 self.visit(stmt, nesting + 1)
-        # Walk the iter/test for BoolOps
         if isinstance(node, ast.For | ast.AsyncFor):
             self.visit(node.iter, nesting)
         else:
@@ -278,9 +296,11 @@ class _Counter:
         Args:
             node: Try statement to score.
             nesting: Nesting depth of the try statement, added to each handler's increment.
+
+        Returns:
+            None; handler increments and visited statements contribute to this counter's score.
         """
-        # The try itself is not a B1 in SonarSource v1.4 (no try-statement
-        # increment); only handlers add B1 + B2.
+        # SonarSource v1.4 treats each except handler as a control-flow break within a try statement.
         for stmt in node.body:
             self.visit(stmt, nesting)
         for handler in node.handlers:
@@ -298,9 +318,11 @@ class _Counter:
         Args:
             node: Conditional expression to score.
             nesting: Nesting depth of the expression, added to its increment.
+
+        Returns:
+            None. Adds the conditional and any operand contributions to this counter's score.
         """
         self.score += 1 + nesting
-        # Walk children at nesting + 1
         self.visit(node.test, nesting + 1)
         self.visit(node.body, nesting + 1)
         self.visit(node.orelse, nesting + 1)
@@ -313,6 +335,9 @@ class _Counter:
         Args:
             node: Match statement to score.
             nesting: Nesting depth of the match statement, added to its increment.
+
+        Returns:
+            None; the match and visited expressions contribute to this counter's score.
         """
         self.score += 1 + nesting
         for case in node.cases:
@@ -328,12 +353,11 @@ class _Counter:
         Args:
             node: Lambda nested inside the measured function.
             nesting: Nesting depth at which the default values are visited.
+
+        Returns:
+            None; any contributions from defaults update this counter's score.
         """
-        # Nested lambda inside another function - the lambda body is a new
-        # scope; nesting resets to 0 for its body, but the *outer* function's
-        # cognitive complexity does not include the lambda's interior (it
-        # gets its own finding via iter_functions). Walk only the args
-        # defaults at the outer nesting (for BoolOps in defaults).
+        # Nested lambdas are scored separately, so only their defaults contribute to the enclosing function's score.
         for default in node.args.defaults:
             self.visit(default, nesting)
         for kw_default in node.args.kw_defaults:
@@ -341,20 +365,26 @@ class _Counter:
                 self.visit(kw_default, nesting)
 
     def _visit_FunctionDef(self, node: ast.FunctionDef, nesting: int) -> None:
-        """Hand a nested function definition to the shared handling that keeps its body out of the score.
+        """Score a nested function definition's decorators and defaults in self.score, excluding its body.
 
         Args:
             node: Function definition nested inside the measured function.
             nesting: Nesting depth at which the definition is reached.
+
+        Returns:
+            None. Any contributions from decorators and defaults update this counter's score.
         """
         self._visit_function_scope(node, nesting)
 
     def _visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef, nesting: int) -> None:
-        """Hand a nested async function definition to the shared handling that keeps its body out of the score.
+        """Score a nested async definition's decorators and defaults in self.score, excluding its body.
 
         Args:
             node: Async function definition nested inside the measured function.
             nesting: Nesting depth at which the definition is reached.
+
+        Returns:
+            None. Any contributions from decorators and defaults update this counter's score.
         """
         self._visit_function_scope(node, nesting)
 
@@ -368,10 +398,11 @@ class _Counter:
         Args:
             node: Function or async function definition nested inside the measured function.
             nesting: Nesting depth at which decorators and default values are visited.
+
+        Returns:
+            None; any contributions from decorators and defaults update this counter's score.
         """
-        # Nested function gets its own finding; walk only its decorator
-        # expressions and default values at the outer nesting so BoolOps
-        # there still count toward the outer function.
+        # Nested functions are scored separately, so only decorators and defaults can contribute to the enclosing function.
         for decorator in node.decorator_list:
             self.visit(decorator, nesting)
         for default in node.args.defaults:
@@ -381,13 +412,15 @@ class _Counter:
                 self.visit(kw_default, nesting)
 
     def _visit_ClassDef(self, node: ast.ClassDef, nesting: int) -> None:
-        """Keep a nested class body out of the measured function's score, visiting only decorators and base classes.
+        """Add a nested class's decorator and base class expression contributions to self.score, excluding its body.
 
         Args:
             node: Class definition nested inside the measured function.
             nesting: Nesting depth at which decorators and base class expressions are visited.
+
+        Returns:
+            None. Any contributions from decorators and base class expressions update this counter's score.
         """
-        # Like nested functions - walk decorators + base expressions only.
         for decorator in node.decorator_list:
             self.visit(decorator, nesting)
         for base in node.bases:
@@ -401,6 +434,9 @@ class _Counter:
         Args:
             node: Boolean operation node to score.
             nesting: Nesting depth passed unchanged to the operands; it is not added to the increment.
+
+        Returns:
+            None. Adds the boolean increment and any operand contributions to this counter's score.
         """
         self.score += 1
         for value in node.values:
@@ -415,6 +451,9 @@ class _Counter:
         Args:
             node: Call expression whose callee is compared with the measured function's name.
             nesting: Nesting depth passed unchanged to positional and keyword arguments.
+
+        Returns:
+            None. Updates this counter's score for a matching callee and any contributions from the arguments.
         """
         if self.self_name is not None and isinstance(node.func, ast.Name) and node.func.id == self.self_name:
             self.score += 1
@@ -431,7 +470,7 @@ def _format_number(value: int | float) -> str:
         value: Threshold from the matched severity threshold.
 
     Returns:
-        The value as text: a non-integer float keeps its decimal form, and any whole number is rendered as an integer.
+        The threshold as text. Whole numbers use integer form. Other floats use their standard str representation.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

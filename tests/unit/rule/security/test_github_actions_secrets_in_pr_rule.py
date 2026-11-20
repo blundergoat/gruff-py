@@ -222,11 +222,14 @@ _OWN_WORKFLOW_EVENT_GUARD_IDS = (
 
 @pytest.mark.parametrize(("body", "expected"), _OWN_WORKFLOW_EVENT_GUARD_CASES, ids=_OWN_WORKFLOW_EVENT_GUARD_IDS)
 def test_own_workflow_event_guard(body: str, expected: int) -> None:
-    """Only own PR-unreachable guards may suppress a source reference.
+    """Check when job and step guards suppress secret findings for references in their scope.
 
     Args:
-        body: Workflow text after the ``pull_request_target`` trigger, holding the guard under test.
-        expected: Secret findings the rule must report; zero means the guard proves the job unreachable from a PR.
+        body: Workflow text appended after the pull_request_target trigger to test guard recognition and scope.
+        expected: Number of secret findings to assert. Zero means the rule treats the reference as unreachable for pull_request_target.
+
+    Returns:
+        None. Checks that the number of secret findings matches the expected count for the guard case.
     """
     source = "on:\n  pull_request_target:\n" + body
     findings = GithubActionsSecretsInPrRule().analyse(make_text_unit(source, _WF), default_ctx())
@@ -234,7 +237,11 @@ def test_own_workflow_event_guard(body: str, expected: int) -> None:
 
 
 def test_pr_workflow_with_secret_fires():
-    """Report one finding, naming the secret, for a ``pull_request_target`` workflow that reads a repository secret."""
+    """Report one finding, naming the secret, for a ``pull_request_target`` workflow that reads a repository secret.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = (
         "on: pull_request_target\njobs:\n  publish:\n    steps:\n      - run: npm publish\n"
         "        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
@@ -245,7 +252,11 @@ def test_pr_workflow_with_secret_fires():
 
 
 def test_github_token_skipped():
-    """Report nothing when such a workflow reads only ``GITHUB_TOKEN``."""
+    """Report nothing when a pull_request_target workflow reads only ``GITHUB_TOKEN``.
+
+    Returns:
+        None. Checks that the GITHUB_TOKEN reference yields no findings.
+    """
     src = (
         "on: pull_request_target\njobs:\n  triage:\n    steps:\n      - run: gh pr view\n"
         "        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
@@ -254,13 +265,21 @@ def test_github_token_skipped():
 
 
 def test_non_pr_workflow_with_secret_skipped():
-    """Report nothing for a push workflow that reads a repository secret."""
+    """Report nothing for a push workflow that reads a repository secret.
+
+    Returns:
+        None after the assertion passes.
+    """
     src = "on: push\njobs:\n  publish:\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
     assert GithubActionsSecretsInPrRule().analyse(make_text_unit(src, _WF), default_ctx()) == []
 
 
 def test_plain_pull_request_workflow_is_not_reported():
-    """A plain pull_request run from a fork receives no secrets, so its secret reference exposes nothing."""
+    """Report nothing for a plain pull_request workflow that references a repository secret.
+
+    Returns:
+        None after the assertion passes.
+    """
     src = (
         "on:\n  pull_request:\n    branches: [main]\njobs:\n  publish:\n    steps:\n      - run: npm publish\n"
         "        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
@@ -269,7 +288,12 @@ def test_plain_pull_request_workflow_is_not_reported():
 
 
 def test_trigger_is_read_from_the_on_key_only():
-    """An ``if:`` naming pull_request in an issue_comment workflow is not a trigger; flow and quoted forms are."""
+    """Expect no finding for a secret reference when a job condition mentions pull_request in an issue_comment workflow.
+    Expect one finding when on lists pull_request_target in flow form or when both on and pull_request_target are quoted keys.
+
+    Returns:
+        None. Checks for no findings in the job-condition case and one finding for each trigger declaration.
+    """
     comment = "on: issue_comment\njobs:\n  x:\n    if: github.event.issue.pull_request\n    steps:\n      - run: echo ${{ secrets.NPM_TOKEN }}\n"
     flow = "on: [push, pull_request_target]\njobs:\n  x:\n    steps:\n      - run: echo ${{ secrets.NPM_TOKEN }}\n"
     quoted = '"on":\n  "pull_request_target":\n    types: [opened]\njobs:\n  x:\n    steps:\n      - run: echo ${{ secrets.NPM_TOKEN }}\n'

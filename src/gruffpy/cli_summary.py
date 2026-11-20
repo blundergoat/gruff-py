@@ -23,7 +23,7 @@ def summary_payload(
     *,
     group_by: str = "none",
 ) -> dict[str, Any]:
-    """Return the exact ``gruff.summary.v3`` projection for the summary command.
+    """Return the exact gruff.summary.v3 projection for the summary command.
 
     Args:
         report: Analysis report to summarise.
@@ -32,7 +32,7 @@ def summary_payload(
         group_by: Text-only grouping mode retained in the shared command signature.
 
     Returns:
-        Canonical analysis payload with only ``findings`` removed.
+        Canonical analysis payload without findings and with schemaVersion set to gruff.summary.v3.
     """
     del top, elapsed_seconds, group_by
     return report.to_summary_dict()
@@ -94,28 +94,23 @@ def summary_text(
 ) -> str:
     """Render the summary command's text output.
 
-    Sensitive exclusions filter this command's findings, so the audit section ``analyse`` prints is
-    rendered below the canonical block through the same helper: FAMILY-CONTRACT.md (search:
-    ``**Where the audit must appear**``) forbids filtering a surface without publishing its count
-    there.
+    FAMILY-CONTRACT.md requires the audit of sensitive exclusions here because those exclusions filter this command's findings.
 
     Args:
-        report: Analysis report to summarise.
-        top: Row cap applied to ``topRules`` / ``topFiles`` / ``groupedRules``.
+        report: Completed scan supplying the score, finding counts, diagnostics and sensitive-exclusion audit.
+        top: Row cap for the top rules, top files and grouped rule counts.
         elapsed_seconds: Wall-clock duration of the underlying analyse run.
-        group_by: ``"rule"`` to render the ``Grouped by rule`` block in place
-            of the default ``Top rules`` block.
+        group_by: The value "rule" replaces the default Top rules block with Grouped by rule.
 
     Returns:
-        Multi-line text payload ending in a single trailing newline.
+        Multiline summary text with a newline appended after the rendered lines.
     """
     payload = _text_summary_payload(report, top, elapsed_seconds, group_by=group_by)
     summary = payload["summary"]
     counts = report.finding_counts()
     paths_display = ", ".join(summary["paths"]) if summary["paths"] else "(none)"
-    # FAMILY-CONTRACT section 1: masthead, then the two-line composite block, then the scan card.
-    # `summary` and `analyse` lead with the same three lines so a reader moving between the two views
-    # never has to hunt for the grade in a different place.
+    # FAMILY-CONTRACT section 1 fixes the masthead and two-line composite block above the scan details.
+    # The grade stays in the same position in summary and analyse so readers can find it in either view.
     composite = None if report.score is None else report.score.composite
     lines = [
         f"{TOOL_NAME} {report.tool_version} summary",
@@ -181,11 +176,9 @@ def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
 
 
 def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:
-    """Build the canonical per-pillar summary rows sorted by findings DESC, pillar ASC.
+    """Build applicable pillar rows ordered by descending finding count, then pillar name.
 
-    Sources grade/score/per-severity data from the ``ScoreReport`` attached to
-    *report* when available; falls back to per-finding counts otherwise.
-    Only applicable pillars appear in the returned list.
+    Use attached score data or fall back to per-finding counts; unavailable grades and scores are None.
 
     Args:
         report: Analysis report to summarise.
@@ -273,6 +266,9 @@ def _append_summary_hints(lines: list[str], summary: dict[str, Any]) -> None:
     Args:
         lines: Rendered summary lines to extend in place; unchanged when neither hint applies.
         summary: Aggregate fields whose ignored/findings counts select hints and whose paths build the baseline command.
+
+    Returns:
+        None; applicable hints are appended to lines in place.
     """
     hints: list[str] = []
     if summary["ignored"]:

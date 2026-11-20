@@ -45,19 +45,17 @@ class AttributeCountRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit one finding per class whose attribute count exceeds the threshold.
+        """Report non-exempt classes whose distinct attribute count exceeds the configured threshold.
 
-        Attribute names are deduplicated, so a class-level annotation that
-        is re-assigned in ``__init__`` counts once. Tuple-target unpacking
-        in ``__init__`` (``self.a, self.b = ...``) is supported.
+        Test, known framework-base and dataclass-style classes are skipped; repeated attribute names count once.
+        Assignments on self inside __init__ include tuple and list unpacking.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Source file to inspect; a missing AST produces no findings.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            One finding per ``ClassDef`` whose deduped attribute count is
-            over threshold.
+            Findings for non-exempt classes above their configured threshold; empty when no class qualifies.
         """
         if unit.tree is None:
             return []
@@ -143,15 +141,14 @@ def _collect_attributes(cls: ast.ClassDef) -> set[str]:
 
 
 def _class_body_names(stmt: ast.AST) -> set[str]:
-    """Collect the attribute names that one class-body statement binds by assigning or annotating a bare name.
+    """Collect bare names that the attribute count includes from one class-body assignment or annotation.
 
     Args:
         stmt: One statement from the class body. Only an annotated assignment to a single name, with or without a value, and a plain assignment are
             inspected; every other statement contributes nothing.
 
     Returns:
-        The names the statement binds directly, including each name in a chained assignment; empty for other statement kinds and for tuple-unpacking,
-        attribute or subscript targets.
+        Bare names from the statement's targets, including any bare names in a chain with other target shapes. Empty if no bare name qualifies.
     """
     if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
         return {stmt.target.id}
@@ -194,6 +191,9 @@ def _collect_self_attribute(target: ast.AST, names: set[str]) -> None:
         target: One assignment target. A self.<name> attribute contributes its name, a tuple or list is searched element by element, and anything
             else, including a starred element or a deeper chain such as self.a.b, is ignored.
         names: The attribute-name set being built for the current __init__ method; it is mutated in place with each matched name.
+
+    Returns:
+        None; matching attribute names are added to names in place.
     """
     if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
         names.add(target.attr)
@@ -209,7 +209,7 @@ def _format_number(value: int | float) -> str:
         value: The threshold to render, as an int or a float.
 
     Returns:
-        The float's str form when it has a fractional part, otherwise the value as an integer string, so 15.0 renders as 15.
+        Integer text for integers and finite whole-number floats, so 15.0 renders as 15. Other floats use their usual Python text.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

@@ -34,16 +34,14 @@ _IGNORED_TOKEN_TYPES = frozenset(
 
 
 def code_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
-    """Return the physical line numbers of a file that carry code.
+    """Return physical lines containing code or data.
 
-    A line is left out when it is blank, holds only a ``#`` comment, belongs to a PEP 257 docstring (the first
-    statement of a module, class or function body), or belongs to a decorator. String literals used as data keep
-    counting. Docstring and decorator lines are found from *tree*, so they count when *tree* is None; source that
-    cannot be tokenized falls back to leaving out blank and visibly commented lines.
+    Comment and layout tokens do not count; an available AST also excludes docstrings and decorator lines.
+    Tokenization failures keep nonblank lines except full-line comments, then remove any AST-known decorator lines.
 
     Args:
         source: Full source text of the analysed file.
-        tree: Parsed AST for the same source, or None for text files and parse failures.
+        tree: AST for the same source, or None; an AST's _gruff_code_lines cache is reused or populated.
 
     Returns:
         One-based line numbers that hold code or data.
@@ -59,35 +57,33 @@ def code_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
 
 
 def lines_for_size(node: LineCountableNode, code_lines: frozenset[int]) -> int:
-    """Return how many code lines a node spans, from its ``def``, ``class`` or ``lambda`` line to its end line.
+    """Return how many code lines a node spans, from its def, class or lambda line to its end line.
 
     Decorators sit above that start line and decorator lines inside the span are not code lines, so neither counts.
 
     Args:
         node: Function, class, async function, or lambda node to measure.
-        code_lines: The file's code lines, from ``code_line_numbers``.
+        code_lines: The file's code lines, from code_line_numbers.
 
     Returns:
-        Number of code lines in the node's span; at least 1 for a node whose end line is unknown.
+        Number of code lines in the node's span. A node with no end line counts as one line.
     """
     end = node.end_lineno
     if end is None:
-        # Defensive: Python >= 3.8 always populates end_lineno on nodes returned by ast.parse().
+        # A node with no end line still contributes one line to the size metric.
         return 1
     return sum(1 for line in range(node.lineno, end + 1) if line in code_lines)
 
 
 def logical_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
-    """Return the start line of every logical line of code in a file.
+    """Return the first code line of each tokenizer logical line.
 
-    A logical line is what the tokenizer ends with a NEWLINE token: one statement, or one compound-statement header,
-    however many physical lines its literals, calls or brackets span. A logical line made only of a docstring or a
-    decorator is left out, as ``code_line_numbers`` leaves those lines out. Source that cannot be tokenized falls back
-    to the code lines themselves.
+    Multiline expressions count once. With successful tokenization, a supplied AST excludes docstring-only and decorator-only lines.
+    Tokenization failures return physical code lines without populating the logical-line cache.
 
     Args:
         source: Full source text of the analysed file.
-        tree: Parsed AST for the same source, or None for text files and parse failures.
+        tree: AST for the same source, or None to keep docstring and decorator lines. A supplied tree can reuse or populate both line caches.
 
     Returns:
         One-based line numbers where a logical line of code starts.
@@ -109,7 +105,6 @@ def logical_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
                 starts.add(first_code_line)
             first_code_line = None
             continue
-        # The logical line starts at its first token that sits on a code line.
         if first_code_line is None and token.type not in _IGNORED_TOKEN_TYPES and token.start[0] in code_lines:
             first_code_line = token.start[0]
     lines = frozenset(starts)
@@ -119,19 +114,19 @@ def logical_line_numbers(source: str, tree: ast.AST | None) -> frozenset[int]:
 
 
 def logical_lines_for_size(node: LineCountableNode, logical_lines: frozenset[int]) -> int:
-    """Return how many logical lines start in a node's span, from its ``def`` or ``lambda`` line to its end line.
+    """Count logical-line starts from a node's opening line through its end line.
 
     Args:
-        node: Function, async function, or lambda node to measure.
-        logical_lines: The file's logical-line starts, from ``logical_line_numbers``.
+        node: Definition or lambda whose span is measured.
+        logical_lines: The file's logical-line starts, from logical_line_numbers.
 
     Returns:
-        Number of logical lines that start in the node's span; at least 1, since a lambda inside a longer statement
-        starts no logical line of its own.
+        Number of logical-line starts in the span, with a minimum of one for nodes such as inline lambdas that have no start of their own.
+        A node with no end line also counts as one.
     """
     end = node.end_lineno
     if end is None:
-        # Defensive: Python >= 3.8 always populates end_lineno on nodes returned by ast.parse().
+        # A node with no end line still contributes one logical line to the size metric.
         return 1
     return max(1, sum(1 for line in range(node.lineno, end + 1) if line in logical_lines))
 
@@ -143,17 +138,16 @@ def fallback_code_line_count(source: str) -> int:
         source: Source text, possibly invalid or truncated.
 
     Returns:
-        Nonblank lines that are not full-line ``#`` comments.
+        Number of nonblank lines whose first non-whitespace character is something other than #.
     """
     return len(_fallback_code_lines(source))
 
 
 def _token_code_lines(source: str, tree: ast.AST | None) -> frozenset[int]:
-    """Find the physical lines that hold a token other than a comment, a layout token or a docstring.
+    """Find physical lines containing code or data tokens, excluding comments, layout and recognised docstrings.
 
-    A token that spans several lines, such as a multi-line string, marks every line it covers. Whitespace-only error tokens do not count. Decorator
-    lines are left in; code_line_numbers removes them afterwards. Source that cannot be tokenized falls back to _fallback_code_lines, where docstring
-    lines count.
+    Multiline tokens count on every covered line; whitespace-only error tokens do not count.
+    Decorator lines remain for code_line_numbers to remove; tokenization failures use _fallback_code_lines, where docstrings count.
 
     Args:
         source: Full source text of the analysed file.
@@ -223,7 +217,7 @@ def _docstring_source_spans(
         source_lines: Source without newline terminators, used to normalize byte columns.
 
     Returns:
-        Start/end positions that enclose only conventional docstring tokens.
+        Start/end line and character-column pairs enclosing docstring expressions; empty when tree is None or no docstrings are found.
     """
     if tree is None:
         return ()
@@ -281,11 +275,9 @@ def _is_inside_docstring_span(
 
 
 def qualified_symbol(node: ast.AST, parents: list[ast.AST]) -> str:
-    """Return a qualified dotted name using a node's parent chain.
+    """Return the dotted symbol used by size-rule findings.
 
-    Used by size rules so findings carry a stable `symbol` field
-    (e.g. ``ClassA.method_b`` or ``module_func``). The parents list is the
-    parent AST chain from outermost (Module) to innermost (immediate parent).
+    Named ancestors precede the node name; a lambda adds a marker containing its source line.
 
     Args:
         node: AST node whose symbol should be rendered.
@@ -308,19 +300,15 @@ def qualified_symbol(node: ast.AST, parents: list[ast.AST]) -> str:
 
 
 def parent_chain(node: ast.AST) -> list[ast.AST]:
-    """Walk parent links upward and return the ancestor chain.
+    """Return ancestors in outermost-to-immediate-parent order, excluding the supplied node.
 
-    Walks `parent` links from a node and returns ancestors
-    from outermost (closest to module) to immediate parent (excluding *node*).
-
-    Requires the parser to have attached `parent` attributes (the gruff-py
-    parser does this in `_attach_parents`).
+    Parent links come from the parser's _attach_parents pass; a missing parent link ends the walk.
 
     Args:
         node: AST node whose ancestors should be returned.
 
     Returns:
-        Ancestor chain from module-adjacent parent to immediate parent.
+        Ancestors including the module when linked; an empty list when node has no parent link.
     """
     chain: list[ast.AST] = []
     current = getattr(node, "parent", None)

@@ -49,14 +49,15 @@ class DataclassAttributesRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze dataclass definitions for missing payload documentation.
+        """Analyze dataclass and attrs class definitions for missing payload documentation.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context with dataclass documentation options.
 
         Returns:
-            Findings for public dataclasses with undocumented field payloads.
+            Findings for public classes with a recognized dataclass or attrs decorator that lack required field documentation.
+            Empty when the tree is absent or no class qualifies.
         """
         if unit.tree is None:
             return []
@@ -120,9 +121,8 @@ def _positive_int(value: Any, *, fallback: int) -> int:
 def _dataclass_fields(node: ast.ClassDef) -> tuple[str, ...]:
     """Collect the public names a class body assigns directly, skipping annotations whose leaf name is ClassVar.
 
-    Only top-level body statements count: annotated assignments to a bare name, with or without a value, and plain assignments with a single bare-name
-    target. Names that is_public rejects are dropped. A quoted ClassVar annotation is not skipped, because _annotation_leaf returns an empty name for
-    string annotations. This function does not check for a dataclass decorator; _should_report does that.
+    Include bare-name annotated assignments and single-target plain assignments, retaining only names accepted by is_public.
+    String annotations do not exclude ClassVar fields; _should_report checks the class decorator.
 
     Args:
         node: Class definition whose direct body statements are scanned.
@@ -178,9 +178,8 @@ def _should_report(
 ) -> bool:
     """Decide whether a public dataclass- or attrs-decorated class with enough fields lacks field documentation.
 
-    A class is eligible when is_public accepts its name, has_dataclass_decorator matches the leaf name of one of its decorators, and it has at least
-    min_fields fields. An eligible class is reported when its docstring documents none of its fields, or, with require_all_fields set, when the
-    documented set differs from the field set.
+    Eligibility requires is_public and has_dataclass_decorator to accept the class and at least min_fields fields.
+    Report eligible classes with no documented fields, or any missing field when require_all_fields is true.
 
     Args:
         node: Class definition under test; its name, decorators and docstring are read.
@@ -213,9 +212,7 @@ def _documented_fields(
 ) -> tuple[str, ...]:
     """Return fields documented by Sphinx entries, Attributes sections, or bullets.
 
-    The three syntaxes are collected independently so the section-tracking
-    state for Google-style ``Attributes:`` blocks does not obscure the simpler
-    Sphinx and bullet matchers.
+    Collect the enabled syntaxes independently so Attributes section tracking does not obscure Sphinx entries or bullet matches.
 
     Args:
         docstring: Raw class docstring from extract_docstring; None or an empty string yields no documented fields.
@@ -257,9 +254,8 @@ def _sphinx_documented_fields(docstring: str, field_set: set[str]) -> tuple[str,
 def _attribute_section_fields(docstring: str, field_set: set[str]) -> tuple[str, ...]:
     """Collect field names that start a line inside an attributes section of a docstring.
 
-    _is_attribute_section_header opens the section and _is_attribute_section_exit closes it; the closing line itself is not checked for a field, blank
-    lines inside the section are skipped, and a later header line reopens it. A line counts when _FIELD_PATTERN matches a field name at the start of
-    the stripped line followed by a colon, an opening parenthesis, a hyphen or the end of the line.
+    Headers open or reopen a section; _is_attribute_section_exit closes it before field matching, and blank lines are skipped.
+    Match a leading field name followed by a colon, opening parenthesis, hyphen or end of line in the stripped text.
 
     Args:
         docstring: Non-empty raw docstring text, scanned line by line.
@@ -326,8 +322,8 @@ def _is_attribute_section_exit(raw_line: str, stripped: str) -> bool:
         stripped: The same line with surrounding whitespace removed; the caller never passes an empty value.
 
     Returns:
-        True when the raw line starts with neither a space nor a tab and is not made only of hyphens, so an unindented hyphen underline keeps the
-        section open.
+        True when the raw line starts with neither a space nor a tab and the stripped text contains a character other than a hyphen.
+        An unindented hyphen underline keeps the section open.
     """
     return not raw_line.startswith((" ", "\t")) and not set(stripped) <= {"-"}
 
@@ -360,9 +356,8 @@ def _dataclass_attributes_finding(
 ) -> Finding:
     """Build the finding for a reported class, recording its documented and missing public fields.
 
-    The message names the qualified symbol and the total public field count from fields, not the missing count. Metadata records fieldCount,
-    documentedFields and missingFields, where missingFields lists the fields absent from documented_fields in field order. Severity, pillar, tier and
-    confidence come from definition, and the finding spans node from its lineno to its end_lineno.
+    The message and fieldCount use the total field count; missingFields preserves fields order after excluding documented_fields.
+    Metadata also records documentedFields; rule attributes come from definition, and the line span comes from node.
 
     Args:
         unit: Analysed file whose display path is recorded on the finding.

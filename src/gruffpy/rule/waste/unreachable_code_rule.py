@@ -26,10 +26,7 @@ class UnreachableCodeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unreachable-code rule as a high-confidence dead-code warning.
 
-        High confidence because the rule only matches structural terminators
-        (``return``, ``raise``, ``break``, ``continue``) and syntactically
-        literal conditions; runtime-dependent branches stay clean because
-        only ``ast.Constant`` tests qualify.
+        High confidence comes from structural terminators and literal ast.Constant conditions; dynamic condition expressions are not evaluated.
 
         Returns:
             Definition for the unreachable-code rule under the dead-code pillar.
@@ -44,19 +41,16 @@ class UnreachableCodeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag statements after a terminator, plus literal-condition dead branches.
+        """Flag the first statement after a terminator in each supported block and the first statement of each dead literal-condition branch.
 
-        Walks every statement block (function bodies, if/else, loop bodies,
-        try handlers, match cases) and reports the first statement after a
-        ``return``/``raise``/``continue``/``break``. Also catches the dead
-        side of ``if True:`` / ``if False:`` / ``while False:``.
+        Supported blocks exclude try-star statements; literal conditions are limited to ast.Constant nodes.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unreachable statement (at most one per terminator block).
+            Findings for detected unreachable statements; empty when the AST is absent, no candidate keyword occurs, or nothing qualifies.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -200,12 +194,9 @@ def _literal_condition_findings(
     unit: AnalysisUnit,
     definition: RuleDefinition,
 ) -> list[Finding]:
-    """Detect statements unreachable due to a syntactically-literal condition.
+    """Find the first statement of each nonempty branch made unreachable by an ast.Constant condition.
 
-    Covers ``if <literal-false>:``, ``while <literal-false>:``, and the ``else``
-    branch of ``if <literal-true>:``. Only ``ast.Constant`` tests qualify;
-    dynamic names, calls, comparisons, and boolean operations stay clean so
-    runtime-dependent conditions don't get flagged.
+    False conditions select if and while bodies; true conditions select if else branches. Dynamic expressions are not evaluated.
 
     Args:
         unit: Parsed source with a non-None AST; its display path is attached to each finding.
@@ -234,7 +225,7 @@ def _literal_condition_findings(
 
 
 def _is_literal_truthy(test: ast.expr) -> bool | None:
-    """Return the truth value of *test* if it's a syntactic constant; else None.
+    """Return the truth value of test if it's a syntactic constant; else None.
 
     Args:
         test: Condition expression to classify; only an ast.Constant is evaluated for truthiness.

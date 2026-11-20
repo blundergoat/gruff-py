@@ -39,9 +39,8 @@ class FileScore:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the native per-file score row.
 
-        `penalty` is rounded to two decimals so PHP and Python comparisons
-        remain stable. The v3 machine adapter normalizes the offender path and
-        optional fields.
+        Grade is None when no files were evaluated; unavailable metric maxima and mutation scores remain None.
+        Penalty is rounded to two decimals; the v3 adapter normalizes the path and omits absent optional metrics.
 
         Returns:
             JSON-ready native score fields and metric maxima.

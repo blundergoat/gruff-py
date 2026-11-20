@@ -100,29 +100,30 @@ class BaselineEntry:
 
     @classmethod
     def from_dict(cls, row: dict[str, Any], index: int) -> BaselineEntry:
-        """Rebuild one reviewed row, refusing anything that could expire on an edit or leak a finding's text.
+        """Restore a reviewed occurrence for durable matching while rejecting legacy position, message and classification fields.
 
         Args:
-            row: Decoded occurrence object; a hand-edited file may carry anything at all.
+            row: Decoded occurrence with an identity and count for matching and optional ruleId, path and subject labels.
             index: Zero-based position, named in the error so the user can find the row.
 
         Returns:
-            Validated row ready to match against live findings.
+            Validated entry ready to match against live findings. Missing or non-string labels become empty strings.
 
         Raises:
-            BaselineError: When the identity is not 16 hex characters, the count is below one, or a forbidden key is present.
+            BaselineError: When identity is not 16 lowercase hex characters, count is not a positive non-boolean integer,
+                or a forbidden key is present.
         """
         identity = row.get("identity")
-        # An identity that is not the ratified digest shape cannot have come from a generator, so the row is refused.
+        # Reject malformed identities so a bad row cannot silently fail to match a reviewed finding.
         if not isinstance(identity, str) or len(identity) != 16 or any(character not in "0123456789abcdef" for character in identity):
             raise BaselineError(f"Baseline occurrences[{index}].identity must be 16 lowercase hex characters.")
 
         count = row.get("count")
-        # A count below one would mean a reviewed identity that suppresses nothing, which is a hand edit gone wrong.
+        # A reviewed row with a count below one would suppress no findings.
         if not isinstance(count, int) or isinstance(count, bool) or count < 1:
             raise BaselineError(f"Baseline occurrences[{index}].count must be a positive integer.")
 
-        # A positional or re-classifiable field is how a 0.5 baseline expired on every edit, so its presence fails the file.
+        # Position, message and classification fields are rejected so a stored review depends on its durable identity and count.
         for forbidden in _FORBIDDEN_OCCURRENCE_KEYS:
             if forbidden in row:
                 raise BaselineError(f'Baseline occurrences[{index}] carries forbidden key "{forbidden}".')
@@ -172,15 +173,15 @@ class BaselineData:
         """Index the reviewed rows for matching.
 
         Returns:
-            Every row keyed by its identity; empty when the baseline accepted nothing.
+            Rows keyed by identity, keeping the last row for a duplicate identity; empty when there are no entries.
         """
         return {entry.identity: entry for entry in self.entries}
 
     def sensitive_total(self) -> int:
-        """Count the sensitive findings this file recorded without storing.
+        """Total the per-rule counts recorded without storing sensitive finding details.
 
         Returns:
-            Total across every rule; zero when the scan found no secrets.
+            Total of the recorded counts across all rules, or zero when no counts are available.
         """
         return sum(self.sensitive_by_rule.values())
 
@@ -304,7 +305,14 @@ class BaselineStore:
     """
 
     def __init__(self, project_root: str | Path) -> None:
-        """Anchor baseline paths to the project being analysed."""
+        """Anchor baseline paths to the project being analysed.
+
+        Args:
+            project_root: Project directory used to anchor relative baseline paths.
+
+        Returns:
+            None.
+        """
         self._project_root = Path(project_root)
 
     def read(self, path: str | Path) -> BaselineData:
@@ -317,7 +325,7 @@ class BaselineStore:
             Parsed baseline ready to match against this run's findings.
 
         Raises:
-            BaselineError: When the file is missing, unreadable, malformed, a 0.5 layout, or written by another port.
+            BaselineError: When the file is missing, unreadable, malformed, or uses an unsupported schema.
         """
         display_path = _display_path(path)
         payload = self._decode(path)
@@ -329,7 +337,7 @@ class BaselineStore:
                 f'Baseline schema "{schema}" is a 0.5 baseline. Migrate it to a separate file with '
                 f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline <new path>`; the original is preserved."
             )
-        # Any other schemaVersion is a pre-0.6 document, and every one of them takes the same route forward.
+        # Unsupported or missing schemas are refused; the diagnostic points older files to the migration command.
         if schema != BASELINE_SCHEMA_VERSION:
             raise BaselineError(
                 f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}"; carry an older file\'s reviews forward '
@@ -338,7 +346,7 @@ class BaselineStore:
             )
 
         tool_language = payload.get("toolLanguage")
-        # A baseline names its writer, so another port's file is refused instead of reporting every row resolved.
+        # Missing or empty writer names are refused; apply_baseline separately checks whether the named port matches this run.
         if not isinstance(tool_language, str) or not tool_language:
             raise BaselineError("Baseline toolLanguage must name the port that wrote the file.")
 
@@ -359,14 +367,14 @@ class BaselineStore:
 
         Args:
             path: Destination relative to the project root, or absolute.
-            findings: Findings to record; sensitive ones are counted by rule and never stored.
+            findings: Scan findings to record. Sensitive findings contribute only counts by rule. Other findings with # in their symbols are skipped.
             declaration_position: Declaration resolver from the runner; ``None`` ranks by line, as a direct API call does.
 
         Returns:
-            The file just written, including the sensitive counts it recorded rather than stored.
+            Baseline data for the written file, including its display path, reviewed entries, and recorded sensitive counts.
 
         Raises:
-            BaselineError: When a finding cannot be named, or the file cannot be written.
+            BaselineError: When identity construction fails or the baseline file cannot be written.
         """
         data = _document_from_findings(findings, declaration_position)
         absolute_path = self._absolute_path(path)
@@ -402,10 +410,11 @@ class BaselineStore:
             declaration_position: Declaration resolver from the runner; ``None`` ranks by line.
 
         Returns:
-            What was written and how much of the 0.5 file's review carried across.
+            The written baseline, the number of findings accepted by the 0.5 baseline, and the number of sensitive findings tallied.
 
         Raises:
-            BaselineError: When the input is missing or not a 0.5 baseline, the two paths are one file, or the write fails.
+            BaselineError: When the input cannot be read or is not a 0.5 baseline, the paths name one file, writing fails,
+                or the input bytes change during migration.
         """
         absolute_input = self._absolute_path(input_path)
         self._require_distinct_paths(absolute_input, self._absolute_path(output_path))
@@ -462,12 +471,15 @@ class BaselineStore:
             output_path: Where the migrated baseline will be written, as _absolute_path returned it; the same-file check runs only when both files
                 already exist.
 
+        Returns:
+            None. Verifies that the migration output is separate from the input.
+
         Raises:
             BaselineError: When both paths resolve to the same location, or both exist and are the same file on disk, as a hard link makes them.
         """
         if input_path.resolve() == output_path.resolve():
             raise BaselineError(f"Migration output must be a different file from its input: {input_path}")
-        # A symlink or a hard link would make the "different" output the same bytes, destroying the retreat path.
+        # Two existing paths can resolve to different names and still refer to the same file through a hard link.
         if output_path.exists() and input_path.exists() and os.path.samefile(input_path, output_path):
             raise BaselineError(f"Migration output must be a different file from its input: {input_path}")
 
@@ -532,10 +544,10 @@ def generate_baseline(
 ) -> BaselineReport:
     """Persist the current findings as the user's accepted debt.
 
-    Findings stay visible on the generating run; the report confirms what was written and what was only counted.
+    The report counts written entries and sensitive findings separately, with zero baseline suppressions. Other report filters still apply.
 
     Args:
-        project_root: Resolved project root used for display paths.
+        project_root: Project root that anchors a relative destination and determines its display path.
         path: Destination baseline file, relative or absolute.
         findings: Findings to record as the new baseline.
         declaration_position: Declaration resolver from the runner; ``None`` ranks by line.
@@ -563,17 +575,17 @@ def migrate_baseline(
     findings: Sequence[Finding],
     declaration_position: Callable[[Finding], int] | None = None,
 ) -> BaselineReport:
-    """Carry a 0.5 baseline's reviews into a new file and report what came across.
+    """Carry reviews from a 0.5 baseline into a new file when they still match this scan.
 
     Args:
-        project_root: Resolved project root used for display paths.
+        project_root: Project root that anchors relative input and output paths and determines the report's display path.
         input_path: The 0.5 baseline to read; it is left byte-identical.
-        output_path: Where the migrated baseline is written.
+        output_path: Destination for the migrated baseline. It must name a different file from input_path.
         findings: This run's findings, from which the new identities are computed.
         declaration_position: Declaration resolver from the runner; ``None`` ranks by line.
 
     Returns:
-        Report describing the migrated baseline.
+        Report with the written entry and sensitive finding counts. Both are zero when no legacy review matches.
     """
     migration = BaselineStore(project_root).migrate(input_path, output_path, findings, declaration_position)
     return BaselineReport(
@@ -597,15 +609,11 @@ def apply_baseline(
     declaration_position: Callable[[Finding], int] | None = None,
 ) -> BaselineApplyResult:
     """Separate the debt a user already reviewed from the findings they still need to act on.
-
-    Each live finding is classified in this order: a sensitive finding is never eligible, an identity covering two
-    declarations is a collision that hides nothing, occurrences within the reviewed count are unchanged, and the
-    rest are new. Partial scans leave resolved debt unjudged, because an unmatched row may simply belong to a file
-    this run never opened.
+    Findings without identities and collisions stay visible; reviewed counts hide unchanged debt, and partial scans leave resolved debt unjudged.
 
     Args:
-        project_root: Resolved project root used for display paths.
-        path: Baseline file to read.
+        project_root: Project root used to locate a relative baseline and display its path.
+        path: Baseline file to read, either absolute or relative to project_root.
         findings: Live findings to classify.
         source: Origin label recorded on the report (``explicit``/``default``).
         scan_scope: ``full-project`` when the run covered the whole project, ``partial-scope`` when paths narrowed it.
@@ -615,10 +623,10 @@ def apply_baseline(
         The gated findings, the report, and every collision the run must name.
 
     Raises:
-        BaselineError: When the baseline cannot be read, or was written by another port.
+        BaselineError: When the baseline cannot be read or validated, was written by another port, or constructing a finding identity fails.
     """
     baseline = BaselineStore(project_root).read(path)
-    # A baseline written by another port would report every row resolved and invite a destructive regenerate.
+    # Reviews are port-specific, so reject a foreign baseline before using its rows to classify findings.
     if baseline.tool_language != TOOL_LANGUAGE:
         raise BaselineError(
             f"Baseline {baseline.path} was written by {baseline.tool_language} and this run is {TOOL_LANGUAGE}; "
@@ -629,7 +637,7 @@ def apply_baseline(
     groups = _group_by_identity(findings, identities)
     statuses = _classify(findings, identities, groups, baseline.by_identity())
     gated, counts = _partition(findings, statuses)
-    # Only a full scan proves reviewed debt was fixed; a narrowed run never opened the other files.
+    # A partial scan can miss findings outside its scope, so only a full scan counts unmatched reviews as resolved.
     resolved_entries, resolved_occurrences = _resolved_surplus(baseline, groups, statuses) if scan_scope == "full-project" else ((), 0)
 
     return BaselineApplyResult(
@@ -653,21 +661,22 @@ def apply_baseline(
 
 
 def require_overwritable_default_path(project_root: str | Path, path: str | Path, force: bool) -> None:
-    """Refuse to write a baseline over a 0.5 file at the shared default path.
+    """Check whether an existing baseline can be overwritten at the conventional filename.
 
-    All five ports write and auto-discover the same filename, so without this an ordinary upgrade-then-generate
-    destroys the 0.5 baseline that is the user's documented retreat path, before they know they need it.
-    Regenerating v3 over v3 is not destructive, because v3 is what the tool now reads.
+    A version 0.5 baseline is left alone rather than destroyed unless the caller forces the write, preserving the rollback copy.
 
     Args:
-        project_root: Resolved project root the destination is relative to.
+        project_root: Base directory used when the destination path is relative.
         path: Destination the user asked to generate.
-        force: True when the user passed ``--force`` and means to overwrite the older file.
+        force: Whether to skip the overwrite check at the user's request.
+
+    Returns:
+        None. Checks the existing destination before the caller writes a baseline.
 
     Raises:
-        BaselineError: When the default path already holds a file this version would not read.
+        BaselineError: When an unforced write targets the conventional filename and its existing JSON object has a noncurrent schema string.
     """
-    # Any other destination is the user's own choice of file, and any v3 file is what this version already reads.
+    # The caller can bypass overwrite protection by forcing the write or choosing a different filename.
     if force or Path(path).name != DEFAULT_BASELINE_FILENAME:
         return
     absolute_path = Path(path) if Path(path).is_absolute() else Path(project_root) / path
@@ -676,7 +685,7 @@ def require_overwritable_default_path(project_root: str | Path, path: str | Path
         return
     try:
         existing = json.loads(absolute_path.read_text(encoding="utf-8"))
-    # For example, a hand-edited or truncated file cannot be classified, so it is left alone rather than destroyed.
+    # A read error, invalid UTF-8 or malformed JSON leaves no confirmed schema mismatch to report, so the caller can still attempt the write.
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return
     schema = existing.get("schemaVersion") if isinstance(existing, dict) else None
@@ -696,7 +705,7 @@ def default_baseline_path(project_root: str | Path) -> Path:
         project_root: Project root that anchors the default baseline filename.
 
     Returns:
-        Absolute path to the conventional ``gruff-baseline.json`` location.
+        Path to gruff-baseline.json beneath project_root; it is absolute only when project_root is absolute.
     """
     return Path(project_root) / DEFAULT_BASELINE_FILENAME
 
@@ -748,7 +757,7 @@ def _group_by_identity(findings: Sequence[Finding], identities: Sequence[Finding
     groups: dict[str, _IdentityGroup] = {}
     for index, finding in enumerate(findings):
         named = identities[index]
-        # A sensitive finding has no identity, so it joins no group and no reviewed row can ever reach it.
+        # Skip findings without identities so reviewed rows cannot suppress secrets or findings with the ordinal separator in their symbols.
         if named is None:
             continue
         group = groups.setdefault(
@@ -794,7 +803,7 @@ def _classify(
             continue
         reviewed = reviewed_by_identity.get(identity)
         reviewed_count = reviewed.count if reviewed is not None else 0
-        # The reviewed count is spent lowest line first, so two ports hide the same occurrences and not merely the same number.
+        # Spend the reviewed count on the earliest locations first, with unlocated findings sorted last. Ties keep scan order.
         for position, index in enumerate(sorted(group.indexes, key=lambda item: _spend_order(findings[item]))):
             statuses[index] = "unchanged" if position < reviewed_count else "new"
     return statuses
@@ -827,7 +836,7 @@ def _partition(findings: Sequence[Finding], statuses: Sequence[str]) -> tuple[li
     counts = {"new": 0, "unchanged": 0, "collision": 0, "notEligible": 0}
     for finding, status in zip(findings, statuses, strict=True):
         counts[status] += 1
-        # Only an unchanged finding leaves the gated set; a collision or a secret stays visible and still fails the run.
+        # Only unchanged findings leave the gated set; collisions and sensitive findings remain for severity-threshold evaluation.
         if status != "unchanged":
             gated.append(finding)
     return gated, counts
@@ -990,14 +999,15 @@ def _row_text(row: dict[str, Any], key: str) -> str | None:
         key: Matching field to read from that occurrence.
 
     Returns:
-        Nonempty field text, or None if the field is absent, empty, or not a string.
+        Nonempty field text, or None if the field is absent, empty, or not a string. None for a symbol or message removes that matching constraint.
+        A row without a rule ID or a usable path cannot match.
     """
     value = row.get(key)
     return value if isinstance(value, str) and value else None
 
 
 def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
-    """Restore every reviewed row from a validated v3 document.
+    """Validate and restore the reviewed rows after the baseline version check.
 
     Args:
         payload: Decoded v3 baseline root whose schemaVersion has already been checked; only its occurrences list is read here.
@@ -1015,7 +1025,7 @@ def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
         raise BaselineError('Baseline key "occurrences" must be a list.')
     entries: list[BaselineEntry] = []
     for index, row in enumerate(rows):
-        # Each reviewed occurrence must be an object; anything else is a hand edit that cannot be matched.
+        # Reject the baseline if a non-object row cannot supply the identity and count needed for matching.
         if not isinstance(row, dict):
             raise BaselineError(f"Baseline occurrences[{index}] must be a JSON object.")
         entries.append(BaselineEntry.from_dict(row, index))
@@ -1086,6 +1096,9 @@ def _atomic_write_text(path: Path, text: str) -> None:
             one filesystem.
         text: The complete serialised baseline, written as UTF-8 before it replaces the destination.
 
+    Returns:
+        None. Writes and syncs the staged text, then replaces the destination.
+
     Raises:
         Exception: Any failure while writing, syncing or replacing the staging file, typically an OSError such as a full disk, is re-raised unchanged
             after an attempt to remove the staging file, leaving the destination as it was.
@@ -1097,7 +1110,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(staging_path, path)
-    # For example, a full disk can fail after staging; remove the partial file and keep the original intact.
+    # A full disk can interrupt staging, so try to remove the temporary file and leave the destination intact.
     except Exception:
         # A cleanup failure must not hide the write error the user needs to act on.
         with suppress(OSError):
@@ -1112,23 +1125,23 @@ def _display_path(path: str | Path) -> str:
         path: Baseline path as the user gave it, or the project-relative or absolute form that _report_path chose to show.
 
     Returns:
-        The path text with backslashes turned into forward slashes, so Windows and POSIX runs print the same; it is not made relative or resolved.
+        Path text using forward slashes on both Windows and POSIX, with no relativisation or resolution.
     """
     return str(path).replace("\\", "/")
 
 
 def _report_path(project_root: Path, requested: str | Path, absolute_path: Path) -> str:
-    """Choose the shortest stable baseline path to show in analysis output.
+    """Choose the baseline path label to show in analysis output.
 
     Args:
-        project_root: Store's project root, which an absolute selection is shown relative to when it lies inside it.
+        project_root: Store's project root used to shorten absolute selections that share its path prefix.
         requested: Baseline path as the user selected it; a relative one is shown as given, with backslashes turned into forward slashes.
-        absolute_path: The selection as _absolute_path returned it; it is read only when the requested path is absolute, so it is that path unchanged
-            and may lie outside the project root.
+        absolute_path: The Path returned by _absolute_path, used only for absolute selections. It may lie outside the project root.
 
     Returns:
-        Forward-slash display path: the user's relative path as given, a project-relative path for an absolute selection inside the project, or the
-        full absolute path for a baseline outside it.
+        Forward-slash display path. Relative selections retain their spelling apart from slash direction.
+        An absolute selection is shown relative to the project root if it starts with that root's path components, or in full otherwise.
+        The comparison does not resolve symlinks or parent-directory segments.
     """
     requested_path = Path(requested)
     # A user-entered relative path is already the project-oriented label they expect to see in the report.
@@ -1136,7 +1149,7 @@ def _report_path(project_root: Path, requested: str | Path, absolute_path: Path)
         return _display_path(requested)
     try:
         return _display_path(absolute_path.relative_to(project_root))
-    # For example, an external baseline cannot be displayed relative to this project root.
+    # An absolute selection outside the project root prefix keeps its full path in the report.
     except ValueError:
         return _display_path(absolute_path)
 

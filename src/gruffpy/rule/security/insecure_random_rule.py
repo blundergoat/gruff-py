@@ -45,9 +45,7 @@ class InsecureRandomRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the insecure-random rule as a medium-confidence warning.
 
-        Medium confidence because ``random`` is fine for simulations,
-        sampling, and tests; the heuristic only fires when the *use*
-        smells security-sensitive.
+        Medium confidence reflects legitimate uses in simulations, sampling and tests.
 
         Returns:
             Definition for the insecure-random rule under the security pillar.
@@ -62,19 +60,16 @@ class InsecureRandomRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``random.*`` calls inside security-smelling enclosing context.
+        """Flag supported random calls whose nearest plain assignment or function has a security-related name.
 
-        Walks up the call's parent chain: if the assignment target or
-        enclosing function name passes ``has_security_smell`` (``token``,
-        ``password``, ``api_key``, etc.), the call is flagged with a
-        ``secrets``-module remediation.
+        Plain assignments inspect bare-name targets; matched calls recommend the secrets module.
 
         Args:
             unit: Parsed source file to inspect (with parent links).
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per ``random.X`` call in a security-smelling scope.
+            One finding per matched call, or an empty list when parsing is unavailable or no supported call matches.
         """
         if unit.tree is None or "random" not in unit.source:
             return []

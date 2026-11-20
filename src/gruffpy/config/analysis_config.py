@@ -114,7 +114,14 @@ class AnalysisConfig:
     deep_scan_budget: DeepScanBudget = field(default_factory=DeepScanBudget)
 
     def __post_init__(self) -> None:
-        """Reject a Python target that would make the user's modernisation advice unsupported."""
+        """Reject a Python target that would make the user's modernisation advice unsupported.
+
+        Returns:
+            None; construction continues when the minimum Python version is supported.
+
+        Raises:
+            ValueError: When minimum_python_version is below (3, 11).
+        """
         if self.minimum_python_version < (3, 11):
             raise ValueError("Minimum Python version must be at least 3.11.")
 
@@ -219,9 +226,7 @@ class AnalysisConfig:
     def with_display_floor(self, display_floor: Severity) -> "AnalysisConfig":
         """Return a new config whose report shows only findings at or above *display_floor*.
 
-        This is the configuration form of the family's ``--min-severity``. It
-        decides what a report shows and never an exit code, a score, or a
-        baseline; ``failOn`` is what gates a build.
+        The --min-severity floor only filters reports; failOn gates builds, and scores and baselines ignore the floor.
 
         Args:
             display_floor: Lowest severity the report shows.
@@ -235,7 +240,8 @@ class AnalysisConfig:
         """Return a new config with the rule include/exclude selection swapped.
 
         Args:
-            selection: ``RuleSelection`` capturing the CLI filter flags.
+            selection: Tier, pillar and rule filters that control which rules run.
+                An empty selection clears the existing filters, so every rule passes selection.
 
         Returns:
             New ``AnalysisConfig`` carrying the updated selection.
@@ -260,7 +266,7 @@ class AnalysisConfig:
         forms (``ctx``, ``msg``, ``cfg``).
 
         Args:
-            abbrevs: Allowed-abbreviation tokens, lowercase.
+            abbrevs: Tokens exempt from the abbreviation rule regardless of case. An empty tuple clears the allowlist.
 
         Returns:
             New ``AnalysisConfig`` with the allowlist updated.
@@ -285,8 +291,7 @@ class AnalysisConfig:
         """Return a new config whose ``analyse --format text`` hint threshold is *threshold*.
 
         Args:
-            threshold: Finding count at which ``analyse --format text`` appends
-                the ``summary --group-by=rule`` hint; set to ``0`` to disable.
+            threshold: Minimum finding count for the text report to suggest summary --group-by=rule. Zero or less disables the hint.
 
         Returns:
             New ``AnalysisConfig`` with the threshold updated.

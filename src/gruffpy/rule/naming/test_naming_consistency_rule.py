@@ -42,10 +42,7 @@ class TestNamingConsistencyRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the test-naming-consistency rule as a medium-confidence advisory.
 
-        Advisory because mixed casing is a style problem, not a defect.
-        Medium confidence because a partial migration (e.g. from unittest
-        camelCase to pytest snake_case) can legitimately produce mixed
-        styles for a transitional period.
+        Mixed casing is a style issue; confidence is medium because migrations between test frameworks can temporarily mix conventions.
 
         Returns:
             Definition for the test-naming-consistency rule under the
@@ -61,19 +58,16 @@ class TestNamingConsistencyRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag a test file that mixes ``test_snake_case`` and ``testCamelCase`` function names.
+        """Flag test files that mix snake_case and camelCase test function names.
 
-        Both top-level test functions and ``Test<X>`` class methods are
-        scanned; the file is silent unless *both* styles appear (so an
-        all-snake or all-camel file passes).
+        Inspect top-level test functions and direct test methods of top-level Test-prefixed classes.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            Empty list, or a single file-anchored finding summarising the
-            mix with sample names.
+            One file-anchored finding with sample names when both styles occur; otherwise an empty list.
         """
         if not isinstance(unit.tree, ast.Module):
             return []
@@ -137,8 +131,8 @@ def _walk_test_functions(
     Args:
         tree: Module whose immediate body and qualifying classes' immediate bodies are inspected.
 
-    Returns:
-        Iterator of synchronous or asynchronous definitions with names starting test, in source order; nested definitions are not visited.
+    Yields:
+        Synchronous or asynchronous definitions whose names start with test, in source order; nested definitions are not visited.
     """
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test"):

@@ -61,11 +61,11 @@ class MissingRaisesDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer; its
-                ``everyCallable`` option widens the rule.
+            context: Rule context whose everyCallable option includes underscore-private functions.
 
         Returns:
-            Findings for documented functions in scope that raise without docs.
+            Findings for in-scope functions with an explicit raise and a parseable docstring missing raises entries.
+            Empty when the tree is absent or no function matches.
         """
         if unit.tree is None:
             return []
@@ -81,11 +81,11 @@ def _missing_raises_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tu
     """Collect each function definition in the tree that this rule flags, paired with its detected docstring style.
 
     The tree is searched with ast.walk, so nested functions and methods are judged individually alongside top-level ones;
-    ``_missing_raises_doc_style`` decides whether each one is flagged.
+    _missing_raises_doc_style decides whether each one is flagged.
 
     Args:
         tree: Parsed module tree to search for function and async function definitions at any depth.
-        every_callable: Whether the rule's ``everyCallable`` option is on, bringing underscore-private names into scope.
+        every_callable: Whether the rule's everyCallable option is on, bringing underscore-private names into scope.
 
     Returns:
         Pairs of flagged function definition and its docstring style, in ast.walk order; an empty list when no function is flagged.
@@ -103,14 +103,14 @@ def _missing_raises_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tu
 def _missing_raises_doc_style(node: FunctionNode, *, every_callable: bool) -> DocstringStyle | None:
     """Return the docstring style of a function this rule flags, or None when the function is not flagged.
 
-    A function is flagged when ``_should_skip_raises_doc_check`` does not skip it and its docstring parses with no raises entries.
+    A function is flagged when _should_skip_raises_doc_check does not skip it and its docstring parses with no raises entries.
 
     Args:
         node: Function or async function definition to judge.
-        every_callable: Whether the rule's ``everyCallable`` option is on, bringing underscore-private names into scope.
+        every_callable: Whether the rule's everyCallable option is on, bringing underscore-private names into scope.
 
     Returns:
-        The parsed docstring's detected style for a flagged function; None when ``_should_skip_raises_doc_check`` skips the function, it has no
+        The parsed docstring's detected style for a flagged function; None when _should_skip_raises_doc_check skips the function, it has no
         docstring, its docstring is empty, whitespace-only or fails to parse, or its docstring already lists raises entries.
     """
     if _should_skip_raises_doc_check(node, every_callable=every_callable):
@@ -129,11 +129,11 @@ def _should_skip_raises_doc_check(node: FunctionNode, *, every_callable: bool) -
 
     Args:
         node: Function or async function definition to test.
-        every_callable: Whether the rule's ``everyCallable`` option is on, bringing underscore-private names into scope.
+        every_callable: Whether the rule's everyCallable option is on, bringing underscore-private names into scope.
 
     Returns:
-        True when ``is_in_documentation_scope`` rejects the name, the function is an overload stub, it is a property setter or deleter, or
-        ``has_raise_in_body`` finds no raise statement outside nested functions and lambdas; False when the rule should go on to read the docstring.
+        True when is_in_documentation_scope rejects the name, the function is an overload stub, it is a property setter or deleter, or
+        has_raise_in_body finds no raise statement outside nested functions and lambdas; False when the rule should go on to read the docstring.
     """
     return (
         not is_in_documentation_scope(node.name, every_callable=every_callable)
@@ -158,7 +158,7 @@ def _missing_raises_doc_finding(
         unit: Analysis unit whose display path becomes the finding's file path.
         definition: This rule's definition, supplying the rule ID, default severity, pillar, tier, confidence and secondary pillars.
         node: Flagged function definition that sets the finding's line span and symbol.
-        style: Detected docstring style, whose value is recorded under the finding's ``style`` metadata key.
+        style: Detected docstring style, whose value is recorded under the finding's style metadata key.
 
     Returns:
         Finding whose message names the function's qualified symbol and whose fixed remediation asks for a section naming each exception type and the

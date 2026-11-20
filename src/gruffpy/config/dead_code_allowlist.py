@@ -50,9 +50,7 @@ class DeadCodeAllowlist:
     def matches_decorator(self, decorator_names: tuple[str, ...]) -> bool:
         """Return whether any of *decorator_names* is on the decorator allowlist.
 
-        Callers typically pass both the fully-qualified decorator name
-        (``module.Class.decorator``) and its leaf so the allowlist can be
-        spelled either way.
+        Pass both qualified and leaf decorator names to let allowlists use either spelling.
 
         Args:
             decorator_names: Names of decorators on the candidate symbol.

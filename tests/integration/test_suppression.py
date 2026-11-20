@@ -18,11 +18,14 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """Suppress only the rule a same-line ``gruff: disable`` comment names, so the dangerous call on that unreachable line still reports.
+    """Suppress only the rule a same-line gruff: disable comment names, so the dangerous call on that unreachable line still reports.
 
     Args:
-        tmp_path: Project root holding a config that enables dangerous-call findings and a module with an unreachable ``eval`` call.
-        monkeypatch: Changes into the project so the ``src`` operand and the config path resolve.
+        tmp_path: Project root holding a config that enables dangerous-call findings and a module with an unreachable eval call.
+        monkeypatch: Changes into the project so the src operand and the config path resolve.
+
+    Returns:
+        None. Checks that the dangerous-call finding is the only finding left after same-line suppression.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -52,11 +55,14 @@ def test_gruff_disable_suppresses_only_matching_rule_on_same_line(
 
 
 def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypatch) -> None:
-    """Apply a ``gruff: disable-next`` comment to the next physical line only, so the second ``eval`` call on line 3 still reports.
+    """Apply a gruff: disable-next comment to the next physical line only, so the second eval call still reports.
 
     Args:
         tmp_path: Project root holding a config that enables dangerous-call findings and a module with the directive above two calls.
-        monkeypatch: Changes into the project so the ``src`` operand and the config path resolve.
+        monkeypatch: Changes into the project so the src operand and the config path resolve.
+
+    Returns:
+        None. Checks that exactly one finding remains and that it points to the second call.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -87,11 +93,14 @@ def test_gruff_disable_next_targets_next_physical_line(tmp_path: Path, monkeypat
 
 
 def test_gruff_disable_file_is_file_local(tmp_path: Path, monkeypatch) -> None:
-    """Confine a ``gruff: disable-file`` comment to its own file, so an unmarked module with the same 1,001-line body still reports its length.
+    """Confine a gruff: disable-file comment to its own file, so an unmarked module with the same 1,001-line body still reports its length.
 
     Args:
-        tmp_path: Project root whose ``src`` folder holds the marked and the unmarked long module.
-        monkeypatch: Changes into the project so the ``src`` operand resolves.
+        tmp_path: Project root whose src folder holds the marked and the unmarked long module.
+        monkeypatch: Changes into the project so the src operand resolves.
+
+    Returns:
+        None. Checks that the unmarked module produces the only file-length finding.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -124,7 +133,7 @@ def _analyse_broken_source(tmp_path: Path, source: str) -> tuple[int, dict]:
     """Run the JSON CLI journey for one syntactically broken source fixture.
 
     Args:
-        tmp_path: Temporary project root that receives the fixture.
+        tmp_path: Temporary project root that receives the fixture. Make it the working directory so the CLI finds src.
         source: Broken Python source text to write and analyse.
 
     Returns:
@@ -165,6 +174,9 @@ def test_parse_broken_source_text_findings_obey_suppressions(
         tmp_path: Temporary project root containing the broken Python file.
         monkeypatch: Fixture that makes the temporary project the CLI working directory.
         suppressed_source: Broken source carrying the suppression form under test.
+
+    Returns:
+        None. Checks the parser diagnostic, exit status and AWS finding with and without a suppression directive.
     """
     monkeypatch.chdir(tmp_path)
 

@@ -32,9 +32,7 @@ class GithubActionsPullRequestTargetRule(SourceTextRule):
     def definition(self) -> RuleDefinition:
         """Describe the pull-request-target rule as a high-confidence error.
 
-        Error severity because checking out the PR head under
-        ``pull_request_target`` runs untrusted code with secrets and a write
-        token - a critical, precise pattern, not a posture smell.
+        Error severity reflects the risk of executing untrusted PR-head code with privileged credentials.
 
         Returns:
             Definition for the github-actions-pull-request-target rule under the

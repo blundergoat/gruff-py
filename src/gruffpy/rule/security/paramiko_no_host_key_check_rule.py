@@ -47,13 +47,10 @@ class ParamikoNoHostKeyCheckRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the paramiko host-key rule as a high-confidence ERROR.
 
-        ERROR severity because the unsafe policies remove the only thing
-        stopping an SSH MITM attack; high confidence because the matched
-        class names are unambiguous paramiko-defined policy types.
+        Accepting unknown SSH host keys weakens server authentication; recognized policy class names support high confidence.
 
         Returns:
-            Definition for the paramiko host-key rule under the security
-            pillar.
+            Definition for the Paramiko host-key rule under the security pillar.
         """
         return RuleDefinition(
             id=self.ID,
@@ -65,19 +62,16 @@ class ParamikoNoHostKeyCheckRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag instantiation of paramiko AutoAddPolicy / WarningPolicy.
+        """Flag calls whose spelling matches Paramiko's AutoAddPolicy or WarningPolicy.
 
-        File-level gate: must import paramiko (the policy class names are
-        common-looking enough that an unrelated library could share them).
-        Resolves ``import paramiko as p`` and ``from paramiko import
-        AutoAddPolicy as X`` aliases.
+        Top-level imports supply bare policy names and module prefixes. Qualified calls match on the first and last name components.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per AutoAddPolicy / WarningPolicy instantiation.
+            One finding per matched call, or an empty list when parsing, supported imports or matching calls are absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -109,11 +103,11 @@ class _ParamikoAliases:
         """Build the alias map from a module's top-level imports.
 
         Args:
-            tree: Module AST to inspect.
+            tree: AST whose top-level imports are inspected when it is a module.
 
         Returns:
-            Alias record capturing paramiko's local module names and any
-            policy classes imported directly into the module namespace.
+            Alias record containing the import flag, module aliases and directly imported unsafe policies;
+            non-module trees return an empty record.
         """
         if not isinstance(tree, ast.Module):
             return cls(False, frozenset(), {})

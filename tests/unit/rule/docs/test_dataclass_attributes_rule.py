@@ -6,7 +6,11 @@ from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
 
 def test_public_dataclass_without_attribute_docs_emits():
-    """Report an undocumented three-field public dataclass once, listing every field as missing."""
+    """Report an undocumented three-field public dataclass once, listing every field as missing.
+
+    Returns:
+        None. Asserts one finding with the dataclass symbol, field count and complete list of missing fields.
+    """
     src = """\
 from dataclasses import dataclass
 
@@ -26,7 +30,11 @@ class AnalysisReport:
 
 
 def test_attributes_section_is_accepted():
-    """Report nothing when an ``Attributes`` section documents every field."""
+    """Report nothing when an Attributes section documents every field.
+
+    Returns:
+        None. Asserts an empty finding list for the fixture with complete Attributes documentation.
+    """
     src = '''\
 from dataclasses import dataclass
 
@@ -49,7 +57,11 @@ class AnalysisReport:
 
 
 def test_bullet_field_list_is_accepted_by_default():
-    """Report nothing when a bullet list documents every field under the default options."""
+    """Report nothing when a bullet list documents every field under the default options.
+
+    Returns:
+        None. Asserts an empty finding list for the bullet-list fixture under default settings.
+    """
     src = '''\
 from dataclasses import dataclass
 
@@ -71,7 +83,11 @@ class Payload:
 
 
 def test_min_fields_option_can_raise_threshold():
-    """Report nothing for an undocumented three-field dataclass when ``min_fields`` is 4."""
+    """Report nothing for an undocumented three-field dataclass when min_fields is 4.
+
+    Returns:
+        None. Asserts an empty finding list when the dataclass falls below the configured field threshold.
+    """
     src = """\
 from dataclasses import dataclass
 
@@ -91,7 +107,11 @@ class Payload:
 
 
 def test_require_all_fields_reports_partial_attribute_section():
-    """Report the two undocumented fields once when ``require_all_fields`` is set and the section covers one field."""
+    """Report the two undocumented fields once when require_all_fields is set and the section covers one field.
+
+    Returns:
+        None. Asserts one finding that lists name as documented and value and status as missing.
+    """
     src = '''\
 from dataclasses import dataclass
 
@@ -121,7 +141,11 @@ class Payload:
 
 
 def test_private_dataclass_is_skipped():
-    """Report nothing for an undocumented private dataclass."""
+    """Report nothing for an undocumented private dataclass.
+
+    Returns:
+        None. Asserts an empty finding list for the undocumented private dataclass.
+    """
     src = """\
 from dataclasses import dataclass
 

@@ -39,9 +39,9 @@ class AwsAccessKeyRule(SourceTextRule):
     ID = "sensitive-data.aws-access-key"
 
     def definition(self) -> RuleDefinition:
-        """Describe the AWS-access-key rule as a high-confidence ERROR.
+        """Describe the AWS-access-key rule as a high-confidence warning.
 
-        Precise ``AKIA`` and ``ASIA`` shapes give users high-confidence findings, while error
+        Precise ``AKIA`` and ``ASIA`` shapes give users high-confidence findings, while warning
         severity reflects the rotation urgency of an exposed AWS credential.
 
         Returns:
@@ -60,19 +60,17 @@ class AwsAccessKeyRule(SourceTextRule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Scan raw source for ``AKIA``-/``ASIA``-prefixed access key IDs.
 
-        Users see each key-shaped literal, AWS's documented example key among them, so a reviewer
-        decides what is a placeholder rather than the suffix of the value deciding it.
+        Findings show the source line and a redacted marker. Exact vendor-documented samples and fully masked values are skipped.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per AWS access key literal.
+            One finding per access key match remaining after the documented-sample and masked-value exclusions.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        # Every key-shaped occurrence remains separately visible so users can rotate each exposure.
         for access_key_match in iter_matches(_PATTERN, unit.source):
             if access_key_match.raw[4:] == _MASKED_BODY:
                 continue

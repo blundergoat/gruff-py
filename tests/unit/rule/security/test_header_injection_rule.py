@@ -3,7 +3,11 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_flask_dynamic_header_key_emits():
-    """Report one finding for a Flask view that sets a response header named by a request argument."""
+    """Report one finding for a Flask view that sets a response header named by a request argument.
+
+    Returns:
+        None when all assertions pass.
+    """
     src = (
         "from flask import Flask, request\n"
         "app = Flask(__name__)\n"
@@ -18,7 +22,11 @@ def test_flask_dynamic_header_key_emits():
 
 
 def test_flask_literal_header_key_skipped():
-    """Report nothing for a Flask view that sets a literal header name."""
+    """Report nothing for a Flask view that sets a literal header name.
+
+    Returns:
+        None when all assertions pass.
+    """
     src = (
         "from flask import Flask\n"
         "app = Flask(__name__)\n"
@@ -32,6 +40,10 @@ def test_flask_literal_header_key_skipped():
 
 
 def test_no_framework_import_skipped():
-    """Report nothing for a dynamic header name in a file without a framework import."""
+    """Report nothing for a dynamic header name in a file without a framework import.
+
+    Returns:
+        None when all assertions pass.
+    """
     src = "response.headers[user_input] = 'x'\n"
     assert HeaderInjectionRule().analyse(make_unit(src), default_ctx()) == []

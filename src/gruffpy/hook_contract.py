@@ -93,9 +93,8 @@ def capabilities_payload() -> dict[str, Any]:
     """Return the advertised hook contract capability payload.
 
     Returns:
-        JSON-serializable capabilities for `gruff-py hook --capabilities`,
-        including the contract version, supported hook features, flag names,
-        and flag-order declaration.
+        JSON-serializable capabilities for gruff-py hook --capabilities, including the contract version and supported hook features,
+        flag names and the flag-order declaration.
     """
     return {
         "contractVersion": HOOK_CONTRACT_VERSION,
@@ -134,8 +133,7 @@ def config_error_payload(exc: ConfigError) -> dict[str, Any]:
             can run.
 
     Returns:
-        JSON-serializable hook payload with no findings, `schemaOk: false`, and
-        the analyzer's config error as an object carrying its remediation.
+        JSON-serializable hook payload with no findings, schemaOk set to false, and a configuration error object with remediation.
     """
     payload = fatal_payload("config", str(exc))
     payload["config"] = {
@@ -146,16 +144,15 @@ def config_error_payload(exc: ConfigError) -> dict[str, Any]:
 
 
 def fatal_payload(diagnostic_type: str, message: str) -> dict[str, Any]:
-    """Return the empty payload that accompanies a run which could not happen.
+    """Build a fatal hook payload when a failure prevents a successful hook result.
 
-    Every field the contract requires is present and empty, so a consumer parses
-    one shape whether the run succeeded or not and reads the reason from the
-    fatal diagnostic rather than scraping stderr.
+    Required fields retain their normal shape, with no findings or analysed files.
+    The fatal diagnostic carries the reason so consumers do not need to scrape stderr.
 
     Args:
         diagnostic_type: Stable machine-readable kind, such as `config`,
             `baseline`, or `changed-region`.
-        message: One sentence saying what stopped the run.
+        message: Error detail published as the fatal diagnostic message.
 
     Returns:
         JSON-serializable hook payload carrying one fatal diagnostic.
@@ -234,21 +231,21 @@ def hook_payload(
     Args:
         report: Native analysis report produced by the normal analyser runner
             before the v3 machine adapter projects it.
-        paths: Requested hook path arguments, used to map explicit
-            `--changed-ranges` onto files.
-        changed_ranges: Raw explicit changed-range string from the hook CLI.
-        base_stable_identities: Hook stable identities from the git base tree,
-            each with its occurrence count, when a new-only comparison is active.
+        paths: Requested hook path arguments, used to map explicit --changed-ranges onto files.
+        changed_ranges: Range text; None disables region filtering, while empty or invalid text raises ValueError.
+        base_stable_identities: Git base occurrence counts. None disables identity filtering.
+            An empty counter still establishes a prior base for attributing file and project findings to the edit.
         mode: Which region selector chose the work, for the run audit block.
-        baseline_path: Project-relative baseline that classified the run, or None.
-        baseline_statuses: Baseline status per finding, keyed by `id(finding)`;
-            empty when no baseline was applied.
-        suppressions: One section 13a audit row per configured sensitive
-            exclusion, zero matches included.
+        baseline_path: Path to the applied baseline as supplied by the caller. None means no baseline was applied.
+        baseline_statuses: Status keyed by id(finding). None or a missing entry publishes a null baselineStatus.
+        suppressions: Configured, built-in, inline and duplicate audit rows for the hook; include zero-match configured exclusions.
 
     Returns:
-        JSON-serializable hook contract payload with filtered findings, the run
-        audit block, the exclusion audit, ignored paths, and config status.
+        JSON-serializable hook payload with findings, diagnostics, run details, suppression audit rows, ignored paths and config status.
+        The suppressed count covers changed-region removals. Findings removed only by the new-only filter do not contribute.
+
+    Raises:
+        ValueError: If explicit changed-range syntax is invalid.
     """
     filtered = _filter_findings_for_hook(
         report.findings,
@@ -289,7 +286,7 @@ def hook_payload(
 
 
 def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
-    """Project one sensitive exclusion, configured or built in, into its section 13a audit row.
+    """Serialize a suppression audit row for the hook payload.
 
     Args:
         summary: Suppression audit entry, including its count, optional symbol and optional source.
@@ -304,7 +301,7 @@ def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
         "symbol": summary.symbol,
         "reason": summary.reason,
         "suppressed": summary.suppressed,
-        # Only a built-in row names its source; a configured row is recognised by carrying none.
+        # Configured exclusions omit source; built-in, inline and duplicate suppressions retain their source label.
         **({} if summary.source is None else {"source": summary.source}),
     }
 
@@ -312,14 +309,13 @@ def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
 def _diagnostic_payload(diagnostic: RunDiagnostic) -> dict[str, Any]:
     """Project one run diagnostic into the v2 shape, where every entry says what it means for the run.
 
-    v1 left a consumer to infer severity from the diagnostic type, so a budget
-    note and a run that could not happen looked alike.
+    Explicit severity distinguishes a budget note from a failure that invalidates the run.
 
     Args:
         diagnostic: One diagnostic the run produced.
 
     Returns:
-        The JSON row, carrying an explicit severity beside the v1 fields.
+        The diagnostic fields plus warning severity when invalidates_run is False, or fatal severity otherwise.
     """
     payload: dict[str, Any] = dict(diagnostic.to_dict())
     payload["severity"] = "warning" if diagnostic.invalidates_run is False else "fatal"
@@ -338,7 +334,7 @@ def _filter_findings_for_hook(
 
     Args:
         findings: Full-scan findings in the order retained by this filter.
-        paths: Requested paths to which explicit changed ranges apply.
+        paths: Requested paths added to the finding paths when resolving explicit ranges. An empty tuple uses the finding paths alone.
         changed_ranges: Explicit range text; None disables region filtering, while an empty string is invalid.
         base_stable_identities: Prior occurrence counts; None disables identity-based new-only filtering.
         has_prior_base: Whether a Git comparison or applied baseline can attribute file and project findings to the edit.
@@ -360,8 +356,8 @@ def _filter_findings_for_hook(
 
         if changed.active:
             if scope in {"file", "project"}:
-                # Without a prior base the hook cannot attribute a whole-file issue to this edit, and a base that
-                # already held this occurrence says the edit did not introduce it.
+                # Line ranges alone cannot attribute file or project findings to this edit, so both need a prior base.
+                # A Git base occurrence assigned to this finding also rules it out as new.
                 if not has_prior_base or index in covered:
                     suppressed_count += 1
                     continue
@@ -384,9 +380,7 @@ def _base_covered_findings(
 ) -> set[int]:
     """Pick the current findings the base already held, spending each key's base count on its lowest lines first.
 
-    One base occurrence covers one current occurrence, never every occurrence of its key, so a duplicate an edit added
-    stays visible. Counts are spent lowest line first, as baseline matching spends a reviewed count, before any region
-    filter applies.
+    One base occurrence covers one current occurrence; added duplicates beyond that count remain eligible before region filtering.
 
     Args:
         findings: Every current finding, before any region filtering.
@@ -431,8 +425,8 @@ def _hook_stable_identity(finding: Finding, scope: str | None = None) -> str:
     """Build the hook comparison key without source-line positions.
 
     Args:
-        finding: Finding supplying the rule, file, and either its symbol or fallback message.
-        scope: Explicit scope, or None or empty text to infer it from the finding.
+        finding: Finding supplying the rule and file. A non-None symbol takes precedence over the scope and message.
+        scope: Scope used for a finding without a symbol. None or empty text infers that scope from the finding.
 
     Returns:
         A 16-character hash of the rule and file plus the symbol, file/project scope, or line-scoped message.
@@ -473,18 +467,17 @@ def stable_identities_from_git_base(
 
     Args:
         project_root: Git working tree where the hook command was invoked.
-        paths: Requested hook paths to materialize from the base tree.
+        paths: Git pathspecs to materialize and analyze; empty selects the whole base tree.
         diff_ref: Git ref supplied to `--diff`; `working-tree` maps to `HEAD`.
-        config_path: Explicit config file from the hook CLI, when supplied.
+        config_path: Explicit config file. None looks for working-tree config first and leaves discovery to the base scan if none is found.
+            The no_config flag disables config loading.
         no_config: Whether config discovery is disabled.
         include_ignored: Whether default-ignored and gitignored paths are
             included in the base analysis.
-        deep_scan_budget: Raw ``--deep-scan-budget`` text forwarded to the base
-            analysis, so the base and working trees are bounded identically; empty
-            when the hook passed no override.
+        deep_scan_budget: Override text shared with working-tree analysis; empty applies no override to the base scan.
 
     Returns:
-        How many times each hook stable identity occurs in the requested base tree.
+        Counts by hook stable identity. An empty counter means the base was analyzed and produced no findings.
     """
     base_ref = "HEAD" if diff_ref == "working-tree" else diff_ref
     with tempfile.TemporaryDirectory(prefix="gruff-hook-base-") as tmp:
@@ -523,13 +516,12 @@ def render_json(payload: dict[str, Any]) -> str:
 
 
 def _finding_payload(finding: Finding, identity: Any = None, baseline_status: str | None = None) -> dict[str, Any]:
-    """Project one finding into the v2 shape, carrying the four fields v1 never published.
+    """Build a hook finding entry with location, scope, identities, remediation and metadata.
 
     Args:
         finding: The finding to reshape.
-        identity: This finding's ratified family identity, or None where the
-            family refuses to name it, which is every sensitive finding.
-        baseline_status: What an applied baseline made of it; None when none was.
+        identity: Baseline identity supplying stableIdentity and symbolOrdinal; None publishes a null identity and ordinal 0.
+        baseline_status: Baseline classification to publish. None emits a null baselineStatus when no classification was supplied.
 
     Returns:
         JSON-serializable hook finding entry.
@@ -558,9 +550,7 @@ def _finding_payload(finding: Finding, identity: Any = None, baseline_status: st
 def _end_line_for(finding: Finding) -> int | None:
     """Return the span end every v2 finding carries, repeating the start line when the rule reported no span.
 
-    A consumer locating a finding cannot treat an absent end as a single line by
-    guessing, so the contract makes the field required and the single-line case
-    explicit.
+    The required endLine field makes single-line spans explicit rather than leaving consumers to infer them.
 
     Args:
         finding: Finding whose reported start and optional end define the published span.
@@ -578,14 +568,13 @@ def _end_line_for(finding: Finding) -> int | None:
 def _symbol_ordinal_from(identity: Any) -> int:
     """Return the declaration ordinal the ratified identity hashed, so a consumer can recompute it.
 
-    A finding naming no symbol reports 0, which is what the identity contract
-    says a symbol-less subject carries.
+    A symbol-less subject comes from the finding's message and has no declaration ordinal, so the hook reports 0.
 
     Args:
         identity: Ratified identity carrying a subject, or None when the finding has no identity.
 
     Returns:
-        The ASCII-digit suffix after the subject's last #, or 0 when no valid suffix is available.
+        The integer after the subject's last # if written with ASCII digits, or 0 when no valid suffix is available.
     """
     if identity is None:
         return 0
@@ -594,7 +583,7 @@ def _symbol_ordinal_from(identity: Any) -> int:
     if marker < 0:
         return 0
     tail = subject[marker + 1 :]
-    # `str.isdigit` accepts non-ASCII digits, which `int` would then read as a number this module never wrote.
+    # Require ASCII decimal digits so ordinal parsing rejects Unicode forms, including digits int cannot convert.
     return int(tail) if _ASCII_DIGITS.fullmatch(tail) else 0
 
 
@@ -622,7 +611,9 @@ def _metadata_for(finding: Finding) -> dict[str, Any]:
         finding: Finding whose metadata is copied without changing the original mapping.
 
     Returns:
-        A shallow copy; when threshold is present, missing comparison aliases are filled where available and existing values remain intact.
+        A shallow copy with existing fields preserved. A threshold key enables defaults for direction and unit.
+        A missing measured field uses measuredValue when non-None, otherwise the first present metric alias.
+        A None alias ends the lookup without adding measured, even if a later alias has a value.
     """
     metadata = dict(finding.metadata)
     if "threshold" not in metadata:
@@ -642,7 +633,8 @@ def _unit_for_metadata(rule_id: str, metadata: dict[str, Any]) -> str:
 
     Args:
         rule_id: Rule ID whose size prefix supplies a count fallback when no metric determines the unit.
-        metadata: Comparison metadata inspected in the function's metric-priority order.
+        metadata: Metrics checked in priority order. A None value on the first present line or count alias skips that group.
+            Density, volume and score metrics select a unit by key presence.
 
     Returns:
         The metric's unit label, count for an otherwise unclassified size rule, or value for another rule.
@@ -754,6 +746,9 @@ def _materialize_git_base(
         target_root: Directory receiving the selected relative paths and their blob bytes.
         base_ref: Git tree or commit ref whose files are materialised.
         paths: Git pathspecs selecting files; empty selects the whole tree.
+
+    Returns:
+        None; selected files are written beneath target_root.
 
     Raises:
         ValueError: If a Git command cannot resolve or read the requested tree.

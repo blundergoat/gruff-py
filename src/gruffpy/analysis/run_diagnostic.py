@@ -38,7 +38,8 @@ class RunDiagnostic:
         Use when a JSON-capable reporter prepares diagnostics for the caller.
 
         Returns:
-            JSON-compatible mapping; absent locations remain null for a run-wide problem.
+            JSON-compatible mapping with null for any absent location field.
+            The invalidatesRun key preserves an explicit boolean and is omitted when invalidates_run is None.
         """
         payload = {
             "type": self.type,

@@ -43,9 +43,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the repeated-structure rule with a ``minGroupSize`` threshold (default 3).
 
-        Medium confidence because the structural hash ignores constant
-        values to find shape duplicates - but legitimately distinct tests
-        can occasionally hash the same when they share boilerplate scaffolding.
+        Medium confidence reflects that normalizing case data can group distinct tests that share scaffolding.
 
         Returns:
             Definition with the ``minGroupSize`` threshold key and the
@@ -63,22 +61,18 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Report eligible groups, or per-test findings when ``groupFindings`` is false.
+        """Report similar tests as groups or individual findings according to groupFindings.
 
-        Legacy mode hashes each test body's structural skeleton (node types, names,
-        attributes - but not constant values) and groups by hash; skips
-        tests that already have a call-style decorator (they're presumed
-        intentionally individualised).
+        Legacy mode ignores most constant values when grouping AST shapes; long or multiline strings retain content-sensitive hashes.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the ``minGroupSize``
-                numeric threshold and the ``groupFindings`` option.
+            unit: Source file to inspect. A missing AST yields no findings. A first scope lookup caches the index and increments the shared counter.
+            context: Rule execution context supplying the minGroupSize threshold, converted to an integer, and the groupFindings option.
 
         Returns:
-            One finding per test belonging to a shape-equivalent group whose
-            size meets the threshold; with ``groupFindings`` on, one finding
-            per group instead.
+            With groupFindings off or omitted, one finding per test in a legacy AST-shape group meeting minGroupSize.
+            With it on, one per eligible group meeting minGroupSize, grouped by runner style, container, attribute key and body shape.
+            Grouped mode skips table-driven tests and tests with fewer than two body statements after docstring removal.
         """
         if unit.tree is None:
             return []
@@ -91,7 +85,7 @@ class RepeatedStructureMissingParametrizeRule(Rule):
         groups: dict[str, list[ast.FunctionDef | ast.AsyncFunctionDef]] = collections.defaultdict(list)
         for fn, _scope in test_functions(unit):
             if any(isinstance(d, ast.Call) for d in fn.decorator_list):
-                continue  # decorated tests are already structured
+                continue  # Call-decorated tests may already encode distinct cases, so legacy grouping leaves them alone.
             groups[_shape_hash(fn)].append(fn)
         for fns in groups.values():
             if len(fns) < min_group:
@@ -128,7 +122,8 @@ class RepeatedStructureMissingParametrizeRule(Rule):
 def _shape_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     """Hash the full function AST for the legacy duplicate-test comparison.
 
-    Name and attribute spellings are retained. Most constants retain only their type; long or newline-containing strings retain a value digest.
+    Name expressions and attribute accesses retain their spellings. Function and parameter declaration names are skipped.
+    Most constants retain only their type. Long or newline-containing strings retain a value digest.
 
     Args:
         fn: Test declaration whose decorators, signature, docstring and body are traversed.
@@ -166,15 +161,17 @@ def _constant_shape(value: Any) -> str:
 
 
 def _group_findings(unit: AnalysisUnit, definition: RuleDefinition, min_group: int) -> list[Finding]:
-    """Report one finding per group of matching tests, as family contract section 16 defines them.
+    """Report groups that share a lexical container, marks, body shape and runner so each finding can suggest a case table.
+    Only recognized test cases with at least two statements after the docstring and no detected case table can join a group.
+    A scope cache miss stores the parsed tree's function scopes and increments the shared computation counter.
 
     Args:
         unit: Parsed test file whose tests are compared; other files never join its groups.
         definition: This rule's definition, which supplies severity, pillar and confidence.
-        min_group: Smallest group that reports; ``minGroupSize`` keeps its meaning here.
+        min_group: Minimum number of tests required for a group finding, from the minGroupSize setting.
 
     Returns:
-        One finding per qualifying group, anchored at its first member, ordered by that member's position.
+        One finding per qualifying group, anchored at its first member and ordered by that member's position. Empty if no group qualifies.
     """
     # The runner is part of the key: a group's advice names one table idiom, and unittest and pytest each need their own.
     groups: dict[tuple[bool, tuple[ast.AST, ...], tuple[str, ...], str], list[_TestFunction]] = collections.defaultdict(list)
@@ -195,7 +192,7 @@ def _group_finding(unit: AnalysisUnit, definition: RuleDefinition, members: list
 
     Args:
         unit: Test file that holds the group.
-        definition: This rule's definition.
+        definition: Rule metadata supplying the finding's identity, severity, pillar, tier, confidence and secondary pillars.
         members: Group members in source order; the first is the anchor.
         unittest: Whether the members are unittest methods, which picks ``subTest`` over ``parametrize``.
 
@@ -252,15 +249,15 @@ def _body_without_docstring(fn: _TestFunction) -> list[ast.stmt]:
 
 
 def _is_table_driven(fn: _TestFunction, body: list[ast.stmt]) -> bool:
-    """Return whether a test already runs its cases from a table, which section 16 leaves out.
+    """Detect table-driven syntax that excludes a test from grouped findings.
 
     Args:
-        fn: Test function whose marks, and those of its enclosing classes and module, are checked for ``parametrize``.
-        body: Its statements after the docstring.
+        fn: Test function whose marks, and those of its enclosing classes and module, are checked for parametrize.
+        body: All top-level test statements, with the leading docstring omitted if present.
 
     Returns:
-        True for a ``parametrize`` decorator or ``pytestmark`` on the test, a class or the module, any ``subTest`` call,
-        or a top-level loop over an inline literal table.
+        True for a decorator or pytestmark containing a call whose final name ends in parametrize, a subTest call in the body,
+        or a top-level loop over a literal list, tuple, dict or set. False otherwise.
     """
     scopes = [fn, *(parent for parent in parent_chain(fn) if isinstance(parent, ast.ClassDef | ast.Module))]
     marks = [mark for owner in scopes for mark in _marks(owner)]
@@ -272,7 +269,7 @@ def _is_table_driven(fn: _TestFunction, body: list[ast.stmt]) -> bool:
 
 
 def _marks(owner: ast.AST) -> list[ast.expr]:
-    """Return an owner's decorators, then for a class or module the value of each ``pytestmark`` assignment in its body.
+    """Collect decorators and values assigned directly to the bare name pytestmark in class or module bodies.
 
     Args:
         owner: AST owner; only class and module bodies are searched for pytestmark assignments.
@@ -335,13 +332,14 @@ def _container_key(fn: _TestFunction) -> tuple[ast.AST, ...]:
 
 
 def _body_shape(body: list[ast.stmt]) -> str:
-    """Serialize statements, retaining text payloads, keys and indices as section 16 requires.
+    """Serialize test statements to compare bodies that could share a case table.
 
     Args:
         body: Top-level test statements after removal of a leading docstring.
 
     Returns:
-        Newline-joined group-comparison shape, retaining significant literal text and normalizing other constants by kind.
+        Newline-joined statement shapes. Function and class definitions and type statements retain their literal values.
+        Dictionary keys, subscript selectors and strings with ASCII whitespace also retain literal values. Other constants are represented by kind.
     """
     return "\n".join(_shape_of(stmt) for stmt in body)
 
@@ -349,15 +347,16 @@ def _body_shape(body: list[ast.stmt]) -> str:
 def _shape_of(node: object, *, preserve_literals: bool = False) -> str:
     """Serialize one AST value through its syntax fields only.
 
-    ``ast.iter_fields`` never yields the ``parent`` link the parser attaches to every node, so the cost stays
-    proportional to this statement; anything that follows that link, such as ``copy.deepcopy``, walks the whole module.
+    Parent links sit outside the syntax fields, so serialization stays within the supplied value.
+    A recursive traversal through those links, such as copy.deepcopy, can reach the whole module.
 
     Args:
         node: An AST node, a list of nodes, or a field value such as an identifier or operator flag.
-        preserve_literals: Keep literal values within a declaration, container key or index/slice expression.
+        preserve_literals: When true, preserve every literal value in node and its descendants.
 
     Returns:
-        A shape retaining significant literal values; other literals match only within their kind.
+        A shape that always keeps literals in function, class and type alias declarations, dictionary keys and subscript selectors.
+        It also keeps strings with ASCII whitespace. With preserve_literals false, other literals are represented by kind.
     """
     # Declarations are structure rather than case data; TypeAlias is available from Python 3.12.
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) or type(node).__name__ == "TypeAlias":

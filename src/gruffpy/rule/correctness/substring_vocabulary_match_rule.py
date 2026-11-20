@@ -110,9 +110,7 @@ class SubstringVocabularyMatchRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the substring-vocabulary-match rule as a medium-confidence advisory.
 
-        Medium confidence: the shape match is exact, but whether substring
-        semantics are a bug depends on the vocabulary's intent, so the rule
-        is confined to free-text-named targets derived from parameters.
+        Findings require parameter-derived free-text targets; whether a matched substring scan is a bug depends on vocabulary intent.
 
         Returns:
             Definition for the substring-vocabulary-match rule under the
@@ -135,7 +133,7 @@ class SubstringVocabularyMatchRule(Rule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per matching scan site.
+            One finding per matching scan site; empty without a module AST, the source marker, a qualifying vocabulary or a matching scan.
         """
         if not isinstance(unit.tree, ast.Module) or " in " not in unit.source:
             return []
@@ -150,17 +148,16 @@ class SubstringVocabularyMatchRule(Rule):
 
 
 def _module_string_vocabularies(tree: ast.Module) -> dict[str, list[str]]:
-    """Collect module-level constants holding only string literals.
+    """Collect string vocabularies from plain top-level assignments to single bare names.
 
     Args:
         tree: Parsed module whose direct body statements are inspected; assignments nested in functions, classes or if, try and with blocks are not
             considered.
 
     Returns:
-        Mapping from each top-level name whose single-target assignment holds a list, set or tuple display of string literals, optionally wrapped in
-        one tuple, list, set or frozenset call, to its entries in source order. A later qualifying assignment to the same name replaces the earlier
-        entries, a later non-qualifying one leaves them in place, and an empty display, bare or wrapped as in frozenset(()), maps to an empty list,
-        while a zero-argument call such as frozenset() does not qualify. Empty when no top-level assignment qualifies.
+        Each name maps to entries in source order from its last qualifying assignment. Later nonqualifying assignments leave the entry in place.
+        String-only list, set or tuple displays qualify, including as the sole positional argument of a bare tuple, list, set or frozenset call.
+        Empty displays give empty lists. Calls with keywords or no arguments are skipped. With no qualifying assignments, the mapping is empty.
     """
     vocabularies: dict[str, list[str]] = {}
     for node in tree.body:
@@ -224,23 +221,17 @@ def _scan_function(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     vocabularies: dict[str, list[str]],
 ) -> list[Finding]:
-    """Report each vocabulary scan in one function's own scope that runs over parameter-derived free text.
-
-    Only positional-only, regular and keyword-only parameters without a collection annotation count as source parameters; *args and **kwargs are
-    ignored. A scan site is reported only when its iterable names a non-empty module vocabulary with at least one entry that has no space, its text
-    name maps to a source parameter, and either the text name or that parameter carries a free-text token.
-
-    The walk stops at nested functions, classes and lambdas. Nested functions and methods get their own pass from analyse, but statements directly in
-    a nested class body and lambda bodies are not scanned at all.
+    """Report qualifying vocabulary scans over parameter-derived free text in one function's own scope.
+    Nested functions and methods receive separate analyse passes; nested class statements and lambda bodies are skipped.
 
     Args:
         definition: Rule definition whose id, severity, pillar, tier, confidence and secondary pillars are copied into each finding.
         unit: Analysis unit that supplies the file path for each finding.
-        function: Function whose parameters and own-scope body are scanned.
-        vocabularies: Module-level vocabulary names mapped to their string entries, as collected from the module's top-level assignments.
+        function: Function to scan; only positional-only, regular and keyword-only parameters without collection annotations can supply text.
+        vocabularies: Module-level string entries; only non-empty vocabularies with at least one entry containing no space qualify.
 
     Returns:
-        One finding per qualifying scan site in the function's own scope; empty when none qualifies.
+        One finding per scan whose text maps to a source parameter and whose text or source name has a free-text token; empty if none qualifies.
     """
     parameters = {
         parameter.arg
@@ -276,25 +267,19 @@ def _parameter_text_sources(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     parameters: set[str],
 ) -> dict[str, str]:
-    """Map text-candidate names to the parameter they derive from.
+    """Map text-candidate names to their source parameters.
 
-    A parameter maps to itself. A local qualifies only when exactly one plain single-target assignment in the function's own scope binds it, and that
-    assignment's value is a parameter, either bare or under a chain of argument-free lower, casefold, strip, lstrip, rstrip or upper calls, so
-    call-derived strings and tokenised collections never qualify. A name rebound by such an assignment from any other expression (e.g. text =
-    text.split()) is dropped even when it is a parameter, because it no longer holds the free-text string the scan would match against. A parameter
-    rebound only through such chains stays mapped, to the chain's root, which is itself unless the chain starts at another parameter.
-
-    Annotated, augmented, chained, unpacking, loop, with and walrus bindings are not counted, so a local bound only that way is never mapped and a
-    parameter rebound that way stays mapped.
+    Only bare names and argument-free lower, casefold, strip, lstrip, rstrip and upper chains qualify as assignment values.
 
     Args:
-        function: Function whose own-scope assignments are inspected; assignments in nested functions, classes and lambdas are not.
+        function: Function whose own-scope plain single-target assignments are inspected; nested scopes and other binding forms are ignored.
         parameters: The function's parameter names that are not collection-annotated; each starts mapped to itself, and only these can be the root a
             name derives from.
 
     Returns:
-        Mapping from each qualifying parameter or local to the parameter it derives from; a name missing from the mapping cannot be the text of a
-        reported scan.
+        Each parameter starts mapped to itself; a local needs exactly one inspected assignment rooted in a source parameter.
+        A parameter may have several such assignments and maps to the last root encountered; any other inspected value removes its target.
+        Bindings outside plain single-target assignments do not affect the result. Missing names cannot supply a reported scan's text.
     """
     sources: dict[str, str] = {name: name for name in parameters}
     assigned_counts: dict[str, int] = {}
@@ -338,14 +323,14 @@ def _case_chain_root(value: ast.expr) -> str | None:
 
 
 def _vocabulary_scan_site(node: ast.AST) -> tuple[str, str, ast.AST] | None:
-    """Return ``(vocabulary, text, node)`` for an any()-scan or loop-scan site.
+    """Return the vocabulary name, text name and report node for an any() or loop scan.
 
     Args:
         node: Node from the function-scope walk; only calls and plain for loops are examined, async for loops are not.
 
     Returns:
-        The scanned iterable's name, the text name and the node to report (the any() call itself, or the if statement inside the loop). None when the
-        node is neither a call nor a plain for loop, or does not match a scan shape.
+        The iterable name, text name and report node (the any() call or the first matching if directly in the loop body).
+        None when the node does not match either scan shape.
     """
     if isinstance(node, ast.Call):
         return _any_scan_site(node)
@@ -355,13 +340,13 @@ def _vocabulary_scan_site(node: ast.AST) -> tuple[str, str, ast.AST] | None:
 
 
 def _any_scan_site(call: ast.Call) -> tuple[str, str, ast.AST] | None:
-    """Match an any() call whose generator tests each term of a named collection for containment in a name.
+    """Match a bare any call whose generator tests for containment of its term in a named text value.
 
-    The call must target the bare name any with a single generator-expression argument that has one for clause binding a bare name over a bare-name
-    iterable; list comprehensions and multi-clause generators do not match.
+    The only positional argument must be a generator with one for clause binding a bare name over a bare-name iterable.
+    Calls with keywords and generators with filters can still match.
 
     Args:
-        call: Call node to test.
+        call: Candidate call whose callee and generator are examined for a vocabulary containment scan.
 
     Returns:
         The iterable's name, the text name and the call node to report. None when the call does not have the any() scan shape or its element is not a
@@ -408,7 +393,7 @@ def _loop_scan_site(loop: ast.For) -> tuple[str, str, ast.AST] | None:
 
 
 def _containment_text(expression: ast.expr, term_name: str) -> str | None:
-    """Return the containment target name for ``<term> in <text>`` comparisons.
+    """Return the text name from a comparison of the form term in text.
 
     Args:
         expression: Test expression to inspect: the generator element of an any() scan or the test of an if statement in a loop scan.
@@ -444,7 +429,7 @@ def _has_free_text_token(name: str) -> bool:
 
 
 def _is_collection_annotated(annotation: ast.expr | None) -> bool:
-    """Whether *annotation*'s head type is a known non-str collection.
+    """Decide whether any supported head of the annotation names a known non-str collection.
 
     Args:
         annotation: Parameter annotation expression, or None for an unannotated parameter.
@@ -457,19 +442,17 @@ def _is_collection_annotated(annotation: ast.expr | None) -> bool:
 
 
 def _annotation_head_names(annotation: ast.expr | None) -> set[str]:
-    """Constructor name(s) at the head of a type annotation (``dict[..]`` -> ``dict``).
+    """Collect head names from supported type annotations, unwrapping Optional and Union.
 
-    ``Optional[...]`` / ``Union[...]`` wrappers unwrap to the head(s) they wrap,
-    so ``Optional[list[str]]`` and ``Union[str, dict]`` resolve to the inner
-    collection rather than the wrapper name.
+    A union contributes the supported names from all of its members, including non-collection names such as str.
 
     Args:
         annotation: Annotation expression to inspect, or None when the parameter has none.
 
     Returns:
-        Set of head names: the name itself for a bare name, the final attribute of a dotted reference (typing.List gives List), the head of a
-        subscripted type, the inner heads of an Optional or Union subscript, and the heads of both sides of an X | Y union. Every member is kept, so
-        Union[str, dict] gives both str and dict. Empty for None, a string forward reference and other unsupported forms.
+        Names from bare references, final attributes of dotted references, tuple elements and both sides of a | union.
+        A subscript contributes its base names. If those names are all Optional or Union, or there are none, it uses the index instead.
+        Empty for None, a string forward reference or another expression with no supported names.
     """
     if isinstance(annotation, ast.Name):
         return {annotation.id}

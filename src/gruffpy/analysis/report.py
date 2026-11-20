@@ -134,15 +134,9 @@ class AnalysisReport:
         return counts
 
     def finding_counts_by_rule(self) -> list[dict[str, Any]]:
-        """Return one row per rule that emitted at least one finding.
+        """Return rows for rules with findings, carrying counts, highest severities and first-finding confidences.
 
-        Each row carries ``ruleId``, ``count``, the **worst** ``severity``
-        observed across the rule's findings (so threshold-based rules that
-        emit both ``warning`` and ``error`` are labelled by the highest band
-        seen), and ``confidence`` taken from the first finding (confidence is
-        rule-level today and does not vary across findings of the same rule).
-        Rows are sorted by ``count`` descending then ``ruleId`` ascending so
-        identical inputs produce identical output across runs.
+        Sort by descending count and ascending ruleId so identical inputs produce repeatable output.
 
         Returns:
             Deterministically ordered list of per-rule rows.
@@ -168,10 +162,10 @@ class AnalysisReport:
         return sorted(per_rule.values(), key=lambda row: (-row["count"], row["ruleId"]))
 
     def parse_error_count(self) -> int:
-        """Return the number of parser diagnostics in the report.
+        """Count parse-error diagnostics for the machine report summary.
 
         Returns:
-            Count of diagnostics whose type is ``parse-error``.
+            Count of diagnostics whose type is parse-error.
         """
         return sum(1 for d in self.diagnostics if d.type == "parse-error")
 
@@ -190,7 +184,7 @@ class AnalysisReport:
         """Serialize the report to the canonical JSON-compatible payload.
 
         Returns:
-            Dictionary shaped according to ``gruff.analysis.v3``.
+            Dictionary shaped according to gruff.analysis.v3.
         """
         from gruffpy.analysis.machine_contract import analysis_payload
 
@@ -200,7 +194,7 @@ class AnalysisReport:
         """Return the sole supported findings-free projection of this report.
 
         Returns:
-            Analysis v3 with only ``findings`` removed and its schema identifier changed.
+            Analysis v3 with only findings removed and its schema identifier changed.
         """
         from gruffpy.analysis.machine_contract import summary_payload
 

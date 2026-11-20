@@ -34,6 +34,9 @@ def _write_corpus(project_root: Path) -> None:
 
     Args:
         project_root: Project root that receives a ``secrets`` folder holding the AWS, AWS-sibling, JWT and clean ``.env`` files.
+
+    Returns:
+        None. Creates the secrets directory and writes the synthetic fixture files.
     """
     secrets = project_root / "secrets"
     secrets.mkdir()
@@ -71,7 +74,7 @@ def _finding_scopes(payload: dict[str, Any]) -> set[tuple[str, str, int | None]]
         payload: Parsed JSON report whose findings are reduced.
 
     Returns:
-        One (rule id, file, line) tuple per distinct finding scope.
+        Distinct tuples of rule id, file, and one-based start line. The line is None when the finding has no start line.
     """
     return {(finding["ruleId"], finding["file"], finding["line"]) for finding in payload["findings"]}
 
@@ -82,6 +85,9 @@ def _write_config(project_root: Path, entries: str) -> None:
     Args:
         project_root: Project root whose ``.gruff-py.yaml`` is created or replaced.
         entries: YAML text appended after the schema version line.
+
+    Returns:
+        None. Creates or replaces the project's configuration file.
     """
     (project_root / ".gruff-py.yaml").write_text(_CONFIG_HEADER + entries)
 
@@ -103,10 +109,13 @@ def corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_exact_rule_and_path_removes_only_that_scope(corpus: Path) -> None:
-    """Case ``exact-rule-and-path``: every occurrence in the named file goes, nothing else.
+    """Remove every AWS-rule occurrence in the named file while retaining all other baseline findings.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Compares finding scopes before and after the exclusion and checks the suppression audit entry.
     """
     baseline = _analyse(use_config=False)
     _write_config(
@@ -137,7 +146,10 @@ def test_same_rule_in_another_file_and_other_rules_keep_reporting(corpus: Path) 
     """The sibling file and the second sensitive rule in the excluded file both survive.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks which rule and file pairs remain after applying the exclusion.
     """
     _write_config(
         corpus,
@@ -153,10 +165,13 @@ def test_same_rule_in_another_file_and_other_rules_keep_reporting(corpus: Path) 
 
 
 def test_scope_matching_nothing_reports_zero_without_failing(corpus: Path) -> None:
-    """Case ``scope-matching-nothing``: fixing the underlying problem never breaks a build.
+    """Keep findings unchanged and record zero suppressions when an exclusion matches only the clean file.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Compares finding scopes and checks that the exclusion records zero suppressions.
     """
     baseline = _analyse(use_config=False)
     _write_config(
@@ -171,10 +186,13 @@ def test_scope_matching_nothing_reports_zero_without_failing(corpus: Path) -> No
 
 
 def test_symbol_narrows_the_scope_to_nothing_on_this_pillar(corpus: Path) -> None:
-    """Case ``symbol-narrows-scope``: these findings carry no symbol, so nothing matches.
+    """Keep finding scopes unchanged and record zero suppressions when the exclusion requires SyntheticFixtureSymbol.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Writes the exclusion config and checks the resulting scopes and suppression record.
     """
     baseline = _analyse(use_config=False)
     _write_config(
@@ -194,10 +212,13 @@ def test_symbol_narrows_the_scope_to_nothing_on_this_pillar(corpus: Path) -> Non
 
 
 def test_two_distinct_entries_each_report_their_own_count(corpus: Path) -> None:
-    """Case ``two-distinct-entries``: independent scopes keep independent counts.
+    """Report a separate suppression count for each configured rule and file scope.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks which finding scopes disappear and how many findings each exclusion suppresses.
     """
     baseline = _analyse(use_config=False)
     _write_config(
@@ -221,10 +242,13 @@ def test_two_distinct_entries_each_report_their_own_count(corpus: Path) -> None:
 
 
 def test_same_rule_other_file_survives_when_only_the_sibling_is_excluded(corpus: Path) -> None:
-    """Case ``same-rule-other-file-survives``: excluding one file leaves the other reporting.
+    """Keep reporting the AWS rule in the unexcluded file when its sibling is excluded.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks which scopes disappear and that the AWS rule remains visible in the other file.
     """
     baseline = _analyse(use_config=False)
     _write_config(
@@ -240,10 +264,13 @@ def test_same_rule_other_file_survives_when_only_the_sibling_is_excluded(corpus:
 
 
 def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None:
-    """A suppressed finding stops gating the build, exactly like the inline directive channel.
+    """Check the initial warning-gate failure, then the exclusion counts and absence of AWS and JWT findings.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks the unconfigured exit status and the configured report's suppression counts and remaining findings.
     """
     unconfigured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "warning", "--no-config", "secrets"])
     assert unconfigured.exit_code == 1, unconfigured.output
@@ -269,10 +296,13 @@ def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None
 
 
 def test_text_output_states_the_suppressed_total_and_its_rationale(corpus: Path) -> None:
-    """Terminal users see the family total, so a configured suppression is never invisible.
+    """Check that terminal output shows the suppressed total and configured reason for the AWS exclusion.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks the command's exit status and the suppression section in standard output.
     """
     _write_config(
         corpus,
@@ -287,10 +317,13 @@ def test_text_output_states_the_suppressed_total_and_its_rationale(corpus: Path)
 
 
 def test_summary_text_states_the_same_suppressed_total_as_analyse(corpus: Path) -> None:
-    """Section 13a: ``summary`` filters, so it publishes the count ``analyse`` publishes.
+    """Show the same suppression count and rationale in summary and analyse text output.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks that both commands succeed and print the same suppression audit line.
     """
     _write_config(
         corpus,
@@ -309,10 +342,13 @@ def test_summary_text_states_the_same_suppressed_total_as_analyse(corpus: Path) 
 
 
 def test_no_reported_field_carries_matched_value_material(corpus: Path) -> None:
-    """Section 5 forbids value material anywhere in the report, audit rows included.
+    """Keep the primary AWS key and the JWT fixture value out of command standard output.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks that neither planted fixture value appears in the command's JSON output.
     """
     _write_config(
         corpus,
@@ -329,7 +365,10 @@ def test_rejected_entry_stops_the_json_run_with_a_config_error(corpus: Path) -> 
     """A machine consumer gets a parseable config-error payload and exit 2.
 
     Args:
-        corpus: Synthetic secrets corpus, already the working directory.
+        corpus: Project root where this test writes the exclusion config; already the working directory.
+
+    Returns:
+        None. Checks exit 2 and a JSON config error that identifies the exclusion entry and its invalid key.
     """
     _write_config(
         corpus,

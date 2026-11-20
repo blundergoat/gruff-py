@@ -147,7 +147,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     if definitions is None:
         definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     definitions = sorted(definitions, key=lambda definition: definition.id)
-    # Declared pillars keep the displayed total aligned with user-visible findings.
+    # Pillar totals cover the catalog, including rules disabled by default.
     rule_counts_by_pillar = Counter(definition.pillar for definition in definitions)
     lines = [
         "# Rules",
@@ -162,10 +162,9 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         "| Pillar | Rule count | Notes |",
         "|---|---:|---|",
     ]
-    # Readers see active pillars in a stable order across generated releases.
+    # Fixed pillar order keeps summaries comparable across regenerated catalogs.
     for pillar in _PILLAR_ORDER:
         registered_rule_count = rule_counts_by_pillar.get(pillar, 0)
-        # An empty pillar is reserved and gives users no rule row to configure.
         if registered_rule_count:
             lines.append(f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |")
     lines.extend(["", "## Rule IDs", ""])
@@ -173,11 +172,10 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     # Readers browse familiar feature sections before opening individual rule details.
     for group in _GROUP_ORDER:
         items = by_group.get(group, [])
-        # A section with no shipped rules would only add an empty heading for users.
         if not items:
             continue
         lines.extend([f"### {group}", ""])
-        # Each catalog item links the user's rule id to its default-enabled posture.
+        # An unmarked rule is enabled by default.
         for definition in items:
             suffix = " (default off)" if not definition.default_enabled else ""
             lines.append(f"- `{definition.id}`{suffix}")
@@ -205,7 +203,7 @@ def check_rules_markdown(path: Path) -> bool:
         path: Markdown file to compare against the freshly rendered output.
 
     Returns:
-        True when the file is byte-identical to ``render_rules_markdown()``.
+        True when the file's decoded text, after newline normalisation, matches the generated documentation.
     """
     return path.read_text() == render_rules_markdown()
 
@@ -223,13 +221,16 @@ def write_rules_markdown(path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for docs generation/checking.
+    """Check rule documentation by default. Use --write to regenerate it. The path defaults to docs/rules.md.
 
     Args:
         argv: Optional argv slice (defaults to ``sys.argv[1:]`` when ``None``).
 
     Returns:
-        ``0`` on success or when docs are current; ``1`` if ``--check`` fails.
+        0 after writing succeeds or when docs are current, or 1 when the default or explicit check finds different text.
+
+    Raises:
+        FileNotFoundError: When the file to check does not exist.
     """
     parser = argparse.ArgumentParser(description="Generate or check docs/rules.md.")
     parser.add_argument("path", nargs="?", default="docs/rules.md")
@@ -238,11 +239,10 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--write", action="store_true", help="Rewrite the docs file.")
     args = parser.parse_args(argv)
     path = Path(args.path)
-    # A contributor chooses write mode after changing the rules shipped to users.
     if args.write:
         write_rules_markdown(path)
         return 0
-    # Release checks compare bytes so stale user documentation fails without a rewrite.
+    # Checking compares decoded text without rewriting stale documentation.
     if args.check or not args.write:
         return 0 if check_rules_markdown(path) else 1
     return 0
@@ -270,7 +270,7 @@ def _group_for(definition: RuleDefinition) -> str:
     """Choose the generated-doc section where a user finds one rule.
 
     Args:
-        definition: One non-empty runtime rule definition.
+        definition: Rule whose id prefix selects the section; unrecognised prefixes use the rule's pillar.
 
     Returns:
         Stable user-facing section heading for the rule.
@@ -306,10 +306,10 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     """Render the settings and guidance a user needs to act on one rule.
 
     Args:
-        definition: One non-empty runtime rule definition to explain.
+        definition: Rule supplying the displayed defaults and the ID used to look up guidance.
 
     Returns:
-        Non-empty Markdown lines for the rule's catalog detail section.
+        A nonempty list of Markdown lines for the rule's catalog detail section, including blank separators.
     """
     docs = documentation_for_rule(definition.id)
     lines = [
@@ -327,10 +327,10 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     ]
     if not definition.default_enabled and definition.id in _M02_DEFAULT_OFF_REASONS:
         lines.append(f"- Default-off reason: {_M02_DEFAULT_OFF_REASONS[definition.id]}")
-    # Metric rules show the threshold a user can tune for finding severity.
+    # Show the threshold and severity together because users configure them as a pair.
     if _has_severity_thresholds(definition):
         lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")
-    # Named thresholds expose several user-tunable limits instead of one metric cutoff.
+    # Named thresholds document rule-specific settings outside the single threshold and severity pair.
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
     # Options explain non-threshold behavior users can configure for this rule.
@@ -343,7 +343,7 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     # Formula provenance lets reviewers trace how a measured value was calculated.
     if docs.formula_provenance:
         lines.append(f"- Formula provenance: {docs.formula_provenance}")
-    # Security metadata gives users the sink/source context attached to a finding.
+    # The security taxonomy helps readers identify the kinds of issues the rule reports.
     if docs.security_metadata:
         lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
     if docs.false_positive_shapes:
@@ -362,15 +362,15 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
 
 
 def _inline_mapping(mapping: dict[str, Any]) -> str:
-    """Format option values for a compact user-facing catalog line.
+    """Format named values for a compact user-facing catalog line.
 
     Args:
-        mapping: Option names and values; an empty mapping means no settings.
+        mapping: Catalog names and values, such as rule options or security metadata.
 
     Returns:
-        Sorted inline settings, or ``none`` when users have nothing to configure.
+        Inline code pairs in key order, or the literal none when the mapping is empty.
     """
-    # Sorted settings keep generated diffs predictable for reviewers.
+    # Sorting keys keeps catalog diffs stable when insertion order changes.
     pairs = ", ".join(f"`{key}` = `{value!r}`" for key, value in sorted(mapping.items()))
     # An empty mapping is rendered explicitly instead of leaving a blank catalog value.
     return pairs or "none"
@@ -383,7 +383,7 @@ def _has_severity_thresholds(definition: RuleDefinition) -> bool:
         definition: Runtime rule definition whose threshold contract is displayed.
 
     Returns:
-        ``False`` when no single threshold is available to the user.
+        True when the rule declares a single cutoff and its associated severity. Otherwise, False leaves any named thresholds eligible for display.
     """
     return definition.default_threshold is not None
 
@@ -405,7 +405,7 @@ def _suppression_lines() -> list[str]:
     """Render examples users follow when suppressing reviewed findings.
 
     Returns:
-        Non-empty Markdown lines covering same-line, next-line, and file scope.
+        A non-empty list of Markdown lines, including blank separators, covering same-line, next-line and file scope.
     """
     return [
         "## Suppressing Findings",
@@ -441,7 +441,7 @@ def _choosing_rules_lines() -> list[str]:
     """Render examples users follow when selecting or configuring rules.
 
     Returns:
-        Non-empty Markdown lines for default scans, disabling, and thresholds.
+        A non-empty list of Markdown lines, including blank separators, for default scans, disabling rules and setting thresholds.
     """
     return [
         "## Choosing Rules",

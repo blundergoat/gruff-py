@@ -52,6 +52,9 @@ def test_tokenize(identifier: str, expected: list[str]) -> None:
     Args:
         identifier: Identifier to split; the cases cover empty, underscore-only, snake, camel, acronym, digit and dunder shapes.
         expected: Tokens the case expects, in order.
+
+    Returns:
+        None after checking the ordered tokens, including an empty list for empty or underscore-only input.
     """
     assert tokenize(identifier) == expected
 
@@ -70,5 +73,8 @@ def test_lower_tokens(identifier: str, expected: list[str]) -> None:
     Args:
         identifier: Identifier with an acronym prefix or mixed snake and camel case.
         expected: Lower-cased tokens the case expects, in order.
+
+    Returns:
+        None after checking that the lowercase tokens match the expected sequence.
     """
     assert lower_tokens(identifier) == expected

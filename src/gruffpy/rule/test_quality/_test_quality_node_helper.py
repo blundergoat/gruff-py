@@ -31,10 +31,10 @@ _compute_counter = {"count": 0}
 
 
 def scopes_for_unit(unit: AnalysisUnit) -> ScopeMap:
-    """Return the scope classification for every function in a unit.
+    """Return scope classifications for function declarations outside function bodies.
 
-    Memoised: subsequent calls for the same tree return the cached map without
-    re-walking. Non-Python units (``tree is None``) yield an empty map.
+    Cache misses store a shared map and increment the computation counter; later calls return the same mutable map.
+    Units without a tree return an empty map.
 
     Args:
         unit: Parsed analysis unit to classify.
@@ -60,11 +60,13 @@ def iter_test_functions(
 ) -> Iterator[tuple[ast.FunctionDef | ast.AsyncFunctionDef, TestScope]]:
     """Yield function/scope pairs for every function in test scope.
 
-    Args:
-        unit: Parsed analysis unit to inspect.
+    On a cache miss for a parsed tree, iteration caches the scopes and increments the shared computation counter.
 
-    Returns:
-        Iterator of test function nodes and their classified scopes.
+    Args:
+        unit: Analysis unit whose tree supplies the function classifications.
+
+    Yields:
+        Function and test-related scope pairs, including conftest helpers. An unparsed unit or no matching scopes yields no pairs.
     """
     for fn, scope in scopes_for_unit(unit).items():
         if scope.kind is not TestScopeKind.NON_TEST:
@@ -78,11 +80,10 @@ def is_assertion_call(call: ast.Call) -> bool:
     """Return whether a call expression is an assertion helper.
 
     Args:
-        call: Call expression to inspect.
+        call: Call whose callee spelling is checked against the assertion and helper names.
 
     Returns:
-        True for ``self.assertX(...)``, ``assert_*`` helpers, ``pytest.raises``,
-        and related helpers.
+        True for recognized assertion-named calls, supported pytest helpers, or warnings.catch_warnings; false otherwise.
     """
     callee = call.func
     if isinstance(callee, ast.Name):
@@ -118,35 +119,28 @@ def _is_assertion_helper_name(name: str) -> bool:
 
 
 def is_catch_warnings_call(call: ast.Call) -> bool:
-    """Return whether a call is ``warnings.catch_warnings(...)``.
+    """Recognize catch_warnings calls by their extracted receiver name.
 
-    ``test-quality.no-assertions`` treats this context manager as an assertion
-    only when its ``with`` body escalates warnings to errors; other rules keep
-    the broader :func:`is_assertion_call` classification.
+    The no-assertions rule additionally requires an error filter; other rules use the broader assertion classification.
 
     Args:
-        call: Call expression to inspect.
+        call: Call whose callee attribute and receiver name identify the warnings context helper.
 
     Returns:
-        True for ``warnings.catch_warnings(...)`` calls.
+        True for a catch_warnings attribute whose extracted receiver spelling is warnings; false otherwise.
     """
     callee = call.func
     return isinstance(callee, ast.Attribute) and callee.attr == "catch_warnings" and _dotted_name(callee.value) == "warnings"
 
 
 def has_error_warnings_filter(node: ast.AST) -> bool:
-    """Return whether a subtree escalates warnings to errors.
-
-    Matches ``warnings.simplefilter("error", ...)`` and
-    ``warnings.filterwarnings("error", ...)`` calls anywhere under *node* -
-    the shape that makes a ``catch_warnings`` block fail the test when a
-    warning fires.
+    """Recognize warnings filter calls with the literal error string as their first positional argument.
 
     Args:
-        node: Subtree to inspect (typically a ``with`` statement).
+        node: Subtree searched for simplefilter or filterwarnings calls whose extracted receiver name is warnings.
 
     Returns:
-        True when an error-escalating warnings filter call is present.
+        True when a matching call has the literal error action; false otherwise.
     """
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
@@ -161,14 +155,13 @@ def has_error_warnings_filter(node: ast.AST) -> bool:
 
 
 def is_pytest_fixture_decorator(decorator: ast.AST) -> bool:
-    """Return whether a decorator marks a pytest fixture function.
+    """Recognize fixture decorator spellings without resolving their imports.
 
     Args:
-        decorator: Decorator expression to inspect.
+        decorator: Decorator expression that supplies the name to match. A decorator call supplies its callee name.
 
     Returns:
-        True for ``@pytest.fixture``, ``@pytest.fixture(...)``, ``@fixture``,
-        ``@fixture(...)``, and ``@_pytest.fixtures.fixture`` variants.
+        True when the extracted spelling is fixture or ends with .fixture; false for other or unknown spellings.
     """
     name = _dotted_name(decorator)
     if name is None:
@@ -177,11 +170,7 @@ def is_pytest_fixture_decorator(decorator: ast.AST) -> bool:
 
 
 def compute_count() -> int:
-    """Return the cumulative number of full scope computations performed.
-
-    Test-only instrumentation. The memoisation gate test diffs this counter
-    before/after running all test-quality rules on the same unit and asserts
-    the delta is 1, not N.
+    """Return the number of complete scope-map computations since the last counter reset.
 
     Returns:
         Number of complete scope-map computations performed.
@@ -190,7 +179,11 @@ def compute_count() -> int:
 
 
 def reset_compute_count() -> None:
-    """Reset the instrumentation counter. Test-only helper."""
+    """Reset the shared scope-computation counter for tests.
+
+    Returns:
+        None; the shared counter is set to zero.
+    """
     _compute_counter["count"] = 0
 
 
@@ -211,16 +204,15 @@ _MOCK_FACTORY_LEAVES: frozenset[str] = frozenset(
 
 
 def is_mock_factory_call(call: ast.Call) -> bool:
-    """Return whether a call constructs or opens a mock object.
+    """Recognize mock-factory call spellings for test-quality analysis.
 
-    Recognises both ``Mock()`` and ``unittest.mock.Mock()`` shapes, plus
-    ``mocker.patch(...)`` from pytest-mock.
+    Matching uses names only; any dotted target with patch before its final component is also accepted.
 
     Args:
-        call: Call expression to inspect.
+        call: Call whose callee spelling supplies the components for mock-factory matching.
 
     Returns:
-        True when the call is a ``Mock()``, ``MagicMock()``, ``patch(...)``, or equivalent.
+        True for a supported factory leaf or a non-final patch component; false for other or unnamed targets.
     """
     target = _dotted_name(call.func)
     if target is None:
@@ -228,7 +220,7 @@ def is_mock_factory_call(call: ast.Call) -> bool:
     leaf = target.split(".")[-1]
     if leaf in _MOCK_FACTORY_LEAVES:
         return True
-    # mocker.patch.object(...) / mocker.patch.dict(...) - match the patch root.
+    # A patch component can precede object or dict instead of being the target's final component.
     parts = target.split(".")
     return any(part == "patch" for part in parts[:-1])
 
@@ -236,14 +228,13 @@ def is_mock_factory_call(call: ast.Call) -> bool:
 def find_mock_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, ast.AST]:
     """Return variable bindings created from mock factories.
 
-    Catches ``mock = Mock()``, ``thing: Foo = MagicMock()``, and the with-statement
-    ``with patch(...) as mock:`` shape.
+    Recognizes simple assignments, annotated assignments, and with-statement aliases from supported mock factories.
 
     Args:
-        fn: Test function to inspect.
+        fn: Test function whose body is scanned without entering nested functions or lambdas.
 
     Returns:
-        Mapping of variable name to the assignment or with-item node that created it.
+        Mapping of each name to its last matching assignment or with-item node in traversal order. Empty when no bindings match.
     """
     bindings: dict[str, ast.AST] = {}
     for node in walk_test_body(fn):
@@ -276,7 +267,8 @@ def _assign_mock_bindings(node: ast.Assign) -> dict[str, ast.AST]:
         node: Assignment whose right-hand call and direct target names are inspected.
 
     Returns:
-        Simple target names mapped to the supplied assignment node; an empty mapping when the value is not a recognized factory call.
+        Simple target names mapped to the supplied assignment node; an empty mapping when the value is not a recognized factory call
+        or no target is a simple name.
     """
     if not isinstance(node.value, ast.Call) or not is_mock_factory_call(node.value):
         return {}
@@ -284,13 +276,13 @@ def _assign_mock_bindings(node: ast.Assign) -> dict[str, ast.AST]:
 
 
 def _ann_assign_mock_bindings(node: ast.AnnAssign) -> dict[str, ast.AST]:
-    """Extract a simple annotated target bound to a recognized mock factory.
+    """Extract a simple annotated binding to the result of a recognized mock factory call.
 
     Args:
         node: Annotated assignment whose optional value and target are inspected.
 
     Returns:
-        The target name mapped to the supplied node, or an empty mapping for an absent value, unmatched call or non-name target.
+        The name mapped to the supplied node, or an empty mapping unless the target is a name and the value is a recognized mock factory call.
     """
     if node.value is None or not isinstance(node.value, ast.Call) or not is_mock_factory_call(node.value) or not isinstance(node.target, ast.Name):
         return {}
@@ -316,17 +308,15 @@ def _with_mock_bindings(node: ast.With) -> dict[str, ast.AST]:
 def walk_test_body(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> Iterator[ast.AST]:
-    """Yield every node in a test function body.
+    """Yield test-body nodes while leaving nested function and lambda nodes unexpanded.
 
-    A nested ``def helper(): ...`` inside a test is yielded (so rules can see
-    it), but the nested function's body is not - its statements belong to the
-    inner scope, not the test.
+    The walk also visits nested class bodies.
 
     Args:
         fn: Test function to walk.
 
-    Returns:
-        Iterator over body nodes, excluding nested function bodies.
+    Yields:
+        Each visited body node, including nested function and lambda nodes before their children are skipped.
     """
 
     def _visit(node: ast.AST) -> Iterator[ast.AST]:

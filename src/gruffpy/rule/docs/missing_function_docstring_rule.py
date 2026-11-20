@@ -74,15 +74,14 @@ class MissingFunctionDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze a Python module for undocumented public functions.
+        """Analyze a Python module for undocumented functions and methods in the configured scope.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer; its
-                ``everyCallable`` option widens the rule.
+            context: Rule execution context supplied by the analyzer. Its everyCallable option widens the rule.
 
         Returns:
-            Findings for functions or methods in scope that miss docstrings.
+            Findings for in-scope functions or methods missing docstrings; empty when the tree is absent or none qualify.
         """
         if unit.tree is None:
             return []
@@ -102,12 +101,14 @@ def _undocumented_functions(unit: AnalysisUnit, *, every_callable: bool) -> list
 
     Args:
         unit: Analysis unit whose parsed tree is walked; the tree must not be None, and the file's display path decides the test-file skip.
-        every_callable: Whether the ``everyCallable`` option is on, which brings underscore-private names and ``test_*`` functions in test files into
-            scope.
+        every_callable: Whether everyCallable includes private names and functions beginning with test_ in test files.
 
     Returns:
         Pairs of each reportable function node and its parent chain from the module down to its immediate parent, in walk order; empty when every
         function is documented, out of scope or exempt.
+
+    Raises:
+        AssertionError: When unit.tree is None.
     """
     assert unit.tree is not None
     candidates: list[tuple[FunctionNode, list[ast.AST]]] = []
@@ -129,16 +130,13 @@ def _should_report_missing_function_docstring(
 ) -> bool:
     """Decide whether one function or method is in scope, lacks a docstring and matches no exemption.
 
-    Name scope comes from is_in_documentation_scope; without ``everyCallable``, a ``test_*`` function in a file that is_test_file accepts is also
-    skipped. The function is kept only when extract_docstring finds no docstring and none of is_abstract_method, is_overload_stub,
-    is_property_setter_or_deleter, is_protocol_method_stub or _is_single_callsite_closure match.
+    Exemptions cover abstract methods, overload stubs, property setters and deleters, protocol stubs and the single-callsite closure heuristic.
 
     Args:
-        node: Function or async function node being checked.
+        node: Definition whose name, existing docstring and exemption markers determine whether to report a finding.
         parents: Parent chain of node from the module down to its immediate parent, used by the protocol-stub and nested-closure exemptions.
-        display_path: Display path of the file, used only to decide whether a ``test_*`` function sits in a test file.
-        every_callable: Whether the ``everyCallable`` option is on; when true, underscore-private names come into scope and ``test_*`` functions in
-            test files are no longer skipped.
+        display_path: Display path used to check whether a function with the test_ prefix is in a test file.
+        every_callable: Whether everyCallable is enabled; true includes private names and functions beginning with test_ in test files.
 
     Returns:
         True when the function should get a finding; False when it is out of scope, already has a docstring, or matches an exemption.
@@ -160,9 +158,8 @@ def _should_report_missing_function_docstring(
 def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> bool:
     """Test whether a nested function's name appears as a bare name at most once within its nearest enclosing function.
 
-    The enclosing scope is the innermost FunctionDef or AsyncFunctionDef in parents, so a method of a class defined inside a function is counted
-    against that function. Occurrences are counted by _name_reference_count_excluding, so attribute access such as ``self.method`` is not counted and
-    a name with no occurrence at all also qualifies.
+    Search the innermost enclosing function, including when node is a method of a class nested inside that function.
+    Count name nodes outside node, including attribute bases. Attribute names after a dot do not count. Zero occurrences also qualifies.
 
     Args:
         node: Function being tested; its own subtree is left out of the count.
@@ -172,11 +169,6 @@ def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> b
         True when node has an enclosing function whose subtree, outside node itself, holds at most one bare-name occurrence of node's name; False when
         no enclosing function exists or the name occurs more than once.
     """
-    # Nested function whose name is referenced at most once inside the
-    # enclosing function is treated as a closure / one-shot callback (regex
-    # sub callbacks, SSE `event_generator`, mock-class method stubs). Forcing
-    # a docstring on these is noise - the call-site context already documents
-    # intent.
     enclosing = next(
         (p for p in reversed(parents) if isinstance(p, ast.FunctionDef | ast.AsyncFunctionDef)),
         None,
@@ -189,11 +181,11 @@ def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> b
 def _name_reference_count_excluding(root: ast.AST, name: str, exclude: ast.AST) -> int:
     """Count the bare-name nodes matching an identifier under a root node, skipping one excluded subtree.
 
-    Every ``ast.Name`` context counts, so an assignment to the name counts as well as a load, while an attribute access such as ``obj.name`` does not.
+    Every ast.Name context counts, so an assignment to the name counts as well as a load, while an attribute access such as obj.name does not.
 
     Args:
         root: Node whose descendants are searched; in this rule, the enclosing function.
-        name: Identifier compared against each ``ast.Name`` node's id.
+        name: Identifier compared against each ast.Name node's id.
         exclude: Node skipped together with its whole subtree; in this rule, the nested function itself.
 
     Returns:
@@ -204,8 +196,7 @@ def _name_reference_count_excluding(root: ast.AST, name: str, exclude: ast.AST) 
     while stack:
         current = stack.pop()
         if current is exclude:
-            # Don't descend into the closure's own body - recursive references
-            # inside the closure shouldn't count toward "external callsites".
+            # Recursive references inside the closure do not count as external uses.
             continue
         if isinstance(current, ast.Name) and current.id == name:
             count += 1
@@ -262,8 +253,8 @@ def _missing_docstring_message(node: FunctionNode, symbol: str) -> str:
         symbol: Qualified symbol shown in the finding.
 
     Returns:
-        A message naming the intent, each parameter, and a Returns or Yields and
-        a Raises section only when the function returns a value or raises.
+        A request for intent and parameter entries, excluding a leading self or cls and names starting with an underscore.
+        Requests Yields for generators, otherwise Returns when _returns_documentable_value is true, and Raises when has_raise_in_body is true.
     """
     wanted = ["a brief intent description"]
     parameters = [name for name in signature_param_names(node) if not name.startswith("_")]
@@ -288,8 +279,8 @@ def _returns_documentable_value(node: FunctionNode) -> bool:
             expressions decide.
 
     Returns:
-        True when the function has a return annotation other than a bare ``None``, or, with no annotation, when its own body yields or has a return
-        whose expression is not the literal ``None``; False otherwise.
+        True when the function has a return annotation other than a bare None, or, with no annotation, when its own body yields or has a return
+        whose expression is not the literal None; False otherwise.
     """
     if has_return_annotation(node):
         return not has_none_only_return(node)

@@ -16,13 +16,13 @@ _FUNCTION_CACHE_ATTR = "_gruffpy_function_nodes"
 
 
 def iter_functions(tree: ast.AST) -> Iterator[FunctionLike]:
-    """Yield every function-like node in an AST, in document order.
+    """Yield cached function-like nodes, or collect them in ast.walk order and cache the tuple on the root.
 
     Args:
-        tree: AST root to inspect.
+        tree: AST root to inspect and cache on; later AST changes do not invalidate its cached tuple.
 
-    Returns:
-        Iterator over function, async function, and lambda nodes.
+    Yields:
+        Function, async function and lambda nodes in the cached or newly collected order.
     """
     cached = getattr(tree, _FUNCTION_CACHE_ATTR, None)
     if isinstance(cached, tuple):
@@ -81,16 +81,12 @@ def _walk_skip_nested(node: ast.AST) -> Iterator[ast.AST]:
 
 
 def is_wildcard_pattern(pattern: ast.pattern) -> bool:
-    """Return whether a match pattern is a bare wildcard.
-
-    ``MatchAs(pattern=None, name=None)`` is the bare ``_`` (no binding).
-    Named catch-alls like ``case x:`` bind a name and are NOT wildcards
-    in the cyclomatic-counting sense - they are still decisions.
+    """Identify an unbound wildcard for cyclomatic counting; named catch-alls still count as decisions.
 
     Args:
-        pattern: Pattern node from a ``match`` case.
+        pattern: Pattern node from a match case.
 
     Returns:
-        True for ``case _:`` and equivalent bare-name catch-all patterns.
+        True only for MatchAs with both pattern and name unset; False for every other pattern.
     """
     return isinstance(pattern, ast.MatchAs) and pattern.pattern is None and pattern.name is None

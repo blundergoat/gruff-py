@@ -30,8 +30,7 @@ class PublicMethodCountRule(Rule):
         """Describe the public-method-count rule with a configurable threshold (default 10).
 
         Returns:
-            Definition under the size pillar; methods starting with ``_``
-            (including dunder methods) are excluded from the count.
+            Definition under the size pillar; names beginning with an underscore, including dunder methods, are excluded from the count.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,17 +45,15 @@ class PublicMethodCountRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per class whose public-method count exceeds the threshold.
 
-        Only direct methods of the class body are counted - nested classes
-        are reported separately. The metric is a proxy for the size of the
-        class's external API.
+        Counts distinct public method names defined directly in each class; nested classes are assessed separately.
+        Test-class shapes, recognized framework bases and dataclass or attrs-style decorators exempt a class.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Parsed source file to walk; a missing tree yields no findings.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            One finding per ``ClassDef`` whose public-method count is over
-            threshold.
+            One finding per eligible class over threshold; an empty list when none qualify.
         """
         if unit.tree is None:
             return []
@@ -154,7 +151,7 @@ def _format_number(value: int | float) -> str:
         value: Threshold taken from the matched severity threshold, as an int or a float.
 
     Returns:
-        The float text unchanged when value is a float with a fractional part; otherwise the integer text, so 10.0 renders as 10.
+        Integer text for integers and finite whole-number floats, so 10.0 renders as 10. Other floats use their usual Python text.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

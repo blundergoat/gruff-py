@@ -31,9 +31,7 @@ class PrivateReflectionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the private-reflection rule as a medium-confidence warning.
 
-        Medium confidence because some legitimate test patterns access
-        ``_private`` (e.g. testing a thoroughly internal helper); the rule
-        catches the broad case and lets users suppress the rare exceptions.
+        A finding identifies private access for the reviewer to judge, since a test may reach into an internal helper intentionally.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -48,14 +46,12 @@ class PrivateReflectionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tests that access ``_private`` attributes on objects other than ``self``/``cls``.
+        """Flag private-attribute access in tests, excluding dunder names and attributes accessed directly on self or cls.
 
-        Skips dunder names (``__init__``, ``__class__``) since those are
-        framework hooks rather than private state; allows ``self._x`` and
-        ``cls._x`` to permit ordinary in-class test helpers.
+        These exclusions allow protocol hooks and ordinary in-class test helpers.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
@@ -72,7 +68,6 @@ class PrivateReflectionRule(Rule):
                     continue
                 if not _is_private_name(node.attr):
                     continue
-                # Skip self._x access inside the test class itself.
                 if isinstance(node.value, ast.Name) and node.value.id in {"self", "cls"}:
                     continue
                 parents = parent_chain(fn)
@@ -94,7 +89,7 @@ class PrivateReflectionRule(Rule):
                         metadata={"attribute": node.attr},
                     ),
                 )
-                break  # one finding per test
+                break  # The first location gives the reviewer a concrete dependency to inspect.
         return findings
 
 
@@ -108,5 +103,5 @@ def _is_private_name(name: str) -> bool:
         True for a leading underscore unless the name both starts and ends with double underscores; false otherwise.
     """
     if name.startswith("__") and name.endswith("__"):
-        return False  # dunder = framework hook, not private
+        return False  # Keep Python's special-name convention out of private-reflection findings.
     return name.startswith("_")

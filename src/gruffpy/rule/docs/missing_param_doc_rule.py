@@ -78,11 +78,10 @@ class MissingParamDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer; its
-                ``everyCallable`` option widens the rule.
+            context: Rule context whose everyCallable option includes private names and requires nonblank parameter descriptions.
 
         Returns:
-            One finding per documented function in scope that misses parameter entries.
+            One finding per documented in-scope function missing parameter entries; empty for an absent tree or no candidates.
         """
         if unit.tree is None:
             return []
@@ -98,7 +97,7 @@ def _param_doc_candidates(tree: ast.AST, *, every_callable: bool) -> list[_Param
 
     Args:
         tree: Parsed module tree to walk.
-        every_callable: Whether the ``everyCallable`` option is on; passed to _param_doc_candidate for each function.
+        every_callable: Whether the everyCallable option is on; passed to _param_doc_candidate for each function.
 
     Returns:
         One candidate per function that _param_doc_candidate reports as missing parameter entries; empty when it reports none.
@@ -114,20 +113,17 @@ def _param_doc_candidates(tree: ast.AST, *, every_callable: bool) -> list[_Param
 
 
 def _param_doc_candidate(node: FunctionNode, *, every_callable: bool) -> _ParamDocCandidate | None:
-    """Build a candidate for one function when its docstring has no entry for one or more of its signature parameters.
+    """Build a candidate listing required parameters missing from a parseable function docstring.
 
-    The function is skipped when _should_skip_param_doc_check excludes it, when it has no docstring, or when parse_docstring returns None. Signature
-    parameters come from signature_param_names, and a parameter whose name starts with an underscore is never required. With every_callable on, a
-    docstring entry counts only when _has_description finds description text in it.
+    Exempt functions are skipped, underscore-prefixed parameters are not required, and every_callable requires nonblank entry descriptions.
 
     Args:
         node: Function definition to check.
-        every_callable: Whether the ``everyCallable`` option is on; it brings underscore-private function names into scope and stops an entry without
-            a description from counting.
+        every_callable: Whether everyCallable includes private function names and requires nonblank descriptions for parameter entries.
 
     Returns:
-        Candidate holding the node, its qualified symbol, the missing parameter names in the order signature_param_names lists them, and the detected
-        docstring style; None when the function is skipped, has no parseable docstring, or has an entry for every required parameter.
+        Candidate with the node, qualified symbol, missing names in signature_param_names order and detected style.
+        None when the function is exempt, has no parseable docstring, or every required parameter has a qualifying entry.
     """
     if _should_skip_param_doc_check(node, every_callable=every_callable):
         return None
@@ -158,7 +154,7 @@ def _should_skip_param_doc_check(node: FunctionNode, *, every_callable: bool) ->
 
     Args:
         node: Function definition to test.
-        every_callable: Whether the ``everyCallable`` option is on; it brings underscore-private function names into scope.
+        every_callable: Whether the everyCallable option is on; it brings underscore-private function names into scope.
 
     Returns:
         True when the rule must not check the function's parameter entries.

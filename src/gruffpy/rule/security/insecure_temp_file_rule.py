@@ -54,10 +54,7 @@ class InsecureTempFileRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the insecure-temp-file rule as a medium-confidence WARNING.
 
-        WARNING severity because the TOCTOU window only matters on shared
-        hosts (less common in containerised deploys); medium confidence
-        because the matched shapes are explicit but legitimate uses exist
-        (debug scripts writing well-known paths).
+        Predictable temporary paths can race with other processes; legitimate fixed-path uses lower confidence.
 
         Returns:
             Definition for the insecure-temp-file rule under the security
@@ -74,15 +71,16 @@ class InsecureTempFileRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tempfile.mktemp() and file-API calls with hardcoded /tmp prefixes.
+        """Flag calls spelled tempfile.mktemp or mktemp.
+
+        Also flag supported file and path calls with positional string literals starting with /tmp/ or /var/tmp/.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per mktemp call or per hardcoded /tmp path passed
-            to a file API.
+            At most one finding per matched call, or an empty list when parsing is unavailable or no call matches.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []

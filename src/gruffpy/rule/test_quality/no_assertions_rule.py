@@ -62,15 +62,15 @@ class _Collection:
     by_unittest: bool
 
     def is_collected(self, scope_kind: TestScopeKind) -> bool:
-        """Return whether a function of this scope kind is a collected test in this file.
+        """Check runner eligibility before assertion analysis screens support functions.
 
         Args:
-            scope_kind: Test-scope classification of the function.
+            scope_kind: Candidate classification used to decide whether unittest discovery applies.
 
         Returns:
-            True when some runner collects that kind of test from this file.
+            True if the file matches pytest collection, or if it matches unittest discovery and the scope is a TestCase test method.
         """
-        # unittest discovery loads only TestCase methods; bare functions and Test* classes are pytest's alone.
+        # Only TestCase test methods can qualify through unittest discovery. Other candidate scopes need a pytest match.
         if scope_kind is TestScopeKind.UNITTEST_TEST_METHOD:
             return self.by_pytest or self.by_unittest
         return self.by_pytest
@@ -84,10 +84,7 @@ class NoAssertionsRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the no-assertions rule as a high-confidence warning.
 
-        High confidence because a collected test with zero ``assert``
-        statements, assertion helpers, framework assertions, AND
-        ``pytest.raises``/``warns`` blocks is almost certainly verifying
-        nothing.
+        Such tests provide no recognized syntactic evidence of an expected outcome.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -103,44 +100,35 @@ class NoAssertionsRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag collected tests with no assertion statements, helpers, or raises/warns blocks.
+        """Flag eligible tests with no recognized assertion-like syntax.
 
-        A test counts as having an assertion if any of these appear in its
-        body, including inside nested helpers and callbacks it defines: a bare
-        ``assert`` statement, a framework assertion call, an ``assert_*`` helper
-        call, or a ``with`` item whose context manager is an assertion call
-        (``warnings.catch_warnings`` only when the block escalates warnings to
-        errors). Files no runner collects, shipped package modules, pytest
-        fixtures, conftest support functions, nox sessions, and invoke tasks are
-        not collected tests for this rule.
+        Recognition includes nested bodies, patch replacements referencing raising fakes, and decorator calls; support functions are excluded.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context; supplies the project root whose pytest settings name test files.
+            unit: Parsed source file to inspect; a missing AST yields no findings.
+            context: Rule execution context supplying the project root for pytest discovery settings cached on first lookup.
 
         Returns:
-            One finding per collected test function with zero detected assertions.
+            One finding per eligible test with no recognized assertion-like syntax.
         """
-        # Sources without an AST cannot contain a collected Python test.
+        # Without an AST, an empty result means the file was never checked for assertions.
         if unit.tree is None:
             return []
         collection = _collection_for_unit(unit, context)
-        # A file no runner collects holds no tests to verify, whatever its functions are named.
+        # Keep test-like helpers out of the report when neither runner's discovery convention admits their file.
         if not (collection.by_pytest or collection.by_unittest):
             return []
         definition = self.definition()
         imported_pytest_assertions = _imported_pytest_assertion_callees(unit.tree)
         task_runner_decorators = _imported_task_runner_decorators(unit.tree)
         findings: list[Finding] = []
-        # Each collected test needs at least one construct that can fail on an unmet expectation.
         for fn, scope in test_functions(unit):
-            # A runner that does not load this kind of test from this file never executes it as one.
             if not collection.is_collected(scope.kind):
                 continue
             # Fixtures, conftest helpers, and task-runner sessions support tests but are not test cases.
             if _is_no_assertions_support_function(fn, scope, task_runner_decorators):
                 continue
-            # A recognised assertion makes the test verifiable, so no finding is needed.
+            # Recognized assertion syntax satisfies this rule even when its execution cannot be established.
             if _has_any_assertion(fn, imported_pytest_assertions):
                 continue
             parents = parent_chain(fn)
@@ -169,42 +157,36 @@ def _has_any_assertion(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     imported_pytest_assertions: frozenset[str],
 ) -> bool:
-    """Return whether a test contains a construct that verifies an expectation.
+    """Detect assertion-like syntax accepted by the no-assertions rule.
 
     Args:
         fn: Collected test function to inspect.
-        imported_pytest_assertions: Callee names resolved from pytest imports; empty means the
-            source uses no supported direct or aliased imports.
+        imported_pytest_assertions: Additional pytest callee spellings from imports; empty adds no matches beyond built-in name checks.
 
     Returns:
-        True when the test contains an assertion statement or recognised assertion-like call.
+        True for recognized body syntax, an accepted patch replacement, or a recognized decorator call; false otherwise.
     """
-    # Test bodies may verify through statements, direct calls, or context managers, in any scope they define.
+    # Nested helpers and callbacks count syntactically even when this walk cannot show that the test invokes them.
     for node in _walk_test_body_deeply(fn):
-        # A Python assertion fails the test when its expectation is false.
         if isinstance(node, ast.Assert):
             return True
-        # Standalone framework helpers can fail without a language-level assert statement.
         if isinstance(node, ast.Call) and _is_standalone_assertion_call(node, imported_pytest_assertions):
             return True
-        # Exception and warning expectations are expressed as context managers.
         if isinstance(node, ast.With) and _has_with_item_assertion(node, imported_pytest_assertions):
             return True
     return _has_installed_failure_fake(fn) or _has_decorator_assertion_call(fn, imported_pytest_assertions)
 
 
 def _has_installed_failure_fake(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Recognise a negative expectation installed as a patch replacement.
+    """Recognise a local raising fake supplied as a patch replacement.
 
-    A raising fake can fail the test when an unwanted dependency is called. Its
-    mere definition is insufficient: it must occupy a replacement argument,
-    rather than the patched target, in a recognised patch call.
+    A matching fake must occupy a replacement position or a new or side_effect keyword; target-only references do not count.
 
     Args:
         fn: Test function whose nested fakes and patch calls are inspected.
 
     Returns:
-        True when a local fake raising AssertionError is installed.
+        True when a recognized patch call names a local fake containing an AssertionError raise; false otherwise.
     """
     failures = {
         node.name
@@ -269,24 +251,21 @@ def _has_with_item_assertion(
     with_statement: ast.With,
     imported_pytest_assertions: frozenset[str],
 ) -> bool:
-    """Return whether a context manager verifies an exception or warning expectation.
+    """Detect recognized assertion-like with-items, with special handling for warning filters.
 
     Args:
-        with_statement: ``with`` statement whose context managers may assert behaviour.
-        imported_pytest_assertions: Callee names resolved from pytest imports; empty means only
-            canonical and assertion-named calls can match.
+        with_statement: With statement whose context calls are classified by their extracted spellings.
+        imported_pytest_assertions: Additional pytest callee spellings from imports; empty leaves only built-in name checks.
 
     Returns:
-        True when any context manager can fail the test on an unmet expectation.
+        True for a recognized context call; catch_warnings additionally needs an error filter. False otherwise.
     """
-    # Any assertion-like context manager is enough to make the test verifiable.
+    # Warning-state isolation alone does not satisfy this rule.
     for item in with_statement.items:
-        # Ordinary resource managers do not verify an outcome.
         if not (isinstance(item.context_expr, ast.Call) and _is_recognised_assertion_call(item.context_expr, imported_pytest_assertions)):
             continue
-        # Catching warnings verifies behavior only when warnings are promoted to failures.
+        # A recognized catch_warnings call counts only with a literal error filter somewhere in the with subtree.
         if is_catch_warnings_call(item.context_expr):
-            # An error filter turns any matching warning into a failed test.
             if has_error_warnings_filter(with_statement):
                 return True
             continue
@@ -325,12 +304,11 @@ def _is_recognised_assertion_call(
     """Recognise canonical calls and names bound through pytest imports.
 
     Args:
-        call: Call expression to classify.
-        imported_pytest_assertions: Callee names resolved from pytest imports; empty means the
-            source uses no supported direct or aliased imports.
+        call: Expression whose callee is checked for a recognized assertion spelling.
+        imported_pytest_assertions: Extra callee spellings from imports. An empty set leaves the shared and private-name checks in effect.
 
     Returns:
-        True when the shared matcher or an import-aware callee match recognises the call.
+        True for a shared assertion match, a bare name or one-level attribute starting with _assert at its leaf, or a collected pytest name.
     """
     target = _callee_name(call)
     private_assertion = target is not None and target.split(".")[-1].startswith("_assert")
@@ -338,7 +316,7 @@ def _is_recognised_assertion_call(
 
 
 def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:
-    """Resolve direct and module-aliased pytest assertion helper names in one source tree.
+    """Collect extra pytest assertion spellings by matching import syntax across one source tree.
 
     Use this once per analysed file so every test in the file shares the same import lookup.
 
@@ -346,23 +324,20 @@ def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:
         tree: Parsed Python source whose imports establish local pytest names.
 
     Returns:
-        Callee names such as ``raises`` or ``pt.warns``; empty means no supported aliases exist.
+        Helper spellings from pytest module aliases and from-imports whose module field is pytest. Empty means no extra spellings were found.
     """
     assertion_callees: set[str] = set()
-    # Imports are collected once per file rather than rediscovered for every test function.
     for node in ast.walk(tree):
-        # A module alias applies to each assertion-like helper exposed by pytest.
+        # A module alias gives the rule another spelling for each supported helper.
         if isinstance(node, ast.Import):
-            # One import statement may bind several unrelated modules.
             for imported_module in node.names:
-                # Canonical ``pytest`` calls are already covered by the shared matcher.
+                # Canonical pytest calls are already covered by the shared matcher.
                 if imported_module.name != "pytest" or imported_module.asname is None:
                     continue
                 assertion_callees.update(f"{imported_module.asname}.{helper_name}" for helper_name in _PYTEST_ASSERTION_HELPERS)
             continue
-        # Direct imports bind one helper name, optionally under a local alias.
         if isinstance(node, ast.ImportFrom) and node.module == "pytest":
-            # Only helpers with assertion semantics can satisfy this rule.
+            # Direct imports use the same helper allowlist as module aliases.
             for imported_helper in node.names:
                 if imported_helper.name not in _PYTEST_ASSERTION_HELPERS:
                     continue
@@ -371,57 +346,55 @@ def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:
 
 
 def _callee_name(call: ast.Call) -> str | None:
-    """Return the simple or one-level dotted name used for an assertion call.
+    """Return the bare or one-level dotted spelling of a call target.
 
     Args:
-        call: Call expression whose imported binding may identify an assertion helper.
+        call: Call expression whose callee spelling is inspected without resolving imports.
 
     Returns:
-        A name such as ``raises`` or ``pt.raises``; ``None`` means the callee has another shape.
+        Callee spelling, or None unless the callee is a name or an attribute on a name.
     """
     # Direct imports produce a simple local name.
     if isinstance(call.func, ast.Name):
         return call.func.id
-    # ``import pytest as pt`` produces a one-level dotted helper call.
+    # An aliased module import can make an assertion helper use a dotted spelling.
     if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
         return f"{call.func.value.id}.{call.func.attr}"
     return None
 
 
 def _walk_test_body_deeply(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
-    """Yield every node in a test body, including nested function and lambda bodies.
+    """Yield every node beneath a test's body statements for assertion detection.
 
-    The shared ``walk_test_body`` stops at nested scopes because most test-quality rules judge only a
-    test's own statements. An assertion inside a callback or local helper the test registers still
-    verifies the test, so this rule looks through those scopes.
+    Nested helpers and callbacks are included because this rule counts assertion syntax within those scopes.
 
     Args:
         fn: Collected test function to walk.
 
-    Returns:
-        Iterator over every node beneath the test's body statements; decorators and defaults are excluded.
+    Yields:
+        AST nodes in the body subtree, including nested decorators and defaults; excludes the outer function's decorators and defaults.
     """
-    # Decorators and argument defaults are not part of what the test executes, so only body statements are walked.
+    # The outer function's decorators and defaults execute at definition time, so assertion detection starts at its body.
     for statement in fn.body:
         yield from ast.walk(statement)
 
 
 def _collection_for_unit(unit: AnalysisUnit, context: RuleContext) -> _Collection:
-    """Decide which test runners would collect tests from the analysed file.
+    """Estimate file eligibility from discovery names and the package-location heuristic.
 
     Args:
         unit: Parsed source file whose path is matched against collection conventions.
-        context: Rule execution context; its project root locates ``pyproject.toml``.
+        context: Rule execution context whose project root locates pyproject.toml and keys the shared config cache populated on first lookup.
 
     Returns:
-        Collection flags; both false mean no runner loads tests from the file.
+        Runner-convention flags. Both false exclude the file from this rule. Missing or empty python_files settings use the default pytest globs.
     """
     display_path = unit.file.display_path.replace("\\", "/")
     basename = PurePosixPath(display_path).name
     patterns = read_pytest_config(context.project_root).python_files or _DEFAULT_PYTHON_FILES
     by_pytest = any(_matches_python_files(display_path, basename, pattern) for pattern in patterns)
     by_unittest = fnmatch.fnmatchcase(basename, _UNITTEST_DISCOVERY_PATTERN)
-    # Importable package code named like a test is shipped with the distribution rather than collected.
+    # The package-location heuristic excludes likely library helpers even when their names match test globs.
     if (by_pytest or by_unittest) and _is_shipped_package_module(unit.file.absolute_path, display_path):
         return _Collection(by_pytest=False, by_unittest=False)
     return _Collection(by_pytest=by_pytest, by_unittest=by_unittest)
@@ -445,28 +418,23 @@ def _matches_python_files(display_path: str, basename: str, pattern: str) -> boo
 
 
 def _is_shipped_package_module(absolute_path: str, display_path: str) -> bool:
-    """Return whether a file is importable package code outside any test directory.
-
-    ``bandit/core/test_properties.py`` matches ``test_*.py``, yet ``bandit`` and ``bandit/core`` both carry
-    ``__init__.py`` and no directory on the way is a test directory, so it ships with the distribution and
-    its ``test_*`` decorator factories are not tests.
+    """Identify regular-package paths outside test directories for exclusion from collected-test analysis.
 
     Args:
         absolute_path: Filesystem path used to look for ``__init__.py`` in each parent directory.
         display_path: Project-relative path whose directory segments are inspected.
 
     Returns:
-        True only when every directory between the project root and the file is a package and none is a
-        test directory; a root-level file or a path outside the project is never shipped package code.
+        True when every directory between the project root and file has an __init__.py and none is a test directory;
+        false for root-level files and outside-project paths.
     """
     directories = PurePosixPath(display_path).parent.parts
-    # Root-level files, paths outside the project, and test directories are where runners look for tests.
+    # Root-level, outside-project and test-directory paths do not qualify for this package-based exclusion.
     if not directories or directories[0] in {"/", ".."} or any(part in _TEST_DIRECTORY_NAMES for part in directories):
         return False
     package_directory = Path(absolute_path).parent
-    # Each directory up to the project root must be a package for the module to be importable from it.
     for _segment in directories:
-        # A directory without ``__init__.py`` breaks the import path, so the file is not shipped package code.
+        # Importable namespace packages are not sufficient evidence for this regular-package exclusion.
         if not (package_directory / "__init__.py").is_file():
             return False
         package_directory = package_directory.parent
@@ -474,18 +442,18 @@ def _is_shipped_package_module(absolute_path: str, display_path: str) -> bool:
 
 
 def _imported_task_runner_decorators(tree: ast.AST) -> frozenset[str]:
-    """Resolve the local names under which the file imports a task-runner decorator.
+    """Return canonical task-runner decorator spellings plus names found in imports.
 
     Args:
-        tree: Parsed Python source whose imports bind ``nox.session`` or ``invoke.task``.
+        tree: Parsed Python source inspected for imports of nox.session or invoke.task.
 
     Returns:
-        Dotted decorator spellings such as ``nox.session``, ``session``, or ``n.session``.
+        Canonical nox.session and invoke.task spellings plus supported import names; canonical names remain when no imports match.
     """
     decorator_names = {f"{module}.{decorator}" for module, decorator in _TASK_RUNNER_DECORATORS.items()}
     # Imports are collected once per file rather than rediscovered for every candidate function.
     for node in ast.walk(tree):
-        # ``import nox as n`` makes ``@n.session`` the session decorator.
+        # Importing nox as n gives the decorator spelling n.session.
         if isinstance(node, ast.Import):
             decorator_names.update(
                 f"{alias.asname}.{_TASK_RUNNER_DECORATORS[alias.name]}"
@@ -493,7 +461,7 @@ def _imported_task_runner_decorators(tree: ast.AST) -> frozenset[str]:
                 if alias.name in _TASK_RUNNER_DECORATORS and alias.asname is not None
             )
             continue
-        # ``from nox import session`` binds the decorator itself, optionally under an alias.
+        # A direct import can expose the decorator without the task-runner module prefix.
         if isinstance(node, ast.ImportFrom) and node.module in _TASK_RUNNER_DECORATORS:
             decorator_names.update(alias.asname or alias.name for alias in node.names if alias.name == _TASK_RUNNER_DECORATORS[node.module])
     return frozenset(decorator_names)
@@ -504,18 +472,18 @@ def _is_no_assertions_support_function(
     scope: TestScope,
     task_runner_decorators: frozenset[str],
 ) -> bool:
-    """Return whether a fixture, conftest helper, or task-runner session is outside collected-test analysis.
+    """Identify candidate functions to skip when checking for missing assertions.
 
     Args:
-        fn: Candidate test function.
-        scope: Test-scope classification of the function.
-        task_runner_decorators: Decorator spellings that bind ``nox.session`` or ``invoke.task`` in this file.
+        fn: Candidate whose decorators are checked for an exemption.
+        scope: Classification used to exempt conftest functions.
+        task_runner_decorators: Accepted spellings for nox.session and invoke.task, including recognized import aliases.
 
     Returns:
-        True when the function supports tests or a task runner rather than being a collected test.
+        True for conftest functions or candidates with a recognized fixture or task-runner decorator.
     """
-    # Conftest functions support collection and fixtures rather than acting as collected tests.
+    # Treat conftest functions as support code even when their names resemble test cases.
     if scope.kind is TestScopeKind.CONFTEST:
         return True
-    # A fixture, nox session, or invoke task keeps even a ``test_*``-named function outside test collection.
+    # A recognized decorator exempts even a function whose name begins with test_.
     return any(is_pytest_fixture_decorator(decorator) or _decorator_name(decorator) in task_runner_decorators for decorator in fn.decorator_list)

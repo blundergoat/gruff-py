@@ -18,10 +18,10 @@ def _fixture_cases(expectation: str) -> list[object]:
     """Collect one pytest case per calibration fixture under an expectation folder, named by rule and fixture path.
 
     Args:
-        expectation: Expectation folder to read: ``positive`` or ``negative``.
+        expectation: Expectation folder to read: positive or negative.
 
     Returns:
-        Cases of rule id and fixture path in sorted order; empty when the calibration folder is missing.
+        Cases of rule id and fixture path in sorted order. Empty if the calibration folder is missing or no Python fixtures match the expectation.
     """
     cases: list[object] = []
     if not _FIXTURE_ROOT.exists():
@@ -69,6 +69,9 @@ def test_positive_fixture_triggers_rule(rule_id: str, fixture_path: Path) -> Non
     Args:
         rule_id: Rule the fixture's folder names; the cases cover every positive fixture.
         fixture_path: Fixture expected to trigger that rule.
+
+    Returns:
+        None. Fails if the named rule produces zero findings for the positive fixture.
     """
     matching_findings = _matching_findings(rule_id, fixture_path)
     assert matching_findings, f"{fixture_path} should trigger {rule_id}."
@@ -81,6 +84,9 @@ def test_negative_fixture_does_not_trigger_rule(rule_id: str, fixture_path: Path
     Args:
         rule_id: Rule the fixture's folder names; the cases cover every negative fixture.
         fixture_path: Fixture expected to stay clean for that rule.
+
+    Returns:
+        None. Fails if the named rule produces a finding for the negative fixture.
     """
     matching_findings = _matching_findings(rule_id, fixture_path)
     assert matching_findings == [], f"{fixture_path} should not trigger {rule_id}."
@@ -93,13 +99,13 @@ def _unit_from_fixture(fixture_path: Path) -> AnalysisUnit:
         fixture_path: Fixture source file.
 
     Returns:
-        The unit, whose display path is relative to the fixture's expectation folder.
+        The unit, with its display path relative to the nearest expectation folder, or its file name when none exists.
     """
     source = fixture_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # Parent links are added dynamically to AST nodes.
     return AnalysisUnit(
         file=SourceFile(
             absolute_path=str(fixture_path),
@@ -133,7 +139,7 @@ def _context(registry: RuleRegistry) -> RuleContext:
         registry: Registry whose defaults form the config.
 
     Returns:
-        The rule context.
+        A context rooted at the calibration fixtures with configuration from the registry's defaults.
     """
     return RuleContext(
         project_root=str(_FIXTURE_ROOT),

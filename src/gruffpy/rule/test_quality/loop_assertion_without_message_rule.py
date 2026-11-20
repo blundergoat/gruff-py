@@ -33,9 +33,7 @@ class LoopAssertionWithoutMessageRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the loop-assertion-without-message rule as a medium-confidence advisory.
 
-        Medium confidence: a missing message on a loop assertion is a real
-        debuggability problem, but a fix is often "split into parametrize"
-        rather than "add a message" - so the advice is contextual.
+        A missing message can obscure which iteration failed; parametrization or a message may provide the needed context.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -51,14 +49,12 @@ class LoopAssertionWithoutMessageRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``assert`` statements nested inside ``for``/``while`` loops with no message.
+        """Flag loops containing assertions without messages.
 
-        Walks each loop in a test body and stops at the first message-less
-        assert (one finding per loop); the missing iteration context makes
-        failures hard to attribute.
+        Recognized unittest subTest loops are exempt; each remaining loop contributes at most one finding.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
@@ -98,7 +94,7 @@ class LoopAssertionWithoutMessageRule(Rule):
                             metadata={},
                         ),
                     )
-                    break  # one finding per loop is enough
+                    break  # One diagnostic directs the reviewer to the loop without reporting every assertion.
         return findings
 
 

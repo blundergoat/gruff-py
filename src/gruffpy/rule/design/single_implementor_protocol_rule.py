@@ -78,14 +78,15 @@ class SingleImplementorProtocolRule:
         )
 
     def analyse_project(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
-        """Analyse the whole project for unnecessary abstractions.
+        """Find unnecessary single-implementor abstractions across the supplied project units.
 
         Args:
             units: Parsed project units to inspect together.
-            context: Rule execution context with configured options.
+            context: Supplies external protocol base names and extra paths to exclude from the analysis.
 
         Returns:
-            Findings for one-implementor abstractions without external type usage.
+            Findings for non-extended abstractions with one implementor and no counted external annotation or value references.
+            A reference is internal if its owner matches either class's qualified or simple name. Empty when no abstraction qualifies.
         """
         settings = context.settings_for(self.definition())
         external_bases = {base.lower() for base in settings.string_list_option("externalProtocolBases")}
@@ -291,16 +292,16 @@ def _extended_abstractions(
     abstractions: list[_ClassInfo],
     abstraction_names: set[str],
 ) -> set[str]:
-    """Collect the base names through which one abstraction subclasses another abstraction.
+    """Collect base names that mark internal abstractions as extended for the finding filter.
 
-    Matching is by name only, so every abstraction sharing a simple name with an extended one is also treated as extended.
+    Matching is by name only. A base from another module can mark an abstraction with the same simple name as extended.
 
     Args:
         abstractions: Internal abstractions whose bases are scanned.
         abstraction_names: Fqns and simple names of all abstractions, matched against each base name and its last segment.
 
     Returns:
-        Each matching base name in both its written and last-segment forms; empty when no abstraction extends another.
+        Each matching base name in both its written and last-segment forms. Empty when no base name matches.
     """
     extended: set[str] = set()
     for abstraction in abstractions:
@@ -312,13 +313,13 @@ def _extended_abstractions(
 
 
 def _collect_classes(units: list[AnalysisUnit]) -> list[_ClassInfo]:
-    """Collect module-level classes and the classes nested in their bodies from every unit with an ast.Module tree.
+    """Collect classes declared directly in module or class bodies, skipping classes inside functions or control-flow blocks.
 
     Args:
         units: Eligible analysis units; a unit whose tree is not an ast.Module is skipped.
 
     Returns:
-        Class infos in unit order, each class listed before the classes nested in it.
+        Class infos in unit order, each class listed before the classes nested in it. Empty when no direct class declarations qualify.
     """
     classes: list[_ClassInfo] = []
     for unit in units:
@@ -347,6 +348,9 @@ def _collect_classes_from_body(
         body: Statements scanned for class definitions.
         stack: Names of the enclosing classes, empty at module level.
         classes: Output list this function appends to in place.
+
+    Returns:
+        None. Appends the collected class records to classes in place.
     """
     for stmt in body:
         if not isinstance(stmt, ast.ClassDef):
@@ -392,10 +396,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self.class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Visit a class without traversing nested owner state incorrectly.
+        """Append class decorator and body references to the shared list while temporarily extending the class owner stack.
 
         Args:
-            node: Class definition node to inspect.
+            node: Class whose name supplies the owner during traversal. A nested class supplies its own owner.
+
+        Returns:
+            None. Appends references under the active class owner and restores the previous owner stack.
         """
         self.class_stack.append(node.name)
         for decorator in node.decorator_list:
@@ -405,10 +412,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self.class_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Record function annotations and then inspect its body.
+        """Append references from a function's annotations, defaults and body to the shared reference list.
 
         Args:
-            node: Function definition node to inspect.
+            node: Function whose annotations, defaults and body supply references for the current owner.
+
+        Returns:
+            None. Appends the references found in the function to the shared list.
         """
         self._record_function_annotations(node)
         self._visit_function_defaults(node)
@@ -416,10 +426,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Record async function annotations and then inspect its body.
+        """Append references from an async function's annotations, defaults and body to the shared reference list.
 
         Args:
-            node: Async function definition node to inspect.
+            node: Async function whose annotations, defaults and body supply references for the current owner.
+
+        Returns:
+            None. Appends the references found in the async function to the shared list.
         """
         self._record_function_annotations(node)
         self._visit_function_defaults(node)
@@ -427,20 +440,26 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        """Record references from an annotated assignment.
+        """Append references from an annotated assignment's annotation and optional value to the shared reference list.
 
         Args:
-            node: Annotated assignment node to inspect.
+            node: Assignment whose annotation and optional right-hand value supply references.
+
+        Returns:
+            None. Appends references from the annotation and any assigned value to the shared list.
         """
         self._record_annotation(node.annotation)
         if node.value is not None:
             self.visit(node.value)
 
     def visit_Name(self, node: ast.Name) -> None:
-        """Record loaded names as value-position references.
+        """Append loaded names to the shared reference list; assignment and deletion targets add no reference.
 
         Args:
-            node: Name expression node to inspect.
+            node: Name occurrence whose access context determines whether its identifier counts as a reference.
+
+        Returns:
+            None. Appends the identifier to the shared reference list when the name is loaded.
         """
         if isinstance(node.ctx, ast.Load):
             self._record_reference(node.id)
@@ -448,14 +467,14 @@ class _ReferenceVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Record dotted value-position references.
 
-        Only ``Load`` context counts, mirroring :meth:`visit_Name`: a store
-        target such as ``module.Renderer = Fake`` (monkeypatching) binds an
-        attribute *named* like the abstraction without referencing it. The
-        loaded inner chain (``module``, or ``a.Renderer`` in
-        ``a.Renderer.x = 1``) is still visited via ``generic_visit``.
+        Only loads count, so the target in module.Renderer = Fake adds no reference to Renderer.
+        The visitor still inspects the loaded inner chain, such as a.Renderer in a.Renderer.x = 1.
 
         Args:
-            node: Attribute expression node to inspect.
+            node: Attribute expression whose loaded name and children are examined.
+
+        Returns:
+            None. Appends recognized references to the visitor's shared list.
         """
         if isinstance(node.ctx, ast.Load):
             name = _name_for(node)
@@ -467,10 +486,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
     ) -> None:
-        """Record the names in every parameter annotation, variadic parameters included, and in the return annotation.
+        """Append names from every parameter annotation and the return annotation to the shared reference list, including variadic parameters.
 
         Args:
             node: Function or async function definition whose annotations are read.
+
+        Returns:
+            None. Appends references from parameter and return annotations to the shared list.
         """
         all_args = (
             list(node.args.posonlyargs)
@@ -486,21 +508,27 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self._record_annotation(node.returns)
 
     def _visit_function_defaults(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        """Visit parameter default expressions so the names they load are recorded as references.
+        """Visit parameter defaults so their loaded names are appended to the shared reference list.
 
         Args:
             node: Function or async function definition whose positional and keyword-only defaults are visited; keyword-only parameters without a
                 default are skipped.
+
+        Returns:
+            None. Appends references found in parameter defaults to the shared list.
         """
         for default in (*node.args.defaults, *node.args.kw_defaults):
             if default is not None:
                 self.visit(default)
 
     def _record_annotation(self, annotation: ast.AST) -> None:
-        """Record each name extracted from an annotation expression as a reference, with the owner _owner_fqn reports.
+        """Append extracted annotation names to the shared reference list with the owner reported by _owner_fqn.
 
         Args:
             annotation: Annotation expression; a node type without a handler in _ANNOTATION_NAME_HANDLERS records nothing.
+
+        Returns:
+            None. Appends each extracted name with its current owner to the shared reference list.
         """
         for name in _annotation_names(annotation):
             self._record_reference(name)
@@ -510,6 +538,9 @@ class _ReferenceVisitor(ast.NodeVisitor):
 
         Args:
             name: Bare or dotted name text to record.
+
+        Returns:
+            None. Appends a reference to the shared list with its class owner, or with no owner outside a class.
         """
         self.references.append(_TypeReference(name=name, owner_class_fqn=self._owner_fqn()))
 
@@ -559,14 +590,14 @@ def _attribute_names(node: ast.AST) -> set[str]:
         node: ast.Attribute node, as guaranteed by the handler table.
 
     Returns:
-        The attribute chain's dotted name and its last segment.
+        Set containing the rendered name and its last segment. If the base has no name, the set contains only the attribute name.
     """
     assert isinstance(node, ast.Attribute)
     return _attribute_annotation_names(node)
 
 
 def _subscript_annotation_names(node: ast.AST) -> set[str]:
-    """Extract names from both the subscripted value and its slice, such as list and Foo in ``list[Foo]``.
+    """Extract names from both the subscripted value and its slice, such as list and Foo in list[Foo].
 
     Args:
         node: ast.Subscript node, as guaranteed by the handler table.
@@ -579,7 +610,7 @@ def _subscript_annotation_names(node: ast.AST) -> set[str]:
 
 
 def _binop_annotation_names(node: ast.AST) -> set[str]:
-    """Extract names from both operands of a binary operation, such as each member of an ``A | B`` union.
+    """Extract names from both operands of a binary operation, such as each member of an A | B union.
 
     Args:
         node: ast.BinOp node, as guaranteed by the handler table.
@@ -592,7 +623,7 @@ def _binop_annotation_names(node: ast.AST) -> set[str]:
 
 
 def _tuple_annotation_names(node: ast.AST) -> set[str]:
-    """Extract names from each tuple element, such as the key and value types in ``dict[K, V]``.
+    """Extract names from each tuple element, such as the key and value types in dict[K, V].
 
     Args:
         node: ast.Tuple node, as guaranteed by the handler table.
@@ -605,7 +636,7 @@ def _tuple_annotation_names(node: ast.AST) -> set[str]:
 
 
 def _list_annotation_names(node: ast.AST) -> set[str]:
-    """Extract names from each list element, such as the parameter types in ``Callable[[A], B]``.
+    """Extract names from each list element, such as the parameter types in Callable[[A], B].
 
     Args:
         node: ast.List node, as guaranteed by the handler table.
@@ -620,7 +651,7 @@ def _list_annotation_names(node: ast.AST) -> set[str]:
 def _constant_annotation_names(node: ast.AST) -> set[str]:
     """Return a string constant in an annotation as one name, treating it as a forward reference.
 
-    The string is not parsed, so a quoted expression such as ``list[Foo]`` is kept whole and does not match Foo.
+    The string is not parsed, so a quoted expression such as list[Foo] is kept whole and does not match Foo.
 
     Args:
         node: ast.Constant node, as guaranteed by the handler table.
@@ -644,13 +675,13 @@ _ANNOTATION_NAME_HANDLERS = {
 
 
 def _attribute_annotation_names(node: ast.Attribute) -> set[str]:
-    """Return an attribute chain's dotted name together with its last segment.
+    """Extract the names an attribute contributes to annotation matching.
 
     Args:
         node: Attribute expression found in an annotation.
 
     Returns:
-        Set holding the dotted name built by _name_for and its last segment.
+        Set containing the name built by _name_for and its last segment. If the base has no name, the set contains only the attribute name.
     """
     name = _name_for(node)
     return {name, _leaf(name)} if name else set()
@@ -689,14 +720,14 @@ def _is_matching_name(name: str, abstraction: _ClassInfo) -> bool:
 def _name_for(node: ast.AST) -> str:
     """Build the dotted name text of a base or attribute expression, unwrapping subscripts and calls.
 
-    A subscript yields its subscripted value, so ``Protocol[T]`` gives Protocol; a call yields its callee; a string constant is returned verbatim; an
+    A subscript yields its subscripted value, so Protocol[T] gives Protocol; a call yields its callee; a string constant is returned verbatim; an
     attribute whose prefix has no name yields only the attribute.
 
     Args:
         node: Expression to name.
 
     Returns:
-        The bare or dotted name, or an empty string for any other node type.
+        The bare or dotted name or the original string constant. Empty when the expression, including any unwrapped value or callee, has no name.
     """
     if isinstance(node, ast.Name):
         return node.id

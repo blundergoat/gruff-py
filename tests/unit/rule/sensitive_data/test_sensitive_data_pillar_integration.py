@@ -61,8 +61,12 @@ _EXPECTED_RULE_IDS = {
 
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
-    """Report every expected sensitive-data rule at least once on the dangerous fixture, each with a preview in the marker grammar."""
-    # Two expected rules ship off by default (ADR-029), so the fixture runs with them switched on, as a project would.
+    """Report every expected sensitive-data rule at least once on the dangerous fixture, each with a preview in the marker grammar.
+
+    Returns:
+        None after verifying expected-rule presence and preview-marker grammar.
+    """
+    # Enable the expected rules explicitly so the fixture also exercises detectors that are disabled by default.
     ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
     findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
     sensitive_findings = [finding for finding in findings if finding.rule_id.startswith("sensitive-data.")]
@@ -74,18 +78,25 @@ def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
 
 
 def test_aws_key_fires_on_json_file_via_text_seam():
-    """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
+    """Planted AWS key in a .json file is detected via the SourceTextRule seam.
+
+    Returns:
+        None after checking AWS-rule presence and cyclomatic-rule absence for the text file.
+    """
     src = f'{{"region": "us-east-1", "key": "{_AWS_KEY}"}}\n'
     findings = RuleRegistry.defaults().analyse([make_unit(src, display_path="aws.json", source_type="text")], default_ctx())
     text_findings = {f.rule_id for f in findings}
     assert "sensitive-data.aws-access-key" in text_findings
-    # A Python-only rule must NOT fire on this text file. complexity rules require
-    # an AST; they should be inert when tree is None.
+    # The JSON fixture has no syntax tree, so the cyclomatic rule cannot produce a finding.
     assert "complexity.cyclomatic" not in text_findings
 
 
 def test_parse_broken_python_still_runs_source_text_rules():
-    """Keep raw-source findings while AST-only rules stay out of a broken file."""
+    """Report the AWS finding from broken Python and no dangerous-function-call finding under the default configuration.
+
+    Returns:
+        None after checking AWS-rule presence and dangerous-function-call absence.
+    """
     source = f"AWS_KEY = {_AWS_KEY!r}\neval('payload')\ndef broken(:\n"
     broken_unit = replace(
         make_unit(source),
@@ -100,8 +111,10 @@ def test_parse_broken_python_still_runs_source_text_rules():
 
 
 def test_redaction_in_json_output_never_leaks_raw_secret():
-    """Every emitted finding's metadata.preview is redacted; the raw secret never
-    appears in the serialised JSON."""
+    """The serialized AWS finding contains the fixed marker and excludes the raw key, checked fragments and length text.
+
+    Returns:
+        None after verifying the AWS finding count and JSON redaction assertions."""
     src = f"AWS_KEY = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws_findings = [f for f in findings if f.rule_id == "sensitive-data.aws-access-key"]
@@ -113,7 +126,11 @@ def test_redaction_in_json_output_never_leaks_raw_secret():
 
 
 def test_every_secret_uses_a_zero_payload_marker_from_the_ratified_grammar():
-    """Users see the class the detector knew, never characters or length from the matched value."""
+    """The AWS finding preview names its category without including the matched key or its length.
+
+    Returns:
+        None after verifying the AWS preview value and marker grammar.
+    """
     src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")

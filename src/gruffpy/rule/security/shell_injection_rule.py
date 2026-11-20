@@ -47,10 +47,7 @@ class ShellInjectionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the shell-injection rule as a high-confidence ERROR.
 
-        ERROR severity because the pattern is rarely accidental: someone had
-        to write ``shell=True`` with a non-literal command. High confidence
-        because the call shape is precise (target name + ``shell=True``
-        kwarg + dynamic first arg).
+        Nonliteral commands at supported subprocess or os shell-call shapes can allow shell injection.
 
         Returns:
             Definition for the shell-injection rule under the security pillar.
@@ -67,19 +64,16 @@ class ShellInjectionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag subprocess ``shell=True`` with dynamic input, and ``os.system``/``os.popen`` calls.
+        """Flag dynamic commands passed to supported subprocess targets with shell=True or to calls spelled os.system or os.popen.
 
-        Static command strings to ``subprocess(..., shell=True)`` and
-        ``os.system("...")`` are skipped (no injection surface). The
-        subprocess targets covered include ``run``/``call``/``check_call``/
-        ``check_output``/``Popen``/``getoutput``/``getstatusoutput``.
+        Subprocess calls require literal shell=True. Both groups require a first positional command other than a string literal.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per shell-injection call site.
+            One finding per matched call, or an empty list when parsing is unavailable or none match.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -114,10 +108,10 @@ class ShellInjectionRule(Rule):
 
 
 def _shell_injection_label(target: str, call: ast.Call) -> str | None:
-    """Classify a supported shell call with a nonliteral first positional argument.
+    """Classify a supported shell call with a first positional argument other than a string literal.
 
-    Configured subprocess targets require literal shell=True. Configured os shell targets do not require that keyword; both groups skip string-literal
-    first arguments.
+    Configured subprocess targets require literal shell=True.
+    Configured os shell targets are checked regardless of that keyword.
 
     Args:
         target: Resolved call-target spelling to compare with the configured target sets.

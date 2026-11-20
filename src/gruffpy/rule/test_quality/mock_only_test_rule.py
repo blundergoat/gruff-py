@@ -35,10 +35,7 @@ class MockOnlyTestRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the mock-only-test rule as a medium-confidence warning.
 
-        Medium confidence because the heuristic ignores framework/builtin
-        calls and mock-bound calls - but a clever test that constructs real
-        objects via factory functions named like mocks could still false-
-        positive.
+        Name-based classification can mistake real factories for mocks, so findings require review.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -53,19 +50,16 @@ class MockOnlyTestRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tests that create mocks but never invoke any non-mock, non-framework code.
+        """Flag tests with mock bindings and no call recognized as outside mocks or framework helpers.
 
-        Only considers tests with at least one mock binding; a test reaches
-        real code if any call's root name is not a mock binding, not in
-        ``{pytest, unittest, mock}``, and not an assertion/mock-factory call.
+        Unnamed call targets count as non-mock calls; assertion helpers, mock factories, and framework-rooted calls do not.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per test whose only call targets are mocks or
-            framework helpers.
+            One finding per test with mock bindings whose calls are all classified as mock or framework interactions.
         """
         if unit.tree is None:
             return []

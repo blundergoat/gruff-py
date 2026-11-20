@@ -52,7 +52,7 @@ class MissingClassDocstringRule(Rule):
             context: Rule execution context with rule options.
 
         Returns:
-            Findings for classes that should carry a docstring.
+            Findings for classes that need docstrings; empty when the tree is absent or no class qualifies.
         """
         if unit.tree is None:
             return []

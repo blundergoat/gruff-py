@@ -11,6 +11,9 @@ def test_loads_basic_yaml(tmp_path: Path):
 
     Args:
         tmp_path: Holds a config with ignore paths and file-length tiers.
+
+    Returns:
+        None. Checks the loaded ignore paths and the nested file-length warning threshold.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text(
@@ -26,6 +29,9 @@ def test_empty_file_returns_empty_dict(tmp_path: Path):
 
     Args:
         tmp_path: Holds an empty config file.
+
+    Returns:
+        None. Checks that the loader produces an empty mapping for the empty file.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("")
@@ -37,6 +43,9 @@ def test_comments_only_returns_empty_dict(tmp_path: Path):
 
     Args:
         tmp_path: Holds a config of comments only.
+
+    Returns:
+        None. Checks that the loader produces an empty mapping for the comment-only file.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("# just comments\n# more comments\n")
@@ -48,6 +57,9 @@ def test_list_at_root_raises_config_error(tmp_path: Path):
 
     Args:
         tmp_path: Holds a config whose top level is a list.
+
+    Returns:
+        None. Checks that the loader rejects the list with a ConfigError requiring a top-level mapping.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("- foo\n- bar\n")
@@ -59,7 +71,10 @@ def test_invalid_yaml_raises_config_error(tmp_path: Path):
     """Report malformed YAML as a ``ConfigError``.
 
     Args:
-        tmp_path: Holds a config with invalid nesting.
+        tmp_path: Holds a config with a malformed YAML value containing an unquoted colon followed by a space.
+
+    Returns:
+        None. Checks that the loader reports the parse failure as a ConfigError.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("paths:\n  ignore:\n  -  - nested-bad: x: y\n")
@@ -72,6 +87,9 @@ def test_missing_file_raises_config_error(tmp_path: Path):
 
     Args:
         tmp_path: Directory where the named config is never written.
+
+    Returns:
+        None. Checks that the missing file produces a ConfigError identifying the read failure.
     """
     with pytest.raises(ConfigError, match="Failed to read config file"):
         load_gruff_py_yaml(tmp_path / "does-not-exist.yaml")
@@ -82,6 +100,9 @@ def test_dotted_rule_keys_preserved(tmp_path: Path):
 
     Args:
         tmp_path: Holds a config with two dotted rule sections.
+
+    Returns:
+        None. Checks that both dotted IDs stay whole and that the nested warning threshold is retained.
     """
     path = tmp_path / ".gruff-py.yaml"
     path.write_text("rules:\n  size.file-length:\n    enabled: true\n  complexity.cyclomatic:\n    thresholds:\n      warning: 8\n")

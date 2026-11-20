@@ -15,15 +15,16 @@ def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
 
     Args:
         source: Python module source to parse.
-        display_path: Path the unit displays; its absolute path is the same path under ``/``.
+        display_path: Path the unit displays; its absolute path is the same path under /.
 
     Returns:
-        An analysis unit whose non-root tree nodes carry ``parent`` links.
+        An analysis unit whose non-root tree nodes carry parent links.
+        Attaching links can overwrite parents on shared AST operator and context nodes, including nodes in previously parsed trees.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # The rule uses this extra AST attribute to find enclosing nodes.
     return AnalysisUnit(
         file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
         source=source,
@@ -38,7 +39,7 @@ def _ctx_for(rule_id: str) -> RuleContext:
         rule_id: Identifier of the rule to enable.
 
     Returns:
-        A context rooted at ``/`` with that one-rule config.
+        A context rooted at / with that one-rule config.
     """
     return RuleContext(
         project_root="/",
@@ -47,7 +48,11 @@ def _ctx_for(rule_id: str) -> RuleContext:
 
 
 def test_empty_function_pass_fires():
-    """Report one finding, naming ``f``, for a function whose body is only ``pass``."""
+    """Report one finding, naming f, for a function whose body is only pass.
+
+    Returns:
+        None. Asserts that a pass-only function produces one finding naming f.
+    """
     src = "def f():\n    pass\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert len(findings) == 1
@@ -55,51 +60,78 @@ def test_empty_function_pass_fires():
 
 
 def test_empty_function_ellipsis_fires():
-    """Report one finding for a function whose body is only ``...``."""
+    """Report one finding for a function whose body is only an ellipsis.
+
+    Returns:
+        None. Asserts that an ellipsis-only function produces one finding.
+    """
     src = "def f():\n    ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert len(findings) == 1
 
 
 def test_abstract_method_does_not_fire():
-    """Report nothing for an ``@abstractmethod`` whose body is ``...``."""
+    """Report nothing for an @abstractmethod whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that an abstract method with an ellipsis body produces no findings.
+    """
     src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self): ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_overload_stub_does_not_fire():
-    """Report nothing for an ``@overload`` stub followed by its implementation."""
+    """Report nothing for an @overload stub followed by its implementation.
+
+    Returns:
+        None. Asserts that an overload stub followed by its implementation produces no findings.
+    """
     src = "from typing import overload\n@overload\ndef f(x: int) -> int: ...\ndef f(x): return x\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_protocol_method_stub_does_not_fire():
-    """Report nothing for a ``Protocol`` method whose body is ``...``."""
+    """Report nothing for a Protocol method whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that a Protocol method with an ellipsis body produces no findings.
+    """
     src = "from typing import Protocol\nclass P(Protocol):\n    def m(self):\n        ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_pytest_fixture_does_not_fire():
-    """Report nothing for a ``pytest.fixture`` function whose body is ``...``."""
+    """Report nothing for a pytest.fixture function whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that a pytest fixture with an ellipsis body produces no findings.
+    """
     src = "import pytest\n@pytest.fixture\ndef setup():\n    ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_function_with_body_does_not_fire():
-    """Report nothing for a function that returns a value."""
+    """Report nothing for a function that returns a value.
+
+    Returns:
+        None. Asserts that a function returning a value produces no findings.
+    """
     src = "def f():\n    return 1\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_function_with_docstring_and_pass_fires():
-    """Report one finding for a function whose body is a docstring and ``pass``."""
-    # Docstring + pass should still count as empty (the docstring is just a
-    # comment for the purposes of this rule).
+    """Report one finding for a function whose body is a docstring and pass.
+
+    Returns:
+        None. Asserts that a function containing only a docstring and pass produces one finding.
+    """
+    # Docstring + pass should still count as empty (the docstring is just a comment for the purposes of this rule).
     src = '''def f():
     """A function."""
     pass
@@ -109,7 +141,11 @@ def test_function_with_docstring_and_pass_fires():
 
 
 def test_test_double_empty_method_does_not_fire():
-    """Report nothing for the empty ``close`` method of a ``FakeTerminal`` class in a file under ``tests/``."""
+    """Report nothing for the empty close method of a FakeTerminal class in a file under tests/.
+
+    Returns:
+        None. Asserts that the empty FakeTerminal.close method produces no findings under tests/.
+    """
     src = "class FakeTerminal:\n    def close(self):\n        pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),
@@ -119,7 +155,11 @@ def test_test_double_empty_method_does_not_fire():
 
 
 def test_production_test_double_name_still_fires():
-    """Report one finding for the empty ``close`` method of a ``FakeTerminal`` class in a file under ``src/``."""
+    """Report one finding for the empty close method of a FakeTerminal class in a file under src/.
+
+    Returns:
+        None. Asserts that the fixture with an empty FakeTerminal.close method under src/ produces one finding.
+    """
     src = "class FakeTerminal:\n    def close(self):\n        pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "src/gruffpy/terminal.py"),
@@ -162,18 +202,25 @@ def test_production_test_double_name_still_fires():
     ],
 )
 def test_source_proven_declarations(source: str, exempt: bool) -> None:
-    """Report nothing for a pluggy hook specification or a ``...`` stub under ``TYPE_CHECKING``, and findings for each near miss.
+    """Report nothing for a pluggy hook specification or an ellipsis stub under TYPE_CHECKING, and findings for each near miss.
 
     Args:
         source: Module source with one empty function: a hook specification, a type-checking stub or a near miss of either.
         exempt: Whether the rule should report nothing.
+
+    Returns:
+        None. Asserts that findings are absent exactly when exempt is true.
     """
     findings = EmptyFunctionRule().analyse(_unit(source), _ctx_for("waste.empty-function"))
     assert (not findings) is exempt
 
 
 def test_nested_inner_test_double_class_exempts_its_method():
-    """Report nothing for the empty method of a ``FakeClient`` class nested in a plain class, in a test file."""
+    """Report nothing for the empty method of a FakeClient class nested in a plain class, in a test file.
+
+    Returns:
+        None. Asserts that an empty method on a nested FakeClient in a test file produces no findings.
+    """
     src = "class Suite:\n    class FakeClient:\n        def close(self):\n            pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),
@@ -183,7 +230,11 @@ def test_nested_inner_test_double_class_exempts_its_method():
 
 
 def test_nested_plain_class_in_test_double_outer_still_fires():
-    """Report one finding for the empty method of a plain class nested in a ``FakeSuite`` class, in a test file."""
+    """Report one finding for the empty method of a plain class nested in a FakeSuite class, in a test file.
+
+    Returns:
+        None. Asserts that the test fixture with an empty method on Helper inside FakeSuite produces one finding.
+    """
     src = "class FakeSuite:\n    class Helper:\n        def close(self):\n            pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),

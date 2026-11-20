@@ -57,9 +57,7 @@ class UnsafePickleRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unsafe-pickle rule as a high-confidence ERROR.
 
-        ERROR severity because pickle deserialisation of untrusted input is
-        a textbook RCE vector - there's no defensive ``loads`` mode that
-        makes it safe.
+        Pickle deserialization of untrusted input can execute code; loads has no safe mode for that input.
 
         Returns:
             Definition for the unsafe-pickle rule under the security pillar.
@@ -75,19 +73,16 @@ class UnsafePickleRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag pickle/cPickle/dill ``load``/``loads`` calls without a literal first argument.
+        """Flag configured deserialization calls and directly chained pickle-family Unpickler loads.
 
-        A literal bytes or str first argument is skipped - it can't be
-        attacker-controlled. The chained form
-        ``pickle.Unpickler(file).load()`` is also detected (and the
-        ``cPickle``/``dill`` equivalents) regardless of receiver shape.
+        A string or bytes literal as the first positional argument exempts a direct call. Recognized Unpickler load chains are always reported.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per pickle deserialisation call without a literal source.
+            One finding per matched direct or chained call; empty when none match or the unit has no parsed tree.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -109,10 +104,10 @@ def _unsafe_pickle_label(call: ast.Call, target: str | None) -> str | None:
 
     Args:
         call: Call supplying the literal-argument exemption and possible chained receiver.
-        target: Dotted call-target spelling, or None when the target cannot be resolved syntactically.
+        target: Bare or dotted call-target spelling, or None when the target cannot be resolved syntactically.
 
     Returns:
-        The configured target without a literal first argument, a recognized chained label, or None when neither matches.
+        The configured target if no first positional string or bytes literal exempts it, a recognized chained label, or None when neither matches.
     """
     if target is not None and target in _UNSAFE_LOAD_TARGETS and not _has_safe_literal_first_arg(call):
         return target

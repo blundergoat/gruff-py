@@ -105,7 +105,8 @@ class IgnoreDirectiveReasonRule(Rule):
             context: Rule execution context. Unused; present for the rule API.
 
         Returns:
-            Findings for suppression comments without substantive reasons.
+            Findings for suppression comments without substantive reasons. A generated-file marker in the first ten lines skips the scan
+            and returns an empty list.
         """
         del context
         # A generated file is rewritten by its generator, so a reason written into it would not survive.
@@ -153,17 +154,15 @@ def _unexplained_directive(comment: SourceComment) -> _DirectiveMatch | None:
 def _extract_reason(body: str, directive_end: int) -> str:
     """Take the text that follows a matched directive in a comment body as its reason, without its separator.
 
-    A ``#`` at the start of the tail or after whitespace opens a second comment, and only the text after it is returned. Otherwise one leading comma,
-    ``--``, ``-`` or ``:`` is dropped, and text after a comma that fully matches another tool's directive shape such as ``isort:skip`` yields an empty
-    reason.
+    Return text after a # that starts the tail or follows whitespace; otherwise remove one leading comma, --, - or colon.
+    If the text after a comma matches the pattern for another tool's directive, return an empty string.
 
     Args:
         body: Comment body that contains the matched directive.
         directive_end: Offset in body where the matched directive ends; only the text after it is read.
 
     Returns:
-        The stripped reason text; an empty string when nothing or only a separator follows the directive, when nothing follows a second-comment ``#``,
-        or when the only text after a comma is another tool's directive.
+        Stripped reason text. Empty when no reason follows the directive or separator, or when a comma introduces only directive-like text.
     """
     tail = body[directive_end:].strip()
     if not tail:
@@ -195,7 +194,7 @@ def _is_substantive_reason(reason: str) -> bool:
     Returns:
         True when the reason matches _TRACKER_REFERENCE or has at least two non-generic words; False otherwise, including empty text.
     """
-    # An issue reference points the reader at the full explanation, however short it is.
+    # A tracker reference can point to context elsewhere, so it qualifies without further explanation here.
     if _TRACKER_REFERENCE.search(reason):
         return True
     words = [word.lower() for word in _WORD_PATTERN.findall(reason)]

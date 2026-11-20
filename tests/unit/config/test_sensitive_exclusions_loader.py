@@ -30,7 +30,7 @@ def _defaults() -> AnalysisConfig:
 
 
 def _yaml(tmp_path: Path, body: str) -> Path:
-    """Write a project's ``.gruff-py.yaml`` as the schema version line followed by the given body.
+    """Write a project's .gruff-py.yaml as the schema version line followed by the given body.
 
     Args:
         tmp_path: Project root that receives the config.
@@ -60,10 +60,10 @@ def _load(tmp_path: Path, body: str) -> AnalysisConfig:
 
 
 def _entry(**fields: str) -> str:
-    """Format one ``sensitiveExclusions`` list item as YAML, with ``rule`` first and the other fields beneath it.
+    """Format one sensitiveExclusions list item as YAML, with rule first and the other fields beneath it.
 
     Args:
-        fields: Entry fields as written in YAML; ``rule`` is required.
+        fields: Entry fields as written in YAML; rule is required.
 
     Returns:
         The entry's YAML lines, ending with a newline.
@@ -74,10 +74,13 @@ def _entry(**fields: str) -> str:
 
 
 def test_absent_section_leaves_no_sensitive_exclusions(tmp_path: Path) -> None:
-    """Load no sensitive exclusions when the config has no ``sensitiveExclusions`` section.
+    """Load no sensitive exclusions when the config has no sensitiveExclusions section.
 
     Args:
-        tmp_path: Project root whose config sets only an empty ignore list.
+        tmp_path: Project root whose config sets an empty ignore list.
+
+    Returns:
+        None. Checks that omitting sensitiveExclusions leaves the loaded exclusions empty.
     """
     config = _load(tmp_path, "paths:\n  ignore: []\n")
 
@@ -85,10 +88,13 @@ def test_absent_section_leaves_no_sensitive_exclusions(tmp_path: Path) -> None:
 
 
 def test_empty_section_is_accepted(tmp_path: Path) -> None:
-    """Accept an empty ``sensitiveExclusions`` list as no exclusions.
+    """Accept an empty sensitiveExclusions list as no exclusions.
 
     Args:
         tmp_path: Project root whose config sets the section to an empty list.
+
+    Returns:
+        None. Checks that an explicit empty sensitiveExclusions list loads without any exclusions.
     """
     config = _load(tmp_path, "sensitiveExclusions: []\n")
 
@@ -100,6 +106,9 @@ def test_rule_and_path_entry_loads_with_its_reason(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config holds one AWS-rule entry with a reason.
+
+    Returns:
+        None. Checks the loaded exclusion's rule, path, zero index, absent symbol and unquoted reason.
     """
     config = _load(
         tmp_path,
@@ -126,7 +135,10 @@ def test_symbol_is_accepted_and_retained(tmp_path: Path) -> None:
     """Keep the symbol an entry names.
 
     Args:
-        tmp_path: Project root whose entry narrows the AWS rule to one symbol.
+        tmp_path: Project root whose AWS exclusion entry names a symbol.
+
+    Returns:
+        None. Checks that the loaded exclusion retains the symbol exactly as written.
     """
     config = _load(
         tmp_path,
@@ -147,6 +159,9 @@ def test_two_distinct_entries_keep_their_written_order(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config holds an AWS entry and then a JWT entry.
+
+    Returns:
+        None. Checks that the entries keep their written order and receive indexes 0 and 1.
     """
     config = _load(
         tmp_path,
@@ -162,10 +177,13 @@ def test_two_distinct_entries_keep_their_written_order(tmp_path: Path) -> None:
 
 
 def test_written_path_is_normalised_to_the_display_path_findings_carry(tmp_path: Path) -> None:
-    """Normalise an entry path written with a leading ``./`` to ``secrets/aws.env``.
+    """Normalise an entry path written with a leading ./ to secrets/aws.env.
 
     Args:
-        tmp_path: Project root whose entry path starts with ``./``.
+        tmp_path: Project root whose exclusion entry uses a dot-prefixed relative path.
+
+    Returns:
+        None. Asserts that the loaded path drops the leading ./.
     """
     config = _load(
         tmp_path,
@@ -176,10 +194,13 @@ def test_written_path_is_normalised_to_the_display_path_findings_carry(tmp_path:
 
 
 def test_toml_entries_load_with_the_same_shape(tmp_path: Path) -> None:
-    """Load a ``pyproject.toml`` exclusion entry into the same structure as a YAML entry.
+    """Check the loaded TOML exclusion against the expected SensitiveExclusion record.
 
     Args:
-        tmp_path: Project root whose ``pyproject.toml`` holds one inline-table entry.
+        tmp_path: Project root whose pyproject.toml holds one inline-table entry.
+
+    Returns:
+        None. Checks the entry index, rule, path, reason, and None for the omitted symbol.
     """
     (tmp_path / "pyproject.toml").write_text(
         '[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n'
@@ -322,13 +343,16 @@ def test_rejected_entry_names_its_index_and_offending_key(
     body: str,
     mentions: tuple[str, ...],
 ) -> None:
-    """Every contract rejection stops the run with a diagnostic the user can act on.
+    """Check the config loading error for each invalid sensitive exclusion case.
 
     Args:
         tmp_path: Project root the malformed config is written into.
         case_id: Name of the rejection case, reported when the assertion fails.
         body: Config text expected to be refused.
-        mentions: Substrings the diagnostic must contain, naming the entry and the offending key.
+        mentions: Substrings the diagnostic must contain for the selected rejection case.
+
+    Returns:
+        None. Checks that the loader raises ConfigError and that its message contains every expected substring for the case.
     """
     _yaml(tmp_path, body)
 
@@ -340,10 +364,13 @@ def test_rejected_entry_names_its_index_and_offending_key(
 
 
 def test_section_must_be_a_list(tmp_path: Path) -> None:
-    """Refuse a ``sensitiveExclusions`` section that is a mapping rather than a list.
+    """Refuse a sensitiveExclusions section that is a mapping rather than a list.
 
     Args:
         tmp_path: Project root whose section is a single mapping.
+
+    Returns:
+        None. Checks that the loader rejects the mapping with a ConfigError requiring a list of entries.
     """
     _yaml(tmp_path, "sensitiveExclusions:\n  rule: sensitive-data.aws-access-key\n")
 
@@ -356,6 +383,9 @@ def test_entry_must_be_a_table(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose section lists a bare rule id.
+
+    Returns:
+        None. Checks that the error identifies entry zero and says it must be a table.
     """
     _yaml(tmp_path, "sensitiveExclusions:\n  - sensitive-data.aws-access-key\n")
 
@@ -364,10 +394,13 @@ def test_entry_must_be_a_table(tmp_path: Path) -> None:
 
 
 def test_rejection_is_fatal_even_in_the_default_non_strict_scan(tmp_path: Path) -> None:
-    """Unknown rule keys only warn, but an unreviewable suppression always stops the scan.
+    """Reject a sensitive exclusion without a reason even when strict loading is disabled.
 
     Args:
         tmp_path: Project root carrying a suppression entry with no rationale.
+
+    Returns:
+        None. Checks that loading an exclusion without a reason raises ConfigError even with strict mode disabled.
     """
     _yaml(
         tmp_path,

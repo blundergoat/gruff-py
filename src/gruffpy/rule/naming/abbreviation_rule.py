@@ -50,8 +50,7 @@ class AbbreviationRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the abbreviation rule.
 
-        The blocklist is intentionally configurable because short forms such as
-        ``ctx`` and ``msg`` are idiomatic in some codebases.
+        Projects can allowlist idiomatic short forms such as ctx and msg through allowlists.acceptedAbbreviations.
 
         Returns:
             Definition for the abbreviation rule under the naming pillar.
@@ -66,21 +65,17 @@ class AbbreviationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag identifiers whose tokenised form contains a blocked abbreviation.
+        """Flag blocked abbreviation tokens in function names, nonvariadic parameters and supported assignment targets inside functions.
 
-        Project-accepted abbreviations from
-        ``allowlists.acceptedAbbreviations`` are subtracted before matching.
-        Test files are skipped wholesale (fixtures routinely use ``tmp``,
-        ``ctx``, ``msg``). Each blocked name fires at most once per file.
+        Accepted tokens from allowlists.acceptedAbbreviations are ignored.
+        Recognized test files are skipped because their fixtures commonly use short names.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplying accepted-abbreviation
-                allowlists.
+            context: Rule context supplying the accepted-abbreviation allowlist.
 
         Returns:
-            One finding per unique identifier whose first blocked-abbreviation
-            token is not accepted.
+            One finding per distinct non-dunder candidate with an unaccepted blocked token. Empty for no tree, recognized test files or no matches.
         """
         if unit.tree is None:
             return []
@@ -175,7 +170,8 @@ def _identifiers_in(node: ast.AST) -> list[tuple[str, int, str]]:
         node: AST node from the rule traversal; assignment scope is determined through attached parent links.
 
     Returns:
-        Name, source-line and kind tuples for the declaration or direct assignment targets; an empty list for other nodes.
+        Name, source-line and kind tuples for a function name and its non-variadic parameters, or for direct names in an assignment inside a function.
+        An empty list for other nodes or for assignments with no direct names.
     """
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return [(node.name, node.lineno, "function"), *_argument_identifiers(node.args)]
@@ -193,7 +189,7 @@ def _argument_identifiers(arguments: ast.arguments) -> list[tuple[str, int, str]
         arguments: Function argument declaration whose positional-only, positional and keyword-only names are inspected.
 
     Returns:
-        Name, source-line and parameter-kind tuples in declaration order; variadic arguments are not included.
+        Tuples of name, source line and the fixed identifier category parameter, in declaration order. Variadic arguments are excluded.
     """
     all_args = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
     return [(arg.arg, arg.lineno, "parameter") for arg in all_args]

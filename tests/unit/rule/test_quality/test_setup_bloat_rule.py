@@ -13,25 +13,33 @@ MAX_SETUP_LINES = 30  # the rule's default maxSetupLines
 
 
 def _fixture(code_lines: int, documentation: str = "") -> str:
-    """Return a module whose ``@pytest.fixture()`` function holds exactly *code_lines* code lines.
+    """Return module source whose @pytest.fixture() function holds exactly code_lines code lines.
 
     Args:
-        code_lines: Code lines the fixture holds, counting its ``def`` line and its ``return``.
-        documentation: Indented docstring or comment lines placed after the ``def`` line; empty by default.
+        code_lines: Requested fixture code-line count, at least 2, including its def and return lines.
+        documentation: Newline-terminated, indented docstring or comment lines to insert after the def line. Empty inserts no documentation.
     """
     body = "\n".join(f"    value_{i} = {i}" for i in range(code_lines - 2))
     return f"import pytest\n\n\n@pytest.fixture()\ndef shared_config():\n{documentation}{body}\n    return value_0\n"
 
 
 def test_fixture_long_in_code_lines_is_reported():
-    """Report a fixture one code line over the 30-line default, with that line count in the metadata."""
+    """Report a fixture one code line over the 30-line default, with that line count in the metadata.
+
+    Returns:
+        None. Checks that exactly one finding records the fixture's full code-line count.
+    """
     over_limit = MAX_SETUP_LINES + 1
     findings = SetupBloatRule().analyse(make_unit(_fixture(over_limit)), default_ctx())
     assert [finding.metadata["lines"] for finding in findings] == [over_limit]
 
 
 def test_documented_fixture_under_the_limit_is_not_reported():
-    """Report nothing for a 30-code-line fixture that also holds a multi-line docstring and five comment lines."""
+    """Report nothing for a 30-code-line fixture that also holds a multi-line docstring and five comment lines.
+
+    Returns:
+        None. Checks that the added documentation leaves a fixture at the code-line limit free of findings.
+    """
     fields = "\n".join(f"    Field {i} is explained here." for i in range(8))
     docstring = f'    """Build the shared configuration.\n\n{fields}\n    """\n'
     comments = "".join(f"    # Step {i}.\n" for i in range(5))
@@ -50,6 +58,9 @@ def test_production_setup_hooks_are_not_reported(display_path: str, is_method: b
     Args:
         display_path: Observed non-test source path.
         is_method: Whether the hook is an application method rather than a module function.
+
+    Returns:
+        None. Checks that the rule emits no finding for the undecorated hook at the supplied production path.
     """
     source = _fixture(MAX_SETUP_LINES + 1).replace("@pytest.fixture()\n", "").replace("shared_config", "setup")
     if is_method:
@@ -64,10 +75,13 @@ def test_production_setup_hooks_are_not_reported(display_path: str, is_method: b
     ids=["setUp", "setUpClass", "setup_method", "setup_class", "setup_function"],
 )
 def test_conventional_lifecycle_names_are_retained(hook_name: str):
-    """Preserve each existing lifecycle spelling while narrowing only plain setup.
+    """Report one oversized-setup finding and its code-line count for each conventional lifecycle name.
 
     Args:
         hook_name: Existing supported lifecycle spelling.
+
+    Returns:
+        None. Checks the finding count and reported line count for the generated hook.
     """
     source = _fixture(MAX_SETUP_LINES + 1).replace("@pytest.fixture()\n", "").replace("shared_config", hook_name)
     findings = SetupBloatRule().analyse(make_unit(source), default_ctx())
@@ -81,10 +95,13 @@ def test_conventional_lifecycle_names_are_retained(hook_name: str):
     ids=["test-module", "test-helper"],
 )
 def test_plain_setup_in_test_context_is_retained(display_path: str):
-    """Retain ordinary test modules and the observed Django test-helper context.
+    """Report an oversized plain setup hook in a test module or test helper.
 
     Args:
         display_path: Conventional test-module or test-helper path.
+
+    Returns:
+        None. Checks that the rule emits one finding for the hook at the supplied path.
     """
     source = _fixture(MAX_SETUP_LINES + 1).replace("@pytest.fixture()\n", "").replace("shared_config", "setup")
     findings = SetupBloatRule().analyse(make_unit(source, display_path), default_ctx())
@@ -92,14 +109,22 @@ def test_plain_setup_in_test_context_is_retained(display_path: str):
 
 
 def test_decorated_setup_outside_test_paths_is_retained():
-    """Explicit fixture evidence remains sufficient in a support library."""
+    """Explicit fixture evidence remains sufficient in a support library.
+
+    Returns:
+        None. Checks for one finding on an oversized decorated setup hook outside a conventional test path.
+    """
     source = _fixture(MAX_SETUP_LINES + 1).replace("shared_config", "setup")
     findings = SetupBloatRule().analyse(make_unit(source, "lib/sqlalchemy/testing/fixtures/base.py"), default_ctx())
     assert len(findings) == 1
 
 
 def test_default_off_and_explicit_enable_use_the_same_detector():
-    """Keep oversized fixtures quiet by default and report them when explicitly enabled."""
+    """Keep oversized fixtures quiet by default and report them when explicitly enabled.
+
+    Returns:
+        None. Checks default suppression, then verifies the finding and its line count after enabling the rule.
+    """
     registry = RuleRegistry.defaults()
     unit = make_unit(_fixture(MAX_SETUP_LINES + 1))
     context = default_ctx()
@@ -113,7 +138,11 @@ def test_default_off_and_explicit_enable_use_the_same_detector():
 
 
 def test_plain_setup_keeps_test_path_for_explicit_file_input():
-    """Retain test-directory evidence when an explicit file displays only its basename."""
+    """Retain test-directory evidence when an explicit file displays only its basename.
+
+    Returns:
+        None. Checks that the test-directory path allows a finding that reports the basename and code-line count.
+    """
     source = _fixture(MAX_SETUP_LINES + 1).replace("@pytest.fixture()\n", "").replace("shared_config", "setup")
     unit = make_unit(source, "utils.py")
     unit = replace(unit, file=replace(unit.file, absolute_path="/repo/tests/template_tests/utils.py"))

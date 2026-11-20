@@ -130,8 +130,7 @@ class GenericFunctionRule(Rule):
         """Describe the generic-function rule with a configurable verb blocklist.
 
         Returns:
-            Definition under the naming pillar; the blocklist is exposed via
-            the ``genericFunctions`` option.
+            Definition under the naming pillar; the blocklist is exposed via the genericFunctions option.
         """
         return RuleDefinition(
             id=self.ID,
@@ -145,21 +144,14 @@ class GenericFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag configured generic verbs outside recognized required methods.
-
-        Single-token check is deliberate: ``process_payment`` passes
-        (two tokens) but ``process`` alone fails. The blocklist defaults to
-        common contentless verbs (``process``, ``handle``, ``do``, ``run``,
-        ``execute``, ``perform``, ``apply``, ``manage``, ``operate``).
+        """Flag configured generic verbs used as single-token names outside recognized required methods.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the
-                ``genericFunctions`` option.
+            unit: Source file to inspect; a missing tree produces no findings.
+            context: Rule context supplying genericFunctions; missing or invalid values use defaults, and an empty list disables matches.
 
         Returns:
-            One finding per generic function without a recognized required-method
-            contract.
+            One finding per matching single-token function name without a recognized required-method contract; empty when none match.
         """
         if unit.tree is None:
             return []

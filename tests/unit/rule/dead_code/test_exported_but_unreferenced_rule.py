@@ -28,7 +28,7 @@ def _unit(source: str, display_path: str) -> AnalysisUnit:
         display_path: Project-relative path of the unit.
 
     Returns:
-        The analysis unit.
+        A unit containing the source, its parsed tree and the file metadata for display_path.
     """
     tree = ast.parse(source)
     file = SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python")
@@ -44,7 +44,7 @@ def _ctx(
     """Build a rule context with the exported-but-unreferenced rule enabled.
 
     Args:
-        scan_scope: Scan scope the context reports; defaults to ``full-project``.
+        scan_scope: Scan scope the context reports; defaults to full-project.
         options: Rule options; None applies none.
         allowlist: Dead-code allowlist; None applies an empty one.
 
@@ -68,15 +68,18 @@ def _analyse(units: list[AnalysisUnit], context: RuleContext | None = None):
         context: Rule context; None uses a full-project context with default settings.
 
     Returns:
-        The rule's findings.
+        Findings for unreferenced, non-exempt public definitions; empty when none qualify or the context is not full-project.
     """
     return ExportedButUnreferencedRule().analyse_project(units, context or _ctx())
 
 
 def test_dead_export_in_all_plus_reexport_fires_under_full_project():
-    """Report only ``render_legacy``, which ``__all__`` and a re-export name but nothing calls, as an unreferenced function.
+    """Report only render_legacy, which the export list and a re-export name but nothing calls, as an unreferenced function.
 
-    The finding's message contains the phrase ``no reference beyond its definition``.
+    The finding's message contains the phrase no reference beyond its definition.
+
+    Returns:
+        None after all assertions pass.
     """
     units = [
         _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
@@ -90,7 +93,11 @@ def test_dead_export_in_all_plus_reexport_fires_under_full_project():
 
 
 def test_called_symbol_is_clean():
-    """Report nothing once another module calls both exported functions."""
+    """Report nothing once another module calls both exported functions.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
         _unit(_REEXPORT_INIT, "pkg/__init__.py"),
@@ -104,7 +111,11 @@ def test_called_symbol_is_clean():
 
 
 def test_reference_from_an_ignored_file_counts_but_the_file_never_reports():
-    """Count a call in a reference-only tree while reporting only symbols still unreferenced everywhere."""
+    """Report no findings when one reference-only tree calls render_legacy and another defines an uncalled helper.
+
+    Returns:
+        None. Asserts no findings when one ignored tree calls render_legacy and another defines an uncalled helper.
+    """
     units = [
         _unit(_DEAD_FUNCTION_MODULE, "pkg/render.py"),
         _unit(_REEXPORT_INIT, "pkg/__init__.py"),
@@ -117,13 +128,21 @@ def test_reference_from_an_ignored_file_counts_but_the_file_never_reports():
 
 
 def test_partial_scope_suppresses_entirely():
-    """Report nothing under a partial scan scope."""
+    """Report nothing under a partial scan scope.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [_unit(_DEAD_FUNCTION_MODULE, "pkg/render.py")]
     assert _analyse(units, _ctx(scan_scope="partial-scope")) == []
 
 
 def test_default_context_scope_is_suppressed():
-    """Report nothing under a rule context built with its default scan scope."""
+    """Report nothing under a rule context built with its default scan scope.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [_unit(_DEAD_FUNCTION_MODULE, "pkg/render.py")]
     rule = ExportedButUnreferencedRule()
     config = AnalysisConfig(rules={rule.definition().id: RuleSettings(enabled=True)})
@@ -132,7 +151,11 @@ def test_default_context_scope_is_suppressed():
 
 
 def test_attribute_access_counts_as_use():
-    """Count a call through the module attribute ``pkg.util.helper`` as a use."""
+    """Count a call through the module attribute pkg.util.helper as a use.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("def helper():\n    return 1\n", "pkg/util.py"),
         _unit("import pkg.util\n\nvalue = pkg.util.helper()\n", "pkg/app.py"),
@@ -141,7 +164,11 @@ def test_attribute_access_counts_as_use():
 
 
 def test_getattr_string_counts_as_use():
-    """Count a ``getattr`` lookup by string name as a use."""
+    """Count a getattr lookup by string name as a use.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("def handler():\n    return 1\n", "pkg/util.py"),
         _unit('import pkg.util\n\nfn = getattr(pkg.util, "handler")\n', "pkg/app.py"),
@@ -150,7 +177,11 @@ def test_getattr_string_counts_as_use():
 
 
 def test_aliased_import_counts_as_use():
-    """Count an aliased import as a use of the original name."""
+    """Count an aliased import as a use of the original name.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("def legacy_name():\n    return 1\n", "pkg/util.py"),
         _unit("from pkg.util import legacy_name as modern_name\n", "pkg/app.py"),
@@ -159,7 +190,11 @@ def test_aliased_import_counts_as_use():
 
 
 def test_class_used_only_as_base_is_clean():
-    """Count use as another class's base as a use of the class."""
+    """Count use as another class's base as a use of the class.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("class BasePort:\n    pass\n", "pkg/ports.py"),
         _unit(
@@ -172,7 +207,11 @@ def test_class_used_only_as_base_is_clean():
 
 
 def test_framework_decorated_definition_is_exempt():
-    """Exempt a function decorated with ``click.command()``."""
+    """Exempt a function decorated with click.command().
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit(
             "import click\n\n@click.command()\ndef cli_entry():\n    return 0\n",
@@ -183,9 +222,11 @@ def test_framework_decorated_definition_is_exempt():
 
 
 def test_fastapi_on_event_handler_is_exempt():
-    """Exempt an async handler registered with ``app.on_event``."""
-    # @app.on_event("startup") is registered by the decorator and called by the
-    # framework, never by name - it must not be flagged as unreferenced.
+    """Exempt an async handler decorated with app.on_event.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit(
             'import app\n\n@app.on_event("startup")\nasync def startup_event():\n    return None\n',
@@ -196,7 +237,11 @@ def test_fastapi_on_event_handler_is_exempt():
 
 
 def test_flask_before_request_handler_is_exempt():
-    """Exempt a handler registered with ``app.before_request``."""
+    """Exempt a handler registered with app.before_request.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit(
             "import app\n\n@app.before_request\ndef load_user():\n    return None\n",
@@ -207,28 +252,44 @@ def test_flask_before_request_handler_is_exempt():
 
 
 def test_entry_point_pattern_option_exempts():
-    """Exempt a function matching an ``entryPointPatterns`` glob."""
+    """Exempt a function matching an entryPointPatterns glob.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [_unit("def handle_payment(event):\n    return event\n", "pkg/handlers.py")]
     context = _ctx(options={"entryPointPatterns": ["handle_*"]})
     assert _analyse(units, context) == []
 
 
 def test_dead_code_allowlist_symbol_exempts():
-    """Exempt a function the dead-code allowlist names as a symbol."""
+    """Exempt a function the dead-code allowlist names as a symbol.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [_unit("def keep_me():\n    return 1\n", "pkg/api.py")]
     context = _ctx(allowlist=DeadCodeAllowlist(symbols=("keep_me",)))
     assert _analyse(units, context) == []
 
 
 def test_dead_code_allowlist_path_exempts():
-    """Exempt a function in a file the dead-code allowlist names by path."""
+    """Exempt a function in a file the dead-code allowlist names by path.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [_unit("def keep_me():\n    return 1\n", "pkg/public_api.py")]
     context = _ctx(allowlist=DeadCodeAllowlist(paths=("pkg/public_api.py",)))
     assert _analyse(units, context) == []
 
 
 def test_test_files_produce_no_candidates_but_count_as_users():
-    """Report nothing when only a test calls a function, and nothing for an uncalled helper under ``tests``."""
+    """Report nothing when only a test calls a function, and nothing for an uncalled helper under tests.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("def fixture_target():\n    return 1\n", "pkg/util.py"),
         _unit(
@@ -242,7 +303,11 @@ def test_test_files_produce_no_candidates_but_count_as_users():
 
 
 def test_private_and_dunder_names_are_not_candidates():
-    """Report nothing for an uncalled private function and private class."""
+    """Report nothing for an uncalled private function and private class.
+
+    Returns:
+        None after all assertions pass.
+    """
     units = [
         _unit("def _internal():\n    return 1\n\nclass _Helper:\n    pass\n", "pkg/util.py"),
     ]
@@ -250,17 +315,23 @@ def test_private_and_dunder_names_are_not_candidates():
 
 
 def test_underscore_test_suffix_files_are_not_candidates():
-    """Report nothing for an uncalled function in a file named with a ``_test`` suffix."""
-    # `widget_test.py` is a pytest/unittest test file even outside a tests/ dir,
-    # so its symbols are callers, not export candidates.
+    """Report nothing for an uncalled function in a file named with a _test suffix.
+
+    Returns:
+        None after all assertions pass.
+    """
+    # Gruff treats files ending in _test.py as test files outside tests directories, so they contribute no export candidates.
     units = [_unit("def widget_case():\n    return 1\n", "pkg/widget_test.py")]
     assert _analyse(units) == []
 
 
 def test_quoted_dotted_annotation_reference_counts_as_use():
-    """Count a quoted, dotted return annotation as a use of the class it names."""
-    # A class referenced only through a quoted *dotted* forward ref
-    # (`-> "pkg.models.Payload"`) must not be flagged - annotations count as use.
+    """Count a quoted, dotted return annotation as a use of the class it names.
+
+    Returns:
+        None. Asserts no findings for the fixture with a quoted dotted return annotation.
+    """
+    # The AST stores the dotted annotation as a string, so the rule parses it separately to find the reference to Payload.
     units = [
         _unit("class Payload:\n    pass\n", "pkg/models.py"),
         _unit(
@@ -278,7 +349,11 @@ def test_quoted_dotted_annotation_reference_counts_as_use():
 
 
 def test_definition_is_advisory_medium_confidence_dead_code():
-    """Define the rule as an advisory, medium-confidence dead-code rule, off by default with no entry-point patterns."""
+    """Define the rule as an advisory, medium-confidence dead-code rule, off by default with no entry-point patterns.
+
+    Returns:
+        None after all assertions pass.
+    """
     definition = ExportedButUnreferencedRule().definition()
     assert definition.default_severity.value == "advisory"
     assert definition.confidence.value == "medium"
@@ -288,10 +363,12 @@ def test_definition_is_advisory_medium_confidence_dead_code():
 
 
 def test_quoted_annotation_reference_counts_as_use():
-    """Count a quoted return annotation as a use of the class it names."""
-    # A public class referenced only through a quoted (forward-ref) annotation
-    # under TYPE_CHECKING must not be flagged - the rule's contract says
-    # annotations count as use.
+    """Count a quoted return annotation as a use of the class it names.
+
+    Returns:
+        None. Asserts no findings when the return annotation names Payload as a string.
+    """
+    # The rule ignores the unaliased import under TYPE_CHECKING, so the quoted annotation is the only counted reference to Payload.
     units = [
         _unit("class Payload:\n    pass\n", "pkg/models.py"),
         _unit(
@@ -309,8 +386,12 @@ def test_quoted_annotation_reference_counts_as_use():
 
 
 def test_quoted_annotation_inside_subscript_counts_as_use():
-    """Count a quoted name inside a subscripted return annotation as a use."""
-    # The forward reference can be nested inside an otherwise-unquoted generic.
+    """Count a quoted name inside a subscripted return annotation as a use.
+
+    Returns:
+        None. Asserts no findings when a list return annotation names its element class as a string.
+    """
+    # The AST walk sees list as a name and Record as a string, so the rule parses the string separately to count Record as used.
     units = [
         _unit("class Record:\n    pass\n", "pkg/models.py"),
         _unit(

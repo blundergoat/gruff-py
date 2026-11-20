@@ -56,10 +56,12 @@ _DEFAULT_SKIP_REASONS = {
 
 
 def analysis_payload(report: AnalysisReport) -> dict[str, Any]:
-    """Return one canonical ``gruff.analysis.v3`` document.
+    """Return one canonical gruff.analysis.v3 document.
+
+    Summary finding counts use machine_context.summary_findings when set, including an empty tuple. None uses report.findings.
 
     Args:
-        report: Native run state to project without changing analysis semantics.
+        report: Supplies run settings, diagnostics and emitted findings, plus a separate findings sequence for summary counts when available.
 
     Returns:
         JSON-compatible analysis envelope with shared fields and Python extensions.
@@ -109,17 +111,16 @@ def summary_payload(report: AnalysisReport) -> dict[str, Any]:
 def _machine_run(report: AnalysisReport) -> dict[str, Any]:
     """Build the run section of the analysis envelope from the report's settings, with inputs and config path made relative to the project root.
 
-    The config path and any input that cannot be expressed under the project root are omitted rather than published as host paths. Filters appear only
-    when active, includeIgnored only when true, and configuration warnings and the partial-context caveat go under extensions.py.run only when
-    present.
+    Inputs is an empty list when no path can be made root-relative. Missing or unprojectable config paths omit config.
+    Configuration warnings and a non-None partial-context caveat appear under extensions.py.run.
 
     Args:
         report: Native run state supplying the fail-on level, output format, requested paths, config path, filters, configuration warnings and
             partial-context caveat, plus the machine context's project root and include-ignored flag.
 
     Returns:
-        JSON-compatible run object with failOn, format, inputs and projectRoot set to ., plus config, filters, includeIgnored and extensions only when
-        they apply.
+        JSON-compatible run object with failOn, format and inputs, and with projectRoot set to a dot.
+        Includes config when projectable, filters when active, includeIgnored when true and extensions when populated.
     """
     root = report.machine_context.project_root
     payload: dict[str, Any] = {
@@ -255,17 +256,19 @@ def _finding_counts_by_pillar(findings: tuple[Finding, ...]) -> dict[str, int]:
 def _machine_finding(finding: Finding, root: str) -> dict[str, Any]:
     """Project one native finding into the shared machine finding object with a root-relative file path.
 
-    The finding's metadata is copied and given locationPrecision, scanner-pinpointed when a positive column exists and line-only otherwise, so the
-    finding itself is not mutated. The line is clamped to at least 1, endLine and column appear only when set and positive, and symbol only when
-    non-empty. A file outside the project root propagates the ValueError from _machine_path.
+    Metadata is copied with locationPrecision set to scanner-pinpointed for a positive column, otherwise line-only; the finding is unchanged.
+    Missing or nonpositive lines become 1. The object omits missing or nonpositive end lines and columns, and missing or empty symbols.
 
     Args:
-        finding: Native finding to project.
+        finding: Supplies the rule, message, location, fingerprints and metadata for the machine finding.
         root: Project root that the finding's file path is made relative to.
 
     Returns:
         JSON-compatible finding object with ruleId, message, file, line, severity, pillar, secondaryPillars, tier, confidence, remediation (empty
         string when absent), fingerprint, stableIdentity and metadata, plus endLine, column and symbol when they apply.
+
+    Raises:
+        ValueError: The finding path cannot be represented relative to the project root.
     """
     metadata = dict(finding.metadata)
     has_column = finding.column is not None and finding.column > 0
@@ -301,7 +304,7 @@ def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
     cannot be expressed under the project root; line appears only when positive.
 
     Args:
-        diagnostic: Run diagnostic to project.
+        diagnostic: Entry from report.diagnostics supplying the message, location and whether the problem invalidates the run.
         root: Project root used to make the diagnostic's file path relative.
 
     Returns:
@@ -327,8 +330,8 @@ def _machine_ignored_paths(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Build the sorted ignored-path details and the ignored path list, and require both to name the same paths in the same order.
 
-    Details are sorted by path while the ignored path list keeps the report's order after de-duplication, so the report's ignored paths must already
-    be in sorted order and match the details one for one.
+    Detail paths are sorted after projection. The ignored path list keeps the first occurrence of each root-relative path. Those first occurrences
+    must be in sorted order and match the detail paths one for one.
 
     Args:
         report: Native run state supplying ignored_path_details, ignored_paths and the project root.
@@ -402,11 +405,11 @@ def _skip_reason(detail: IgnoredPath) -> str:
 def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, Any]:
     """Project one suppression summary row into the machine suppression object.
 
-    Paths are made root-relative and de-duplicated. symbol appears only when set, and source whenever the row names one: built-in on a test-path skip
-    row, inline or duplicate on a section 13c row; a configured row carries none.
+    Paths become unique and root-relative. Empty symbols and a None source are omitted.
+    Source is built-in for test-path skips, inline for another tool's comment or duplicate for a merged claim.
 
     Args:
-        summary: Suppression summary row to project.
+        summary: Audit row supplying the rule, suppression reason and count. Configured exclusions carry no source.
         root: Project root the suppression's paths are made relative to.
 
     Returns:
@@ -421,7 +424,6 @@ def _machine_suppression(summary: SuppressionSummary, root: str) -> dict[str, An
     }
     if summary.symbol:
         payload["symbol"] = summary.symbol
-    # Only a built-in row names its source; a configured row is recognised by carrying none.
     if summary.source is not None:
         payload["source"] = summary.source
     return payload
@@ -538,6 +540,9 @@ def _add_optional_sections(payload: dict[str, Any], report: AnalysisReport) -> N
     Args:
         payload: Analysis envelope being built, mutated in place.
         report: Native run state supplying the baseline, diff, display filter and extension values.
+
+    Returns:
+        None. Adds the applicable sections to payload in place.
     """
     baseline = _machine_baseline(report.extensions.baseline, report.machine_context.project_root)
     if baseline is not None:
@@ -597,7 +602,6 @@ def _machine_baseline_entry(value: Any) -> dict[str, Any]:
         JSON-compatible object with identity and count, plus ruleId, path and subject only when non-empty.
     """
     payload: dict[str, Any] = {"identity": value.identity, "count": value.count}
-    # A row's rule, path, and subject exist for the reader, so an absent one is omitted rather than written empty.
     for key, text in (("ruleId", value.rule_id), ("path", value.path), ("subject", value.subject)):
         if text:
             payload[key] = text
@@ -607,8 +611,8 @@ def _machine_baseline_entry(value: Any) -> dict[str, Any]:
 def _machine_diff(value: Any, root: str) -> dict[str, Any] | None:
     """Project the diff extension into the machine diff section when diff mode was enabled.
 
-    The native value is converted through its to_dict when it has one. filteredFindings is the native suppressedCount, mode comes from the native
-    source and appears only when it is a non-empty string, and caveat appears only when it is a string.
+    A callable to_dict supplies the native value. Missing changedFiles yields no paths; missing suppressedCount yields zero filteredFindings.
+    Otherwise suppressedCount is converted to int. mode requires non-empty string source; caveat requires a string and may be empty.
 
     Args:
         value: Diff extension value from the report, either an object with to_dict or a dictionary, or None when no diff was requested.
@@ -681,13 +685,13 @@ def _machine_extensions(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _to_report_value(value: Any) -> Any:
-    """Convert a native extension value to its dictionary form when it provides to_dict.
+    """Use the report representation supplied by an extension's callable to_dict method.
 
     Args:
-        value: Native extension value or plain data.
+        value: Report extension to convert through a callable to_dict, or preserve unchanged when no such method exists.
 
     Returns:
-        The result of value.to_dict() when value has a callable to_dict, otherwise value unchanged.
+        The result of value.to_dict() when callable. Otherwise returns value unchanged, including None for a missing extension.
     """
     to_dict = getattr(value, "to_dict", None)
     if callable(to_dict):
@@ -727,10 +731,7 @@ def _machine_inputs(values: Any, root: str) -> list[str]:
     Returns:
         Root-relative POSIX input paths without duplicates, in first-seen order, with inputs outside the root omitted.
     """
-    # A run that could not start never resolved a project root, so its envelope is rooted at the launch directory,
-    # and a target named from a sibling directory, such as `analyse ../proj`, has no form under it. A host path may
-    # not be published, so the input is left out the way the config path beside it already is, instead of raising
-    # and losing the one envelope that says why the run could not start.
+    # Omit inputs outside the root, as with config paths, to preserve startup failure envelopes without publishing host paths.
     paths: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -772,8 +773,9 @@ def _machine_relative_path(value: str, root: str) -> str | None:
         root: Project root the result is relative to.
 
     Returns:
-        Root-relative POSIX path, . for the root itself, or None when value is empty, contains a backslash, starts with a Windows drive letter,
-        resolves outside root, or cannot be resolved.
+        A root-relative POSIX path, or . for the root itself.
+        None when value is empty, contains a backslash, starts with a Windows drive prefix, or resolves outside root.
+        None also covers OSError or ValueError while resolving the candidate or making it relative to root.
     """
     if not value or "\\" in value or re.match(r"^[A-Za-z]:", value):
         return None

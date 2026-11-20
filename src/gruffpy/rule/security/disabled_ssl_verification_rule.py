@@ -97,6 +97,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             node: Module node to inspect.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_scope_body(node.body, false_aliases=set())
 
@@ -105,6 +108,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             node: Function definition to inspect.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_scope_body(node.body, false_aliases=set())
 
@@ -113,6 +119,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             node: Async function definition to inspect.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_scope_body(node.body, false_aliases=set())
 
@@ -121,6 +130,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             node: Class definition to inspect.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_scope_body(node.body, false_aliases=set())
 
@@ -129,6 +141,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             node: Call expression to inspect.
+
+        Returns:
+            None; findings for this call and any matched nested calls are appended to this visitor's findings.
         """
         target = call_target_name(node)
         if target is not None:
@@ -155,11 +170,12 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
     def _visit_scope_body(self, body: list[ast.stmt], false_aliases: set[str]) -> None:
         """Visit a statement sequence with a private copy of its initial aliases.
 
-        Calls found during traversal are appended to the visitor's findings.
-
         Args:
             body: Statements to visit in source order.
             false_aliases: Initial false-value names, copied so the caller's set is unchanged.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         aliases = set(false_aliases)
         for stmt in body:
@@ -173,6 +189,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: Statement whose calls and bindings are inspected.
             aliases: Current scope's mutable alias set, updated by handled bindings and branches.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         if self._did_visit_definition_or_assignment(stmt, aliases):
             return
@@ -181,7 +200,7 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         self._visit_with_aliases(stmt, aliases)
 
     def _did_visit_definition_or_assignment(self, stmt: ast.stmt, aliases: set[str]) -> bool:
-        """Handle definitions and assignments before generic statement traversal.
+        """Handle definitions and assignments before generic traversal, appending any matches to this visitor's findings.
 
         Args:
             stmt: Statement to dispatch when it defines a scope or assigns a value.
@@ -209,7 +228,7 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         stmt: ast.stmt,
         aliases: set[str],
     ) -> bool:
-        """Handle conditional and loop or exception suites with branch-local aliases.
+        """Visit supported branches with local aliases and append any matches to this visitor's findings.
 
         Args:
             stmt: Statement to check for an if, loop, or try suite.
@@ -236,6 +255,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: Function or class definition whose body starts a fresh alias scope.
             aliases: Outer alias set from which the definition's bound name is removed.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         aliases.discard(stmt.name)
         self.visit(stmt)
@@ -246,6 +268,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: Assignment whose value is visited before its targets change state.
             aliases: Current alias set, mutated to reflect the assigned value.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_with_aliases(stmt.value, aliases)
         self._record_assignment(stmt.targets, stmt.value, aliases)
@@ -256,6 +281,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: Annotated assignment; an absent value still invalidates its target aliases.
             aliases: Current alias set, mutated after any value is visited.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         if stmt.value is not None:
             self._visit_with_aliases(stmt.value, aliases)
@@ -267,6 +295,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: Augmented assignment whose value is inspected for calls.
             aliases: Current alias set from which the assigned target names are removed.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_with_aliases(stmt.value, aliases)
         aliases.difference_update(_target_names(stmt.target))
@@ -278,7 +309,10 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             stmt: Conditional whose test, body, and alternative suite are visited.
-            aliases: Outer aliases; names assigned anywhere in the conditional are removed afterward.
+            aliases: Outer aliases; assigned names outside nested definitions and the definitions' bound names are removed afterward.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_with_aliases(stmt.test, aliases)
         self._visit_scope_body(stmt.body, set(aliases))
@@ -290,7 +324,10 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
 
         Args:
             stmt: Loop or try statement delegated to the branching visitor.
-            aliases: Outer alias set from which names assigned within the statement are removed.
+            aliases: Outer alias set. Removes stored names and nested definition names, skipping bindings inside those definitions.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         self._visit_branching_statement(stmt, aliases)
         aliases.difference_update(_assigned_names(stmt))
@@ -303,6 +340,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             stmt: For, async-for, while, or try statement; other shapes receive no traversal here.
             aliases: Initial aliases copied for each suite and used while inspecting loop expressions.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         if isinstance(stmt, ast.For | ast.AsyncFor):
             self._visit_with_aliases(stmt.iter, aliases)
@@ -329,6 +369,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
         Args:
             node: Syntax subtree to visit using the supplied aliases.
             aliases: Alias set exposed to nested call checks during this visit.
+
+        Returns:
+            None. Appends a finding for each matched call to the visitor's findings list.
         """
         previous = self._false_aliases
         self._false_aliases = aliases
@@ -351,6 +394,9 @@ class _DisabledSslVerificationVisitor(ast.NodeVisitor):
             targets: Assignment targets from which plain or destructured names are collected.
             value: Assigned expression; None or a value outside the false-constant check clears the names.
             aliases: Mutable alias set receiving or losing the collected target names.
+
+        Returns:
+            None. Adds the assigned names to aliases for a false-like constant and removes them otherwise.
         """
         assigned = {name for target in targets for name in _target_names(target)}
         if value is not None and is_false_constant(value):
@@ -490,6 +536,9 @@ class _AssignedNameCollector(ast.NodeVisitor):
 
         Args:
             node: Name node to inspect.
+
+        Returns:
+            None; store-context names are added to this collector's names.
         """
         if isinstance(node.ctx, ast.Store):
             self.names.add(node.id)
@@ -499,6 +548,9 @@ class _AssignedNameCollector(ast.NodeVisitor):
 
         Args:
             node: Function definition to record.
+
+        Returns:
+            None; the definition's name is added to this collector's names.
         """
         self.names.add(node.name)
 
@@ -507,6 +559,9 @@ class _AssignedNameCollector(ast.NodeVisitor):
 
         Args:
             node: Async function definition to record.
+
+        Returns:
+            None; the definition's name is added to this collector's names.
         """
         self.names.add(node.name)
 
@@ -515,5 +570,8 @@ class _AssignedNameCollector(ast.NodeVisitor):
 
         Args:
             node: Class definition to record.
+
+        Returns:
+            None; the definition's name is added to this collector's names.
         """
         self.names.add(node.name)

@@ -70,11 +70,11 @@ class MissingReturnDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer; its
-                ``everyCallable`` option widens the rule.
+            context: Rule context whose everyCallable option admits private names and infers unannotated returns from the body.
 
         Returns:
-            Findings for documented functions in scope without a recognized result description.
+            One finding per eligible function with a parseable docstring and no accepted return documentation.
+            A Returns type hint or qualifying prose can satisfy the rule. Empty when the tree is absent or no function qualifies.
         """
         if unit.tree is None:
             return []
@@ -91,7 +91,7 @@ def _missing_return_doc_nodes(tree: ast.AST, *, every_callable: bool) -> list[tu
 
     Args:
         tree: Parsed module tree; ast.walk visits every function and async function in it, including methods and nested functions.
-        every_callable: Whether the rule's ``everyCallable`` option is on; passed to _missing_return_doc_style to widen which functions are in scope.
+        every_callable: Whether the rule's everyCallable option is on; passed to _missing_return_doc_style to widen which functions are in scope.
 
     Returns:
         Each function that _missing_return_doc_style reports, paired with its parsed docstring style, in ast.walk order; empty when no function
@@ -134,14 +134,15 @@ def _missing_return_doc_style(node: FunctionNode, *, every_callable: bool) -> Do
 
 
 def _has_prose_return_doc(node: FunctionNode, parsed: ParsedDocstring) -> bool:
-    """Recognize a result description in the parsed narrative.
+    """Check whether the rule accepts the docstring narrative as result documentation.
 
     Args:
-        node: Callable whose result is being documented.
-        parsed: Docstring fields supplied by the shared parser.
+        node: Callable whose decorators, result annotation and return expressions can qualify its narrative.
+        parsed: Parsed docstring whose summary and description are checked.
 
     Returns:
-        True for recognized prose; false leaves the missing-result finding.
+        True when the result prose qualifies or a callable decorated with bare property has a non-empty summary.
+        False leaves the callable eligible for a missing-result finding.
     """
     narrative = "\n".join(part for part in (parsed.summary, parsed.description) if part)
     if re.search(r"\b(?:returns?\s+\w|returned\b|yields?\s+\w)", narrative, re.IGNORECASE):
@@ -154,14 +155,14 @@ def _has_prose_return_doc(node: FunctionNode, parsed: ParsedDocstring) -> bool:
 
 
 def _result_type_named_in_summary(node: FunctionNode, summary: str) -> bool:
-    """Recognize a nominal result description naming the annotated class.
+    """Recognize article-led prose containing a capitalized name from the return annotation.
 
     Args:
-        node: Callable carrying the result annotation.
+        node: Callable whose return annotation supplies the names to look for. An absent annotation yields False.
         summary: Parsed introductory prose, without parameter fields.
 
     Returns:
-        True when a noun phrase names a result class; generic action prose does not qualify.
+        True when the summary starts with A, An or The and contains a capitalized annotation name other than Any; False otherwise.
     """
     if node.returns is None or not re.match(r"(?:An?|The)\s+", summary):
         return False
@@ -177,7 +178,8 @@ def _simple_return_values_are_described(node: FunctionNode, narrative: str) -> b
         narrative: Parsed prose, without parameter fields.
 
     Returns:
-        True only when all returns name documented attributes or subscript keys.
+        True when at least one return exists and each return matches the prose by its full attribute expression or nonblank string subscript key.
+        False otherwise.
     """
     values = [n.value for n in own_body_nodes(node) if isinstance(n, ast.Return)]
     if not values:
@@ -195,17 +197,17 @@ def _simple_return_values_are_described(node: FunctionNode, narrative: str) -> b
 
 
 def _should_skip_return_doc_check(node: FunctionNode, *, every_callable: bool) -> bool:
-    """Decide from a function's name, decorators, return annotation and, if unannotated, its body whether to skip it.
+    """Decide whether the return-documentation rule should skip a definition.
 
     Args:
-        node: Function or async function to classify.
-        every_callable: Whether the rule's ``everyCallable`` option is on; it brings underscore-private names into scope and lets an unannotated
+        node: Definition supplying the name, decorators, return annotation and body checked by the rule.
+        every_callable: Whether the rule's everyCallable option is on; it brings underscore-private names into scope and lets an unannotated
             function be checked when returns_value finds a return of a non-None value or a yield in its own body.
 
     Returns:
         True when is_in_documentation_scope rejects the name, the function is an overload stub or a property setter or deleter, or its return
-        annotation is exactly ``-> None``. False for any other annotated function. For an unannotated function, False only when every_callable is on
-        and returns_value finds a value in its own body; otherwise True.
+        annotation is exactly -> None. False for any other annotated function. For an unannotated function, False only when every_callable is on
+        and its own body contains a return of a non-None value, a yield or a yield from. Otherwise True.
     """
     if (
         not is_in_documentation_scope(node.name, every_callable=every_callable)
@@ -216,7 +218,7 @@ def _should_skip_return_doc_check(node: FunctionNode, *, every_callable: bool) -
         return True
     if has_return_annotation(node):
         return False
-    # Without an annotation, only the widened scope reads the body to see whether a value comes back.
+    # In widened scope, an unannotated generator can be checked even if it has no return statement.
     return not (every_callable and returns_value(node))
 
 

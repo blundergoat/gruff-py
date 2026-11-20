@@ -38,7 +38,11 @@ _CODEX_PATCH_TOOL_MATCHER = "^apply_patch$"
 
 
 def test_codex_registers_post_edit_quality_hook() -> None:
-    """Register one Codex patch-tool handler that runs the gruff quality hook through the Node launcher, with its timeout and status text."""
+    """Check that the single Codex patch-tool handler names the quality hook and Node launcher and has the expected timeout and status text.
+
+    Returns:
+        None. Reads the Codex registration and checks the patch matcher and its command handler.
+    """
     payload = json.loads((_REPO_ROOT / ".codex/hooks.json").read_text())
 
     post_tool_use = payload["hooks"]["PostToolUse"]
@@ -51,15 +55,19 @@ def test_codex_registers_post_edit_quality_hook() -> None:
     handler = handlers[0]
     assert handler["type"] == "command"
     assert ".goat-flow/hooks/gruff-code-quality.sh" in handler["command"]
-    # Codex hooks run from the session cwd, so the registration reaches the
-    # script through the Node git-root launcher instead of invoking it directly.
+    # The registration resolves the project root from the session directory.
+    # It starts the Node launcher in that root to run the quality hook.
     assert ".goat-flow/hooks/run-with-bash.mjs" in handler["command"]
     assert handler["timeout"] == _CODEX_HOOK_TIMEOUT_SECONDS
     assert handler["statusMessage"] == "gruff code quality"
 
 
 def test_hook_capabilities_advertise_contract() -> None:
-    """Advertise ``gruff.hook.v2``, this analyser's name and version, every supported feature, the flag names and free flag order."""
+    """Advertise ``gruff.hook.v2``, this analyser's name and version, every supported feature, the flag names and free flag order.
+
+    Returns:
+        None. Checks the contract fields in the hook's capability response.
+    """
     result = CliRunner().invoke(main, ["hook", "--capabilities", "--format", "json"])
 
     assert result.exit_code == 0, result.output
@@ -89,6 +97,9 @@ def test_hook_changed_ranges_omit_file_scope_and_keep_line_scope(
     Args:
         tmp_path: Project root holding a config that enables dangerous-call findings and a 1,011-line module with an ``eval`` call on line 500.
         monkeypatch: Changes into the project so the relative module and config paths resolve.
+
+    Returns:
+        None. Compares scoped and full hook findings and checks the suppression count for both changed ranges.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -123,6 +134,9 @@ def test_hook_findings_have_contract_fields_and_threshold_metadata(
     Args:
         tmp_path: Project root holding a 1,011-line module with an ``eval`` call on line 10.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks required hook finding fields and validates threshold metadata when present.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -156,6 +170,9 @@ def test_hook_stable_identity_survives_line_shift_and_measured_value_change(
         tmp_path: Project root holding a config that enables dangerous-call findings, a one-line ``eval`` module and a long module rewritten ten lines
             longer.
         monkeypatch: Changes into the project so the relative module and config paths resolve.
+
+    Returns:
+        None. Checks identities and fingerprints before and after a line shift and a file-length increase.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -192,6 +209,9 @@ def test_hook_baseline_new_only_uses_stable_identity(
     Args:
         tmp_path: Project root holding the rewritten module and the hook baseline generated from it.
         monkeypatch: Changes into the project so baseline generation and the hook scan its ``src`` folder.
+
+    Returns:
+        None. Checks hook findings against both baselines, with and without a changed range.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -240,6 +260,9 @@ def test_hook_baseline_with_no_findings_is_accepted(
     Args:
         tmp_path: Project root holding a config that enables dangerous-call findings, a one-line ``eval`` module and an empty v3 baseline.
         monkeypatch: Changes into the project so the relative module and config paths resolve.
+
+    Returns:
+        None. Checks the hook's exit status and findings when the baseline contains no occurrences.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -271,11 +294,14 @@ def test_hook_baseline_refuses_a_document_that_is_not_a_v3_baseline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An analysis report is not a baseline: reading one would suppress findings under rules nobody ratified.
+    """Reject an analysis report supplied as a baseline with a fatal diagnostic that mentions --migrate-baseline.
 
     Args:
         tmp_path: Temporary project the scan runs in.
         monkeypatch: Fixture used to make that project the working directory.
+
+    Returns:
+        None. Checks the hook's exit code and diagnostic when given the analysis report.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -319,6 +345,9 @@ def test_hook_diff_new_only_uses_stable_identity(
     Args:
         tmp_path: Git repository whose module is committed under, then over, the length threshold.
         monkeypatch: Changes into the repository so git and the hook run there.
+
+    Returns:
+        None. Checks the hook's diff report against HEAD before and after the length finding enters the committed base.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -349,12 +378,15 @@ def test_hook_diff_new_only_keeps_each_occurrence_beyond_the_base_count(
 ) -> None:
     """Report the second ``random.randint`` token while the base still holds only the first.
 
-    Both lines carry one hook key, because ``security.insecure-random`` names no symbol and states the same message. A
-    base that held the key once hid every current occurrence; it now covers exactly one, the lowest line.
+    Both lines carry one hook key, because ``security.insecure-random`` names no symbol and states the same message.
+    One base occurrence covers the first line. With both in the base, changing the second call's argument adds no new insecure-random finding.
 
     Args:
         tmp_path: Repository root holding the token module.
         monkeypatch: Moves the working directory into the repository.
+
+    Returns:
+        None. Checks the reported lines for both the surplus and equal occurrence counts.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -390,6 +422,9 @@ def test_hook_rejects_malformed_changed_ranges(
         bad_range: Malformed range; the cases cover non-numeric text and a reversed range.
         tmp_path: Project root holding a one-line module that calls ``eval``.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks the hook's exit code for each malformed range.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -398,7 +433,6 @@ def test_hook_rejects_malformed_changed_ranges(
 
     result = _invoke_hook("--no-config", "--changed-ranges", bad_range, "src/sample.py")
 
-    # A malformed range is a controlled exit 2, not an uncaught traceback.
     assert result.exit_code == 2, result.output
 
 
@@ -411,6 +445,9 @@ def test_hook_flags_parse_before_and_after_path(
     Args:
         tmp_path: Project root holding a one-line module that calls ``eval``.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks both exit codes and compares the JSON responses across the two flag positions.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -434,6 +471,9 @@ def test_hook_exits_zero_with_findings(
     Args:
         tmp_path: Project root holding a one-line module that calls ``eval``.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks that the hook exits successfully while reporting at least one finding.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -456,6 +496,9 @@ def test_hook_exclude_rule_removes_finding_from_payload(
     Args:
         tmp_path: Project root holding a config that enables dangerous-call findings and a one-line ``eval`` module.
         monkeypatch: Changes into the project so the relative module and config paths resolve.
+
+    Returns:
+        None. Checks whether the dangerous-call rule appears in the hook reports with and without the exclusion flag.
     """
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nrules:\n  security.dangerous-function-call:\n    enabled: true\n")
@@ -485,6 +528,9 @@ def test_hook_exclude_rule_accepts_repeated_and_csv_values(
     Args:
         tmp_path: Project root holding a one-line module that calls ``eval``.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks that the hook reports none of the rules named through the two exclusion flags.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -513,13 +559,16 @@ def test_hook_publishes_nonfatal_bounded_deep_scan_diagnostic(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Publish a non-fatal ``bounded-deep-scan`` diagnostic for a CLI budget, still report the AWS key pattern and never echo the key.
+    """Check that the CLI-budget payload reports a non-fatal bounded-deep-scan diagnostic and the AWS key rule, with the synthetic key absent.
 
     The payload has no dangerous-call finding for the module's ``eval`` call.
 
     Args:
         tmp_path: Project root holding ``large.py``, which assigns a synthetic AWS key and calls ``eval``.
         monkeypatch: Changes into the project so the relative module path resolves.
+
+    Returns:
+        None. Checks the budget diagnostic, the reported rules and the absence of the synthetic key from the JSON payload.
     """
     monkeypatch.chdir(tmp_path)
     aws_key = "AKIA" + "1234567890ABCDEF"
@@ -551,6 +600,9 @@ def test_hook_reports_ignored_paths_and_config_errors(
     Args:
         tmp_path: Project root whose config first ignores one of two ``eval`` modules and is then rewritten without a schema version.
         monkeypatch: Changes into the project so the hook finds its config.
+
+    Returns:
+        None. Checks the ignored-path report and the error response produced after the config is rewritten.
     """
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "src"
@@ -569,7 +621,7 @@ def test_hook_reports_ignored_paths_and_config_errors(
     payload = json.loads(result.output)
     assert result.exit_code == 2, result.output
     assert payload["config"]["schemaOk"] is False
-    # v2 carries the error as an object, because a configuration a consumer cannot fix is a dead end.
+    # The error object lets hook consumers read the remediation separately from the diagnostic message.
     assert "schemaVersion" in payload["config"]["error"]["message"]
     assert "gruff-py migrate-config" in payload["config"]["error"]["message"]
     assert "init --force" not in payload["config"]["error"]["message"]
@@ -581,6 +633,9 @@ def _generate_baseline(baseline_path: Path) -> None:
 
     Args:
         baseline_path: Destination for the generated baseline.
+
+    Returns:
+        None. Writes the baseline to baseline_path and checks that the file exists.
     """
     result = CliRunner().invoke(
         main,
@@ -647,6 +702,9 @@ def test_long_file_helpers_honor_substantive_line_contract(tmp_path: Path) -> No
 
     Args:
         tmp_path: Temporary directory receiving the two generated Python files.
+
+    Returns:
+        None. Parses both generated files and checks their assignment counts.
     """
     plain_file = tmp_path / "plain.py"
     eval_file = tmp_path / "eval.py"
@@ -663,11 +721,12 @@ def test_long_file_helpers_honor_substantive_line_contract(tmp_path: Path) -> No
 def _write_long_file(path: Path, *, total_lines: int) -> None:
     """Write a module made of a docstring line followed by numbered assignments.
 
-    Each assignment is a substantive line, so the file-length rule counts it.
-
     Args:
         path: Module to create or overwrite.
         total_lines: Number of assignment lines after the docstring line.
+
+    Returns:
+        None. Writes the module to path. A nonpositive assignment count leaves only the docstring.
     """
     # Substantive assignments, not blank padding: file-length counts substantive lines only.
     lines = ['"""Utilities for hook contract conformance."""\n']
@@ -677,12 +736,15 @@ def _write_long_file(path: Path, *, total_lines: int) -> None:
 
 
 def _write_long_file_with_eval(path: Path, *, eval_line: int, total_lines: int) -> None:
-    """Write the same long module, but with one physical line assigning the result of an ``eval`` call.
+    """Write a module of substantive assignments for the hook tests, with an optional eval assignment.
 
     Args:
         path: Module to create or overwrite.
-        eval_line: Physical line that holds the ``eval`` call, counting the docstring as line 1.
-        total_lines: Number of assignment lines after the docstring line.
+        eval_line: Physical line for the eval call, counting the docstring as line 1. A line outside the assignments produces no eval call.
+        total_lines: Number of assignment lines after the docstring line. A nonpositive count leaves only the docstring.
+
+    Returns:
+        None. Writes the generated module to path.
     """
     lines = ['"""Utilities for hook contract conformance."""\n']
     for line in range(2, total_lines + 2):
@@ -698,6 +760,9 @@ def _git(*args: str) -> None:
 
     Args:
         args: Git subcommand and its arguments.
+
+    Returns:
+        None; commands may change the current repository, and captured output is discarded.
 
     Raises:
         subprocess.CalledProcessError: Git exits non-zero.

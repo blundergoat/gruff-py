@@ -25,8 +25,8 @@ class ParameterCountRule(Rule):
         """Describe the parameter-count rule with a configurable arity threshold (default 10).
 
         Returns:
-            Definition under the size pillar; parameter count includes
-            ``*args``/``**kwargs`` but excludes ``self``/``cls``.
+            Definition under the size pillar; variable positional and keyword parameters each count once.
+            Only a leading positional self or cls is excluded, and only when a class occurs in the ancestor chain.
         """
         return RuleDefinition(
             id=self.ID,
@@ -41,13 +41,11 @@ class ParameterCountRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per function whose total parameter arity exceeds the threshold.
 
-        Counts positional-only + positional + keyword-only + ``*args`` +
-        ``**kwargs``. Method receivers (``self``/``cls``) are excluded so a
-        9-parameter free function and a 9-parameter method compare on equal
-        footing.
+        Counts positional-only, positional and keyword-only parameters, plus one each for variable positional and keyword parameters.
+        A leading positional self or cls is excluded when any ancestor is a class.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Parsed source file to walk; a missing tree yields no findings.
             context: Rule execution context that supplies the threshold.
 
         Returns:
@@ -153,7 +151,7 @@ def _format_number(value: int | float) -> str:
         value: Threshold value to render; an integer or a float.
 
     Returns:
-        The value as text, keeping the decimals of a non-integer float and printing whole-number floats such as 10.0 as 10.
+        Integer text for integers and finite whole-number floats, so 10.0 renders as 10. Other floats use their usual Python text.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

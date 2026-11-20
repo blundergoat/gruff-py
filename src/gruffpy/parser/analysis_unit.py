@@ -40,10 +40,10 @@ class AnalysisUnit:
     diagnostics: tuple[ParseDiagnostic, ...] = ()
 
     def has_parse_errors(self) -> bool:
-        """Return whether parsing produced diagnostics.
+        """Return whether parsing produced a fatal diagnostic.
 
         Returns:
-            True when the unit has one or more parse diagnostics.
+            True when at least one parse diagnostic is fatal; nonfatal diagnostics alone return False.
         """
         return any(not diagnostic.non_fatal for diagnostic in self.diagnostics)
 

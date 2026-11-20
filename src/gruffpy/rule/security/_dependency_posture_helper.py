@@ -52,12 +52,10 @@ def dependency_declarations(unit: AnalysisUnit) -> tuple[DependencyDeclaration, 
     """Extract dependency declarations from the supported metadata file types.
 
     Args:
-        unit: Parsed analysis unit whose raw source text is available.
+        unit: Provides the display path and source text. A setup.py unit without an AST yields no declarations.
 
     Returns:
-        Dependency declarations from PEP 621 ``pyproject.toml``, requirements
-        files, ``setup.cfg``, or ``setup.py``. Unsupported files return an empty
-        tuple.
+        Declarations from pyproject.toml, requirements files, setup.cfg or setup.py; an empty tuple if none are usable or the file is unsupported.
     """
     display_path = unit.file.display_path.replace("\\", "/")
     filename = PurePosixPath(display_path).name.lower()
@@ -95,13 +93,13 @@ def dependency_name(declaration: DependencyDeclaration) -> str | None:
 
 
 def is_git_reference(declaration: DependencyDeclaration) -> bool:
-    """Return whether the declaration installs from a Git/VCS reference.
+    """Screen the raw dependency declaration for recognized Git reference markers.
 
     Args:
-        declaration: Dependency declaration to inspect.
+        declaration: Dependency whose raw text supplies the spelling checked for Git markers.
 
     Returns:
-        True for ``git+...`` requirement forms and PEP 508 ``name @ git+...`` references.
+        True when the text starts with git+ or git@ or contains ' @ git+', ignoring case. False otherwise.
     """
     lowered = declaration.raw.lower()
     return lowered.startswith("git+") or " @ git+" in lowered or lowered.startswith("git@")
@@ -114,11 +112,9 @@ def is_local_path_reference(declaration: DependencyDeclaration) -> bool:
         declaration: Dependency declaration to inspect.
 
     Returns:
-        True for editable/local paths and PEP 508 ``file:`` references.
+        True for supported local path or file: forms; False for Git references and other declarations.
     """
-    # Git refs (including scp-style ``git@host:org/repo``) contain a ``/`` and no
-    # ``://``, so the slash-based fallback below would double-flag them; defer to
-    # security.dependency-git-reference, matching how is_url_reference excludes them.
+    # Git references can also match local-path heuristics; leave them to security.dependency-git-reference to avoid duplicate findings.
     if is_git_reference(declaration):
         return False
     spec = declaration.raw.strip()
@@ -139,7 +135,7 @@ def is_url_reference(declaration: DependencyDeclaration) -> bool:
     """Return whether the declaration installs from a non-VCS HTTP(S) URL.
 
     Args:
-        declaration: Dependency declaration to inspect.
+        declaration: Dependency declaration whose raw text is checked for a bare HTTP(S) URL or a named direct reference to one.
 
     Returns:
         True for direct HTTP(S) references that are not Git/VCS or local-file references.
@@ -198,7 +194,7 @@ def dependency_metadata(
 
 
 def _pyproject_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
-    """Extract PEP 621 dependency arrays from ``pyproject.toml`` text.
+    """Extract dependency declarations from supported pyproject.toml arrays.
 
     Args:
         source: Complete TOML text containing project, build-system or dependency-group declarations.
@@ -249,7 +245,7 @@ def _requirements_declarations(source: str) -> tuple[DependencyDeclaration, ...]
 
 
 def _setup_config_declarations(source: str) -> tuple[DependencyDeclaration, ...]:
-    """Extract dependency lines from ``setup.cfg`` options sections.
+    """Extract dependency lines from setup.cfg options sections.
 
     Args:
         source: Configuration text scanned for install_requires and extras_require entries.
@@ -290,7 +286,7 @@ def _setup_config_declarations(source: str) -> tuple[DependencyDeclaration, ...]
 
 
 def _setup_py_declarations(unit: AnalysisUnit) -> tuple[DependencyDeclaration, ...]:
-    """Extract literal dependency strings from ``setup(...)`` calls in ``setup.py``.
+    """Extract literal dependency strings from setup calls in setup.py.
 
     Args:
         unit: Parsed source whose AST is scanned for calls with the terminal name setup.
@@ -317,7 +313,7 @@ def _setup_py_declarations(unit: AnalysisUnit) -> tuple[DependencyDeclaration, .
 
 
 def _dependency_values_from_ast(node: ast.AST) -> list[DependencyDeclaration]:
-    """Return literal dependency strings nested inside a setup keyword value.
+    """Extract dependency declarations from a setup keyword's string literal or supported literal containers.
 
     Args:
         node: Keyword value searched through literal lists, tuples, sets and dictionary values.
@@ -407,7 +403,7 @@ def _should_continue_setup_config_extra_collection(
 
 
 def _normalise_requirement_line(line: str) -> str:
-    """Return a requirement declaration with comments/options stripped, or ``""``.
+    """Return a declaration with supported comments and options removed, or an empty string for ignored lines.
 
     Args:
         line: One requirements line to strip of supported comments, editable prefixes and trailing hash options.
@@ -488,7 +484,7 @@ def _call_name(node: ast.AST) -> str:
 
 
 def _is_requirements_file(filename: str) -> bool:
-    """Return whether *filename* is a pip requirements-style file.
+    """Return whether filename is a pip requirements-style file.
 
     Args:
         filename: Lowercased basename supplied by the declaration dispatcher.
@@ -548,7 +544,7 @@ def _looks_like_reference(spec: str) -> bool:
 
 
 def _looks_like_named_requirement(spec: str) -> bool:
-    """Return whether the declaration starts with a package-name token.
+    """Recognize a leading package-name token when the declaration matches no reference heuristic.
 
     Args:
         spec: Declaration text checked for a package-name token and screened against reference heuristics.

@@ -37,8 +37,13 @@ _EXPECTED_COUNTS = {
 def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
     """Report each test-quality rule its expected number of times on the full fixture, and report every registered one.
 
+    The test clears the shared pytest-config cache.
+
     Args:
-        tmp_path: Project root holding a ``pyproject.toml`` whose pytest block sets only ``-q``.
+        tmp_path: Project root where the test writes a pyproject.toml whose pytest block sets only -q.
+
+    Returns:
+        None. Checks the exact finding counts and verifies that the fixture produces a finding for every registered test-quality rule.
     """
     registry = RuleRegistry.defaults()
     ctx = _ctx_with_opt_in_rules(tmp_path, registry)
@@ -54,12 +59,12 @@ def test_full_pillar_fixture_exercises_every_test_quality_rule(tmp_path: Path):
 
 
 def _ctx_with_opt_in_rules(tmp_path: Path, registry: RuleRegistry) -> RuleContext:
-    """Write a minimal pytest ``pyproject.toml`` at tmp_path and build a context that enables each rule in the helper's options mapping.
+    """Write a minimal pytest pyproject.toml at tmp_path and build a context that enables each rule in the helper's options mapping.
 
     It also clears the cached pytest config, sets the billing domain namespace and turns grouped findings off.
 
     Args:
-        tmp_path: Project root that receives the ``pyproject.toml``.
+        tmp_path: Project root that receives the pyproject.toml.
         registry: Registry whose defaults seed the config.
 
     Returns:
@@ -97,7 +102,7 @@ def _full_pillar_source() -> str:
     """Fill in the full-pillar fixture's setup and long-test bodies.
 
     Returns:
-        The fixture source, with 31 ``value += 1`` lines in ``setup_method`` and 101 ``step = 1`` lines in ``test_function_too_long_case``.
+        The fixture source, with 31 value += 1 lines in setup_method and 101 step = 1 lines in test_function_too_long_case.
     """
     setup_body = "".join("    value += 1\n" for _ in range(31))
     long_test_body = "".join("    step = 1\n" for _ in range(101))

@@ -69,14 +69,15 @@ def apply_inline_suppressions(
 
 
 def _is_covered_by_comment(lines: Sequence[str], finding: Finding) -> bool:
-    """Return whether the finding's line, or a comment-only line directly above it, names a check making its claim.
+    """Decide whether a nearby inline suppression directive covers the finding.
 
     Args:
         lines: The finding's file, split into lines.
         finding: The finding to judge; a file-level finding has no line to carry a comment.
 
     Returns:
-        True when the finding is suppressed where it was written.
+        True for a covering nosec or zizmor directive on the finding's line or on the immediately preceding comment-only line.
+        False when the line number is missing or out of range, or neither line contains a covering directive.
     """
     line = finding.line
     if line is None or line < 1 or line > len(lines):
@@ -88,15 +89,15 @@ def _is_covered_by_comment(lines: Sequence[str], finding: Finding) -> bool:
 
 
 def _has_covering_comment(line: str, rule_id: str) -> bool:
-    """Return whether one line's bandit or zizmor comment names a check making the rule's claim.
+    """Determine whether a Bandit or zizmor suppression on this line covers the rule.
 
     Args:
-        line: Source line to read.
-        rule_id: The finding's rule id.
+        line: Source line searched for suppression directives.
+        rule_id: Finding's rule ID, checked by prefix for bare nosec and by exact ID for a mapped zizmor audit.
 
     Returns:
-        True when a bare ``# nosec`` covers a security or sensitive-data rule, or a zizmor audit maps to the rule.
-        A ``# nosec`` naming test ids or test names covers nothing, because section 13c maps no bandit test.
+        True when a bare # nosec covers a security or sensitive-data rule, or a zizmor audit maps to the rule.
+        False otherwise. A nosec directive naming Bandit tests provides no coverage because FAMILY-CONTRACT.md section 13c maps none of them.
     """
     is_broad = rule_id.startswith(("security.", "sensitive-data."))
     for match in _BANDIT_DIRECTIVE.finditer(line):
@@ -106,13 +107,14 @@ def _has_covering_comment(line: str, rule_id: str) -> bool:
 
 
 def _merge_repeated_claims(findings: list[Finding]) -> tuple[list[Finding], list[SuppressedFinding]]:
-    """Merge ``security.variable-import`` into ``security.dangerous-function-call`` on one dynamic ``__import__``.
+    """Suppress duplicate __import__ findings by pairing reports on the same file and line.
+    Each security.variable-import finding uses one available security.dangerous-function-call finding.
 
     Args:
         findings: Findings left after the inline comments.
 
     Returns:
-        Tuple ``(kept, merged)``; each merged finding carries the repeated-claim reason.
+        Tuple (kept, merged); each merged finding carries the repeated-claim reason.
     """
     dangerous_imports = Counter(
         (finding.file_path, finding.line)
@@ -123,7 +125,7 @@ def _merge_repeated_claims(findings: list[Finding]) -> tuple[list[Finding], list
     merged: list[SuppressedFinding] = []
     for finding in findings:
         key = (finding.file_path, finding.line)
-        # The variable-import finding repeats the claim only on an ``__import__`` the dangerous-call rule reports.
+        # Consuming one counterpart per match keeps surplus variable-import findings on the same line.
         if finding.rule_id == "security.variable-import" and finding.metadata.get("target") == "__import__" and dangerous_imports[key] > 0:
             dangerous_imports[key] -= 1
             merged.append(SuppressedFinding(finding=finding, justification=DUPLICATE_REASON))
@@ -133,16 +135,16 @@ def _merge_repeated_claims(findings: list[Finding]) -> tuple[list[Finding], list
 
 
 def _rows(removed: Sequence[SuppressedFinding], source: str, reason: str, first_index: int) -> list[SuppressionSummary]:
-    """Fold removed findings into one audit row per file and rule, in byte order of path and then rule.
+    """Fold removed findings into one audit row per file and rule, sorted by path and then rule identifier.
 
     Args:
         removed: Findings one section 13c class removed.
-        source: ``"inline"`` or ``"duplicate"``.
+        source: Audit row label, either inline or duplicate.
         reason: The class's exact audit reason.
         first_index: Index of the first row this class adds.
 
     Returns:
-        One row per file and rule; text output shows each as ``inline[app/loader.py] security.dangerous-function-call: 1``.
+        One row per file and rule with its removal count and source label; an empty input produces no rows.
     """
     counts = Counter((item.finding.file_path, item.finding.rule_id) for item in removed)
     return [

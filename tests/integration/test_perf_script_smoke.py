@@ -95,6 +95,9 @@ def test_perf_script_payload_advertises_schema_version_1(
 
     Args:
         quick_run_payload: Parsed payload from the module's single quick run, read for its schema version.
+
+    Returns:
+        None. Checks the schema version in the quick-run payload.
     """
     assert quick_run_payload.get("schemaVersion") == 1
 
@@ -106,6 +109,9 @@ def test_perf_script_payload_publishes_documented_top_level_keys(
 
     Args:
         quick_run_payload: Parsed payload from the module's single quick run, checked for the expected keys.
+
+    Returns:
+        None. Checks for the expected top-level keys and lists any missing keys if the assertion fails.
     """
     assert _EXPECTED_TOP_LEVEL_KEYS.issubset(quick_run_payload), f"missing top-level keys: {_EXPECTED_TOP_LEVEL_KEYS - quick_run_payload.keys()}"
 
@@ -117,6 +123,9 @@ def test_perf_script_payload_reports_cold_start_and_analyse_workloads(
 
     Args:
         quick_run_payload: Parsed payload whose workload names are collected.
+
+    Returns:
+        None. Checks that both expected workload names appear in the quick-run payload.
     """
     workloads = quick_run_payload["workloads"]
     workload_names = {w["name"] for w in workloads}
@@ -131,11 +140,11 @@ def _section(payload: dict[str, object], *keys: str) -> dict[str, object]:
     """Read one nested section of the perf payload, so a shape change fails here rather than later.
 
     Args:
-        payload: Parsed perf-script payload.
+        payload: Perf payload or subsection where the key lookup starts.
         keys: Section names to walk, outermost first.
 
     Returns:
-        The addressed section.
+        The addressed section, or payload itself when no keys are supplied.
     """
     section: object = payload
     for key in keys:
@@ -148,10 +157,13 @@ def _section(payload: dict[str, object], *keys: str) -> dict[str, object]:
 def test_perf_script_payload_describes_its_host(
     quick_run_payload: dict[str, object],
 ) -> None:
-    """A timing record is only comparable when the machine that produced it is recorded.
+    """Record the platform, uname and CPU in the quick run's host metadata.
 
     Args:
         quick_run_payload: Parsed payload from one quick perf run.
+
+    Returns:
+        None. Checks that all three host fields contain values.
     """
     host = _section(quick_run_payload, "host")
 
@@ -163,10 +175,13 @@ def test_perf_script_payload_describes_its_host(
 def test_perf_script_payload_binds_its_runtime_source(
     quick_run_payload: dict[str, object],
 ) -> None:
-    """A timing record must name the exact source revision it measured.
+    """Require source metadata with revision and digest lengths, a dirty flag and the expected runtime paths.
 
     Args:
         quick_run_payload: Parsed payload from one quick perf run.
+
+    Returns:
+        None. Checks the revision metadata, included runtime paths, file count and digest length.
     """
     source = _section(quick_run_payload, "source")
     runtime_source = _section(source, "runtimeSource")
@@ -185,6 +200,9 @@ def test_perf_script_workloads_have_well_formed_timing_record(
 
     Args:
         quick_run_payload: Parsed payload whose workload timing records are checked.
+
+    Returns:
+        None. Checks command, exit code and timing fields for each workload in the payload.
     """
     workloads = quick_run_payload["workloads"]
     assert all(
@@ -196,10 +214,13 @@ def test_perf_script_workloads_have_well_formed_timing_record(
 def test_perf_script_cold_start_workload_exits_zero(
     quick_run_payload: dict[str, object],
 ) -> None:
-    """Record exit code 0 for the quick run's ``cold-start`` workload.
+    """Check the recorded exit code for the quick run's cold-start workload.
 
     Args:
         quick_run_payload: Parsed payload that must contain the ``cold-start`` workload.
+
+    Returns:
+        None. Asserts that the cold-start workload recorded exit code 0.
     """
     workloads = quick_run_payload["workloads"]
     cold_start = next(w for w in workloads if w["name"] == "cold-start")
@@ -213,6 +234,9 @@ def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Holds the baseline JSON file and the script's output folder.
+
+    Returns:
+        None. Runs the perf script against the temporary baseline and checks its regression exit code and message.
     """
     baseline = tmp_path / "baseline.json"
     baseline.write_text(
@@ -268,7 +292,11 @@ _DOCUMENTED_FLAGS = (
 
 
 def test_perf_script_help_lists_documented_flags() -> None:
-    """List every documented flag in the perf script's ``--help`` output."""
+    """List the expected flags in the perf script's ``--help`` output.
+
+    Returns:
+        None. Runs the script with --help and checks its standard output for the expected flags.
+    """
     proc = subprocess.run(
         ["bash", str(SCRIPT_PATH), "--help"],
         cwd=str(REPO_ROOT),

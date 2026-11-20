@@ -102,7 +102,7 @@ def is_documented_sample(matched_value: str) -> bool:
     """Return whether a matched value is, exactly and whole, a vendor-documented sample such as AWS's example key.
 
     Args:
-        matched_value: The whole matched value; a value that merely contains a sample is compared whole and still reports.
+        matched_value: Whole matched value; a larger value containing a sample is not exempted by this check.
 
     Returns:
         True when the value is a documented sample, so the user sees no finding for it.
@@ -111,7 +111,7 @@ def is_documented_sample(matched_value: str) -> bool:
 
 
 def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]:
-    """Yield :class:`SecretMatch` for every non-overlapping pattern match in *source*.
+    """Yield non-overlapping secret matches, excluding exact vendor-documented samples.
 
     The match's ``line`` is the 1-based line number of the first character.
 
@@ -119,8 +119,8 @@ def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]
         pattern: Compiled sensitive-data pattern to scan with.
         source: Source text to inspect.
 
-    Returns:
-        Iterator of secret matches with offsets and line numbers.
+    Yields:
+        SecretMatch values with source offsets and one-based line numbers.
     """
     line_offsets = _line_offsets(source)
     for match in pattern.finditer(source):
@@ -186,7 +186,7 @@ _SCHEME_SHAPE = re.compile(r"^[a-z][a-z0-9+.-]*$")
 def fixed_preview() -> str:
     """Return the bare marker, used when a detector classified nothing more specific.
 
-    A generic ``KEY=value`` match, or a category or scheme the family never ratified, falls back to it: neither names a class to act on.
+    Generic key-value matches, unsupported categories and schemes that fail the shape check all use this marker.
 
     Returns:
         Classification-only marker with no value-derived characters or length.
@@ -195,19 +195,15 @@ def fixed_preview() -> str:
 
 
 def category_preview(category: str | None) -> str:
-    """Return the most specific marker for a classified match, unconditionally.
-
-    Section 5 removed the configuration that once gated this, because every marker is zero-payload by
-    construction, so gating one bought no confidentiality.
+    """Return a redaction marker using the category when the marker format allows it.
 
     Args:
-        category: Ratified category the detector classified; ``None`` or an unratified name yields the
-            bare marker.
+        category: Detector classification; None or an unratified name selects the bare marker.
 
     Returns:
         ``[redacted:<category>]`` for a ratified category, ``[redacted]`` otherwise.
     """
-    # An unratified name would put this port outside the closed family grammar, so it degrades instead.
+    # The shared redaction format allows only listed categories, so a missing or unlisted category uses the bare marker.
     if category is None or category not in RATIFIED_MARKER_CATEGORIES:
         return fixed_preview()
     return f"[redacted:{category}]"
@@ -220,7 +216,7 @@ def connection_string_preview(scheme: str) -> str:
         scheme: Scheme captured by the detector's own pattern; never user-supplied free text.
 
     Returns:
-        ``[redacted:connection-string:<scheme>]``, or the bare marker when the scheme is malformed.
+        A connection-string marker naming the lowercased scheme, or the bare marker when the scheme fails the shape check.
     """
     normalised = scheme.lower()
     # A scheme outside the grammar's shape would leak whatever the pattern happened to capture.
@@ -233,11 +229,10 @@ def is_likely_placeholder_secret(secret: str) -> bool:
     """Return whether *secret* looks like documentation or fixture text.
 
     Args:
-        secret: Candidate secret text after provider-specific extraction.
+        secret: Candidate credential text to trim and compare with placeholder markers.
 
     Returns:
-        True for common dummy/example marker words, false for real-looking
-        values that should still be reported.
+        True for empty or whitespace-only text or a value containing a dummy/example marker; False otherwise.
     """
     normalized = secret.strip().lower()
     if not normalized:
@@ -262,7 +257,7 @@ def _line_offsets(source: str) -> list[int]:
 
 
 def _offset_to_line(line_offsets: list[int], offset: int) -> int:
-    """Binary-search *offset* into *line_offsets* and return the 1-based line.
+    """Locate the source line containing a match.
 
     Args:
         line_offsets: Ascending character indices returned by _line_offsets for the same source.
@@ -278,4 +273,4 @@ def _offset_to_line(line_offsets: list[int], offset: int) -> int:
             lo = mid + 1
         else:
             hi = mid
-    return lo  # `lo` is the first line whose start is *past* offset → that's our 1-based line.
+    return lo  # The count of starts at or before the match is its one-based line number.

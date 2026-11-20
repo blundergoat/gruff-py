@@ -46,7 +46,7 @@ class UrlCredentialsRule(SourceTextRule):
     ID = "sensitive-data.url-credentials"
 
     def definition(self) -> RuleDefinition:
-        """Describe the URL-credentials rule as a high-confidence ERROR.
+        """Describe the URL-credentials rule as a high-confidence warning.
 
         Returns:
             Definition for the URL-credentials rule under the sensitive-data pillar.
@@ -70,21 +70,20 @@ class UrlCredentialsRule(SourceTextRule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per credential-bearing HTTP(S) URL with a fixed preview marker.
+            Findings for passwords accepted by extraction and the placeholder filter, with a redacted preview.
+            A match is skipped if the preceding eligible match was the same URL on the previous line. Empty if no URL qualifies.
         """
         definition = self.definition()
         findings: list[Finding] = []
         previous_report: tuple[int, str] | None = None
-        # Each credential-bearing URL remains independently actionable in the user's report.
         for credential_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(credential_match.raw)
-            # Unparseable, templated, or placeholder passwords do not represent a credential the user must
-            # rotate.
+            # Template-like segments and likely placeholders are excluded to avoid reporting URL construction examples.
             if embedded_password is None or is_likely_placeholder_secret(embedded_password):
                 continue
             repeats_previous_line = previous_report == (credential_match.line - 1, credential_match.raw)
             previous_report = (credential_match.line, credential_match.raw)
-            # A URL repeated verbatim on the next line is one credential written twice, such as a wrapped table row.
+            # An intervening eligible URL can keep repeats on consecutive lines from sharing a finding.
             if repeats_previous_line:
                 continue
             # This rule's pattern matches only http and https, and the matched text starts with whichever it was.
@@ -114,17 +113,17 @@ def _extract_password(url: str) -> str | None:
         url: Matched credential-bearing URL text.
 
     Returns:
-        The literal password, or ``None`` when the URL embeds no password or the captured segment is a
-        ``str.format``/f-string/printf template or ran past the userinfo into another component.
+        The captured password as written, or None if there is no password separator or the segment contains a brace, backslash, slash, colon,
+        or a percent sign without two following hexadecimal digits.
     """
     before_host = url.split("@", 1)[0]
     userinfo = before_host.split("://", 1)[-1]
     credential_parts = userinfo.split(":", 1)
-    # Without a password separator, the user has not embedded a credential in this URL.
+    # A username alone does not trigger this password check.
     if len(credential_parts) != 2:
         return None
     password = credential_parts[1]
-    # Template syntax and over-captured separators describe how a URL is built, not a secret it carries.
+    # Treat these characters as signs of templating or a capture that crossed a URL component boundary.
     if any(character in _NON_CREDENTIAL_CHARACTERS for character in password) or _TEMPLATE_PERCENT.search(password):
         return None
     return password

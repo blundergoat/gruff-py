@@ -39,29 +39,21 @@ from gruffpy.config.exceptions import ConfigError
     help="Where to write the migrated config. Required unless --dry-run; the input is never rewritten.",
 )
 def migrate_config(dry_run: bool, config_path: Path | None, output_path: Path | None) -> None:
-    """Rewrite legacy config keys to the current schema, printing a diff summary.
+    """Print what a YAML migration would change and write it on request.
 
-    Maps the pre-ADR-014 two-tier ``thresholds: {warning, error}`` rubric to a
-    single ``threshold`` plus ``severity`` (the error tier wins when both are
-    present) and pins ``schemaVersion``. Allowlists, ``paths.ignore``,
-    ``selection``, ``minimumSeverity``, per-rule ``enabled`` and ``options``
-    are preserved.
-
-    The migration is always out of place: the file named by ``--config`` is
-    only ever read, and the result goes where ``--output`` says. A user who
-    regrets the migration still has the configuration they started with, which
-    is what FAMILY-CONTRACT.md section 8's migration rule requires.
+    Updates schemaVersion and eligible legacy rule tiers, moves per-command minimumSeverity to failOn and removes allowlists.secretPreviews.
+    Preserves paths.ignore and requires a separate output path for changes. FAMILY-CONTRACT.md section 5 governs preview removal.
 
     Args:
-        dry_run: When True, print the diff and write nothing.
-        config_path: Explicit YAML config path, or ``None`` to discover the
-            project config.
-        output_path: Where the migrated config is written; required unless
-            *dry_run* is set.
+        dry_run: When True, show any changes without writing the migrated configuration.
+        config_path: Explicit YAML config path, or None to discover the project config.
+        output_path: Destination for changed YAML. None is allowed for dry runs and when the input is already current.
+
+    Returns:
+        None. Prints any migration notes and diff, warns if YAML comments would be lost, and reports a successful write.
 
     Raises:
-        click.ClickException: When no migratable YAML config exists, no output
-            path was given, or the file cannot be parsed or written.
+        click.ClickException: If migration raises ConfigError, a write has no distinct resolved output path, or the output write fails.
     """
     try:
         migration = migrate_config_file(project_root=Path.cwd(), config_path=config_path)
@@ -81,8 +73,7 @@ def migrate_config(dry_run: bool, config_path: Path | None, output_path: Path | 
     if dry_run:
         click.echo(f"Dry run: {migration.path} left unchanged.")
         return
-    # Without a destination there is nowhere to put the result, and writing over the input is the one thing
-    # migration must never do; refusing is better than choosing a path the user did not name.
+    # Require the caller to choose where changed YAML goes so migration preserves the input by default.
     if output_path is None:
         raise click.ClickException("migrate-config needs --output <path> to write the migrated config, or --dry-run to print it.")
     if output_path.resolve() == migration.path.resolve():

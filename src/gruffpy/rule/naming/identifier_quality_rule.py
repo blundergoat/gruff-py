@@ -51,28 +51,23 @@ class IdentifierQualityRule(Rule):
 
         Args:
             unit: Parsed user file; a missing tree means no identifiers can be reviewed.
-            context: Active scan context; empty settings are valid because this rule
-                has no user options.
+            context: Active scan context, unused because this rule has no user options.
 
         Returns:
-            One finding per name/line; empty means every identifier is descriptive.
+            One finding per matched name and source line; no matches or no parsed tree produce an empty list.
         """
-        # A parse failure leaves the UI without reliable declaration names.
         if unit.tree is None:
             return []
         definition = self.definition()
         user_findings: list[Finding] = []
         reported_identifiers: set[tuple[str, int]] = set()
 
-        # Each parsed declaration may contribute a renameable user-facing name.
         for candidate_node in ast.walk(unit.tree):
-            # One declaration can expose multiple parameter or assignment names.
             for identifier_name, identifier_line in _identifiers_in(candidate_node):
-                # Duplicate AST routes must not repeat the same UI result.
+                # Duplicate AST routes must not repeat the same finding.
                 if (identifier_name, identifier_line) in reported_identifiers:
                     continue
                 placeholder_reason = _placeholder_pattern(identifier_name)
-                # No reason means the identifier already communicates a useful role.
                 if placeholder_reason is None:
                     continue
                 reported_identifiers.add((identifier_name, identifier_line))
@@ -105,7 +100,7 @@ def _finding_for_identifier(
         placeholder_reason: Token evidence explaining why the name was flagged.
 
     Returns:
-        Complete finding with unchanged message and identity inputs.
+        Finding containing the placeholder warning, rename guidance, source location and token evidence.
     """
     return Finding(
         rule_id=definition.id,
@@ -131,16 +126,16 @@ def _placeholder_pattern(identifier_name: str) -> str | None:
         identifier_name: Declaration name; empty text has no placeholder evidence.
 
     Returns:
-        User-facing reason, or ``None`` when the name should stay out of results.
+        User-facing reason, or None when the name should stay out of results.
     """
-    # Python-owned dunder names keep their language-defined spelling.
+    # Names that begin and end with double underscores are exempt, including user-defined names.
     if identifier_name.startswith("__") and identifier_name.endswith("__"):
         return None
     identifier_tokens = lower_tokens(identifier_name)
-    # An empty tokenizer result gives the UI no placeholder word to explain.
+    # An empty tokenizer result gives the rule no placeholder word to explain.
     if not identifier_tokens:
         return None
-    # Exact first tokens cover draft names such as temp/cache-independent temp_item.
+    # Match complete first tokens so longer words such as temporary are not treated as temp.
     if _has_placeholder_prefix(identifier_tokens):
         return f"placeholder token {identifier_tokens[0]!r}"
     # Numbered families cover user-visible drafts such as result1 and data42.
@@ -156,7 +151,7 @@ def _has_placeholder_prefix(identifier_tokens: list[str]) -> bool:
         identifier_tokens: Nonempty lowercase tokens from one declaration.
 
     Returns:
-        ``True`` when the name begins with a reviewed placeholder token.
+        True when the name begins with a reviewed placeholder token.
     """
     return identifier_tokens[0] in _PLACEHOLDER_TOKENS
 
@@ -168,49 +163,44 @@ def _is_numbered_placeholder(identifier_tokens: list[str]) -> bool:
         identifier_tokens: Lowercase tokens; empty/single-token names return false.
 
     Returns:
-        ``True`` for shapes such as ``result1`` or ``data42``.
+        True when the first token names a numbered placeholder family and the second token contains only digits.
     """
     return len(identifier_tokens) >= 2 and identifier_tokens[0] in _NUMBERED_BASES and identifier_tokens[1].isdigit()
 
 
 def _identifiers_in(candidate_node: ast.AST) -> list[tuple[str, int]]:
-    """Return renameable identifiers exposed by one parsed user declaration.
+    """Collect candidate names from one parsed declaration or assignment for placeholder checks.
 
     Args:
         candidate_node: Parsed node; unrelated nodes return an empty list.
 
     Returns:
-        Identifier/line pairs shown in findings, or empty for unsupported nodes.
+        Candidate name and source line pairs, or an empty list when the node supplies no supported names.
     """
-    # Function names and parameters are both visible in the user's API journey.
     if isinstance(candidate_node, ast.FunctionDef | ast.AsyncFunctionDef):
         return [
             (candidate_node.name, candidate_node.lineno),
             *_argument_identifiers(candidate_node.args),
         ]
-    # Class declarations expose one renameable type name.
     if isinstance(candidate_node, ast.ClassDef):
         return [(candidate_node.name, candidate_node.lineno)]
-    # Chained and unpacked assignments may expose several user names.
     if isinstance(candidate_node, ast.Assign):
         return _assignment_identifiers(candidate_node.targets)
-    # An annotated assignment exposes the same user-facing target shapes.
     if isinstance(candidate_node, ast.AnnAssign):
         return _target_identifiers(candidate_node.target)
     return []
 
 
 def _argument_identifiers(arguments: ast.arguments) -> list[tuple[str, int]]:
-    """Return names a user chose for positional and keyword-only parameters.
+    """Collect positional and keyword-only parameter names for placeholder checks, excluding variadic parameters.
 
     Args:
-        arguments: Parsed signature; empty parameter groups return no names.
+        arguments: Parsed signature. Empty signatures and those with only variadic parameters yield no names.
 
     Returns:
         Parameter/line pairs in declaration order.
     """
     user_parameters = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
-    # Every declared parameter can independently appear in the scan results.
     return [(parameter.arg, parameter.lineno) for parameter in user_parameters]
 
 
@@ -237,12 +227,10 @@ def _target_identifiers(assignment_target: ast.expr) -> list[tuple[str, int]]:
         assignment_target: Parsed target; attributes/subscripts return no names.
 
     Returns:
-        Renameable identifier/line pairs, or empty for non-name targets.
+        Renameable identifier/line pairs for direct names and immediate tuple or list members; empty when no such names exist.
     """
-    # A direct assignment exposes one local name in the user's report.
     if isinstance(assignment_target, ast.Name):
         return [(assignment_target.id, assignment_target.lineno)]
-    # Tuple/list unpacking exposes each simple child name independently.
     if isinstance(assignment_target, ast.Tuple | ast.List):
         return [(element.id, element.lineno) for element in assignment_target.elts if isinstance(element, ast.Name)]
     return []

@@ -32,10 +32,13 @@ def test_fingerprint_matches_php(rule_id, file, line, end_line, column, symbol, 
         rule_id: Rule id of the recorded identity.
         file: Finding path of the recorded identity.
         line: Start line, or None for an identity without one.
-        end_line: End line, or None.
-        column: Column, or None.
-        symbol: Symbol, or None.
+        end_line: Recorded end of the finding's range, or None when the identity has no end line.
+        column: Recorded column of the finding, or None when the identity has no column.
+        symbol: Name of the finding's symbol, or None when the identity has no symbol.
         expected: Fingerprint gruff-php produced for the same identity.
+
+    Returns:
+        None. Compares the computed fingerprint with the recorded gruff-php value.
     """
     actual = fingerprint_for(
         rule_id=rule_id,
@@ -49,14 +52,22 @@ def test_fingerprint_matches_php(rule_id, file, line, end_line, column, symbol, 
 
 
 def test_fingerprint_is_16_lowercase_hex_chars():
-    """Produce a fingerprint of exactly 16 lowercase hexadecimal characters."""
+    """Produce a fingerprint of exactly 16 lowercase hexadecimal characters.
+
+    Returns:
+        None. Checks the fingerprint length and lowercase hexadecimal alphabet.
+    """
     fp = fingerprint_for("r", "f", 1)
     assert len(fp) == 16
     assert all(c in "0123456789abcdef" for c in fp)
 
 
 def test_fingerprint_is_deterministic():
-    """Produce the same fingerprint for identical inputs."""
+    """Produce the same fingerprint for identical inputs.
+
+    Returns:
+        None. Compares the fingerprints from two calls with identical inputs.
+    """
     assert fingerprint_for("r", "f", 1, 1, 1, "s") == fingerprint_for("r", "f", 1, 1, 1, "s")
 
 
@@ -88,14 +99,20 @@ def test_fingerprint_distinguishes_by_identifying_field(kwargs_a: dict, kwargs_b
     Args:
         kwargs_a: Keyword arguments for the first identity; the cases vary the line, path, rule id or symbol.
         kwargs_b: The same identity with that one field changed.
+
+    Returns:
+        None. Checks that the two fingerprints differ in every parameterized case.
     """
     assert fingerprint_for(**kwargs_a) != fingerprint_for(**kwargs_b)
 
 
 def test_fingerprint_does_not_depend_on_unhashed_fields():
-    """Severity, confidence, pillar, message, metadata are NOT in the fingerprint -
-    rewording rule messages must not churn baselines."""
-    # Same identifying fields, different non-hashed context: same fingerprint.
+    """Check fingerprint repeatability for identical finding coordinates and symbol.
+
+    Returns:
+        None. Compares fingerprints from two calls with the same rule, file, location and symbol.
+    """
+    # Repeated reports can use a consistent fingerprint to identify a finding at the same location.
     fp_a = fingerprint_for("r", "f", 1, end_line=1, column=1, symbol="s")
     fp_b = fingerprint_for("r", "f", 1, end_line=1, column=1, symbol="s")
     assert fp_a == fp_b

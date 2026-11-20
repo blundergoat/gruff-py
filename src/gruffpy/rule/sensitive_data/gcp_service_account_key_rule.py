@@ -43,7 +43,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
     ID = "sensitive-data.gcp-service-account-key"
 
     def definition(self) -> RuleDefinition:
-        """Describe the GCP-service-account-key rule as a high-confidence ERROR.
+        """Describe the GCP-service-account-key rule as a high-confidence warning.
 
         Returns:
             Definition for the GCP-service-account-key rule under the sensitive-data pillar.
@@ -58,17 +58,17 @@ class GcpServiceAccountKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for service-account JSON carrying private-key material.
+        """Flag service-account type markers when the selected private-key text passes the placeholder check.
+
+        Use the first quoted private_key field if it is nonempty. Otherwise, use the first complete PEM block.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per service-account type marker when key material is present.
+            One finding per matched type marker. Empty when no marker matches or the selected key text is missing or looks like a placeholder.
         """
-        # Files without the service-account marker cannot represent this user-facing credential
-        # type.
         if "service_account" not in unit.source:
             return []
 
@@ -78,8 +78,6 @@ class GcpServiceAccountKeyRule(SourceTextRule):
             return []
 
         definition = self.definition()
-        # Every service-account marker gets its own source location when one file embeds multiple
-        # keys.
         return [
             Finding(
                 rule_id=definition.id,
@@ -109,14 +107,14 @@ def _private_key_value(source: str) -> str | None:
     """Return private-key material used only to classify a service-account finding.
 
     Args:
-        source: Raw scanned text; the first quoted private-key field takes priority over a complete PEM block.
+        source: Raw scanned text where the first quoted private-key field takes priority over PEM-shaped text.
 
     Returns:
-        Captured field contents with escapes left as written, otherwise the first complete PEM block, or None when neither is found. An empty field is
-        returned as an empty string.
+        Captured field contents with escapes left as written, including an empty string for an empty field. Without a field, the first span from a
+        private-key opening marker through a later closing marker, whose label may differ. None if neither form is found.
     """
     match = _PRIVATE_KEY_FIELD_RE.search(source)
-    # A JSON private_key field is the clearest evidence users need to review.
+    # A nonempty quoted field keeps other PEM text out of classification. An empty field lets the caller try PEM text separately.
     if match is not None:
         return match.group(1)
     pem_match = _PEM_BLOCK_RE.search(source)
@@ -124,7 +122,7 @@ def _private_key_value(source: str) -> str | None:
 
 
 def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> bool:
-    """Return whether the candidate is too short to represent a real user credential.
+    """Identify short key bodies that the service-account detector treats as placeholders.
 
     Args:
         private_key_value: Extracted key text; None or an empty string falls back to a PEM block in source.
@@ -144,13 +142,13 @@ def _looks_like_placeholder_key(private_key_value: str | None, source: str) -> b
 
 
 def _pem_block(source: str) -> str | None:
-    """Return the first complete private-key PEM block found in source text.
+    """Extract the first span delimited by private-key PEM markers.
 
     Args:
         source: Raw scanned text searched for a private-key opening marker and a later closing marker.
 
     Returns:
-        First matching block including its markers, or None when no complete block matches.
+        The first span including both markers, or None when no opening marker has a later closing marker. The marker labels may differ.
     """
     match = _PEM_BLOCK_RE.search(source)
     return None if match is None else match.group(0)

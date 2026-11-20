@@ -44,7 +44,8 @@ def unreachable_secret_lines(source: str) -> set[int]:
         source: Complete workflow text used to establish ownership and event guards.
 
     Returns:
-        One-based source lines unreachable for pull_request_target; ambiguous ownership supplies none.
+        One-based source lines proved unreachable for pull_request_target. If ownership is ambiguous or no guard proves a scope
+        unreachable, the set is empty and the guard check excludes no secret findings.
     """
     blocked: set[int] = set()
     root = _ownership(source)
@@ -70,6 +71,9 @@ def _mark_if_rejected(node: _GuardNode, blocked: set[int]) -> None:
     Args:
         node: Job or step whose direct if child may exclude its entire source range.
         blocked: One-based line numbers mutated to include the scope when its guard proves false for pull_request_target.
+
+    Returns:
+        None; qualifying source lines are added to blocked in place.
     """
     guard = node.child("if")
     if guard and _event_is_true(guard.content, "pull_request_target") is False:
@@ -83,7 +87,7 @@ def _yaml_text(raw: str) -> str | None:
         raw: Workflow line scanned for quotes and whitespace-delimited comments.
 
     Returns:
-        Stripped text before an unquoted comment, possibly empty; None when a quoted span cannot be read.
+        Stripped line with its unquoted comment removed if present. Empty if no text remains. None for a malformed quoted span.
     """
     index = 0
     while index < len(raw):
@@ -143,7 +147,8 @@ def _parent(stack: list[_GuardNode], indent: int, index: int, prefix: str, total
     """Close siblings before attaching a list item so guards cannot leak across steps.
 
     Args:
-        stack: Nonempty ownership stack, mutated by closing ranges, removing finished nodes and adding list items.
+        stack: Nonempty ownership stack. Finished nodes are popped and their ranges closed even if no parent is returned.
+            A new list item is appended to both the enclosing node's children and the stack.
         indent: Leading-space count for the current source line.
         index: Zero-based current line index, also the one-based end of preceding scopes.
         prefix: Matched list-item prefix, or an empty string for a mapping entry.
@@ -172,10 +177,12 @@ def _entry(parent: _GuardNode, text: str, prefix: str, node: _GuardNode) -> _Gua
         parent: Owner mutated by appending a mapping child or recording scalar list content.
         text: Stripped workflow line with comments already removed.
         prefix: List-item prefix removed before parsing the entry, or an empty string for a mapping.
-        node: Provisional child mutated with its key, content and adjusted indentation when a mapping matches.
+        node: Provisional child whose key and content are set before duplicate or merge keys are rejected.
+            Its indentation is adjusted only when it is appended.
 
     Returns:
-        The appended child, or the supplied list item for a scalar entry; None for aliases, duplicate or merge keys, or unsupported entries.
+        The appended child, or the supplied list item for a scalar entry.
+        None for alias or anchor markers, duplicate or merge keys, or unsupported entries. This stops the ownership proof.
     """
     if _ALIAS.search(text):
         return None
@@ -201,7 +208,9 @@ def _guard_tokens(content: str) -> list[str] | None:
         content: Guard scalar whose optional quotes and expression wrapper are removed before tokenization.
 
     Returns:
-        Non-whitespace tokens, possibly empty; None for invalid text, unsupported syntax or more than 128 tokens.
+        Non-whitespace tokens, or an empty list if none remain. None means decoding failed, a wrapper was incomplete, text could not be tokenized,
+        or the guard exceeded 128 tokens. An empty list or None leaves the guard unproven and keeps secret warnings in place.
+        A failed JSON decode is an expected way for a guard to remain unproven, so it needs no separate diagnostic.
     """
     expression = content.strip()
     if expression.startswith('"'):
@@ -261,10 +270,10 @@ class _GuardExpression:
         return self.tokens[self.position] if self.position < len(self.tokens) else ""
 
     def unary(self) -> _Operand:
-        """Read one operand, respecting negation before equality.
+        """Consume one operand with negation before equality, advancing position and setting is_valid to False for malformed syntax.
 
         Returns:
-            The event, literal or conservative boolean operand at this position.
+            An event or literal operand, or a truth operand whose None value means no truth could be proved.
         """
         lexeme = self.peek()
         self.position += 1
@@ -287,10 +296,10 @@ class _GuardExpression:
         return _Operand()
 
     def comparison_is_true(self) -> bool | None:
-        """Evaluate an exact event/literal comparison.
+        """Evaluate the next operand or event comparison and advance position; malformed operands set is_valid to False.
 
         Returns:
-            Its boolean result, or None when the operands cannot prove one.
+            The case-insensitive comparison result, or the operand's truth without a comparator; None when neither can be proved.
         """
         left = self.unary()
         operator = self.peek()
@@ -308,10 +317,10 @@ class _GuardExpression:
         return equal if operator == "==" else not equal
 
     def conjunction_is_true(self) -> bool | None:
-        """Evaluate AND while still parsing both branches.
+        """Evaluate all AND operands, advancing position and marking invalid syntax in is_valid.
 
         Returns:
-            False for any false branch, True for two true branches, or None otherwise.
+            False if any operand is false, True if all operands are true, or None when the result remains unknown.
         """
         result = self.comparison_is_true()
         while self.peek() == "&&":
@@ -321,10 +330,10 @@ class _GuardExpression:
         return result
 
     def disjunction_is_true(self) -> bool | None:
-        """Evaluate OR while retaining an unknown reachable branch.
+        """Evaluate all OR operands, advancing position and marking invalid syntax in is_valid.
 
         Returns:
-            True for any true branch, False for two false branches, or None otherwise.
+            True if any operand is true, False if all operands are false, or None when the result remains unknown.
         """
         result = self.conjunction_is_true()
         while self.peek() == "||":

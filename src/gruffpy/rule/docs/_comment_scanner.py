@@ -21,15 +21,14 @@ class SourceComment:
 
 
 def scan_comments(source: str) -> tuple[SourceComment, ...]:
-    """Return real comment tokens from *source* without reopening files.
+    """Return real comment tokens from source without reopening files.
 
     Args:
-        source: Python source text from an ``AnalysisUnit``.
+        source: Python source text from an AnalysisUnit.
 
     Returns:
-        Tuple of comment tokens with line numbers and stripped bodies. Strings
-        containing ``#`` are ignored because Python's tokenizer only yields
-        actual comments.
+        Comment tokens with line numbers and stripped bodies. Strings containing # are ignored.
+        If tokenization fails, the tuple contains only the comments read before the failure, possibly none.
     """
     comments: list[SourceComment] = []
     try:
@@ -46,7 +45,7 @@ def scan_comments(source: str) -> tuple[SourceComment, ...]:
                 )
             )
     except (tokenize.TokenError, SyntaxError):
-        # The tokenizer raises IndentationError (a SyntaxError) on bad
-        # dedents; keep the comments collected before the failure.
+        # Bad dedents can raise IndentationError and unfinished input can raise TokenError.
+        # Keep earlier comments available to comment rules and leave syntax reporting to the analysis diagnostics.
         return tuple(comments)
     return tuple(comments)

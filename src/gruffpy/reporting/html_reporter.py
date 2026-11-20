@@ -40,23 +40,19 @@ class HtmlReporter:
         self.interactive = interactive
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as the standalone single-file HTML inspection report.
+        """Render a standalone HTML inspection report with score summaries, diagnostic messages and findings.
 
-        Sections: masthead, optional diagnostics block, verdict (grade
-        stamp + severity counts), per-pillar grade cards, top-offender
-        table, cyclomatic-complexity histogram, finding list, and footer.
-        When ``interactive=True``, the finding section also gets a filter
-        toolbar backed by inline ES modules.
+        Pillar scores appear in a table; interactive reports add finding filters backed by an inline ES module.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Analysis report supplying paths, diagnostics, score summaries and findings.
 
         Returns:
-            Complete single-file HTML document (no external assets).
+            Complete single-file HTML document with no external assets.
         """
         score = report.score
-        # Two different absences: scoring never ran, or it ran and found nothing to evaluate. The
-        # second must not render a number, because that is how an empty scan used to read as perfect.
+        # A missing score shows n/a. A score without a composite shows not evaluated.
+        # The text label keeps an unevaluated scan from looking like a perfect score.
         composite = None if score is None else score.composite
         grade = "n/a" if composite is None else composite.letter
         numeric_score = ("n/a" if score is None else "not evaluated") if composite is None else f"{composite.score:.2f} / 100"
@@ -97,11 +93,10 @@ class HtmlReporter:
             report: Analysis result whose paths and optional score seed the header.
 
         Returns:
-            Escaped HTML masthead; a missing score keeps the legacy fallback mode.
+            Escaped HTML masthead; without a score, the scoring mode is shown as full-project.
         """
-        # Empty requested paths mean the user selected the current project root.
+        # With no recorded request paths, the masthead displays the current directory as its default.
         paths = report.requested_paths or (".",)
-        # A diagnostic-only report has no score, so preserve the existing fallback mode.
         scoring_mode = report.score.scope if report.score is not None else "full-project"
         return (
             '<header class="masthead">'
@@ -246,17 +241,17 @@ class HtmlReporter:
     def _distribution(self, report: AnalysisReport) -> str:
         """Render the histogram of cyclomatic-complexity findings, one bar per complexity band.
 
-        The caption gives how many of those findings exceed CC 10. Each bar height is the band count as a percentage of the largest band count, never
-        below 4 percent; the 11-15 band uses the warn style and the 16-20 and 21+ bands use the fail style.
+        The caption counts findings above CC 10. Bar heights are percentages relative to the largest band count, with a divisor of at least 1.
+        Heights round to a whole percent with a 4 percent minimum. The 11-15 band uses warn styling, and 16-20 and 21+ use fail styling.
 
         Args:
-            report: Analysis report whose score supplies the band counts; it must carry a score.
+            report: Analysis report whose score must supply at least one complexity band.
 
         Returns:
             Distribution section HTML with the caption, one bar per band and the band labels on the axis.
 
         Raises:
-            TypeError: When report.score is None, because the empty distribution leaves max() only the integer 1.
+            TypeError: When the report has no score or its complexity distribution is empty, leaving max() with only the integer 1.
         """
         distribution = {} if report.score is None else report.score.complexity_distribution
         max_count = max(1, *distribution.values())
@@ -438,9 +433,8 @@ class HtmlReporter:
     def _finding_filters(self, report: AnalysisReport) -> str:
         """Render the interactive finding filter form.
 
-        It has severity and pillar multi-selects, path and free-text search fields, group-by radios and a clear button. The pillar options list only
-        the pillars present in the report's findings, sorted by name, and the pillar select shows between two and six rows. The count output starts
-        with every finding shown; the inline script rewrites it as filters change.
+        Pillar options include only the report's pillars, sorted by name, with two to six rows visible.
+        The inline script updates the count, which initially includes every finding.
 
         Args:
             report: Analysis report whose findings supply the pillar options and the initial count.
@@ -490,17 +484,15 @@ class HtmlReporter:
 
 
 def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:
-    """Return applicable pillar scores sorted by findings DESC, then pillar ASC.
+    """Return applicable pillar scores ordered by decreasing finding count, then pillar name.
 
-    Mirrors the canonical Phase 2 summary shape: only applicable pillars are
-    included, sourced from the existing ``PillarScore`` data without
-    recomputing severity counts or scores.
+    Reuse existing score objects without recomputing severity counts or scores.
 
     Args:
-        report: Analysis report providing the optional ``ScoreReport``.
+        report: Analysis report supplying the optional ScoreReport.
 
     Returns:
-        Applicable ``PillarScore`` entries ordered for the canonical table.
+        Ordered PillarScore entries, or an empty list when there is no score or no applicable pillar.
     """
     if report.score is None:
         return []
@@ -565,8 +557,8 @@ def _diagnostic_row(diagnostic: RunDiagnostic) -> str:
     """Render one run diagnostic with its type, message and, when known, its location.
 
     Args:
-        diagnostic: Diagnostic to render; its location is file_path:line when both are set, else file_path, else path, and the location is omitted
-            when none is available.
+        diagnostic: Diagnostic to render. A non-None file_path and line produce file_path:line, even if file_path is empty.
+            Otherwise a non-empty file_path takes precedence over path. A None location is omitted and an empty location renders a blank span.
 
     Returns:
         Diagnostic row HTML with every value escaped.

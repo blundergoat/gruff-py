@@ -12,13 +12,13 @@ from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def _ctx(threshold: int = 100) -> RuleContext:
-    """Build a context whose config sets only this rule, enabled with *threshold* as its error threshold.
+    """Build a context whose config sets only this rule, enabled with threshold as its error threshold.
 
     Args:
         threshold: Error threshold in lines.
 
     Returns:
-        A context rooted at ``/`` whose config holds only this rule's settings.
+        A context rooted at / whose config holds only this rule's settings.
     """
     rule = TestFunctionTooLongRule()
     config = AnalysisConfig(
@@ -33,13 +33,21 @@ def _ctx(threshold: int = 100) -> RuleContext:
 
 
 def test_short_test_skipped():
-    """Report nothing for a test whose body is one assertion."""
+    """Report nothing for a test whose body is one assertion.
+
+    Returns:
+        None. Checks that the one-assertion test produces no length finding.
+    """
     src = "def test_foo():\n    assert 1 + 1 == 2\n"
     assert TestFunctionTooLongRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_under_default_threshold_emits_no_finding():
-    """Report nothing for a test with 60 assignments and one assertion, under the default threshold of 100."""
+    """Report nothing for a test with 60 assignments and one assertion, under the default threshold of 100.
+
+    Returns:
+        None. Checks that the fixture produces no finding at the default length threshold.
+    """
     body = "\n".join(f"    x{i} = {i}" for i in range(60))
     src = f"def test_foo():\n{body}\n    assert True\n"
     assert TestFunctionTooLongRule().analyse(make_unit(src), default_ctx()) == []
@@ -48,7 +56,10 @@ def test_under_default_threshold_emits_no_finding():
 def test_above_default_threshold_fires_at_error_severity():
     """Report one error-severity finding for a test with 120 assignments, over the default threshold of 100.
 
-    The metadata records a line count above 100, the threshold and the ``error`` threshold type.
+    The metadata records a line count above 100, the threshold and the error threshold type.
+
+    Returns:
+        None. Checks that the overlong fixture produces one error with its line count, threshold and threshold type.
     """
     body = "\n".join(f"    x{i} = {i}" for i in range(120))
     src = f"def test_foo():\n{body}\n    assert True\n"
@@ -62,7 +73,11 @@ def test_above_default_threshold_fires_at_error_severity():
 
 
 def test_custom_threshold_above_emits_error():
-    """Report one error-severity finding for a test with 75 assignments when the threshold is 50."""
+    """Report one error-severity finding for a test with 75 assignments when the threshold is 50.
+
+    Returns:
+        None. Checks for one error finding with error threshold metadata under the custom limit.
+    """
     body = "\n".join(f"    x{i} = {i}" for i in range(75))
     src = f"def test_foo():\n{body}\n    assert True\n"
     findings = TestFunctionTooLongRule().analyse(make_unit(src), _ctx(threshold=50))
@@ -73,7 +88,11 @@ def test_custom_threshold_above_emits_error():
 
 
 def test_documented_test_is_measured_by_its_code_lines():
-    """Report nothing for a test with 95 assignments and one assertion, plus a 20-note docstring and 20 comment lines."""
+    """Report nothing for a test with 95 assignments and one assertion, plus a 20-note docstring and 20 comment lines.
+
+    Returns:
+        None. Checks that the docstring and comments leave the fixture below the length threshold.
+    """
     notes = "\n".join(f"    Note {i}." for i in range(20))
     doc = f'    """Checks every value.\n\n{notes}\n    """'
     comments = "\n".join(f"    # Step {i}." for i in range(20))
@@ -83,7 +102,7 @@ def test_documented_test_is_measured_by_its_code_lines():
 
 
 def _response_snapshot_source() -> str:
-    """Build the observed response check with a long literal expected snapshot.
+    """Build an oversized response check for testing the literal inline snapshot exemption.
 
     Returns:
         Test source whose expected data crosses the physical code-line limit.
@@ -112,8 +131,11 @@ def test_inline_response_snapshot_needs_no_length_finding(snapshot_name: str, do
     """Keep a single response snapshot quiet when expected data supplies its size.
 
     Args:
-        snapshot_name: Direct or explicitly aliased inline_snapshot import.
+        snapshot_name: Local name used in the snapshot import and call, either snapshot or an alias.
         documented: Whether a docstring precedes the same response check.
+
+    Returns:
+        None. Checks that the literal response snapshot produces no length finding.
     """
     source = _response_snapshot_source()
     if snapshot_name != "snapshot":
@@ -142,11 +164,14 @@ def test_inline_response_snapshot_needs_no_length_finding(snapshot_name: str, do
     ],
 )
 def test_snapshot_exemption_retains_other_long_test_shapes(before: str, after: str) -> None:
-    """Retain findings for uncertain snapshot bindings or additional test behavior.
+    """Check that long response tests outside the literal snapshot exemption still produce a finding.
 
     Args:
         before: Exact source fragment in the observed snapshot-only shape.
-        after: Replacement introducing the distinct retained behavior.
+        after: Replacement that puts the response test outside the snapshot exemption.
+
+    Returns:
+        None. Checks for one error finding with a line count above the default threshold.
     """
     source = _response_snapshot_source()
     assert before in source
@@ -158,7 +183,11 @@ def test_snapshot_exemption_retains_other_long_test_shapes(before: str, after: s
 
 
 def test_default_off_and_explicit_enable_preserve_the_repair() -> None:
-    """Keep long tests opt-in while retaining the snapshot exemption when enabled."""
+    """Keep the test length rule opt-in and preserve its snapshot exemption when enabled.
+
+    Returns:
+        None. Checks that the rule is silent by default and flags only the ordinary long test when enabled.
+    """
     registry = RuleRegistry.defaults()
     body = "\n".join(f"    value_{index} = {index}" for index in range(120))
     units = [make_unit(f"def test_long():\n{body}\n    assert True\n"), make_unit(_response_snapshot_source())]

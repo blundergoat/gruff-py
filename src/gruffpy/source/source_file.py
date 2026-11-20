@@ -21,10 +21,9 @@ class SourceFile:
     type: SourceFileType = "python"
 
     def is_python(self) -> bool:
-        """Return whether this source file is Python (vs. a text-only source like ``.env``).
+        """Return whether this source file is Python (vs. a text-only source like .env).
 
-        Used by rules and the parser to skip AST-based analysis on plain-text
-        files while still letting ``SourceTextRule``-based rules run.
+        Used by rules and the parser to skip AST-based analysis on plain-text files while still letting SourceTextRule-based rules run.
 
         Returns:
             True when the file is classified as Python source.

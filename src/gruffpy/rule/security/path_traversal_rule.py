@@ -79,11 +79,7 @@ class PathTraversalRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the path-traversal rule as a high-confidence ERROR.
 
-        ERROR severity because path traversal grants read/write access to
-        files outside the intended directory, including configuration,
-        credentials, and source; high confidence because the matched
-        sinks + intra-procedural taint pinpoint the path argument
-        without ambiguity.
+        Request-tainted paths at supported file sinks can escape the intended directory and expose or modify files.
 
         Returns:
             Definition for the path-traversal rule under the security
@@ -106,7 +102,7 @@ class PathTraversalRule(Rule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per call site whose path argument is tainted.
+            Matched tainted-path findings, or an empty list if parsing, a supported framework import or matching calls are absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -128,8 +124,8 @@ class PathTraversalRule(Rule):
 def _path_sink_argument(call: ast.Call) -> ast.expr | None:
     """Select the path expression to query in the taint map for a supported file call.
 
-    For a recognized chained Path method, inspect the constructor's first positional argument. Direct sinks use the outer call's first positional
-    argument.
+    For a recognized chained call, use the constructor's first positional argument.
+    Direct sinks use the outer call's first positional argument.
 
     Args:
         call: Call expression to inspect for a supported direct or chained sink shape.
@@ -158,7 +154,7 @@ def _path_sink_argument(call: ast.Call) -> ast.expr | None:
 
 
 def _is_path_chained_sink(call: ast.Call) -> bool:
-    """Recognize a supported file method called directly on a Path constructor.
+    """Recognize a supported file method on a call whose target ends in a recognized pathlib constructor name.
 
     Args:
         call: Call to check for a supported method and constructor-name suffix.
@@ -192,7 +188,7 @@ def _build_finding(
         call: Matched sink call supplying the target spelling and source range.
 
     Returns:
-        A finding with path-traversal remediation and filesystem-sink metadata.
+        A finding with path-traversal remediation and filesystem-sink metadata. A target without a dotted name appears as ?.
     """
     target = call_target_name(call) or "?"
     return Finding(

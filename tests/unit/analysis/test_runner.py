@@ -35,6 +35,9 @@ def test_scan_scope_treats_project_root_paths_as_full_project(tmp_path: Path, pa
         tmp_path: Project root the operands are resolved against.
         paths: Scan operands; the cases cover no operand, spellings of the root, the root beside a folder, and folders alone.
         expected: Scope the case must produce.
+
+    Returns:
+        None after the assertion passes.
     """
     assert _scan_scope(paths, tmp_path) == expected
 
@@ -43,7 +46,10 @@ def test_scan_scope_treats_absolute_project_root_as_full_project(tmp_path: Path)
     """Treat the project root's absolute path as full-project and an absolute subfolder path as partial scope.
 
     Args:
-        tmp_path: Project root, passed by its absolute path and then with a ``src`` suffix.
+        tmp_path: Project root, passed by its absolute path and then with a src suffix.
+
+    Returns:
+        None after the assertions pass.
     """
     assert _scan_scope((str(tmp_path),), tmp_path) == "full-project"
     assert _scan_scope((str(tmp_path / "src"),), tmp_path) == "partial-scope"

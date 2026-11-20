@@ -15,7 +15,11 @@ _URL = f"https://deploy:{_PASSWORD}@api.example.test/v1"
 
 
 def test_https_url_with_embedded_password_emits_redacted_preview():
-    """Report one finding whose metadata holds only the category and the fixed https preview, with no password or URL in its text."""
+    """Report one finding whose metadata holds only the category and the fixed https preview, with no password or URL in its text.
+
+    Returns:
+        None after checking the finding count, rule ID, metadata, and redaction of the raw password and URL.
+    """
     findings = UrlCredentialsRule().analyse(make_unit(f"REMOTE = {_URL!r}\n"), default_ctx())
 
     assert len(findings) == 1
@@ -29,7 +33,11 @@ def test_https_url_with_embedded_password_emits_redacted_preview():
 
 
 def test_http_url_with_embedded_password_emits():
-    """Report one finding for an HTTP URL with an embedded password."""
+    """Report one finding for an HTTP URL with an embedded password.
+
+    Returns:
+        None after checking that the HTTP URL produces one finding.
+    """
     url = "http://user:" + _PASSWORD + "@example.test"
 
     findings = UrlCredentialsRule().analyse(make_unit(f"REMOTE = {url!r}\n"), default_ctx())
@@ -38,14 +46,22 @@ def test_http_url_with_embedded_password_emits():
 
 
 def test_url_credentials_is_off_in_the_default_registry():
-    """Report no URL-credentials finding through the default registry under default settings."""
+    """Report no URL-credentials finding through the default registry under default settings.
+
+    Returns:
+        None after checking that the default registry produces no URL-credentials finding.
+    """
     findings = RuleRegistry.defaults().analyse([make_unit(f"REMOTE = {_URL!r}\n")], default_ctx())
 
     assert "sensitive-data.url-credentials" not in {finding.rule_id for finding in findings}
 
 
 def test_url_credentials_routes_through_the_registry_once_enabled():
-    """Report the URL-credentials rule, and not the database-URL rule, through the registry once enabled."""
+    """Report the URL-credentials rule, and not the database-URL rule, through the registry once enabled.
+
+    Returns:
+        None after checking for the enabled URL-credentials finding and the absence of a database-URL finding.
+    """
     findings = RuleRegistry.defaults().analyse([make_unit(f"REMOTE = {_URL!r}\n")], ctx_enabling("sensitive-data.url-credentials"))
     rule_ids = {finding.rule_id for finding in findings}
 
@@ -54,21 +70,33 @@ def test_url_credentials_routes_through_the_registry_once_enabled():
 
 
 def test_placeholder_url_password_skipped():
-    """Report nothing for a URL whose password is the word password."""
+    """Report nothing for a URL whose password is the word password.
+
+    Returns:
+        None after checking that the placeholder password produces no findings.
+    """
     src = "REMOTE = 'https://deploy:password@" + "example.test/v1'\n"
 
     assert UrlCredentialsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_public_url_without_credentials_skipped():
-    """Report nothing for a URL without credentials."""
+    """Report nothing for a URL without credentials.
+
+    Returns:
+        None after checking that a URL without credentials produces no findings.
+    """
     src = "REMOTE = 'https://example.test/v1'\n"
 
     assert UrlCredentialsRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_database_url_not_duplicated_by_url_credentials_rule():
-    """Report nothing from this rule for a database URL with a password."""
+    """Report nothing from this rule for a database URL with a password.
+
+    Returns:
+        None after checking that the URL-credentials rule produces no findings for the PostgreSQL URL.
+    """
     src = "DATABASE_URL = 'postgresql://admin:realSecret123@" + "db.example.test/app'\n"
 
     assert UrlCredentialsRule().analyse(make_unit(src), default_ctx()) == []
@@ -86,16 +114,23 @@ def test_database_url_not_duplicated_by_url_credentials_rule():
     ids=["str-format-template", "f-string-template", "printf-template", "second-colon", "path-separator"],
 )
 def test_templated_or_over_captured_password_is_not_a_credential(source: str) -> None:
-    """Clear the M17 hunt's template and over-capture shapes, whose captured segment is no literal password.
+    """Report nothing for URL templates and password captures containing a second colon or a slash.
 
     Args:
-        source: URL literal whose password segment carries template syntax or a separator.
+        source: Python source containing the URL shape to analyse.
+
+    Returns:
+        None after checking that the supplied URL template or malformed password capture produces no findings.
     """
     assert UrlCredentialsRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_real_credentials_still_report_including_percent_escapes() -> None:
-    """Keep reporting literal passwords, including one whose special character is percent-encoded."""
+    """Keep reporting literal passwords, including one whose special character is percent-encoded.
+
+    Returns:
+        None after checking for a warning finding on each of the two source lines.
+    """
     plain = "http://admin:" + "S3cr3tPassw0rd" + "@db.internal"
     encoded = "https://deploy:" + "S3cr%40tValue42" + "@api.example.test"
     findings = UrlCredentialsRule().analyse(make_unit(f"PLAIN = {plain!r}\nENCODED = {encoded!r}\n"), default_ctx())
@@ -105,7 +140,11 @@ def test_real_credentials_still_report_including_percent_escapes() -> None:
 
 
 def test_url_repeated_on_the_next_line_is_reported_once() -> None:
-    """Report a wrapped row written twice once, while distinct credentials on adjacent lines stay separate."""
+    """Report one finding for a URL repeated on consecutive lines and two when the URLs differ.
+
+    Returns:
+        None after checking the finding line numbers for the repeated and distinct URLs.
+    """
     repeated = f"CASES = [\n    {_URL!r},\n    {_URL!r},\n]\n"
     other = "https://deploy:" + "an0ther" + "Secret!7" + "@api.example.test/v1"
     distinct = f"CASES = [\n    {_URL!r},\n    {other!r},\n]\n"
@@ -118,7 +157,10 @@ def _assert_url_raw_values_redacted(*rendered_values: str) -> None:
     """Fail when any rendered value contains the fixture's password or credential URL.
 
     Args:
-        rendered_values: Finding text to check, such as a message or stringified metadata.
+        rendered_values: Finding text to check, such as a message or stringified metadata; no arguments performs no checks.
+
+    Returns:
+        None when no supplied text contains the raw fixture password or URL.
 
     Raises:
         AssertionError: A rendered value contains the raw password or URL.

@@ -46,10 +46,7 @@ class Jinja2AutoescapeOffRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the jinja2-autoescape-off rule as a high-confidence ERROR.
 
-        ERROR severity because the missing autoescape silently disables XSS
-        protection across every template rendered through the environment;
-        high confidence because the matched constructor shape and kwarg
-        check are unambiguous.
+        Missing or literal-False autoescape disables automatic escaping; explicit constructor and argument checks support high confidence.
 
         Returns:
             Definition for the jinja2-autoescape-off rule under the security
@@ -65,20 +62,16 @@ class Jinja2AutoescapeOffRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``jinja2.Environment(...)`` without ``autoescape=True``.
+        """Flag recognized Jinja2 Environment calls with no explicit autoescape keyword or with that keyword set to literal False.
 
-        Resolves the common alias shapes (``import jinja2``, ``from jinja2
-        import Environment``, ``from jinja2 import Environment as Env``)
-        before testing the call target. Skips constructors whose
-        ``autoescape`` argument is literal ``True`` or a call to
-        ``select_autoescape``.
+        Top-level imports supply aliases. Other values supplied through the explicit autoescape keyword are exempt.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per Environment construction without autoescape.
+            One finding per matched constructor, or an empty list when parsing, supported imports or matching calls are absent.
         """
         if unit.tree is None or "jinja2" not in unit.source:
             return []
@@ -107,14 +100,14 @@ class _Jinja2Aliases:
 
     @classmethod
     def from_tree(cls, tree: ast.AST) -> "_Jinja2Aliases":
-        """Collect the local names bound to ``jinja2.Environment``.
+        """Collect candidate Environment call spellings from top-level Jinja2 imports.
 
         Args:
-            tree: Module AST to inspect for jinja2 imports.
+            tree: AST whose top-level imports are inspected when it is a module.
 
         Returns:
-            Aliases record listing every call-target name that resolves to
-            ``jinja2.Environment`` in this module.
+            Aliases record containing candidate Environment call spellings from top-level imports, without rebinding checks;
+            empty when the tree is not a module or no supported import occurs.
         """
         names: set[str] = set()
         if not isinstance(tree, ast.Module):

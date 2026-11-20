@@ -16,7 +16,11 @@ _PRIVATE_KEY_ID = "abc123" + "def456" + "abc123" + "def456"
 
 
 def test_gcp_service_account_key_emits_with_redacted_preview():
-    """Report one finding on line 2 whose metadata holds only the category, fixed preview and provider, without the fixture key or key id."""
+    """Report one finding on line 2 whose metadata holds only the category, fixed preview and provider, without the fixture key or key id.
+
+    Returns:
+        None after the finding and redaction assertions succeed.
+    """
     src = _service_account_source(_PRIVATE_KEY_VALUE)
 
     findings = GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx())
@@ -34,7 +38,11 @@ def test_gcp_service_account_key_emits_with_redacted_preview():
 
 
 def test_gcp_service_account_key_routes_through_default_registry():
-    """Report the GCP service-account rule through the default registry for a service-account JSON file."""
+    """Report the GCP service-account rule through the default registry for a service-account JSON file.
+
+    Returns:
+        None after confirming that the registry reports the GCP rule.
+    """
     findings = RuleRegistry.defaults().analyse(
         [make_unit(_service_account_source(_PRIVATE_KEY_VALUE), "service-account.json")],
         default_ctx(),
@@ -45,21 +53,33 @@ def test_gcp_service_account_key_routes_through_default_registry():
 
 
 def test_service_account_marker_without_private_key_skipped():
-    """Report nothing for a service-account JSON file without a private key."""
+    """Report nothing for a service-account JSON file without a private key.
+
+    Returns:
+        None after verifying that the missing private key produces no findings.
+    """
     src = '{"type": "service_account", "client_email": "fixture@' + 'example.test"}\n'
 
     assert GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx()) == []
 
 
 def test_private_key_without_service_account_marker_skipped_by_gcp_rule():
-    """Report nothing from this rule for a private key in JSON that lacks the service-account type marker."""
+    """Report nothing from this rule for a private key in JSON that lacks the service-account type marker.
+
+    Returns:
+        None after verifying that this rule produces no findings without the type marker.
+    """
     src = '{"private_key": "' + _PRIVATE_KEY_VALUE + '"}\n'
 
     assert GcpServiceAccountKeyRule().analyse(make_unit(src, "key.json"), default_ctx()) == []
 
 
 def test_placeholder_service_account_key_skipped():
-    """Report nothing for a service-account key whose private-key body is a placeholder."""
+    """Report nothing for a service-account key whose private-key body is a placeholder.
+
+    Returns:
+        None after verifying that the placeholder key produces no findings.
+    """
     src = _service_account_source(f"{_PRIVATE_KEY_HEADER}\\nplaceholder\\n{_PRIVATE_KEY_FOOTER}\\n")
 
     assert GcpServiceAccountKeyRule().analyse(make_unit(src, "service-account.json"), default_ctx()) == []
@@ -69,7 +89,7 @@ def _service_account_source(private_key: str) -> str:
     """Return service-account JSON text holding the fixed key id and the given private key.
 
     Args:
-        private_key: Value written into the ``private_key`` field.
+        private_key: Contents of the private_key field with any required JSON escapes already applied.
 
     Returns:
         JSON text with the service-account type, key id and private key fields.
@@ -81,7 +101,10 @@ def _assert_gcp_raw_values_redacted(*rendered_values: str) -> None:
     """Fail when any rendered value contains the fixture's private key or key id.
 
     Args:
-        rendered_values: Finding text to check, such as a message or stringified metadata.
+        rendered_values: Finding text to check, such as a message or stringified metadata; no arguments performs no checks.
+
+    Returns:
+        None when no supplied text contains either raw fixture value.
 
     Raises:
         AssertionError: A rendered value contains the raw private key or key id.

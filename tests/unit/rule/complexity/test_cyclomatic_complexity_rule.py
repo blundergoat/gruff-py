@@ -29,18 +29,20 @@ RADON_GROUND_TRUTH = {
 
 
 def _make_unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+    """Build an x.py fixture for complexity checks that follow AST parent links.
+
+    In CPython, assigning parent links also updates shared operator and context nodes.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        The analysis unit.
+        Analysis unit containing the original source and parsed tree under x.py.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # -- ast.AST supports dynamic attributes; parent is not a declared attribute.
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
@@ -52,7 +54,7 @@ def _ctx(threshold: int = 10) -> RuleContext:
         threshold: Complexity the rule allows before it reports; defaults to 10.
 
     Returns:
-        The rule context.
+        A context with settings for the cyclomatic complexity rule alone.
     """
     rule = CyclomaticComplexityRule()
     config = AnalysisConfig(
@@ -73,7 +75,7 @@ def _function_by_name(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
         name: Function name to look up in the fixture's parsed AST.
 
     Returns:
-        The matching ``FunctionDef`` / ``AsyncFunctionDef`` node.
+        The matching FunctionDef or AsyncFunctionDef node.
 
     Raises:
         AssertionError: The fixture defines no function with that name.
@@ -94,25 +96,36 @@ def _function_by_name(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
 def test_matches_radon_ground_truth(function_name: str, expected: int) -> None:
     """Cross-check cyclomatic values against radon 6.0.1 on the fixture file.
 
-    Run ``uvx radon cc tests/fixtures/complexity/cc_fixture.py -s`` to refresh
-    the ground-truth values in ``tests/fixtures/complexity/radon_ground_truth.md``.
+    Run uvx --from radon==6.0.1 radon cc tests/fixtures/complexity/cc_fixture.py -s to regenerate the reference scores.
+    Update RADON_GROUND_TRUTH and tests/fixtures/complexity/radon_ground_truth.md with the results.
 
     Args:
         function_name: Function in the cc_fixture file to measure.
         expected: Radon 6.0.1 reference complexity for that function.
+
+    Returns:
+        None. Compares the named fixture function's cyclomatic score with the stored Radon 6.0.1 reference.
     """
     assert cyclomatic_for(_function_by_name(function_name)) == expected
 
 
 def test_simple_function_returns_1():
-    """Report nothing for a function with no branches."""
+    """Report nothing for a function with no branches.
+
+    Returns:
+        None after the assertion passes.
+    """
     src = "def f():\n    return 1\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     assert findings == []
 
 
 def test_complexity_just_over_threshold_is_a_lower_band_notice():
-    """Report a complexity of 12 against a threshold of 10 as one advisory lower-band finding on ``f``."""
+    """Report a complexity of 12 against a threshold of 10 as one advisory lower-band finding on f.
+
+    Returns:
+        None after the assertions pass.
+    """
     # 11 if-statements -> cc = 12: over this test's threshold of 10 (the rule's default is 20), under one and a half times it
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(11)])
     src = f"def f(x):\n{body}\n"
@@ -126,7 +139,11 @@ def test_complexity_just_over_threshold_is_a_lower_band_notice():
 
 
 def test_above_error_threshold_emits_error():
-    """Report error severity for a function with 25 ``if`` statements against a threshold of 10."""
+    """Report error severity for a function with 25 if statements against a threshold of 10.
+
+    Returns:
+        None after the assertion passes.
+    """
     body = "\n".join([f"    if x == {i}: return {i}" for i in range(25)])
     src = f"def f(x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
@@ -134,18 +151,26 @@ def test_above_error_threshold_emits_error():
 
 
 def test_nested_function_emits_separate_finding():
-    """Report a complex nested function as ``outer.inner`` and leave its simple outer function unreported."""
+    """Report a complex nested function as outer.inner and leave its simple outer function unreported.
+
+    Returns:
+        None. Checks that the findings include outer.inner and omit outer.
+    """
     inner = "\n".join([f"        if x == {i}: return {i}" for i in range(11)])
     src = f"def outer(x):\n    def inner(x):\n{inner}\n    return inner\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
     symbols = {f.symbol for f in findings}
     assert "outer.inner" in symbols
-    # outer itself is too simple at default thresholds: cc=1
+    # The branches belong to inner, so outer scores 1 and stays below this test's threshold of 10.
     assert "outer" not in symbols
 
 
 def test_method_symbol_qualified():
-    """Qualify a complex method's finding symbol with its class, as ``C.m``."""
+    """Qualify a complex method's finding symbol with its class, as C.m.
+
+    Returns:
+        None after the assertion passes.
+    """
     body = "\n".join([f"        if x == {i}: return {i}" for i in range(11)])
     src = f"class C:\n    def m(self, x):\n{body}\n"
     findings = CyclomaticComplexityRule().analyse(_make_unit(src), _ctx())
@@ -153,8 +178,11 @@ def test_method_symbol_qualified():
 
 
 def test_rule_counts_a_match_once_and_an_if_chain_per_branch():
-    """Report a ``match`` with twelve cases and a wildcard at 2, and a chain of twelve ``if`` statements at 13."""
-    # Twelve match cases are one decision (cc 2); twelve if statements stay twelve decisions (cc 13).
+    """Report a match with twelve cases and a wildcard at 2, and a chain of twelve if statements at 13.
+
+    Returns:
+        None after the assertion passes.
+    """
     branch_count = 12
     cases = "\n".join(f"        case {i}:\n            return {i}" for i in range(branch_count))
     matched = f"def dispatch(x):\n    match x:\n{cases}\n        case _:\n            return -1\n"
@@ -168,7 +196,11 @@ def test_rule_counts_a_match_once_and_an_if_chain_per_branch():
 
 
 def test_rule_skips_test_files():
-    """Report nothing for complex source at four test-file paths, but one finding for the same source at ``x.py``."""
+    """Report nothing for complex source at four test-file paths, but one finding for the same source at x.py.
+
+    Returns:
+        None after the assertions pass.
+    """
     body = "\n".join([f"    if x == {i}: assert x" for i in range(30)])
     src = f"def test_many(x):\n{body}\n"
     unit = _make_unit(src)

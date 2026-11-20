@@ -9,17 +9,15 @@ class GithubAnnotationsReporter:
     """Render findings as ``::error``/``::warning``/``::notice`` lines for GitHub Actions PRs."""
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as ``::error``/``::warning``/``::notice`` workflow-command lines.
+        """Render findings and run diagnostics as GitHub Actions workflow-command lines.
 
-        Each finding becomes one annotation that GitHub Actions surfaces
-        inline on PR diffs. Severity maps: ``error`` → ``error``,
-        ``warning`` → ``warning``, ``advisory`` → ``notice``.
+        Findings use error, warning or notice for error, warning or advisory severity, respectively.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Report supplying the findings and run diagnostics to annotate.
 
         Returns:
-            Annotation lines (empty string when there are no findings).
+            Annotation lines with a trailing newline, or an empty string when both findings and diagnostics are empty.
         """
         lines = [*(_diagnostic_annotation(item) for item in report.diagnostics)]
         lines.extend(_annotation(finding) for finding in report.findings)
@@ -27,11 +25,10 @@ class GithubAnnotationsReporter:
 
 
 def _diagnostic_annotation(diagnostic: RunDiagnostic) -> str:
-    """Format one run diagnostic as a GitHub Actions annotation line, so problems with the run itself are reported in the same output as the findings.
+    """Report one run diagnostic as a GitHub Actions annotation alongside findings.
 
-    The level is notice only when the diagnostic is explicitly marked as not invalidating the run. When invalidates_run is True or None, the level is
-    error. The file property comes first and uses file_path, or path when file_path is None or empty. It is left out only when that chosen value is
-    None. The title is the diagnostic type, and the line property is added only when a line is known.
+    Use notice only for invalidates_run=False, otherwise error. Prefer nonempty file_path over path; omit file only when the result is None.
+    Put file before the type-based title and include line only when known.
 
     Args:
         diagnostic: Run diagnostic to render. Its type becomes the annotation title and its message becomes the annotation message.

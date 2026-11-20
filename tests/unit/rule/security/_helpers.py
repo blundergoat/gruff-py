@@ -11,59 +11,53 @@ from gruffpy.source.source_file import SourceFile
 
 
 def make_unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
-    """Parse *source* into an ``AnalysisUnit`` with ``.parent`` links attached.
-
-    Several security rules walk up the AST via ``getattr(node, "parent", ...)``
-    (e.g. to find the enclosing assignment or function). ``ast.parse``
-    doesn't populate ``parent`` by default; this helper does.
+    """Parse source into an AnalysisUnit with parent links for security rules that inspect enclosing nodes.
 
     Args:
         source: Python source to parse.
         display_path: File path stored on the unit (some rules gate on the path).
 
     Returns:
-        Ready-to-analyse unit pointing at an in-memory ``SourceFile``.
+        Ready-to-analyse unit pointing at an in-memory SourceFile.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # The fixture adds parent metadata outside the standard AST fields.
     file = SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def make_text_unit(source: str, display_path: str) -> AnalysisUnit:
-    """Build a text-typed ``AnalysisUnit`` (``tree=None``) for ``SourceTextRule`` tests.
+    """Build a text-typed AnalysisUnit with no tree for SourceTextRule tests.
 
-    GitHub Actions and dependency-posture rules scan raw file text rather than a
-    Python AST, so their tests need a unit with ``type="text"`` and no tree.
+    GitHub Actions and dependency-posture rules scan raw text, so their tests need a text-typed unit without a Python AST.
 
     Args:
         source: Raw file text to scan.
         display_path: Path stored on the unit (text rules gate on it).
 
     Returns:
-        A text-typed unit pointing at an in-memory ``SourceFile``.
+        A text-typed unit pointing at an in-memory SourceFile.
     """
     file = SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="text")
     return AnalysisUnit(file=file, source=source, tree=None)
 
 
 def default_ctx() -> RuleContext:
-    """Build a ``RuleContext`` seeded with every built-in rule at its default settings.
+    """Build a RuleContext seeded with every built-in rule at its default settings.
 
-    Used by security-pillar tests that don't need custom thresholds or
-    options.
+    Used by security-pillar tests that don't need custom thresholds or options.
 
     Returns:
-        Default ``RuleContext`` for the security pillar.
+        Context with built-in rule defaults and a placeholder root for tests without a project directory.
     """
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
     return RuleContext(project_root="/tmp/no-such-root", config=config)
 
 
 def ctx_enabling(*rule_ids: str) -> RuleContext:
-    """Build the default ``RuleContext`` with the named rules switched on, as a project that enables them would.
+    """Build the default RuleContext with the named rules switched on, as a project that enables them would.
 
     Used for rules that ship off by default, so their detection stays tested.
 
@@ -71,10 +65,9 @@ def ctx_enabling(*rule_ids: str) -> RuleContext:
         rule_ids: Ids of built-in rules to enable; an empty call gives the default context.
 
     Returns:
-        Default ``RuleContext`` with every named rule enabled.
+        Context with the named rules enabled and a placeholder root for tests without a project directory.
     """
     config = AnalysisConfig.from_registry(RuleRegistry.defaults())
-    # Each named rule keeps its default thresholds and options; only ``enabled`` changes.
     for rule_id in rule_ids:
         config = config.with_rule_settings(rule_id, replace(config.rule_settings(rule_id), enabled=True))
     return RuleContext(project_root="/tmp/no-such-root", config=config)

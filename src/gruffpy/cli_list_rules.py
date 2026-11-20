@@ -28,15 +28,15 @@ def list_rules_detail(
 
     Args:
         registry: Rule registry to look up the requested rule against.
-        rule_id: Positional rule identifier supplied to ``list-rules``.
-        rule_format: ``"json"`` for the structured payload; anything else
-            renders the multi-line text shape.
-        write_stdout: Sink callable matching ``cli._write_stdout``.
+        rule_id: Positional rule identifier supplied to list-rules.
+        rule_format: The json format selects a structured payload; any other value selects multi-line text.
+        write_stdout: Sink callable matching cli._write_stdout.
+
+    Returns:
+        None after writing the selected representation to write_stdout.
 
     Raises:
-        click.ClickException: When ``rule_id`` is not in the registry; the
-            exception message includes up to three ``difflib`` close-match
-            suggestions when any are found.
+        click.ClickException: If rule_id is unknown, with up to three close-match suggestions when available.
     """
     if not registry.has(rule_id):
         all_ids = [rule.definition().id for rule in registry.all()]

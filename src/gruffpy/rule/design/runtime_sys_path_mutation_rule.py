@@ -53,11 +53,8 @@ class RuntimeSysPathMutationRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the runtime-sys-path-mutation rule as a high-confidence advisory.
 
-        Advisory severity per the new-rule rollout policy and the
-        single-severity contract; the insert(0)-shadows-the-process risk is
-        carried in the message and metadata rather than a severity tier.
-        High confidence because the matched receiver is the literal
-        ``sys.path`` attribute chain and the exemptions are structural.
+        Advisory severity follows the rollout and single-severity policies; insert(0) risk is carried in the message and metadata.
+        Confidence is high because matching requires the literal sys.path receiver and uses structural exemptions.
 
         Returns:
             Definition for the runtime-sys-path-mutation rule under the
@@ -73,19 +70,17 @@ class RuntimeSysPathMutationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag sys.path mutations executed at import time or in library code.
+        """Flag sys.path.insert and sys.path.append calls outside the rule's script and test exemptions.
 
-        Skips files under a ``tests`` directory and ``conftest.py`` entirely,
-        and calls lexically inside an ``if __name__ == "__main__":`` block.
-        In a standalone script a top-level call is skipped as well, but not
-        one inside a function or in a guard's ``else`` branch.
+        Files under tests directories and conftest.py files are exempt. The nearest main guard exempts calls in its body only.
+        Outside any main guard, recognised scripts exempt calls with no enclosing function or lambda, including calls in class bodies.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per mutating call outside the exempt locations.
+            Findings for mutating calls outside exempt locations; empty when no parsed tree, no sys.path text or no reportable call is present.
         """
         if unit.tree is None or "sys.path" not in unit.source:
             return []
@@ -101,7 +96,7 @@ class RuntimeSysPathMutationRule(Rule):
             if method is None:
                 continue
             branch = _main_guard_branch(node)
-            # The guard body runs only as a script; a script's top level runs in its own process too.
+            # A call in the nearest guard's test or else branch remains reportable even inside an outer main guard's body.
             if branch == "body" or (is_script and branch is None and _is_module_level(node)):
                 continue
             findings.append(_build_finding(definition, unit, node, method))
@@ -124,10 +119,9 @@ def _is_exempt_file(display_path: str) -> bool:
 
 
 def _sys_path_mutation_method(node: ast.Call) -> str | None:
-    """Return insert or append when a call's callee is written as ``sys.path.insert`` or ``sys.path.append``.
+    """Return insert or append when a call's callee is written as sys.path.insert or sys.path.append.
 
-    The receiver must be the attribute path on the bare name sys, so a call reached through an aliased import such as ``import sys as system`` or
-    ``from sys import path`` does not match.
+    The receiver must be path on the bare name sys. Calls through an alias such as system.path or through a directly imported path are ignored.
 
     Args:
         node: Call node to inspect.
@@ -145,15 +139,14 @@ def _sys_path_mutation_method(node: ast.Call) -> str | None:
 
 
 def _is_standalone_script(unit: AnalysisUnit, tree: ast.AST) -> bool:
-    """Return whether a file is run as its own process rather than imported by another module.
+    """Identify files treated as standalone scripts when deciding which sys.path mutations to exempt.
 
     Args:
         unit: Source file whose path and first line are read.
         tree: The file's parsed syntax tree.
 
     Returns:
-        True for a file that opens with a shebang, sits under a ``scripts``, ``bin`` or ``tools`` directory, or
-        carries an ``if __name__ == "__main__":`` guard anywhere.
+        True for a shebang, a scripts, bin or tools directory component, or any recognized main guard; False otherwise.
     """
     if unit.source.startswith("#!"):
         return True
@@ -203,10 +196,9 @@ def _main_guard_branch(node: ast.AST) -> Literal["body", "else"] | None:
 
 
 def _is_main_guard(test: ast.expr) -> bool:
-    """Test whether an if condition compares the bare name ``__name__`` with the string ``__main__`` using ``==``.
+    """Recognize an equality comparison between the bare name __name__ and the string __main__ in either operand order.
 
-    Either operand order matches. An ``and`` expression matches when any of its operands matches, checked recursively; ``or``, ``!=`` and chained
-    comparisons do not match.
+    An and expression matches if any operand is itself a main guard. An or expression, inequality or chained comparison does not match.
 
     Args:
         test: Condition expression to examine, normally the test of an if statement.
@@ -215,8 +207,7 @@ def _is_main_guard(test: ast.expr) -> bool:
         True when the condition is a main guard, which callers use to recognise a standalone script and the guard branch that holds a call; False
         otherwise.
     """
-    # A compound entry-point guard (``__name__ == "__main__" and ...``) still
-    # only runs in the script entry point, so it is exempt too.
+    # An and condition with a main check can exempt a call when this is its nearest main guard and the call is in its body.
     if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
         return any(_is_main_guard(value) for value in test.values)
     if not (isinstance(test, ast.Compare) and len(test.ops) == 1):
@@ -230,15 +221,15 @@ def _is_main_guard(test: ast.expr) -> bool:
 
 
 def _argument_position(call: ast.Call, method: str) -> int | None:
-    """Read the integer index passed as the first positional argument of a sys.path insert call.
+    """Read the index passed as the first positional argument of a sys.path insert call.
 
     Args:
         call: Mutating call node whose positional arguments are read.
         method: Method name returned by _sys_path_mutation_method; only insert carries a position.
 
     Returns:
-        The index when the first positional argument is an integer constant; None for append, for an insert without positional arguments, or when the
-        first argument is not an integer constant (a negative index such as -1 parses as a unary expression, so it also yields None).
+        The first positional argument's value when it is an integer or boolean constant in an insert call.
+        None for append, a missing positional argument, or any other expression, including a negative literal such as -1.
     """
     if method != "insert" or not call.args:
         return None
@@ -256,8 +247,8 @@ def _build_finding(
 ) -> Finding:
     """Build the finding for one sys.path mutation call, choosing its message from the method and insert index.
 
-    An insert at integer index 0 gets the message about shadowing later imports for the whole process; every other call gets the execution-order
-    message naming its method. Metadata always records method and adds argumentPosition only when _argument_position finds an integer index.
+    An insert index equal to 0, including False, gets the shadowing message. Other calls get the execution-order message naming their method.
+    Metadata always records method and adds argumentPosition when an insert's first argument is an integer or boolean constant.
 
     Args:
         definition: Rule definition supplying the rule id, severity, pillar, tier, confidence and secondary pillars.

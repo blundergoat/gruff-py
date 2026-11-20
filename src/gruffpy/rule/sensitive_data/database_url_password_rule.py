@@ -99,25 +99,21 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for ``<scheme>://user:password@host`` URLs with a real password.
+        """Scan raw source for database URLs with an inline password.
 
-        Users see each credential-bearing URL, while common placeholder passwords in examples and
-        tests remain quiet.
+        Skip unparseable or placeholder passwords and stock credential pairs on nonempty dotless hosts, 127.0.0.1 or 0.0.0.0.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per database URL whose password is not a placeholder.
+            One finding per matched URL that survives password parsing, placeholder checks and stock development exclusions.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        # Each credential-bearing URL becomes a separate item in the user's remediation queue.
         for database_url_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(database_url_match.raw)
-            # Unparseable or placeholder passwords do not represent a credential the user must
-            # rotate, and nor does a stock pair on a host only a developer's machine reaches.
             if embedded_password is None or _is_placeholder_password(embedded_password) or _is_stock_development_url(database_url_match.raw):
                 continue
             findings.append(
@@ -144,8 +140,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
 def _extract_scheme(url: str) -> str:
     """Return the scheme of a ``scheme://user:password@host`` URL.
 
-    The scheme is the only part of a connection string the URL already publishes in plain text, so it
-    is the only part a marker may name.
+    Only the scheme is retained in connection-string markers; credentials and host details stay out of previews.
 
     Args:
         url: Matched URL text; one of the schemes this rule's own pattern accepts.
@@ -186,13 +181,13 @@ def _extract_password(url: str) -> str | None:
 
 
 def _is_placeholder_password(password: str) -> bool:
-    """Return whether *password* is an exact known fixture placeholder.
+    """Return whether the password is an exact known fixture placeholder.
 
     Args:
         password: Extracted password to compare after stripping surrounding whitespace and folding case.
 
     Returns:
-        True when the normalized whole value is a listed placeholder, otherwise False.
+        True for empty or whitespace-only passwords and values that normalize to a listed placeholder. False otherwise.
     """
     return password.strip().casefold() in _PLACEHOLDER_PASSWORDS
 

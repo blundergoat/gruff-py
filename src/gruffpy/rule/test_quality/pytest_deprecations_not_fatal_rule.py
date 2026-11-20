@@ -26,10 +26,7 @@ class PytestDeprecationsNotFatalRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the pytest-deprecations-not-fatal rule as a medium-confidence advisory.
 
-        Medium confidence because some projects intentionally let
-        deprecations stay warnings (third-party noise they can't fix); the
-        rule recommends the strict default but defers to per-project
-        suppression.
+        The advisory flags a configuration choice that may be intentional when third-party deprecations must remain warnings.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -44,20 +41,16 @@ class PytestDeprecationsNotFatalRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit a pyproject-anchored finding when pytest does not escalate ``DeprecationWarning``.
+        """Emit a pyproject-anchored finding when pytest settings lack a recognized deprecation error filter.
 
-        Only fires when the unit contains at least one test function and a
-        pytest config block is present; checks ``filterwarnings`` for an
-        ``error::DeprecationWarning`` entry.
+        A bare error filter qualifies, as does an entry that starts with error and contains DeprecationWarning.
 
         Args:
-            unit: Parsed source file used to detect test presence.
-            context: Rule execution context supplying the ``project_root``
-                used to locate pyproject.toml.
+            unit: Parsed source file used to detect test presence. A missing AST yields no findings.
+            context: Rule execution context supplying the project root for pyproject.toml settings cached on first lookup.
 
         Returns:
-            One pyproject.toml-anchored finding when deprecation warnings
-            are not escalated, otherwise empty.
+            One pyproject.toml-anchored finding for a unit with tests and pytest settings that lack a qualifying filter. Otherwise, an empty list.
         """
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []

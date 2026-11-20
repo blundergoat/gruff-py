@@ -5,10 +5,10 @@ from gruffpy.command.dashboard_page_renderer import DashboardPageRenderer
 
 
 def _state(**overrides: str) -> dict[str, str]:
-    """Build a dashboard form state whose project, paths and config values carry characters HTML must escape.
+    """Build dashboard form state with project, paths and config defaults that exercise HTML escaping.
 
     Args:
-        overrides: Field values that replace the defaults.
+        overrides: Field values that replace defaults or add fields.
 
     Returns:
         The merged state mapping.
@@ -42,7 +42,11 @@ _UNEXPECTED_DASHBOARD_HTML_SUBSTRINGS_LOWERCASE = ("baseline", "mutation")
 
 
 def test_dashboard_html_renders_with_doctype_and_required_substrings():
-    """Render the dashboard page as an HTML document with its controls, escaped form values and the state's selections."""
+    """Render the dashboard page as an HTML document with its controls, escaped form values and the state's selections.
+
+    Returns:
+        None after the assertions pass.
+    """
     html = DashboardPageRenderer().dashboard_html(_state())
     assert html.startswith("<!DOCTYPE html>")
     missing = [s for s in _EXPECTED_DASHBOARD_HTML_SUBSTRINGS if s not in html]
@@ -50,14 +54,22 @@ def test_dashboard_html_renders_with_doctype_and_required_substrings():
 
 
 def test_dashboard_html_omits_unimplemented_feature_words():
-    """Keep the unimplemented-feature words ``baseline`` and ``mutation`` out of the dashboard page, in any letter case."""
+    """Keep the unimplemented-feature words baseline and mutation out of the dashboard page, in any letter case.
+
+    Returns:
+        None after the assertion passes.
+    """
     html = DashboardPageRenderer().dashboard_html(_state()).lower()
     present = [s for s in _UNEXPECTED_DASHBOARD_HTML_SUBSTRINGS_LOWERCASE if s in html]
     assert not present, f"unexpected words leaked into dashboard html: {present}"
 
 
 def test_loading_frame_and_error_html_escape_untrusted_text():
-    """Show the ready message in the loading frame, and include an error page's escaped title and detail and its exit code and duration."""
+    """Show the ready message in the loading frame, and include an error page's escaped title and detail and its exit code and duration.
+
+    Returns:
+        None after the assertions pass.
+    """
     renderer = DashboardPageRenderer()
 
     loading = renderer.loading_frame()
@@ -75,7 +87,11 @@ def test_loading_frame_and_error_html_escape_untrusted_text():
 
 
 def test_inject_dashboard_metadata_embeds_html_safe_script_block():
-    """Embed scan metadata as a script block right after ``<body>``, with the project root's markup characters Unicode-escaped."""
+    """Embed scan metadata after the opening body tag, with the project root's markup characters Unicode-escaped.
+
+    Returns:
+        None after the assertions pass.
+    """
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
         project_root='/tmp/<project>&"quoted"',
@@ -94,7 +110,11 @@ _SAMPLE_COMMAND_ARGV = ("gruff-py", "analyse", "--format", "html", "path with sp
 
 
 def test_inject_dashboard_metadata_payload_records_scan_provenance():
-    """Record the scan's type, exit code, duration, project root and shell-quoted command in the embedded metadata."""
+    """Record the scan-complete event type, exit code, duration, project root and shell-quoted command in the embedded metadata.
+
+    Returns:
+        None. Checks the embedded event type, exit code, duration, project root and shell-quoted command.
+    """
     html = DashboardPageRenderer().inject_dashboard_metadata(
         "<!doctype html><html><body><main>scan</main></body></html>",
         project_root=_SAMPLE_PROJECT_ROOT,

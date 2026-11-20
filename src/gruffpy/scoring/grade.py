@@ -32,7 +32,7 @@ class Grade:
             score: Numeric score to map into a grade band.
 
         Returns:
-            Letter grade from A through F.
+            The letter grade for the score: A, B, C, D or F.
         """
         if score >= 90.0:
             return "A"
@@ -56,10 +56,7 @@ class Grade:
 def _round_half_up(score: float) -> float:
     """Round one score to the ratified two decimals, breaking ties away from zero.
 
-    Python's built-in ``round`` breaks ties to even, so 53.125 becomes 53.12 here while Go, PHP,
-    Rust, and JavaScript all produce 53.13. The family contract fixes the precision but not the
-    tie-break, and a scorer that disagrees with its four siblings on the last cent would fail the
-    cross-port scoring gate for a reason that has nothing to do with the formula.
+    Half-up rounding makes 53.125 become 53.13 instead of the 53.12 produced by Python's ties-to-even rounding.
 
     Args:
         score: Raw score before rounding.

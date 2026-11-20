@@ -32,9 +32,7 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
     def definition(self) -> RuleDefinition:
         """Describe the secrets-in-pr rule as a medium-confidence warning.
 
-        Medium confidence because exposure depends on how the secret is used;
-        the gate (a pull_request_target trigger in ``on:`` plus a
-        non-GITHUB_TOKEN secret reference) keeps the noise bounded.
+        Medium confidence reflects uncertainty about how a secret is used; detection requires a declared pull_request_target trigger.
 
         Returns:
             Definition for the github-actions-secrets-in-pr rule under the
@@ -47,19 +45,19 @@ class GithubActionsSecretsInPrRule(SourceTextRule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
-            # Off unless a project enables it: wrong on its only judged finding in the 0.6.0 measurement; too few to delete on (ADR-029).
+            # Keep this rule opt-in under ADR-029 because measured precision was low and the sample was too small to justify retirement.
             default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag each non-``GITHUB_TOKEN`` secret reference in a pull_request_target workflow.
+        """Flag secrets.NAME expressions in pull_request_target workflows, excluding GITHUB_TOKEN and jobs or steps proven unreachable.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per referenced secret, when ``on:`` declares pull_request_target.
+            One finding per qualifying reference. Empty outside pull_request_target workflows or when no qualifying reference is found.
         """
         if not is_workflow_file(unit.file.display_path):
             return []

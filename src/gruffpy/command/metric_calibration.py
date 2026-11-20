@@ -55,7 +55,7 @@ class MetricDiagnostic:
         """Serialise the diagnostic.
 
         Returns:
-            JSON-ready diagnostic fields.
+            JSON-ready type and message fields; path and line are omitted independently when unavailable.
         """
         payload: dict[str, object] = {
             "type": self.type,
@@ -106,13 +106,13 @@ class FunctionMetricRow:
     maintainability_index: float
 
     def value_for(self, metric: MetricName) -> float:
-        """Return one metric value for this row.
+        """Read a stored measurement for distribution summaries and ranking.
 
         Args:
-            metric: Metric name to read.
+            metric: Name selecting cyclomatic complexity, Halstead volume or maintainability index.
 
         Returns:
-            Numeric value for the requested metric.
+            The selected measurement as a float, including cyclomatic complexity.
         """
         match metric:
             case "cyclomatic":
@@ -129,7 +129,7 @@ class FunctionMetricRow:
             metric: Metric that should appear as the row's top-level value.
 
         Returns:
-            JSON-ready row payload.
+            JSON-ready metric row; endLine is null when the source node's end line is unavailable.
         """
         return {
             "filePath": self.file_path,
@@ -179,7 +179,7 @@ class MetricSummary:
         """Serialise this metric summary.
 
         Returns:
-            JSON-ready summary payload.
+            JSON-ready summary; min, p50, p90, p99 and max are null when the distribution has no rows.
         """
         return {
             "name": self.metric,
@@ -261,14 +261,19 @@ def build_metric_calibration_report(
     """Build metric distributions using the same discovery as analysis.
 
     Args:
-        paths: Paths requested by the user.
-        config_path: Explicit configuration path, if one was provided.
-        no_config: Whether default configuration loading should be skipped.
-        include_ignored: Whether discovery should include normally ignored files.
+        paths: Source paths to measure; an empty tuple scans project_root.
+        config_path: Explicit configuration file; None discovers project configuration unless no_config is true.
+        no_config: Use registry defaults without loading config; combining it with config_path adds a config-error diagnostic.
+        include_ignored: Include files skipped by built-in and gitignore rules. Configured paths.ignore still applies.
         project_root: Root directory used to resolve relative paths.
 
     Returns:
-        Complete calibration report with rows, summaries, and diagnostics.
+        Report with measured rows, summaries and diagnostics. Unparseable files contribute no rows.
+        A config conflict or ConfigError uses registry defaults. The report's config path is None when no file was loaded.
+        With no measured functions, summary counts and crossings are zero and distribution statistics are None.
+
+    Raises:
+        ValueError: If the configured minimum Python version is below the supported minimum.
     """
     config, config_loaded_from, diagnostics = _load_metric_config(
         project_root=project_root,
@@ -310,10 +315,10 @@ def metric_calibration_payload(
 
     Args:
         report: Metric calibration report to serialise.
-        top: Number of top rows to include per metric.
+        top: Row limit per metric. Zero keeps every metric's top list empty. Negative values drop that many rows from each ranking's end.
 
     Returns:
-        JSON-ready calibration payload.
+        JSON-ready report; configPath is null when no config file was loaded, and each metric's top list is empty when no rows are selected.
     """
     return {
         "schemaVersion": "gruff-py.metric-calibration.v1",
@@ -338,11 +343,11 @@ def metric_calibration_payload(
 
 
 def render_metric_calibration_text(report: MetricCalibrationReport, *, top: int) -> str:
-    """Render a text calibration report.
+    """Summarize scan coverage, diagnostics and function metrics for review in the terminal.
 
     Args:
-        report: Metric calibration report to render.
-        top: Number of top rows to include per metric.
+        report: Scan counts, diagnostics, metric distributions and measured function rows.
+        top: Row limit per metric. Zero displays none for each metric. A negative value trims up to that many rows from the end.
 
     Returns:
         Human-readable calibration report.
@@ -375,10 +380,14 @@ def top_rows(
     Args:
         report: Metric calibration report containing all rows.
         metric: Metric to sort by.
-        top: Maximum number of rows to return.
+        top: Row limit. Zero selects no rows. A negative value trims up to that many rows from the end of the ranking.
 
     Returns:
-        Ordered rows for the requested metric.
+        Rows ranked highest first for above crossings and lowest first for below crossings, with ties by path and line.
+        The tuple is empty when there are no rows or the limit selects none.
+
+    Raises:
+        LookupError: When the report has no summary for the requested metric.
     """
     threshold = _threshold_for_metric(report.summaries, metric)
     if threshold == "above":
@@ -451,12 +460,13 @@ def _discover_metric_sources(
     Args:
         paths: Paths requested by the user; relative paths are anchored at project_root, absolute paths are used as given, and an empty tuple makes
             discovery scan the project root.
-        include_ignored: When true, discovery also returns files under default and gitignored paths.
+        include_ignored: When true, include eligible files skipped by gitignore, third-party, minified or fallback rules.
+            Configured patterns and VCS directories still exclude files.
         project_root: Root directory discovery resolves the requested paths against.
         config: Analysis config whose ignored path patterns are passed to discovery.
 
     Returns:
-        Discovery result with the discovered source files, the ignored paths, and the requested paths that were not found.
+        Discovery result with source files, ignored paths and their reasons, and requested paths that were not found.
     """
     discovery = SourceDiscovery(project_root)
     return discovery.discover(
@@ -538,6 +548,9 @@ def _append_diagnostics(lines: list[str], diagnostics: Sequence[MetricDiagnostic
     Args:
         lines: Text report lines, mutated in place by appending a blank line, the section heading and the diagnostic lines.
         diagnostics: Diagnostics to list; when empty, nothing is appended.
+
+    Returns:
+        None; report lines are updated in place when diagnostics are present.
     """
     if not diagnostics:
         return
@@ -568,6 +581,9 @@ def _append_distribution(lines: list[str], summaries: Sequence[MetricSummary]) -
     Args:
         lines: Text report lines, mutated in place by appending a blank line, the section heading, the header row and the summary lines.
         summaries: Metric summaries to render, in report order.
+
+    Returns:
+        None; the section and column headers are appended even when summaries is empty.
     """
     lines.extend(
         [
@@ -612,6 +628,9 @@ def _append_top_rows(lines: list[str], report: MetricCalibrationReport, top: int
         lines: Text report lines, mutated in place by appending a blank line, a Top heading and the row lines for each metric.
         report: Calibration report supplying the rows and the summaries that set each metric's sort direction.
         top: Maximum number of rows listed per metric.
+
+    Returns:
+        None; each metric's Top section is appended to lines.
     """
     for metric in METRIC_ORDER:
         rows = top_rows(report, metric, top)
@@ -642,7 +661,7 @@ def _metric_row(file_path: str, fn: FunctionLike, code_lines: frozenset[int]) ->
 
     Args:
         file_path: Display path of the file containing the node, recorded on the row.
-        fn: Function-like node to measure.
+        fn: Function-like node to measure; metric helpers may store cached results on the node.
         code_lines: The file's code line numbers, used for the maintainability index line term.
 
     Returns:
@@ -663,11 +682,11 @@ def _metric_row(file_path: str, fn: FunctionLike, code_lines: frozenset[int]) ->
 def _maintainability_index_for(fn: FunctionLike, code_lines: frozenset[int]) -> float:
     """Compute maintainability index for a function-like node.
 
-    Uses the shared `lines_for_size()` helper for LOC, so the line term counts
-    code lines only and documenting a function never lowers its index.
+    The line term counts only code lines, so comments and docstrings do not lower the index.
+    A node with no end line is counted as one line.
 
     Args:
-        fn: Function, async function, or lambda node to score.
+        fn: Function, async function, or lambda node to score; metric helpers may cache results on the node.
         code_lines: The file's code lines, from ``code_line_numbers``.
 
     Returns:
@@ -684,12 +703,10 @@ def _maintainability_index_for(fn: FunctionLike, code_lines: frozenset[int]) -> 
 
 
 def _metric_thresholds(config: AnalysisConfig) -> dict[MetricName, MetricThreshold]:
-    """Choose the threshold, severity and direction used to count crossings for each calibrated metric.
+    """Choose crossing thresholds, severities and directions for each calibrated metric.
 
-    Only the cyclomatic threshold reads the config: it comes from the cyclomatic complexity rule settings, falls back to warning severity when the
-    rule has no configured severity threshold, and counts values above it. The Halstead volume threshold is fixed at 400 with error severity and
-    counts values above it, and the maintainability index threshold is fixed at 70 with error severity and counts values below it, regardless of
-    config.
+    Cyclomatic complexity uses its configured rule settings, defaults to warning severity, and counts values above its threshold.
+    Halstead volume counts values above 400; maintainability index counts values below 70. Both use error severity regardless of config.
 
     Args:
         config: Analysis config supplying the cyclomatic complexity rule settings.
@@ -715,7 +732,7 @@ def _threshold(
     Args:
         config: Analysis config holding the rule settings.
         rule_id: Rule whose settings supply the threshold.
-        default_severity: Severity used when the rule has no configured severity threshold.
+        default_severity: Severity paired with the rule's warning threshold when no severity threshold is configured.
         direction: Whether values above or below the threshold count as crossings.
 
     Returns:
@@ -738,7 +755,7 @@ def _summary_for(
     """Summarise one metric's distribution across all rows, including how many rows cross its threshold.
 
     Args:
-        metric: Metric to summarise.
+        metric: Name used to select the measurement from each row and identify the resulting summary.
         rows: Metric rows whose values for the metric form the distribution.
         threshold: Crossing threshold whose value, severity and direction are copied into the summary and used to count crossings.
 
@@ -850,7 +867,7 @@ def _active_threshold(settings: RuleSettings, default_severity: Severity) -> Sev
     """Pick the rule's configured severity threshold, or fall back to its warning threshold paired with the default severity.
 
     Args:
-        settings: Rule settings to read.
+        settings: Settings that supply the configured severity threshold or the numeric warning threshold required for the fallback.
         default_severity: Severity paired with the warning threshold when the settings carry no severity threshold.
 
     Returns:
@@ -903,10 +920,10 @@ def _format_number(value: float) -> str:
     """Format a metric number for the text report.
 
     Args:
-        value: Number to format.
+        value: Measured value, distribution statistic or crossing threshold shown in the text report.
 
     Returns:
-        The integer digits for a whole number, otherwise the value with one decimal place.
+        Whole numbers as integer text, finite fractional values to one decimal place, and nonfinite values as inf, -inf or nan.
     """
     if value.is_integer():
         return str(int(value))
@@ -917,10 +934,10 @@ def _rounded(value: float) -> int | float:
     """Normalise a metric number for the JSON payload.
 
     Args:
-        value: Number to normalise.
+        value: Measured value, distribution statistic or crossing threshold included in the JSON payload.
 
     Returns:
-        An int for a whole number, otherwise the value rounded to two decimal places.
+        An int for a whole number, a finite fractional value rounded to two decimal places, or the original nonfinite value.
     """
     if value.is_integer():
         return int(value)

@@ -12,8 +12,7 @@ class Severity(StrEnum):
     def from_input(cls, value: str) -> "Severity | None":
         """Parse a user-supplied severity string, returning ``None`` for unknown values.
 
-        Used by config loaders to validate per-rule severity overrides
-        without throwing on typos.
+        Callers can validate per-rule severity overrides without catching ValueError for unknown names.
 
         Args:
             value: Raw string from CLI flags or config files.

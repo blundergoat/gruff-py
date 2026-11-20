@@ -30,9 +30,7 @@ class NamingConsistencyRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the naming-consistency rule as a medium-confidence advisory.
 
-        Medium confidence because mixed pytest/unittest naming sometimes
-        reflects legitimate migration in progress; the rule fires on the
-        observable mix without judging intent.
+        Mixed pytest and unittest naming can be intentional during a migration, so findings do not infer intent.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -47,19 +45,16 @@ class NamingConsistencyRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit one finding per test file that mixes two or more test-naming conventions.
+        """Emit one finding for a matching Python file that mixes top-level test-naming conventions.
 
-        Conventions tracked: ``test_snake`` (``def test_foo``), ``testCamel``
-        (``def testFoo``), ``TestPrefix`` (``class TestFoo``), and
-        ``SuffixTest`` (``class FooTest``). Fires only when 2+ are present.
+        The path must end in .py and contain test regardless of case. Conventions are test_snake, testCamel, TestPrefix, and SuffixTest.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. Without a module AST the rule returns no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            A single file-anchored finding listing the observed conventions,
-            or empty when fewer than two coexist.
+            A file-anchored finding listing the mix, or an empty list for ineligible files or fewer than two conventions.
         """
         if not isinstance(unit.tree, ast.Module):
             return []

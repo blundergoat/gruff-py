@@ -14,11 +14,11 @@ def apply_suppressions(
 
     Args:
         findings: Findings emitted by rules.
-        suppressions_by_file: Parsed suppressions keyed by display path.
+        suppressions_by_file: Parsed suppressions keyed by display path; a missing entry leaves that file's findings unsuppressed.
 
     Returns:
-        Findings with matching suppressions removed. Unsuppressed ``Finding``
-        objects are returned unchanged.
+        Findings with matching suppressions removed. A finding without a line can match only a file-wide directive.
+        Unsuppressed Finding objects are returned unchanged.
     """
     return [finding for finding in findings if not _is_suppressed(finding, suppressions_by_file.get(finding.file_path))]
 

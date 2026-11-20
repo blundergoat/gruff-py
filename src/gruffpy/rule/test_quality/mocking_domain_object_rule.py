@@ -32,11 +32,10 @@ class MockingDomainObjectRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the mocking-domain-object rule as a medium-confidence advisory.
 
-        The rule cannot identify "domain" namespaces without project-specific
-        configuration, so it stays silent until ``domain_namespaces`` is set.
+        The rule stays silent until domain_namespaces contains at least one prefix to match.
 
         Returns:
-            Definition with the ``domain_namespaces`` option seeded to an empty list.
+            Definition with domain_namespaces initialized to an empty list.
         """
         return RuleDefinition(
             id=self.ID,
@@ -49,20 +48,17 @@ class MockingDomainObjectRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag mock factory calls whose ``spec=`` / first arg names a configured domain type.
+        """Flag mock-factory calls in recognised test bodies when the selected argument spelling matches a configured domain namespace.
 
-        Resolves dotted names from the factory's positional or ``spec``/
-        ``spec_set`` keyword argument and matches against the
-        ``domain_namespaces`` prefix list; emits nothing when the option is
-        empty.
+        A nameable first positional argument precedes spec and spec_set; an empty domain_namespaces list disables findings.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the
-                ``domain_namespaces`` list option.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
+            context: Rule execution context supplying the domain_namespaces list option.
 
         Returns:
-            One finding per mock factory targeting a configured domain type.
+            One finding per mock-factory call in the scanned test bodies whose selected argument name equals a configured namespace
+            or starts with that namespace plus a dot.
         """
         if unit.tree is None:
             return []

@@ -40,15 +40,14 @@ class ClassLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit one finding per class whose body exceeds the configured line count.
+        """Emit one finding per class whose code-line count, including its header, exceeds the configured threshold.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Source file to inspect; a missing AST yields no findings, and an existing AST's code-line cache may be populated.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            One finding per ``ClassDef`` over threshold, anchored at the
-            class definition line (decorators included).
+            Findings for over-threshold classes, anchored at the first decorator or the class line when undecorated; empty when none qualify.
         """
         if unit.tree is None:
             return []
@@ -87,16 +86,14 @@ def _class_length_finding(
     decorated, otherwise at the class line, and ends at the class's end line.
 
     Args:
-        unit: Analysed file; its source and tree recount the class's code lines and its display path becomes the finding's file path.
+        unit: Source file supplying line counts and the finding path; its AST's code-line cache may be populated.
         definition: The rule's definition, supplying the rule id, pillar, tier, confidence and secondary pillars copied onto the finding.
         node: The class to report, already selected by _long_classes.
         settings: Effective rule settings that supply the matched threshold and the limit the code-line count is banded against.
 
     Returns:
-        A finding whose message names the qualified class symbol, its code-line count and the matched threshold's severity and value. Its severity is
-        advisory in the lower band and the matched threshold's severity in the upper band (a count of at least one and a half times the limit), its
-        remediation is the lower-band do-not-grow advice or the upper-band split advice, and its metadata records lines, measuredValue, threshold,
-        thresholdDirection, thresholdType and the limit band.
+        A class-span finding with the measured count, matched threshold and limit band recorded in metadata.
+        The lower band uses advisory severity and do-not-grow advice; the upper band keeps the matched severity and uses split advice.
 
     Raises:
         ValueError: When settings.high_value_threshold_match returns no match for the class's code-line count, which happens when no single severity
@@ -144,6 +141,9 @@ def _active_high_threshold(settings: RuleSettings) -> int | float:
 
     Returns:
         The single severity-threshold value when one is configured, otherwise the numeric warning threshold.
+
+    Raises:
+        LookupError: If no single severity threshold is set and the warning threshold is missing or nonnumeric.
     """
     if settings.severity_threshold is not None:
         return settings.severity_threshold.threshold

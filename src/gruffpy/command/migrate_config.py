@@ -160,13 +160,9 @@ def _migrate_document(
     document: dict[str, Any],
     defaults: AnalysisConfig,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
-    """Build the migrated form of a parsed config document, with schemaVersion pinned as its first key.
+    """Deep-copy the config, pin schemaVersion first, and apply key and legacy tier rewrites without mutating the input.
 
-    It also collects the change lines for each rewrite and the notes for unknown rule ids left as-is. The input document is deep-copied and never
-    mutated. A schemaVersion change line is recorded only when the existing value is absent or differs from the current schema version. The 0.6.0 key
-    moves are applied next (a per-command minimumSeverity mapping is renamed to failOn and allowlists.secretPreviews is removed), then each rule
-    section under rules whose id is a known rule gets the legacy threshold rewrite. A rule section that is not a mapping is skipped without a note,
-    while an unknown rule id is passed through unchanged and reported as a note rather than a change line.
+    Record changed schema versions and applied rewrites; skip non-mapping rule sections and note unknown rule mappings left unchanged.
 
     Args:
         document: The config mapping parsed from the YAML file; it is deep-copied before any rewrite.
@@ -205,20 +201,16 @@ def _migrate_document(
 
 
 def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
-    """Apply the two key moves 0.6.0 made, both of which the loader now refuses outright.
+    """Convert the retired per-command gate to failOn and remove allowlists.secretPreviews in place.
 
-    The per-command exit gate left ``minimumSeverity`` for ``failOn``; the same
-    key as a single severity is the 0.6 display floor and stays where it is.
-    ``allowlists.secretPreviews`` was removed because FAMILY-CONTRACT.md
-    section 5 makes category markers unconditional, and the key authorises
-    nothing.
+    A scalar minimumSeverity remains the display floor; FAMILY-CONTRACT.md section 5 requires unconditional category markers.
+    Removing secretPreviews also removes the allowlists table if it becomes empty.
 
     Args:
-        migrated: The working document, edited in place.
+        migrated: The working document, edited in place. A legacy per-command minimumSeverity mapping replaces any existing failOn value.
 
     Returns:
-        One readable line per rewrite; empty when the document was already
-        current.
+        One readable line per rewrite. The list is empty when neither rewrite applies.
     """
     changes: list[str] = []
 
@@ -229,12 +221,11 @@ def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
         changes.append("minimumSeverity: renamed to failOn, the key that gates the exit code in 0.6")
 
     allowlists = migrated.get("allowlists")
-    # Presence is the test, not content: an empty list reads as configured redaction just as a populated one does.
+    # The loader rejects the removed preview key even when its value is empty.
     if isinstance(allowlists, dict) and "secretPreviews" in allowlists:
         allowlists.pop("secretPreviews")
         changes.append("allowlists.secretPreviews: removed; section 5 makes category markers unconditional")
 
-        # A block whose last key just went is a mapping with nothing in it, which the loader reads as neither shape.
         if not allowlists:
             migrated.pop("allowlists")
 
@@ -246,17 +237,14 @@ def _migrate_rule_section(
     section: dict[str, Any],
     default_settings: RuleSettings,
 ) -> list[str]:
-    """Replace a rule section's legacy warning and error threshold tiers with a single threshold and severity, in place.
+    """Replace legacy warning and error tiers in place; error wins, and rules without severity rubrics only lose those tiers.
 
-    Only warning and error keys that are not threshold names in the rule's default settings count as legacy tiers; other thresholds keys are kept, and
-    the thresholds mapping is deleted when nothing remains in it. The error tier wins when both legacy tiers are present. For a rule without a
-    severity rubric the legacy tiers are only removed. When the section already has a threshold, that threshold and any existing severity are kept and
-    a missing severity is filled from the winning tier name. Otherwise the winning tier's value becomes threshold and its tier name becomes severity,
-    replacing any severity already set.
+    Preserve an explicit threshold and severity, filling missing severity from the winning tier; otherwise replace both from that tier.
 
     Args:
         rule_id: Rule id used only to label the returned change line.
-        section: The rule's config mapping, mutated in place: legacy tiers are deleted, and threshold and severity may be set.
+        section: Rule config changed in place. Legacy tiers and any thresholds table they leave empty are removed.
+            The top-level threshold and severity may be set.
         default_settings: Registry-default settings for the rule; its threshold names decide whether a warning or error key is a real knob rather than
             a legacy tier, and its severity rubric decides whether the legacy value is converted or only removed.
 
@@ -281,9 +269,7 @@ def _migrate_rule_section(
     if "threshold" in section:
         if "severity" in section:
             return [f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity pair is already present"]
-        # threshold without severity is fatal even in non-strict mode, so fill
-        # the missing half from the legacy tier rather than write a config that
-        # cannot load.
+        # Fill the missing severity from the legacy tier because a threshold alone makes the config unloadable even in lenient mode.
         section["severity"] = tier
         return [f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and added the missing severity={tier}"]
     section["threshold"] = legacy[tier]

@@ -120,9 +120,7 @@ class RuleRegistry:
             A tuple of Python rules, source-text rules and project rules, each keeping the input order; a rule that is neither a project rule nor a
             SourceTextRule is placed in the Python rule list.
         """
-        # Project-rule check must come first: a rule satisfying ProjectRuleProtocol
-        # is dispatched only through analyse_project, mirroring the prior inline
-        # `if isinstance(rule, ProjectRuleProtocol): continue` guard.
+        # A rule that also satisfies ProjectRuleProtocol must run only through analyse_project, avoiding duplicate analysis.
         python_rules: list[Rule] = []
         text_rules: list[SourceTextRule] = []
         project_rules: list[ProjectRuleProtocol] = []
@@ -195,7 +193,6 @@ class RuleRegistry:
         # A broken Python file retains useful source text but has no AST that
         # Python rules can inspect honestly.
         if unit.file.is_python() and not unit.has_parse_errors() and not unit.is_deep_scan_bounded():
-            # Parseable Python units follow the existing per-file AST rule order.
             for rule in python_rules:
                 findings.extend(rule.analyse(unit, context))
         elif unit.file.is_python() and unit.is_deep_scan_bounded():
@@ -232,9 +229,8 @@ class RuleRegistry:
     def _deduplicate(findings: list[Finding]) -> list[Finding]:
         """Drop repeated findings, keeping the first occurrence of each.
 
-        Two findings are duplicates when their rule id, file path, line, end line, column, symbol, message and metadata all match; metadata is
-        compared as JSON with sorted keys, and an absent line, end line, column or symbol compares as an empty value. Fields outside this key are not
-        compared.
+        Identity uses rule id, file path, line, end line, column, symbol, message and metadata as JSON with sorted keys.
+        Missing line, end line and column values, and missing or empty symbols, compare as empty strings; other fields are ignored.
 
         Args:
             findings: Findings collected from the per-file and project rule passes, in collection order.

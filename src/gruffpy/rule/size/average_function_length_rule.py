@@ -42,14 +42,10 @@ class AverageFunctionLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit one finding per class whose mean method length crosses the threshold.
-
-        Catches "god classes" that hide behind small methods *and* one giant
-        one - the average reveals the bulk that per-method limits miss.
-        Requires the class to have at least 3 methods.
+        """Report classes with at least three direct methods whose mean code-line count exceeds the threshold.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Source file to inspect; a missing AST yields no findings, and an existing AST's code-line cache may be populated.
             context: Rule execution context that supplies the threshold.
 
         Returns:
@@ -82,7 +78,7 @@ def _classes_with_long_average(
     Args:
         tree: Parsed module to walk for class definitions at any depth.
         code_lines: The file's code line numbers, from code_line_numbers, used to measure each method.
-        warning_threshold: Average method length a class must exceed to qualify; despite the name, the rule passes the value from
+        warning_threshold: Average method length a class must exceed to qualify. The rule passes the value from
             _active_high_threshold, which may be a warning or an error severity threshold.
 
     Returns:
@@ -118,7 +114,7 @@ def _average_lines(methods: list[MethodNode], code_lines: frozenset[int]) -> flo
 
     Args:
         methods: Methods to measure; must be non-empty, which callers guarantee by requiring at least three methods.
-        code_lines: The file's code line numbers, from code_line_numbers, so blank, comment, docstring and decorator lines are not counted.
+        code_lines: File line numbers from code_line_numbers. A line can still count when it contains both docstring text and other code.
 
     Returns:
         Average code lines per method as a float.
@@ -133,15 +129,12 @@ def _average_function_length_finding(
     methods: list[MethodNode],
     settings: RuleSettings,
 ) -> Finding:
-    """Build the finding for a class whose average method length exceeds the configured threshold.
+    """Build a finding for a class whose average method length exceeds the configured threshold.
 
-    The average is recomputed from the file's code lines and matched against the high-side threshold in settings, which supplies the reported severity
-    and threshold. The message names the class's qualified symbol, the average to one decimal place, the method count, the threshold's severity and
-    the threshold value. The finding spans the class from its class line to its end line, and its metadata records the average rounded to two decimals
-    as averageLines and measuredValue, plus methodCount, threshold, thresholdDirection set to above, and thresholdType set to the severity.
+    The message shows the average to one decimal place; metadata records it rounded to two decimals.
 
     Args:
-        unit: Analysed file that supplies the source, tree and display path for the finding.
+        unit: Source file supplying the finding's path and line counts; its AST's code-line cache may be populated.
         definition: This rule's definition, supplying the rule id, pillar, tier, confidence and secondary pillars.
         node: Class that crossed the threshold; its lines and qualified name locate the finding.
         methods: The class's direct methods, used for the average and the reported method count.

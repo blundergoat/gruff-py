@@ -19,15 +19,12 @@ class SarifReporter:
     """Render an analysis report as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers."""
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers.
+        """Render a SARIF 2.1.0 log for code-scanning and IDE consumers.
 
-        Builds the ``runs[0].tool.driver.rules`` section from the full
-        registry so SARIF consumers see metadata for every rule that
-        *could* fire, not just the ones with findings. Findings without a
-        matching registry entry get a fallback rule descriptor.
+        Include metadata for every default-registry rule and fallback descriptors for unregistered rules found in normal or suppressed findings.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Report whose findings, suppressed findings, diagnostics and run properties populate the SARIF log.
 
         Returns:
             Pretty-printed SARIF JSON, trailing newline included.
@@ -76,18 +73,17 @@ class SarifReporter:
 
 
 def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
-    """Convert one run diagnostic into a SARIF tool execution notification so code-scanning consumers see problems with the run itself.
+    """Convert a run diagnostic into a SARIF tool execution notification.
 
-    The level is note only when invalidates_run is exactly False. True and the unset None legacy fatal default both become error, which matches the
-    test render uses for executionSuccessful. The location uses the diagnostic's file path in preference to its input path, and the line becomes a
-    region startLine only when one of those paths is present.
+    Use note only for invalidates_run=False, otherwise error, matching render's executionSuccessful check.
+    Prefer nonempty file_path over path; add startLine only when a path is selected and a line is known.
 
     Args:
         diagnostic: Run problem to report; its type becomes the descriptor id and its message the notification text.
 
     Returns:
-        Notification mapping with descriptor, level and message, plus a single-entry locations list only when the diagnostic names a file or input
-        path; a run-wide diagnostic carries no locations key.
+        Notification mapping with descriptor, level and message. A selected path adds one location, even when the input path is an empty string.
+        When the selected path is None, the locations key is omitted.
     """
     notification: dict[str, Any] = {
         "descriptor": {"id": diagnostic.type},
@@ -104,11 +100,9 @@ def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
 
 
 def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
-    """Build the SARIF rule descriptor for a rule in the default registry from its definition and catalogue documentation.
+    """Build a default-registry SARIF rule descriptor from its definition and catalogue documentation.
 
-    The short description is the definition's description, or its name when the description is empty. The full description is the documented
-    rationale, and the help text is the rationale followed by a blank line and the fix guidance. Secondary pillars, threshold keys and default options
-    are added to properties only when the definition has them.
+    Descriptions and help use the rule description, catalogue rationale and fix guidance; optional settings appear only when present.
 
     Args:
         definition: Registered rule definition whose id also selects the catalogue documentation.
@@ -139,12 +133,10 @@ def _rule_metadata(definition: RuleDefinition) -> dict[str, Any]:
 
 
 def _fallback_rule_metadata(finding: Finding) -> dict[str, Any]:
-    """Build a stand-in rule descriptor from a finding whose rule id has no default-registry entry.
+    """Build a stand-in rule descriptor from a finding for use when the default registry has no descriptor for its rule ID.
 
-    It gives the finding's result a rule to index. The name and short description repeat the rule id, the full description and help repeat the
-    finding's message, and the default severity is the finding's own severity. The descriptor always reports defaultEnabled as True and carries no
-    documentation, thresholds or options. When several findings share an unregistered rule id, render keeps the descriptor built from the first one,
-    reported findings before suppressed ones.
+    The name and short description use the rule ID; full description and help use the message. Documentation, thresholds and options are omitted.
+    For each unknown rule ID, render retains the first descriptor, considering reported findings before suppressed findings.
 
     Args:
         finding: Finding whose rule id, message and classification stand in for the missing rule definition.
@@ -219,19 +211,17 @@ def _result(finding: Finding, rule_index: int) -> dict[str, Any]:
 
 
 def _partial_fingerprints(finding: Finding) -> dict[str, str] | None:
-    """Return the fingerprints GitHub code scanning groups alerts by, or ``None`` when the result must carry none.
+    """Return the durable identity used to group SARIF alerts, or None when the finding cannot be named.
 
-    ``gruffFingerprint`` is the ratified durable identity and nothing else, so an alert survives a line move while a
-    second declaration of one name opens its own alert.
+    Stored identities preserve the pipeline's declaration ranking across line moves; the fallback ranks only the supplied finding.
 
     Args:
         finding: Finding being rendered as a SARIF result.
 
     Returns:
-        The ``partialFingerprints`` object, or ``None`` for a sensitive finding, which has no durable name at all.
+        A partialFingerprints mapping; without a stored identity, None for sensitive findings or symbols containing the reserved ordinal separator.
     """
-    # The pipeline names every finding before the baseline filters any; a direct API caller's finding is named here,
-    # ranked by its own line, so an ordinary result is never published without a fingerprint.
+    # Reuse the pipeline identity after filtering so declaration ranks do not change with the remaining result set.
     if finding.baseline_identity is not None:
         return {"gruffFingerprint": finding.baseline_identity}
     named = finding_identities([finding])[0]

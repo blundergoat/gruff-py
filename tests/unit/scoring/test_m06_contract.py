@@ -33,7 +33,7 @@ def _finding(
     symbol: str | None = None,
     line: int | None = 1,
 ) -> Finding:
-    """Build one finding with an explicit weight so a test can state what it expects.
+    """Build a finding whose severity and confidence determine its base scoring weight.
 
     Args:
         rule_id: Native rule identifier, the ratified attribution key.
@@ -41,8 +41,8 @@ def _finding(
         severity: Severity driving the ratified weight.
         confidence: Confidence multiplying that weight.
         file_path: Project-relative path.
-        symbol: Qualified symbol, or None for a file-level finding.
-        line: Reported line, which the cluster key deliberately ignores.
+        symbol: Qualified symbol, or None for a file-level finding that cannot join a scoring cluster.
+        line: Reported line, or None for no line location; the cluster key ignores it.
 
     Returns:
         One finding ready to score.
@@ -63,9 +63,10 @@ def _finding(
 def test_scale_is_not_an_automatic_penalty() -> None:
     """Duplicating a project must not move its grade.
 
-    This is the property the ratified shape exists to deliver: duplication doubles the findings and
-    the evaluated files together, so the density they make is unchanged. The retired absolute-sum
-    shape failed it - a 4x duplication of identical code cost gruff-py fifteen composite points.
+    Findings and evaluated-file counts grow together, keeping the scoring density unchanged.
+
+    Returns:
+        None. Compares the composite grades for the original, doubled, and quadrupled inputs.
     """
     single = [_finding("naming.one", Pillar.NAMING, Severity.WARNING, file_path="src/a.py")]
     doubled = single + [_finding("naming.one", Pillar.NAMING, Severity.WARNING, file_path="src/b.py")]
@@ -101,7 +102,7 @@ def _pillar_score(report: ScoreReport, pillar: str) -> float:
     """Read one published pillar score, failing the test rather than returning None.
 
     Args:
-        report: A scored report.
+        report: Report whose pillar rows supply the requested score.
         pillar: Pillar name to read.
 
     Returns:
@@ -113,14 +114,22 @@ def _pillar_score(report: ScoreReport, pillar: str) -> float:
 
 
 def test_adding_a_finding_worsens_its_own_pillar() -> None:
-    """Adding a finding without adding a file can only worsen the pillar it lands in."""
+    """Check that the added finding lowers the security score.
+
+    Returns:
+        None. Compares the security scores before and after adding the finding.
+    """
     before, after = _monotonicity_pair()
 
     assert _pillar_score(after, "security") < _pillar_score(before, "security")
 
 
 def test_adding_a_finding_leaves_unrelated_pillars_alone() -> None:
-    """A pillar that gained no finding must not move, or the composite couples unrelated areas."""
+    """Check that the added finding lowers the composite score while the documentation score stays fixed.
+
+    Returns:
+        None. Compares the composite and documentation scores before and after adding the finding.
+    """
     before, after = _monotonicity_pair()
 
     assert after.composite is not None and before.composite is not None
@@ -129,7 +138,11 @@ def test_adding_a_finding_leaves_unrelated_pillars_alone() -> None:
 
 
 def test_a_reachable_clean_pillar_scores_one_hundred() -> None:
-    """Every pillar an applicable rule can reach reports a perfect score when it finds nothing."""
+    """Check that a run with evaluated files and no findings marks each reported pillar applicable and scores it at 100.
+
+    Returns:
+        None. Checks each reported pillar's applicability and score.
+    """
     clean = ScoreCalculator().calculate([], EVALUATED_FILES)
     scored = {row.pillar: (row.applicable, None if row.grade is None else row.grade.score) for row in clean.pillars}
 
@@ -137,7 +150,11 @@ def test_a_reachable_clean_pillar_scores_one_hundred() -> None:
 
 
 def test_a_run_that_evaluated_nothing_scores_nothing() -> None:
-    """Nothing evaluated is null throughout, never a perfect score on an empty directory."""
+    """Check that a run with no evaluated files omits the composite and pillar grades and still reports a zero file count.
+
+    Returns:
+        None. Checks for absent grades and a published file count of zero.
+    """
     nothing = ScoreCalculator().calculate([], 0)
 
     assert nothing.composite is None
@@ -147,11 +164,12 @@ def test_a_run_that_evaluated_nothing_scores_nothing() -> None:
 
 
 def test_serialization_rounds_to_two_decimals_away_from_zero() -> None:
-    """Ties round away from zero, matching the four sibling ports.
+    """Positive score ties round up to two decimal places.
 
-    Python's built-in ``round`` breaks ties to even, so 53.125 would become 53.12 here while Go, PHP,
-    Rust, and JavaScript all produce 53.13 - a cross-port disagreement on the last cent that has
-    nothing to do with the formula.
+    Python's built-in round uses ties to even, which would round 53.125 to 53.12 instead of the required 53.13.
+
+    Returns:
+        None. Checks positive ties, a non-tie, and an exact score.
     """
     assert Grade.from_score(53.125).score == 53.13
     assert Grade.from_score(50.005).score == 50.01
@@ -162,9 +180,10 @@ def test_serialization_rounds_to_two_decimals_away_from_zero() -> None:
 def test_clustering_keys_on_symbol_without_line_identity() -> None:
     """Correlated findings on one symbol bill once, whatever lines they report.
 
-    Correlated rules disagree about which line to report - ``size.function-length`` names the
-    decorator while the complexity rules name the ``def`` - so a line in the cluster key would split
-    one root cause into two and bill it twice.
+    Function length and complexity findings can report different lines, so including the line in the cluster key would split one group.
+
+    Returns:
+        None. Checks the split pillar penalties and the exact published cluster row.
     """
     report = ScoreCalculator().calculate(
         [
@@ -191,7 +210,11 @@ def test_clustering_keys_on_symbol_without_line_identity() -> None:
 
 
 def test_two_symbols_in_one_file_do_not_cluster() -> None:
-    """Correlated rules on different symbols are different root causes and bill separately."""
+    """Correlated rules on different symbols do not form a reported cluster.
+
+    Returns:
+        None. Asserts that the report contains no cluster rows.
+    """
     distinct = ScoreCalculator().calculate(
         [
             _finding("size.function-length", Pillar.SIZE, Severity.WARNING, symbol="run", line=1),
@@ -204,7 +227,11 @@ def test_two_symbols_in_one_file_do_not_cluster() -> None:
 
 
 def test_rule_attribution_is_keyed_by_native_rule_id() -> None:
-    """Every rule that produced a finding owes exactly one row, sorted by its native identifier."""
+    """Every rule that produced a finding owes exactly one row, sorted by its native identifier.
+
+    Returns:
+        None. Checks attribution order, finding counts, and weights.
+    """
     report = ScoreCalculator().calculate(
         [
             _finding("naming.b-rule", Pillar.NAMING, Severity.ADVISORY),
@@ -223,10 +250,10 @@ def test_rule_attribution_is_keyed_by_native_rule_id() -> None:
 
 
 def test_text_and_machine_views_agree_on_the_composite() -> None:
-    """The composite a person reads and the one a script reads come from one calculation.
+    """Verify that the machine-readable report preserves the calculated composite and scoring context.
 
-    A renderer that formats the score itself, rather than printing what the scorer produced, can
-    drift from the machine view without any other test noticing.
+    Returns:
+        None. Checks the serialized score, grade, evaluated file count, and scored pillars.
     """
     report = ScoreCalculator().calculate(
         [_finding("complexity.cyclomatic", Pillar.COMPLEXITY, Severity.WARNING)],
@@ -241,7 +268,11 @@ def test_text_and_machine_views_agree_on_the_composite() -> None:
 
 
 def test_canonical_block_leads_the_text_view() -> None:
-    """FAMILY-CONTRACT section 1 puts the masthead and the composite block first, extensions below."""
+    """Check the FAMILY-CONTRACT section 1 header order and that the Composite line is not repeated.
+
+    Returns:
+        None. Checks the opening lines and scans the rest of the report for a second Composite line.
+    """
     from tests.unit.reporting.test_reporters import _report
 
     lines = TextReporter().render(_report()).splitlines()

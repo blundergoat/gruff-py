@@ -23,11 +23,11 @@ def _mi(source: str) -> float:
 
 
 def _branched_body(branch_count: int, with_elif: bool = False) -> str:
-    """Return the source of a function ``f`` with ``branch_count`` if/else branches, or if/elif branches when with_elif is set.
+    """Generate source for a function f with repeated conditional blocks for maintainability index tests.
 
     Args:
-        branch_count: Number of branches to generate.
-        with_elif: Whether each branch pairs ``if`` with ``elif`` and longer arithmetic instead of ``else``; defaults to False.
+        branch_count: Number of if statements to generate, each paired with an else or elif.
+        with_elif: Use an elif and longer arithmetic in both arms when true. The default uses else and simpler arithmetic.
 
     Returns:
         The function source, which ends by returning x.
@@ -47,8 +47,11 @@ def _branched_body(branch_count: int, with_elif: bool = False) -> str:
 
 
 def test_trivial_function_has_max_mi():
-    """Give a function that only returns ``x + 1`` the maximum index of 100."""
-    # Simple short function: low HV, CC=1, low LOC -> MI close to 100 (clamped).
+    """Give a function that only returns ``x + 1`` the maximum index of 100.
+
+    Returns:
+        None. Checks that the short function's reported index is 100.
+    """
     src = "def f(x):\n    return x + 1\n"
     mi = _mi(src)
     assert mi == 100.0  # clamped at upper bound
@@ -58,33 +61,34 @@ _MI_CLAMP_MAX = 100.0
 
 
 def test_mi_formula_matches_canonical_values():
-    """Trace a known case to verify the formula.
+    """Verify the upper clamp with a fixture whose hand-calculated maintainability index exceeds the maximum.
 
-    For `f(x): return x + 1`:
-    - HV = 4.7548..., ln(HV) ~= 1.559
-    - CC = 1
-    - LOC = 2 code lines (the def line and the return line)
-    - MI = 171 - 5.2*1.559 - 0.23*1 - 16.2*ln(2)
-         = 171 - 8.107 - 0.23 - 16.2*0.693
-         = 171 - 8.107 - 0.23 - 11.226
-         = 151.4  -> clamped to 100
+    Returns:
+        None. Checks that the raw score exceeds the ceiling and the reported score equals it.
     """
     src = "def f(x):\n    return x + 1\n"
     raw = 171 - 5.2 * math.log(4.7548875) - 0.23 * 1 - 16.2 * math.log(2)
-    assert raw > _MI_CLAMP_MAX  # would clamp
+    assert raw > _MI_CLAMP_MAX  # A raw score equal to the ceiling would satisfy the output assertion even without clamping.
     assert _mi(src) == _MI_CLAMP_MAX
 
 
 def test_complex_function_lowers_mi():
-    """Score a function with 40 if/else branches below 80."""
-    # Bigger function should have lower (worse) MI.
+    """Score a function with 40 if/else branches below 80.
+
+    Returns:
+        None. Checks the generated function's maintainability index against the cutoff of 80.
+    """
     src = _branched_body(40)
     mi = _mi(src)
-    assert mi < 80.0  # below default warning
+    assert mi < 80.0  # This test's cutoff is higher than the calibration error threshold of 70.
 
 
 def test_documenting_a_function_leaves_its_index_unchanged():
-    """Keep a ten-branch function's index, below 100, unchanged after a long docstring and ten comment lines are added."""
+    """Keep a ten-branch function's index, below 100, unchanged after a long docstring and ten comment lines are added.
+
+    Returns:
+        None after the assertions pass.
+    """
     plain = _branched_body(10)
     notes = "\n".join(f"    Branch {i} is explained here." for i in range(30))
     comments = "".join(f"    # Step {i}.\n" for i in range(10))

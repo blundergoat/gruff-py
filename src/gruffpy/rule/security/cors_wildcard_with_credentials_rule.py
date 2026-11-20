@@ -51,12 +51,9 @@ class CorsWildcardWithCredentialsRule(Rule):
     ID = "security.cors-wildcard-with-credentials"
 
     def definition(self) -> RuleDefinition:
-        """Describe the CORS-wildcard-with-credentials rule as a high-confidence ERROR.
+        """Describe the wildcard CORS rule as a high-confidence security ERROR.
 
-        ERROR severity because the combination is rejected by browsers (so
-        the developer's intent doesn't work) and indicates a misconfigured
-        CORS policy; high confidence because the kwarg combination is
-        explicit and unambiguous.
+        The matcher assumes a wildcard whenever there is no explicit origins keyword.
 
         Returns:
             Definition for the CORS-wildcard-with-credentials rule under
@@ -72,19 +69,16 @@ class CorsWildcardWithCredentialsRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``CORS(..., supports_credentials=True, origins='*')`` shapes.
+        """Flag CORS calls with explicit supports_credentials=True and a wildcard origins value or no explicit origins keyword.
 
-        Matches calls whose target leaf is ``CORS`` and which combine a
-        truthy ``supports_credentials`` literal with either an explicit
-        wildcard ``origins`` value or a missing ``origins`` kwarg
-        (Flask-CORS defaults to wildcard).
+        Call names are matched by spelling without resolving imports.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsafe CORS configuration call.
+            One finding per matched call; empty when no syntax tree is available or no call passes the checks.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -155,7 +149,7 @@ def _build_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
-    """Build the finding for a matched wildcard CORS configuration.
+    """Build the finding for a CORS call that combines a wildcard origin with explicit credential support.
 
     Args:
         definition: Rule identity, severity, and classification to copy into the finding.

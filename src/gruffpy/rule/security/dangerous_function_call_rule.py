@@ -31,11 +31,9 @@ class DangerousFunctionCallRule(Rule):
     ID = "security.dangerous-function-call"
 
     def definition(self) -> RuleDefinition:
-        """Describe the dangerous-function-call rule as a high-confidence ERROR.
+        """Describe the opt-in dangerous-call rule as a high-confidence ERROR for code-execution risk.
 
-        ERROR severity reflects the risk when the matched input is unsafe.
-        High confidence describes the exact built-in target match; the rule
-        does not establish input provenance.
+        Confidence covers target spelling, not resolved built-in identity or input provenance.
 
         Returns:
             Definition for the dangerous-function-call rule under the
@@ -52,18 +50,16 @@ class DangerousFunctionCallRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag every ``eval``/``exec``/``compile`` call, plus dynamic ``__import__``.
+        """Flag bare eval, exec and compile calls, plus bare __import__ calls with a first positional argument other than a string literal.
 
-        Literal ``__import__("os")`` is treated as a normal import and
-        skipped; ``__import__(name_var)`` is flagged. The other targets fire
-        unconditionally because they always represent code-execution surface.
+        Imports with no positional argument are skipped. The rule uses only callee spelling and argument syntax.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per matching call site.
+            One finding per matching call site; empty when syntax is unavailable or no call matches.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -99,7 +95,7 @@ def _dangerous_call_kind(node: ast.Call) -> str | None:
         node: Call to check for a listed target or a dynamic import argument.
 
     Returns:
-        Matched target name, or None for other calls or imports without a nonliteral first positional argument.
+        Matched target name, or None for other calls and imports with a missing or string-literal first positional argument.
     """
     target = call_target_name(node)
     if target in _UNCONDITIONAL_DANGEROUS:

@@ -19,10 +19,11 @@ class PythonFileParser:
 
         Args:
             source_file: Source file descriptor to read and parse.
-            budget: Effective line/byte bound for Python AST construction.
+            budget: AST construction limits; None uses the default DeepScanBudget.
 
         Returns:
-            Analysis unit with source text, optional AST, and parse diagnostics.
+            An analysis unit with decoded source and a parent-linked AST, or no AST for non-Python files, budget skips or handled errors.
+            Read errors also leave source empty; read and parse errors add fatal diagnostics, while budget skips add a nonfatal diagnostic.
         """
         try:
             with open(source_file.absolute_path, "rb") as f:
@@ -90,7 +91,10 @@ def _attach_parents(tree: ast.AST) -> None:
 
     Args:
         tree: Parsed tree or subtree whose descendants receive parent references; this pass does not assign the root a parent.
+
+    Returns:
+        None; descendants of tree receive parent attributes in place.
     """
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
-            child.parent = node  # type: ignore[attr-defined]  # AST parent links
+            child.parent = node  # type: ignore[attr-defined]  # ast.AST has no declared parent attribute; checks use these links.

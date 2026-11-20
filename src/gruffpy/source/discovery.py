@@ -100,10 +100,10 @@ class IgnoredPath:
     pattern: str | None = None
 
     def to_dict(self) -> dict[str, str | None]:
-        """Return the JSON-serialisable mapping used by ``ignoredPathDetails``.
+        """Return the JSON-serialisable mapping used by ignoredPathDetails.
 
         Returns:
-            Mapping with ``path``, ``source``, and ``pattern`` keys.
+            Mapping with path, source and pattern keys; pattern is None when no matched pattern is available.
         """
         return {"path": self.path, "source": self.source, "pattern": self.pattern}
 
@@ -163,12 +163,14 @@ class SourceDiscovery:
         """Discover analyzable source files from requested paths.
 
         Args:
-            paths: Requested file or directory paths relative to the project root.
-            include_ignored: Whether default and gitignored paths should be included.
-            configured_ignore_patterns: Additional project-config ignore patterns.
+            paths: Requested files or directories, absolute or relative to the project root. An empty list or empty path requests the project root.
+            include_ignored: True to bypass gitignore and the third-party, minified and fallback exclusions.
+                Explicitly requested files bypass those exclusions in either mode. Configured globs and VCS directory exclusions still apply.
+            configured_ignore_patterns: Project-config globs that exclude matching paths even when include_ignored is true.
 
         Returns:
-            Discovered source files plus missing and ignored path summaries.
+            Discovered source files, missing requests, and reported ignored paths with their reasons. Unsupported types can leave the file list
+            empty without a diagnostic.
         """
         patterns = list(configured_ignore_patterns)
         requested = paths or ["."]
@@ -209,17 +211,16 @@ class SourceDiscovery:
     ) -> IgnoredPath | None:
         """Return why gruff would ignore ``raw_path``, or ``None`` if it would not.
 
-        Shares ``discover``'s ignore decision so ``check-ignore`` and ``analyse``
-        cannot diverge. Existing file operands receive explicit-file semantics;
-        hypothetical paths retain path-policy classification.
+        Uses the same ignore rules as discover. For an existing file operand, only configured patterns and VCS directories can exclude it.
+        Hypothetical paths retain normal path-policy classification.
 
         Args:
-            raw_path: File or directory path relative to the project root.
-            include_ignored: Whether default and gitignored paths are in scope.
-            configured_ignore_patterns: Project-config ``paths.ignore`` globs.
+            raw_path: Absolute or project-relative file or directory path. An empty string selects the project root.
+            include_ignored: When true, only configured patterns and VCS directories can exclude the path.
+            configured_ignore_patterns: The paths.ignore globs, checked before other exclusion sources.
 
         Returns:
-            The matching ``IgnoredPath`` (path, source, pattern), or ``None``.
+            The ignored path and its exclusion source and pattern, or None if no exclusion applies. A gitignore match has no reported pattern.
         """
         patterns = list(configured_ignore_patterns)
         absolute = self._absolute_path(raw_path)
@@ -243,11 +244,10 @@ class SourceDiscovery:
         patterns: list[str],
         ignored: list[IgnoredPath],
     ) -> tuple[Iterable[Path], str | None]:
-        """Resolve one requested input path into the files it contributes, recording it as ignored or reporting it as missing.
+        """Resolve a requested path into candidate files and diagnostics, extending the shared gitignore cache as matching reaches new directories.
 
-        An existing file operand gets explicit-file semantics, so a file named directly is skipped only by a configured pattern or a VCS directory,
-        never by gitignore, third-party, minified or fallback rules. A directory is returned as a lazy walk, so its skipped entries reach ignored only
-        as the caller consumes the walk.
+        Existing file operands bypass gitignore, third-party, minified and fallback rules; configured patterns and VCS directories still apply.
+        Directory walks record skipped entries only as the caller consumes them.
 
         Args:
             raw_path: The path as the user supplied it, relative to the project root or absolute; an empty string means the project root. It is
@@ -291,15 +291,13 @@ class SourceDiscovery:
         patterns: list[str],
         ignored_paths: list[IgnoredPath],
     ) -> Iterator[Path]:
-        """Walk a directory tree and yield every analysable source file beneath it that the ignore rules do not skip.
+        """Walk a directory tree, yielding supported non-ignored files and caching gitignore specs and misses as needed.
 
-        Symlinked directories found during the walk are never followed, although the directory passed in is walked even when it is itself a symlink.
-        An ignored directory is pruned whole, so nothing beneath it is visited or recorded. The directory passed in is not itself checked against the
-        ignore rules; the caller has already done that. A directory that cannot be listed, including the directory passed in, is treated as empty: its
-        files are left out silently and nothing is recorded for it in ignored_paths.
+        Ignored directories are pruned, so descendant files and ignored-path records are absent.
+        Symlinked child directories are skipped without a record; unreadable directories contribute no files or ignore records.
 
         Args:
-            directory: Existing directory to walk.
+            directory: Existing directory already checked against ignore rules; it is walked even when it is a symlink.
             include_ignored: Whether gitignored, third-party, minified and fallback-ignored entries are walked as well; configured patterns and VCS
                 directories are always skipped.
             patterns: Configured paths.ignore globs checked against each entry.
@@ -346,17 +344,17 @@ class SourceDiscovery:
         is_dir: bool,
         ignored_paths: list[IgnoredPath],
     ) -> bool:
-        """Decide whether the walk skips one directory entry, recording the reason when the skip is reportable.
+        """Decide whether a walk skips an entry, extending the shared gitignore cache as needed and recording reportable skips.
 
         Args:
             path: Entry being considered during the walk.
-            include_ignored: Whether gitignored, third-party, minified and fallback-ignored entries are kept.
+            include_ignored: Whether to bypass gitignore, third-party, minified and fallback exclusions. Configured and VCS exclusions still apply.
             patterns: Configured paths.ignore globs checked against the entry.
             is_dir: Whether the entry is a directory, as already determined by the walk; a skipped directory is always recorded.
             ignored_paths: Accumulator that receives an IgnoredPath when the entry is skipped and its decision carries a display path and reason.
 
         Returns:
-            True when the entry is ignored and the walk must skip it, False when the walk keeps it.
+            True when an ignore rule excludes the entry. False when the walk can consider it for traversal or source discovery.
         """
         decision = self._ignore_decision(
             path,
@@ -379,20 +377,25 @@ class SourceDiscovery:
         Args:
             decision: Ignore decision for a skipped path; it is recorded only when it carries both a display path and a reason.
             ignored_paths: List mutated in place by appending the IgnoredPath built from the decision.
+
+        Returns:
+            None. Appends an ignored-path entry when the decision supplies both a display path and a reason.
         """
         if decision.display_path is None or decision.reason is None:
             return
         ignored_paths.append(IgnoredPath(decision.display_path, decision.reason.source, decision.reason.pattern))
 
     def _add_file(self, path: Path, target: dict[str, SourceFile]) -> None:
-        """Register a discovered file under its resolved path so the same file reached twice is analysed once.
+        """Register a supported file under its canonical path so repeated discoveries share one entry.
 
-        A file with no supported source type is dropped silently, so an explicitly named file with an unsupported extension yields no source file and
-        no missing or ignored diagnostic.
+        Unsupported files reaching this helper are dropped without adding a source entry or a diagnostic.
 
         Args:
-            path: File to register; it is resolved before its source type and display path are computed.
-            target: Mapping from resolved absolute path to SourceFile, updated in place; an existing entry for the same resolved path is replaced.
+            path: File to register; resolution is attempted first, with the original path used if resolution raises OSError.
+            target: Mapping from canonical path to SourceFile, updated in place; an existing entry for the same path is replaced.
+
+        Returns:
+            None. Inserts or replaces the canonical-path entry for a supported file.
         """
         canonical = self._canonical(path)
         source_type = self._source_type(canonical)
@@ -405,10 +408,10 @@ class SourceDiscovery:
         )
 
     def _absolute_path(self, raw: str) -> Path:
-        """Anchor a user-supplied path at the project root without resolving symlinks or relative segments.
+        """Anchor a user-supplied path at the project root without resolving symlinks or collapsing .. segments.
 
         Args:
-            raw: Path as supplied by the user; an empty string means the project root, and an absolute path is returned unchanged.
+            raw: Path as supplied by the user. An empty string selects the project root. An absolute input keeps its own anchor.
 
         Returns:
             An absolute path for raw that is not resolved, so any .. segments and symlinks remain.
@@ -436,14 +439,14 @@ class SourceDiscovery:
             return path
 
     def _display_path(self, path: Path) -> str:
-        """Render a path as the project-relative, forward-slash string used for source files and ignored-path reports.
+        """Render a display path for source-file and ignored-path reports, relative to the project root when possible.
 
         Args:
-            path: File or directory to render; it is resolved first, so a symlink is shown by its target.
+            path: File or directory to render; resolution is attempted first, so a symlink is shown by its target when resolution succeeds.
 
         Returns:
-            The resolved path relative to the project root with forward slashes, . for the root itself, or the resolved absolute path when it lies
-            outside the project root.
+            The canonical path relative to the root with forward slashes, . for the root itself, or its string form when outside the root.
+            If resolution raises OSError, the original path is used and may retain symlinks or .. segments.
         """
         canonical = self._canonical(path)
         try:
@@ -461,8 +464,8 @@ class SourceDiscovery:
                 case-insensitively.
 
         Returns:
-            python for a .py file; text for a configuration-style extension, a dotenv-style name, setup.cfg, or a requirements .txt or .in file; None
-            when the file is not analysed.
+            python for a .py file. text for a suffix in TEXT_EXTENSIONS, a dotenv-style name, setup.cfg, or a requirements .txt or .in file.
+            None for names outside those source types.
         """
         suffix = path.suffix.lower()
         if suffix in PYTHON_EXTENSIONS:
@@ -526,17 +529,17 @@ class SourceDiscovery:
         return None
 
     def _third_party_match(self, path: Path, *, is_dir: bool) -> str | None:
-        """Return the outermost third-party or build-output directory on ``path``, lowercased.
+        """Return the outermost third-party or build-output directory on path, lowercased.
 
-        A file's own name is not a directory, so a file called ``dist`` never matches, while ``a/Vendor/x.py`` gives
-        ``vendor``. The outermost directory wins, so ``vendor/x/dist/y.py`` is reported as ``vendor`` in every port.
+        For a file, only its ancestor directories count. For example, vendor/dist matches vendor even when dist is a file.
+        The outermost directory wins, so vendor/x/dist/y.py is reported as vendor.
 
         Args:
-            path: Candidate file or directory.
+            path: Candidate whose displayed components are checked, relative to the project root when possible. The root itself has no match.
             is_dir: Whether the candidate itself is a directory, which makes its own name eligible.
 
         Returns:
-            The matched directory name in lowercase, or ``None`` when no directory on the path is in the class.
+            The matched directory name in lowercase, or None when no directory on the path is in the class.
         """
         display = self._display_path(path).replace("\\", "/")
         if display == ".":
@@ -550,17 +553,17 @@ class SourceDiscovery:
         return None
 
     def _fallback_applies_at(self, path: Path) -> bool:
-        """Decide whether the built-in fallback ignore directories apply to a path, which they do only when no .gitignore governs it.
+        """Decide whether a path is eligible for the built-in fallback directory ignores.
 
-        A .gitignore at the project root or in any directory down to and including the path's parent disables the fallback, leaving the fallback
-        directory names to the .gitignore rules. A directory's own .gitignore is not consulted for the directory itself.
+        A .gitignore file along the checked parent chain disables the fallback regardless of its contents.
+        A directory's own .gitignore does not affect fallback eligibility for that directory.
 
         Args:
             path: Candidate file or directory whose ancestor directories are searched for a .gitignore.
 
         Returns:
-            True when no .gitignore exists from the project root down to the path's parent, or when the parent lies outside the project root; False
-            otherwise.
+            True when the canonical parent is outside the project root or no .gitignore file exists from the root through that parent.
+            False when a .gitignore file exists along that chain.
         """
         parent = self._canonical(path.parent)
         try:
@@ -581,8 +584,7 @@ class SourceDiscovery:
         """Find the first configured paths.ignore glob that matches a path.
 
         Args:
-            path: Candidate file or directory, compared through its resolved display path, which is absolute when the path lies outside the project
-                root.
+            path: Candidate file or directory, compared through its display path; if resolution raises OSError, the original path is used.
             patterns: Configured paths.ignore globs in configuration order; an empty list matches nothing.
 
         Returns:
@@ -606,15 +608,10 @@ class SourceDiscovery:
         record_file: bool,
         explicit_file: bool = False,
     ) -> _IgnoreDecision:
-        """Decide whether discovery skips a path, and why, by checking each exclusion source in a fixed order.
+        """Choose a path's exclusion using configured, VCS, gitignore, third-party, minified and fallback checks in that order.
 
-        The order is configured patterns, VCS directories, gitignore, third-party directories, minified files, then fallback directories. Configured
-        patterns and VCS directories always apply. When include_ignored or explicit_file is set, evaluation stops there, so the gitignore,
-        third-party, minified and fallback checks never exclude an existing file the user named directly, nor any path when ignored paths were
-        requested.
-
-        The decision's display path is None when the skip stays out of the report: a walked file skipped by a VCS, gitignore, third-party or fallback
-        rule, or a walked minified file with no analysable source type.
+        Configured and VCS exclusions always apply; include_ignored and explicit_file bypass later checks.
+        Gitignore checks cache ancestor files and misses; walked-file reporting depends on the exclusion source and record_file.
 
         Args:
             path: Candidate file or directory.
@@ -663,7 +660,7 @@ class SourceDiscovery:
         return _IgnoreDecision(False)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
-        """Ask the project's gitignore matcher whether a path is ignored.
+        """Check the project's gitignore rules, caching ancestor specs and missing files as matching reaches new directories.
 
         Args:
             path: Candidate file or directory.
@@ -683,16 +680,14 @@ class SourceDiscovery:
 
 
 def _is_pattern_match(display_path: str, pattern: str) -> bool:
-    """Test a project-relative display path against one configured paths.ignore glob.
+    """Test a display path against one configured paths.ignore glob.
 
-    A pattern matches when, compared literally, it equals the path or names one of its ancestor directories, or when the whole path matches it as a
-    glob in which ** crosses directories, * and ? stay within one segment, and every other character is literal. Leading and trailing slashes are
-    ignored and backslashes in the pattern become forward slashes. Because ** followed by a slash still needs that slash, such a pattern does not
-    match a name at the project root.
+    Literal matches include descendants. Globs use ** across directories and * or ? within a segment.
+    Other characters in the normalized pattern are literal. A glob such as **/name requires a slash and misses a root-level name.
 
     Args:
-        display_path: Project-relative forward-slash path to test.
-        pattern: Configured glob or plain path as written in paths.ignore.
+        display_path: Forward-slash path to test, relative to the project root when possible. Leading and trailing slashes are ignored.
+        pattern: Glob or plain path from paths.ignore; outer slashes are ignored and backslashes become forward slashes.
 
     Returns:
         True when the pattern names the path, one of its ancestor directories, or matches it as a glob, else False.

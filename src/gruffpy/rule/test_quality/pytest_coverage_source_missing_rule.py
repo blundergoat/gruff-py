@@ -26,10 +26,7 @@ class PytestCoverageSourceMissingRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the coverage-source-missing rule as a medium-confidence advisory.
 
-        Medium confidence because some projects intentionally rely on
-        ``--cov=<pkg>`` CLI flags or other tools; the rule encourages
-        declarative configuration but can't prove the user isn't covered by
-        another mechanism.
+        A project can set coverage scope through CLI flags or other tools outside the declarative source list this rule checks.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -44,21 +41,17 @@ class PytestCoverageSourceMissingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit a pyproject-anchored finding when ``[tool.coverage.run].source`` is empty or absent.
+        """Emit a pyproject-anchored finding when [tool.coverage.run].source is empty or absent.
 
-        Per-unit: each test-bearing unit contributes one finding (downstream
-        dedup collapses the duplicates that share a fingerprint). Skipped
-        when the unit has no test functions or when no pytest config block
-        exists in ``pyproject.toml``.
+        Units without pytest configuration are skipped. The rule registry keeps the first of the identical findings from qualifying test files.
 
         Args:
-            unit: Parsed source file used to detect test presence.
-            context: Rule execution context supplying the ``project_root``
-                used to locate pyproject.toml.
+            unit: Parsed source file used to detect test presence. A missing AST yields no findings.
+            context: Rule execution context supplying the project root for pyproject.toml settings cached on first lookup.
 
         Returns:
-            One pyproject.toml-anchored finding when coverage source is
-            absent (and the unit has tests), otherwise empty.
+            One pyproject.toml-anchored finding for a unit with tests and pytest configuration when coverage source is empty or absent.
+            Otherwise, an empty list.
         """
         if unit.tree is None or not any(True for _ in test_functions(unit)):
             return []

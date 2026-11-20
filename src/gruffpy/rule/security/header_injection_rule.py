@@ -32,9 +32,7 @@ class HeaderInjectionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the header-injection rule as a medium-confidence warning.
 
-        Medium confidence because the ``response.headers[x] = y`` shape
-        could be from a non-web ``headers`` dict; the file-level framework
-        gate trims most of that noise.
+        Medium confidence reflects unresolved receiver types; a framework import gate limits matching to files with framework imports.
 
         Returns:
             Definition for the header-injection rule under the security pillar.
@@ -50,18 +48,16 @@ class HeaderInjectionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``...headers[<non-literal>] = ...`` in files that import Flask/FastAPI/Django.
+        """Flag plain assignments to .headers[...] with non-string-literal keys in modules with top-level Flask, FastAPI, or Django imports.
 
-        The framework gate is intentional - without it the shape produces
-        too many false positives on non-web ``headers`` dicts (HTTP
-        clients, parser libraries, message queues).
+        The framework import gate limits matches on client, parser, or message-queue header dictionaries.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per dynamic-key header assignment in gated files.
+            One finding per qualifying assignment, including constant non-string keys; empty when no tree, framework import, or match exists.
         """
         if unit.tree is None or "headers" not in unit.source:
             return []

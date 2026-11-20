@@ -76,23 +76,15 @@ class ScoreCalculator:
         evaluated_files: int,
         diff_active: bool = False,
     ) -> ScoreReport:
-        """Compute the full ``ScoreReport`` from *findings*.
+        """Grade pillars by penalty density across evaluated files and grade each offending file by its own weighted penalty.
 
-        Each pillar scores on the density of its weighted findings per
-        evaluated file, on the ratified curve from ``SCORE_FLOOR`` to 100, so a
-        larger project is not penalised for its size. The composite grade is the
-        arithmetic mean of applicable pillar scores; top offenders are the 10
-        files with the worst grade (ties broken by finding count then path).
-
-        A run that evaluated nothing has no health to report: every pillar score,
-        the composite, and both grades are ``None`` rather than a perfect 100.
+        The composite averages applicable pillars; at most ten offending files are ranked by grade, finding count and path.
+        With no evaluated files, all grades are None.
 
         Args:
-            findings: Findings produced by the rule pass.
-            evaluated_files: Ratified scoring denominator - Python files that
-                survived discovery and parsed. Zero means nothing was evaluated.
-            diff_active: When true, serialized score mode is ``"diff"`` instead
-                of ``"full-project"``; it does not describe discovery coverage.
+            findings: Run findings to score. With none and at least one evaluated file, applicable pillars and the composite earn a perfect grade.
+            evaluated_files: Number of discovered Python files that parsed; zero or less leaves all grades None.
+            diff_active: Selects diff instead of full-project as the serialized score mode; it does not describe discovery coverage.
 
         Returns:
             Score report ready for serialisation and rendering.
@@ -174,8 +166,8 @@ class ScoreCalculator:
     ) -> list[FileScore]:
         """Grade each file that carries findings on its own weight and return the ten worst as the top offenders.
 
-        Each file is graded as a one-file project from its own weighted findings, so file and project grades share one curve. Results sort by worst
-        grade, then by more findings, then by path. Files with no findings never appear.
+        Each file is graded by applying the pillar curve to its total finding weight with a denominator of one.
+        Results sort by lowest score, then by higher finding count, then by path. Files with no findings never appear.
 
         Args:
             findings: Scored findings for the run, grouped here by file path.
@@ -185,8 +177,8 @@ class ScoreCalculator:
                 by finding count and path alone.
 
         Returns:
-            At most ten FileScore entries, worst first, each with severity counts, summed penalty, highest cyclomatic and cognitive complexity, and
-            longest reported line count; each of those three metrics is None when the file has no finding carrying it.
+            At most ten FileScore entries, worst first, each with severity counts and summed penalty. Cyclomatic and cognitive maxima use their
+            respective rules. The line maximum uses file, function and class length rules. Each maximum is None without qualifying integer metadata.
         """
         by_file: dict[str, list[Finding]] = {}
         for finding in findings:
@@ -195,8 +187,7 @@ class ScoreCalculator:
         scores: list[FileScore] = []
         for file_path, file_findings in by_file.items():
             counts = self._severity_counts(file_findings)
-            # A file's density is its own weighted findings, so file and project scores share one
-            # curve and a top-offender list cannot rank code by a rule the project grade never used.
+            # Reuse the run's cluster adjustments so a finding contributes the same penalty to its file and pillar totals.
             weight = self._finding_penalty(file_findings, finding_penalties)
             max_cyclomatic = self._max_metadata_int(file_findings, "complexity.cyclomatic", "complexity")
             max_cognitive = self._max_metadata_int(file_findings, "complexity.cognitive", "complexity")
@@ -215,7 +206,7 @@ class ScoreCalculator:
                 )
             )
 
-        # An ungraded file sorts as if perfect, so a run that evaluated nothing ranks by findings alone.
+        # When no file has a grade, higher finding counts rank first and path breaks ties.
         scores.sort(key=lambda s: (100.0 if s.grade is None else s.grade.score, -s.findings, s.file_path))
         return scores[:10]
 
@@ -254,7 +245,7 @@ class ScoreCalculator:
         findings: list[Finding],
         finding_penalties: dict[int, float],
     ) -> float:
-        """Total the weight a group of findings, such as one pillar's or one file's, removes from its score.
+        """Total the penalty weight used to grade a group of findings, such as one pillar or file.
 
         Args:
             findings: The findings to total.
@@ -327,15 +318,13 @@ class ScoreCalculator:
 
 
 def _correlated_clusters(findings: list[Finding], penalties: dict[int, float]) -> tuple[dict[str, object], ...]:
-    """List every correlated concept that billed one shared weight.
+    """Report shared complexity and size penalties by file and symbol.
 
-    A reader can then see which findings the grade counted once, rather than inferring it from a
-    total that is lower than the sum of its parts. Sorted by file then symbol, so two runs over
-    unchanged input publish the same bytes.
+    Rows report the rule IDs, finding count and rounded shared penalty, ordered by file and symbol.
 
     Args:
-        findings: Scored findings for the run.
-        penalties: Clustered weight per finding, keyed by ``id()``.
+        findings: Run findings. Only findings from correlated complexity rules with a symbol can form a cluster for the same file and symbol.
+        penalties: Clustered weight per finding, keyed by id(); a missing entry contributes zero to the reported cluster weight.
 
     Returns:
         One row per cluster of two or more findings; empty when nothing clustered.
@@ -348,7 +337,7 @@ def _correlated_clusters(findings: list[Finding], penalties: dict[int, float]) -
 
     clusters: list[dict[str, object]] = []
     for (file_path, symbol), group in groups.items():
-        # A lone correlated finding billed its own full weight, so it is not a cluster to report.
+        # A lone eligible finding keeps its full penalty, so there is no shared penalty to report.
         if len(group) < 2:
             continue
         weight = sum(penalties.get(id(finding), 0.0) for finding in group)
@@ -367,17 +356,17 @@ def _correlated_clusters(findings: list[Finding], penalties: dict[int, float]) -
 
 
 def _rule_attribution(findings: list[Finding], penalties: dict[int, float]) -> tuple[dict[str, object], ...]:
-    """Report how much weight each native rule removed from the score.
+    """Report the total scoring penalty weight attributed to each native rule.
 
-    The key is the native ``rule_id``: a concept identifier may group reporting, but the ratified
-    contract never makes it the attribution key. Sorted by rule identifier for deterministic output.
+    The key is the native rule_id: a concept identifier may group reporting, but does not identify attribution rows.
+    Rows are sorted by rule identifier for deterministic output.
 
     Args:
         findings: Scored findings for the run.
-        penalties: Clustered weight per finding, keyed by ``id()``.
+        penalties: Clustered weight keyed by each finding's id(); a missing entry contributes zero weight.
 
     Returns:
-        One row per native rule that carried weight; empty when the run produced no findings.
+        One row per native rule with its finding count and rounded penalty weight, including zero-weight rules. Empty when there are no findings.
     """
     counts: dict[str, int] = {}
     weights: dict[str, float] = {}
@@ -404,13 +393,11 @@ def _round_weight(weight: float) -> float:
 def _curve_grade(weight: float, evaluated_files: int) -> Grade | None:
     """Apply the ratified pillar curve to one summed weight.
 
-    The curve is ``floor + (100 - floor) / (1 + density / densityScale)``, where density is the
-    weight divided by the evaluated-file count. Dividing before transforming is what makes a
-    duplicated project score the same as the original: twice the findings over twice the code is the
-    same ratio, where the retired absolute-sum shape scored the duplicate far worse.
+    The curve is floor + (100 - floor) / (1 + density / densityScale), where density is the weight per evaluated file.
+    Duplicating both the code and its findings leaves that ratio unchanged.
 
     Args:
-        weight: Summed severity-by-confidence weight; zero means reachable and clean.
+        weight: Sum of severity-by-confidence weights. Zero gives a score of 100 when files were evaluated.
         evaluated_files: Ratified denominator; zero or less means nothing was evaluated.
 
     Returns:
@@ -427,9 +414,8 @@ def _curve_grade(weight: float, evaluated_files: int) -> Grade | None:
 def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
     """Assign every finding its scoring weight, sharing one weight across correlated size and complexity findings on a symbol.
 
-    Each finding starts at its base severity-by-confidence weight. Findings from CORRELATED_COMPLEXITY_RULES that name the same file and symbol form a
-    group; in a group of two or more, every member is reweighted to the group's highest base weight divided by the group size, so the group bills that
-    highest weight once in total. A finding without a symbol is never grouped.
+    Findings from CORRELATED_COMPLEXITY_RULES sharing a file and symbol split the group's highest base weight equally.
+    Other findings retain their base weight; a None symbol prevents grouping.
 
     Args:
         findings: Scored findings for the run.
@@ -442,10 +428,8 @@ def _finding_penalties(findings: list[Finding]) -> dict[int, float]:
     for finding in findings:
         if finding.rule_id not in CORRELATED_COMPLEXITY_RULES or finding.symbol is None:
             continue
-        # Key on the qualified symbol only, not the line: size.function-length reports
-        # the decorator line while complexity rules report the def line, so a line in
-        # the key splits a decorated function's findings and skips down-weighting. A
-        # finding without a line still names its function, so it shares the penalty too.
+        # Group by file and qualified symbol because decorated functions can have different reported lines across rules.
+        # Findings without a line can still share the symbol's penalty.
         key = (finding.file_path, finding.symbol)
         groups.setdefault(key, []).append(finding)
     for group in groups.values():

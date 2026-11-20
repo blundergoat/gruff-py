@@ -49,14 +49,14 @@ class MissingReadmeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze the project root for an absent README file.
+        """Analyze the project root for an absent README path.
 
         Args:
             unit: Current analysis unit; retained for the rule protocol.
             context: Rule execution context containing the project root.
 
         Returns:
-            A missing README finding when no candidate README exists.
+            One finding when no candidate README path exists; empty when a candidate exists, including a directory.
         """
         root = context.project_root
         if _has_readme(root):

@@ -10,14 +10,12 @@ class HotspotReporter:
     """Render an analysis report as a ``gruff-py.hotspot.v1`` JSON map of top-offender files."""
 
     def render(self, report: AnalysisReport) -> str:
-        """Render *report* as a ``gruff-py.hotspot.v1`` JSON map of top-offender files.
+        """Render the report as a gruff-py.hotspot.v1 JSON map of top-offender files.
 
-        The payload's ``limitations`` field documents the current ranking
-        approach (finding density + available metrics; no git churn yet) so
-        consumers can interpret hotspot scores honestly.
+        The limitations field explains ranking by finding density and available metrics without git churn.
 
         Args:
-            report: Fully-populated analysis report.
+            report: Report supplying diagnostics and optional scores; no score gives empty hotspots and the full-project scope.
 
         Returns:
             Pretty-printed JSON document with a trailing newline.

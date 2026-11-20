@@ -27,13 +27,10 @@ _command_root: click.Group | None = None
 def was_fail_on_set_on_cli() -> bool:
     """Return True when the user explicitly passed ``--fail-on`` on the command line.
 
-    Distinguishes the user's deliberate choice from Click's default-value fill-in,
-    so the precedence rule (CLI flag > ``failOn.<cmd>`` > binary default)
-    only consults the configured override when no CLI value was supplied.
+    Explicit CLI input takes precedence over failOn.<cmd>, which takes precedence over the binary default.
 
     Returns:
-        True if the active Click context recorded the flag's value source as
-        ``COMMANDLINE``; False when the default was applied or no context exists.
+        True when Click records COMMANDLINE for fail_on. False for every other source or when there is no active Click context.
     """
     ctx = click.get_current_context(silent=True)
     if ctx is None:
@@ -43,32 +40,29 @@ def was_fail_on_set_on_cli() -> bool:
 
 
 def bind_root_group(root: click.Group) -> None:
-    """Register *root* as the parent Click group that ``@<command>_command`` decorators attach to.
+    """Bind the parent Click group used by command-registration decorators.
 
-    Must be called once during CLI bootstrap before any ``@analyse_command``
-    / ``@dashboard_command`` / etc. decorator runs - otherwise ``_command``
-    raises ``RuntimeError``.
+    Call once during CLI bootstrap before applying command decorators, which otherwise raise RuntimeError.
 
     Args:
         root: Click root group that owns every gruff subcommand.
+
+    Returns:
+        None; replaces the shared root-group binding.
     """
     global _command_root
     _command_root = root
 
 
 def apply_decorators(function: _F, decorators: Iterable[ClickDecorator]) -> _F:
-    """Apply *decorators* to *function* in order, returning the wrapped callable.
-
-    Iterates the iterable left-to-right: ``decorators = (a, b, c)`` produces
-    ``c(b(a(function)))``. Used to compose the per-command decorator tuples
-    declared at the bottom of this module.
+    """Compose command decorators that may attach option metadata or register the command.
 
     Args:
         function: The Click command function to decorate.
-        decorators: Sequence of Click option/argument/command decorators.
+        decorators: Wrappers applied from left to right; an empty iterable returns function unchanged.
 
     Returns:
-        The fully-decorated function, cast back to its original signature type.
+        The resulting callable, which may be a registered Click command. Its static type matches the input signature.
     """
     wrapped: Callable[..., Any] = function
     for decorator in decorators:
@@ -166,6 +160,9 @@ def _silent_callback(ctx: click.Context, _param: click.Parameter, value: bool) -
         ctx: Click context used to locate the shared CLI state.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: True enables silence; False leaves the existing state unchanged.
+
+    Returns:
+        None; sets the shared silent flag only when value is true.
     """
     if value:
         _state(ctx).is_silent = True
@@ -178,6 +175,9 @@ def _quiet_callback(ctx: click.Context, _param: click.Parameter, value: bool) ->
         ctx: Click context used to locate the shared CLI state.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: True enables quiet mode; False leaves the existing state unchanged.
+
+    Returns:
+        None; sets the shared quiet flag only when value is true.
     """
     if value:
         _state(ctx).is_quiet = True
@@ -190,6 +190,9 @@ def _ansi_callback(ctx: click.Context, _param: click.Parameter, value: bool | No
         ctx: Context receiving the colour choice and used to locate shared state.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: True or False forces colour on or off; None preserves both existing settings.
+
+    Returns:
+        None; updates Click and shared colour state only for an explicit value.
     """
     if value is not None:
         ctx.color = value
@@ -203,6 +206,9 @@ def _no_interaction_callback(ctx: click.Context, _param: click.Parameter, value:
         ctx: Click context used to locate the shared CLI state.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: True disables interaction; False leaves the existing state unchanged.
+
+    Returns:
+        None; updates the shared interaction policy only when value is true.
     """
     if value:
         _state(ctx).is_interaction_disabled = True
@@ -215,6 +221,9 @@ def _verbose_callback(ctx: click.Context, _param: click.Parameter, value: int) -
         ctx: Click context used to locate the shared CLI state.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: Requested level; a nonzero value replaces the shared verbosity setting.
+
+    Returns:
+        None; replaces shared verbosity only when value is nonzero.
     """
     if value:
         _state(ctx).verbosity = value
@@ -227,6 +236,9 @@ def _command_version_callback(ctx: click.Context, _param: click.Parameter, value
         ctx: Context whose resilient-parsing mode suppresses output and whose exit ends the command.
         _param: Click-supplied parameter descriptor, unused by this callback.
         value: True requests the version; False leaves command dispatch unchanged.
+
+    Returns:
+        None when the version is not requested or resilient parsing is active.
 
     Raises:
         click.exceptions.Exit: With a successful status after printing outside resilient parsing.
@@ -277,7 +289,7 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
     """
 
     def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
-        """Register *function* as a subcommand of the bound root group.
+        """Register function as a subcommand of the bound root group.
 
         Args:
             function: The command implementation to register.
@@ -286,7 +298,7 @@ def _command(*args: Any, **attrs: Any) -> ClickDecorator:
             The Click-wrapped command callable.
 
         Raises:
-            RuntimeError: If ``bind_cli_root`` has not been called first.
+            RuntimeError: If bind_root_group has not supplied a root group.
         """
         if _command_root is None:
             raise RuntimeError("CLI root group has not been bound.")
@@ -323,32 +335,28 @@ def _pass_context(function: _F) -> _F:
 
 
 def analyse_command(function: _F) -> _F:
-    """Wire *function* up as the ``analyse`` subcommand with its full option set.
-
-    Adds the global flags (``--silent``, ``--quiet``, ``--ansi``, etc.) plus
-    analyse-specific options for rule/pillar filtering, fail-on, output
-    format, config, and the PHP-port compatibility flags.
+    """Register the analyse subcommand with global, analysis and cross-port compatibility options.
 
     Args:
-        function: The command implementation.
+        function: Command implementation to decorate and register on the bound root group.
 
     Returns:
-        The decorated function registered as ``gruff analyse``.
+        The decorated callable registered as the gruff-py analyse command.
     """
     return apply_decorators(function, _ANALYSE_COMMAND_DECORATORS)
 
 
 def dashboard_command(function: _F) -> _F:
-    """Wire *function* up as the ``dashboard`` subcommand serving the live HTTP UI.
+    """Register the dashboard subcommand serving the live HTTP interface.
 
     Adds the dashboard launch options on top of the global flags. Diff and
     timeout stay accepted family options but do not alter gruff-py scans.
 
     Args:
-        function: The command implementation.
+        function: Command implementation to decorate and register as dashboard.
 
     Returns:
-        The decorated function registered as ``gruff dashboard``.
+        The decorated callable registered as the gruff-py dashboard command.
     """
     return apply_decorators(function, _DASHBOARD_COMMAND_DECORATORS)
 
@@ -356,121 +364,119 @@ def dashboard_command(function: _F) -> _F:
 def list_rules_command(function: _F) -> _F:
     """Wire *function* up as the ``list-rules`` subcommand (table or JSON output).
 
+    Plain text output is also available.
+
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff list-rules``.
+        The Click command registered as gruff-py list-rules on the bound root group.
     """
     return apply_decorators(function, _LIST_RULES_COMMAND_DECORATORS)
 
 
 def report_command(function: _F) -> _F:
-    """Wire *function* up as the ``report`` subcommand for writing HTML/JSON to disk.
+    """Register the report subcommand for writing HTML or JSON to stdout or a file.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff report``.
+        The Click command registered as gruff-py report on the bound root group.
     """
     return apply_decorators(function, _REPORT_COMMAND_DECORATORS)
 
 
 def summary_command(function: _F) -> _F:
-    """Wire *function* up as the ``summary`` subcommand for top-N rule/file digests.
+    """Register the summary subcommand for capped text digests or a findings-free JSON projection.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff summary``.
+        The Click command registered as gruff-py summary on the bound root group.
     """
     return apply_decorators(function, _SUMMARY_COMMAND_DECORATORS)
 
 
 def metric_calibration_command(function: _F) -> _F:
-    """Wire *function* up as the hidden ``metric-calibration`` subcommand.
+    """Register the hidden metric-calibration subcommand.
 
-    Hidden from ``--help`` listings; used during rule tuning to inspect the
-    distribution of metric values across the codebase.
+    Hidden from --help listings, this command shows how metric values are distributed across the codebase during rule tuning.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff metric-calibration``.
+        The Click command registered as gruff-py metric-calibration on the bound root group.
     """
     return apply_decorators(function, _METRIC_CALIBRATION_COMMAND_DECORATORS)
 
 
 def list_command(function: _F) -> _F:
-    """Wire *function* up as the ``list`` subcommand (introspect available commands).
+    """Register the list subcommand for discovering available commands.
 
-    Supports ``--format`` for txt/xml/json/md output and ``--raw`` for a bare
-    command listing.
+    The --format flag selects txt, xml, json or md. The --raw flag prints command names only and takes precedence.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff list``.
+        The Click command registered as gruff-py list on the bound root group.
     """
     return apply_decorators(function, _LIST_COMMAND_DECORATORS)
 
 
 def help_command_decorator(function: _F) -> _F:
-    """Wire *function* up as the ``help`` subcommand (per-command help text).
+    """Register the help subcommand for displaying per-command help text.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff help``.
+        The Click command registered as gruff-py help on the bound root group.
     """
     return apply_decorators(function, _HELP_COMMAND_DECORATORS)
 
 
 def init_command(function: _F) -> _F:
-    """Wire *function* up as the ``init`` subcommand for writing a default ``.gruff-py.yaml``.
+    """Register the init subcommand for writing a default .gruff-py.yaml file.
 
-    Adds ``--force`` to regenerate an existing file on top of the global flags.
+    Adds --force to regenerate an existing file on top of the global flags.
 
     Args:
         function: The command implementation.
 
     Returns:
-        The decorated function registered as ``gruff init``.
+        The Click command registered as gruff-py init on the bound root group.
     """
     return apply_decorators(function, _INIT_COMMAND_DECORATORS)
 
 
 def check_ignore_command(function: _F) -> _F:
-    """Wire *function* up as the ``check-ignore`` subcommand.
+    """Register the check-ignore subcommand with shared config resolution and ignore classification.
 
-    Reports whether gruff would ignore each path (and why) using the same config
-    resolution and ignore engine as ``analyse``, performing no analysis.
+    The command reports each path's ignore status and reason without running analysis.
 
     Args:
-        function: The command implementation.
+        function: Command implementation to decorate and register as check-ignore.
 
     Returns:
-        The decorated function registered as ``gruff check-ignore``.
+        The decorated callable registered as the gruff-py check-ignore command.
     """
     return apply_decorators(function, _CHECK_IGNORE_COMMAND_DECORATORS)
 
 
 def completion_command(function: _F) -> _F:
-    """Wire *function* up as the ``completion`` subcommand for shell completion scripts.
+    """Register the completion subcommand for shell completion scripts.
 
-    ``--debug`` tails the completion debug log for troubleshooting wonky
-    shell integrations.
+    The debug flag is accepted, but invoking it raises a not-implemented error.
 
     Args:
-        function: The command implementation.
+        function: Command implementation to decorate and register as completion.
 
     Returns:
-        The decorated function registered as ``gruff completion``.
+        The decorated callable registered as the gruff-py completion command.
     """
     return apply_decorators(function, _COMPLETION_COMMAND_DECORATORS)
 

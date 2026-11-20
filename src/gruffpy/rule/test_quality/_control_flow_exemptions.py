@@ -23,15 +23,15 @@ def is_fixture_loop(
     node: ast.For | ast.AsyncFor | ast.While,
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    """Return whether *node* is a bounded fixture/table sweep.
+    """Identify loops that qualify for the fixture-loop control-flow exemption.
 
     Args:
         node: Loop statement found inside a test function.
         fn: Owning test function, used to discover local/module fixture tables.
 
     Returns:
-        True when the loop is data-driven fixture coverage rather than
-        assertion-hiding control flow.
+        True for a for or async-for loop over a recognized fixture iterable with no if or match descendants in its body,
+        provided every assert has a message; a body with no assert statements also qualifies. False otherwise.
     """
     if isinstance(node, ast.While):
         return False
@@ -47,14 +47,16 @@ def is_subtest_loop(
     node: ast.For | ast.AsyncFor | ast.While,
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    """Recognise a loop whose entire body carries unittest case context.
+    """Recognise a loop whose body gives each statement unittest case context.
 
     Args:
         node: Candidate loop in a unittest test method.
-        fn: Owning method, whose first argument binds the TestCase receiver.
+        fn: Owning method. Its first positional parameter names the receiver. No such parameter or a name store for it disqualifies the loop.
 
     Returns:
-        True when each statement is inside a subTest naming a bound loop value.
+        True for a nonempty for or async-for body of with statements, each using receiver.subTest with an argument that refers to a loop target.
+        Only a simple target name or a direct named element of a tuple or list target counts.
+        Loops with an else block or any if or match descendant in the body return False; while loops also return False.
     """
     if isinstance(node, ast.While) or node.orelse or _contains_branch(node.body):
         return False
@@ -92,14 +94,14 @@ def _is_subtest_statement(statement: ast.stmt, receiver: str, bound_names: froze
 
 
 def is_guard_clause(node: ast.If | ast.Match) -> bool:
-    """Return whether a branch exits/skips rather than changing expectations.
+    """Recognize a simple guard shape for the test control-flow exemption.
 
     Args:
         node: Conditional node found inside a test function.
 
     Returns:
-        True for simple ``if`` guards whose body only returns, raises, breaks,
-        continues, or calls a recognised skip helper.
+        True for a nonempty if body with no else or elif, containing only direct exits or recognized standalone skip calls;
+        False for match statements and all other branches.
     """
     if isinstance(node, ast.Match) or node.orelse:
         return False
@@ -110,10 +112,11 @@ def _literal_collection_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> 
     """Collect fixture-named literal assignments from the function and outermost AST bodies.
 
     Args:
-        fn: Owning function whose direct statements and parent-linked outermost body are inspected.
+        fn: Owning function whose direct statements are inspected. Without parent links, only the function's own body contributes bindings.
 
     Returns:
-        Names assigned literal collections in either direct body; nested statement bodies are not searched.
+        Fixture-named bindings to collection literals in either direct body. Empty if neither body contains a qualifying assignment.
+        Nested statement bodies are not searched.
     """
     bindings: set[str] = set()
     for scope in (_module_root(fn), fn):
@@ -163,10 +166,10 @@ def _target_names(target: ast.expr) -> frozenset[str]:
     """Extract names directly bound by a loop target.
 
     Args:
-        target: Loop target, either a simple name or a tuple/list of target expressions.
+        target: Loop assignment target inspected for names used by the loop exemptions.
 
     Returns:
-        The simple name or direct named elements of a tuple/list; nested unpacking and other shapes contribute no names.
+        A frozen set containing the simple name or direct names from a tuple or list. Other shapes and nested unpacking contribute no names.
     """
     if isinstance(target, ast.Name):
         return frozenset({target.id})
@@ -224,7 +227,7 @@ def _is_fixture_call(
 
 
 def _is_literal_collection(expr: ast.AST) -> bool:
-    """Recognize collection literals used as fixture data.
+    """Recognize literal container shapes eligible for the fixture-loop exemption.
 
     Args:
         expr: AST node to classify by its literal container shape.
@@ -236,7 +239,7 @@ def _is_literal_collection(expr: ast.AST) -> bool:
 
 
 def _is_fixtureish_name(name: str) -> bool:
-    """Check a name for a configured fixture-data marker.
+    """Check a name for a built-in fixture-data marker.
 
     Args:
         name: Identifier spelling to search case-insensitively for fixture-related substrings.

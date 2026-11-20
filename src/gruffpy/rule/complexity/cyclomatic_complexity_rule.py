@@ -61,8 +61,8 @@ class CyclomaticComplexityRule(Rule):
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
             default_threshold=20,
-            # Off unless a project enables it: after its repair, 26 of 50 upper-band findings were worth acting on in the
-            # 0.6.0 precision measurement, under the 0.60 floor; complexity.cognitive covers the same functions.
+            # The 0.6.0 sample found 26 actionable upper-band findings out of 50, below the 0.60 precision floor.
+            # Enable this rule when a project needs cyclomatic scores alongside complexity.cognitive.
             default_enabled=False,
         )
 
@@ -70,16 +70,16 @@ class CyclomaticComplexityRule(Rule):
         """Analyze function-like nodes for cyclomatic complexity findings.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Source file to inspect; traversal may cache the function list and complexity scores on its AST.
             context: Rule execution context with threshold settings.
 
         Returns:
-            Findings for functions above the configured complexity threshold.
+            Findings above the configured threshold; empty for a missing AST, a built-in test path or no qualifying function.
         """
         if unit.tree is None:
             return []
 
-        # A test's branches are its assertion sequence, which M14's upper-band labels found not worth splitting.
+        # Built-in test paths are exempt so this metric does not ask callers to split test control flow.
         if is_built_in_test_path(unit.file.display_path):
             return []
 
@@ -134,7 +134,7 @@ def cyclomatic_for(fn: FunctionLike) -> int:
     docstring. Nested function bodies are skipped.
 
     Args:
-        fn: Function, async function, or lambda node to score.
+        fn: Function, async function, or lambda node to score; computed scores are stored on this node and reused on later calls.
 
     Returns:
         Cyclomatic complexity score for the node body.
@@ -151,10 +151,9 @@ def cyclomatic_for(fn: FunctionLike) -> int:
 
 
 def _extra_match_cases(fn: FunctionLike) -> int:
-    """Count the match cases after each match's first, which this rule takes back so a match is one decision.
+    """Count excess non-wildcard cases so this rule charges at most one decision per match.
 
-    ``cyclomatic_for`` stays radon-aligned for the maintainability index and the docs rationale rule; only this rule
-    reports a flat dispatch over many cases as the single decision a reader makes.
+    The maintainability index and documentation rationale retain the uncapped cyclomatic_for score.
 
     Args:
         fn: Function, async function, or lambda node whose matches are counted.

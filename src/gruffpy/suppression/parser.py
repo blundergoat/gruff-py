@@ -60,7 +60,7 @@ class ParsedSuppressions:
             line: One-based physical source line.
 
         Returns:
-            Rule ids disabled directly on the line or by ``disable-next``.
+            Rule ids disabled directly on the line or by disable-next. The set is empty when neither supplies any rule ids.
         """
         same_line = self.line_disabled_rule_ids.get(line, frozenset())
         next_line = self.next_line_disabled_rule_ids.get(line, frozenset())
@@ -72,18 +72,17 @@ def parse_suppressions(
     *,
     known_rule_ids: frozenset[str] | None = None,
 ) -> ParsedSuppressions:
-    """Parse gruff suppression comments from *source*.
+    """Parse gruff suppression comments from source text.
 
     Args:
         source: Source text to scan.
-        known_rule_ids: Optional set of accepted rule ids. Unknown ids are
-            reported and do not suppress anything.
+        known_rule_ids: Accepted rule ids; None skips registry checking. With a set, unknown ids are reported and suppress nothing.
 
     Returns:
-        Parsed suppression data and parser diagnostics.
+        File, same-line and next-line suppression ids with diagnostics. Rejected directives can produce diagnostics even when no ids are accepted.
+        If tokenization fails, only comments collected before the failure contribute to the result.
     """
-    # Marker-free sources cannot contain directives; skipping their tokenizer avoids cliffs on
-    # large non-Python fixtures discovered for source-text rules.
+    # Text without the gruff marker cannot contain a directive, so large non-Python inputs need no tokenization for suppressions.
     if "gruff" not in source.casefold():
         return ParsedSuppressions()
 
@@ -156,9 +155,7 @@ def _comment_tokens(source: str) -> list[_CommentToken]:
             if token.type == tokenize.COMMENT:
                 tokens.append(_CommentToken(text=token.string, line=token.start[0]))
     except (tokenize.TokenError, SyntaxError):
-        # The tokenizer raises IndentationError (a SyntaxError) on bad
-        # dedents; suppressions run on unparseable files, so keep what was
-        # collected instead of crashing the run.
+        # If a bad dedent or unfinished input stops tokenization, keep earlier comments and let the AST parser report syntax errors.
         return tokens
     return tokens
 
@@ -180,8 +177,8 @@ def _parse_comment(
 
     Returns:
         A parsed comment whose directive is None and whose rule ids are empty when the comment has no gruff marker (no diagnostics) or a malformed
-        directive (one parse-error diagnostic). Otherwise it holds the directive, the ids that passed validation, and a diagnostic for each rejected
-        id.
+        directive (one parse-error diagnostic). Otherwise it holds the directive, the accepted ids, and one diagnostic per rejected item.
+        If every id is rejected, the directive is still present but suppresses no findings.
     """
     marker = _GRUFF_COMMENT_RE.search(comment_text)
     if marker is None:
@@ -374,6 +371,9 @@ def _add_line_rule_ids(target: dict[int, set[str]], line: int, rule_ids: frozens
         target: Mutable map from line to rule ids, updated in place.
         line: One-based line that the ids apply to: the comment's own line for disable, or the following line for disable-next.
         rule_ids: Accepted rule ids to add for that line.
+
+    Returns:
+        None. Adds the rule ids to the target's set for that line, creating the set on first use.
     """
     target.setdefault(line, set()).update(rule_ids)
 

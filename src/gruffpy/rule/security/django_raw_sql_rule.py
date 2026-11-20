@@ -46,11 +46,7 @@ class DjangoRawSqlRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the Django raw-SQL rule as a high-confidence WARNING.
 
-        WARNING severity because the call is sometimes legitimate when the
-        dynamic component is a hardcoded identifier (column name from a
-        whitelist); high confidence because the matched shapes are the
-        explicit ORM escape hatches and the dynamic-string first-arg gate
-        keeps the FP rate bounded.
+        WARNING allows for legitimate allowlisted identifiers; high confidence reflects the raw-query shapes and dynamic-string gate.
 
         Returns:
             Definition for the Django raw-SQL rule under the security pillar.
@@ -62,23 +58,21 @@ class DjangoRawSqlRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.HIGH,
-            # Off unless a project enables it: right on 2 of 5 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            # Keep this rule opt-in under ADR-029 because measured precision was low and the sample was too small to justify retirement.
             default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``.raw(<dynamic>)`` and ``RawSQL(<dynamic>, ...)`` in Django files.
+        """Flag a dynamic first positional SQL argument to .raw(...) or RawSQL(...) when a top-level Django import is detected.
 
-        Uses the shared ``is_dynamic_string`` helper so dynamic-string
-        detection matches the other security rules. Files without a
-        Django import are skipped entirely (framework gate).
+        Dynamic strings use the shared security-rule predicate.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsafe raw-SQL escape-hatch call.
+            One finding per matching call. Empty without a parsed tree, a .raw or RawSQL source marker, a top-level Django import, or a match.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -107,7 +101,7 @@ def _raw_sql_label(call: ast.Call) -> str | None:
         call: Call whose attribute or resolved target spelling is inspected.
 
     Returns:
-        Shape label for an attribute named raw or a target ending in RawSQL; None otherwise.
+        Shape label for an attribute named raw or a target whose final name is RawSQL; None otherwise.
     """
     if isinstance(call.func, ast.Attribute) and call.func.attr == "raw":
         return ".raw"

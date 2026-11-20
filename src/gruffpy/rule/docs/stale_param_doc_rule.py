@@ -59,10 +59,10 @@ class StaleParamDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Required by the rule interface and unused by this check.
 
         Returns:
-            Findings for documented parameters absent from function signatures.
+            One finding per stale documented parameter; empty when the tree is absent or no stale entries are found.
         """
         if unit.tree is None:
             return []
@@ -71,16 +71,15 @@ class StaleParamDocRule(Rule):
 
 
 def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
-    """Collect stale parameter entries from every function and async function definition in the module tree.
+    """Collect stale parameter entries throughout the module tree, including nested functions and methods.
 
-    The ast.walk traversal reaches nested functions and methods as well as module-level definitions, and entries keep the order in which it visits
-    them.
+    Entries follow ast.walk order. Overload stubs and property setters or deleters are skipped.
 
     Args:
         tree: Parsed module tree of the analysis unit; the rule calls this only when the unit has a tree.
 
     Returns:
-        Stale parameter entries for all visited definitions; empty when no checked definition documents a name missing from its signature.
+        Stale parameter entries from checked definitions, or an empty list when none documents a name missing from its signature.
     """
     stale: list[_StaleParam] = []
     for node in ast.walk(tree):
@@ -93,9 +92,8 @@ def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
 def _stale_parameters_for_function(node: FunctionNode) -> list[_StaleParam]:
     """Find the documented parameter names of one function that match no name in its signature.
 
-    Overload stubs and property setters or deleters are skipped (is_overload_stub, is_property_setter_or_deleter), as are functions whose docstring is
-    missing, blank, fails to parse, or documents no parameters. Documented entries without a name are ignored, and each remaining name is compared
-    after _normalise_param_name against the set returned by signature_param_names.
+    Overloads, property setters and deleters, and missing, blank or unparseable docstrings are skipped; None names are ignored.
+    Leading asterisks are removed before documented names are compared with signature_param_names.
 
     Args:
         node: Function or async function definition whose docstring entries are compared with its signature.
@@ -131,9 +129,8 @@ def _normalise_param_name(name: str) -> str:
     Returns:
         The name with all leading asterisks removed; unchanged when it has none.
     """
-    # Docstring parsers preserve `*args` / `**kwargs` literally; signature_param_names
-    # returns the bare identifier. Strip the leading `*` / `**` so a docstring
-    # entry for `*keys` matches a signature varargs slot named `keys`.
+    # Parsed varargs entries keep leading asterisks, while signature_param_names returns bare names.
+    # Removing the asterisks lets documented varargs names match their signature slots.
     return name.lstrip("*")
 
 

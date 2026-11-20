@@ -57,11 +57,9 @@ class Finding:
     baseline_subject: str | None = None
 
     def fingerprint(self) -> str:
-        """Compute the stable 16-char identifier used for baselines and dedup.
+        """Compute the line-precise 16-character identifier serialized with finding reports.
 
-        Byte-compatible with gruff-php so baselines cross-apply between
-        implementations. See :mod:`gruffpy.finding.fingerprint` for the
-        algorithm.
+        Uses the same JSON escaping and hash prefix as gruff-php for matching payload fields.
 
         Returns:
             str: Lowercase hex string, 16 characters of a SHA-256 prefix.
@@ -76,13 +74,10 @@ class Finding:
         )
 
     def stable_identity(self) -> str:
-        """Compute the line-insensitive 16-char identity for external diff tooling.
+        """Compute the identity that external diff tools use to match findings across line shifts.
 
-        Pairs with :meth:`fingerprint` per ADR-020: ``fingerprint`` stays the
-        line-precise identity used by baselines and SARIF; ``stable_identity``
-        is line-insensitive so consumers can match "the same logical finding"
-        across unrelated line shifts. Uses ``[ruleId, file, symbol]`` when
-        ``symbol`` is set, ``[ruleId, file, message]`` otherwise.
+        ADR-020 keeps fingerprint line-precise for baselines and SARIF.
+        The hash uses [ruleId, file, symbol] for any string symbol, including an empty one, or [ruleId, file, message] when symbol is None.
 
         Returns:
             str: Lowercase hex string, 16 characters of a SHA-256 prefix.
@@ -97,10 +92,8 @@ class Finding:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the native finding dictionary used by internal report paths.
 
-        The v3 machine adapter owns path normalization, optional-field
-        omission, and `locationPrecision`; this helper preserves the report
-        model's nullable values. The fingerprint is computed on demand so
-        callers never serialize a stale identity.
+        Preserve nullable model fields and copy metadata; compute both identities when serializing.
+        The v3 machine adapter handles path normalization, optional-field omission and locationPrecision.
 
         Returns:
             JSON-ready native finding fields plus computed identities.

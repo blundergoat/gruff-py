@@ -77,18 +77,19 @@ class WithPropertyBacking:
 
 
 def _unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap the result as the ``dynamism.py`` unit.
+    """Parse source, link every non-root AST node to its parent and wrap the result as the dynamism.py unit.
 
     Args:
         source: Python module source to parse.
 
     Returns:
-        An analysis unit displayed as ``dynamism.py`` whose non-root tree nodes carry ``parent`` links.
+        An analysis unit displayed as dynamism.py whose non-root tree nodes carry parent links.
+        Attaching links can overwrite parents on shared AST operator and context nodes, including nodes in previously parsed trees.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # Rules use this dynamic AST attribute to recover enclosing symbols.
     return AnalysisUnit(
         file=SourceFile(
             absolute_path="/dynamism.py",
@@ -104,7 +105,7 @@ def _ctx() -> RuleContext:
     """Build a context that enables every rule in the default registry with its default thresholds.
 
     Returns:
-        A context rooted at ``/`` whose config enables every registered rule, default-off rules included.
+        A context rooted at / whose config enables every registered rule, default-off rules included.
     """
     registry = RuleRegistry.defaults()
     rules: dict[str, RuleSettings] = {}
@@ -119,7 +120,11 @@ def _ctx() -> RuleContext:
 
 
 def test_registry_includes_surviving_m04_rules():
-    """Expose the unused-private-attribute, empty-function and unreachable-code rules in the default registry."""
+    """Expose the unused-private-attribute, empty-function and unreachable-code rules in the default registry.
+
+    Returns:
+        None. Checks that the default registry contains all three specified rule IDs.
+    """
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
@@ -131,14 +136,13 @@ def test_registry_includes_surviving_m04_rules():
 
 
 def test_dynamism_fixture_emits_only_acceptable_findings():
-    """Report no dead-code or waste finding on the dynamism fixture when every registered rule is enabled."""
+    """Check that the dynamism fixture stays free of dead-code and waste findings with every registered rule enabled.
+
+    Returns:
+        None. Asserts that the dynamism fixture produces no dead-code or waste findings with every registered rule enabled.
+    """
     findings = RuleRegistry.defaults().analyse([_unit(DYNAMISM_FIXTURE)], _ctx())
-    # The fixture deliberately includes things that LOOK suspicious but
-    # are accepted Python patterns. Restrict the dead-code + waste rules
-    # to count their findings.
     target_rule_prefixes = ("dead-code.", "waste.")
     suspect = [f for f in findings if any(f.rule_id.startswith(p) for p in target_rule_prefixes)]
-    # The two rules that reported the bare `_setup` function were retired in 0.6.0 (ADR-029), so every dead-code and
-    # waste rule must now stay silent on this fixture.
     unexpected = [(f.rule_id, f.symbol) for f in suspect]
     assert unexpected == [], f"unexpected findings: {unexpected}"

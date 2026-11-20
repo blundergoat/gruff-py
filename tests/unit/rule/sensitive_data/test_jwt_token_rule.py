@@ -9,20 +9,32 @@ _YAML_JWT_SIGNATURE = "abcdef123456" + "abcdef"
 
 
 def test_jwt_in_source_emits():
-    """Report one finding for a three-part JWT literal in Python source."""
+    """Report one finding for a three-part JWT literal in Python source.
+
+    Returns:
+        None after verifying that the JWT literal produces one finding.
+    """
     src = f"TOKEN = '{_JWT_HEADER}.{_JWT_PAYLOAD}.{_JWT_SIGNATURE}'\n"
     findings = JwtTokenRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_non_jwt_token_not_flagged():
-    """Report nothing for a short token that is not a JWT."""
+    """Report nothing for a short token that is not a JWT.
+
+    Returns:
+        None after verifying that the short token produces no findings.
+    """
     src = "TOKEN = 'short-token'\n"
     assert JwtTokenRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_jwt_in_yaml_emits():
-    """Report one finding for a JWT value in a YAML text file."""
+    """Report one finding for a JWT value in a YAML text file.
+
+    Returns:
+        None after verifying that the YAML JWT value produces one finding.
+    """
     src = f"token: {_JWT_HEADER}.{_YAML_JWT_PAYLOAD}.{_YAML_JWT_SIGNATURE}\n"
     findings = JwtTokenRule().analyse(make_unit(src, "config.yaml", "text"), default_ctx())
     assert len(findings) == 1

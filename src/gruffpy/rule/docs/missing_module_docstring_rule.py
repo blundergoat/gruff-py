@@ -47,7 +47,7 @@ class MissingModuleDocstringRule(Rule):
             context: Rule execution context supplied by the analyzer.
 
         Returns:
-            A single missing-docstring finding when the module needs one.
+            One finding for a nonempty undocumented module outside tests and re-export shims; empty for other inputs.
         """
         if not isinstance(unit.tree, ast.Module):
             return []
@@ -79,19 +79,16 @@ class MissingModuleDocstringRule(Rule):
 
 
 def _is_reexport_shim(module: ast.Module, display_path: str) -> bool:
-    """Report whether an ``__init__.py`` module holds only imports and ``__all__`` assignments (a re-export shim).
+    """Decide whether an __init__.py module contains only imports and supported __all__ assignments.
 
-    The path test is a plain suffix match on display_path. The loop accepts any number of import statements, single-target ``__all__`` assignments and
-    annotated ``__all__`` assignments; any other top-level statement, such as a class, a function, an expression or an augmented ``__all__``
-    assignment, makes it return False.
+    Single-target and annotated assignments to __all__ qualify; any other top-level statement disqualifies the module.
 
     Args:
         module: Parsed module whose top-level statements are checked one by one.
-        display_path: Display path of the file; only a path ending in ``__init__.py`` can qualify as a shim.
+        display_path: Display path of the file; only the __init__.py suffix is checked.
 
     Returns:
-        True when the path ends in ``__init__.py`` and every top-level statement is an import or an ``__all__`` assignment, which makes the rule skip
-        the module without a finding; False otherwise.
+        True when the path has the __init__.py suffix and every top-level statement qualifies, including an empty module; False otherwise.
     """
     if not display_path.endswith("__init__.py"):
         return False

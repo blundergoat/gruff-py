@@ -68,12 +68,16 @@ _M02_OPT_IN_CASES = (
 
 @pytest.mark.parametrize(("rule_id", "source", "display_path"), _M02_OPT_IN_CASES, ids=[case[0] for case in _M02_OPT_IN_CASES])
 def test_m02_opt_in_rules_require_configuration_to_emit(rule_id: str, source: str, display_path: str) -> None:
-    """Keep each accepted opt-in rule quiet until its existing positive case is enabled.
+    """Check that each listed opt-in rule reports a finding on its positive case only when enabled.
 
     Args:
-        rule_id: Rule kept opt-in by M02's accepted table.
-        source: Positive input retained from the rule's detector tests.
+        rule_id: Default-disabled rule to enable for the second analysis.
+        source: Python source expected to trigger the selected rule when enabled.
         display_path: Production or collected-test scope required by the detector.
+
+    Returns:
+        None. Checks the default setting and compares the named rule's findings before and after enabling it.
+        Attaching parent links can overwrite parents on shared AST operator and context nodes, including nodes in previously parsed trees.
     """
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
@@ -96,7 +100,11 @@ def test_m02_opt_in_rules_require_configuration_to_emit(rule_id: str, source: st
 
 
 def test_catalog_entries_are_importable_and_unique() -> None:
-    """Give the catalogue one importable definition per built-in rule, with unique ids in catalogue order."""
+    """Give the catalogue one definition per built-in rule, with unique ids in catalogue order.
+
+    Returns:
+        None. Checks definition count, id uniqueness, and id order against the built-in entries.
+    """
     definitions = catalog_definitions()
     ids = [definition.id for definition in definitions]
 
@@ -106,7 +114,11 @@ def test_catalog_entries_are_importable_and_unique() -> None:
 
 
 def test_registry_defaults_consumes_catalog_entries() -> None:
-    """Build the default registry and the default config's rules from exactly the catalogue's rule ids."""
+    """Build the default registry and the default config's rules from exactly the catalogue's rule ids.
+
+    Returns:
+        None. Checks that the catalogue, default registry, and default config have the same rule ids.
+    """
     catalog_ids = {definition.id for definition in catalog_definitions()}
     registry_ids = {rule.definition().id for rule in RuleRegistry.defaults().all()}
 
@@ -120,13 +132,20 @@ def test_rule_id_matches_pillar_prefix_convention(definition: RuleDefinition) ->
 
     Args:
         definition: Catalogue rule definition; the cases cover every rule.
+
+    Returns:
+        None. Fails if the rule id lacks a prefix allowed for its pillar.
     """
     prefixes = _PREFIXES_BY_PILLAR[definition.pillar]
     assert definition.id.startswith(prefixes)
 
 
 def test_no_concrete_rule_class_is_omitted_from_catalog() -> None:
-    """List in the catalogue exactly the concrete rule classes defined in the rule source files."""
+    """Match the catalogue classes to the top-level rule classes identified by the source scan.
+
+    Returns:
+        None. Fails if either the catalogue or the source scan contains a class absent from the other.
+    """
     catalog_classes = {f"{type(entry.create()).__module__}.{type(entry.create()).__name__}" for entry in BUILTIN_RULES}
     concrete_classes = set(_concrete_rule_class_paths())
 
@@ -155,7 +174,11 @@ def _unused_private_helper():
 
 
 def test_registry_analyse_is_deterministic_across_runs() -> None:
-    """Running the full registry on the same source twice produces identical fingerprints."""
+    """Running the full registry on the same source twice produces identical fingerprints.
+
+    Returns:
+        None. Checks that the fingerprint lists match in order across the two analyses.
+    """
     tree_a = ast.parse(_DETERMINISM_FIXTURE)
     tree_b = ast.parse(_DETERMINISM_FIXTURE)
     file = SourceFile(absolute_path="/d.py", display_path="d.py", type="python")
@@ -174,6 +197,9 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
 
     Args:
         definition: Catalogue rule definition; the cases cover every rule.
+
+    Returns:
+        None. Fails if any of the listed documentation fields is empty.
     """
     docs = documentation_for_rule(definition.id)
     assert docs.rationale
@@ -184,15 +210,10 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
 
 
 def test_medium_and_low_confidence_rules_publish_false_positive_guidance() -> None:
-    """Every heuristic rule must tell a user where it misfires and what to do instead.
-
-    A medium or low confidence rule will be wrong sometimes, so shipping one without
-    ``falsePositiveShapes`` leaves a user with a finding they cannot judge. The two passes below
-    separate the two ways that fails: a rule carrying no shapes at all, and a rule carrying a shape
-    whose text or mitigation is blank, which reads as guidance but answers nothing.
+    """Require medium- and low-confidence rules to document false-positive shapes and mitigations.
 
     Returns:
-        None; either list being non-empty raises an assertion naming the offending rule ids.
+        None; assertions fail for missing shapes or blank shape or mitigation text.
     """
     heuristic_definitions = [definition for definition in _ALL_DEFINITIONS if definition.confidence in {Confidence.MEDIUM, Confidence.LOW}]
     missing = [definition.id for definition in heuristic_definitions if not documentation_for_rule(definition.id).false_positive_shapes]
@@ -213,10 +234,13 @@ _NON_METRIC_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.id not in _FORMULA_R
 
 @pytest.mark.parametrize("definition", _METRIC_DEFINITIONS, ids=lambda d: d.id)
 def test_metric_rule_publishes_formula_provenance(definition: RuleDefinition) -> None:
-    """Publish formula provenance for each metric rule.
+    """Check for formula provenance on each listed metric rule.
 
     Args:
-        definition: Metric rule definition; the cases cover each metric rule.
+        definition: Catalogue definition whose id is in the formula rule list.
+
+    Returns:
+        None. Fails if the selected rule's formula provenance is empty.
     """
     docs = documentation_for_rule(definition.id)
     assert docs.formula_provenance
@@ -224,10 +248,13 @@ def test_metric_rule_publishes_formula_provenance(definition: RuleDefinition) ->
 
 @pytest.mark.parametrize("definition", _NON_METRIC_DEFINITIONS, ids=lambda d: d.id)
 def test_non_metric_rule_has_no_formula_provenance(definition: RuleDefinition) -> None:
-    """Publish no formula provenance for a rule that is not a metric.
+    """Check that rules outside the formula rule list have empty formula provenance.
 
     Args:
-        definition: Non-metric rule definition; the cases cover each one.
+        definition: Catalogue definition whose id is outside the formula rule list.
+
+    Returns:
+        None. Requires an empty string in the selected rule's formula provenance field.
     """
     docs = documentation_for_rule(definition.id)
     assert docs.formula_provenance == ""
@@ -241,10 +268,13 @@ _SIZE_AND_COMPLEXITY_DEFINITIONS = [d for d in _ALL_DEFINITIONS if d.pillar in _
 def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
     definition: RuleDefinition,
 ) -> None:
-    """Publish the standard threshold metadata keys and an above or below direction for each size and complexity rule.
+    """Check the standard threshold metadata for rules in the size, complexity, and maintainability pillars.
 
     Args:
-        definition: Size or complexity rule definition; the cases cover each one.
+        definition: Catalogue definition from the size, complexity, or maintainability pillar.
+
+    Returns:
+        None. Checks the threshold metadata keys in order and requires an above or below direction.
     """
     docs = documentation_for_rule(definition.id)
     assert docs.threshold_metadata_keys == (
@@ -257,7 +287,11 @@ def test_size_and_complexity_threshold_docs_publish_standard_metadata_contract(
 
 
 def test_selected_security_rules_publish_taxonomy_metadata() -> None:
-    """Publish a CWE and high security severity for the Django raw SQL rule, and a CWE for the unsafe YAML load rule."""
+    """Publish a CWE and high security severity for the Django raw SQL rule, and a CWE for the unsafe YAML load rule.
+
+    Returns:
+        None. Checks CWE-89 and high payload severity for raw SQL, and CWE-502 for unsafe YAML loading.
+    """
     docs = documentation_for_rule("security.django-raw-sql")
     assert docs.security_metadata["cwe"] == ["CWE-89"]
     assert docs.to_payload()["security"]["securitySeverity"] == "high"
@@ -267,10 +301,11 @@ def test_selected_security_rules_publish_taxonomy_metadata() -> None:
 
 
 def _concrete_rule_class_paths() -> list[str]:
-    """List the top-level rule classes in each ``*_rule.py`` file under the rule source, skipping ``project_rule.py``.
+    """Find top-level classes that define definition and either analyse or analyse_project.
+    Scan *_rule.py files under the rule source, skipping project_rule.py.
 
     Returns:
-        Their fully qualified class names, sorted.
+        Sorted fully qualified names of matching classes. Empty if the scan finds no matches.
     """
     classes: list[str] = []
     for path in sorted(_RULE_ROOT.rglob("*_rule.py")):
@@ -313,6 +348,9 @@ def test_retired_f_string_rule_never_runs(source: str) -> None:
 
     Args:
         source: A preserved positive or negative case from the retired rule's tests.
+
+    Returns:
+        None. Checks that the retired rule is absent from the registry and produces zero findings with its setting enabled.
     """
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)
@@ -587,12 +625,15 @@ def test_retired_f_string_rule_never_runs(source: str) -> None:
     ),
 )
 def test_retired_m02_rules_never_run(rule_id: str, source: str, display_path: str) -> None:
-    """Keep approved retired emitters absent even with their former settings enabled.
+    """Keep retired rules absent even with their former settings enabled.
 
     Args:
-        rule_id: Retired rule the operator selected for deletion.
+        rule_id: Retired rule whose former setting is enabled for the check.
         source: Preserved positive input from that rule's former tests.
         display_path: Original production or test-file scope for the positive input.
+
+    Returns:
+        None. Checks that the enabled id appears in neither the registry nor the findings.
     """
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)

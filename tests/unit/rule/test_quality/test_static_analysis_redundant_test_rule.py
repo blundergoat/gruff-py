@@ -21,10 +21,10 @@ _FIXTURE = (
 
 
 def _findings(test_source):
-    """Analyse the ``ShapeService`` fixture module followed by test_source, with default settings.
+    """Analyse the ShapeService fixture module followed by test_source, with default settings.
 
     Args:
-        test_source: Test code appended after the ``ShapeService`` fixture module.
+        test_source: Test code appended after the ShapeService fixture module.
 
     Returns:
         Findings this rule reports for the combined source.
@@ -37,7 +37,7 @@ def _only(test_source):
     """Analyse test_source after the fixture module and require exactly one finding.
 
     Args:
-        test_source: Test code appended after the ``ShapeService`` fixture module.
+        test_source: Test code appended after the ShapeService fixture module.
 
     Returns:
         The one finding the rule reported.
@@ -51,7 +51,11 @@ def _only(test_source):
 
 
 def test_inspect_isclass_flags_local_class_declaration():
-    """Report one ``inspect-isclass`` finding, naming ``ShapeService`` and its same-file declaration, for ``inspect.isclass`` on it."""
+    """Report one inspect-isclass finding, naming ShapeService and its same-file declaration, for inspect.isclass on it.
+
+    Returns:
+        None. Checks the rule ID, finding variant, evidence symbol and recorded same-file declaration.
+    """
     finding = _only("def test_decl():\n    assert inspect.isclass(ShapeService)\n")
     assert finding.rule_id == RULE_ID
     assert finding.metadata["variant"] == "inspect-isclass"
@@ -60,7 +64,11 @@ def test_inspect_isclass_flags_local_class_declaration():
 
 
 def test_hasattr_method_flags_declared_method():
-    """Report one ``hasattr-method`` finding, with its full message, for ``hasattr`` on a method declared in the file."""
+    """Report one hasattr-method finding, with its full message, for hasattr on a method declared in the file.
+
+    Returns:
+        None. Checks the variant, method and test symbols, and exact finding message.
+    """
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'render')\n")
     assert finding.metadata["variant"] == "hasattr-method"
     assert finding.metadata["evidenceSymbol"] == "ShapeService.render"
@@ -72,34 +80,54 @@ def test_hasattr_method_flags_declared_method():
 
 
 def test_hasattr_class_attribute_flags_assignment():
-    """Report one ``hasattr-class-attribute`` finding for ``hasattr`` on a class attribute assigned in the class body."""
+    """Report one hasattr-class-attribute finding for hasattr on a class attribute assigned in the class body.
+
+    Returns:
+        None. Checks the finding variant and the static fact recorded for ShapeService.label.
+    """
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'label')\n")
     assert finding.metadata["variant"] == "hasattr-class-attribute"
     assert finding.metadata["staticFact"] == ("attribute ShapeService.label is declared in the same parsed file")
 
 
 def test_hasattr_class_attribute_flags_annotated_assignment_with_value():
-    """Report one ``hasattr-class-attribute`` finding for ``hasattr`` on an annotated class attribute that has a value."""
+    """Report one hasattr-class-attribute finding for hasattr on an annotated class attribute that has a value.
+
+    Returns:
+        None. Checks the finding variant and evidence symbol for ShapeService.code.
+    """
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'code')\n")
     assert finding.metadata["variant"] == "hasattr-class-attribute"
     assert finding.metadata["evidenceSymbol"] == "ShapeService.code"
 
 
 def test_callable_getattr_method_variant():
-    """Report one ``callable-getattr-method`` finding for ``callable(getattr(...))`` on a declared method."""
+    """Report one callable-getattr-method finding for callable(getattr(...)) on a declared method.
+
+    Returns:
+        None. Checks the finding variant and evidence symbol for the getattr call.
+    """
     finding = _only("def test_decl():\n    assert callable(getattr(ShapeService, 'render'))\n")
     assert finding.metadata["variant"] == "callable-getattr-method"
     assert finding.metadata["evidenceSymbol"] == "ShapeService.render"
 
 
 def test_callable_attribute_method_variant():
-    """Report one ``callable-attribute-method`` finding for ``callable`` on a declared method reached by attribute."""
+    """Report one callable-attribute-method finding for callable on a declared method reached by attribute.
+
+    Returns:
+        None. Checks the variant of the single finding for direct access to the method.
+    """
     finding = _only("def test_decl():\n    assert callable(ShapeService.render)\n")
     assert finding.metadata["variant"] == "callable-attribute-method"
 
 
 def test_unittest_asserttrue_is_detected():
-    """Report one finding, naming the method and the full assertion, for ``self.assertTrue(hasattr(...))`` in a unittest class."""
+    """Report one finding, naming the method and the full assertion, for self.assertTrue(hasattr(...)) in a unittest class.
+
+    Returns:
+        None. Checks the qualified test method name and exact assertion text on the finding.
+    """
     source = "class TestShape(unittest.TestCase):\n    def test_decl(self):\n        self.assertTrue(hasattr(ShapeService, 'render'))\n"
     finding = _only(source)
     assert finding.symbol == "TestShape.test_decl"
@@ -107,7 +135,11 @@ def test_unittest_asserttrue_is_detected():
 
 
 def test_finding_carries_advisory_high_and_required_metadata_keys():
-    """Report the finding at advisory severity and high confidence, with exactly five metadata keys."""
+    """Report the finding at advisory severity and high confidence, with exactly five metadata keys.
+
+    Returns:
+        None. Checks severity, confidence, the exact metadata key set and the candidate confidence value.
+    """
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'render')\n")
     assert finding.severity is Severity.ADVISORY
     assert finding.confidence is Confidence.HIGH
@@ -122,13 +154,21 @@ def test_finding_carries_advisory_high_and_required_metadata_keys():
 
 
 def test_remediation_is_behaviour_first():
-    """Give remediation that says to remove only the redundant assertion or replace it with behavioral evidence."""
+    """Give remediation that says to remove only the redundant assertion or replace it with behavioral evidence.
+
+    Returns:
+        None. Checks the finding's exact remediation text.
+    """
     finding = _only("def test_decl():\n    assert hasattr(ShapeService, 'render')\n")
     assert finding.remediation == ("Remove only the redundant assertion, or replace it with behavioral evidence that static analysis cannot prove.")
 
 
 def test_each_redundant_assertion_emits_one_finding():
-    """Report three findings, one per variant, for a test with three redundant assertions on the same method."""
+    """Report three findings, one per variant, for a test with three redundant assertions on the same method.
+
+    Returns:
+        None. Checks that the finding list contains each of the three expected variants exactly once.
+    """
     source = (
         "def test_decl():\n"
         "    assert hasattr(ShapeService, 'render')\n"
@@ -140,7 +180,11 @@ def test_each_redundant_assertion_emits_one_finding():
 
 
 def test_nested_class_resolves_via_attribute_chain():
-    """Report one finding naming ``Outer.Inner`` for ``inspect.isclass`` on a nested class."""
+    """Report one finding naming Outer.Inner for inspect.isclass on a nested class.
+
+    Returns:
+        None. Checks that exactly one finding names Outer.Inner as its evidence symbol.
+    """
     source = (
         "import inspect\n\n"
         "class Outer:\n"
@@ -156,85 +200,145 @@ def test_nested_class_resolves_via_attribute_chain():
 
 
 def test_behavioural_value_assertion_is_clean():
-    """Report nothing for an assertion on the value a method returns."""
+    """Report nothing for an assertion on the value a method returns.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "def test_value():\n    assert ShapeService().render() == 'shape'\n"
     assert _findings(source) == []
 
 
 def test_dynamic_member_name_is_clean():
-    """Report nothing for ``hasattr`` with a member name held in a variable."""
+    """Report nothing for hasattr with a member name held in a variable.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "def test_value():\n    member = 'render'\n    assert hasattr(ShapeService, member)\n"
     assert _findings(source) == []
 
 
 def test_instance_receiver_is_clean():
-    """Report nothing for ``hasattr`` on a test parameter."""
+    """Report nothing for hasattr on a test parameter.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value(service):\n    assert hasattr(service, 'render')\n") == []
 
 
 def test_imported_symbol_is_clean():
-    """Report nothing for ``hasattr`` on a class imported inside the test."""
+    """Report nothing for hasattr on a class imported inside the test.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "def test_value():\n    from datetime import datetime\n\n    assert hasattr(datetime, 'fromisoformat')\n"
     assert _findings(source) == []
 
 
 def test_bare_annotation_is_clean():
-    """Report nothing for ``hasattr`` on a class attribute that is annotated but has no value."""
+    """Report nothing for hasattr on a class attribute that is annotated but has no value.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value():\n    assert hasattr(ShapeService, 'slug')\n") == []
 
 
 def test_undeclared_member_is_clean():
-    """Report nothing for ``hasattr`` on a member the class does not declare."""
+    """Report nothing for hasattr on a member the class does not declare.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value():\n    assert hasattr(ShapeService, 'missing')\n") == []
 
 
 def test_private_member_is_left_to_private_reflection():
-    """Report nothing for ``hasattr`` on an underscore-prefixed member name."""
+    """Report nothing for hasattr on an underscore-prefixed member name.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value():\n    assert hasattr(ShapeService, '_secret')\n") == []
 
 
 def test_callable_of_non_method_attribute_is_clean():
-    """Report nothing for ``callable`` on a class attribute that holds a string."""
+    """Report nothing for callable on a class attribute that holds a string.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value():\n    assert callable(ShapeService.label)\n") == []
 
 
 def test_negated_existence_is_clean():
-    """Report nothing for ``assert not hasattr`` on a declared method."""
+    """Report nothing for assert not hasattr on a declared method.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     assert _findings("def test_value():\n    assert not hasattr(ShapeService, 'render')\n") == []
 
 
 def test_assert_false_is_clean():
-    """Report nothing for ``self.assertFalse(hasattr(...))`` on a declared method."""
+    """Report nothing for self.assertFalse(hasattr(...)) on a declared method.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class TestShape(unittest.TestCase):\n    def test_value(self):\n        self.assertFalse(hasattr(ShapeService, 'render'))\n"
     assert _findings(source) == []
 
 
 def test_assert_not_has_attr_is_clean():
-    """Report nothing for ``self.assertNotHasAttr`` on a declared method."""
+    """Report nothing for self.assertNotHasAttr on a declared method.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class TestShape(unittest.TestCase):\n    def test_value(self):\n        self.assertNotHasAttr(ShapeService, 'render')\n"
     assert _findings(source) == []
 
 
 def test_property_member_is_clean():
-    """Report nothing for ``hasattr`` on a property."""
+    """Report nothing for hasattr on a property.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class WithProp:\n    @property\n    def name(self):\n        return 'x'\n\ndef test_value():\n    assert hasattr(WithProp, 'name')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_instance_only_attribute_is_clean():
-    """Report nothing for ``hasattr`` on a class for an attribute set only in ``__init__``."""
+    """Report nothing for hasattr on a class for an attribute set only in __init__.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class Stateful:\n    def __init__(self):\n        self.count = 0\n\ndef test_value():\n    assert hasattr(Stateful, 'count')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_setattr_injected_member_is_clean():
-    """Report nothing for ``hasattr`` on a member added by a module-level ``setattr``."""
+    """Report nothing for hasattr on a member added by a module-level setattr.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class Dynamic:\n    pass\n\nsetattr(Dynamic, 'injected', 1)\n\ndef test_value():\n    assert hasattr(Dynamic, 'injected')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_conditionally_declared_class_is_clean():
-    """Report nothing for ``hasattr`` on a class declared inside an ``if`` block."""
+    """Report nothing for hasattr on a class declared inside an if block.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "if True:\n"
         "    class Conditional:\n"
@@ -247,13 +351,21 @@ def test_conditionally_declared_class_is_clean():
 
 
 def test_module_level_rebinding_makes_class_ambiguous():
-    """Report nothing when the module rebinds the class name to ``None`` after declaring the class."""
+    """Report nothing when the module rebinds the class name to None after declaring the class.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class Widget:\n    def render(self):\n        return 'x'\n\nWidget = None\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_module_level_function_rebinding_makes_class_ambiguous():
-    """Report nothing when a later function definition reuses the class name."""
+    """Report nothing when a later function definition reuses the class name.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "class Widget:\n"
         "    def render(self):\n"
@@ -267,13 +379,21 @@ def test_module_level_function_rebinding_makes_class_ambiguous():
 
 
 def test_module_level_delete_makes_class_ambiguous():
-    """Report nothing when the module deletes the class name after declaring the class."""
+    """Report nothing when the module deletes the class name after declaring the class.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = "class Widget:\n    def render(self):\n        return 'x'\n\ndel Widget\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_module_level_member_rebinding_makes_method_ambiguous():
-    """Report nothing for ``callable`` on a method that the module later sets to ``None``."""
+    """Report nothing for callable on a method that the module later sets to None.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "class Widget:\n    def render(self):\n        return 'x'\n\nWidget.render = None\n\ndef test_value():\n    assert callable(Widget.render)\n"
     )
@@ -281,7 +401,11 @@ def test_module_level_member_rebinding_makes_method_ambiguous():
 
 
 def test_nested_class_rebinding_makes_nested_class_ambiguous():
-    """Report nothing when the outer class rebinds its nested class name to ``1``."""
+    """Report nothing when the outer class rebinds its nested class name to 1.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "class Outer:\n"
         "    class Inner:\n"
@@ -295,7 +419,11 @@ def test_nested_class_rebinding_makes_nested_class_ambiguous():
 
 
 def test_test_local_rebinding_makes_class_ambiguous():
-    """Report nothing when the test rebinds the class name before its ``hasattr`` assertion."""
+    """Report nothing when the test rebinds the class name before its hasattr assertion.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "class Widget:\n    def render(self):\n        return 'x'\n\ndef test_value():\n    Widget = object()\n    assert hasattr(Widget, 'render')\n"
     )
@@ -303,7 +431,11 @@ def test_test_local_rebinding_makes_class_ambiguous():
 
 
 def test_star_import_disables_class_evidence():
-    """Report nothing for ``hasattr`` on a same-file class when the module has a star import."""
+    """Report nothing for hasattr on a same-file class when the module has a star import.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "from os import *\n\nclass Widget:\n    def render(self):\n        return 'x'\n\ndef test_value():\n    assert hasattr(Widget, 'render')\n"
     )
@@ -311,15 +443,23 @@ def test_star_import_disables_class_evidence():
 
 
 def test_test_parameter_shadow_is_clean():
-    """Report nothing when a test parameter shares the class name."""
-    # A fixture / parametrized argument shadows the same-file class name.
+    """Report nothing when a test parameter shares the class name.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # The parameter hides the same-file Widget class, so its declaration cannot establish what hasattr checks.
     source = "class Widget:\n    def render(self):\n        return 'x'\n\ndef test_value(Widget):\n    assert hasattr(Widget, 'render')\n"
     assert StaticAnalysisRedundantTestRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_in_test_member_write_is_clean():
-    """Report nothing for ``callable`` on a method the test reassigns first."""
-    # An in-test monkeypatch makes the member a runtime mutation, not a declaration.
+    """Report nothing for callable on a method the test reassigns first.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # Reassigning Widget.render makes its original declaration unreliable as evidence for the assertion.
     source = (
         "class Widget:\n"
         "    def render(self):\n"
@@ -332,7 +472,11 @@ def test_in_test_member_write_is_clean():
 
 
 def test_decorated_class_is_not_trusted_evidence():
-    """Report nothing for ``hasattr`` on a class that has a decorator."""
+    """Report nothing for hasattr on a class that has a decorator.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     # A class decorator can add, remove, or replace members at class creation.
     source = (
         "def strip(cls):\n"
@@ -348,7 +492,11 @@ def test_decorated_class_is_not_trusted_evidence():
 
 
 def test_metaclass_class_is_not_trusted_evidence():
-    """Report nothing for ``hasattr`` on a class built by a custom metaclass."""
+    """Report nothing for hasattr on a class built by a custom metaclass.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     # A metaclass can hide or synthesise members at class creation.
     source = (
         "class Meta(type):\n"
@@ -363,8 +511,12 @@ def test_metaclass_class_is_not_trusted_evidence():
 
 
 def test_conditional_import_rebinding_makes_class_ambiguous():
-    """Report nothing when a module-level ``try`` may import the class name from another module."""
-    # A conditional module-level re-import can replace the class at runtime.
+    """Report nothing when a module-level try may import the class name from another module.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # A conditional module-level import can replace the class at runtime.
     source = (
         "class Widget:\n"
         "    def render(self):\n"
@@ -380,8 +532,12 @@ def test_conditional_import_rebinding_makes_class_ambiguous():
 
 
 def test_class_body_conditional_rebinding_makes_member_ambiguous():
-    """Report nothing for ``callable`` on a method that an ``if`` in the class body rebinds to ``None``."""
-    # A member rebound inside a class-body compound is no longer statically known.
+    """Report nothing for callable on a method that an if in the class body rebinds to None.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # A conditional assignment to render disqualifies its method declaration as evidence for the rule.
     source = (
         "FEATURE = True\n\n"
         "class Widget:\n"
@@ -396,8 +552,12 @@ def test_class_body_conditional_rebinding_makes_member_ambiguous():
 
 
 def test_class_body_conditional_delete_makes_member_ambiguous():
-    """Report nothing for ``hasattr`` on a method that an ``if`` in the class body deletes."""
-    # A del inside a class-body compound can remove the member at class creation.
+    """Report nothing for hasattr on a method that an if in the class body deletes.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # The rule treats render as ambiguous because the class body can delete it before the test checks for it.
     source = (
         "FEATURE = True\n\n"
         "class Widget:\n"
@@ -412,7 +572,11 @@ def test_class_body_conditional_delete_makes_member_ambiguous():
 
 
 def test_class_body_compound_leaves_untouched_member_flagged():
-    """Report one finding for ``callable`` on a method when an ``if`` in the class body rebinds only another method."""
+    """Report one finding for callable on a method when an if in the class body rebinds only another method.
+
+    Returns:
+        None. Asserts that exactly one finding names Widget.render as its evidence symbol.
+    """
     # A compound that rebinds one member must not silence an untouched sibling.
     source = (
         "FEATURE = True\n\n"
@@ -432,7 +596,11 @@ def test_class_body_compound_leaves_untouched_member_flagged():
 
 
 def test_match_case_body_rebinding_makes_class_ambiguous():
-    """Report nothing when a case of a module-level ``match`` rebinds the class name."""
+    """Report nothing when a case of a module-level match rebinds the class name.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     # A binding inside a module-level match case still shadows the same-file class.
     source = (
         "import sys\n\n"
@@ -451,8 +619,12 @@ def test_match_case_body_rebinding_makes_class_ambiguous():
 
 
 def test_match_capture_pattern_makes_class_ambiguous():
-    """Report nothing when a module-level ``match`` has a capture pattern that binds the class name."""
-    # `case Widget:` is a capture pattern that rebinds Widget, not a class match.
+    """Report nothing when a module-level match has a capture pattern that binds the class name.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # case Widget: is a capture pattern that rebinds Widget, not a class match.
     source = (
         "import sys\n\n"
         "class Widget:\n"
@@ -468,8 +640,11 @@ def test_match_capture_pattern_makes_class_ambiguous():
 
 
 def test_locally_shadowed_assertion_helper_is_clean():
-    """Report nothing when the test defines its own ``hasattr`` before asserting with it."""
-    # The assertion helper itself is rebound in the test's local scope.
+    """Report nothing when the test defines its own hasattr before asserting with it.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     source = (
         "class Widget:\n"
         "    def render(self):\n"
@@ -483,8 +658,11 @@ def test_locally_shadowed_assertion_helper_is_clean():
 
 
 def test_neighbour_shapes_are_not_claimed():
-    """Report nothing for an ``isinstance`` check, a private attribute read or a ``pytest.raises`` block."""
-    # Shapes owned by sibling test-quality rules must stay clean here.
+    """Report nothing for an isinstance check, a private attribute read or a pytest.raises block.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list for each example.
+    """
     rule = StaticAnalysisRedundantTestRule()
     ctx = default_ctx()
     neighbour_sources = (
@@ -496,7 +674,11 @@ def test_neighbour_shapes_are_not_claimed():
 
 
 def test_registry_exposes_rule_with_advisory_high_defaults():
-    """Expose the rule in the default registry, enabled by default at advisory severity and high confidence."""
+    """Expose the rule in the default registry, enabled by default at advisory severity and high confidence.
+
+    Returns:
+        None. Asserts that the registered rule is enabled by default with advisory severity and high confidence.
+    """
     rule = RuleRegistry.defaults().get(RULE_ID)
     definition = rule.definition()
     assert definition.default_severity is Severity.ADVISORY

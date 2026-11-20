@@ -31,13 +31,13 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``band.py``.
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for band.py.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        A unit for ``band.py`` whose AST nodes carry parent links.
+        A unit for band.py with parent links on every non-root AST node.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
@@ -54,7 +54,7 @@ def _ctx(rule: Rule, settings: RuleSettings) -> RuleContext:
         settings: Settings applied to that rule.
 
     Returns:
-        A context whose config enables only that rule with those settings.
+        A context whose config contains only that rule's supplied settings, including its enabled state.
     """
     return RuleContext(project_root="/", config=AnalysisConfig(rules={rule.definition().id: settings}))
 
@@ -79,10 +79,10 @@ def _only(rule: Rule, source: str, settings: RuleSettings) -> Finding:
 
 
 def _assignments(count: int) -> str:
-    """Return module source with count numbered assignments, one per line.
+    """Return module source with numbered assignments, one per line.
 
     Args:
-        count: Number of items to generate.
+        count: Number of assignments to generate. Zero or a negative count produces empty source.
 
     Returns:
         Source holding one assignment per line.
@@ -91,25 +91,25 @@ def _assignments(count: int) -> str:
 
 
 def _class_of_lines(count: int) -> str:
-    """Return source for a class ``C`` spanning count lines: the class line plus count minus one attributes.
+    """Build a class C fixture with an attribute assignment on each line after the header.
 
     Args:
-        count: Lines the class should span.
+        count: Requested line count including the header. Values below 2 leave only the class header, which fails to parse.
 
     Returns:
-        Source for ``C`` with count minus one attribute assignments.
+        Source for C with the header followed by any generated attribute assignments.
     """
     return "class C:\n" + "".join(f"    a{i} = {i}\n" for i in range(count - 1))
 
 
 def _function_of_statements(count: int) -> str:
-    """Return source for a function ``f`` of count lines: the ``def``, count minus two increments and a return.
+    """Build a function f fixture with a def line, optional increments and a return line.
 
     Args:
-        count: Lines the function should span.
+        count: Requested line count. Values below 2 produce only the def and return lines.
 
     Returns:
-        Source for ``f`` spanning count lines.
+        Source for f spanning the requested number of lines, with a minimum of 2.
     """
     return "def f(x):\n" + "".join("    x += 1\n" for _ in range(count - 2)) + "    return x\n"
 
@@ -151,25 +151,25 @@ def _class_with_public_methods(count: int) -> str:
 
 
 def _function_with_branches(count: int) -> str:
-    """Return source for a function ``f`` with count sequential ``if`` branches on ``x``.
+    """Return source for a function f with count sequential if branches on x.
 
     Args:
         count: Number of items to generate.
 
     Returns:
-        Source for ``f`` with count branches before its return.
+        Source for f with count branches before its return.
     """
     return "def f(x):\n    y = 0\n" + "".join(f"    if x == {i}:\n        y += {i}\n" for i in range(count)) + "    return y\n"
 
 
 def _function_nested_to(depth: int) -> str:
-    """Return source for a function ``f`` whose ``if`` statements nest depth levels deep before the return.
+    """Return source for a function f whose if statements nest depth levels deep before the return.
 
     Args:
         depth: Nesting depth of the innermost statement.
 
     Returns:
-        Source for ``f`` with depth nested ``if`` statements.
+        Source for f with depth nested if statements.
     """
     return "def f(x):\n" + "".join("    " * (level + 1) + f"if x > {level}:\n" for level in range(depth)) + "    " * (depth + 1) + "return x\n"
 
@@ -180,13 +180,13 @@ BAND_FIELDS = ("rule", "limit", "lower", "upper", "build", "lower_advice", "uppe
 
 
 def _case_id(case: object) -> str | None:
-    """Return a case value's ``ID`` attribute as its parametrize id, or None when it has none.
+    """Return a case value's ID attribute as its parametrize id, or None when it has none.
 
     Args:
-        case: One parametrize argument value; a rule instance carries ``ID``.
+        case: One parametrize argument value; a rule instance carries ID.
 
     Returns:
-        The ``ID`` string, or None so pytest generates that parameter's id itself.
+        The ID string, or None so pytest generates that parameter's id itself.
     """
     return getattr(case, "ID", None)
 
@@ -218,6 +218,9 @@ def test_each_rule_just_over_its_limit_reports_the_lower_band_notice(
         build: Function that turns a count into source.
         lower_advice: Remediation expected in the lower band.
         upper_advice: Upper-band remediation, from the shared cases; unused here.
+
+    Returns:
+        None. Checks the measured value, advisory severity and expected remediation of the single lower-band finding.
     """
     near = _only(rule, build(lower), RuleSettings(enabled=True, severity_threshold=SeverityThreshold(limit, Severity.ERROR)))
 
@@ -241,6 +244,9 @@ def test_each_rule_at_twice_its_limit_keeps_its_severity_and_says_split_or_simpl
         build: Function that turns a count into source.
         lower_advice: Lower-band remediation, checked with the upper advice for forbidden wording.
         upper_advice: Remediation expected in the upper band.
+
+    Returns:
+        None. Checks the upper-band error and its remediation, and checks both advice texts for forbidden wording.
     """
     far = _only(rule, build(upper), RuleSettings(enabled=True, severity_threshold=SeverityThreshold(limit, Severity.ERROR)))
 
@@ -254,9 +260,12 @@ def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: 
     """Report a 110-line function as advisory and a 160-line one with the configured warning, each message naming the threshold of 100.
 
     Args:
-        lines: Total function lines requested from the builder, the ``def`` line included.
+        lines: Total function lines requested from the builder, the def line included.
         band: Expected limit band.
         severity: Expected severity: advisory in the lower band, the configured warning in the upper.
+
+    Returns:
+        None. Checks the expected band and severity and verifies that the message names the warning threshold of 100.
     """
     settings = RuleSettings(enabled=True, severity_threshold=SeverityThreshold(100, Severity.WARNING))
     finding = _only(FunctionLengthRule(), _function_of_statements(lines), settings)
@@ -267,7 +276,11 @@ def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: 
 
 
 def test_function_length_counts_a_multi_line_literal_and_call_once() -> None:
-    """Measure a function holding a 130-entry dict literal and a call with 130 keyword arguments at 12 lines."""
+    """Measure a function holding a 130-entry dict literal and a call with 130 keyword arguments at 12 lines.
+
+    Returns:
+        None. Asserts a total of 12 logical lines with one line each for the multiline literal and call.
+    """
     literal = "".join(f"        'key{i}': {i},\n" for i in range(130))
     arguments = "".join(f"        option{i}={i},\n" for i in range(130))
     statements = "".join("    x += 1\n" for _ in range(8))
@@ -281,7 +294,11 @@ def test_function_length_counts_a_multi_line_literal_and_call_once() -> None:
 
 
 def test_function_length_still_reports_101_distinct_statements() -> None:
-    """Measure a 102-line function of distinct statements at 102 lines against a threshold of 100."""
+    """Measure a 102-line function of distinct statements at 102 lines against a threshold of 100.
+
+    Returns:
+        None. Asserts that the finding reports all 102 lines.
+    """
     settings = RuleSettings(enabled=True, severity_threshold=SeverityThreshold(100, Severity.ERROR))
     finding = _only(FunctionLengthRule(), _function_of_statements(102), settings)
 
@@ -289,7 +306,11 @@ def test_function_length_still_reports_101_distinct_statements() -> None:
 
 
 def test_public_method_count_counts_each_name_once() -> None:
-    """Count six property pairs and one overloaded method as 7 public names, not fifteen definitions."""
+    """Count six property pairs and one overloaded method as 7 public names, not fifteen definitions.
+
+    Returns:
+        None. Asserts the distinct public-name count in the finding metadata.
+    """
     properties = "".join(
         f"    @property\n    def p{i}(self):\n        return {i}\n    @p{i}.setter\n    def p{i}(self, value):\n        pass\n" for i in range(6)
     )
@@ -303,5 +324,5 @@ def test_public_method_count_counts_each_name_once() -> None:
 
     finding = _only(PublicMethodCountRule(), source, settings)
 
-    # Six properties and one overloaded method are seven public names, not fifteen definitions.
+    # A threshold of six makes the deduplicated count visible in a finding.
     assert finding.metadata["publicMethods"] == 7

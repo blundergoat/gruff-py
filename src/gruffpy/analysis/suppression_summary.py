@@ -47,7 +47,7 @@ class SuppressionSummary:
         symbol.
 
         Returns:
-            JSON-ready native suppression fields.
+            JSON-ready native suppression fields. An unavailable symbol is included as None and an absent source is omitted.
         """
         return {
             "index": self.index,

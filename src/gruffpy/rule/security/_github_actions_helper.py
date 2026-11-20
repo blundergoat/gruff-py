@@ -25,14 +25,14 @@ def is_workflow_file(display_path: str) -> bool:
 
 
 def source_line(source: str, offset: int) -> int:
-    """Return the 1-based line number of *offset* within *source*.
+    """Return the 1-based line number of offset within source.
 
     Args:
         source: Full source text being scanned.
         offset: Zero-based character offset of a match.
 
     Returns:
-        One-based line number containing *offset*.
+        One-based line number containing the offset.
     """
     return source.count("\n", 0, offset) + 1
 

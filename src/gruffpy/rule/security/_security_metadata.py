@@ -147,7 +147,7 @@ def finding_security_metadata(
         sink_label: Optional sink taxonomy label for the finding.
 
     Returns:
-        Security taxonomy plus optional source and sink labels.
+        Registered taxonomy plus any nonempty labels. For an unregistered rule, only supplied labels appear, so the mapping may be empty.
     """
     metadata = rule_security_metadata(rule_id)
     if source_label:

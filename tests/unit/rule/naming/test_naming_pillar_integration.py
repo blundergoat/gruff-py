@@ -69,7 +69,7 @@ def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
 
     Args:
         source: Python source to parse.
-        display_path: Project-relative path of the unit; defaults to ``users.py``.
+        display_path: Project-relative path of the unit; defaults to users.py.
 
     Returns:
         A unit at display_path whose AST nodes carry parent links.
@@ -77,7 +77,7 @@ def _unit(source: str, display_path: str = "users.py") -> AnalysisUnit:
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # The fixture adds parent metadata outside the standard AST fields.
     return AnalysisUnit(
         file=SourceFile(
             absolute_path=f"/{display_path}",
@@ -109,7 +109,11 @@ def _default_ctx() -> RuleContext:
 
 
 def test_registry_includes_all_naming_rules():
-    """Register the five naming rules in the default registry."""
+    """Check that the default registry includes the expected naming rules.
+
+    Returns:
+        None after checking that every expected rule ID is present.
+    """
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     expected = {
@@ -131,14 +135,22 @@ _EXPECTED_NAMING_RULE_IDS_FIRED = {
 
 
 def test_naming_rules_fire_on_fixture():
-    """Expose the surviving naming rules on the existing mixed fixture."""
+    """Require the expected naming-rule findings from the mixed fixture.
+
+    Returns:
+        None after checking that the fixture produces findings for every expected naming rule ID.
+    """
     findings = RuleRegistry.defaults().analyse([_unit(NAMING_FIXTURE)], _default_ctx())
     rule_ids = {f.rule_id for f in findings}
     assert _EXPECTED_NAMING_RULE_IDS_FIRED.issubset(rule_ids), f"missing rule ids: {_EXPECTED_NAMING_RULE_IDS_FIRED - rule_ids}"
 
 
 def test_module_name_mismatch_silent_when_filename_matches():
-    """Report no module-name mismatch for ``UserService`` in ``user_service.py``."""
+    """Report no module-name mismatch for UserService in user_service.py.
+
+    Returns:
+        None after checking that the module-name mismatch findings list is empty.
+    """
     findings = RuleRegistry.defaults().analyse(
         [_unit("class UserService:\n    pass\n", display_path="user_service.py")],
         _default_ctx(),

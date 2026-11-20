@@ -45,10 +45,7 @@ class HardcodedFrameworkSecretKeyRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the hardcoded-SECRET_KEY rule as a high-confidence ERROR.
 
-        ERROR severity because a leaked SECRET_KEY in Flask/Django defeats
-        session signing, password reset tokens, and CSRF protection; high
-        confidence because the matched shape (module-scope assignment with
-        a string literal value) is unambiguous.
+        ERROR reflects the risk to framework signing when a key leaks; high confidence reflects the direct string-literal assignment.
 
         Returns:
             Definition for the hardcoded-SECRET_KEY rule under the
@@ -65,20 +62,17 @@ class HardcodedFrameworkSecretKeyRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag module-scope ``SECRET_KEY = "..."`` in Flask/Django files.
+        """Flag direct module-body SECRET_KEY assignments with string-literal values in files importing Flask or Django.
 
-        Walks only the module body - assignments inside functions, classes,
-        or branches are skipped. The framework gate (Flask or Django
-        imported) keeps the rule from firing on unrelated modules that
-        happen to have a constant named ``SECRET_KEY``.
+        Functions, classes, and branches are not traversed; imports must appear directly in the module body.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per module-scope SECRET_KEY assignment with a
-            string-literal value.
+            One finding per direct module-body SECRET_KEY assignment with a string-literal value.
+            Empty without a parsed module, a qualifying framework import, or a matching assignment.
         """
         if unit.tree is None or _SECRET_KEY_NAME not in unit.source:
             return []

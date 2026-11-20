@@ -33,9 +33,7 @@ class UnusedMockRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unused-mock rule as a high-confidence warning.
 
-        High confidence because the rule looks for any Load-context
-        reference to the mock's name in the test body - a mock with zero
-        such references is dead test scaffolding.
+        High confidence reflects tracking of direct reads, augmented assignments and closure captures of mock binding names.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -50,20 +48,16 @@ class UnusedMockRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag tests whose mock binding name is never read elsewhere in the function body.
+        """Flag tests with unread mock bindings.
 
-        Considers a mock "used" only when its name appears as a
-        Load-context ``Name`` node (attribute access, function argument,
-        etc.), including a read captured by a nested function. A nested
-        local with the same name and plain reassignment don't count.
+        Reads include augmented-assignment targets and captured outer bindings; nested function locals and plain assignments do not count.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per test, listing the unused mock names in the
-            message and metadata.
+            One finding per affected test, listing unused mock names in the message and metadata; empty when the AST is absent or none qualify.
         """
         if unit.tree is None:
             return []
@@ -131,12 +125,13 @@ def _referenced_names(fn: ast.FunctionDef | ast.AsyncFunctionDef, names: set[str
 def _function_tables(unit: AnalysisUnit) -> dict[tuple[str, int], symtable.SymbolTable]:
     """Index compiler symbol tables without dropping enclosing lexical context.
 
+    Compiler rejection leaves the caller's direct AST reads intact; this optional closure analysis therefore returns no tables without a diagnostic.
+
     Args:
         unit: Parsed source whose full text supplies enclosing bindings.
 
     Returns:
-        Function tables keyed by name and definition line, or an empty mapping
-        when compiler-level syntax errors prevent lexical analysis.
+        Function tables keyed by name and definition line. Empty when the compiler rejects the source or produces no function tables.
     """
     # CPython marks x += value as assigned, not referenced. Add a same-line
     # read for symbol analysis only, retaining original scopes and line numbers.

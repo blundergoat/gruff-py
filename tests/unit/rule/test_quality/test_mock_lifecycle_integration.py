@@ -59,7 +59,11 @@ _EXPECTED_MOCK_LIFECYCLE_FIRES = {
 
 
 def test_mock_lifecycle_rules_fire_on_cumulative_fixture():
-    """Report the empty-parametrize, unused-mock, private-reflection and global-state rules at least once on the cumulative fixture."""
+    """Report the empty-parametrize, unused-mock, private-reflection and global-state rules at least once on the cumulative fixture.
+
+    Returns:
+        None. Checks that the reported rule IDs include every expected ID, regardless of additional findings.
+    """
     findings = RuleRegistry.defaults().analyse([make_unit(_FIXTURE)], default_ctx())
     fired = {f.rule_id for f in findings}
     missing = _EXPECTED_MOCK_LIFECYCLE_FIRES - fired
@@ -67,11 +71,14 @@ def test_mock_lifecycle_rules_fire_on_cumulative_fixture():
 
 
 def test_memoisation_invariant_holds_for_full_pillar():
-    """Single scope computation per unit even with mock-aware rules in the registry."""
+    """Reset the shared computation counter and require one scope computation with the default registry's mock-aware rules.
+
+    Returns:
+        None. Checks that the default registry performs exactly one scope computation on the cumulative fixture.
+    """
     reset_compute_count()
     unit = make_unit(_FIXTURE)
     before = compute_count()
     RuleRegistry.defaults().analyse([unit], default_ctx())
     after = compute_count()
-    # One compute regardless of how many test-quality rules consumed the scope.
     assert after - before == 1, f"Memoisation broken: {after - before} computes"

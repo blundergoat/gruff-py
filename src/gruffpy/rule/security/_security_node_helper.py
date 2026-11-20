@@ -53,22 +53,13 @@ _MODULE_CONSTANT_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def call_target_name(call: ast.Call) -> str | None:
-    """Return the dotted name of a call target, or None for dynamic calls.
-
-    Examples:
-
-    - ``eval(...)`` → ``"eval"``
-    - ``pickle.loads(...)`` → ``"pickle.loads"``
-    - ``self.method(...)`` → ``"self.method"``
-    - ``urllib.request.urlopen(...)`` → ``"urllib.request.urlopen"``
-    - ``func_var(...)`` (where ``func_var`` is a local) → ``"func_var"``
-    - ``(a or b)(...)`` → ``None``
+    """Return the spelling of a name-based call target without resolving runtime bindings.
 
     Args:
         call: Call expression to inspect.
 
     Returns:
-        Dotted target name, or None when the callee is dynamic.
+        A bare name or a dotted attribute chain rooted in a name, or None for other callee expressions.
     """
     return _resolve_name(call.func)
 
@@ -80,7 +71,7 @@ def _resolve_name(node: ast.AST) -> str | None:
         node: Expression whose names and attribute receivers are inspected without resolving bindings.
 
     Returns:
-        Dotted spelling for a supported chain, or None when any receiver has another expression shape.
+        Bare name or dotted attribute chain. None when the expression or any attribute receiver has an unsupported shape.
     """
     if isinstance(node, ast.Name):
         return node.id
@@ -96,7 +87,7 @@ def call_keyword(call: ast.Call, name: str) -> ast.expr | None:
     """Return the value expression for a keyword argument.
 
     Args:
-        call: Call expression to inspect.
+        call: Call whose explicitly named keyword arguments are searched. Keyword unpacking is skipped.
         name: Keyword name to find.
 
     Returns:
@@ -109,7 +100,7 @@ def call_keyword(call: ast.Call, name: str) -> ast.expr | None:
 
 
 def is_false_constant(node: ast.expr) -> bool:
-    """Return whether an expression is the literal ``False`` or ``0``.
+    """Return whether an expression is a constant whose value is False or equals zero.
 
     Args:
         node: Expression to inspect.
@@ -126,10 +117,10 @@ def is_string_literal(node: ast.expr) -> bool:
     """Return whether an expression is a pure string literal.
 
     Args:
-        node: Expression to inspect.
+        node: Parsed expression checked for a string constant at its root.
 
     Returns:
-        True for plain string constants without interpolation.
+        True for a string-valued AST constant, including an empty string. False for all other expressions.
     """
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
@@ -178,6 +169,9 @@ def _collect_module_constant_candidate(
         candidates: Candidate names and string values, mutated when a qualifying assignment is found.
         owner_targets: Candidate names and their original AST target objects, mutated alongside candidates.
         invalid: Names disqualified by encountered bindings, extended in place.
+
+    Returns:
+        None; candidate records and disqualified names are updated in place.
     """
     if isinstance(stmt, ast.Assign):
         _collect_plain_assign_candidate(stmt, candidates, owner_targets, invalid)
@@ -210,6 +204,9 @@ def _collect_plain_assign_candidate(
         candidates: Recorded candidate values, extended for a qualifying name not previously recorded.
         owner_targets: Original AST targets, extended with the qualifying assignment's target object.
         invalid: Names disqualified by repeated or unsupported assignments, extended in place.
+
+    Returns:
+        None; candidate records and disqualified names are updated in place.
     """
     if len(stmt.targets) != 1:
         names = (_constant_target_name(target) for target in stmt.targets)
@@ -232,16 +229,12 @@ def _module_scope_rebound_names(
     tree: ast.Module,
     owner_targets: Mapping[str, ast.Name],
 ) -> set[str]:
-    """Return ALL-CAPS names bound at module scope outside their recording assignment.
+    """Find supported ALL-CAPS store and import bindings outside recorded candidate targets.
 
-    Covers rebinds nested in module-level blocks (``if``/``try``/``with``),
-    loop targets, tuple unpacking, walrus expressions, and nested imports.
-    Function and class bodies are skipped: they bind their own scopes, and
-    module rebinds from inside a function require ``global``, which the
-    caller handles separately.
+    Function, class and lambda subtrees are skipped; the caller checks global declarations separately.
 
     Args:
-        tree: Module whose body and nested module-level blocks are scanned, skipping inner scopes.
+        tree: Module scanned for bindings in its body, including nested blocks and comprehension targets.
         owner_targets: Original candidate target objects exempted by identity from the rebind scan.
 
     Returns:
@@ -317,20 +310,20 @@ def _is_module_constant_name(name: str) -> bool:
         name: Identifier spelling tested from start to end against the constant-name pattern.
 
     Returns:
-        True for an uppercase initial letter followed by uppercase letters, digits or underscores; False otherwise.
+        True for a name starting with an ASCII uppercase letter, with any remaining characters limited to A-Z, 0-9 and underscore. False otherwise.
     """
     return bool(_MODULE_CONSTANT_RE.fullmatch(name))
 
 
 def is_fixed_string_expression(node: ast.expr, constants: Mapping[str, str]) -> bool:
-    """Return whether *node* resolves only to same-module fixed string material.
+    """Recognize supported expressions composed of fixed string material.
 
     Args:
         node: Expression to inspect.
-        constants: Same-module string constants from :func:`module_string_constants`.
+        constants: Same-module string constants from module_string_constants.
 
     Returns:
-        True when the expression is fully fixed at import time.
+        True when every required piece resolves to fixed string material, including empty strings. False for unsupported or unresolved pieces.
     """
     return _fixed_string_value(node, constants) is not None
 
@@ -421,7 +414,8 @@ def _fixed_format_call_value(node: ast.expr, constants: Mapping[str, str]) -> st
         constants: Known string values used to resolve the receiver and argument expressions.
 
     Returns:
-        Receiver material followed by argument material, possibly empty; None for unresolved parts or expanded keywords.
+        Receiver material followed by argument material, possibly empty. None if the expression has another shape,
+        a required part is unresolved, or the call expands keyword arguments.
     """
     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format"):
         return None
@@ -467,16 +461,15 @@ def _fixed_format_values(node: ast.expr, constants: Mapping[str, str]) -> list[s
 
 
 def is_dynamic_string(node: ast.expr) -> bool:
-    """Return whether an expression builds a string from runtime values.
+    """Recognize string-building syntax that may contain runtime values.
 
-    These are the four shapes that produce strings whose contents depend on
-    runtime values - i.e. the classic SQL-concat / shell-concat anti-patterns.
+    This heuristic does not prove string types or exclude constant concatenation and formatting.
 
     Args:
         node: Expression to inspect.
 
     Returns:
-        True for f-strings, ``%`` formatting, ``.format``, or string concatenation.
+        True for interpolated f-strings, string-like addition or percent formatting, or calls to a format attribute. False otherwise.
     """
     if isinstance(node, ast.JoinedStr):
         return any(isinstance(v, ast.FormattedValue) for v in node.values)
@@ -486,10 +479,10 @@ def is_dynamic_string(node: ast.expr) -> bool:
 
 
 def _is_str_producer(node: ast.expr) -> bool:
-    """Best-effort: does *node* yield a str at runtime?
+    """Recognize syntax that may produce a string without resolving runtime types.
 
     Args:
-        node: Expression checked for supported literal, joined, binary or format/join call syntax.
+        node: Expression checked for string literals, f-strings, supported binary operations or calls to format or join attributes.
 
     Returns:
         True when a string-producing syntax heuristic matches; False otherwise, without resolving runtime types.
@@ -532,16 +525,15 @@ def _is_format_call(node: ast.expr) -> bool:
 
 
 def frameworks_in_use(tree: ast.AST) -> frozenset[str]:
-    """Return frameworks imported by a module.
+    """Infer framework labels from the module's import spellings.
 
-    Used to scope rules like ``security.header-injection`` (Flask/FastAPI/Django)
-    so they only fire inside files that actually use the framework.
+    Rules use these import labels to limit framework-specific checks to matching files.
 
     Args:
         tree: Module AST to inspect.
 
     Returns:
-        Framework labels detected from top-level imports.
+        Labels from direct module-body imports; empty for non-module input or when no recognized import is found.
     """
     if not isinstance(tree, ast.Module):
         return frozenset()
@@ -552,22 +544,16 @@ def frameworks_in_use(tree: ast.AST) -> frozenset[str]:
 
 
 def imported_module_names(tree: ast.AST) -> frozenset[str]:
-    """Return every name an ``import`` statement binds anywhere in a module.
+    """Collect names bound by imports anywhere in a module, including imports inside handlers.
 
-    Used to tell a framework's module-level request proxy (``flask.request``)
-    from an application object that merely owns a ``request`` attribute
-    (``other.request``), without naming individual frameworks. Function-local
-    imports count, because a handler may import its framework inside the body.
-
-    ``import flask`` binds ``flask``; ``import flask as f`` binds ``f``;
-    ``import urllib.request`` binds ``urllib``; ``from a import b`` binds ``b``.
-    A star import binds nothing this can name.
+    Request checks use these bindings to see whether a dotted reference starts with an imported name.
+    For example, import flask binds flask, import flask as f binds f, import urllib.request binds urllib, and from a import b binds b.
 
     Args:
         tree: Module AST to inspect.
 
     Returns:
-        Names bound by import statements; empty for a non-module tree.
+        Names bound by import statements. Empty for a non-module tree or when no import supplies an explicit name.
     """
     if not isinstance(tree, ast.Module):
         return frozenset()
@@ -576,7 +562,7 @@ def imported_module_names(tree: ast.AST) -> frozenset[str]:
         if not isinstance(node, ast.Import | ast.ImportFrom):
             continue
         for alias in node.names:
-            # `from x import *` binds names this analyser cannot enumerate.
+            # A wildcard import can bind names this analyser cannot enumerate.
             if alias.name == "*":
                 continue
             bound.add(alias.asname or alias.name.split(".", 1)[0])
@@ -614,11 +600,7 @@ def _framework_for_name(name: str) -> str:
 
 
 def has_security_smell(name: str) -> bool:
-    """Return whether a name suggests security-sensitive material.
-
-    Substring match against a curated token list (``password``, ``token``,
-    ``secret``, ``api_key``, ``auth``, ``signature``, ``hmac``, ``otp``, etc.).
-    Matches on lowercased name.
+    """Match identifier substrings against the curated security-sensitive token set, ignoring case.
 
     Args:
         name: Identifier to inspect.
@@ -650,13 +632,13 @@ def is_pass_or_ellipsis_body(body: list[ast.stmt]) -> bool:
 
 
 def does_exception_handler_log(handler: ast.ExceptHandler) -> bool:
-    """Return whether an exception handler logs or prints.
+    """Detect logging-like call spellings anywhere in an exception handler's AST subtree.
 
     Args:
         handler: Exception handler to inspect.
 
     Returns:
-        True when the body contains logging-like calls.
+        True if a call anywhere in the handler subtree has a recognized final name on a bare name or a name-rooted attribute chain. False otherwise.
     """
     for node in ast.walk(handler):
         if not isinstance(node, ast.Call):

@@ -64,11 +64,6 @@ class XxeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the XXE rule as a high-confidence ERROR.
 
-        ERROR severity because XXE is a well-documented exfiltration and SSRF
-        vector on un-hardened parsers; high confidence because the matched
-        call targets exist only to parse XML and the defusedxml allowlist
-        cleanly removes the migration false-positive class.
-
         Returns:
             Definition for the XXE rule under the security pillar.
         """
@@ -83,21 +78,16 @@ class XxeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag calls to XXE-vulnerable XML parsers, allowlisting defusedxml files.
+        """Flag XML parser call targets after resolving aliases from direct module-body imports.
 
-        Walks top-level imports to build an alias map (``ET`` →
-        ``xml.etree.ElementTree``, ``etree`` → ``lxml.etree``, etc.) and
-        normalises each call target through the map before checking it
-        against the unsafe-target set. Any ``import defusedxml`` /
-        ``from defusedxml`` in the file suppresses the rule for the whole
-        file, on the assumption the migration is in progress.
+        A direct defusedxml import suppresses findings for the file.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsafe XML parser call.
+            One finding per matched unsafe parser call, or an empty list when none qualify or syntax is absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -153,7 +143,7 @@ class _XmlAliases:
             tree: Module AST to inspect for XML imports.
 
         Returns:
-            Alias map keyed by local name with fully-qualified targets.
+            Resolver holding local names and their qualified targets. It leaves targets unchanged without a module tree or qualifying imports.
         """
         aliases: dict[str, str] = {}
         if not isinstance(tree, ast.Module):
@@ -191,6 +181,9 @@ def _record_import(node: ast.Import, aliases: dict[str, str]) -> None:
     Args:
         node: Import statement to inspect for xml, lxml or their submodules.
         aliases: Alias map to mutate; matching imports are recorded only when they have an explicit alias.
+
+    Returns:
+        None; matching imports update aliases in place.
     """
     for alias in node.names:
         if not alias.name.startswith(_XML_MODULE_PREFIXES) and alias.name not in {"xml", "lxml"}:
@@ -203,8 +196,11 @@ def _record_from_import(node: ast.ImportFrom, aliases: dict[str, str]) -> None:
     """Record named imports from XML modules in the supplied alias map.
 
     Args:
-        node: From-import statement to inspect for xml, lxml or their submodules.
+        node: From-import statement to inspect for xml, lxml or their submodules. A relative import with no module name adds no alias.
         aliases: Alias map to mutate with qualified imported names; star imports are skipped.
+
+    Returns:
+        None; matching imports update aliases in place.
     """
     module = node.module
     if module is None:

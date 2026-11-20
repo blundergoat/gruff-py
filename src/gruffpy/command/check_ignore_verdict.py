@@ -38,7 +38,7 @@ class CheckIgnoreVerdict:
         """Return the JSON-serialisable verdict mapping.
 
         Returns:
-            Mapping with ``path``, ``ignored``, ``source``, and ``pattern`` keys.
+            Mapping with path, ignored, source and pattern; absent source or pattern metadata remains None and serialises to JSON null.
         """
         return {
             "path": self.path,

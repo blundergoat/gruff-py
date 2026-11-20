@@ -68,8 +68,8 @@ def parse_sensitive_exclusions(
         Entries in the order the user wrote them; empty when the list is empty.
 
     Raises:
-        ConfigError: When any entry is malformed, over-broad, unreviewable, or duplicated.
-            The message names the entry index and the offending key.
+        ConfigError: When section is not a list, or an entry is malformed, over-broad, unreviewable or duplicated.
+            Feedback identifies the list, entry, invalid field or duplicate scope as applicable.
     """
     if not isinstance(section, list):
         raise ConfigError(f'Config key "{SENSITIVE_EXCLUSIONS_KEY}" must be a list of entries.')
@@ -85,7 +85,7 @@ def parse_sensitive_exclusions(
         )
         scope = (exclusion.rule, exclusion.path, exclusion.symbol)
         first_index = claimed_scopes.get(scope)
-        # Two entries claiming one scope would split the audit count arbitrarily.
+        # The matcher credits at most one entry per finding, so a later duplicate could never get credit for its rationale.
         if first_index is not None:
             raise ConfigError(
                 f'Config key "{SENSITIVE_EXCLUSIONS_KEY}[{index}]" is a duplicate scope of '
@@ -108,7 +108,7 @@ def _parse_entry(
 
     Args:
         index: Original list position retained in diagnostics and the resulting audit entry.
-        entry: Raw entry table containing the rule, path, optional symbol and review reason.
+        entry: Raw table with rule, path, review reason and an optional symbol. Omit symbol to match the rule anywhere in the file.
         known_rule_ids: Registered ids used to reject misspelled rules.
         sensitive_rule_ids: Registered sensitive-data ids permitted in this suppression channel.
 
@@ -116,7 +116,7 @@ def _parse_entry(
         An immutable entry with validated fields and its original list index.
 
     Raises:
-        ConfigError: When the entry shape, keys or any required field is invalid.
+        ConfigError: When the entry shape, keys or any supplied field is invalid, or a required field is missing.
     """
     entry_path = f"{SENSITIVE_EXCLUSIONS_KEY}[{index}]"
     if not isinstance(entry, dict):
@@ -137,6 +137,9 @@ def _reject_unaccepted_keys(entry_path: str, entry: dict[Any, Any]) -> None:
     Args:
         entry_path: Indexed configuration path identifying the rejected entry.
         entry: Raw table whose keys must belong to the accepted rule/path/symbol/reason set.
+
+    Returns:
+        None after validating that the entry contains only accepted keys.
 
     Raises:
         ConfigError: When any table key is outside the accepted set.
@@ -178,7 +181,7 @@ def _parse_rule(
         raise ConfigError(
             f'Config key "{entry_path}.rule" must be one exact rule id; {rule!r} contains a wildcard, glob, or regular-expression metacharacter.'
         )
-    # A pillar or tier name is a group selector wearing a rule id.
+    # A pillar or tier names a group of rules, so it cannot scope the exclusion to one rule.
     if rule in _SELECTOR_VALUES:
         raise ConfigError(f'Config key "{entry_path}.rule" must be one exact rule id, not the selector {rule!r}.')
     # A typo must fail loudly instead of silently suppressing nothing.
@@ -193,20 +196,21 @@ def _parse_rule(
 
 
 def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
-    """Resolve the one project-relative file the entry may silence the rule in.
+    """Validate the project-relative path used to match findings for this exclusion.
 
     Args:
         entry_path: Indexed configuration path used to identify invalid path values.
         entry: Raw table supplying the required literal path string.
 
     Returns:
-        Path text with forward slashes and leading ./ segments removed.
+        Path text using forward slashes, with leading ./ segments removed.
+        A path consisting only of those segments becomes empty and matches no nonempty finding path.
 
     Raises:
         ConfigError: When the raw value is missing or invalid, or its normalized path is absolute, traversing or a glob.
     """
     path = _normalise_report_path(_required_string(f"{entry_path}.path", entry, "path"))
-    # An absolute path leaks the author's machine layout and escapes the project.
+    # Absolute paths tie the exclusion to one checkout, even for files inside the project.
     if path.startswith("/") or _WINDOWS_DRIVE_PATTERN.match(path):
         raise ConfigError(f'Config key "{entry_path}.path" must be project-relative; {path!r} is absolute.')
     if ".." in path.split("/"):
@@ -225,7 +229,7 @@ def _parse_symbol(entry_path: str, entry: dict[Any, Any]) -> str | None:
         entry: Raw table optionally carrying a non-empty symbol string.
 
     Returns:
-        The supplied symbol unchanged, or None when the key is absent.
+        The supplied symbol unchanged, or None when the key is absent so the exclusion matches by rule and path alone.
 
     Raises:
         ConfigError: When a present symbol is not a non-empty string.
@@ -286,7 +290,7 @@ def _normalise_report_path(path: str) -> str:
         path: Path exactly as the user wrote it.
 
     Returns:
-        The same path with Windows separators and a leading ``./`` removed.
+        The path with Windows separators replaced by forward slashes and all leading ./ segments removed.
     """
     normalised = path.replace("\\", "/")
     while normalised.startswith("./"):

@@ -53,7 +53,8 @@ class TodoDensityRule(Rule):
             context: Rule execution context with threshold settings.
 
         Returns:
-            A density finding when marker count exceeds the configured threshold.
+            One finding when markers per 1000 lines exceed the configured threshold.
+            Empty for absent source, exempt rule modules, no markers or no matching threshold.
         """
         if not unit.source:
             return []
@@ -104,9 +105,7 @@ class TodoDensityRule(Rule):
 def _is_rule_definition_file(display_path: str) -> bool:
     """Report whether a display path ends with the TODO density or commented-out code rule module path.
 
-    Backslashes are converted to forward slashes before a plain string suffix match against _RULE_DEFINITION_FILE_SUFFIXES. Because the match does not
-    check for a directory boundary, any path ending in gruffpy/rule/docs/todo_density_rule.py or gruffpy/rule/waste/commented_out_code_rule.py
-    matches, whatever text comes before that suffix.
+    The match normalizes path separators and accepts any prefix, without requiring a directory boundary before the suffix.
 
     Args:
         display_path: Display path of the scanned file, taken from unit.file.display_path; Windows-style backslash separators are accepted.

@@ -85,7 +85,7 @@ class RuleDocs:
         """Return JSON-ready docs metadata.
 
         Returns:
-            Documentation fields suitable for CLI and SARIF metadata.
+            Documentation fields suitable for CLI and SARIF metadata. Empty optional fields are omitted. The configKeys list is always present.
         """
         payload: dict[str, Any] = {
             "rationale": self.rationale,
@@ -100,9 +100,6 @@ class RuleDocs:
 
     def _optional_payload_fields(self) -> dict[str, Any]:
         """Collect the non-empty optional payload fields in JSON-key order.
-
-        Driven from a table so adding a new optional field is one row and the
-        cost stays linear instead of multiplicative.
 
         Returns:
             Optional fields keyed by their camelCase JSON name, in table order, containing only fields whose source value is truthy; tuples are copied
@@ -132,18 +129,14 @@ def custom_docs_for(
     *,
     config_keys: tuple[str, ...],
 ) -> RuleDocs | None:
-    """Resolve hand-curated docs for rules whose generated text would mislead.
-
-    Deliberately a flat ``match``: literal rule-class arms keep curated entries
-    greppable, while closely related rule families share branch-free dispatch
-    when another arm would cross the repository complexity limit.
+    """Resolve curated rule guidance, returning None when the catalog must generate it.
 
     Args:
         definition: Rule definition being documented.
         config_keys: Public config keys computed for the rule by the catalog.
 
     Returns:
-        Curated ``RuleDocs`` for the rule, or ``None`` to use generated docs.
+        Curated RuleDocs for the rule, or None to use generated docs.
     """
     match definition.id:
         case UnsafeNumericCoercionRule.ID:

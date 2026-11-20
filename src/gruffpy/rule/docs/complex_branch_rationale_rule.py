@@ -69,11 +69,12 @@ class ComplexBranchRationaleRule(Rule):
         """Analyze complex functions for missing rationale signals.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect; analysis caches function discovery on its tree and scores on inspected function nodes.
             context: Rule execution context with complexity thresholds.
 
         Returns:
-            Findings for complex functions without docstring or branch comments.
+            Findings for functions above their thresholds that lack both a substantive docstring and qualifying branch rationale;
+            empty when the tree is absent or no function qualifies.
         """
         if unit.tree is None:
             return []
@@ -122,7 +123,7 @@ def _thresholds(
             configured values.
 
     Returns:
-        Mapping of every default key to its threshold: the configured value when it is a positive int, otherwise the default.
+        Mapping of every default key to its threshold: the configured value when it is a positive non-bool int, otherwise the default.
     """
     return {key: _positive_int(options.get(key, defaults[key]), fallback=int(defaults[key])) for key in defaults}
 
@@ -198,9 +199,8 @@ def _branch_rationale_signals(
 ) -> tuple[str, ...]:
     """Collect the rationale comments found on the two lines above each branch statement in a function body.
 
-    Branch statements are the nodes _is_branch_node accepts from body_nodes, which does not descend into nested functions or classes. For each branch,
-    the comment on the line directly above is tried first and then the comment two lines above; the first one that passes _is_rationale_comment is
-    collected. A comment on the branch line itself is not considered.
+    For branches accepted by _is_branch_node outside nested scopes, try one then two lines above for _is_rationale_comment matches.
+    Collect the first match per branch; comments on the branch line are excluded.
 
     Args:
         fn: Function whose body is walked for branch statements.
@@ -269,7 +269,7 @@ def _complex_branch_finding(
     has_docstring: bool,
     rationale_signals: tuple[str, ...],
 ) -> Finding:
-    """Build the finding for a complex function that lacks a substantive docstring and any branch rationale comment.
+    """Build a finding for a complex function with neither a substantive docstring nor qualifying branch rationale.
 
     The finding spans the function's def line to its end line, names its qualified symbol in the message, takes severity, pillar, tier, confidence and
     secondary pillars from definition, and records both scores, hasDocstring and rationaleSignals in metadata.
@@ -282,7 +282,7 @@ def _complex_branch_finding(
         cognitive: Cognitive complexity score recorded as cognitive in metadata.
         has_docstring: Whether the function has any docstring at all, recorded as hasDocstring; True means a docstring exists but did not count as
             substantive.
-        rationale_signals: Rationale comment bodies recorded as the rationaleSignals list in metadata.
+        rationale_signals: Matched comment text copied to rationaleSignals. The caller passes an empty tuple because a match suppresses the finding.
 
     Returns:
         Finding for fn carrying the rule's message, remediation and complexity metadata.

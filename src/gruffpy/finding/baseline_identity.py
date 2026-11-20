@@ -76,25 +76,25 @@ class FindingIdentity:
 
 
 def is_baseline_eligible(finding: Finding) -> bool:
-    """Tell whether a finding may ever receive a baseline identity.
+    """Check whether a finding passes the sensitive-data requirement for a baseline identity.
 
-    A sensitive finding never does: it stays visible and blocking on every run until the user fixes it or
-    excludes it with a written reason under ``sensitiveExclusions``.
+    A baseline cannot suppress a sensitive finding; separate exclusion and failure-threshold policies still apply.
 
     Args:
         finding: Any finding from the current scan.
 
     Returns:
-        True for an ordinary finding; False for a sensitive-data finding, which a baseline counts but never stores.
+        True if the pillar is non-sensitive and the rule ID lacks the "sensitive-data." prefix.
+        Baselines count sensitive findings without storing them.
     """
     return finding.pillar is not Pillar.SENSITIVE_DATA and not finding.rule_id.startswith(_SENSITIVE_RULE_PREFIX)
 
 
 def has_baseline_identity(finding: Finding) -> bool:
-    """Tell whether a finding can be named durably at all.
+    """Check whether a finding is allowed to proceed to baseline subject construction.
 
     A sensitive finding never is, and neither is one whose symbol carries the ordinal separator, which could pose as
-    another symbol's ordinal. Such a finding is reported on every run and never stored, matched or fingerprinted.
+    another symbol's ordinal. Such a finding cannot be stored in or matched against a baseline.
 
     Args:
         finding: Any finding from the current scan.
@@ -106,15 +106,15 @@ def has_baseline_identity(finding: Finding) -> bool:
 
 
 def normalise_measured_values(message: str) -> str:
-    """Replace every measured value in a message with ``#``, per the identity amendment of 2026-09-05.
+    """Mask numbers in a finding message so a measurement can change without changing its baseline subject.
 
-    ``"File has 1010 lines (limit 1000)"`` becomes ``"File has # lines (limit #)"``, so a file that grows keeps its review.
+    A message such as File has 1010 lines (limit 1000) becomes File has # lines (limit #).
 
     Args:
         message: Finding message as the rule emitted it; it may state a length, count, percentage, or version.
 
     Returns:
-        The message with each run of digits, including ``.`` or ``,`` groups, replaced by ``#``; unchanged when it has none.
+        The message with each ASCII digit sequence, including groups joined by a dot or comma, replaced by #. Text with no match stays unchanged.
     """
     return _MEASURED_VALUE_PATTERN.sub(_MEASURED_VALUE_PLACEHOLDER, message)
 
@@ -130,21 +130,21 @@ def baseline_subject(finding: Finding, ordinal: int) -> str:
         The subject the identity hashes.
 
     Raises:
-        BaselineIdentityError: When the symbol contains the ordinal separator, the ordinal is missing, or
+        BaselineIdentityError: When the symbol contains the ordinal separator, the ordinal for a symbol-bearing finding is below 1, or
             a symbol-less finding also has an empty message and so has nothing left to be named by.
     """
     symbol = finding.symbol
-    # A file-level finding has nothing but its message to name it, so its measurement is stripped and a reword is a new finding.
+    # A symbol-less finding uses its message as the subject. Changes limited to the measured numbers can keep the same subject.
     if not symbol:
         if not finding.message:
             raise BaselineIdentityError(f"Finding {finding.rule_id} in {finding.file_path} names neither a symbol nor a message.")
         return normalise_measured_values(finding.message)
 
     label = f'Finding {finding.rule_id} in {finding.file_path} has symbol "{symbol}"'
-    # A symbol carrying the separator could pose as another symbol's ordinal, so it is refused rather than hashed ambiguously.
+    # Reserve the separator so a symbol-bearing subject has one boundary between the symbol and its ordinal.
     if _ORDINAL_SEPARATOR in symbol:
         raise BaselineIdentityError(f'{label} containing "{_ORDINAL_SEPARATOR}".')
-    # Defaulting a missing ordinal to 1 would merge two same-named functions back together, the collision the ordinal prevents.
+    # Defaulting an invalid ordinal to 1 could give this finding the identity of another declaration with the same symbol.
     if ordinal < 1:
         raise BaselineIdentityError(f"{label} without a declaration ordinal.")
     return f"{symbol}{_ORDINAL_SEPARATOR}{ordinal}"
@@ -153,7 +153,7 @@ def baseline_subject(finding: Finding, ordinal: int) -> str:
 def compute_identity_for(tool_language: str, rule_id: str, path: str, subject: str) -> str:
     """Hash the ratified identity under an explicit tool language.
 
-    Conformance tests use it to reproduce the digests the family oracle pins for other ports, the only proof the rule is one rule.
+    An explicit language token lets conformance tests compare identity digests across implementations.
 
     Args:
         tool_language: One of go, php, py, rs, or ts.
@@ -171,14 +171,15 @@ def compute_identity_for(tool_language: str, rule_id: str, path: str, subject: s
 def declaration_spans(tree: ast.AST | None) -> tuple[DeclarationSpan, ...]:
     """Collect every class and function declaration in one parsed file, innermost first.
 
-    Use from the runner: it is what lets two findings inside one function share an ordinal while a second
-    declaration of the same name takes the next one.
+    The runner uses the closest matching span to give findings on one declaration a shared position.
+    Parsed spans can also reserve ordinal slots for unqualified same-named declarations with no findings.
 
     Args:
         tree: Parsed module AST, or ``None`` for a text file or a file that failed to parse.
 
     Returns:
-        Declarations ordered innermost-first, so the first span containing a line is the closest declaration; empty for ``None``.
+        Declarations ordered innermost first, so the first span containing a line belongs to the closest declaration.
+        With no tree or no declarations, the tuple is empty and the resolver uses the finding's reported line, or 1 if no positive line is available.
     """
     if tree is None:
         return ()
@@ -205,6 +206,9 @@ class DeclarationPositionResolver:
 
         Args:
             spans_by_file: Declarations per display path, from :func:`declaration_spans`.
+
+        Returns:
+            None; the resolver retains the supplied mapping.
         """
         self._spans_by_file = spans_by_file
 
@@ -215,7 +219,7 @@ class DeclarationPositionResolver:
             finding: The finding to place; the last segment of its symbol names the declaration.
 
         Returns:
-            The enclosing same-named declaration's start line, or the finding's own line when no declaration names it.
+            The enclosing same-named declaration's start line, or the finding's positive line; 1 if its line is absent or nonpositive.
         """
         line = finding.line if finding.line is not None and finding.line > 0 else 1
         symbol = finding.symbol
@@ -235,8 +239,9 @@ class DeclarationPositionResolver:
             finding: The finding whose symbol is looked up.
 
         Returns:
-            Sorted start lines; empty for a symbol-less finding or a qualified symbol such as ``Widget.process``, whose
-            spans carry only the short name, so counting every ``process`` would merge two classes' methods.
+            Sorted unique start lines. An empty tuple contributes no extra positions to ordinal ranking.
+            The result is empty for a missing or qualified symbol, or when the file has no matching spans.
+            Spans keep only short names, so using them for a qualified symbol could count methods from other classes.
         """
         symbol = finding.symbol
         if not symbol or "." in symbol:
@@ -254,14 +259,14 @@ def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[Declaratio
         spans_by_file: Declarations per display path, from :func:`declaration_spans`.
 
     Returns:
-        A resolver returning the enclosing declaration's start line, or the finding's own line when no declaration
-        names it, which also lists every same-named declaration for ranking.
+        A resolver returning the enclosing declaration's start line, or the finding's positive line or 1 when no declaration matches.
+        Its ranking list is empty for absent or qualified symbols; otherwise it lists all same-named declaration positions.
     """
     return DeclarationPositionResolver(spans_by_file)
 
 
 def _default_declaration_position(finding: Finding) -> int:
-    """Rank a symbol on its own line when the caller supplied no parsed declarations, as a direct API call does.
+    """Use the finding's reported line to rank its declaration when the caller supplies no resolver.
 
     Args:
         finding: Finding whose reported line supplies the fallback declaration position.
@@ -283,27 +288,25 @@ def finding_identities(
 
     Args:
         findings: This run's findings, in any order.
-        declaration_position: Resolver from :func:`declaration_position_from_spans`; ``None`` ranks by the finding's own line,
-            which is what a direct API caller without a parsed tree gets.
+        declaration_position: Resolver for declaration start lines; None uses each finding's positive line or 1 when unavailable.
 
     Returns:
         One entry per input finding, aligned by index; ``None`` where the finding is sensitive or its symbol carries
-        the ordinal separator, and so has no identity.
+        the ordinal separator, and so has no identity. A new identity for a finding without a symbol uses its normalized message.
 
     Raises:
-        BaselineIdentityError: When an eligible finding cannot be named.
+        BaselineIdentityError: When a finding that needs a new identity has neither a symbol nor a nonempty message.
     """
     position = declaration_position or _default_declaration_position
     ordinals = _symbol_ordinals(findings, position)
     identities: list[FindingIdentity | None] = []
     for index, finding in enumerate(findings):
-        # A sensitive finding is skipped before any hashing, so no secret ever reaches a stored identity; a symbol
+        # A sensitive finding is skipped before any hashing, so its contents never enter a stored identity; a symbol
         # carrying the ordinal separator is skipped too, since no subject built from it could be unambiguous.
         if not has_baseline_identity(finding):
             identities.append(None)
             continue
-        # The runner names every finding once, over the whole scan. Reusing that name keeps one finding one identity
-        # in every later consumer, such as the hook, which would otherwise re-rank only the findings it was handed.
+        # Reuse the name assigned over the whole scan so consumers such as the hook publish the same identity for a subset.
         if finding.baseline_identity is not None and finding.baseline_subject is not None:
             identities.append(
                 FindingIdentity(
@@ -327,8 +330,8 @@ def finding_identities(
 def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], int]) -> tuple[int, ...]:
     """Rank each symbol-bearing finding's declaration among same-named declarations in its file.
 
-    Two findings on one declaration share a position and therefore an ordinal; a second declaration of that
-    name takes the next one, which is what stops one review from covering both.
+    Findings with the same file, symbol and resolved position share an ordinal. Distinct positions in that group get different ordinals.
+    Ranks follow the current declaration order, so inserting or removing an earlier declaration can change later ordinals.
 
     Args:
         findings: Findings to rank in their input order; ineligible and symbol-less entries take no slot.
@@ -343,13 +346,13 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
         if finding.symbol and has_baseline_identity(finding):
             positions = positions_by_symbol.setdefault((finding.file_path, finding.symbol), set())
             positions.add(position(finding))
-            # Every same-named declaration the parser saw takes a slot, whether or not it warned this run.
+            # Reserve slots for same-named declarations the resolver supplies, including ones with no findings.
             if same_named is not None:
                 positions.update(same_named(finding))
 
     ordinals: list[int] = []
     for finding in findings:
-        # A symbol-less finding is named by its message, so it needs no ordinal and takes the sentinel zero.
+        # Only findings eligible for a baseline identity with a symbol need ranking. The others keep their input slot with zero.
         if not finding.symbol or not has_baseline_identity(finding):
             ordinals.append(0)
             continue

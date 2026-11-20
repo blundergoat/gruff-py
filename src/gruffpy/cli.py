@@ -119,8 +119,11 @@ class CliGroup(click.Group):
         """Write the root help menu.
 
         Args:
-            ctx: Active Click context.
+            ctx: Invocation context used to build the root command menu.
             formatter: Click formatter receiving the rendered help.
+
+        Returns:
+            None; writes the root menu to formatter.
         """
         formatter.write(_root_menu(ctx))
 
@@ -419,6 +422,9 @@ def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -
         registry: Rule collection used to resolve the requested identifier.
         rule_id: Identifier whose metadata and guidance should be displayed.
         rule_format: Requested detail format, with table handled as text by the renderer.
+
+    Returns:
+        None; details are sent through the configured CLI output sink.
     """
     list_rules_detail(registry, rule_id, rule_format, _write_stdout)
 
@@ -613,6 +619,8 @@ def _analysis_request(
 ) -> _AnalysisCliRequest:
     """Collect analysis or report options into one execution request.
 
+    Warn on stderr when the caller uses a superseded option spelling.
+
     Args:
         kwargs: Parsed Click values, including targets, filters and baseline choices.
         output_key: Option key holding this command's requested report format.
@@ -660,17 +668,15 @@ def _analysis_request(
 
 
 def _resolved_diff_mode(kwargs: Mapping[str, Any]) -> str:
-    """Return the diff selector this run compares against, taking the family spelling first.
+    """Choose the diff selector to pass to changed-region resolution.
 
-    ``--diff`` names the mode; ``--diff-base`` and its superseded spelling
-    ``--diff-vs`` name the ref, and a named ref is what the run actually
-    compares against.
+    A --diff-base ref takes precedence over --diff-vs and the --diff mode.
 
     Args:
         kwargs: Parsed Click options for this invocation.
 
     Returns:
-        The ref or mode to compare against; empty when the user named none.
+        The selected ref or diff mode, or an empty string when no diff option has a value.
     """
     for name in ("diff_base", "diff_vs"):
         value = kwargs.get(name)
@@ -697,18 +703,19 @@ def _first_present_path(kwargs: Mapping[str, Any], names: tuple[str, ...]) -> Pa
 
 
 def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
-    """Print one line per superseded spelling the user typed, naming the family name that replaces it.
+    """Warn for each superseded option with a value, naming its replacement.
 
-    The run continues: behaviour is identical under the family spelling, so
-    refusing would break a working command line for a rename. The warning is
-    what tells the user the old name is going away.
+    Warnings go to stderr and leave the command running so existing invocations remain usable during the spelling change.
 
     Args:
         kwargs: Parsed Click options for this invocation.
+
+    Returns:
+        None; detected superseded options produce stderr warnings without stopping the run.
     """
     for name, replacement in (("baseline_path", "--baseline"), ("diff_vs", "--diff-base"), ("generate_baseline_path", "--generate-baseline")):
         value = kwargs.get(name)
-        # An option the user left alone is None for a path and "" for a string, and neither is a spelling they typed.
+        # An explicitly empty --diff-vs leaves diff selection unchanged, so it needs no migration warning.
         if value in (None, ""):
             continue
         typed = "--" + name.replace("_", "-")
@@ -721,10 +728,7 @@ def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
 def _resolve_generate_baseline_path(kwargs: Mapping[str, Any]) -> Path | None:
     """Return where a generated baseline is written, or None when the user asked for none.
 
-    ``--generate-baseline`` carries the destination, and given no value it falls
-    back to the conventional file name, which is the shape the ratified CLI
-    contract gives the flag in every port. The superseded
-    ``--generate-baseline-path`` still works and warns.
+    The canonical --generate-baseline destination takes precedence over the supported --generate-baseline-path spelling.
 
     Args:
         kwargs: Parsed Click options for this invocation.
@@ -787,7 +791,8 @@ def _dashboard_request(kwargs: Mapping[str, Any]) -> dashboard_cli._DashboardCli
     """Turn parsed Click values into the user's dashboard launch request.
 
     Args:
-        kwargs: Options from Click; project/config may be None for auto-discovery.
+        kwargs: Parsed Click options. An unset project_root selects the launch directory.
+            An unset config_path allows normal discovery when config loading is enabled.
 
     Returns:
         Startup request; empty paths mean scan the selected project root.
@@ -814,22 +819,18 @@ def _maybe_prompt_to_init_config(
     *,
     project_root: Path | None = None,
 ) -> None:
-    """Offer to generate a default ``.gruff-py.yaml`` when none exists.
+    """Offer to write a default .gruff-py.yaml when no configuration is discoverable.
 
-    Silently skips when the user has opted out (``--config``, ``--no-config``,
-    ``--no-interaction``, ``--quiet``, or ``--silent``), when stdin is not a
-    TTY (e.g. CI, piped invocations), or when any config source is already
-    discoverable. The prompt and the success message are routed to stderr so
-    accepting the prompt does not corrupt structured stdout (``--format json``,
-    ``--format sarif``, etc.).
+    Skip when configuration is explicit or disabled, prompts or normal output are disabled, or stdin is not a TTY.
+    Send the prompt and confirmation to stderr so structured stdout such as --format json stays parseable.
 
     Args:
-        config_path: Explicit ``--config`` path, or ``None`` for auto-discovery.
-        no_config: Whether ``--no-config`` was passed.
-        project_root: Directory the prompt should treat as the project root.
-            Defaults to the current working directory; dashboard callers pass
-            their resolved ``--project`` so the file lands in the scanned
-            project rather than the launch directory.
+        config_path: Explicit --config path that suppresses the offer, or None to allow discovery.
+        no_config: Suppress the offer when the caller has disabled configuration.
+        project_root: Dashboard scan root to search and write to, or None to use the current working directory.
+
+    Returns:
+        None. Writes the default file and announces it on stderr only when the user accepts the prompt.
     """
     if config_path is not None or no_config:
         return
@@ -858,6 +859,9 @@ def _write_config_file(path: Path, content: str) -> None:
         path: Destination selected for the project's configuration file.
         content: Complete configuration text to write at the destination.
 
+    Returns:
+        None; the destination file contains the supplied text after a successful write.
+
     Raises:
         click.ClickException: The destination cannot be written because of an operating-system error.
     """
@@ -885,15 +889,13 @@ def _is_same_or_descendant(candidate: Path, ancestor: Path) -> bool:
 def _target_outside_launch_directory(paths: Sequence[str]) -> str | None:
     """Name the first of several targets that sits outside the launch directory.
 
-    One such target is supported: ``gruff-py analyse /srv/checkout`` makes it the project root. Several are not,
-    because every reported path is written relative to one root, so ``../a`` and ``../b`` from a sibling directory
-    would leave paths the report cannot express. The caller refuses that run instead of raising mid-render.
+    Multiple targets must stay within the launch directory; the caller refuses any run that violates this policy.
 
     Args:
         paths: Scan targets as typed on the command line.
 
     Returns:
-        The first target outside the launch directory when two or more were named, otherwise None.
+        The first outside target as typed, or None if fewer than two were named or all are inside. Paths are normalised for the check.
     """
     # A single target, or none, always has a root the run can report against.
     if len(paths) < 2:
@@ -901,10 +903,10 @@ def _target_outside_launch_directory(paths: Sequence[str]) -> str | None:
     working_directory = Path.cwd()
     for raw_path in paths:
         absolute = Path(raw_path)
-        # A relative target is meant relative to where the command was typed.
+        # Relative targets face the same containment check as absolute paths, including when .. takes them outside the launch directory.
         if not absolute.is_absolute():
             absolute = working_directory / absolute
-        # One target outside the launch directory leaves the targets with no shared root to report from.
+        # An outside target violates the launch-directory policy, so the caller must refuse this multi-target run.
         if not _is_same_or_descendant(Path(os.path.normpath(absolute)), working_directory):
             return raw_path
     return None
@@ -913,9 +915,7 @@ def _target_outside_launch_directory(paths: Sequence[str]) -> str | None:
 def _project_root_from_targets(paths: Sequence[str]) -> Path:
     """Pick the directory that every reported path is written relative to.
 
-    Run ``gruff-py analyse .`` inside a project and the answer is that directory.
-    Run ``gruff-py analyse /srv/checkout`` from a home directory, as CI and scripted scans do, and the answer is /srv/checkout,
-    so findings still read ``gruffpy/cli.py`` rather than an absolute path.
+    Targets outside the launch directory use a containing root; targets inside it keep that directory as the reporting base.
 
     Args:
         paths: Scan targets as typed on the command line; empty means no target was named, so the launch directory is the project.
@@ -924,8 +924,7 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
         Directory to treat as the project root; never empty.
 
     Raises:
-        click.ClickException: When targets sit under different filesystem roots, such as ``analyse /srv/api /opt/tools``,
-            leaving no single project to report against.
+        click.ClickException: Targets have no shared path root, such as paths on different Windows drives.
     """
     working_directory = Path.cwd()
 
@@ -934,14 +933,14 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
         return working_directory
 
     common: Path | None = None
-    # Each target narrows the answer: the root must be a directory that contains all of them.
+    # A shared reporting base must contain every target directory.
     for raw_path in paths:
         absolute = Path(raw_path)
-        # A relative target like ``src/`` is meant relative to where the command was typed.
+        # A single relative target that goes through .. can select a reporting root outside the launch directory.
         if not absolute.is_absolute():
             absolute = working_directory / absolute
         absolute = Path(os.path.normpath(absolute))
-        # Naming one file means the project is the folder holding it, not the file itself.
+        # A missing target contributes its parent, giving discovery a reporting root for a missing-path diagnostic.
         directory = absolute if absolute.is_dir() else absolute.parent
 
         # The first target sets the starting answer; later ones can only widen it.
@@ -950,7 +949,7 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
             continue
         while not _is_same_or_descendant(directory, common):
             parent = common.parent
-            # Walking up hit the filesystem root, so these targets live in unrelated projects.
+            # Targets on separate drives still have no common directory at the top of either drive.
             if parent == common:
                 raise click.ClickException("scan targets do not share a filesystem root")
             common = parent
@@ -965,18 +964,17 @@ def _project_root_from_targets(paths: Sequence[str]) -> Path:
 def _targets_for_root(project_root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
     """Write each relative target as an absolute path from the launch directory when the project root is elsewhere.
 
-    Discovery reads operands against the project root, so ``..`` typed from ``proj/src`` names ``proj``, but read against the
-    root ``proj`` it named the directory above the project, which was then scanned and failed on its first path.
+    Discovery resolves relative targets from the project root. Anchoring them to the launch directory preserves the paths the caller named.
 
     Args:
-        project_root: Root chosen by ``_project_root_from_targets``.
-        paths: Scan targets as typed on the command line.
+        project_root: Root from which discovery resolves scan targets.
+        paths: Scan targets as typed on the command line. An empty tuple leaves discovery to start at the project root.
 
     Returns:
-        The targets unchanged when the root is the launch directory, otherwise each relative one anchored to it.
+        The targets unchanged when the root is the launch directory, otherwise each relative target anchored to the launch directory.
     """
     working_directory = Path.cwd()
-    # Inside the launch directory the root and the operands already agree, so they are passed on exactly as typed.
+    # When the launch directory is the project root, discovery already resolves relative targets from the caller's directory.
     if project_root == working_directory:
         return paths
     return tuple(raw_path if Path(raw_path).is_absolute() else str(working_directory / raw_path) for raw_path in paths)
@@ -985,19 +983,17 @@ def _targets_for_root(project_root: Path, paths: tuple[str, ...]) -> tuple[str, 
 def _path_for_root(project_root: Path, path: Path | None) -> Path | None:
     """Rewrite a typed file path, such as ``--baseline``, so that read against the project root it names the same file.
 
-    The baseline store reads a relative path against the project root, so ``../../base.json`` typed two levels inside the
-    project named a file two levels above it: a read missed it, and a write landed outside the project.
+    A relative baseline path could name a different file when the launch directory and the baseline store's project root differ.
 
     Args:
         project_root: Root chosen by ``_project_root_from_targets``.
         path: The path as typed on the command line, or None when the flag was not given.
 
     Returns:
-        The path unchanged when it is absent, absolute, or typed from the root, otherwise the same file relative to the
-        root, so the report never names a host path.
+        The input when absent, absolute, or launched from the root; otherwise the same file relative to the root or absolute across drives.
     """
     working_directory = Path.cwd()
-    # Inside the launch directory the root and the typed path already agree, so the path is passed on as typed.
+    # An unset path, an absolute path, or a path already relative to the project root can go straight to the baseline store.
     if path is None or path.is_absolute() or project_root == working_directory:
         return path
     try:
@@ -1008,15 +1004,14 @@ def _path_for_root(project_root: Path, path: Path | None) -> Path | None:
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
-    # The four presentation flags decide what the report shows; the rule and pillar selectors decide what runs, so
-    # only the presentation ones reach the display filter.
-    """Execute a CLI request with its display filters and machine-error policy.
+    # Presentation selectors filter what is shown; rule and pillar execution selectors control which checks run.
+    """Execute a CLI analysis request and send configuration warnings to stderr when output policy permits.
 
     Args:
-        request: Targets, execution selectors, output mode and baseline/diff settings to apply.
+        request: Targets, execution and display selectors, output mode, and baseline and diff settings to apply.
 
     Returns:
-        The analysis report, or a refusal report for JSON-mode target errors and ConfigError failures.
+        The analysis report, or in JSON mode a refusal report for a multi-target launch-directory violation or a ConfigError.
 
     Raises:
         SystemExit: A handled target or configuration error prevents a non-JSON run; the exit code is 2.
@@ -1031,8 +1026,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         exclude_rules=_split_repeated_csv(request.hide_rule),
     )
     outside_target = _target_outside_launch_directory(request.paths)
-    # Several targets outside the launch directory have no root to report from, so a machine caller reads the refusal
-    # from the envelope rather than a traceback, and a human reads it on stderr with the same exit 2.
+    # Multiple targets must stay inside the launch directory; JSON returns a refusal report and other formats exit 2 after stderr.
     if outside_target is not None:
         message = (
             f"target {outside_target!r} is outside the launch directory; "
@@ -1078,8 +1072,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     except ConfigError as exc:
         if request.output is OutputFormat.JSON:
             return _config_error_report(request, exc)
-        # Section 7 reserves exit 1 for a completed run whose findings reached the gate, so a run that never
-        # happened has to be distinguishable from one that did; Click's own default for this is 1.
+        # Exit 1 is reserved for completed runs that meet the findings gate; configuration failures remain distinguishable with exit 2.
         click.echo(str(exc), err=True)
         raise SystemExit(2) from exc
     _echo_config_warnings(report)
@@ -1087,10 +1080,13 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
 
 
 def _echo_config_warnings(report: AnalysisReport) -> None:
-    """Echo config warnings to stderr: visible for summary, clean for JSON stdout.
+    """Echo configuration warnings to stderr so report output on stdout stays separate.
 
     Args:
         report: Analysis result containing the configuration warnings to display.
+
+    Returns:
+        None. Writes each warning to stderr unless quiet or silent mode suppresses output.
     """
     if _state().should_suppress_output:
         return
@@ -1099,22 +1095,19 @@ def _echo_config_warnings(report: AnalysisReport) -> None:
 
 
 def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
-    """Build a synthetic native analysis report for a config-load failure.
+    """Build the JSON refusal report for a configuration-load failure.
 
-    The JSON reporter sends this report through the v3 machine adapter so
-    machine-readable callers receive a parseable diagnostic and exit code 2
-    instead of stderr prose. Human formats retain the Click exception path.
+    The v3 adapter emits a parseable diagnostic instead of stderr prose. Other formats print the error to stderr and exit with code 2.
 
     Args:
-        request: Failed invocation whose targets and output settings identify the refused scan.
-        exc: Configuration error whose message is normalized relative to the project root.
+        request: Failed invocation supplying scan targets and output settings. With no explicit config path, the diagnostic has no separate path.
+        exc: Configuration error whose message is copied with occurrences of the project-root prefix removed.
 
     Returns:
         A report containing the configuration diagnostic and exit code 2, with no findings.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
-    # The loader names the absolute path it read, which a v3 envelope may not publish, so the machine message names the
-    # config file relative to the project root; stderr keeps the full path for the person reading it.
+    # Remove the project-root prefix so a path under that root can appear as a relative path in the JSON diagnostic.
     message = str(exc).replace(f"{_project_root_from_targets(request.paths)}{os.sep}", "")
     return _refused_run_report(request, RunDiagnostic(type="config-error", message=message, path=config_path_str))
 
@@ -1241,7 +1234,7 @@ def _rule_payload(definition: RuleDefinition) -> dict[str, Any]:
     documentation = documentation_for_rule(definition.id)
     documentation_payload = documentation.to_payload()
     false_positive_shapes_payload = documentation_payload.get("falsePositiveShapes", [])
-    # The full catalogue keeps its 0.5 nested envelope; M04's canonical mirror is top-level.
+    # Legacy catalogue consumers retain the 0.5 nested envelope; the canonical false-positive metadata is top-level.
     if definition.id not in _LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS:
         documentation_payload.pop("falsePositiveShapes", None)
     return {
@@ -1313,7 +1306,7 @@ def _parse_pillar_values(option: str, values: tuple[str, ...]) -> tuple[Pillar, 
         values: Repeated, possibly comma-separated pillar values from the command line.
 
     Returns:
-        Unique pillars in first-seen order, or an empty tuple when no values were supplied.
+        Unique pillars in first-seen order, or an empty tuple when no nonblank items remain.
 
     Raises:
         click.BadParameter: An item is not a supported pillar value.
@@ -1336,6 +1329,9 @@ def _write_stdout(text: str) -> None:
 
     Args:
         text: Already-rendered output to write verbatim, including any needed newline.
+
+    Returns:
+        None; permitted output is written to stdout.
     """
     if not _state().should_suppress_output:
         sys.stdout.write(text)
@@ -1396,7 +1392,7 @@ def _render_command_rows(
         short: Suppresses descriptions in Markdown and text output only.
 
     Returns:
-        The complete rendered command listing.
+        The rendered command listing. With no rows, raw mode returns an empty string and other formats keep their heading or envelope.
     """
     if raw:
         return "".join(f"{name}\n" for name, _help in rows)

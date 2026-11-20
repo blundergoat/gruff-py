@@ -22,7 +22,7 @@ def _defaults() -> AnalysisConfig:
 
 
 def _write_yaml(tmp_path: Path, body: str) -> Path:
-    """Write raw text as the project's ``.gruff-py.yaml``.
+    """Write raw text as the project's .gruff-py.yaml.
 
     Args:
         tmp_path: Project root that receives the config.
@@ -41,6 +41,9 @@ def test_default_threshold_is_50_when_key_absent(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config holds only the schema version.
+
+    Returns:
+        None. Checks that the loaded threshold is 50 when the setting is absent.
     """
     _write_yaml(tmp_path, "schemaVersion: gruff-py.config.v0.1\n")
 
@@ -54,6 +57,9 @@ def test_threshold_yaml_parses_into_analysis_config(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config sets the threshold to 200.
+
+    Returns:
+        None. Checks that the loaded threshold is the 200 set in YAML.
     """
     _write_yaml(
         tmp_path,
@@ -66,10 +72,13 @@ def test_threshold_yaml_parses_into_analysis_config(tmp_path: Path) -> None:
 
 
 def test_threshold_pyproject_toml_parses_into_analysis_config(tmp_path: Path) -> None:
-    """Load an output volume hint threshold of 0 from ``pyproject.toml``.
+    """Load an output volume hint threshold of 0 from pyproject.toml.
 
     Args:
-        tmp_path: Project root whose ``pyproject.toml`` sets the threshold to 0.
+        tmp_path: Project root whose pyproject.toml sets the threshold to 0.
+
+    Returns:
+        None. Checks that the loader preserves the zero threshold set in pyproject.toml.
     """
     (tmp_path / "pyproject.toml").write_text('[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\noutputVolumeHintThreshold = 0\n')
 
@@ -83,6 +92,9 @@ def test_threshold_rejects_negative_value(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config sets the threshold to -1.
+
+    Returns:
+        None. Checks that the error for a negative threshold gives zero as the lower bound.
     """
     _write_yaml(
         tmp_path,
@@ -98,6 +110,9 @@ def test_threshold_rejects_non_integer(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config sets the threshold to a quoted word.
+
+    Returns:
+        None. Checks that a string threshold raises an error requiring a non-negative integer.
     """
     _write_yaml(
         tmp_path,
@@ -113,6 +128,9 @@ def test_threshold_rejects_boolean(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Project root whose config sets the threshold to true.
+
+    Returns:
+        None. Checks that a boolean threshold raises an error requiring a non-negative integer.
     """
     _write_yaml(
         tmp_path,
@@ -128,10 +146,13 @@ _CONFIGURED_MAX_BYTES = 345
 
 
 def test_deep_scan_budget_defaults_to_the_family_bounds(tmp_path: Path) -> None:
-    """A project that configures nothing still gets the ratified family budget.
+    """A project that configures nothing still gets the default deep-scan budget.
 
     Args:
         tmp_path: Empty project root, so the loader falls back to defaults.
+
+    Returns:
+        None. Checks the default line and byte limits and verifies that the budget records its source as default.
     """
     default_config, _ = ConfigLoader(tmp_path, _defaults()).load()
 
@@ -144,7 +165,10 @@ def test_deep_scan_budget_records_config_as_its_provenance(tmp_path: Path) -> No
     """A configured budget replaces both bounds and says where the values came from.
 
     Args:
-        tmp_path: Project root the test writes a `deepScanBudget` block into.
+        tmp_path: Project root the test writes a deepScanBudget block into.
+
+    Returns:
+        None. Checks the enabled flag, both configured limits and the config source recorded on the budget.
     """
     _write_yaml(
         tmp_path,
@@ -172,11 +196,14 @@ def test_deep_scan_budget_records_config_as_its_provenance(tmp_path: Path) -> No
     ids=("not-a-table", "unknown-key", "enabled-not-bool", "max-lines-zero", "max-bytes-fractional"),
 )
 def test_deep_scan_budget_rejects_malformed_config(tmp_path: Path, body: str) -> None:
-    """Refuse a malformed ``deepScanBudget`` section with a ``ConfigError`` naming it.
+    """Refuse a malformed deepScanBudget section with a ConfigError naming it.
 
     Args:
         tmp_path: Project root whose config appends the case's budget section.
-        body: Budget section text; the cases cover a non-table, an unknown key, a non-boolean flag and out-of-range limits.
+        body: Budget section text covering a non-table, an unknown key, a non-boolean flag, a zero line limit and a fractional byte limit.
+
+    Returns:
+        None. Checks that each malformed budget raises ConfigError naming deepScanBudget.
     """
     _write_yaml(tmp_path, "schemaVersion: gruff-py.config.v0.1\n" + body)
 

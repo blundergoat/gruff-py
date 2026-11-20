@@ -58,6 +58,9 @@ def test_default_accepted_abbreviations_survive_unrelated_allowlists_section(tmp
 
     Args:
         tmp_path: Isolated project directory holding the unrelated allowlist override.
+
+    Returns:
+        None; the default abbreviations must survive the unrelated allowlist setting.
     """
     _yaml(tmp_path, "allowlists:\n  deadCode:\n    symbols: []\n")
 
@@ -72,6 +75,9 @@ def test_explicit_accepted_abbreviations_replace_defaults(tmp_path: Path):
 
     Args:
         tmp_path: Isolated project directory holding the replacement abbreviation list.
+
+    Returns:
+        None; the configured abbreviations must replace the defaults exactly.
     """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: ['ctx', 'cfg']\n")
 
@@ -85,6 +91,9 @@ def test_empty_accepted_abbreviations_list_clears_defaults(tmp_path: Path):
 
     Args:
         tmp_path: Isolated project directory holding the explicit empty naming list.
+
+    Returns:
+        None; the explicit empty list must clear all default abbreviations.
     """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: []\n")
 
@@ -98,6 +107,9 @@ def test_accepted_abbreviations_rejects_non_list_value(tmp_path: Path):
 
     Args:
         tmp_path: Isolated project directory holding the invalid scalar allowlist.
+
+    Returns:
+        None; loading the scalar allowlist must raise ConfigError naming acceptedAbbreviations.
     """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations: not-a-list\n")
 
@@ -110,6 +122,9 @@ def test_accepted_abbreviations_rejects_non_string_entry(tmp_path: Path):
 
     Args:
         tmp_path: Isolated project directory holding the mixed-type naming list.
+
+    Returns:
+        None; loading the numeric entry must raise ConfigError naming acceptedAbbreviations.
     """
     _yaml(tmp_path, "allowlists:\n  acceptedAbbreviations:\n      - ctx\n      - 7\n")
 
@@ -128,6 +143,9 @@ def test_secret_previews_rejects_every_value_except_an_empty_list(tmp_path: Path
     Args:
         tmp_path: Project root whose config sets ``secretPreviews``.
         configured_value: YAML value for the key; the cases vary its shape across lists, a scalar, an object and null.
+
+    Returns:
+        None; each supplied value must raise the fixed removal error without exposing the fixture preview.
     """
     _yaml(tmp_path, f"allowlists:\n  secretPreviews: {configured_value}\n")
 
@@ -143,6 +161,9 @@ def test_toml_secret_previews_is_refused_even_when_empty(tmp_path: Path):
 
     Args:
         tmp_path: Temporary project the configuration is written into.
+
+    Returns:
+        None; the empty TOML list must raise the fixed removal error.
     """
     _toml(tmp_path, "\n[tool.gruff-py.allowlists]\nsecretPreviews = []\n")
 
@@ -157,6 +178,9 @@ def test_toml_secret_previews_rejects_a_configured_preview(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose ``pyproject.toml`` lists one preview.
+
+    Returns:
+        None; the configured preview must raise the fixed removal error without appearing in it.
     """
     _toml(tmp_path, '\n[tool.gruff-py.allowlists]\nsecretPreviews = ["known-fixture"]\n')
 

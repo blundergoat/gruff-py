@@ -154,20 +154,20 @@ class SilentExceptRule(Rule):
 
 
 def _has_explanatory_comment(handler: ast.ExceptHandler, comments: dict[int, str]) -> bool:
-    """Use only real comments belonging to this pass-only handler as rationale.
+    """Check whether comments within a pass-only or ellipsis-only handler explain why it swallows the exception.
 
     Args:
-        handler: Pass-only exception handler whose inclusive source-line range bounds the comment search.
+        handler: Exception handler whose inclusive source-line range bounds the comment search.
         comments: Tokenized comment text keyed by one-based source line.
 
     Returns:
-        True when in-range comments reject code parsing, contain a reason signal and add non-stock words; False for empty, unfinished or code-like
-        text.
+        True when the comments fail the code parse check, signal a reason, and contain a word outside the stock and reason word sets.
+        False for empty or unfinished text, text that parses as code, or text that fails the wording checks.
     """
     prose = " ".join(comments[line] for line in range(handler.lineno, (handler.end_lineno or handler.lineno) + 1) if line in comments)
     if not prose or _UNFINISHED_PATTERN.search(prose):
         return False
-    # An incomplete compound header is still disabled code, rather than an explanation.
+    # Complete trailing-colon headers to reject parseable disabled code. A SyntaxError only selects the wording checks, so it needs no separate log.
     candidate = prose + "\n    pass" if prose.endswith(":") else prose
     try:
         ast.parse(candidate)
@@ -179,7 +179,7 @@ def _has_explanatory_comment(handler: ast.ExceptHandler, comments: dict[int, str
 
 
 def _is_wide_exception(handler: ast.ExceptHandler) -> bool:
-    """True if the handler catches no specific type, or catches Exception/BaseException.
+    """Identify bare handlers and direct exception names that the rule treats as broad.
 
     Args:
         handler: Exception handler whose caught-type syntax is classified.

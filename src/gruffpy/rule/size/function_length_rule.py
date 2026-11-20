@@ -28,8 +28,7 @@ class FunctionLengthRule(Rule):
         """Describe the function-length rule with a configurable line threshold (default 100).
 
         Returns:
-            Definition under the size pillar; covers ``def``, ``async def``,
-            and ``lambda`` nodes.
+            Definition under the size pillar; covers functions, async functions and lambdas.
         """
         return RuleDefinition(
             id=self.ID,
@@ -42,19 +41,18 @@ class FunctionLengthRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit one finding per function whose body exceeds the configured line count.
+        """Emit one finding per function whose logical-line count exceeds the configured threshold.
 
-        Length is the function's logical-line count from ``logical_lines_for_size``:
-        a statement or compound-statement header counts once however many lines it
-        spans, and blank lines, comments, docstrings and decorators are free. The finding's start line still includes decorators.
+        Successful tokenization counts definition headers and multiline statements once, excluding blanks, comments, docstrings and decorators.
+        Tokenization failures fall back to physical code lines. Findings start at the first decorator when present.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Source file to measure. Its AST can cache physical code lines and successfully tokenized logical starts.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            One finding per ``FunctionDef``/``AsyncFunctionDef``/``Lambda``
-            that crosses the threshold.
+            One finding per function, async function or lambda over threshold; an empty list if the tree is missing or none qualify.
+            The measured count is at least one, even when no logical line starts inside the node's span.
         """
         if unit.tree is None:
             return []
@@ -74,7 +72,7 @@ def _long_functions(tree: ast.AST, logical_lines: frozenset[int], warning_thresh
 
     Args:
         tree: Parsed module tree to walk, including nested definitions.
-        logical_lines: Line numbers that hold a logical line, used to count each function's size.
+        logical_lines: File line numbers where logical lines start, used to count the starts within each function's span.
         warning_threshold: The active threshold; a function is kept only when its logical-line count is strictly greater.
 
     Returns:
@@ -95,6 +93,9 @@ def _active_high_threshold(settings: RuleSettings) -> int | float:
 
     Returns:
         The configured severity threshold's value when one is set, otherwise the warning threshold.
+
+    Raises:
+        LookupError: If no single severity threshold is set and the warning threshold is missing or nonnumeric.
     """
     if settings.severity_threshold is not None:
         return settings.severity_threshold.threshold
@@ -107,15 +108,13 @@ def _function_length_finding(
     node: FunctionNode,
     settings: RuleSettings,
 ) -> Finding:
-    """Build the finding for one over-threshold function, reporting its logical-line count and the matched threshold.
+    """Build the finding for one over-threshold function, reporting its measured line count and the matched threshold.
 
-    The logical-line count is recomputed from the unit's source and tree. The count is banded against the limit in force: in the lower band the
-    severity drops to advisory and the remediation says not to add to the function, while in the upper band the finding keeps the matched threshold's
-    severity and the remediation says to split the function. The finding starts on the earliest of the definition and decorator lines (the lambda's
-    own line for a lambda) and ends on the node's end line.
+    Lower-band findings are advisory with advice not to grow; upper-band findings keep the matched severity and advise splitting.
+    The finding spans the earliest definition or decorator line through the node's end line; lambdas start on their own line.
 
     Args:
-        unit: Parsed source file that contains the function; supplies the source, tree and display path.
+        unit: Source file supplying the text, tree and display path. Its AST can cache physical code lines and successfully tokenized logical starts.
         definition: This rule's definition, which supplies the rule id, pillar, tier, confidence and secondary pillars.
         node: The function, async function or lambda node that exceeded the active threshold.
         settings: Resolved settings for this rule, used to match the threshold and to find the limit in force.
@@ -186,7 +185,7 @@ def _format_number(value: int | float) -> str:
         value: Threshold value to render.
 
     Returns:
-        The value as text: a non-integral float keeps its decimal form, while an int or a whole-number float is written as an integer.
+        Integer text for integers and finite whole-number floats. Other floats use their usual Python text.
     """
     if isinstance(value, float) and not value.is_integer():
         return str(value)

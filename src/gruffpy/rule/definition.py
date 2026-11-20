@@ -76,9 +76,7 @@ class RuleDefinition:
     def get_description(self) -> str:
         """Return the human-readable description, falling back to the rule name.
 
-        SARIF and other consumers want a sentence - the ``description``
-        field is optional, so reporters call this rather than testing for
-        emptiness themselves.
+        Reporters use this fallback because description is optional.
 
         Returns:
             Non-empty description or the rule's display name.
@@ -88,9 +86,8 @@ class RuleDefinition:
     def threshold_payload(self) -> dict[str, Any]:
         """Return the JSON-projectable threshold shape for output consumers.
 
-        Single-threshold rubrics (ADR-014) project ``{"threshold": value}`` — the
-        severity is carried separately as the rule's ``defaultSeverity``. Named-knob
-        rules project ``{"thresholds": {...}}``; rules with neither project ``{}``.
+        Single-threshold rubrics follow ADR-014 and return a threshold key; severity remains in defaultSeverity.
+        Named-knob rules return a thresholds map; rules with neither return an empty mapping.
 
         Returns:
             Mapping to splat into a rule-metadata payload.
@@ -104,16 +101,11 @@ class RuleDefinition:
     def listing_threshold_payload(self) -> dict[str, Any]:
         """Return the family listing projection of this rule's thresholds.
 
-        ``list-rules`` and its per-rule detail view publish every threshold as a
-        named knob map under ``thresholds``. A single-threshold rubric borrows the
-        knob name gruff-go publishes for the same rule id, or publishes
-        ``{"threshold": value}`` when no port names that knob; a named-knob rule
-        publishes its map unchanged; a rule with neither publishes nothing, so an
-        absent key means "no threshold". ``threshold_payload`` is untouched and
-        still serves SARIF.
+        Single values use a family knob name, falling back to threshold; named maps are copied unchanged.
+        With neither form set, the payload is empty. threshold_payload keeps its separate shape for SARIF.
 
         Returns:
-            ``{"thresholds": {...}}`` to splat into a listing payload, or ``{}``.
+            A thresholds entry to merge into the rule listing, or an empty mapping when the rule has no threshold defaults.
         """
         if self.default_threshold is not None:
             knob = _LISTING_THRESHOLD_KNOB_NAMES.get(self.id, "threshold")

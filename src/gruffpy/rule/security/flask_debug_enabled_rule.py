@@ -43,11 +43,7 @@ class FlaskDebugEnabledRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the Flask-debug-enabled rule as a high-confidence ERROR.
 
-        ERROR severity because the Werkzeug debugger is an RCE vector in
-        production; high confidence because the three matched shapes
-        (``run(debug=True)``, ``config['DEBUG'] = True``,
-        ``config.update(DEBUG=True)``) are explicit literal-true settings
-        with no ambiguous interpretation.
+        ERROR reflects the production risk of Werkzeug's debugger; high confidence reflects explicit literal-True run or config settings.
 
         Returns:
             Definition for the Flask-debug-enabled rule under the security
@@ -65,17 +61,15 @@ class FlaskDebugEnabledRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag literal-true debug enables in Flask-context files.
 
-        File-level framework gate: the rule only fires when the unit
-        imports Flask (mirrors ``security.header-injection``'s approach).
-        Non-literal values (``debug=is_dev``) are intentionally skipped -
-        only literal ``True`` triggers, to keep false-positive rate low.
+        The rule requires a top-level Flask import, following the framework gate used by security.header-injection.
+        Only literal True qualifies, which avoids guessing the runtime value of settings such as debug=is_dev.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per literal-true debug-enabling shape.
+            One finding per matching node. Empty if there is no parsed tree, no top-level Flask import or no matching debug setting.
         """
         if unit.tree is None:
             return []

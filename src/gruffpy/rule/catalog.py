@@ -204,14 +204,9 @@ def _entry(factory: RuleFactory) -> BuiltInRule:
 
 
 def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
-    """Resolve a rule's documentation, using curated docs when they exist and generated docs otherwise.
+    """Resolve a rule's documentation, preferring curated docs and otherwise generating it from definition metadata.
 
-    Config keys are derived first and passed to the curated docs lookup as well as stored in generated docs. Generated docs fill the rationale, fix
-    guidance and bad and good examples from templates that name the rule (the repeated-structure parametrize rule instead gets a fixed group-mode
-    rationale), plus its confidence rationale, config keys, formula provenance, threshold direction, threshold metadata keys and security metadata.
-    Option descriptions listed for the rule in _OPTION_DESCRIPTIONS then replace the docs' option descriptions, curated or generated. The reviewed
-    false-positive guidance in _REVIEWED_FALSE_POSITIVE_GUIDANCE is attached as a single shape only when the docs publish no false-positive shape of
-    their own.
+    Config keys feed both paths; option descriptions override either result, and reviewed false-positive guidance fills an empty shape list.
 
     Args:
         definition: Rule definition whose id, name, pillar, confidence, thresholds and options drive the documentation.
@@ -740,10 +735,10 @@ def documentation_for_rule(rule_id: str) -> RuleDocs:
         rule_id: Built-in rule id.
 
     Returns:
-        Catalog ``RuleDocs`` (rationale, examples, threshold semantics).
+        Catalog RuleDocs (rationale, examples, threshold semantics).
 
     Raises:
-        KeyError: If *rule_id* is not a built-in catalog entry.
+        KeyError: If rule_id is not a built-in catalog entry.
     """
     try:
         return _BUILTIN_RULES_BY_ID[rule_id].docs
@@ -755,6 +750,6 @@ def catalog_definitions() -> list[RuleDefinition]:
     """Return built-in rule definitions in catalog order.
 
     Returns:
-        List of ``RuleDefinition`` records, one per ``BUILTIN_RULES`` entry.
+        List of RuleDefinition records, one per BUILTIN_RULES entry.
     """
     return [entry.definition for entry in BUILTIN_RULES]

@@ -105,7 +105,16 @@ class ConfigLoader:
         *,
         strict: bool = False,
     ) -> None:
-        """Prepare config discovery for one project and the command's strictness choice."""
+        """Prepare config discovery for one project and the command's strictness choice.
+
+        Args:
+            project_root: Directory searched for the project's configuration files.
+            analysis_config: Default settings on which loaded user settings are layered.
+            strict: Whether unsupported per-rule settings raise ConfigError during loading or are recorded as warnings.
+
+        Returns:
+            None; stores the discovery settings and initializes an empty warning collection.
+        """
         self._project_root = Path(project_root)
         self._defaults = analysis_config
         self._strict = strict
@@ -116,21 +125,22 @@ class ConfigLoader:
         """Return the non-fatal config warnings collected by the last ``load()``.
 
         Returns:
-            Warning messages in encounter order; empty when the config was
-            fully understood or ``load()`` has not run yet.
+            Warning messages in encounter order; empty before load() runs or when the last load recorded none.
         """
         return tuple(self._warnings)
 
     def _warn_or_raise(self, problem: str, lenient_consequence: str, hint: str) -> None:
-        """Raise *problem* under strict mode; otherwise record it as a warning.
+        """Raise ConfigError with the problem and hint in strict mode, or record a warning on the loader.
 
-        The lenient consequence ("ignored; defaults apply") is only true on
-        the warning path, so it never appears in the strict-mode error.
+        The consequence applies only when loading continues, so strict errors omit it.
 
         Args:
             problem: Invalid setting described in both strict errors and lenient warnings.
             lenient_consequence: Effect of continuing, included only in the recorded warning.
             hint: Corrective instruction appended to either form of feedback.
+
+        Returns:
+            None after recording a warning in lenient mode.
 
         Raises:
             ConfigError: When this loader is strict; otherwise the warning is retained for the caller.
@@ -142,16 +152,15 @@ class ConfigLoader:
     def load(self, config_path: Path | None = None) -> tuple[AnalysisConfig, Path | None]:
         """Load config, honouring YAML / `pyproject.toml` precedence.
 
-        An explicit path wins, followed by modern or legacy YAML, modern or legacy TOML, and
-        finally built-in defaults when the project has no Gruff settings.
+        Clear warnings from the previous load before resolving the configuration.
+        During discovery, the first existing YAML file wins even if empty. With neither YAML file, try the modern then legacy TOML table.
 
         Args:
-            config_path: Optional explicit config path; when set, skips the
-                project-root discovery and loads that file directly.
+            config_path: File to load directly. Pass None to use project-root discovery.
 
         Returns:
-            Tuple ``(config, source_path)`` where ``source_path`` is the file
-            the config was loaded from, or ``None`` if defaults were used.
+            The settings and the selected YAML or TOML path, even if the file supplies no overrides.
+            Discovery returns built-in defaults and a None path when it finds neither a YAML file nor a supported TOML table.
         """
         self._warnings = []
         if config_path is not None:
@@ -179,7 +188,7 @@ class ConfigLoader:
         return self._defaults, None
 
     def _load_explicit(self, path: Path) -> tuple[AnalysisConfig, Path | None]:
-        """Load the exact YAML or TOML path supplied by the user, without project discovery.
+        """Load the exact user-selected YAML or TOML path without discovery; retain lenient configuration warnings on this loader.
 
         Args:
             path: User-selected configuration file whose suffix chooses the YAML or TOML reader.
@@ -207,16 +216,17 @@ class ConfigLoader:
         return self._apply_config_section(toml_section), path
 
     def _load_toml_section(self, path: Path) -> dict[str, Any] | None:
-        """Read the supported Gruff table from TOML, or return no table for normal discovery.
+        """Read the supported Gruff table from TOML before applying its settings.
 
         Args:
             path: TOML file to read, using the modern Gruff table before the legacy table.
 
         Returns:
-            Validated Gruff settings, or None when neither supported table is present.
+            Gruff settings after shared top-level checks, or None when neither supported table exists.
+            For None, automatic discovery uses defaults and an explicit load reports a missing table.
 
         Raises:
-            ConfigError: When reading or parsing fails, a selected table has the wrong shape, or settings are invalid.
+            ConfigError: When reading or parsing fails, the tool or selected Gruff table has the wrong shape, or shared top-level checks fail.
         """
         try:
             with open(path, "rb") as f:
@@ -247,6 +257,9 @@ class ConfigLoader:
             section: Parsed settings to check for supported keys, schema and shared value shapes.
             source: File or table label included in feedback so the user can locate the setting.
 
+        Returns:
+            None when all shared settings pass validation.
+
         Raises:
             ConfigError: When a key, schema version or present shared setting is unsupported or malformed.
         """
@@ -271,6 +284,9 @@ class ConfigLoader:
             section: Parsed settings whose required schemaVersion must match this binary.
             source: File or table label included in migration feedback.
 
+        Returns:
+            None when the required schema version matches.
+
         Raises:
             ConfigError: When schemaVersion is absent or differs from the supported version.
         """
@@ -292,15 +308,16 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_display_floor(value: Any, source: str) -> None:
-        """Validate the display floor, refusing the per-command map that used to mean the exit gate.
+        """Validate the display floor and reject legacy per-command maps.
 
-        The map form is the whole reason this check exists: it is valid YAML that
-        used to gate a build, and reading it as a display floor would change what
-        a committed file does without changing what it says.
+        Treating a legacy exit-gate map as a display floor would change a committed file's meaning.
 
         Args:
             value: Raw minimumSeverity setting; must name one supported display severity.
             source: File or table label used to identify an invalid setting.
+
+        Returns:
+            None for a supported severity string.
 
         Raises:
             ConfigError: When the value is a legacy per-command map or is not a supported severity string.
@@ -315,8 +332,11 @@ class ConfigLoader:
         """Validate per-command failure thresholds before a scan can report the wrong exit code.
 
         Args:
-            block: Raw failOn table mapping supported gating commands to threshold strings; an empty table is valid.
+            block: Raw failOn table mapping supported gating commands to threshold strings. An empty table leaves no configured per-command overrides.
             source: File or table label attached to the collected setting errors.
+
+        Returns:
+            None after validating the mapping, command keys and threshold strings.
 
         Raises:
             ConfigError: When the table shape, command names or threshold strings are invalid.
@@ -344,6 +364,9 @@ class ConfigLoader:
             value: Raw hint threshold; zero disables the hint and positive integers set its trigger.
             source: File or table label used in invalid-threshold feedback.
 
+        Returns:
+            None for a non-negative integer threshold.
+
         Raises:
             ConfigError: When the threshold is a boolean, a non-integer or negative.
         """
@@ -359,6 +382,9 @@ class ConfigLoader:
         Args:
             value: Raw budget table; omitted fields retain their configured defaults.
             source: File or table label used in invalid-budget feedback.
+
+        Returns:
+            None when all supplied budget fields are valid.
 
         Raises:
             ConfigError: When the value is not a table, keys are unknown, enabled is not boolean, or a supplied limit is not a positive integer.
@@ -379,16 +405,19 @@ class ConfigLoader:
                 raise ConfigError(f"{source} deepScanBudget.{key} must be a positive integer.")
 
     def _apply_config_section(self, section: dict[str, Any]) -> AnalysisConfig:
-        """Layer every present user section over registered defaults in documented order.
+        """Apply user settings to registered defaults and record unsupported rule settings as loader warnings in lenient mode.
+
+        A supplied failOn table replaces the default command thresholds.
+        A supplied deepScanBudget table is marked as a config override even when it is empty.
 
         Args:
-            section: Top-level settings already shape-checked by the loader; absent sections keep their defaults.
+            section: Parsed settings after shared top-level validation. Absent sections keep their defaults.
 
         Returns:
             Settings with each present section applied; an empty section returns the registered defaults.
 
         Raises:
-            ConfigError: When a section applicator rejects an invalid setting or a strict-mode override.
+            ConfigError: When the Python version cannot be parsed, a setting is invalid, or strict mode rejects an override.
             ValueError: When the requested minimum Python version is below the supported minimum.
         """
         config = self._defaults
@@ -442,7 +471,7 @@ class ConfigLoader:
             A new configuration carrying exactly the supplied ignore patterns.
 
         Raises:
-            ConfigError: When the table has unknown keys or ignore is not a list of strings.
+            ConfigError: When paths is not a table, contains unknown keys, or has an ignore value other than a list of strings.
         """
         if not isinstance(paths, dict):
             raise ConfigError("[tool.gruff-py.paths] must be a table.")
@@ -456,11 +485,11 @@ class ConfigLoader:
 
     @staticmethod
     def _apply_allowlists(config: AnalysisConfig, allowlists: Any) -> AnalysisConfig:
-        """Apply supported user exceptions after validating every allowlist shape.
+        """Build a config with the supplied allowlists, rejecting malformed entries and the retired preview setting.
 
         Args:
             config: Settings retaining any allowlist that the user does not supply.
-            allowlists: Raw allowlist table to validate before applying its present sections.
+            allowlists: Raw user table supplying the allowlists to validate and replace.
 
         Returns:
             Settings with supplied allowlists replaced; an empty table leaves the configuration unchanged.
@@ -483,16 +512,18 @@ class ConfigLoader:
         Args:
             allowlists: Supported allowlist keys; absent acceptedAbbreviations is treated as an empty list for validation.
 
+        Returns:
+            None after validating acceptedAbbreviations and checking for the retired secretPreviews key.
+
         Raises:
             ConfigError: When abbreviations are not a list of strings or secretPreviews is present, even if empty.
         """
         accepted_abbreviations = allowlists.get("acceptedAbbreviations", [])
-        # Invalid naming entries stop the command so the user never sees results based on a
-        # partly applied allowlist.
+        # Reject invalid naming entries before any part of this allowlist can affect analysis.
         if not isinstance(accepted_abbreviations, list) or not all(isinstance(abbreviation, str) for abbreviation in accepted_abbreviations):
             raise ConfigError("[tool.gruff-py.allowlists].acceptedAbbreviations must be a list of strings.")
 
-        # Presence is the test, not content: an empty list reads as configured redaction just as a populated one does.
+        # Category markers are unconditional, so even an empty preview setting is rejected.
         if "secretPreviews" in allowlists:
             raise ConfigError(LEGACY_SECRET_PREVIEWS_ERROR)
 
@@ -525,7 +556,7 @@ class ConfigLoader:
 
         Args:
             config: Config carrying the registered rule ids and their sensitive-data membership.
-            section: Raw ``sensitiveExclusions`` value from the user's YAML or TOML.
+            section: Raw sensitiveExclusions list from the user's YAML or TOML. An empty list clears any existing reviewed exclusions.
 
         Returns:
             New config carrying the validated entries.
@@ -573,7 +604,7 @@ class ConfigLoader:
         )
 
     def _apply_rules(self, config: AnalysisConfig, rules: Any) -> AnalysisConfig:
-        """Merge per-rule user overrides while retaining defaults for unsupported keys.
+        """Merge per-rule overrides, retaining defaults for unsupported entries and recording loader warnings unless strict mode rejects them.
 
         Args:
             config: Settings providing registered rule ids and the defaults each override builds on.
@@ -620,6 +651,8 @@ class ConfigLoader:
     ) -> dict[str, Any]:
         """Keep only registered rule keys before applying the user's overrides.
 
+        Unsupported overrides append warnings to the loader in lenient mode. In strict mode, the first such override raises ConfigError.
+
         Args:
             rule_id: Public rule id whose dotted config keys appear in feedback.
             rule_section: User table; an empty table keeps every registered default.
@@ -644,7 +677,7 @@ class ConfigLoader:
         # A table of named thresholds keeps only knobs registered by this rule.
         if isinstance(thresholds, dict):
             kept = self._sanitised_thresholds(rule_id, thresholds, defaults)
-            # An explicitly empty table remains harmless and visible to the merge.
+            # Retain an explicit empty table so the merge rejects it alongside a supported single threshold.
             if kept or not thresholds:
                 section["thresholds"] = kept
             else:
@@ -685,7 +718,7 @@ class ConfigLoader:
         overrides: dict[str, Any],
         defaults: RuleSettings,
     ) -> dict[str, Any]:
-        """Keep registered threshold overrides and explain unsupported knobs to the user.
+        """Keep overrides for registered thresholds and record loader warnings for unknown names in lenient mode.
 
         Args:
             rule_id: Rule whose dotted threshold key identifies feedback.
@@ -699,9 +732,7 @@ class ConfigLoader:
             ConfigError: When strict mode encounters an unregistered threshold name.
         """
         kept: dict[str, Any] = {}
-        # Each named threshold is checked in the order the user wrote it.
         for key, value in overrides.items():
-            # Unknown knobs leave the corresponding registered default unchanged.
             if key not in defaults.thresholds:
                 self._warn_or_raise(
                     f'Unknown threshold "rules.{rule_id}.thresholds.{key}".',
@@ -718,15 +749,18 @@ class ConfigLoader:
         overrides: dict[str, Any],
         defaults: RuleSettings,
     ) -> dict[str, Any]:
-        """Keep option overrides whose names the registered rule exposes.
+        """Keep overrides for registered options and record loader warnings for unknown names in lenient mode.
 
         Args:
-            rule_id: Public rule id whose exact dotted typo appears in feedback.
+            rule_id: Registered rule id included in the dotted option path in feedback.
             overrides: User option table; empty means no options were requested.
             defaults: Registered options serving as the sole accepted-name source.
 
         Returns:
             Supported sibling overrides in the user's original order; empty when none remain.
+
+        Raises:
+            ConfigError: When strict mode encounters an unregistered option name.
         """
         kept: dict[str, Any] = {}
         # Each option is checked in user order so multiple warnings stay predictable.
@@ -789,6 +823,9 @@ def _validate_selection_values(config: AnalysisConfig, selection: dict[str, Any]
         config: Settings whose registered rule ids define valid rule selectors.
         selection: String-list selectors to check; absent lists select no values for validation.
 
+    Returns:
+        None when all supplied selectors are known.
+
     Raises:
         ConfigError: When any include or exclude selector names an unknown tier, pillar or rule.
     """
@@ -814,6 +851,9 @@ def _reject_unknown_selection_values(
         key: Selector list name included in the error path.
         values: Requested selector values; an empty list is valid.
         valid_values: Complete accepted set used to find unsupported requests.
+
+    Returns:
+        None when every requested selector is supported.
 
     Raises:
         ConfigError: When at least one requested value is absent from the accepted set.
@@ -933,7 +973,7 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
         An allowlist retaining the supplied strings and their order.
 
     Raises:
-        ConfigError: When the table contains unknown keys or a supplied value is not a list of strings.
+        ConfigError: When section is not a table, contains unknown keys, or a supplied field is not a list of strings.
     """
     if not isinstance(section, dict):
         raise ConfigError("[tool.gruff-py.allowlists.deadCode] must be a table.")
@@ -968,7 +1008,7 @@ def _parse_python_version(value: Any) -> tuple[int, int]:
         if len(parts) >= 2:
             try:
                 return (int(parts[0]), int(parts[1]))
-            # For example, ``3.next`` reaches this path and becomes a concise config error below.
+            # The shared ConfigError includes the original input and an example, so a separate log would repeat the failure.
             except ValueError:
                 pass
     raise ConfigError(f"minimumPythonVersion must be a string like '3.11', got {value!r}")

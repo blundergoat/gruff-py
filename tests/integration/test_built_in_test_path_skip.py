@@ -67,12 +67,15 @@ def test_test_path_class_skips_sensitive_findings_and_counts_them(sample_key_pro
 
     Args:
         sample_key_project: Key files in test and production paths, already the working directory.
+
+    Returns:
+        None; the assertions check retained findings, counts and audit-row contents.
     """
     payload = _analyse(sample_key_project)
     key_files = sorted(finding["file"] for finding in payload["findings"] if finding["ruleId"] == _AWS_RULE)
     built_in_rows = [row for row in payload["suppressions"] if row.get("source") == "built-in"]
 
-    # `src/latest.json` only contains the word `test` inside `latest`, so it is production code and keeps reporting.
+    # The test substring in src/latest.json is not a path marker, so the file keeps reporting.
     assert key_files == ["src/config.json", "src/latest.json"]
     assert [(row["index"], row["paths"][0], row["rule"], row["suppressed"]) for row in built_in_rows] == [
         (0, "Tests/Fixtures/keys.json", _AWS_RULE, 1),
@@ -87,8 +90,11 @@ def test_test_path_class_skips_security_findings_and_counts_them(tmp_path: Path,
     """Skip a deliberate ``eval`` in test and example files with the security reason, and keep production code reporting.
 
     Args:
-        tmp_path: Empty directory used as the project root.
+        tmp_path: Directory populated with test, example and production modules and a rule-enabling config.
         monkeypatch: Fixture used to make that directory the working directory.
+
+    Returns:
+        None; the assertions check retained findings and suppression rows.
     """
     source = 'def run(expression):\n    """Evaluate an expression."""\n    return eval(expression)\n'
     for relative_path in ("src/probe/runner.py", "tests/test_runner.py", "examples/run_demo.py"):
@@ -124,6 +130,9 @@ def test_the_skip_is_counted_on_text(sample_key_project: Path, arguments: list[s
     Args:
         sample_key_project: Key files in test and production paths, already the working directory.
         arguments: The command and flags under test, before the scan target.
+
+    Returns:
+        None; the assertions check the command exit and displayed count.
     """
     expected = f"builtInTestPath[examples/demo.json] {_AWS_RULE}: 1 ("
 

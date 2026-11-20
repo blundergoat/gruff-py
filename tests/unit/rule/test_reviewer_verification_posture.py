@@ -81,6 +81,9 @@ def test_reviewer_verification_families_keep_default_posture(expected: dict[str,
     Args:
         expected: Expected posture for each rule id in the family.
         prefix: Rule id prefix selecting the family; the cases cover missing-documentation, security and sensitive-data rules.
+
+    Returns:
+        None. Checks that the selected rule IDs and their default enabled states, severities and confidence levels match expectations.
     """
     registry = RuleRegistry.defaults()
     config = AnalysisConfig.from_registry(registry)

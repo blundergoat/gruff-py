@@ -21,7 +21,7 @@ def _defaults() -> AnalysisConfig:
 
 
 def _write_yaml(tmp_path: Path, body: str) -> Path:
-    """Write raw text as the project's ``.gruff-py.yaml``.
+    """Write raw text as the project's .gruff-py.yaml.
 
     Args:
         tmp_path: Project root that receives the config.
@@ -36,10 +36,13 @@ def _write_yaml(tmp_path: Path, body: str) -> Path:
 
 
 def test_fail_on_yaml_parses_into_analysis_config(tmp_path: Path) -> None:
-    """Load the YAML ``failOn`` levels for analyse, report and dashboard into the config's minimum-severity map.
+    """Load the YAML failOn levels for analyse, report and dashboard into the config's minimum-severity map.
 
     Args:
         tmp_path: Project root whose config sets a fail-on level for each gated command.
+
+    Returns:
+        None. Checks that the loaded thresholds for analyse, report and dashboard match the YAML settings.
     """
     _write_yaml(
         tmp_path,
@@ -56,10 +59,13 @@ def test_fail_on_yaml_parses_into_analysis_config(tmp_path: Path) -> None:
 
 
 def test_fail_on_pyproject_toml_parses_into_analysis_config(tmp_path: Path) -> None:
-    """Load the ``pyproject.toml`` ``failOn`` levels into the config's minimum-severity map.
+    """Load the pyproject.toml failOn levels into the config's minimum-severity map.
 
     Args:
-        tmp_path: Project root whose ``pyproject.toml`` sets a fail-on level for each gated command.
+        tmp_path: Project root whose pyproject.toml sets a fail-on level for each gated command.
+
+    Returns:
+        None. Checks that the loaded thresholds for analyse, report and dashboard match the pyproject.toml settings.
     """
     (tmp_path / "pyproject.toml").write_text(
         '[tool.gruff-py]\nschemaVersion = "gruff-py.config.v0.1"\n[tool.gruff-py.failOn]\nanalyse = "advisory"\nreport = "none"\ndashboard = "none"\n'
@@ -75,10 +81,13 @@ def test_fail_on_pyproject_toml_parses_into_analysis_config(tmp_path: Path) -> N
 
 
 def test_fail_on_absent_yields_empty_map(tmp_path: Path) -> None:
-    """Leave the minimum-severity map empty when the config has no ``failOn`` section.
+    """Leave the minimum-severity map empty when the config has no failOn section.
 
     Args:
         tmp_path: Project root whose config holds only the schema version.
+
+    Returns:
+        None. Checks that omitting failOn leaves the minimum-severity map empty.
     """
     _write_yaml(tmp_path, "schemaVersion: gruff-py.config.v0.1\n")
 
@@ -88,10 +97,13 @@ def test_fail_on_absent_yields_empty_map(tmp_path: Path) -> None:
 
 
 def test_fail_on_rejects_non_gating_summary_key(tmp_path: Path) -> None:
-    """Refuse a ``failOn`` entry for the non-gating ``summary`` command.
+    """Refuse a failOn entry for the non-gating summary command.
 
     Args:
-        tmp_path: Project root whose config sets a fail-on level for ``summary``.
+        tmp_path: Project root whose config sets a fail-on level for summary.
+
+    Returns:
+        None. Checks that the loader raises ConfigError identifying summary as a non-gating command.
     """
     _write_yaml(
         tmp_path,
@@ -103,10 +115,13 @@ def test_fail_on_rejects_non_gating_summary_key(tmp_path: Path) -> None:
 
 
 def test_fail_on_rejection_lists_allowed_gateable_commands(tmp_path: Path) -> None:
-    """List the gateable commands in the error for a ``failOn`` entry naming another command.
+    """List the gateable commands in the error for a failOn entry naming another command.
 
     Args:
-        tmp_path: Project root whose config sets a fail-on level for ``list-rules``.
+        tmp_path: Project root whose config sets a fail-on level for list-rules.
+
+    Returns:
+        None. Checks that the error for list-rules lists analyse, dashboard and report as the allowed commands.
     """
     _write_yaml(
         tmp_path,
@@ -118,10 +133,13 @@ def test_fail_on_rejection_lists_allowed_gateable_commands(tmp_path: Path) -> No
 
 
 def test_fail_on_rejects_unknown_value(tmp_path: Path) -> None:
-    """Refuse an unknown ``failOn`` level, listing the allowed levels in the error.
+    """Refuse an unknown failOn level, listing the allowed levels in the error.
 
     Args:
-        tmp_path: Project root whose config sets the analyse level to ``medium``.
+        tmp_path: Project root whose config sets the analyse level to medium.
+
+    Returns:
+        None. Checks that the error names medium and lists the allowed failOn levels.
     """
     _write_yaml(
         tmp_path,
@@ -133,13 +151,15 @@ def test_fail_on_rejects_unknown_value(tmp_path: Path) -> None:
 
 
 def test_fail_on_rejects_never_alias(tmp_path: Path) -> None:
-    """Refuse ``never`` as a ``failOn`` level.
+    """Refuse never as a failOn level.
 
     Args:
-        tmp_path: Project root whose config sets the analyse level to ``never``.
+        tmp_path: Project root whose config sets the analyse level to never.
+
+    Returns:
+        None. Checks that the loader raises ConfigError naming never as the rejected level.
     """
-    # Family-wide off-switch is 'none'; gruff-go's draft 'never' is explicitly
-    # rejected (ADR-019).
+    # The shared failOn contract uses 'none' to disable exit gating.
     _write_yaml(
         tmp_path,
         "schemaVersion: gruff-py.config.v0.1\nfailOn:\n  analyse: never\n",
@@ -150,10 +170,13 @@ def test_fail_on_rejects_never_alias(tmp_path: Path) -> None:
 
 
 def test_fail_on_surfaces_multiple_errors_at_once(tmp_path: Path) -> None:
-    """Report both ``failOn`` problems in one error: the non-gating command and the unknown level.
+    """Report both failOn problems in one error: the non-gating command and the unknown level.
 
     Args:
         tmp_path: Project root whose config holds both problems.
+
+    Returns:
+        None. Checks that one ConfigError mentions both the non-gating command and the unknown level.
     """
     _write_yaml(
         tmp_path,
@@ -168,10 +191,13 @@ def test_fail_on_surfaces_multiple_errors_at_once(tmp_path: Path) -> None:
 
 
 def test_schema_version_missing_points_at_format_correct_recovery(tmp_path: Path) -> None:
-    """Direct YAML users to migration without claiming force can discard config.
+    """Check the recovery guidance for a missing schema version.
 
     Args:
-        tmp_path: Project containing the schema-less YAML shown to the user.
+        tmp_path: Project root where the test writes YAML without a schemaVersion key.
+
+    Returns:
+        None. Checks that the error names the missing schemaVersion, mentions gruff-py migrate-config and TOML, and omits init --force.
     """
     _write_yaml(tmp_path, "minimumPythonVersion: '3.11'\n")
 
@@ -189,6 +215,9 @@ def test_schema_version_wrong_value_names_expected_literal(tmp_path: Path) -> No
 
     Args:
         tmp_path: Project root whose config names schema version 0.2.
+
+    Returns:
+        None. Checks that the error names the supplied and expected schema versions.
     """
     _write_yaml(tmp_path, "schemaVersion: gruff-py.config.v0.2\n")
 

@@ -39,20 +39,26 @@ def _defaults() -> AnalysisConfig:
 
 
 def _write_yaml(tmp_path: Path, body: str) -> None:
-    """Write raw text as the project's ``.gruff-py.yaml``, adding no schema line.
+    """Write raw text as the project's .gruff-py.yaml, adding no schema line.
 
     Args:
         tmp_path: Project root that receives the config.
         body: Complete config text.
+
+    Returns:
+        None. Writes the supplied text to .gruff-py.yaml, replacing any existing contents.
     """
     (tmp_path / ".gruff-py.yaml").write_text(body)
 
 
 def test_legacy_tiered_thresholds_warn_and_rule_keeps_defaults(tmp_path: Path):
-    """Warn twice for legacy warning and error tiers loaded from ``.gruff-py.yaml``, and leave the cognitive rule at its defaults.
+    """Warn twice for legacy warning and error tiers loaded from .gruff-py.yaml, and leave the cognitive rule at its defaults.
 
     Args:
         tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+
+    Returns:
+        None. Checks the YAML source, two warnings and retention of the cognitive rule defaults.
     """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())
@@ -63,10 +69,13 @@ def test_legacy_tiered_thresholds_warn_and_rule_keeps_defaults(tmp_path: Path):
 
 
 def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_path: Path):
-    """Name the unknown tier key, the accepted keys and the migrate-config command in the first warning, which mentions TOML, not ``init --force``.
+    """Name the unknown tier key, the accepted keys and the migrate-config command in the first warning, which mentions TOML, not init --force.
 
     Args:
         tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+
+    Returns:
+        None. Checks the first warning for the unknown tier key, accepted keys and TOML migration guidance.
     """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())
@@ -80,10 +89,13 @@ def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_pat
 
 
 def test_legacy_tiered_thresholds_raise_under_strict(tmp_path: Path):
-    """Raise a ``ConfigError`` under strict loading that names the unknown tier key, includes the ``Accepted keys`` label and never says ``ignored``.
+    """Raise a ConfigError under strict loading that names the unknown tier key, includes the Accepted keys label and never says ignored.
 
     Args:
         tmp_path: Project root whose config gives the cognitive rule legacy warning and error tiers.
+
+    Returns:
+        None. Checks that the strict error names the unknown tier key, includes the Accepted keys label and omits the word ignored.
     """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults(), strict=True)
@@ -100,7 +112,7 @@ def _unknown_option_warning(project_root: Path) -> str:
     """Load one option typo and return its sole user-facing warning.
 
     Args:
-        project_root: Project containing one valid option and one misspelled option.
+        project_root: Project root where .gruff-py.yaml is created or replaced with one valid option and one misspelled option.
 
     Returns:
         Non-empty warning text; an absent warning fails the one-item unpack.
@@ -116,7 +128,7 @@ def _strict_unknown_option_error(project_root: Path) -> str:
     """Load one option typo in strict mode and return the blocking message.
 
     Args:
-        project_root: Project containing one valid option and one misspelled option.
+        project_root: Project root where .gruff-py.yaml is created or replaced with one valid option and one misspelled option.
 
     Returns:
         Non-empty error text explaining why the user's config was rejected.
@@ -134,6 +146,9 @@ def test_unknown_option_warning_names_key_and_lenient_consequence(tmp_path: Path
 
     Args:
         tmp_path: Project containing one valid option and one misspelled option.
+
+    Returns:
+        None. Checks that the warning names the exact ignored key and explains which settings still apply.
     """
     warning = _unknown_option_warning(tmp_path)
 
@@ -142,10 +157,13 @@ def test_unknown_option_warning_names_key_and_lenient_consequence(tmp_path: Path
 
 
 def test_unknown_option_warning_lists_registered_alternatives(tmp_path: Path) -> None:
-    """List every registered option name that can replace the user's typo.
+    """Check that the warning lists the rule's registered option names.
 
     Args:
         tmp_path: Project containing one valid option and one misspelled option.
+
+    Returns:
+        None. Checks the warning for allow_bullets, min_fields and require_all_fields.
     """
     warning = _unknown_option_warning(tmp_path)
 
@@ -155,10 +173,13 @@ def test_unknown_option_warning_lists_registered_alternatives(tmp_path: Path) ->
 
 
 def test_unknown_option_keeps_valid_sibling_and_registered_default(tmp_path: Path) -> None:
-    """Apply a valid sibling while the misspelling leaves its default intact.
+    """Apply a valid sibling while the misspelling leaves the registered allow_bullets default intact.
 
     Args:
         tmp_path: Project containing one valid option and one misspelled option.
+
+    Returns:
+        None. Checks the min_fields override, the allow_bullets default and the absence of the misspelled key.
     """
     _write_yaml(tmp_path, _UNKNOWN_OPTION_WITH_VALID_SIBLING_YAML)
     defaults = _defaults()
@@ -175,10 +196,13 @@ def test_unknown_option_keeps_valid_sibling_and_registered_default(tmp_path: Pat
 def test_unknown_option_strict_error_names_key_without_lenient_consequence(
     tmp_path: Path,
 ) -> None:
-    """Stop strict users on the typo without saying an ignored key was applied.
+    """Check the strict error for the exact unknown option and the absence of lenient wording.
 
     Args:
         tmp_path: Project containing one valid option and one misspelled option.
+
+    Returns:
+        None. Checks that the error names allowBullet and omits the word ignored.
     """
     message = _strict_unknown_option_error(tmp_path)
 
@@ -187,10 +211,13 @@ def test_unknown_option_strict_error_names_key_without_lenient_consequence(
 
 
 def test_unknown_option_strict_error_lists_registered_alternatives(tmp_path: Path) -> None:
-    """Give strict users every registered option name that can replace the typo.
+    """Check that the strict error lists the rule's registered option names.
 
     Args:
         tmp_path: Project containing one valid option and one misspelled option.
+
+    Returns:
+        None. Checks the strict error for allow_bullets, min_fields and require_all_fields.
     """
     message = _strict_unknown_option_error(tmp_path)
 
@@ -204,6 +231,9 @@ def test_unknown_rule_id_warns_and_section_is_skipped(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose config sets a rule id the registry lacks.
+
+    Returns:
+        None. Checks for one warning naming the unknown rule ID and verifies that all rule settings retain their defaults.
     """
     _write_yaml(
         tmp_path,
@@ -221,6 +251,9 @@ def test_unknown_rule_section_key_warns_and_rest_applies(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose short-variable section adds an unknown key beside its enabled flag.
+
+    Returns:
+        None. Checks for one warning naming the unknown key and verifies that the rule is disabled.
     """
     _write_yaml(
         tmp_path,
@@ -238,6 +271,9 @@ def test_threshold_on_non_rubric_rule_warns_and_is_dropped(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose config gives the short-variable rule a threshold and severity.
+
+    Returns:
+        None. Checks for one warning and verifies that the rule has no severity threshold.
     """
     _write_yaml(
         tmp_path,
@@ -255,6 +291,9 @@ def test_severity_without_threshold_warns_and_is_dropped(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose config gives the file-length rule a severity alone.
+
+    Returns:
+        None. Checks for one warning about the missing threshold and verifies that the rule keeps its defaults.
     """
     _write_yaml(
         tmp_path,
@@ -268,10 +307,13 @@ def test_severity_without_threshold_warns_and_is_dropped(tmp_path: Path):
 
 
 def test_structural_rule_section_error_still_raises_without_strict(tmp_path: Path):
-    """Raise a ``ConfigError`` for a rule section that is not a table, even without strict loading.
+    """Raise a ConfigError for a rule section that is not a table, even without strict loading.
 
     Args:
         tmp_path: Project root whose config sets the file-length rule to a number.
+
+    Returns:
+        None. Checks that non-strict loading raises ConfigError for a rule section that is not a table.
     """
     _write_yaml(
         tmp_path,
@@ -283,10 +325,13 @@ def test_structural_rule_section_error_still_raises_without_strict(tmp_path: Pat
 
 
 def test_unknown_top_level_key_still_raises_without_strict(tmp_path: Path):
-    """Raise a ``ConfigError`` for an unknown top-level key, even without strict loading.
+    """Raise a ConfigError for an unknown top-level key, even without strict loading.
 
     Args:
         tmp_path: Project root whose config adds an unknown top-level key.
+
+    Returns:
+        None. Checks that non-strict loading raises ConfigError for an unknown top-level key.
     """
     _write_yaml(
         tmp_path,
@@ -302,6 +347,9 @@ def test_warnings_reset_between_loads(tmp_path: Path):
 
     Args:
         tmp_path: Project root whose legacy config is replaced by a clean one between loads.
+
+    Returns:
+        None. Replaces the legacy config and checks that the same loader clears its warnings on the next load.
     """
     _write_yaml(tmp_path, _LEGACY_COGNITIVE_YAML)
     loader = ConfigLoader(tmp_path, _defaults())

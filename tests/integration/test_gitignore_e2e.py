@@ -14,7 +14,10 @@ def _write(path: Path, text: str = "") -> None:
 
     Args:
         path: File to create or overwrite.
-        text: UTF-8 content; empty by default.
+        text: Content to write as UTF-8. Empty content creates an empty file or clears an existing one.
+
+    Returns:
+        None. Creates or overwrites the destination file.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -27,7 +30,7 @@ def _file_paths_in_report(output: str) -> set[str]:
         output: JSON text printed by ``analyse --format json``.
 
     Returns:
-        The distinct finding file paths; empty when the report lists no findings.
+        The distinct finding file paths. An empty or missing findings list produces an empty set.
     """
     payload = json.loads(output)
     return {f["file"] for f in payload.get("findings", [])}
@@ -42,8 +45,7 @@ def project_with_gitignored_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         monkeypatch: Pytest monkeypatch fixture (used to ``chdir`` into the project).
 
     Returns:
-        Project root path with ``.gitignore``, ``src/kept.py``, and an ignored
-        ``vendor/third_party.py`` already written.
+        The temporary project root containing .gitignore, src/kept.py, and the ignored vendor/third_party.py.
     """
     monkeypatch.chdir(tmp_path)
     _write(tmp_path / ".gitignore", "vendor/\n")
@@ -54,7 +56,11 @@ def project_with_gitignored_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.usefixtures("project_with_gitignored_finding")
 def test_gitignored_file_does_not_appear_in_findings() -> None:
-    """Leave findings in a gitignored ``vendor`` file out of a full-project report."""
+    """Leave findings in a gitignored ``vendor`` file out of a full-project report.
+
+    Returns:
+        None. Checks that the report omits the gitignored file from its finding paths.
+    """
     result = CliRunner().invoke(
         main,
         ["analyse", "--format", "json", "--fail-on", "none", "--no-config", "."],
@@ -67,7 +73,11 @@ def test_gitignored_file_does_not_appear_in_findings() -> None:
 
 @pytest.mark.usefixtures("project_with_gitignored_finding")
 def test_include_ignored_surfaces_gitignored_findings() -> None:
-    """Report findings in the gitignored ``vendor`` file when ``--include-ignored`` is passed."""
+    """Report findings in the gitignored ``vendor`` file when ``--include-ignored`` is passed.
+
+    Returns:
+        None. Checks that the report includes a finding path for the gitignored file.
+    """
     result = CliRunner().invoke(
         main,
         [
@@ -93,6 +103,9 @@ def test_project_without_gitignore_behaves_normally(tmp_path: Path, monkeypatch:
     Args:
         tmp_path: Project root holding only ``src/app.py``, a module without a docstring.
         monkeypatch: Changes into the project so the ``.`` operand is the project root.
+
+    Returns:
+        None. Checks that analysis succeeds and reports a finding for src/app.py without a gitignore file.
     """
     monkeypatch.chdir(tmp_path)
     _write(tmp_path / "src" / "app.py", "x = 1\n")

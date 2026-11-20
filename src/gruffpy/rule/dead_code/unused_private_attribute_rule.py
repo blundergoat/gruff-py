@@ -36,9 +36,7 @@ class UnusedPrivateAttributeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unused-private-attribute rule as a medium-confidence warning.
 
-        Medium confidence: ``__x``-style name-mangled attributes accessed via
-        the runtime-mangled name (``self._Cls__x``) are out of scope and can
-        false-positive.
+        Reads written as self._Cls__x are not matched to assignments written as self.__x, which can produce false positives.
 
         Returns:
             Definition for the unused-private-attribute rule under the
@@ -54,19 +52,17 @@ class UnusedPrivateAttributeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``self._x``-style assignments inside a class that the class never reads.
+        """Flag self._x-style assignments that have no read or deletion anywhere under a candidate class, including in nested scopes.
 
-        Skips dataclasses (fields are intentionally write-only at the type
-        level), framework-base subclasses, and ``_x`` attributes paired with
-        an ``@property x`` getter (the underscore is the backing field).
-        Honours the dead-code allowlist by path, symbol, and decorator.
+        Classes with dataclass-style decorators or framework bases are excluded as candidates.
+        A direct property, getter or setter exempts an attribute with the same name after its leading underscores are stripped.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplying the allowlist.
+            context: Rule execution context supplying the dead-code allowlist for paths, symbols and decorators.
 
         Returns:
-            One finding per private attribute assigned-but-never-read.
+            One finding per non-exempt private attribute assigned but never read or deleted; empty when the unit has no tree or none qualify.
         """
         if unit.tree is None:
             return []
@@ -155,13 +151,12 @@ def _is_unused_private_attribute(
 ) -> bool:
     """Decide whether a self attribute name is underscore-prefixed, not in read, and not a property backing field.
 
-    A name counts as a backing field when stripping all its leading underscores yields one of the property names, so ``_x`` and ``__x`` both pair with
-    a property method named ``x``.
+    Stripping all leading underscores identifies backing fields, so a property named x exempts both _x and __x.
 
     Args:
         name: Attribute name assigned on self somewhere in the class.
         read: Attribute names the class reads or deletes on self.
-        property_names: Names of the class's methods decorated as a property, setter or getter.
+        property_names: Method names collected from decorators rendered as property or ending in .setter or .getter.
 
     Returns:
         True when the name should be reported; False when it lacks a leading underscore, appears in read, or matches a property name after its leading

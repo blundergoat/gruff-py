@@ -32,12 +32,9 @@ class ShortVariableRule(Rule):
     ID = "naming.short-variable"
 
     def definition(self) -> RuleDefinition:
-        """Describe the short-variable rule with a configurable accepted-name list.
+        """Describe the short-variable rule and its configurable acceptedShortNames list.
 
-        Low confidence because single-character names are idiomatic in
-        mathematical, loop-counter, and exception-handler contexts. The
-        ``acceptedShortNames`` option lets teams expand the default
-        (``i``/``j``/``k``/``n``/``m``/``x``/``y``/``z``/``e``/``_``/``f``).
+        Confidence is low because single-character names can be idiomatic in mathematical, loop and exception-handler code.
 
         Returns:
             Definition for the short-variable rule under the naming pillar.
@@ -88,7 +85,8 @@ def _accepted_short_names(
         definition: Rule definition identifying which settings to read.
 
     Returns:
-        Configured acceptedShortNames as a frozen set, or the built-in names when the option is absent or is not a list of strings.
+        Frozen set from acceptedShortNames. An empty list exempts no names.
+        An absent option or a value other than a list of strings uses the built-in names.
     """
     settings = context.settings_for(definition)
     configured = settings.options.get("acceptedShortNames", list(_DEFAULT_ACCEPTED))

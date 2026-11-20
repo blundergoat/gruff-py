@@ -92,37 +92,34 @@ class HardcodedEnvValueRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``.env`` lines where a secret-shaped KEY=value has a high-entropy literal value.
+        """Flag high-entropy literal values assigned to secret-shaped keys in .env and .env.* files.
 
-        Users see only literal values in ``.env`` files that meet the length and entropy gates;
-        placeholders and runtime variable references remain quiet.
+        Findings name the setting and show a fixed redaction marker. Placeholders and dollar-prefixed values are skipped.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per ``.env`` line whose value crosses the
-            entropy/length gates.
+            One finding per line whose value survives the placeholder, template, reference, length and entropy filters.
+            Empty for other filenames or when no assignment qualifies.
         """
-        # Non-environment files stay out of this focused signal so users do not receive duplicate
-        # noise.
+        # The KEY=value pattern is intended for environment settings, so other filenames are outside this check.
         if not _is_env_file(unit.file.display_path):
             return []
         is_template = _is_env_template(unit.file.display_path)
         definition = self.definition()
         findings: list[Finding] = []
-        # Each secret-named assignment remains independently actionable in the user's report.
         for secret_assignment in _SECRET_KEY_RE.finditer(unit.source):
             environment_key = secret_assignment.group("key")
             secret_value = secret_assignment.group("value").strip().strip("\"'")
-            # Empty, short, placeholder and vendor-documented sample values do not require credential rotation.
+            # Length and placeholder checks keep low-signal values and exact vendor samples out of secret review.
             if _is_placeholder(secret_value) or len(secret_value) < _MIN_VALUE_LENGTH or is_documented_sample(secret_value):
                 continue
             # A template's sample value needs a credential's shape, not only a credential's length.
             if is_template and not _is_credential_shaped(secret_value):
                 continue
-            # A runtime variable reference means the user did not commit the secret value itself.
+            # Treat every dollar-prefixed value as a runtime reference and skip it.
             if secret_value.startswith("${") or secret_value.startswith("$"):
                 continue
             # Structured low-entropy values are unlikely to be live credentials worth surfacing.
@@ -143,9 +140,8 @@ class HardcodedEnvValueRule(SourceTextRule):
                         "Use placeholder values in committed `.env` files and inject real secrets via the deployment environment or a secret manager."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    # The environment key names the setting the user must fix. The value's entropy
-                    # is a statistic computed from the matched secret and is forbidden in
-                    # serialized output by FAMILY-CONTRACT section 5.
+                    # The environment key names the setting the user must fix.
+                    # Entropy is computed from the matched secret and is forbidden in serialized output by FAMILY-CONTRACT section 5.
                     metadata={"preview": fixed_preview(), "key": environment_key},
                 ),
             )
@@ -166,7 +162,7 @@ def _is_env_file(display_path: str) -> bool:
 
 
 def _is_env_template(display_path: str) -> bool:
-    """Return whether an ``.env`` file is a committed template such as ``.env.example`` or ``.env.local.sample``.
+    """Return whether an ``.env`` file has a template filename such as ``.env.example`` or ``.env.local.sample``.
 
     Args:
         display_path: Project-relative path of an ``.env`` file.
@@ -179,14 +175,15 @@ def _is_env_template(display_path: str) -> bool:
 
 
 def _is_placeholder(value: str) -> bool:
-    """Return whether an ``.env`` value is a stand-in for a secret rather than a secret.
+    """Recognize .env values the rule skips as placeholders.
 
     Args:
         value: Unquoted right-hand side of the assignment.
 
     Returns:
-        True for an empty value, a known placeholder in any casing, ``your-...`` wording, an angle-bracketed
-        name, or one character repeated.
+        True for empty text, a known placeholder, or your with an optional suffix of ASCII digits, spaces, dots, underscores, hyphens,
+        or letters matching a-z under Python's Unicode case-insensitive regex rules. Text inside one pair of angle brackets, including <>,
+        or a single character with optional repetitions also qualifies. Matching ignores case.
     """
     return value.casefold() in _PLACEHOLDER_VALUES or _PLACEHOLDER_PATTERN.fullmatch(value) is not None
 
@@ -198,7 +195,7 @@ def _is_credential_shaped(value: str) -> bool:
         value: Unquoted right-hand side of a template assignment.
 
     Returns:
-        True when the value holds a run of at least 20 key characters that mixes letters and digits.
+        True when a run of at least 20 ASCII letters, digits, plus signs or slashes contains both a letter and a digit.
     """
     return any(
         any(character.isalpha() for character in run) and any(character.isdigit() for character in run) for run in _CREDENTIAL_RUN.findall(value)

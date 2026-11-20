@@ -32,14 +32,12 @@ class PytestConfig:
     is_present: bool = False
 
     def has_strict_config(self) -> bool:
-        """Return whether pytest is configured to fail on unknown configs or markers.
+        """Check whether pytest addopts contains a strict configuration or marker flag.
 
-        True when either ``--strict-config`` or ``--strict-markers``
-        appears in ``addopts``; both pins are treated as equivalent strict
-        signals.
+        Either --strict-config or --strict-markers satisfies this rule's strictness check; both are not required.
 
         Returns:
-            True when pytest will refuse silent config typos.
+            True when addopts contains either flag, otherwise False; the other strictness protection may still be disabled.
         """
         return "--strict-config" in self.addopts or "--strict-markers" in self.addopts
 
@@ -60,10 +58,10 @@ class PytestConfig:
         )
 
     def has_coverage_source(self) -> bool:
-        """Return whether ``[tool.coverage.run] source`` lists at least one package.
+        """Return whether the coverage source allowlist contains any entries.
 
         Returns:
-            True when coverage has a configured source allowlist.
+            True for a nonempty coverage_source tuple, otherwise False; entry contents are not validated.
         """
         return bool(self.coverage_source)
 
@@ -72,13 +70,17 @@ _cache: dict[str, PytestConfig] = {}
 
 
 def read_pytest_config(project_root: str) -> PytestConfig:
-    """Return the cached :class:`PytestConfig` for *project_root*.
+    """Return pytest and coverage settings, caching the first snapshot for each project-root string.
 
     Args:
-        project_root: Path to the project root containing ``pyproject.toml``.
+        project_root: Path to the project root containing pyproject.toml; the exact string is the shared-cache key.
 
     Returns:
-        Parsed pytest configuration; subsequent calls reuse the cached value.
+        Parsed settings, or an empty snapshot for a missing file, caught OSError, TOML parse error or absent tool table.
+        Later calls for the same root reuse that snapshot until reset_cache clears the shared cache.
+
+    Raises:
+        UnicodeDecodeError: When pyproject.toml contains invalid UTF-8.
     """
     if project_root in _cache:
         return _cache[project_root]
@@ -88,7 +90,11 @@ def read_pytest_config(project_root: str) -> PytestConfig:
 
 
 def reset_cache() -> None:
-    """Test-only - clear the per-root cache."""
+    """Test-only - clear the per-root cache.
+
+    Returns:
+        None. Clears the shared per-root settings cache.
+    """
     _cache.clear()
 
 
@@ -99,7 +105,8 @@ def _read(project_root: str) -> PytestConfig:
         project_root: Directory containing the pyproject.toml file to read.
 
     Returns:
-        Parsed supported settings; an empty snapshot for a missing file, caught OSError, invalid TOML or absent tool table.
+        A snapshot of supported settings. A missing file, a caught OSError or TOMLDecodeError, or a missing tool table yields an empty snapshot.
+        Without tool.pytest.ini_options, is_present is False even if coverage settings were read.
     """
     path = Path(project_root) / "pyproject.toml"
     if not path.is_file():
@@ -176,7 +183,7 @@ def _table_value(table: dict[str, Any] | None, key: str) -> object:
 
 
 def _split_str(value: object) -> list[str]:
-    """Split a TOML ``addopts`` value (either a string or a list).
+    """Split a TOML option into whitespace tokens or stringified list entries.
 
     Args:
         value: Decoded option value; strings are split on whitespace and list elements are converted with str.

@@ -14,17 +14,17 @@ def _finding(
     line: int = 1,
     column: int | None = None,
 ) -> Finding:
-    """Build a complexity finding in ``src/x.py`` with a fixed message.
+    """Build a complexity finding in src/x.py with a fixed message.
 
     Args:
-        rule_id: Rule id of the finding.
-        severity: Severity, which the rule-count rows report; warning by default.
-        confidence: Confidence; high by default.
-        line: Start line; 1 by default.
+        rule_id: Identifier used to group the finding in rule-count rows.
+        severity: Severity considered when a rule-count row selects its worst band. Defaults to warning.
+        confidence: Confidence recorded in serialized findings and rule-count rows; high by default.
+        line: Start line stored in the fixture, 1 by default; the machine serializer normalizes 0 to 1.
         column: Column, or None for a line-only finding.
 
     Returns:
-        The finding.
+        The configured complexity finding for report assertions.
     """
     return Finding(
         rule_id=rule_id,
@@ -64,7 +64,11 @@ def _report(findings: tuple[Finding, ...]) -> AnalysisReport:
 
 
 def test_finding_counts_by_rule_returns_empty_list_when_no_findings():
-    """Return an empty rule-count list for a report with no findings."""
+    """Return an empty rule-count list for a report with no findings.
+
+    Returns:
+        None after the assertion passes.
+    """
     rows = _report(()).finding_counts_by_rule()
 
     assert rows == []
@@ -74,7 +78,7 @@ _SCANNER_COLUMN = 4
 
 
 def _location_findings() -> tuple[dict, dict]:
-    """Serialise one line-only and one scanner-pinpointed finding through the machine contract.
+    """Serialise a zero-line fixture through normalization to line 1 and a line-7 fixture with the scanner's column.
 
     Returns:
         The two serialised findings, line-only first.
@@ -90,7 +94,11 @@ def _location_findings() -> tuple[dict, dict]:
 
 
 def test_machine_contract_pins_a_line_only_location() -> None:
-    """Serialise a line-only finding created at line 0 as line 1 of its file, with ``line-only`` location precision."""
+    """Serialise a line-only finding created at line 0 as line 1 of its file, with line-only location precision.
+
+    Returns:
+        None after the assertions pass.
+    """
     line_only, _ = _location_findings()
 
     assert line_only["file"] == "src/x.py"
@@ -99,7 +107,11 @@ def test_machine_contract_pins_a_line_only_location() -> None:
 
 
 def test_machine_contract_omits_the_keys_a_line_only_finding_cannot_fill() -> None:
-    """Omit the column, symbol and ``filePath`` keys from a serialised line-only finding."""
+    """Omit the column, symbol and filePath keys from a serialised line-only finding.
+
+    Returns:
+        None after the assertions pass.
+    """
     line_only, _ = _location_findings()
 
     assert "column" not in line_only
@@ -108,7 +120,11 @@ def test_machine_contract_omits_the_keys_a_line_only_finding_cannot_fill() -> No
 
 
 def test_machine_contract_pins_a_scanner_column_location() -> None:
-    """Serialise a scanner-pinpointed finding with its column and ``scanner-pinpointed`` location precision."""
+    """Serialise a scanner-pinpointed finding with its column and scanner-pinpointed location precision.
+
+    Returns:
+        None after the assertions pass.
+    """
     _, pinpointed = _location_findings()
 
     assert pinpointed["column"] == _SCANNER_COLUMN
@@ -116,7 +132,11 @@ def test_machine_contract_pins_a_scanner_column_location() -> None:
 
 
 def test_finding_counts_by_rule_sorts_by_count_desc_then_rule_id_asc():
-    """Sort rule counts from the highest count to the lowest."""
+    """Sort rule counts from the highest count to the lowest.
+
+    Returns:
+        None after the assertion passes.
+    """
     findings = (
         _finding(rule_id="b.rule"),
         _finding(rule_id="a.rule"),
@@ -136,7 +156,11 @@ def test_finding_counts_by_rule_sorts_by_count_desc_then_rule_id_asc():
 
 
 def test_finding_counts_by_rule_includes_severity_and_confidence_from_findings():
-    """Carry each rule's severity and confidence from its findings into the rule-count rows."""
+    """Carry each rule's severity and confidence from its findings into the rule-count rows.
+
+    Returns:
+        None after the assertions pass.
+    """
     findings = (
         _finding(rule_id="naming.x", severity=Severity.ADVISORY, confidence=Confidence.MEDIUM),
         _finding(rule_id="naming.x", severity=Severity.ADVISORY, confidence=Confidence.MEDIUM),
@@ -154,7 +178,11 @@ def test_finding_counts_by_rule_includes_severity_and_confidence_from_findings()
 
 def test_finding_counts_by_rule_reports_worst_severity_when_rule_emits_mixed_bands():
     """Threshold-based rules can emit warning + error in the same run; the grouped
-    row must label the bucket by the worst severity so triage isn't misled."""
+    row must label the bucket by the worst severity so triage isn't misled.
+
+    Returns:
+        None after the assertions pass.
+    """
     findings = (
         _finding(rule_id="complexity.cyclomatic", severity=Severity.WARNING, line=10),
         _finding(rule_id="complexity.cyclomatic", severity=Severity.ERROR, line=20),
@@ -169,7 +197,11 @@ def test_finding_counts_by_rule_reports_worst_severity_when_rule_emits_mixed_ban
 
 
 def test_finding_counts_by_rule_worst_severity_independent_of_finding_order():
-    """The first finding's severity must not lock the row; order shouldn't matter."""
+    """The first finding's severity must not lock the row; order shouldn't matter.
+
+    Returns:
+        None after the assertions pass.
+    """
     error_first = _report(
         (
             _finding(rule_id="r", severity=Severity.ERROR, line=1),

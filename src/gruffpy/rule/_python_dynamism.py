@@ -79,11 +79,10 @@ _FRAMEWORK_DECORATOR_HINTS: frozenset[str] = frozenset(
 def has_framework_decorator(node: ast.AST) -> bool:
     """Return whether a node carries a decorator hint that implies external use.
 
-    Matches both ``@fixture`` and ``@pytest.fixture`` shapes by checking the
-    rightmost attribute / name. ``@app.route(...)`` matches ``route``.
+    Match names directly or by their final dotted segment; decorator calls are matched by their callee.
 
     Args:
-        node: AST node that may expose a ``decorator_list`` attribute.
+        node: AST node whose decorator_list is inspected when present; a missing or empty list yields False.
 
     Returns:
         True when any decorator matches a known framework hook.
@@ -93,22 +92,13 @@ def has_framework_decorator(node: ast.AST) -> bool:
         name = _decorator_name(d)
         if name in _FRAMEWORK_DECORATOR_HINTS:
             return True
-        # Also match suffix patterns like ``app.route``, ``router.get``
-        # where the rightmost dot-segment is a hint.
         if "." in name and name.split(".")[-1] in _FRAMEWORK_DECORATOR_HINTS:
             return True
     return False
 
 
 def _decorator_name(decorator: ast.AST) -> str:
-    """Return a dotted form of *decorator* for matching.
-
-    Examples:
-
-    - ``@fixture`` -> ``fixture``
-    - ``@pytest.fixture`` -> ``pytest.fixture``
-    - ``@app.route("/users")`` -> ``app.route`` (Call wraps Attribute)
-    - ``@router.get`` -> ``router.get``
+    """Return a dotted expression name for framework-marker matching.
 
     Args:
         decorator: Expression to name. Callers pass decorator expressions, class base expressions and the test of an if statement. A call is named by
@@ -208,16 +198,16 @@ def has_dataclass_decorator(cls: ast.ClassDef) -> bool:
 
 
 def module_all_names(tree: ast.AST) -> frozenset[str]:
-    """Return the string names declared by a module-level ``__all__``.
+    """Extract literal export names from the first module-level __all__ assignment.
 
-    Only static lists/tuples of string constants are recognised. Dynamic
-    constructions are treated as "no __all__" - conservative on purpose.
+    List and tuple literals contribute their string elements; other expression shapes contribute no names.
 
     Args:
-        tree: Module AST to inspect.
+        tree: AST root to inspect; a non-module root produces no names.
 
     Returns:
-        Frozen set of statically exported names, or an empty set.
+        Names from the first plain or valued annotated __all__ assignment, with non-string elements skipped;
+        an empty frozen set when none are extracted.
     """
     if not isinstance(tree, ast.Module):
         return frozenset()
@@ -275,10 +265,10 @@ def is_abstract_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def is_overload_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function is decorated with ``@typing.overload``.
+    """Recognize an overload decorator by its final name segment, without resolving the import.
 
     Args:
-        fn: Function node to inspect.
+        fn: Function definition whose decorators are checked for an overload name.
 
     Returns:
         True when the function has an overload decorator.
@@ -287,14 +277,14 @@ def is_overload_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def is_type_checking_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
-    """Recognize ellipsis declarations directly in a typing-only branch.
+    """Recognize ellipsis stubs directly under a syntactic TYPE_CHECKING guard.
 
     Args:
-        fn: Declaration to check; runtime statements keep it reportable.
+        fn: Function to check for a body consisting of an ellipsis and an optional leading docstring.
         parents: Outer-to-inner ancestors, used to distinguish the else branch.
 
     Returns:
-        True only for a direct TYPE_CHECKING body containing an ellipsis.
+        True for a stub directly in an if body whose name or attribute test renders as TYPE_CHECKING or typing.TYPE_CHECKING via _decorator_name.
     """
     if not parents or not isinstance(parents[-1], ast.If):
         return False
@@ -350,10 +340,10 @@ def _pluggy_projects(module: ast.Module) -> set[str]:
 
 
 def _pluggy_marker_names(module: ast.Module) -> set[str]:
-    """Find local names imported from pluggy's hook marker.
+    """Find local names bound by top-level imports of HookspecMarker from pluggy.
 
     Args:
-        module: Source module; relative and unrelated imports are unproved.
+        module: Source module to check for absolute imports of HookspecMarker.
 
     Returns:
         The imported marker's local names, including explicit aliases.
@@ -374,7 +364,8 @@ def _module_shadowed_marker_names(module: ast.Module) -> set[str]:
         module: Source module; nested assignments are conservatively included.
 
     Returns:
-        Names rebound by assignments, declarations or unrelated imports.
+        Names that disqualify a matching marker alias. Includes names assigned anywhere and top-level function, class and import bindings.
+        Absolute from-imports of pluggy are excluded from the import check.
     """
     rebound = {node.id for statement in module.body for node in ast.walk(statement) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)}
     rebound.update(statement.name for statement in module.body if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef))
@@ -408,11 +399,9 @@ def is_protocol_method_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents:
 
 
 def _is_empty_body(body: list[ast.stmt]) -> bool:
-    """Report whether a function body is a placeholder made of pass or a bare constant, optionally after a docstring.
+    """Recognize placeholder bodies containing one pass or constant expression, optionally after a string docstring.
 
-    A body qualifies in two cases. The first is a single pass or constant expression statement, so a lone docstring or a lone ... counts. The second
-    is a string docstring followed by exactly one pass or constant expression statement. Any other statement, or more than two statements, makes the
-    body non-empty.
+    A lone string or ellipsis counts; an empty list, other statement shapes and bodies longer than two statements do not.
 
     Args:
         body: Statement list of a function definition, as passed by the waste.empty-function rule and by the Protocol stub and pluggy hookspec
@@ -427,7 +416,6 @@ def _is_empty_body(body: list[ast.stmt]) -> bool:
             return True
         if isinstance(only, ast.Expr) and isinstance(only.value, ast.Constant):
             return True
-    # Allow [docstring, pass] or [docstring, ...] as also empty.
     if len(body) == 2 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         second = body[1]
         if isinstance(second, ast.Pass):

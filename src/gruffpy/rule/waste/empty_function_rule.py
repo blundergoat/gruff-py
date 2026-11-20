@@ -38,10 +38,7 @@ class EmptyFunctionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the empty-function rule as a high-confidence dead-code warning.
 
-        High confidence because ``pass``/``...``-only bodies are structurally
-        unambiguous; the rule defers to ``is_abstract_method``,
-        ``is_overload_stub``, Protocol-stub detection, and framework
-        decorators to suppress the legitimate cases.
+        A lone pass, constant or docstring qualifies, as does a docstring plus one pass or constant. Declaration and test-double exemptions apply.
 
         Returns:
             Definition for the empty-function rule under the dead-code pillar.
@@ -56,17 +53,16 @@ class EmptyFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag functions and methods whose body is just ``pass`` or ``...``.
+        """Flag non-exempt functions and methods with one pass or constant statement, optionally after a docstring. A lone docstring also qualifies.
 
-        Skips abstract methods, ``@typing.overload`` stubs, Protocol stubs,
-        and framework-hook decorators - these legitimately have empty bodies.
+        Exempts supported abstract methods, overloads, Protocol and TYPE_CHECKING stubs, framework declarations and recognized test-double methods.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per non-exempt empty function definition.
+            One finding per qualifying function, or an empty list when the AST is absent or no function qualifies.
         """
         if unit.tree is None:
             return []
@@ -140,7 +136,7 @@ def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
     if not _is_test_path(display_path):
         return False
     # parents runs outermost -> immediate, so reverse to take the innermost enclosing
-    # class: a nested stub (``class Outer: class _FakeClient: ...``) is named by the
+    # class: a nested stub (a fake class inside another class) is named by the
     # inner class, not the outer suite, so the outermost match misses the exemption.
     parent_class = next((parent for parent in reversed(parents) if isinstance(parent, ast.ClassDef)), None)
     if parent_class is None:

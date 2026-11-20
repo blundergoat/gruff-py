@@ -30,9 +30,7 @@ class TrivialAssertionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the trivial-assertion rule as a high-confidence warning.
 
-        High confidence because ``assert True``, ``assert 1``, and
-        ``assert 1 == 1`` shapes are syntactically constant - there's no
-        legitimate runtime case where they need to be in test code.
+        High confidence is based on literal-only assertion shapes; recognized expected-exception guards are exempt.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -48,18 +46,16 @@ class TrivialAssertionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``assert`` statements whose test expression evaluates the same on every run.
+        """Flag supported literal-only assertions in test bodies, excluding recognized expected-exception guards.
 
-        Catches three shapes: ``assert <constant>`` (bool/int/float
-        literal), ``assert not <constant>`` (recursive unary-not), and
-        ``assert <const> == <const>`` (compare between literals only).
+        Handles boolean, integer and float constants, comparisons between any constants, and recursive not expressions over those forms.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per trivial assert.
+            One finding per supported assertion outside a failure guard; empty when the AST is absent or no assertion qualifies.
         """
         if unit.tree is None:
             return []
@@ -104,7 +100,8 @@ def _is_failure_guard(node: ast.Assert) -> bool:
         node: Assertion with parser-attached parent links used to inspect enclosing try statements.
 
     Returns:
-        True for such an assertion in a qualifying try body or else branch before crossing a function boundary; false otherwise.
+        True if the first enclosing ordinary try with qualifying handlers contains the falsy assertion in its body or else and has a call
+        in its body. False if that try has no call or no eligible try is found before a function boundary.
     """
     if not isinstance(node.test, ast.Constant) or bool(node.test.value):
         return False
@@ -148,7 +145,8 @@ def _is_trivial(expr: ast.expr) -> bool:
         expr: Assertion condition checked for supported constant and comparison forms.
 
     Returns:
-        True for boolean, integer or float constants, literal-only comparisons, or nested not expressions over either; false otherwise.
+        True for boolean, integer or float Constant nodes, comparisons with only Constant operands, or nested not expressions over either.
+        False for other forms.
     """
     if isinstance(expr, ast.Constant):
         return isinstance(expr.value, bool | int | float)

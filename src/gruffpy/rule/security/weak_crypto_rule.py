@@ -55,9 +55,7 @@ class WeakCryptoRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the weak-crypto rule as a high-confidence warning.
 
-        High confidence because the call shape (``hashlib.md5/sha1``) is
-        exact and the security-context check trims away the cache-key and
-        content-digest uses where MD5/SHA1 are acceptable.
+        Name-based context checks suppress calls without security cues; recognized targets include qualified and bare hash names.
 
         Returns:
             Definition for the weak-crypto rule under the security pillar.
@@ -73,22 +71,16 @@ class WeakCryptoRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag MD5/SHA1 in security contexts, and SHA256/SHA512 used for password hashing.
+        """Flag MD5/SHA1 in inferred security contexts and SHA256/SHA512 in inferred password contexts.
 
-        Two patterns trigger findings:
-        - ``hashlib.md5/sha1(...)`` when the argument or enclosing scope
-          carries a security-smelling name (``token``, ``signature``, etc.);
-        - ``hashlib.sha256/sha512(...)`` when the surrounding context smells
-          like password hashing - fast cryptographic hashes are too quick
-          for password storage and should be replaced with a KDF
-          (``scrypt``/``argon2``/``bcrypt``).
+        For MD5 and SHA1, either a literal usedforsecurity=False or reading digest_size on an argument-free constructor suppresses the finding.
 
         Args:
             unit: Parsed source file to inspect (with parent links).
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per weak-algorithm-in-security-context call.
+            One finding per matched hash call; empty when none match or the unit has no parsed tree.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -104,15 +96,14 @@ class WeakCryptoRule(Rule):
 
 
 def _weak_crypto_call(node: ast.AST) -> tuple[ast.Call, str, str] | None:
-    """Return one user-visible weak/fast-hash candidate, or None when safe.
+    """Identify weak or fast hash calls that meet the rule's security-context heuristics.
 
     Args:
         node: Parsed user syntax; non-call nodes cannot become hash findings.
 
     Returns:
-        Call, algorithm, and source label, or None when no warning should appear.
+        Call, algorithm, and source label, or None when the call is outside the detection scope or explicitly exempted.
     """
-    # Only call syntax can invoke one of the hash constructors users see reported.
     if not isinstance(node, ast.Call):
         return None
     call_target = call_target_name(node)
@@ -129,12 +120,10 @@ def _weak_crypto_call(node: ast.AST) -> tuple[ast.Call, str, str] | None:
         # A literal False tells the user-facing rule this hash is intentionally non-security.
         if _has_literal_usedforsecurity_opt_out(node):
             return None
-        # Cache keys and content digests remain quiet without needing the keyword.
         if not _has_security_context_smell(node):
             return None
         return node, weak_algorithm, "security-sensitive-material"
     fast_password_algorithm = _fast_password_hash_algorithm(call_target)
-    # Other algorithms and fast hashes outside password contexts stay out of results.
     if fast_password_algorithm is None or not _has_password_hashing_context_smell(node):
         return None
     return node, fast_password_algorithm, "password-material"
@@ -147,7 +136,7 @@ def _has_literal_usedforsecurity_opt_out(hash_call: ast.Call) -> bool:
         hash_call: MD5/SHA1 call whose keyword arguments are being checked.
 
     Returns:
-        True only for literal False; absent, null, numeric, or dynamic values keep warnings.
+        True only for literal False; other values return False and leave the remaining warning checks in force.
     """
     non_security_value = call_keyword(hash_call, "usedforsecurity")
     # An omitted keyword or **mapping gives the scanner no literal opt-out evidence.
@@ -205,7 +194,7 @@ def _finding_for_call(
 
 
 def _weak_algorithm(target: str) -> str | None:
-    """Return the algorithm name when *target* references hashlib.md5/sha1.
+    """Recognize the bare and hashlib-qualified spellings of MD5 and SHA1.
 
     Args:
         target: Dotted or bare call-target spelling to compare with the weak-hash names.
@@ -216,13 +205,13 @@ def _weak_algorithm(target: str) -> str | None:
     if target in {"hashlib.md5", "hashlib.sha1"}:
         return target.split(".")[-1]
     if target in _WEAK_ALGORITHMS:
-        # `from hashlib import md5` style - bare name match.
+        # A hash imported by its original name from hashlib can be called without the module prefix.
         return target
     return None
 
 
 def _fast_password_hash_algorithm(target: str) -> str | None:
-    """Return the algorithm name when *target* references hashlib.sha256/sha512.
+    """Recognize bare or hashlib-qualified SHA-256 and SHA-512 calls for the password-hashing check.
 
     Args:
         target: Dotted or bare call-target spelling to compare with the fast password-hash names.

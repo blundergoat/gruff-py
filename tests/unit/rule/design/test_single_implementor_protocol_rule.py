@@ -9,19 +9,21 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit under ``/workspace``.
+    """Build a protocol test fixture under /workspace with the source and parent links in its AST.
+
+    Assigning parents also updates shared AST markers such as Load and Store, which keep only the last parent assigned.
 
     Args:
         source: Python source to parse.
         display_path: Project-relative path of the unit.
 
     Returns:
-        The analysis unit.
+        Analysis unit with the source, parent-linked tree and synthetic file record.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # ast.AST does not declare the fixture's parent links.
     return AnalysisUnit(
         file=SourceFile(
             absolute_path=f"/workspace/{display_path}",
@@ -49,7 +51,11 @@ def _analyse(*units: AnalysisUnit):
 
 
 def test_single_implementor_protocol_without_external_usage_is_flagged():
-    """Flag a protocol with one implementor in another file once, at the protocol, naming that implementor."""
+    """Flag a protocol with one implementor in another file once, at the protocol, naming that implementor.
+
+    Returns:
+        None. Asserts one finding with the rule ID, protocol path and symbol, and the implementor's qualified name.
+    """
     contract = _unit(
         "from typing import Protocol\n\nclass Renderer(Protocol):\n    def render(self, value: str) -> str: ...\n",
         "src/contracts.py",
@@ -70,7 +76,11 @@ def test_single_implementor_protocol_without_external_usage_is_flagged():
 
 
 def test_multiple_implementors_skip_protocol():
-    """Report nothing for a protocol with two implementors."""
+    """Report nothing for a protocol with two implementors.
+
+    Returns:
+        None. Asserts an empty finding list for the two-implementor fixture.
+    """
     contract = _unit(
         "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n",
         "src/contracts.py",
@@ -84,7 +94,11 @@ def test_multiple_implementors_skip_protocol():
 
 
 def test_external_type_hint_usage_skips_protocol():
-    """Report nothing when a function annotates a parameter with the protocol."""
+    """Report nothing when a function annotates a parameter with the protocol.
+
+    Returns:
+        None. Asserts an empty finding list for the parameter annotation fixture.
+    """
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -100,7 +114,11 @@ def test_external_type_hint_usage_skips_protocol():
 
 
 def test_base_list_reference_alone_still_flags():
-    """Flag a protocol used only in its one implementor's base list once."""
+    """Flag a protocol used only in its one implementor's base list once.
+
+    Returns:
+        None. Asserts that the sole finding names the protocol.
+    """
     source = _unit(
         "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
@@ -113,7 +131,11 @@ def test_base_list_reference_alone_still_flags():
 
 
 def test_implementor_registry_alone_still_flags():
-    """Flag the protocol once when a registry dictionary references only its implementor."""
+    """Flag the protocol once when a registry dictionary references only its implementor.
+
+    Returns:
+        None. Asserts that the sole finding names the protocol in the implementor registry fixture.
+    """
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -131,7 +153,11 @@ def test_implementor_registry_alone_still_flags():
 
 
 def test_value_reference_to_abstraction_skips_protocol():
-    """Report nothing when a registry dictionary references the protocol itself."""
+    """Report nothing when a registry dictionary references the protocol itself.
+
+    Returns:
+        None. Asserts an empty finding list for the protocol registry fixture.
+    """
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -146,7 +172,11 @@ def test_value_reference_to_abstraction_skips_protocol():
 
 
 def test_isinstance_tuple_reference_skips_protocol():
-    """Report nothing when the protocol appears in an ``isinstance`` type tuple."""
+    """Report nothing when the protocol appears in an isinstance type tuple.
+
+    Returns:
+        None. Asserts an empty finding list for the isinstance tuple fixture.
+    """
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"
@@ -162,7 +192,11 @@ def test_isinstance_tuple_reference_skips_protocol():
 
 
 def test_attribute_store_target_alone_still_flags():
-    """Flag the protocol once when another file only assigns to it as a module attribute."""
+    """Flag the protocol once when another file only assigns to it as a module attribute.
+
+    Returns:
+        None. Asserts one finding naming the protocol when another file assigns to its module attribute.
+    """
     contract = _unit(
         "from typing import Protocol\n\nclass Renderer(Protocol):\n    pass\n\nclass HtmlRenderer(Renderer):\n    pass\n",
         "src/rendering.py",
@@ -179,7 +213,11 @@ def test_attribute_store_target_alone_still_flags():
 
 
 def test_attribute_load_usage_skips_protocol():
-    """Report nothing when code calls a method on the protocol class."""
+    """Report nothing when code calls a method on the protocol class.
+
+    Returns:
+        None. Asserts an empty finding list for the protocol method call fixture.
+    """
     source = _unit(
         "from typing import Protocol\n\n"
         "class Renderer(Protocol):\n"

@@ -19,7 +19,7 @@ def root_menu(ctx: click.Context) -> str:
         ctx: Current Click context (carries CLI state and ANSI setting).
 
     Returns:
-        Multi-line help screen, terminated with a blank line.
+        Multi-line help screen ending with one newline.
     """
     return "\n".join(
         [
@@ -192,20 +192,20 @@ def _style(text: str, color: str, ctx: click.Context) -> str:
 def should_use_color(ctx: click.Context) -> bool | None:
     """Resolve the colour choice that applies to the current help output.
 
-    Use before styling; command input wins, then shared state, then Click's terminal detection.
+    Use before styling. A command flag takes precedence over shared state, which takes precedence over the Click context's colour setting.
     None means the user made no choice and Click decides from the output environment.
 
     Args:
-        ctx: Current Click context.
+        ctx: Context supplying command parameters, inherited CLI state and Click's fallback colour setting.
 
     Returns:
-        True or False to force colour; None means the caller should defer to Click.
+        True to force colour on, False to force it off, or None to defer to Click.
     """
     parameters = getattr(ctx, "params", {})
     # A command-local ANSI choice is the most specific preference the user supplied.
     if "ansi" in parameters:
         value = parameters["ansi"]
-        # Click may expose non-boolean test data; only a real flag value can override colour.
+        # An unset or non-boolean option leaves the colour choice to shared state or the Click context.
         if isinstance(value, bool):
             return value
     state = _state(ctx)

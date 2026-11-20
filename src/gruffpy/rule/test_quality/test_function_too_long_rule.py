@@ -27,12 +27,10 @@ class TestFunctionTooLongRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the test-function-too-long rule with a single 100-line default threshold.
 
-        High confidence because line count is a deterministic structural
-        metric; long tests reliably hide multiple behaviours and resist
-        future maintenance. One value plus one severity per rubric (ADR-014).
+        The deterministic line count has high confidence. ADR-014 specifies one threshold and one severity per rubric.
 
         Returns:
-            Definition with a single ``threshold`` of 100 at error severity.
+            A definition disabled by default, with one threshold of 100 lines at error severity.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,24 +44,17 @@ class TestFunctionTooLongRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag test functions whose ``lines_for_size`` count exceeds the configured threshold.
+        """Flag oversized tests whose code-line count exceeds the effective threshold.
+        See FAMILY-CONTRACT.md section 12, Code lines in every line count, for the shared counting policy.
 
-        Uses the size-pillar's shared ``lines_for_size`` helper per ADR-002
-        so the line metric stays consistent with other size rules. With the
-        default same-value threshold a finding emits as the default severity
-        (error); projects that split the ``warning``/``error`` keys can
-        get severity escalation past the higher tier.
-
-        A single GET/status/literal inline-snapshot response check is exempt.
-        Extra operations and uncertain snapshot bindings retain length findings.
+        A single GET/status/literal-snapshot response check is exempt; extra operations or uncertain snapshot bindings remain eligible.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the ``warning``/
-                ``error`` line-count thresholds.
+            unit: Parsed test source to measure. The scan can cache code-line numbers on its AST.
+            context: Rule context supplying the effective line-count threshold and its finding severity.
 
         Returns:
-            One finding per test whose size exceeds either threshold.
+            One finding per non-exempt test above a configured threshold; empty without a parsed tree or eligible oversized tests.
         """
         if unit.tree is None:
             return []
@@ -106,14 +97,15 @@ class TestFunctionTooLongRule(Rule):
 
 
 def _is_literal_response_snapshot(function: ast.FunctionDef | ast.AsyncFunctionDef, tree: ast.AST) -> bool:
-    """Recognize one response check whose bulk is literal snapshot data.
+    """Recognize the single-response pattern eligible for the test length exemption.
 
     Args:
         function: Test function whose size crossed its configured limit.
         tree: Parsed file supplying the snapshot import and competing bindings.
 
     Returns:
-        True for the supported single GET/status/snapshot shape.
+        True when, after an optional docstring, one get call supplies the response for both a status assertion and a JSON comparison
+        against literal snapshot data, with an unambiguous snapshot import.
     """
     body = function.body
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
@@ -146,13 +138,14 @@ def _is_literal_response_snapshot(function: ast.FunctionDef | ast.AsyncFunctionD
 
 
 def _is_literal_snapshot_data(value: ast.AST) -> bool:
-    """Keep computed expected values outside the snapshot-only exemption.
+    """Check whether a snapshot argument uses the data syntax eligible for the length exemption.
 
     Args:
         value: Snapshot argument to inspect without executing it.
 
     Returns:
-        True when every node belongs to a literal data expression.
+        True when the tree contains only constants, dictionary, list, tuple or set displays, unary signs and load contexts.
+        Dictionary unpacking can pass when its operand uses only those forms.
     """
     literal_nodes = (ast.Constant, ast.Dict, ast.List, ast.Tuple, ast.Set, ast.UnaryOp, ast.UAdd, ast.USub, ast.Load)
     return all(isinstance(node, literal_nodes) for node in ast.walk(value))
@@ -166,7 +159,8 @@ def _has_unambiguous_snapshot_import(tree: ast.AST, snapshot_name: str) -> bool:
         snapshot_name: Callee spelling used by the response comparison.
 
     Returns:
-        True for one module-level import with no other binding in the file.
+        True when an absolute from inline_snapshot import snapshot at module scope supplies the callee spelling, directly or by alias.
+        False for a non-module tree, any wildcard import in the file, or a competing binding or deletion of that spelling.
     """
     if not isinstance(tree, ast.Module):
         return False

@@ -20,11 +20,11 @@ def _finding(*, file_path: str = "secrets/aws.env", symbol: str | None = None) -
     """Build an error-level AWS key finding on line 1, optionally attached to a symbol.
 
     Args:
-        file_path: Finding path; the excluded ``secrets/aws.env`` by default.
+        file_path: Finding path; the excluded secrets/aws.env by default.
         symbol: Symbol that holds the key, or None.
 
     Returns:
-        The finding.
+        The synthetic AWS key finding at the requested path.
     """
     return Finding(
         rule_id=_AWS_RULE,
@@ -40,7 +40,7 @@ def _finding(*, file_path: str = "secrets/aws.env", symbol: str | None = None) -
 
 
 def _exclusion(*, symbol: str | None = None) -> SensitiveExclusion:
-    """Build the single sensitive exclusion entry for the AWS rule on ``secrets/aws.env``.
+    """Build the single sensitive exclusion entry for the AWS rule on secrets/aws.env.
 
     Args:
         symbol: Symbol the entry narrows to, or None to cover the whole path.
@@ -58,7 +58,11 @@ def _exclusion(*, symbol: str | None = None) -> SensitiveExclusion:
 
 
 def test_entry_symbol_suppresses_only_the_finding_carrying_that_symbol() -> None:
-    """Suppress only the finding whose symbol the exclusion entry names, keeping a sibling with another symbol and counting one."""
+    """Suppress only the finding whose symbol the exclusion entry names, keeping a sibling with another symbol and counting one.
+
+    Returns:
+        None. Checks that the finding with the other symbol survives and the audit counts one suppression.
+    """
     matching = _finding(symbol="Fixtures.aws_sample")
     other_symbol = _finding(symbol="Fixtures.other_sample")
 
@@ -72,7 +76,11 @@ def test_entry_symbol_suppresses_only_the_finding_carrying_that_symbol() -> None
 
 
 def test_entry_without_a_symbol_suppresses_regardless_of_the_finding_symbol() -> None:
-    """Suppress every matching finding, with or without a symbol, when the exclusion entry names no symbol."""
+    """Suppress every matching finding, with or without a symbol, when the exclusion entry names no symbol.
+
+    Returns:
+        None. Checks that a path-wide exclusion removes both findings and records two suppressions.
+    """
     kept, summaries = partition_sensitive_exclusions(
         [_finding(symbol="Fixtures.aws_sample"), _finding()],
         [_exclusion()],
@@ -83,7 +91,11 @@ def test_entry_without_a_symbol_suppresses_regardless_of_the_finding_symbol() ->
 
 
 def test_an_entry_matching_nothing_still_publishes_its_audit_row() -> None:
-    """Publish an audit row with a zero suppressed count for an exclusion entry that matches no finding."""
+    """Publish an audit row with a zero suppressed count for an exclusion entry that matches no finding.
+
+    Returns:
+        None. Checks that empty findings still yield an audit row with the exclusion details and a zero count.
+    """
     kept, summaries = partition_sensitive_exclusions([], [_exclusion()])
 
     assert kept == []

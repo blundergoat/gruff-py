@@ -12,18 +12,20 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
-    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for ``x.py``.
+    """Build an analysis unit for x.py with parent links that let the rule identify methods.
+
+    Assigning parents also updates shared AST markers such as Load and Store, which keep only the last parent assigned.
 
     Args:
         source: Python source to parse.
 
     Returns:
-        A unit for ``x.py`` whose AST nodes carry parent links.
+        A unit for x.py whose AST nodes carry parent links.
     """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # ast.AST lacks a parent field. The rule uses these links to identify methods.
     return AnalysisUnit(
         file=SourceFile(absolute_path="/x.py", display_path="x.py", type="python"),
         source=source,
@@ -35,7 +37,7 @@ def _ctx(options: dict | None = None) -> RuleContext:
     """Build a rule context with the generic function rule enabled.
 
     Args:
-        options: Rule options; None applies none.
+        options: Overrides for the rule's generic function names. With None or an empty mapping, the rule uses its built-in names.
 
     Returns:
         A context whose config enables the generic function rule with those options.
@@ -48,7 +50,11 @@ def _ctx(options: dict | None = None) -> RuleContext:
 
 
 def test_process_fires():
-    """Report a function named ``process`` once, naming it in the metadata."""
+    """Report a function named process once, naming it in the metadata.
+
+    Returns:
+        None after the assertions succeed.
+    """
     src = "def process(x): return x\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -56,35 +62,55 @@ def test_process_fires():
 
 
 def test_handle_fires():
-    """Report one finding for source whose only function is named ``handle``."""
+    """Report one finding for source whose only function is named handle.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def handle(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_do_fires():
-    """Report one finding for source whose only function is named ``do``."""
+    """Report one finding for source whose only function is named do.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def do(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_process_payment_does_not_fire():
-    """Report nothing for ``process_payment``."""
+    """Report nothing for process_payment.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def process_payment(x): return x\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_handle_request_does_not_fire():
-    """Report nothing for ``handle_request``."""
+    """Report nothing for handle_request.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def handle_request(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_method_generic_fires():
-    """Report a method named ``execute`` once, as ``C.execute``."""
+    """Report a method named execute once, as C.execute.
+
+    Returns:
+        None after the assertions succeed.
+    """
     src = "class C:\n    def execute(self): pass\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -92,14 +118,22 @@ def test_method_generic_fires():
 
 
 def test_non_generic_does_not_fire():
-    """Report nothing for a function named ``calculate`` under default options."""
+    """Report nothing for a function named calculate under default options.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def calculate(): return 1\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_configurable_replacement():
-    """Report one finding for a lone ``calculate`` function when the ``genericFunctions`` option lists it."""
+    """Report one finding for a lone calculate function when the genericFunctions option lists it.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     src = "def calculate(): return 1\n"
     findings = GenericFunctionRule().analyse(_unit(src), _ctx(options={"genericFunctions": ["calculate"]}))
     assert len(findings) == 1
@@ -122,6 +156,9 @@ def test_required_framework_method_stays_quiet(source):
 
     Args:
         source: A required override from an observed framework family.
+
+    Returns:
+        None after the assertion succeeds.
     """
     assert GenericFunctionRule().analyse(_unit(source), _ctx()) == []
 
@@ -140,6 +177,9 @@ def test_unproven_framework_method_still_fires(source):
 
     Args:
         source: A generic method without a recognized required-hook contract.
+
+    Returns:
+        None after the assertion succeeds.
     """
     findings = GenericFunctionRule().analyse(_unit(source), _ctx())
     assert len(findings) == 1
@@ -159,6 +199,9 @@ def test_shadowed_framework_import_still_fires(shadow):
 
     Args:
         shadow: A binding that prevents proving the imported framework identity.
+
+    Returns:
+        None after the assertion succeeds.
     """
     source = f"from threading import Thread\n{shadow}class Worker(Thread):\n    def run(self): pass\n"
     findings = GenericFunctionRule().analyse(_unit(source), _ctx())
@@ -166,20 +209,32 @@ def test_shadowed_framework_import_still_fires(shadow):
 
 
 def test_nested_function_inside_framework_method_still_fires():
-    """Exempt the direct override while preserving a generic nested function."""
+    """Exempt the direct override Worker.run and report only the nested function Worker.run.run.
+
+    Returns:
+        None after checking that Worker.run.run is the only reported symbol.
+    """
     source = "import threading\nclass Worker(threading.Thread):\n    def run(self):\n        def run(): pass\n"
     findings = GenericFunctionRule().analyse(_unit(source), _ctx())
     assert [finding.symbol for finding in findings] == ["Worker.run.run"]
 
 
 def test_async_function_still_fires():
-    """Keep generic async functions reportable outside a required override."""
+    """Keep generic async functions reportable outside a required override.
+
+    Returns:
+        None after the assertion succeeds.
+    """
     findings = GenericFunctionRule().analyse(_unit("async def run(): pass\n"), _ctx())
     assert len(findings) == 1
 
 
 def test_default_off_and_explicit_enable_use_the_same_detector():
-    """Keep a below-floor rule opt-in while preserving explicit enabled output."""
+    """Keep the generic-function rule opt-in while preserving explicitly enabled output.
+
+    Returns:
+        None after the assertions succeed.
+    """
     registry = RuleRegistry.defaults()
     unit = _unit("def process(): pass\n")
     config = AnalysisConfig.from_registry(registry)

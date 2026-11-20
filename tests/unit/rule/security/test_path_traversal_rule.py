@@ -3,33 +3,53 @@ from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 
 def test_open_tainted_path_emits():
-    """Report one finding for ``open`` on a filename read from Flask request arguments."""
+    """Report one finding for ``open`` on a filename read from Flask request arguments.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    name = request.args['file']\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_open_module_qualified_request_path_emits():
-    """Flag the module-qualified Flask idiom reaching a filesystem sink."""
+    """Flag the module-qualified Flask idiom reaching a filesystem sink.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "import flask\ndef view():\n    name = flask.request.args['file']\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_open_application_object_request_path_skipped():
-    """Keep an application object's request-shaped attribute quiet inside a web file."""
+    """Report no finding when open uses other.request.args despite the Flask request import.
+
+    Returns:
+        None. Asserts that opening a path from other.request.args yields no findings despite the Flask request import.
+    """
     src = "from flask import request\ndef view(other):\n    name = other.request.args['file']\n    open(name).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_open_literal_path_skipped():
-    """Report nothing for ``open`` on a literal path."""
+    """Report nothing for ``open`` on a literal path.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    open('/etc/config.json').read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_open_secure_filename_sanitised_skipped():
-    """Report nothing when ``secure_filename`` cleans the request filename before ``open``."""
+    """Report no finding when open receives the result of calling secure_filename on a request filename.
+
+    Returns:
+        None. Asserts that opening the filename returned by secure_filename yields no findings.
+    """
     src = (
         "from flask import request\n"
         "from werkzeug.utils import secure_filename\n"
@@ -41,67 +61,107 @@ def test_open_secure_filename_sanitised_skipped():
 
 
 def test_basename_sanitised_skipped():
-    """Report nothing when ``os.path.basename`` cleans the request filename before ``open``."""
+    """Report no finding when open receives the result of calling os.path.basename on a request filename.
+
+    Returns:
+        None. Asserts that opening the filename returned by os.path.basename yields no findings.
+    """
     src = "import os\nfrom flask import request\ndef view():\n    name = request.args['file']\n    open(os.path.basename(name)).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_path_chained_read_text_emits():
-    """Report one finding for ``Path(...).read_text()`` on a request filename."""
+    """Report one finding for ``Path(...).read_text()`` on a request filename.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from pathlib import Path\nfrom flask import request\ndef view():\n    name = request.args['file']\n    Path(name).read_text()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_path_chained_write_bytes_emits():
-    """Report one finding for ``Path(...).write_bytes()`` on a request filename."""
+    """Report one finding for ``Path(...).write_bytes()`` on a request filename.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from pathlib import Path\nfrom flask import request\ndef view():\n    name = request.args['file']\n    Path(name).write_bytes(b'')\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_path_chained_literal_skipped():
-    """Report nothing for ``Path(...).read_text()`` on a literal path."""
+    """Report nothing for ``Path(...).read_text()`` on a literal path.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from pathlib import Path\nfrom flask import request\ndef view():\n    Path('/etc/config.json').read_text()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_shutil_copyfile_tainted_src_emits():
-    """Report one finding for ``shutil.copyfile`` from a request filename."""
+    """Report one finding for ``shutil.copyfile`` from a request filename.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "import shutil\nfrom flask import request\ndef view():\n    name = request.args['file']\n    shutil.copyfile(name, '/safe/dest')\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_os_remove_tainted_emits():
-    """Report one finding for ``os.remove`` on a request filename."""
+    """Report one finding for ``os.remove`` on a request filename.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "import os\nfrom flask import request\ndef view():\n    name = request.args['file']\n    os.remove(name)\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_fstring_path_emits():
-    """Report one finding for ``open`` on an f-string path holding a request filename."""
+    """Report one finding for ``open`` on an f-string path holding a request filename.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    name = request.args['file']\n    open(f'/uploads/{name}').read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_non_web_file_skipped():
-    """Without a web-framework import, the rule does not run (no taint sources possible)."""
+    """Report no findings for a file without a web-framework import.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "def view(user_input):\n    open(user_input).read()\n"
     assert PathTraversalRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_fastapi_query_parameter_emits():
-    """Report one finding for ``open`` on a FastAPI ``Query`` parameter."""
+    """Report one finding for ``open`` on a FastAPI ``Query`` parameter.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from fastapi import FastAPI, Query\napp = FastAPI()\n@app.get('/')\ndef view(name: str = Query(...)):\n    open(name).read()\n"
     findings = PathTraversalRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_carries_security_metadata():
-    """Label the request-path finding with the ``filesystem`` sink and ``user-controlled-path`` source."""
+    """Label the request-path finding with the ``filesystem`` sink and ``user-controlled-path`` source.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    open(request.args['file']).read()\n"
     finding = PathTraversalRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "filesystem"

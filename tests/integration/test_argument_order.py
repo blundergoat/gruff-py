@@ -32,14 +32,13 @@ _OPERAND_COMMANDS = (
 
 @pytest.fixture(name="probe_project")
 def fixture_probe_project(tmp_path: Path) -> Path:
-    """Build a one-file project the ordering comparison can scan.
+    """Create the source module used to compare output and exit status across flag orders.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
 
     Returns:
-        The project root, carrying one module and a README so the comparison is
-        about ordering rather than about which incidental findings appeared.
+        The temporary project root containing probe.py and README.md.
     """
     (tmp_path / "probe.py").write_text('"""Probe module."""\n\n\ndef probe(rx: int) -> int:\n    return rx + rx\n', encoding="utf-8")
     (tmp_path / "README.md").write_text("Argument-order fixture.\n", encoding="utf-8")
@@ -60,13 +59,16 @@ def _without_timestamps(output: str) -> str:
 
 @pytest.mark.parametrize(("command", "flags"), _OPERAND_COMMANDS, ids=[name for name, _ in _OPERAND_COMMANDS])
 def test_flags_after_the_path_change_nothing(command: str, flags: tuple[str, ...], probe_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Moving a command's flags after its path changes neither its output nor its exit code.
+    """Moving a command's flags after its path preserves its exit code and its output after timestamp normalization.
 
     Args:
         command: The operand-accepting command under test.
         flags: The flags whose placement is being moved.
-        probe_project: The one-file project both runs scan.
-        monkeypatch: Restores the working directory after the isolated command comparison.
+        probe_project: Project root containing probe.py, where the test creates its working subdirectory.
+        monkeypatch: Switches both runs to the project subdirectory and restores the working directory afterward.
+
+    Returns:
+        None; the assertions compare the command results.
     """
     working_directory = probe_project / "working-directory"
     working_directory.mkdir()
@@ -80,10 +82,13 @@ def test_flags_after_the_path_change_nothing(command: str, flags: tuple[str, ...
 
 
 def test_double_dash_ends_flag_parsing(probe_project: Path) -> None:
-    """A leading-dash operand after ``--`` is reachable as a path rather than read as a flag.
+    """Check that analyse accepts an absolute path to a dash-prefixed file after the end-of-options marker.
 
     Args:
         probe_project: The project the dashed file is added to.
+
+    Returns:
+        None. Checks that analyse succeeds and names the dashed file in its output.
     """
     dashed = probe_project / "-dashed.py"
     dashed.write_text('"""Dashed module."""\n\n\ndef dashed(rx: int) -> int:\n    return rx + rx\n', encoding="utf-8")
@@ -95,7 +100,11 @@ def test_double_dash_ends_flag_parsing(probe_project: Path) -> None:
 
 
 def test_a_command_without_operands_rejects_a_stray_one() -> None:
-    """A command taking no operands rejects one rather than discarding it silently."""
+    """A command taking no operands rejects one rather than discarding it silently.
+
+    Returns:
+        None; the assertion checks the usage exit.
+    """
     result = CliRunner().invoke(main, ["init", "stray-operand"])
 
     # Exit 2 is the family's usage exit; 1 would read to a CI gate as findings.
