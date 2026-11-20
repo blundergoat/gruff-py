@@ -47,7 +47,7 @@ class CognitiveComplexityRule(Rule):
             pillar=Pillar.COMPLEXITY,
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
-            confidence=Confidence.HIGH,
+            confidence=Confidence.MEDIUM,
             default_threshold=30,
         )
 

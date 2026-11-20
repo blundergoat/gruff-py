@@ -36,7 +36,7 @@ class MissingModuleDocstringRule(Rule):
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
-            confidence=Confidence.MEDIUM,
+            confidence=Confidence.HIGH,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

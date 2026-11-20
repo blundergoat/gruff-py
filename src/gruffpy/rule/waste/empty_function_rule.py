@@ -36,7 +36,7 @@ class EmptyFunctionRule(Rule):
     ID = "waste.empty-function"
 
     def definition(self) -> RuleDefinition:
-        """Describe the empty-function rule as a high-confidence dead-code warning.
+        """Describe the empty-function rule as a medium-confidence dead-code warning.
 
         A lone pass, constant or docstring qualifies, as does a docstring plus one pass or constant. Declaration and test-double exemptions apply.
 
@@ -49,7 +49,7 @@ class EmptyFunctionRule(Rule):
             pillar=Pillar.DEAD_CODE,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
-            confidence=Confidence.HIGH,
+            confidence=Confidence.MEDIUM,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

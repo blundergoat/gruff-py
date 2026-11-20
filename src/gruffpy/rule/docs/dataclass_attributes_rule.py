@@ -40,7 +40,7 @@ class DataclassAttributesRule(Rule):
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
-            confidence=Confidence.MEDIUM,
+            confidence=Confidence.HIGH,
             default_options={
                 "min_fields": 3,
                 "require_all_fields": False,

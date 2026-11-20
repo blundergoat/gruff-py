@@ -158,14 +158,19 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Pillar: `complexity`
 - Tier: `v0.1`
 - Default severity: `error`
-- Confidence: `high`
+- Confidence: `medium`
 - Default enabled: yes
 - Rationale: `complexity.cognitive` protects the complexity pillar by flagging cognitive complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cognitive complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
 - Config threshold: `threshold` = `30`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
+- Common false-positive shapes:
+  - An encoder with early returns or a dispatcher with localized branches can exceed the limit because the rule adds up branch and nesting points across the function.
+    Mitigation: Keep guards, branches, and any shared finalization together when a reviewer can already follow each path in place.
+  - Branches and loops across a buffered read, an ordered parser, or a section-by-section renderer can exceed the limit even when the stages are visible in execution order.
+    Mitigation: Keep buffering and truncation together, and preserve the documented parsing sequence or scorecard section order.
 - Bad example: Code that triggers `complexity.cognitive` leaves cognitive complexity unaddressed.
 - Good example: Code that satisfies `complexity.cognitive` makes cognitive complexity explicit or simpler.
 
@@ -337,7 +342,7 @@ except ValueError:
 - Pillar: `documentation`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `medium`
+- Confidence: `high`
 - Default enabled: yes
 - Rationale: Public dataclasses often become reporter, config, or API payload contracts; field names alone rarely explain units, nullability, or stability guarantees.
 - Fix guidance: Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields.
@@ -402,11 +407,11 @@ except ValueError:
 - Pillar: `documentation`
 - Tier: `v0.1`
 - Default severity: `advisory`
-- Confidence: `medium`
+- Confidence: `high`
 - Default enabled: yes
 - Rationale: `docs.missing-module-docstring` protects the documentation pillar by flagging missing module docstring before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing module docstring directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Common false-positive shapes:
   - A generated or deliberately single-purpose production module can be documented by its package reference instead of a module docstring.
     Mitigation: Add the local module summary, exclude generated paths from analysis, or suppress the rule for the reviewed module with a reason.
@@ -561,11 +566,16 @@ except ValueError:
 - Pillar: `naming`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `high`
+- Confidence: `low`
 - Default enabled: yes
 - Rationale: Draft names such as temp, foo, and result1 hide the value or role a reviewer must verify; legitimate domain words such as todo do not prove unfinished work from the identifier alone.
 - Fix guidance: Rename first-token or numbered placeholders for their concrete role; keep legitimate queue/domain names when they already describe the value.
 - Confidence rationale: High confidence: only reviewed first-token placeholder families and numbered base-plus-digit shapes match; exact domain words are not inferred.
+- Common false-positive shapes:
+  - The rule flags first tokens such as `temp`, `thing`, `foo`, and `bar` even when the full name describes a temporary resource, a test model, or a name used by the test.
+    Mitigation: Rename the identifier to lead with its role, as in `temporary_dir`, `IterableChoiceTestModel`, `command_options_for_bar`, or `expected_error_for_short_foo`.
+  - The numbered-name check flags an initial `x` token followed by a digits-only token even when the name denotes a byte, algorithm, or protocol, and it also flags names such as `item1` and `value1` for interchangeable test inputs.
+    Mitigation: Put the role before the byte, algorithm, or protocol mnemonic, as in `BYTE_0X2A`, `KEY_AGREEMENT_OID_X448`, or `display_endpoint_x11`, and name interchangeable test inputs `first_item` and `second_item`.
 - Bad example: `temp = load_tasks()` or `result1 = publish()` hides the value's role.
 - Good example: `pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary.
 
@@ -575,11 +585,11 @@ except ValueError:
 - Pillar: `naming`
 - Tier: `v0.1`
 - Default severity: `advisory`
-- Confidence: `low`
+- Confidence: `high`
 - Default enabled: yes
 - Rationale: `naming.short-variable` protects the naming pillar by flagging short variable name before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported short variable name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
+- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Options: `acceptedShortNames` = `['i', 'j', 'k', 'n', 'm', 'x', 'y', 'z', 'e', '_', 'f']`
 - Common false-positive shapes:
   - A one-character domain or mathematical symbol can be conventional even when it is not one of the built-in loop, axis, or exception names.
@@ -1516,11 +1526,11 @@ except ValueError:
 - Pillar: `test-quality`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `medium`
+- Confidence: `low`
 - Default enabled: yes
 - Rationale: `test-quality.private-reflection` protects the test-quality pillar by flagging private reflection in test before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported private reflection in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
 - Common false-positive shapes:
   - A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.
     Mitigation: Prefer public behavior, or suppress the reviewed access with the compatibility contract it protects.
@@ -1721,11 +1731,16 @@ except ValueError:
 - Pillar: `dead-code`
 - Tier: `v0.1`
 - Default severity: `warning`
-- Confidence: `high`
+- Confidence: `medium`
 - Default enabled: yes
 - Rationale: `waste.empty-function` protects the dead-code pillar by flagging empty function before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported empty function directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: High confidence: the rule matches precise AST or source patterns.
+- Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
+- Common false-positive shapes:
+  - The rule counts a lone docstring or a docstring followed by `pass` or `...` as empty, even when the docstring gives the empty body a purpose.
+    Mitigation: Keep the docstring explicit about the lifecycle event, the stub's role, or what an empty return means to the caller.
+  - A typed signature stub with an `...` body reports as empty when its declaration falls outside the rule's stub exemptions.
+    Mitigation: Keep the typed signature and `...` together so the declaration reads as a signature stub.
 - Bad example: Code that triggers `waste.empty-function` leaves empty function unaddressed.
 - Good example: Code that satisfies `waste.empty-function` makes empty function explicit or simpler.
 
@@ -1742,6 +1757,61 @@ except ValueError:
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
 - Bad example: Code that triggers `waste.unreachable-code` leaves unreachable code unaddressed.
 - Good example: Code that satisfies `waste.unreachable-code` makes unreachable code explicit or simpler.
+
+## Confidence evidence
+
+A rule's confidence follows its measured precision: high at an error-adjusted score of 0.85 or more, medium from 0.70, low below, and a raise needs the lower bound of its 95% interval to clear the new band. These default-on rules have no measurement that sets their confidence, so the value below is inherited, not measured:
+
+| Rule | Confidence | Measurement |
+|---|---|---|
+| `complexity.nesting-depth` | high | too-few |
+| `correctness.substring-vocabulary-match` | medium | unmeasured |
+| `correctness.unsafe-numeric-coercion` | high | unmeasured |
+| `dead-code.unused-private-attribute` | medium | insufficient |
+| `design.runtime-sys-path-mutation` | high | unmeasured |
+| `design.single-implementor-protocol` | medium | unmeasured |
+| `docs.complex-branch-rationale` | medium | insufficient |
+| `docs.missing-readme` | medium | unmeasured |
+| `docs.stale-param-doc` | high | insufficient |
+| `docs.todo-density` | medium | insufficient |
+| `naming.test-naming-consistency` | medium | unmeasured |
+| `security.cors-wildcard-with-credentials` | high | unmeasured |
+| `security.dependency-git-reference` | high | too-few |
+| `security.dependency-local-path` | high | unmeasured |
+| `security.dependency-url-reference` | high | unmeasured |
+| `security.disabled-ssl-verification` | high | too-few |
+| `security.error-suppression` | medium | too-few |
+| `security.extract-compact-user-input` | medium | unmeasured |
+| `security.flask-debug-enabled` | high | too-few |
+| `security.github-actions-broad-permissions` | high | unmeasured |
+| `security.github-actions-pull-request-target` | high | unmeasured |
+| `security.github-actions-remote-shell` | high | unmeasured |
+| `security.hardcoded-bind-all-interfaces` | medium | too-few |
+| `security.insecure-random` | medium | too-few |
+| `security.insecure-tls-protocol` | high | too-few |
+| `security.jinja2-autoescape-off` | high | too-few |
+| `security.paramiko-no-host-key-check` | high | too-few |
+| `security.path-traversal` | high | unmeasured |
+| `security.ssrf` | high | too-few |
+| `sensitive-data.aws-access-key` | high | too-few |
+| `sensitive-data.gcp-service-account-key` | high | too-few |
+| `sensitive-data.hardcoded-env-value` | medium | unmeasured |
+| `sensitive-data.jwt-token` | high | unmeasured |
+| `sensitive-data.phi-pattern` | medium | unmeasured |
+| `size.average-function-length` | high | unmeasured |
+| `test-quality.empty-parametrize` | high | unmeasured |
+| `test-quality.excessive-mocking` | medium | unmeasured |
+| `test-quality.global-state-mutation` | medium | unmeasured |
+| `test-quality.mock-only-test` | medium | unmeasured |
+| `test-quality.mocking-domain-object` | medium | unmeasured |
+| `test-quality.naming-consistency` | medium | insufficient |
+| `test-quality.pytest-coverage-source-missing` | medium | unmeasured |
+| `test-quality.pytest-deprecations-not-fatal` | medium | unmeasured |
+| `test-quality.pytest-strict-config-missing` | medium | unmeasured |
+| `test-quality.static-analysis-redundant-test` | high | unmeasured |
+| `test-quality.test-longer-than-sut` | medium | unmeasured |
+| `test-quality.unused-mock` | high | unmeasured |
+| `waste.unreachable-code` | high | unmeasured |
 
 ## Suppressing Findings
 

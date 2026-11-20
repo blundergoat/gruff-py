@@ -235,6 +235,9 @@ def _docs_for_definition(definition: RuleDefinition) -> RuleDocs:
     option_descriptions = _OPTION_DESCRIPTIONS.get(definition.id)
     if option_descriptions is not None:
         custom_docs = replace(custom_docs, option_descriptions=option_descriptions)
+    measured_guidance = _MEASURED_FALSE_POSITIVE_GUIDANCE.get(definition.id)
+    if not custom_docs.false_positive_shapes and measured_guidance is not None:
+        custom_docs = replace(custom_docs, false_positive_shapes=tuple(FalsePositiveShape(*pair) for pair in measured_guidance))
     if not custom_docs.false_positive_shapes:
         false_positive_guidance = _REVIEWED_FALSE_POSITIVE_GUIDANCE.get(definition.id)
         if false_positive_guidance is not None:
@@ -541,6 +544,50 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
     "waste.one-line-function": (
         "A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.",
         "Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.",
+    ),
+}
+
+# Measured false-positive shapes for rules whose confidence moved below high from their measured precision
+# (precision-floor M07). Each was written from the findings its own measurement labelled not right and bound by an
+# independent review; a rule here may carry several shapes, so it is read before the one-pair table above.
+_MEASURED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[tuple[str, str], ...]] = {
+    "complexity.cognitive": (
+        (
+            "An encoder with early returns or a dispatcher with localized branches can exceed the limit because the rule "
+            "adds up branch and nesting points across the function.",
+            "Keep guards, branches, and any shared finalization together when a reviewer can already follow each path in place.",
+        ),
+        (
+            "Branches and loops across a buffered read, an ordered parser, or a section-by-section renderer can exceed the "
+            "limit even when the stages are visible in execution order.",
+            "Keep buffering and truncation together, and preserve the documented parsing sequence or scorecard section order.",
+        ),
+    ),
+    "naming.identifier-quality": (
+        (
+            "The rule flags first tokens such as `temp`, `thing`, `foo`, and `bar` even when the full name describes a "
+            "temporary resource, a test model, or a name used by the test.",
+            "Rename the identifier to lead with its role, as in `temporary_dir`, `IterableChoiceTestModel`, "
+            "`command_options_for_bar`, or `expected_error_for_short_foo`.",
+        ),
+        (
+            "The numbered-name check flags an initial `x` token followed by a digits-only token even when the name denotes "
+            "a byte, algorithm, or protocol, and it also flags names such as `item1` and `value1` for interchangeable test "
+            "inputs.",
+            "Put the role before the byte, algorithm, or protocol mnemonic, as in `BYTE_0X2A`, `KEY_AGREEMENT_OID_X448`, or "
+            "`display_endpoint_x11`, and name interchangeable test inputs `first_item` and `second_item`.",
+        ),
+    ),
+    "waste.empty-function": (
+        (
+            "The rule counts a lone docstring or a docstring followed by `pass` or `...` as empty, even when the docstring "
+            "gives the empty body a purpose.",
+            "Keep the docstring explicit about the lifecycle event, the stub's role, or what an empty return means to the caller.",
+        ),
+        (
+            "A typed signature stub with an `...` body reports as empty when its declaration falls outside the rule's stub exemptions.",
+            "Keep the typed signature and `...` together so the declaration reads as a signature stub.",
+        ),
     ),
 }
 

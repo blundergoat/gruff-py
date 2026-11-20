@@ -133,6 +133,60 @@ _M02_DEFAULT_OFF_REASONS = {
 }
 
 
+# Default-on rules whose confidence is inherited, not set from a measurement (precision-floor M07): rule id to the
+# status its measurement reached. The generated docs list them under Confidence evidence.
+_INHERITED_CONFIDENCE: dict[str, str] = {
+    "complexity.nesting-depth": "too-few",
+    "correctness.substring-vocabulary-match": "unmeasured",
+    "correctness.unsafe-numeric-coercion": "unmeasured",
+    "dead-code.unused-private-attribute": "insufficient",
+    "design.runtime-sys-path-mutation": "unmeasured",
+    "design.single-implementor-protocol": "unmeasured",
+    "docs.complex-branch-rationale": "insufficient",
+    "docs.missing-readme": "unmeasured",
+    "docs.stale-param-doc": "insufficient",
+    "docs.todo-density": "insufficient",
+    "naming.test-naming-consistency": "unmeasured",
+    "security.cors-wildcard-with-credentials": "unmeasured",
+    "security.dependency-git-reference": "too-few",
+    "security.dependency-local-path": "unmeasured",
+    "security.dependency-url-reference": "unmeasured",
+    "security.disabled-ssl-verification": "too-few",
+    "security.error-suppression": "too-few",
+    "security.extract-compact-user-input": "unmeasured",
+    "security.flask-debug-enabled": "too-few",
+    "security.github-actions-broad-permissions": "unmeasured",
+    "security.github-actions-pull-request-target": "unmeasured",
+    "security.github-actions-remote-shell": "unmeasured",
+    "security.hardcoded-bind-all-interfaces": "too-few",
+    "security.insecure-random": "too-few",
+    "security.insecure-tls-protocol": "too-few",
+    "security.jinja2-autoescape-off": "too-few",
+    "security.paramiko-no-host-key-check": "too-few",
+    "security.path-traversal": "unmeasured",
+    "security.ssrf": "too-few",
+    "sensitive-data.aws-access-key": "too-few",
+    "sensitive-data.gcp-service-account-key": "too-few",
+    "sensitive-data.hardcoded-env-value": "unmeasured",
+    "sensitive-data.jwt-token": "unmeasured",
+    "sensitive-data.phi-pattern": "unmeasured",
+    "size.average-function-length": "unmeasured",
+    "test-quality.empty-parametrize": "unmeasured",
+    "test-quality.excessive-mocking": "unmeasured",
+    "test-quality.global-state-mutation": "unmeasured",
+    "test-quality.mock-only-test": "unmeasured",
+    "test-quality.mocking-domain-object": "unmeasured",
+    "test-quality.naming-consistency": "insufficient",
+    "test-quality.pytest-coverage-source-missing": "unmeasured",
+    "test-quality.pytest-deprecations-not-fatal": "unmeasured",
+    "test-quality.pytest-strict-config-missing": "unmeasured",
+    "test-quality.static-analysis-redundant-test": "unmeasured",
+    "test-quality.test-longer-than-sut": "unmeasured",
+    "test-quality.unused-mock": "unmeasured",
+    "waste.unreachable-code": "unmeasured",
+}
+
+
 def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> str:
     """Render deterministic Markdown documentation for the built-in rule catalog.
 
@@ -191,6 +245,7 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     # The detail section gives users the settings and remediation for every listed id.
     for definition in definitions:
         lines.extend(_rule_detail_lines(definition))
+    lines.extend(_confidence_evidence_lines(definitions))
     lines.extend(_suppression_lines())
     lines.extend(_choosing_rules_lines())
     return "\n".join(lines).rstrip() + "\n"
@@ -399,6 +454,33 @@ def _inline_list(values: tuple[str, ...]) -> str:
     """
     # Each metadata name is styled as code so report consumers can copy it exactly.
     return ", ".join(f"`{value}`" for value in values)
+
+
+def _confidence_evidence_lines(definitions: list[RuleDefinition]) -> list[str]:
+    """Render the Confidence evidence section: how confidence follows measured precision, and which rules inherit theirs.
+
+    Args:
+        definitions: Sorted rule definitions being documented; only ids listed in _INHERITED_CONFIDENCE become table rows.
+
+    Returns:
+        Markdown lines for the section, ending with a blank line; the table is empty when no listed rule is documented.
+    """
+    lines = [
+        "## Confidence evidence",
+        "",
+        "A rule's confidence follows its measured precision: high at an error-adjusted score of 0.85 or more, medium from 0.70, "
+        "low below, and a raise needs the lower bound of its 95% interval to clear the new band. These default-on rules have no "
+        "measurement that sets their confidence, so the value below is inherited, not measured:",
+        "",
+        "| Rule | Confidence | Measurement |",
+        "|---|---|---|",
+    ]
+    for definition in definitions:
+        status = _INHERITED_CONFIDENCE.get(definition.id)
+        if status is not None:
+            lines.append(f"| `{definition.id}` | {definition.confidence.value} | {status} |")
+    lines.append("")
+    return lines
 
 
 def _suppression_lines() -> list[str]:

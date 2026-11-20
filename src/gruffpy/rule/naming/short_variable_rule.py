@@ -8,7 +8,7 @@ Scope: local assignments (Assign / AnnAssign). Function parameters are
 intentionally NOT scanned - single-char params are common in math-flavoured
 code (``def f(x, y, z): ...``). Test files are exempt; assertion fixtures and
 table-driven rule tests routinely use tiny local placeholders where this
-low-confidence style warning is noisy.
+style warning is noisy.
 """
 
 import ast
@@ -34,7 +34,8 @@ class ShortVariableRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the short-variable rule and its configurable acceptedShortNames list.
 
-        Confidence is low because single-character names can be idiomatic in mathematical, loop and exception-handler code.
+        Confidence is high because sampled findings were worth acting on; the accepted names and the parameter and test-file
+        exemptions keep idiomatic short names in mathematical, loop and exception-handler code quiet.
 
         Returns:
             Definition for the short-variable rule under the naming pillar.
@@ -45,7 +46,7 @@ class ShortVariableRule(Rule):
             pillar=Pillar.NAMING,
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
-            confidence=Confidence.LOW,
+            confidence=Confidence.HIGH,
             default_options={"acceptedShortNames": list(_DEFAULT_ACCEPTED)},
         )
 

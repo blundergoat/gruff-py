@@ -32,7 +32,7 @@ class IdentifierQualityRule(Rule):
     ID = "naming.identifier-quality"
 
     def definition(self) -> RuleDefinition:
-        """Describe the high-confidence warning shown in rule listings.
+        """Describe the low-confidence warning shown in rule listings.
 
         Returns:
             Definition for the identifier-quality rule under the naming pillar.
@@ -43,7 +43,7 @@ class IdentifierQualityRule(Rule):
             pillar=Pillar.NAMING,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
-            confidence=Confidence.HIGH,
+            confidence=Confidence.LOW,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:

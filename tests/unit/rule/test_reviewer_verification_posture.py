@@ -11,7 +11,7 @@ Posture = tuple[bool, str, str]
 _DOCS_MISSING_POSTURE: dict[str, Posture] = {
     "docs.missing-class-docstring": (True, "warning", "high"),
     "docs.missing-function-docstring": (True, "warning", "high"),
-    "docs.missing-module-docstring": (True, "advisory", "medium"),
+    "docs.missing-module-docstring": (True, "advisory", "high"),
     "docs.missing-param-doc": (True, "advisory", "medium"),
     "docs.missing-raises-doc": (True, "advisory", "low"),
     "docs.missing-readme": (True, "advisory", "medium"),

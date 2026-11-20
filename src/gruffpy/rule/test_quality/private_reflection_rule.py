@@ -29,7 +29,7 @@ class PrivateReflectionRule(Rule):
     ID = "test-quality.private-reflection"
 
     def definition(self) -> RuleDefinition:
-        """Describe the private-reflection rule as a medium-confidence warning.
+        """Describe the private-reflection rule as a low-confidence warning.
 
         A finding identifies private access for the reviewer to judge, since a test may reach into an internal helper intentionally.
 
@@ -42,7 +42,7 @@ class PrivateReflectionRule(Rule):
             pillar=Pillar.TEST_QUALITY,
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
-            confidence=Confidence.MEDIUM,
+            confidence=Confidence.LOW,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
