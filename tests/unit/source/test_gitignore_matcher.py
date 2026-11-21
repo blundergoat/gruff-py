@@ -21,6 +21,29 @@ def _write(path: Path, text: str = "") -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def test_a_line_git_cannot_use_is_skipped_and_the_rest_apply(tmp_path: Path) -> None:
+    """Skip a lone ``!`` and a trailing-backslash line, as git does, and still apply the file's other patterns.
+
+    git check-ignore ignores ``a.bin`` and keeps ``a.py`` for this exact file; before, pathspec raised on the first line
+    and the scan ended with a traceback.
+
+    Args:
+        tmp_path: Root holding the .gitignore, one ignored binary and one module.
+
+    Returns:
+        None. Asserts that the matcher loads the file and agrees with git on both paths.
+    """
+    _write(tmp_path / ".gitignore", "!\n*.bin\n\\\n")
+    _write(tmp_path / "a.bin")
+    _write(tmp_path / "a.py")
+
+    matcher = GitignoreMatcher.from_root(tmp_path)
+
+    assert matcher.has_rules()
+    assert matcher.is_ignored(tmp_path / "a.bin") is True
+    assert matcher.is_ignored(tmp_path / "a.py") is False
+
+
 def test_no_gitignore_means_nothing_ignored(tmp_path: Path) -> None:
     """Load no rules initially when the root has no .gitignore, and keep its root-level module unignored.
 

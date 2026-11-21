@@ -24,7 +24,29 @@ def _load_spec(directory: Path) -> GitIgnoreSpec | None:
         content = gitignore.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    return GitIgnoreSpec.from_lines(content.splitlines())
+    return GitIgnoreSpec.from_lines(_usable_lines(content.splitlines()))
+
+
+def _usable_lines(lines: list[str]) -> list[str]:
+    """Drop each .gitignore line pathspec cannot compile, so one bad line costs only itself, as it does in git.
+
+    Git treats a lone ``!`` or a pattern ending in an unescaped backslash as matching nothing; pathspec raises a
+    ValueError for both, which would otherwise end the whole scan with a traceback.
+
+    Args:
+        lines: The file's lines, comments and blank lines included.
+
+    Returns:
+        The lines in their original order, without those pathspec rejects; comments and blank lines are kept.
+    """
+    usable = []
+    for line in lines:
+        try:
+            GitIgnoreSpec.from_lines([line])
+        except ValueError:
+            continue
+        usable.append(line)
+    return usable
 
 
 @dataclass(frozen=True, slots=True)
