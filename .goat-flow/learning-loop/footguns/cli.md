@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-11-22
+last_reviewed: 2026-11-23
 ---
 
 ## Footgun: Click optional-value options + variadic positionals stay tempting
@@ -40,11 +40,22 @@ The two forms are covered in `tests/integration/test_cli_smoke.py`.
 
 Running `analyse --format json loop.py` on a self-referencing `loop.py` symlink exited 1 with no output. Discovery rejected the operand, then the scan scope calculation tried to resolve it again. Treat such a scan as partial and let the JSON report carry the diagnostic even when the missing input has no project-relative location.
 
-The runner makes the scope decision in `src/gruffpy/analysis/runner.py` (`run_analysis`). The JSON writer uses the same permissive path projection for missing inputs as for requested inputs in `src/gruffpy/analysis/machine_contract.py` (`analysis_payload`). The reproduction is in `tests/integration/test_cli_smoke.py` (`test_cli_reports_a_symlink_loop_as_a_fatal_json_diagnostic`).
+The runner makes the scope decision in `src/gruffpy/analysis/runner.py` (search: `def run_analysis`). The JSON writer uses the same permissive path projection for missing inputs as for requested inputs in `src/gruffpy/analysis/machine_contract.py` (search: `def analysis_payload`). The reproduction is in `tests/integration/test_cli_smoke.py` (search: `def test_cli_reports_a_symlink_loop_as_a_fatal_json_diagnostic`).
+
+## Resolved Entries
 
 ## Footgun: cli.py routinely sits within 20 lines of the file-length error threshold
 
-**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-05-26 | **Resolved:** 2026-11-23 | **Evidence:** ACTUAL_MEASURED
+
+Resolved by measurement on 2026-11-23. `size.file-length` has counted
+substantive lines since `767a736` (2026-08-05), so docstrings, comments, and
+blank lines no longer count. `src/gruffpy/cli.py` measured 839 against the
+1000-line default and the dogfood self-check reported no findings, while
+`wc -l` reported 1535 for the same file. A physical line count is no longer
+the measurement. If cli.py nears the threshold again, reopen this entry and
+measure with the rule's own counter:
+`uv run python -c "import ast,pathlib; from gruffpy.rule.size.file_length_rule import _substantive_line_count; s=pathlib.Path('src/gruffpy/cli.py').read_text(); print(_substantive_line_count(s, ast.parse(s)))"`
 
 `src/gruffpy/cli.py` (search: `class CliGroup`) is the project's Click entry
 point and concentrates: the root command group, every subcommand handler
@@ -73,18 +84,10 @@ scan emitted `size.file-length`. Keeping the guard while removing two
 non-semantic lines in the same validation area returned the file to the exact
 1,000-line ceiling.
 
-Before adding any code to cli.py, check `wc -l
-src/gruffpy/cli.py` first. If it is within 20 lines of 1000, extract the
-new code to a sibling module before writing it (the natural seams are by
-subcommand — `cli_dashboard.py` already exists; `cli_summary.py`,
-`cli_init.py`, etc. are reasonable next splits). Adding code first and
-"figuring out the threshold later" is the trap that fires every time:
-ruff/mypy/pytest all pass while the dogfood quietly slips into
-exit-code-1 territory. The footgun resolves itself once cli.py drops well
-below 1000 lines via dedicated subcommand modules; until then, every
-contributor must spot-check before merging.
-
-## Resolved Entries
+While the rule counted physical lines, the prevention was to check the line
+count before adding code to cli.py and, within 20 lines of 1000, to extract
+the new code to a subcommand module first. Ruff, mypy, and pytest all passed
+while the dogfood scan slipped into exit code 1.
 
 ## Footgun: Optional-value `--baseline` / `--generate-baseline` consumed the next path
 

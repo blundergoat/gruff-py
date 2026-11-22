@@ -53,10 +53,10 @@ def test_codex_registers_post_edit_quality_hook() -> None:
     assert len(handlers) == 1
     handler = handlers[0]
     assert handler["type"] == "command"
-    assert ".goat-flow/hooks/gruff-code-quality.sh" in handler["command"]
+    assert ".goat-flow/hooks/gruff-code-quality.mjs" in handler["command"]
     # The registration resolves the project root from the session directory.
     # It starts the Node launcher in that root to run the quality hook.
-    assert ".goat-flow/hooks/run-with-bash.mjs" in handler["command"]
+    assert ".goat-flow/hooks/run-hook.mjs" in handler["command"]
     assert handler["timeout"] == _CODEX_HOOK_TIMEOUT_SECONDS
     assert handler["statusMessage"] == "gruff code quality"
 

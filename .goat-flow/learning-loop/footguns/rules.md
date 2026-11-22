@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-10-15
+last_reviewed: 2026-11-23
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -168,30 +168,6 @@ and bare-name references, and modifier predicates that change safety. Add one
 focused fixture for each supported spelling and rerun the real source that
 exposed the gap.
 
-## Footgun: fixed sentinels collide with decoded user literals
-
-**Status:** active | **Created:** 2026-07-16 | **Evidence:** OBSERVED
-
-Rules that flatten an AST template into text can accidentally use a character
-the parser also produces from a user literal. The Markdown interpolation rule
-used one NUL character for every dynamic slot; a source escape such as
-`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
-then exceeded the dynamic-expression list and both f-string and `.format()`
-paths raised `IndexError` instead of returning findings.
-
-The repaired implementation chooses a NUL run absent from each template's
-decoded static text in
-`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py`
-(search: `def _placeholder_absent_from`) and threads that exact token through
-slot matching. The collision controls live in
-`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
-(search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`).
-
-When an analyzer needs an internal marker inside user-derived text, prove the
-marker is absent after parsing and decoding, or keep structural components
-separate instead of using a fixed sentinel. Test the literal marker itself in
-every supported source spelling.
-
 ## Footgun: flow-state walkers dispatch on statement type and silently skip whole node classes
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** OBSERVED
@@ -204,12 +180,20 @@ two-directional and silent: a proved value assigned inside the skipped statement
 reads as raw, and a rebinding that should destroy trust stays invisible.
 
 `MarkdownSanitizerProvenance._scan_control_statement`
-(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py`, search:
+(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py` at `1f02afe`, search:
 `def _scan_control_statement`) named `If`, `For`, `While`, `With`, and `Try` but
 omitted `ast.Match` and `ast.TryStar`. A sanitizer rebound inside a `case` body
 stayed trusted, so `security.unsanitized-markdown-interpolation` suppressed the
 finding for a defeated helper. Ruff, mypy, and the full pytest run stayed green
-throughout, because no fixture used either statement form.
+throughout, because no fixture used either statement form. ADR-029 retired that
+rule in 0.6.0 (`7f146cc`).
+
+The same trap applies to any live dispatcher that decides which statement
+bodies to inspect. The class-body allowlist in
+`src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`
+(search: `def _is_compound_statement`) names `ast.AsyncFor`, `ast.AsyncWith`,
+`ast.TryStar`, and `ast.Match` beside their siblings, so a member rebound
+inside any compound body is treated as ambiguous.
 
 `ast.TryStar` is the specific language trap: `except*` parses to a distinct node
 class that is not a subclass of `ast.Try`, so `isinstance(node, ast.Try)`
@@ -218,9 +202,10 @@ synchronous counterparts.
 
 Mitigation: when adding or extending a statement dispatcher, enumerate every
 statement type that binds a name or branches control flow, and add `match` and
-`except*` fixtures beside the `if` and `try` ones. Regression coverage lives in
-`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
-(search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`).
+`except*` fixtures beside the `if` and `try` ones. The retired rule's regression
+coverage lived in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`.
 
 ## Footgun: dropping a `global`/`nonlocal` store silently makes a name immortal
 
@@ -267,6 +252,33 @@ coverage lived in
 `test_project_global_store_does_not_reach_a_module_level_load`).
 
 ## Resolved Entries
+
+## Footgun: fixed sentinels collide with decoded user literals
+
+**Status:** resolved | **Created:** 2026-07-16 | **Resolved:** 2026-10-17 | **Evidence:** OBSERVED
+
+Resolved by removal: ADR-029 retired `security.unsanitized-markdown-interpolation`
+in 0.6.0 (`7f146cc`), deleting the rule and its placeholder code.
+
+Rules that flatten an AST template into text can accidentally use a character
+the parser also produces from a user literal. The Markdown interpolation rule
+used one NUL character for every dynamic slot; a source escape such as
+`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
+then exceeded the dynamic-expression list and both f-string and `.format()`
+paths raised `IndexError` instead of returning findings.
+
+The repaired implementation chose a NUL run absent from each template's
+decoded static text
+(`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `def _placeholder_absent_from`) and threaded that exact token through
+slot matching. The collision controls lived in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`.
+
+When an analyzer needs an internal marker inside user-derived text, prove the
+marker is absent after parsing and decoding, or keep structural components
+separate instead of using a fixed sentinel. Test the literal marker itself in
+every supported source spelling.
 
 ## Footgun: static declaration evidence is not proof of runtime existence
 

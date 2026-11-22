@@ -15,7 +15,7 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/cli.py` = Click entrypoint, orchestration, report rendering choice, dashboard command wiring, and process exit-code logic.
 - `src/gruffpy/cli_options.py` = shared Click option definitions and the option-to-request translation used by every analysing subcommand; it is the largest CLI module, so flag work usually lands here rather than in `cli.py`.
 - `src/gruffpy/cli_dashboard.py`, `src/gruffpy/cli_hook.py`, `src/gruffpy/cli_list_rules.py`, `src/gruffpy/cli_menu.py`, `src/gruffpy/cli_migrate_config.py`, `src/gruffpy/cli_state.py`, `src/gruffpy/cli_summary.py` = per-subcommand implementations extracted from `cli.py` to keep it under the `size.file-length` error threshold; add new subcommand bodies here, not in `cli.py`.
-- `src/gruffpy/hook_contract.py` = the `gruff.hook.v2` projection and its stable-identity scheme, consumed by `gruff-py hook` and by the shared `.goat-flow/hooks/gruff-code-quality.sh` agent hook.
+- `src/gruffpy/hook_contract.py` = the `gruff.hook.v2` projection and its stable-identity scheme, consumed by `gruff-py hook` and by the shared `.goat-flow/hooks/gruff-code-quality.mjs` agent hook.
 - `src/gruffpy/suppression/` = tokenizer-backed `# gruff: disable=` / `disable-next=` / `disable-file=` comment parser plus the central post-execution finding filter applied by `src/gruffpy/analysis/runner.py` (ADR-008).
 - `src/gruffpy/__main__.py` = `python -m gruffpy` entrypoint.
 - `src/gruffpy/version.py` = runtime version string shown by the CLI.
@@ -26,9 +26,9 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `src/gruffpy/parser/` = source parsing into `AnalysisUnit`; Python files receive ASTs and parent links.
 - `src/gruffpy/rule/` = `Rule` ABC, `ProjectRuleProtocol`, definitions, context, registry, enabled-rule execution, deduplication, and stable ordering.
 - `src/gruffpy/rule/size/` = file/class/function length and parameter/attribute count rules.
-- `src/gruffpy/rule/complexity/` = cyclomatic, cognitive, Halstead volume, nesting depth, and the maintainability-index implementation; NPATH is retired, and maintainability index emits under the separate `maintainability` pillar.
+- `src/gruffpy/rule/complexity/` = cyclomatic, cognitive, and nesting-depth rules plus the shared `_walks.py` traversal helpers; `_halstead.py` now serves only `src/gruffpy/command/metric_calibration.py`. NPATH is retired, and ADR-029 retired Halstead volume and maintainability index in 0.6.0.
 - `src/gruffpy/rule/correctness/` = unsafe numeric-coercion and substring-vocabulary checks for runtime failure or routing mistakes.
-- `src/gruffpy/rule/dead_code/` and `src/gruffpy/rule/waste/` = unused private symbols, empty bodies, unreachable code, redundant variables, and unused imports/parameters.
+- `src/gruffpy/rule/dead_code/` and `src/gruffpy/rule/waste/` = exported-but-unreferenced symbols, unused private attributes, empty function bodies, and unreachable code.
 - `src/gruffpy/rule/modernisation/` = the registered f-string conversion candidate rule.
 - `src/gruffpy/rule/naming/` = intent-layer naming rules (PEP 8 case style is delegated to ruff's `N` rules - see ADR-004).
 - `src/gruffpy/rule/docs/` = docstring presence, parameter/return/raises consistency parsed via `docstring-parser` (ADR-005), TODO density, and missing-README checks.
@@ -61,14 +61,14 @@ To get oriented quickly, read these four files in order - they cover the orchest
 
 ## GOAT Flow And Agent Surfaces
 
-- `AGENTS.md` = shared Codex and Antigravity hot-path project instructions and GOAT Flow `1.18.0` declaration.
+- `AGENTS.md` = shared Codex and Antigravity hot-path project instructions and GOAT Flow `1.19.0` declaration.
 - `.agents/skills/` = installed goat-flow skills shared by Codex and Antigravity; `.agents/hooks.json` is Antigravity's hook registration surface.
 - `.codex/` = Codex-specific configuration and active hook registration in `.codex/hooks.json`.
-- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.18.0` declaration.
+- `CLAUDE.md` = separate Claude peer instructions and GOAT Flow `1.19.0` declaration.
 - `.claude/skills/` and `.claude/settings.json` = the coexisting Claude skill and permission surfaces.
-- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.18.0` declaration.
+- `.github/copilot-instructions.md` = standalone Copilot peer instructions and GOAT Flow `1.19.0` declaration.
 - `.github/skills/` = installed Copilot goat-flow skills; `.github/hooks/` is that surface's hook directory.
-- `.goat-flow/hooks/` = shared deny-dangerous, deny-git-mutations, gruff-code-quality, and post-turn-safety hook scripts, with policy patterns and self-test under `deny-dangerous/`.
+- `.goat-flow/hooks/` = shared deny-dangerous, deny-git-mutations, gruff-code-quality, and post-turn-safety Node hook scripts, started through `run-hook.mjs`, with deny-policy patterns under `deny-dangerous/`.
 - `.goat-flow/config.yaml` = GOAT Flow version, skill-install mode, and hook enablement state.
 - `.goat-flow/security-policy.md` = optional project security policy read by the goat-security skill.
 - `.goat-flow/architecture.md` = cold-path system architecture.
@@ -79,12 +79,12 @@ To get oriented quickly, read these four files in order - they cover the orchest
 - `.goat-flow/learning-loop/patterns/` = reusable project approaches.
 - `.goat-flow/learning-loop/decisions/` = ADRs when architectural decisions need durable context.
 - `.goat-flow/skill-docs/` = shared skill contract references.
-- `.goat-flow/skill-docs/playbooks/` = indexed top-level playbooks: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `naming-and-placement.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-human-facing-prose.md`, `writing-sentence-diagnostics.md`, and `writing-structure-diagnostics.md`.
+- `.goat-flow/skill-docs/playbooks/` = indexed top-level playbooks: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `naming-and-placement.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-fidelity-audit.md`, `writing-human-facing-prose.md`, `writing-sentence-diagnostics.md`, and `writing-structure-diagnostics.md`.
 - `.goat-flow/logs/sessions/` = local session continuity logs.
 - `.goat-flow/plans/` and `.goat-flow/scratchpad/` = local milestone state and temporary notes.
 
 All four tracked agent instruction surfaces currently declare GOAT Flow
-`1.18.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
+`1.19.0`: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the
 `.goat-flow/config.yaml` workspace record, alongside the shared references,
 hooks, and local CLI. Each instruction file stays standalone and owns its own
 skills directory; a declaration here that disagrees with `.goat-flow/config.yaml`

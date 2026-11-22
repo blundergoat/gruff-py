@@ -169,7 +169,7 @@ the raw token, such as `"".join(("TO", "DO"))`, and re-run the analyzer after
 formatting rather than trusting the unit test alone.
 
 **Recurrence 2026-10-03:** CI's Gruff self-check failed partly on an existing
-split, `tests/unit/rule/sensitive_data/test_pii_test_fixture_rule.py` (search: `_GROUPED_DECIMAL`):
+split, `_GROUPED_DECIMAL` in the `sensitive-data.pii-test-fixture` tests (deleted in `7f146cc`):
 `"1,234," + "567.1234567"` still matched `_PHONE_RE` because its second half
 alone is a 3-3-4 digit run. A split must leave no single literal that matches
 the trigger; `"567." + "1234567"` cleared it with the same runtime value.
@@ -348,11 +348,15 @@ symmetrically to `disable`, `disable-next`, and `disable-file`.
 ## Lesson: Quote YAML boolean-like strings in dogfood option defaults
 
 **Created:** 2026-05-31
+**Status:** historical
+**Reason:** ADR-029 retired `naming.boolean-prefix` and its
+`acceptedBooleanNames` option in 0.6.0 (`7f146cc`). Quoting YAML 1.1
+boolean-like scalars still applies to every string-list default in `.gruff-py.yaml`.
 **Incident:** While adding the `naming.boolean-prefix` `acceptedBooleanNames`
 option, `.gruff-py.yaml` initially listed `yes` unquoted. PyYAML parsed it as
 the boolean `True`, so `tests/unit/config/test_gruff_py_yaml_registry_coverage.py`
 (search: `test_repo_yaml_options_match_definition_defaults`) failed even
-though `src/gruffpy/rule/naming/boolean_prefix_rule.py` exposed the intended
+though the rule exposed the intended
 string default. The fix was to quote the entry as `"yes"` in `.gruff-py.yaml`.
 
 When adding string-list defaults to `.gruff-py.yaml`, quote YAML 1.1
@@ -380,9 +384,9 @@ why the task is not actually complete.
 **Created:** 2026-06-10
 **Incident:** Running `scripts/preflight-checks.sh` after rule false-positive
 work failed only the Gruff self-check. The failures were in test fixtures, not
-runtime code: `tests/unit/rule/complexity/test_maintainability_index_rule.py`
-(search: `test_lower_threshold_means_worse_mi_is_threshold`) had an inline
-comment that looked like commented-out code,
+runtime code: the maintainability-index rule test
+`test_lower_threshold_means_worse_mi_is_threshold` (deleted with that rule in
+`7f146cc`) had an inline comment that looked like commented-out code,
 `tests/unit/rule/sensitive_data/test_database_url_password_rule.py` (search:
 `test_placeholder_password_skipped`) omitted parametrized ids, and the same
 test assembled a complete secret-bearing database URL literal for a negative
@@ -401,7 +405,7 @@ anonymous parametrized cases unless the test is explicitly exercising that rule.
 **Incident:** During an M07 session the harness began returning tool results
 **delayed and duplicated** — later batches contained file-read content that did
 not match the file on disk. The agent issued an `Edit` to
-`src/gruffpy/rule/test_quality/magic_number_assertion_rule.py` based on a
+the `test-quality.magic-number-assertion` rule module (deleted in `7f146cc`) based on a
 *hallucinated* failing test (no such test existed; dogfood showed `0` findings
 and `git grep '\.count\s*=='` over `tests`/`src` returned nothing), and five
 further test-file edits failed `String to replace not found` because they
@@ -489,7 +493,7 @@ Second, fixing the rule did not fix the crash: the new integration test,
 `tests/integration/test_cli_smoke.py` (search: `test_analyse_parse_error_exits_2_even_with_fail_on_none`),
 still failed because
 `src/gruffpy/suppression/parser.py` (search: `_comment_tokens`) and
-`src/gruffpy/rule/docs/_comment_scanner.py` had copies of the same narrow
+`src/gruffpy/source/comment_scanner.py` (then `rule/docs/_comment_scanner.py`) had copies of the same narrow
 `except tokenize.TokenError`. All three now catch
 `(tokenize.TokenError, SyntaxError)` and keep tokens collected before the
 failure.

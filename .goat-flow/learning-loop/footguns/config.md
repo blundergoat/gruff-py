@@ -1,6 +1,6 @@
 ---
 category: config
-last_reviewed: 2026-08-22
+last_reviewed: 2026-11-23
 ---
 
 ## Footgun: ConfigLoader `.get(key, [])` collapses absent into empty, clobbering seeded AnalysisConfig defaults
@@ -23,7 +23,7 @@ Both were resolved by injection rather than import. The pillar fact is captured 
 
 Before adding any config validator that needs rule metadata, or any suppression channel that publishes a report field, plan for that direction from the start. Rule facts reach the config layer through a field on `AnalysisConfig` filled by `from_registry`; report value objects belong under `src/gruffpy/analysis/`, and the channel that fills them imports them, not the other way round.
 
-**Portability question for the family.** gruff-rs validates its exclusions with the registry in hand inside its own config loader - its exclusion parser (search: `fn parse_exclusion_rule`) calls `rules::builtin_registry()` directly - so its validator can name the offending rule and pillar from one place, while gruff-py must pre-compute the pillar set one layer earlier. That difference is invisible while conformance asserts only the rejection set, and becomes visible the moment it asserts diagnostic text: the same rejection is phrased by rs as an exclusion-selector error and by py as a `Config key "sensitiveExclusions[0].rule"` error. The family has to decide whether section 13a's "distinct fatal configuration diagnostic naming the entry index and the offending key" fixes the wording or only the fields, before a cross-port fixture can compare messages rather than outcomes.
+**Portability question for the family.** gruff-rs validates its exclusions with the registry in hand inside its own config loader - its sensitive-exclusion loader (search: `fn apply_sensitive_exclusions_section`) calls `rules::builtin_registry()` directly - so its validator can name the offending rule and pillar from one place, while gruff-py must pre-compute the pillar set one layer earlier. That difference is invisible while conformance asserts only the rejection set, and becomes visible the moment it asserts diagnostic text: the same rejection is phrased by rs as an exclusion-selector error and by py as a `Config key "sensitiveExclusions[0].rule"` error. The family has to decide whether section 13a's "distinct fatal configuration diagnostic naming the entry index and the offending key" fixes the wording or only the fields, before a cross-port fixture can compare messages rather than outcomes.
 
 ## Resolved Entries
 

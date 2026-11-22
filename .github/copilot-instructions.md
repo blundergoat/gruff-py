@@ -2,7 +2,7 @@
 
 gruff-py - Python 3.11+ Click CLI quality analyser built with uv, ruff, mypy, pytest, and Hatchling. Primary invariant: finding fingerprints reproduce gruff-php bytes, and the shared schema strings `gruff.analysis.v3`, `gruff.summary.v3`, `gruff.baseline.v3` and `gruff.hook.v2` match the sibling implementations. `gruff-py.hotspot.v1` and `gruff-py.config.v0.1` are language-prefixed outliers that do NOT match sibling output; read `.goat-flow/learning-loop/footguns/compatibility.md` before changing either.
 
-goat-flow version: 1.18.0
+goat-flow version: 1.19.0
 
 ## Workspace Boundary
 

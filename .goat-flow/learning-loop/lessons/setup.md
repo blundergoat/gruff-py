@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-08-14
+last_reviewed: 2026-11-23
 ---
 
 ## Lesson: Treat setup stats warnings as harness blockers

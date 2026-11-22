@@ -49,9 +49,10 @@ Checkout-local GOAT Flow plans, session and event logs, review artifacts, and sc
 numeric totals; verify them with
 `uv run python -m gruffpy.command.rule_docs --check docs/rules.md`. Pillars come
 from each `RuleDefinition.pillar`, not the rule-ID prefix or directory name:
-legacy `waste.*` rules emit under `dead-code`, and the maintainability-index
-implementation lives in the complexity package while emitting under
-`maintainability`. `ProjectRuleProtocol` handles cross-file rules such as
+legacy `waste.*` rules emit under `dead-code`. No registered rule emits under
+`maintainability` since ADR-029 retired the maintainability-index rule in
+0.6.0; `src/gruffpy/command/metric_calibration.py` still computes the index as
+a calibration metric. `ProjectRuleProtocol` handles cross-file rules such as
 `design.single-implementor-protocol`. Overlapping `size.*` and `complexity.*`
 findings on one symbol are billed once by `ScoreCalculator`'s correlated-rule
 clustering (`CORRELATED_COMPLEXITY_RULES`); the former synthetic
@@ -77,9 +78,9 @@ Rules subclassing `SourceTextRule` additionally run on `.env`/`.toml`/`.yaml`/`.
 
 Local development uses `uv` through the `Makefile`. CI in `.github/workflows/ci.yml` runs on Python 3.11 and 3.12 with `bash -n` over `scripts/*.sh`, `pip-audit`, `ruff check`, `ruff format --check`, `mypy`, the `scripts/bump-version.sh --check` version agreement, the generated rule-docs check, `pytest`, the dogfood self-check `gruff-py analyse src tests --fail-on advisory --no-baseline`, and `uv build`. `scripts/preflight-checks.sh` runs the same gates locally plus shellcheck and documentation-drift checks.
 
-The active workspace tooling story is GOAT Flow `1.18.0`, and all four tracked agent surfaces now declare it: `AGENTS.md` with `.agents/` and `.codex/`, `CLAUDE.md` with `.claude/`, `.github/copilot-instructions.md` with `.github/skills/`, plus `.goat-flow/config.yaml`, the shared skill references, the hooks, and the project-local `goat-flow` executable. Each instruction file stays standalone and owns its own skills directory; a version declared here that disagrees with `.goat-flow/config.yaml` is drift to fix, not peer metadata to record.
+The active workspace tooling story is GOAT Flow `1.19.0`, and all four tracked agent surfaces now declare it: `AGENTS.md` with `.agents/` and `.codex/`, `CLAUDE.md` with `.claude/`, `.github/copilot-instructions.md` with `.github/skills/`, plus `.goat-flow/config.yaml`, the shared skill references, the hooks, and the project-local `goat-flow` executable. Each instruction file stays standalone and owns its own skills directory; a version declared here that disagrees with `.goat-flow/config.yaml` is drift to fix, not peer metadata to record.
 
-The installed top-level skill playbooks are `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `naming-and-placement.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-human-facing-prose.md`, `writing-sentence-diagnostics.md`, and `writing-structure-diagnostics.md`; `.goat-flow/skill-docs/playbooks/README.md` is their index.
+The installed top-level skill playbooks are `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `naming-and-placement.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-fidelity-audit.md`, `writing-human-facing-prose.md`, `writing-sentence-diagnostics.md`, and `writing-structure-diagnostics.md`; `.goat-flow/skill-docs/playbooks/README.md` is their index.
 
 Packaging uses Hatchling from `pyproject.toml`; `uv build` emits artifacts under `dist/`. Pre-commit config mirrors the same checks, but its ruff hook auto-fixes, so non-mutating verification should use the explicit CI commands.
 

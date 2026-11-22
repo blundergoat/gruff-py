@@ -152,8 +152,8 @@ multiple-choice options.
 **Incident:** While reproducing the static-analysis-redundant-test false positives
 (see `.goat-flow/learning-loop/lessons/rule-verification.md` (search: `crafted fixture`)), the agent
 put a heredoc append (`cat >> fixture.py <<'PY' ... PY`) and `rm -rf <dir>` in a
-single Bash command. The `deny-dangerous.sh` PreToolUse guard
-(`.goat-flow/hooks/deny-dangerous.sh`) rejected the whole command for `rm -r without
+single Bash command. The `deny-dangerous.sh` PreToolUse guard (since replaced
+by `.goat-flow/hooks/deny-dangerous.mjs`) rejected the whole command for `rm -r without
 safe scoping`, so the append never ran. The next `gruff-py analyse` showed the
 newly-added case "not firing", which contradicted the agent's own AST
 introspection and cost a debugging detour until `wc -l` showed the fixture was
@@ -173,7 +173,8 @@ proved, first confirm the prior mutation actually applied (`wc -l`,
 **Created:** 2026-07-11
 **Incident:** While validating the repaired 0.5.0 milestone tree, the agent sent
 one long read-only Python heredoc containing structure, link, risk-order, and
-index checks. `.goat-flow/hooks/deny-dangerous.sh` rejected it before execution
+index checks. The `deny-dangerous.sh` guard (since replaced by
+`.goat-flow/hooks/deny-dangerous.mjs`) rejected it before execution
 as having more than 50 chained segments. A later path-check heredoc was also
 rejected because its regular expression contained literal backticks, which the
 guard conservatively classified as hidden command substitution. Neither failure

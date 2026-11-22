@@ -60,6 +60,7 @@ gates are green.
 **Reason:** `dead-code.unused-private-function`, which reported the cross-file
 private helpers, was retired in 0.6.0 (ADR-029). The principle still applies:
 name a helper by who uses it, and run root dogfood right after a split.
+ADR-029 also deleted the Markdown sanitizer modules cited below in `7f146cc`.
 **What happened:** The Markdown sanitizer provenance helper exceeded the
 project's 1,000-line error threshold, so it was split into a statement index and
 a flow model. Seven underscore-prefixed model functions were imported and used
@@ -68,11 +69,9 @@ checks a private function's enclosing module and reported every one as unused.
 Renaming only the cross-file API to public names inside the still-private module
 made ownership honest; module-internal helpers remained private.
 **Evidence:**
-`src/gruffpy/rule/security/_markdown_sanitizer_model.py` (search:
-`def combine_expression_safety`) and
-`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py` (search:
-`combine_expression_safety`) — the defining and consuming anchors are now
-explicit, and the repeated root dogfood scan returned zero findings.
+`def combine_expression_safety` in `_markdown_sanitizer_model.py` and its
+consumer in `_markdown_sanitizer_provenance.py` made the defining and consuming
+anchors explicit, and the repeated root dogfood scan returned zero findings.
 **Prevention:** Before splitting a large module, classify each moved symbol as
 module-internal or cross-file API. Give cross-file helpers public names even
 when their module is private, add full return/field documentation during the
@@ -82,6 +81,9 @@ import-aware lint or type checks.
 ## Lesson: Parametrize case ids must use the checked decorator surface
 
 **Created:** 2026-07-12
+**Status:** resolved
+**Reason:** ADR-029 retired `test-quality.parametrize-annotation` in 0.6.0
+(`7f146cc`), so root dogfood no longer checks the decorator-level `ids=` surface.
 **What happened:** A three-case Boolean naming test used
 `pytest.param(..., id=...)` for every row, so pytest displayed readable case
 names and focused/static gates passed. Root dogfood still reported
@@ -96,11 +98,10 @@ own `ids=` surface.
 It recurred again on 2026-08-06 in the same file's source-order matrix:
 five readable row-level ids did not satisfy the rule until the decorator
 received its explicit `ids=` tuple.
-**Evidence:**
-`src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search:
-`def _parametrize_candidate`) checks `call_keyword(decorator, "ids")`, while
-`tests/unit/rule/naming/test_boolean_prefix_rule.py` (search:
-`def test_vague_boolean_names_still_fire`) now supplies that exact surface.
+**Evidence:** The retired rule's `_parametrize_candidate` checked
+`call_keyword(decorator, "ids")`, while the Boolean naming test
+`test_vague_boolean_names_still_fire` supplied that exact surface. Both files
+were deleted in `7f146cc`.
 **Prevention:** For any literal parametrization above the configured case
 threshold, put human-readable labels in the decorator's `ids=` argument even
 when individual `pytest.param` rows could carry their own ids. Run root
@@ -169,6 +170,9 @@ a false negative. Whenever a guard has two directions, pin both in one matrix.
 ## Lesson: Generated Python fixtures need a minimum-runtime execution gate
 
 **Created:** 2026-07-16
+**Status:** historical
+**Reason:** ADR-029 deleted the Markdown sanitizer tests in 0.6.0 (`7f146cc`).
+The minimum-runtime gate still applies to any test that generates source code.
 **Incident:** The Markdown sanitizer test helper generated f-strings whose
 double-quoted expressions reused the outer double quote. Python 3.12 accepted
 that PEP 701 grammar, so local verification passed, but the supported Python
@@ -180,9 +184,9 @@ runtime repair also validated string-valued `ast.Constant` nodes in one loop
 and consumed them in a later loop; mypy correctly rejected the non-local
 narrowing until the consuming branch repeated the value-type check.
 
-**Evidence:** `tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
-(search: `def _link_source`) now uses a triple-quoted outer f-string, and its
-full module runs through:
+**Evidence:** The Markdown interpolation rule's test helper `_link_source`
+was rewritten with a triple-quoted outer f-string, and its full module ran
+through:
 `uv run --isolated --locked --all-extras --python 3.11 pytest -o addopts=''
 tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`.
 
@@ -295,8 +299,8 @@ proves the rule is silent, not that the harness is mis-wired.
 `test-quality.extends-production-class`, the first CLI true-positive scratch
 used `.goat-flow/scratchpad/0.4.0-M01/test_production_base.py` and returned
 zero target findings even though the source shape was `class TestX(ProductionY)`.
-Reading `src/gruffpy/rule/test_quality/extends_production_class_rule.py`
-(search: `def _is_test_file`) showed the rule only runs for paths under
+Reading the rule's `_is_test_file` predicate (the module was deleted in
+`7f146cc`) showed the rule only runs for paths under
 `tests/` or a top-level `test_*.py`; a nested filename alone is not enough. The
 scratch repro passed only after moving it to
 `.goat-flow/scratchpad/0.4.0-M01/tests/test_production_base.py`.
@@ -330,9 +334,9 @@ tables to module-level constants cleared all seven errors with every pytest
 node id unchanged, and a value-level dump of all collected cases matched before
 and after.
 
-`test-quality.parametrize-annotation` counts only literal tables,
-`src/gruffpy/rule/test_quality/parametrize_annotation_rule.py` (search: `case_count = len(cases.elts)`),
-so a named constant also stops it asking for `ids=`. Name the rows anyway, with
+`test-quality.parametrize-annotation` counted only literal tables, so a named
+constant also stopped it asking for `ids=`; ADR-029 retired the rule in 0.6.0
+(`7f146cc`). Name the rows anyway, with
 `pytest.param(..., id=...)` or a sibling `_..._IDS` tuple, as
 `tests/unit/rule/security/test_github_actions_secrets_in_pr_rule.py` (search: `_OWN_WORKFLOW_EVENT_GUARD_IDS`) does.
 

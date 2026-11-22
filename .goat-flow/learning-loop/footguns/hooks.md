@@ -1,7 +1,45 @@
 ---
 category: hooks
-last_reviewed: 2026-10-15
+last_reviewed: 2026-11-23
 ---
+
+## Footgun: goat-flow 1.19.0 install exits 1 for each provider still on the retired bash runtime
+
+**Status:** active | **Created:** 2026-11-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When an upgrade replaces the hook runtime, run `install . --agent <id>` for every tracked agent, then re-run it for each agent that did not print `Install verified for <agent>`; a `Runtime migration is incomplete` exit is not a reason to roll back unless the re-run also fails.
+**Trigger phase:** ACT
+**Incident count:** 1
+**Latest occurrence:** 2026-11-23
+
+Upgrading 1.18.0 to 1.19.0, sequential `install . --agent claude|codex|antigravity|copilot`
+runs exited 1 for claude, codex, and antigravity with `Fatal error: Runtime migration is
+incomplete: a provider still references the retired runtime. Its dependencies were preserved.`
+Each failed run had already moved its own provider's registrations from
+`run-with-bash.mjs` and the `.sh` hooks to `.goat-flow/hooks/run-hook.mjs`. It stopped
+because the providers not yet installed still pointed at the bash runtime. The copilot
+run came last, found no provider on the old runtime, removed the 10 retired files, and
+printed `Install verified for copilot (1.19.0)`. Re-running install for claude, codex,
+and antigravity then printed `Install verified` for each, with exit 0.
+
+The `install --dry-run` preview exited 0 for all four agents beforehand, so it does not
+predict this failure. After the re-runs, every provider config references only the new
+runtime: `.claude/settings.json` (search: "run-hook.mjs").
+
+## Footgun: the Codex hook contract test pins goat-flow's hook file names
+
+**Status:** active | **Created:** 2026-11-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** After any goat-flow upgrade that changes hook registrations, run `uv run pytest tests/integration/test_hook_contract.py` and move its path literals to the installed runtime before running the full gate.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-11-23
+
+`test_codex_registers_post_edit_quality_hook` asserts that the Codex `PostToolUse`
+command names the quality hook and its launcher by file name. The 1.19.0 upgrade
+renamed both, so the full suite reported `1 failed, 2938 passed` with
+`assert '.goat-flow/hooks/gruff-code-quality.sh' in 'node -e ...'`. Neither the
+installer, `goat-flow audit`, nor `hooks verify` reads project tests, so only
+`uv run pytest` caught it. The literals now name `gruff-code-quality.mjs` and
+`run-hook.mjs` in `tests/integration/test_hook_contract.py` (search: "run-hook.mjs").
 
 ## Footgun: goat-flow install appends a duplicate Stop registration on every run
 
@@ -18,9 +56,9 @@ idempotently and collapses the copies back to one, so sync is the repair.
 
 Measured 2026-08-11 on goat-flow 1.15.1 while upgrading from 1.15.0. Running
 `install . --agent claude|codex|antigravity|copilot` sequentially left
-`.codex/hooks.json` (search: `post-turn-safety.sh`) with two identical
+`.codex/hooks.json` (search: `post-turn-safety.mjs`) with two identical
 `Stop` entries where it previously had one, and `.codex/hooks.json` (search:
-`post-turn-safety.sh`) with two where it previously had none.
+`post-turn-safety.mjs`) with two where it previously had none.
 `hooks sync . --agent claude` collapsed claude back to a single entry. A later
 `install . --agent claude --update-config-version` re-created the duplicate,
 which is what proves the append happens on every install rather than only on
@@ -33,6 +71,9 @@ verification trio reports them. Check the registration counts directly, or run
 Not reproduced 2026-10-03 on goat-flow 1.17.0 or 2026-10-15 on goat-flow 1.18.0:
 four sequential `install . --agent claude|codex|antigravity|copilot` runs left
 exactly one `Stop` registration in `.claude/settings.json` and in `.codex/hooks.json`.
+Not reproduced 2026-11-23 on goat-flow 1.19.0 either: re-running `install . --agent claude`
+and `install . --agent codex` after the upgrade left one `Stop` entry in each file before
+`hooks sync` ran. The `.sh` hook names in the 2026-08-11 measurement are now `.mjs`.
 
 ## Footgun: goat-flow install drops retired Claude denies without adding the new ones
 
@@ -62,6 +103,10 @@ printed review guidance for `Read(**/credentials.json)` and `Edit(**/credentials
 without adding them to `permissions.deny` or adding `Edit(.env.example)` and
 `Edit(**/.env.example)` to `permissions.allow`; diffing `.claude/settings.json`
 (search: "Read(**/credentials.json)") against the shipped template aligned both lists.
+
+Not reproduced 2026-11-23 upgrading 1.18.0 to 1.19.0: after install, `permissions.allow`
+(4 rules) and `permissions.deny` (74 rules) matched the package's
+`workflow/hooks/agent-config/claude.json` template exactly, and nothing was dropped.
 
 ## Resolved Entries
 
