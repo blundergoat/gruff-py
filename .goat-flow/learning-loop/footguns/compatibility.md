@@ -1,20 +1,22 @@
 ---
 category: compatibility
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-23
 ---
 
-## Footgun: Baseline and hotspot schema strings are language-prefixed while every sibling uses the shared `gruff.*` name
+## Footgun: Hotspot and config schema strings are per-port while analysis, summary, and baseline strings are shared
 
-**Status:** active | **Created:** 2026-08-11 | **Evidence:** OBSERVED
-**Decision changed:** Treat `gruff-py.baseline.v1` and `gruff-py.hotspot.v1` as known divergences, not as the cross-port contract; verify against the sibling checkouts before writing or "restoring" either string.
+**Status:** active | **Created:** 2026-08-11 | **Updated:** 2026-11-23 | **Evidence:** OBSERVED
+**Decision changed:** Treat `gruff.analysis.v3`, `gruff.summary.v3`, and `gruff.baseline.v3` as the shared contract and `gruff-py.hotspot.v1` and `gruff-py.config.v0.1` as per-port strings; grep the sibling checkouts before changing or "restoring" any of them.
 **Trigger phase:** READ
 **Tags:** hallucination-risk: high
 
-`src/gruffpy/analysis/schema.py` (search: `BASELINE_SCHEMA_VERSION`) emits `gruff-py.baseline.v1` and `gruff-py.hotspot.v1`, while the analysis and summary strings were migrated to the shared, unprefixed `gruff.analysis.v2` and `gruff.summary.v2`. The module docstring records that split as "unchanged" rather than as a decision, and no ADR in `.goat-flow/learning-loop/decisions/` covers it.
+**Prevention:** Before changing a schema string, grep each sibling checkout for its current constant instead of trusting local prose, this entry included. Change a shared string only through the workspace `FAMILY-CONTRACT.md`. A per-port string can change alone, but no sibling reader parses it.
 
-The sibling checkouts do not agree with gruff-py on either string. gruff-ts and gruff-rs emit `gruff.baseline.v1` and `gruff.hotspot.v1`. gruff-php has already moved past both: its `BaselineStore` class (grep the gruff-php checkout for `SCHEMA_VERSION = 'gruff.baseline.v2'`) writes v2 and fails closed on v1 with "Baseline schema gruff.baseline.v1 is no longer supported". Sibling paths are deliberately not written as backticked refs here, because the learning-loop ref checker resolves those from this project root.
+`src/gruffpy/analysis/schema.py` (search: `BASELINE_SCHEMA_VERSION = "gruff.baseline.v3"`) emits the shared `gruff.analysis.v3`, `gruff.summary.v3`, and `gruff.baseline.v3`. gruff-go, gruff-php, gruff-rs, and gruff-ts emitted the same three strings when checked on 2026-11-23. The same module keeps two per-port strings, `gruff-py.hotspot.v1` and `gruff-py.config.v0.1`; gruff-ts names its config schema the same way (`gruff-ts.config.v0.1`).
 
-The non-obvious failure mode is directional. `src/gruffpy/analysis/baseline.py` (search: `LEGACY_BASELINE_SCHEMA_VERSION`) accepts `gruff.baseline.v1` on read, so a sibling-written baseline loads and the divergence stays invisible locally - but every baseline gruff-py writes carries a string no sibling accepts, and gruff-php rejects the v1 form gruff-py reads. Hotspot output has no read path and no fallback at all, so `gruff-py.hotspot.v1` never matches a consumer parsing sibling hotspot reports. Naming the prefixed strings as the compatibility contract is the specific mistake to avoid; before changing either string, grep the sibling checkouts for the current constant rather than trusting a local doc.
+Hotspot output is where the ports still diverge. On 2026-11-23 gruff-rs and gruff-ts emitted `gruff.hotspot.v1`, gruff-php emitted `gruff-php.hotspot.v1`, and gruff-go had no hotspot schema. The family contract ratifies no shared hotspot schema, and hotspot output has no read path or fallback, so no consumer can parse every port's hotspot report by schema string. Sibling paths stay out of backticks because the learning-loop ref checker resolves them from this project root.
+
+The baseline string used to be the trap. Before 0.6.0, gruff-py wrote `gruff-py.baseline.v1` and read `gruff.baseline.v1` as a fallback. `src/gruffpy/analysis/baseline.py` (search: `LEGACY_BASELINE_SCHEMA_VERSIONS`) now refuses both v1 forms and points the user to `gruff-py analyse --migrate-baseline`. Prose that names a prefixed baseline string as current output is stale.
 
 ## Footgun: Finding fingerprints depend on PHP-style JSON bytes
 
@@ -56,27 +58,6 @@ accepted but discarded before `run_analysis()`. Before documenting a compatibili
 flag as a workflow, prove the option value reaches the runtime request and add an
 integration test for its side effect.
 
-## Footgun: Removing a registered rule ID breaks downstream config loads
-
-**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
-**Tags:** hallucination-risk: high
-
-`ConfigLoader` rejects any `rules.<id>` entry whose key is not present in
-`RuleRegistry.defaults()`. Evidence anchors: `src/gruffpy/config/loader.py`
-(search: `Unknown rule id`) and `src/gruffpy/rule/catalog.py` (search:
-`def _entry`).
-
-The non-obvious failure mode is that dropping a previously-shipped rule from
-the catalog turns every downstream config that pinned that rule into a hard
-`ConfigError` at analyse/report time - the analyser fails before scanning
-anything. An empirical reproduction with `test-quality.testdox-readability`
-(removed in commit e8b8814) raises `ConfigError: Unknown rule id
-"test-quality.testdox-readability"` when an upgraded project still mentions the
-ID. Treat rule removals as a public-API break: either keep the ID as a
-deprecated no-op for one release (accept-and-warn in the loader) or call the
-removal out explicitly in release notes and the cross-implementation
-compatibility contract.
-
 ## Footgun: minimumSeverity defaults span six surfaces in lockstep
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
@@ -113,6 +94,27 @@ ADR-019 records the contract; cross-port coordination posture lives in local
 milestone planning notes (search: `Coordination posture`).
 
 ## Resolved Entries
+
+## Footgun: Removing a registered rule ID breaks downstream config loads
+
+**Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+
+Resolved in `0490c9f`: an unknown `rules.<id>` entry now warns and is ignored
+by default, and raises `ConfigError` only under `--strict-config`.
+`src/gruffpy/config/loader.py` (search: `Unknown rule id`) routes the entry
+through `_warn_or_raise`, and
+`tests/unit/config/test_loader_precedence.py` (search: `def test_removed_npath_rule_pin_warns_by_default_and_raises_under_strict`)
+pins both modes. Rule removals still belong in release notes, because
+strict-config users get the hard error.
+
+Before that change, `ConfigLoader` rejected any `rules.<id>` entry whose key
+was not present in `RuleRegistry.defaults()` (`src/gruffpy/rule/catalog.py`,
+search: `def _entry`). Dropping a previously shipped rule turned every
+downstream config that pinned it into a hard `ConfigError` before scanning. An
+empirical reproduction with `test-quality.testdox-readability` (removed in
+commit e8b8814) raised `ConfigError: Unknown rule id
+"test-quality.testdox-readability"` when an upgraded project still mentioned
+the ID.
 
 ## Footgun: OutputFormat accepted more formats than reporters implemented
 
