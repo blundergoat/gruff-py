@@ -46,7 +46,7 @@ Related rules:
 
 Every detail view starts with a fixed header (id, name, pillar, tier, severity, confidence, enabled). After the header, sections appear when the rule has data to show:
 
-- **Rationale, Fix guidance, Bad example, Good example** — sourced from the curated `RuleDocs` metadata. Most rules carry auto-generated text; a handful (e.g. `docs.dataclass-attributes`, `docs.complex-branch-rationale`) have hand-written entries.
+- **Rationale, Fix guidance, Bad example, Good example** — sourced from the curated `RuleDocs` metadata. Most rules carry auto-generated text; a handful (e.g. `docs.dataclass-attributes`) have hand-written entries.
 - **Default options** — appears only when the rule has per-rule options. Each row shows the option name, type, and one-line description.
 - **Escape hatches** — every config key path you can set for this rule, plus `rules.<id>.enabled` to turn it off entirely.
 - **Confidence** — why the rule has its configured confidence rating.

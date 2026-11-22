@@ -84,7 +84,6 @@ selection:
   - dead-code.unused-private-attribute
   - design.runtime-sys-path-mutation
   - design.single-implementor-protocol
-  - docs.complex-branch-rationale
   - docs.dataclass-attributes
   - docs.ignore-directive-reason
   - docs.missing-class-docstring
@@ -157,7 +156,6 @@ selection:
   - test-quality.mocking-domain-object
   - test-quality.naming-consistency
   - test-quality.no-assertions
-  - test-quality.private-reflection
   - test-quality.pytest-coverage-source-missing
   - test-quality.pytest-deprecations-not-fatal
   - test-quality.pytest-strict-config-missing
@@ -228,14 +226,6 @@ rules:
       - ContextManager
       - AsyncContextManager
       additionalExcludedPaths: []
-  # Complex branch rationale
-  docs.complex-branch-rationale:
-    enabled: true
-    options:
-      cyclomatic_warning: 10
-      cognitive_warning: 15
-      private_cyclomatic_warning: 15
-      private_cognitive_warning: 20
   # Dataclass attributes
   docs.dataclass-attributes:
     enabled: true
@@ -510,9 +500,6 @@ rules:
   # Test without assertions
   test-quality.no-assertions:
     enabled: false
-  # Private reflection in test
-  test-quality.private-reflection:
-    enabled: true
   # Coverage source missing
   test-quality.pytest-coverage-source-missing:
     enabled: true

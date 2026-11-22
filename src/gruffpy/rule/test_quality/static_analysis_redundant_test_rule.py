@@ -12,8 +12,7 @@ a class-body method or a real runtime attribute. Anything dynamic, imported,
 instance-bound, private, or behavioural stays clean - it carries signal this rule
 cannot prove redundant. Ports gruff-php's product semantics, not its AST mechanics:
 Python ``hasattr`` reflects runtime attributes, so a bare annotation (``x: T`` with
-no value) is not evidence, and private/dunder access stays with
-``test-quality.private-reflection``.
+no value) is not evidence, and private or dunder access stays out of scope.
 """
 
 import ast

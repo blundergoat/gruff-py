@@ -21,7 +21,6 @@ from gruffpy.rule.dead_code.unused_private_attribute_rule import UnusedPrivateAt
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
-from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.docs.missing_class_docstring_rule import MissingClassDocstringRule
@@ -117,7 +116,6 @@ from gruffpy.rule.test_quality.mock_only_test_rule import MockOnlyTestRule
 from gruffpy.rule.test_quality.mocking_domain_object_rule import MockingDomainObjectRule
 from gruffpy.rule.test_quality.naming_consistency_rule import NamingConsistencyRule
 from gruffpy.rule.test_quality.no_assertions_rule import NoAssertionsRule
-from gruffpy.rule.test_quality.private_reflection_rule import PrivateReflectionRule
 from gruffpy.rule.test_quality.pytest_coverage_source_missing_rule import (
     PytestCoverageSourceMissingRule,
 )
@@ -380,11 +378,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "Keep the abstraction when it is an external contract; exclude the reviewed path with "
         "`options.additionalExcludedPaths` or suppress the finding with that reason.",
     ),
-    "docs.complex-branch-rationale": (
-        "A complex function's rationale can live in an architecture record or issue rather "
-        "than in the nearby docstring or branch comment this rule inspects.",
-        "Add a substantive local rationale, or tune the public/private cyclomatic and cognitive warning options to the project's documented policy.",
-    ),
     "docs.dataclass-attributes": (
         "Dataclass fields documented by an inherited schema or external generator are not visible in the class's local docstring.",
         "Add a local Attributes section, or tune `options.min_fields`, "
@@ -502,10 +495,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A compatibility or staged migration suite can intentionally mix pytest function names with unittest-style function or class names.",
         "Complete the rename when compatibility permits, or suppress the file-level advisory with the migration reason.",
     ),
-    "test-quality.private-reflection": (
-        "A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.",
-        "Prefer public behavior, or suppress the reviewed access with the compatibility contract it protects.",
-    ),
     "test-quality.pytest-coverage-source-missing": (
         "Coverage source can be supplied by CI arguments, `.coveragerc`, or environment settings that the pyproject-only check does not read.",
         "Declare `[tool.coverage.run]` source, or suppress the project finding after checking the external coverage command.",
@@ -604,12 +593,6 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
         ),
         "additionalExcludedPaths": ("Project-relative glob patterns for files exempt from the rule."),
     },
-    "docs.complex-branch-rationale": {
-        "cyclomatic_warning": ("Public-function cyclomatic threshold above which rationale is required."),
-        "cognitive_warning": ("Public-function cognitive complexity threshold above which rationale is required."),
-        "private_cyclomatic_warning": ("Private-function cyclomatic threshold; private functions get more headroom."),
-        "private_cognitive_warning": "Private-function cognitive complexity threshold.",
-    },
     "docs.dataclass-attributes": {
         "min_fields": ("Minimum dataclass field count before an Attributes docstring is required."),
         "require_all_fields": ("When true, every dataclass field must appear in the Attributes block."),
@@ -674,7 +657,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(UnusedPrivateAttributeRule),
     _entry(RuntimeSysPathMutationRule),
     _entry(SingleImplementorProtocolRule),
-    _entry(ComplexBranchRationaleRule),
     _entry(DataclassAttributesRule),
     _entry(IgnoreDirectiveReasonRule),
     _entry(MissingClassDocstringRule),
@@ -740,7 +722,6 @@ BUILTIN_RULES: tuple[BuiltInRule, ...] = (
     _entry(MockingDomainObjectRule),
     _entry(NamingConsistencyRule),
     _entry(NoAssertionsRule),
-    _entry(PrivateReflectionRule),
     _entry(PytestCoverageSourceMissingRule),
     _entry(PytestDeprecationsNotFatalRule),
     _entry(PytestStrictConfigMissingRule),

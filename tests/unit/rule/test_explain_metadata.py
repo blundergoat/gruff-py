@@ -13,7 +13,6 @@ from gruffpy.rule.registry import RuleRegistry
 
 _OPTION_DESCRIPTION_RULES = (
     "design.single-implementor-protocol",
-    "docs.complex-branch-rationale",
     "docs.dataclass-attributes",
     "docs.missing-class-docstring",
     "naming.generic-function",

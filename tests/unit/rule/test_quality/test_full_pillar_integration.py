@@ -19,7 +19,6 @@ _EXPECTED_COUNTS = {
     "test-quality.mocking-domain-object": 1,
     "test-quality.naming-consistency": 1,
     "test-quality.no-assertions": 1,
-    "test-quality.private-reflection": 1,
     "test-quality.pytest-coverage-source-missing": 1,
     "test-quality.pytest-deprecations-not-fatal": 1,
     "test-quality.pytest-strict-config-missing": 1,

@@ -69,6 +69,8 @@ time, so a project using more than one of them moves once. This port's recorded 
 
 31. **Test-function-too-long becomes opt-in** - Set `rules.test-quality.test-function-too-long.enabled: true` to retain this check. Nine of twenty-five repaired findings were worth acting on, below the 0.70 test-quality floor. Existing explicit enable settings remain effective; `--include-rule` alone does not enable it. Enabled scans keep single literal response snapshots quiet and retain the same physical code-line threshold for other tests.
 
+32. **Two rules measured on unseen code are removed** - `docs.complex-branch-rationale` was right on 20 of 50 judged findings and `test-quality.private-reflection` on 6 of 25, below the 50% line. Remove both IDs from selections and suppression comments; obsolete `rules:` blocks warn, or fail with `--strict-config`.
+
 ## Upgrade workflow (`0.5.x` → `0.6.0`)
 
 `naming.generic-function` becomes opt-in because its bounded repair remains below the 0.60 naming floor at 28 right of 49 judged findings. Set `rules.naming.generic-function.enabled: true` to retain it; `--include-rule` alone does not enable it. Enabled scans accept required methods on explicitly imported Django commands (`handle`, `execute`), docutils directives (`run`), threads (`run`) and logging handlers (`handle`). Import aliases are supported; ambiguous bindings and unrecognized bases still report. Options and remediation are unchanged.

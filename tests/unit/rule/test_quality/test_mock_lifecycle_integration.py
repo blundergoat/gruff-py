@@ -53,7 +53,6 @@ def test_global():
 _EXPECTED_MOCK_LIFECYCLE_FIRES = {
     "test-quality.empty-parametrize",
     "test-quality.unused-mock",
-    "test-quality.private-reflection",
     "test-quality.global-state-mutation",
 }
 

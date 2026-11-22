@@ -1,6 +1,5 @@
 # gruff: disable-file=size.file-length -- end-to-end CLI smoke covers every subcommand.
 # gruff: disable-file=test-quality.loop-assertion-without-message -- row ruleId self-describes.
-# gruff: disable-file=docs.complex-branch-rationale -- branches mirror the --format axis.
 """Exercise complete CLI journeys from user-entered options to visible output.
 
 The smoke suite protects every command's parsing, diagnostics, and report shape.

@@ -127,7 +127,6 @@ def slot(x) -> int:
 )
 
 _EXPECTED_RULE_IDS = {
-    "docs.complex-branch-rationale",
     "docs.dataclass-attributes",
     "docs.ignore-directive-reason",
     "docs.missing-module-docstring",

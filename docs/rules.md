@@ -1,6 +1,6 @@
 # Rules
 
-gruff-py `0.6.0` registers 96 rules across 10 pillars in `RuleRegistry.defaults()`.
+gruff-py `0.6.0` registers 94 rules across 10 pillars in `RuleRegistry.defaults()`.
 
 This file is generated from the first-party built-in rule catalog.
 Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.
@@ -14,10 +14,10 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 | `correctness` | 2 | Mechanically detectable runtime-defect shapes |
 | `dead-code` | 4 | Unused and waste-oriented rules |
 | `naming` | 5 | Intent-layer names; PEP 8 case style stays with ruff |
-| `documentation` | 12 | Docstring presence and quality, stale docs, TODO density, README presence |
+| `documentation` | 11 | Docstring presence and quality, stale docs, TODO density, README presence |
 | `security` | 32 | Heuristic AST-level dangerous patterns |
 | `sensitive-data` | 9 | Secret, key, PII, and PHI patterns |
-| `test-quality` | 20 | Pytest-aware test smells and project config checks |
+| `test-quality` | 19 | Pytest-aware test smells and project config checks |
 | `design` | 2 | Project-level abstraction and runtime import-path checks |
 
 ## Rule IDs
@@ -60,7 +60,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 
 ### Documentation
 
-- `docs.complex-branch-rationale`
 - `docs.dataclass-attributes`
 - `docs.ignore-directive-reason`
 - `docs.missing-class-docstring`
@@ -130,7 +129,6 @@ Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify
 - `test-quality.mocking-domain-object`
 - `test-quality.naming-consistency`
 - `test-quality.no-assertions` (default off)
-- `test-quality.private-reflection`
 - `test-quality.pytest-coverage-source-missing`
 - `test-quality.pytest-deprecations-not-fatal`
 - `test-quality.pytest-strict-config-missing`
@@ -317,24 +315,6 @@ except ValueError:
     Mitigation: Keep the abstraction when it is an external contract; exclude the reviewed path with `options.additionalExcludedPaths` or suppress the finding with that reason.
 - Bad example: `class Renderer(Protocol): ...` with only `class HtmlRenderer(Renderer): ...` and no other `Renderer` usage.
 - Good example: `Renderer` used in a factory annotation, registry value, `isinstance`, or `issubclass` check outside the implementor.
-
-### `docs.complex-branch-rationale`
-
-- Name: Complex branch rationale
-- Pillar: `documentation`
-- Tier: `v0.1`
-- Default severity: `advisory`
-- Confidence: `medium`
-- Default enabled: yes
-- Rationale: Highly branched functions are expensive to review; when they cannot be simplified, maintainers need the protocol, bug, or compatibility reason for the branch structure.
-- Fix guidance: Extract the branching logic, or add a substantive docstring or nearby rationale comment explaining why the complexity remains.
-- Confidence rationale: Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments.
-- Options: `cognitive_warning` = `15`, `cyclomatic_warning` = `10`, `private_cognitive_warning` = `20`, `private_cyclomatic_warning` = `15`
-- Common false-positive shapes:
-  - A complex function's rationale can live in an architecture record or issue rather than in the nearby docstring or branch comment this rule inspects.
-    Mitigation: Add a substantive local rationale, or tune the public/private cyclomatic and cognitive warning options to the project's documented policy.
-- Bad example: A public parser function with many `if` branches and no docstring.
-- Good example: A complex compatibility router with a docstring naming the legacy protocol.
 
 ### `docs.dataclass-attributes`
 
@@ -1520,23 +1500,6 @@ except ValueError:
 - Bad example: `def test_saves_user(): service.save(user)`
 - Good example: `def test_saves_user(): service.save(user); assert_user_saved(user)`
 
-### `test-quality.private-reflection`
-
-- Name: Private reflection in test
-- Pillar: `test-quality`
-- Tier: `v0.1`
-- Default severity: `warning`
-- Confidence: `low`
-- Default enabled: yes
-- Rationale: `test-quality.private-reflection` protects the test-quality pillar by flagging private reflection in test before it becomes costly to review, maintain, or trust.
-- Fix guidance: Address the reported private reflection in test directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
-- Confidence rationale: Low confidence: the rule is intentionally conservative and may need tuning.
-- Common false-positive shapes:
-  - A compatibility, serialization, or migration test can deliberately verify a private attribute as the persisted contract.
-    Mitigation: Prefer public behavior, or suppress the reviewed access with the compatibility contract it protects.
-- Bad example: Code that triggers `test-quality.private-reflection` leaves private reflection in test unaddressed.
-- Good example: Code that satisfies `test-quality.private-reflection` makes private reflection in test explicit or simpler.
-
 ### `test-quality.pytest-coverage-source-missing`
 
 - Name: Coverage source missing
@@ -1770,7 +1733,6 @@ A rule's confidence follows its measured precision: high at an error-adjusted sc
 | `dead-code.unused-private-attribute` | medium | insufficient |
 | `design.runtime-sys-path-mutation` | high | unmeasured |
 | `design.single-implementor-protocol` | medium | unmeasured |
-| `docs.complex-branch-rationale` | medium | insufficient |
 | `docs.missing-readme` | medium | unmeasured |
 | `docs.stale-param-doc` | high | insufficient |
 | `docs.todo-density` | medium | insufficient |

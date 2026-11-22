@@ -16,7 +16,6 @@ from gruffpy.rule.dead_code.exported_but_unreferenced_rule import ExportedButUnr
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.design.runtime_sys_path_mutation_rule import RuntimeSysPathMutationRule
 from gruffpy.rule.design.single_implementor_protocol_rule import SingleImplementorProtocolRule
-from gruffpy.rule.docs.complex_branch_rationale_rule import ComplexBranchRationaleRule
 from gruffpy.rule.docs.dataclass_attributes_rule import DataclassAttributesRule
 from gruffpy.rule.docs.ignore_directive_reason_rule import IgnoreDirectiveReasonRule
 from gruffpy.rule.naming.abbreviation_rule import AbbreviationRule
@@ -169,8 +168,6 @@ def custom_docs_for(
             return _ignore_directive_reason_docs(config_keys)
         case DataclassAttributesRule.ID:
             return _dataclass_attributes_docs(config_keys)
-        case ComplexBranchRationaleRule.ID:
-            return _complex_branch_rationale_docs(config_keys)
         case StaticAnalysisRedundantTestRule.ID:
             return _static_analysis_redundant_docs(config_keys)
     return None
@@ -680,33 +677,6 @@ def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
         good_example="`Attributes:` section documenting `findings` and `exit_code`.",
         confidence_rationale=("Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold."),
-        config_keys=config_keys,
-    )
-
-
-def _complex_branch_rationale_docs(config_keys: tuple[str, ...]) -> RuleDocs:
-    """Build curated RuleDocs for ComplexBranchRationaleRule, asking why a highly branched function stays complex.
-
-    Args:
-        config_keys: Public config keys the catalog computed for the rule, stored unchanged as the returned docs' config_keys.
-
-    Returns:
-        Curated RuleDocs with rationale, fix guidance, examples and confidence rationale, and no false-positive shapes.
-    """
-    return RuleDocs(
-        rationale=(
-            "Highly branched functions are expensive to review; when they cannot be "
-            "simplified, maintainers need the protocol, bug, or compatibility reason "
-            "for the branch structure."
-        ),
-        fix_guidance=(
-            "Extract the branching logic, or add a substantive docstring or nearby rationale comment explaining why the complexity remains."
-        ),
-        bad_example="A public parser function with many `if` branches and no docstring.",
-        good_example="A complex compatibility router with a docstring naming the legacy protocol.",
-        confidence_rationale=(
-            "Medium confidence: the rule reuses existing complexity helpers and accepts substantive docstrings or nearby rationale comments."
-        ),
         config_keys=config_keys,
     )
 

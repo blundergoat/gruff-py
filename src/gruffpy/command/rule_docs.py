@@ -142,7 +142,6 @@ _INHERITED_CONFIDENCE: dict[str, str] = {
     "dead-code.unused-private-attribute": "insufficient",
     "design.runtime-sys-path-mutation": "unmeasured",
     "design.single-implementor-protocol": "unmeasured",
-    "docs.complex-branch-rationale": "insufficient",
     "docs.missing-readme": "unmeasured",
     "docs.stale-param-doc": "insufficient",
     "docs.todo-density": "insufficient",

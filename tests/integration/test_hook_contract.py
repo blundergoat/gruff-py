@@ -1,5 +1,4 @@
 # gruff: disable-file=test-quality.loop-assertion-without-message -- finding ruleId names the row.
-# gruff: disable-file=docs.complex-branch-rationale -- threshold branch mirrors finding shape.
 import ast
 import json
 import shutil
