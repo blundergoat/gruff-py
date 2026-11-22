@@ -1,7 +1,12 @@
-"""Project native analysis state into the shared v3 machine contracts."""
+"""Build the shared JSON envelopes for `analyse`, `report` and `summary`.
+
+Automation gets project-relative paths and the run data needed to interpret findings.
+The serializer uses the completed scan so JSON readers get the same analysis result as terminal users.
+"""
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -82,7 +87,8 @@ def analysis_payload(report: AnalysisReport) -> dict[str, Any]:
             "analysedFiles": report.files_parsed,
             "details": details,
             "ignoredPaths": ignored_paths,
-            "missingPaths": _machine_paths(
+            # An unresolved symlink still has a diagnostic, even when its location cannot be published.
+            "missingPaths": _machine_inputs(
                 report.missing_paths,
                 report.machine_context.project_root,
             ),
@@ -109,10 +115,8 @@ def summary_payload(report: AnalysisReport) -> dict[str, Any]:
 
 
 def _machine_run(report: AnalysisReport) -> dict[str, Any]:
-    """Build the run section of the analysis envelope from the report's settings, with inputs and config path made relative to the project root.
-
-    Inputs is an empty list when no path can be made root-relative. Missing or unprojectable config paths omit config.
-    Configuration warnings and a non-None partial-context caveat appear under extensions.py.run.
+    """Present the settings and operands that shaped this scan.
+    Automation can use this section to distinguish runs with different paths, display filters or coverage limits.
 
     Args:
         report: Native run state supplying the fail-on level, output format, requested paths, config path, filters, configuration warnings and
@@ -129,19 +133,26 @@ def _machine_run(report: AnalysisReport) -> dict[str, Any]:
         "inputs": _machine_inputs(report.requested_paths, root),
         "projectRoot": ".",
     }
+    # Runs using defaults have no config file to name.
     if report.config_path is not None:
-        config_path = _machine_relative_path(report.config_path, root)
+        config_path = project_relative_path(report.config_path, root)
+        # An explicit config may live outside the checkout, so only a project path is published.
         if config_path is not None:
             payload["config"] = config_path
+    # Record a requested display filter separately so readers can tell presentation settings from rule selection.
     if report.filters is not None and report.filters.is_active():
         payload["filters"] = _machine_run_filters(report.filters.to_dict())
+    # Record when the operator deliberately scanned paths the default discovery rules would skip.
     if report.machine_context.include_ignored:
         payload["includeIgnored"] = True
     native: dict[str, Any] = {}
+    # A scan can proceed after disregarding a bad rule setting, so keep that warning with the result.
     if report.config_warnings:
         native["configWarnings"] = list(report.config_warnings)
+    # Project-wide rules may have incomplete evidence when the user asks for a diff or a narrow target.
     if report.partial_context_caveat is not None:
         native["partialContextCaveat"] = report.partial_context_caveat
+    # Omit the Python extension when there are no native warnings or caveats to show.
     if native:
         payload["extensions"] = {"py": {"run": native}}
     return payload
@@ -298,10 +309,8 @@ def _machine_finding(finding: Finding, root: str) -> dict[str, Any]:
 
 
 def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
-    """Project one run diagnostic into the machine diagnostic object.
-
-    invalidatesRun defaults to true when the diagnostic leaves it unset. The file comes from file_path, falling back to path, and is omitted when it
-    cannot be expressed under the project root; line appears only when positive.
+    """Publish a diagnostic so automation can explain an incomplete or failed scan.
+    A missing fatality flag defaults to fatal. Source locations appear only when a project-relative file or a positive line is available.
 
     Args:
         diagnostic: Entry from report.diagnostics supplying the message, location and whether the problem invalidates the run.
@@ -315,14 +324,28 @@ def _machine_diagnostic(diagnostic: RunDiagnostic, root: str) -> dict[str, Any]:
         "message": diagnostic.message,
         "invalidatesRun": (True if diagnostic.invalidates_run is None else diagnostic.invalidates_run),
     }
-    source_path = diagnostic.file_path or diagnostic.path
-    if source_path:
-        file_path = _machine_relative_path(source_path, root)
-        if file_path is not None:
-            payload["file"] = file_path
+    # A config or startup error can be useful even when there is no publishable file location.
+    if (file_path := diagnostic_file_path(diagnostic, root)) is not None:
+        payload["file"] = file_path
+    # Whole-file failures carry no line to open in an editor.
     if diagnostic.line is not None and diagnostic.line > 0:
         payload["line"] = diagnostic.line
     return payload
+
+
+def diagnostic_file_path(diagnostic: RunDiagnostic, root: str) -> str | None:
+    """Find the project-relative location shared by JSON, hook and SARIF diagnostics.
+    Use the source file when available, or the input path when the failure happened before the analyser opened a file.
+
+    Args:
+        diagnostic: Run problem whose file path takes precedence over its input path. When both are missing, readers get the message alone.
+        root: Project root the location is relative to.
+
+    Returns:
+        A POSIX path within the project, or None when the location cannot be published.
+    """
+    source_path = diagnostic.file_path or diagnostic.path
+    return project_relative_path(source_path, root) if source_path else None
 
 
 def _machine_ignored_paths(
@@ -559,10 +582,8 @@ def _add_optional_sections(payload: dict[str, Any], report: AnalysisReport) -> N
 
 
 def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
-    """Project a baseline report into the machine baseline section.
-
-    applied is false when this run generated the baseline rather than comparing against one. newFindings combines the new, collision and not-eligible
-    counts, and path appears only when it can be expressed under the project root.
+    """Explain how the run used reviewed findings in the JSON report.
+    Generation is recorded separately from matching. The output distinguishes entries still present from those now absent.
 
     Args:
         value: Baseline extension value from the report; anything other than a BaselineReport means there is no baseline section.
@@ -571,6 +592,7 @@ def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
     Returns:
         JSON-compatible baseline object, or None when value is not a BaselineReport.
     """
+    # A scan that skips or never reaches baseline handling has no baseline section.
     if not isinstance(value, BaselineReport):
         return None
     payload: dict[str, Any] = {
@@ -580,31 +602,36 @@ def _machine_baseline(value: Any, root: str) -> dict[str, Any] | None:
         "newFindings": value.new_count + value.collision_count + value.not_eligible_count,
         "resolvedFindings": value.absent_count,
         "source": value.source,
-        "stale": [_machine_baseline_entry(item) for item in value.stale_entries],
+        "stale": [_machine_baseline_entry(item, root) for item in value.stale_entries],
         "staleEntries": len(value.stale_entries),
         "staleEvaluation": value.stale_evaluation,
         "suppressedFindings": value.suppressed_findings,
         "unchangedFindings": value.unchanged_count,
     }
-    path = _machine_relative_path(value.path, root)
+    path = project_relative_path(value.path, root)
+    # An externally stored baseline can still affect the result without publishing its location.
     if path is not None:
         payload["path"] = path
     return payload
 
 
-def _machine_baseline_entry(value: Any) -> dict[str, Any]:
-    """Render one resolved row: the identity, how many occurrences went away, and the descriptive fields it carried.
+def _machine_baseline_entry(value: Any, root: str) -> dict[str, Any]:
+    """Describe a reviewed row whose count is no longer needed in this scan.
+    The identity and count let automation explain the change. Optional descriptions help a human recognise the original finding.
 
     Args:
         value: Stale baseline entry from the baseline report, carrying an identity, a count and optional rule, path and subject.
+        root: Project root used to normalize the recorded path.
 
     Returns:
-        JSON-compatible object with identity and count, plus ruleId, path and subject only when non-empty.
+        JSON-compatible object with identity and count, optional ruleId and subject, and a path only if it lies in the project.
     """
     payload: dict[str, Any] = {"identity": value.identity, "count": value.count}
-    for key, text in (("ruleId", value.rule_id), ("path", value.path), ("subject", value.subject)):
-        if text:
-            payload[key] = text
+    # Older or hand-edited rows may carry only an identity and count, which are enough for matching.
+    for field_name, label in (("ruleId", value.rule_id), ("path", project_relative_path(value.path, root)), ("subject", value.subject)):
+        # Empty labels add no location or description for a reviewer.
+        if label:
+            payload[field_name] = label
     return payload
 
 
@@ -722,7 +749,8 @@ def _machine_paths(values: Any, root: str) -> list[str]:
 
 
 def _machine_inputs(values: Any, root: str) -> list[str]:
-    """Make requested input paths root-relative and de-duplicate them, dropping any input that has no form under the project root.
+    """Publish unique paths suitable for the JSON report.
+    The scan can report a startup failure without disclosing an external location or failing on an unresolved input.
 
     Args:
         values: Requested input paths, each converted with str before projection.
@@ -731,11 +759,12 @@ def _machine_inputs(values: Any, root: str) -> list[str]:
     Returns:
         Root-relative POSIX input paths without duplicates, in first-seen order, with inputs outside the root omitted.
     """
-    # Omit inputs outside the root, as with config paths, to preserve startup failure envelopes without publishing host paths.
     paths: list[str] = []
     seen: set[str] = set()
+    # Keep the order in which the user named inputs so a refusal report still reflects the invocation.
     for value in values:
-        path = _machine_relative_path(str(value), root)
+        path = project_relative_path(str(value), root)
+        # Repeated spellings of the same file and inputs without a publishable path need no list entry.
         if path is not None and path not in seen:
             seen.add(path)
             paths.append(path)
@@ -743,7 +772,8 @@ def _machine_inputs(values: Any, root: str) -> list[str]:
 
 
 def _machine_path(value: str, root: str) -> str:
-    """Make one path root-relative, refusing any path that cannot be published under the project root.
+    """Require a project-relative path for a field whose contract needs a location.
+    Use this for findings and other records that cannot be published safely without a valid path.
 
     Args:
         value: Absolute path, or path relative to root, to project.
@@ -753,20 +783,18 @@ def _machine_path(value: str, root: str) -> str:
         Root-relative POSIX path.
 
     Raises:
-        ValueError: When _machine_relative_path finds no form for value under root, such as a path outside the root, an empty or backslash path, or a
-            Windows drive path.
+        ValueError: When the path is empty, uses a foreign path style, or resolves outside the project root.
     """
-    path = _machine_relative_path(value, root)
+    path = project_relative_path(value, root)
+    # Mandatory location fields cannot safely represent a finding outside the selected project.
     if path is None:
         raise ValueError(f"machine path {value!r} is outside the project root")
     return path
 
 
-def _machine_relative_path(value: str, root: str) -> str | None:
-    """Express a path relative to the project root in POSIX form, or report that it has no publishable form.
-
-    A relative value is resolved against root and symlinks are resolved on both sides. An OSError while resolving the candidate path counts as having
-    no form; resolving root itself is not guarded.
+def project_relative_path(value: str, root: str) -> str | None:
+    """Convert an input into a portable path inside the selected project.
+    Resolve links before publishing a location so a symlink cannot expose a file outside the checkout.
 
     Args:
         value: Absolute path, or path relative to root, to project.
@@ -774,17 +802,23 @@ def _machine_relative_path(value: str, root: str) -> str | None:
 
     Returns:
         A root-relative POSIX path, or . for the root itself.
-        None when value is empty, contains a backslash, starts with a Windows drive prefix, or resolves outside root.
-        None also covers OSError or ValueError while resolving the candidate or making it relative to root.
+        None when the path is empty, uses a foreign path style, or resolves outside the project root.
+        None also covers resolution errors such as an unlistable directory or a symlink loop in the input.
     """
-    if not value or "\\" in value or re.match(r"^[A-Za-z]:", value):
+    # A Linux reader cannot anchor a Windows drive path, and an empty input offers no location.
+    if not value or (os.name != "nt" and ("\\" in value or re.match(r"^[A-Za-z]:", value))):
         return None
     root_path = Path(root).resolve()
     candidate = Path(value)
+    # A Windows spelling such as `C:source.py` depends on the caller's drive-specific working directory.
+    if candidate.drive and not candidate.is_absolute():
+        return None
+    # For example, `src/app.py` is resolved from the project selected for this scan.
     if not candidate.is_absolute():
         candidate = root_path / candidate
     try:
         relative = candidate.resolve().relative_to(root_path)
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
+        # A circular link or a link outside the checkout has no location the report can publish safely.
         return None
     return relative.as_posix()

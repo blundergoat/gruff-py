@@ -1,9 +1,11 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.parser.analysis_unit import AnalysisUnit, ParseDiagnostic
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.size.file_length_rule import FileLengthRule
 from gruffpy.source.source_file import SourceFile
@@ -126,8 +128,12 @@ def test_substantive_lines_over_threshold_still_fire():
     assert findings[0].end_line == 131
 
 
-def test_docstring_lines_are_free_but_data_strings_count():
+@pytest.mark.parametrize("bounded", [False, True], ids=["parsed", "bounded"])
+def test_docstring_lines_are_free_but_data_strings_count(bounded: bool) -> None:
     """Report nothing for 90 code lines after a 62-line module docstring, but one finding when those lines are a data string instead.
+
+    Args:
+        bounded: Use the text-only line counter after the deep-scan budget is exceeded.
 
     Returns:
         None. Asserts zero findings for the docstring and one for the data string.
@@ -135,12 +141,13 @@ def test_docstring_lines_are_free_but_data_strings_count():
     docstring_body = "\n".join(["'''Module docs.", *(["docs line"] * 60), "'''"])
     source = docstring_body + "\n" + "\n".join(["x = 1"] * 90)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
+    diagnostics = (ParseDiagnostic("test budget", type="bounded-deep-scan", non_fatal=True),) if bounded else ()
+    unit = AnalysisUnit(file=file, source=source, tree=None if bounded else ast.parse(source), diagnostics=diagnostics)
     assert FileLengthRule().analyse(unit, _ctx(threshold=100)) == []
 
     data_lines = ["PAYLOAD = '''start", *(["payload line"] * 60), "'''", *(["x = 1"] * 90)]
     data_source = "\n".join(data_lines)
-    data_unit = AnalysisUnit(file=file, source=data_source, tree=ast.parse(data_source))
+    data_unit = AnalysisUnit(file=file, source=data_source, tree=None if bounded else ast.parse(data_source), diagnostics=diagnostics)
     findings = FileLengthRule().analyse(data_unit, _ctx(threshold=100))
     assert len(findings) == 1
 

@@ -1,4 +1,8 @@
-"""Numeric score paired with the letter grade derived from gruffpy's grade bands."""
+"""Combine a numeric analysis score with its letter grade.
+
+Reports use these helpers to present severity-weighted scores consistently.
+The grade bands apply after the raw score is bounded and rounded.
+"""
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -6,14 +10,19 @@ from decimal import ROUND_HALF_UP, Decimal
 
 @dataclass(frozen=True, slots=True)
 class Grade:
-    """Normalized numeric score paired with a letter grade."""
+    """Hold a normalised analysis score and the letter shown alongside it.
+
+    Use `from_score` when converting a raw numeric score for a report.
+    Use `letter` when only the grade label is needed.
+    """
 
     score: float
     letter: str
 
     @classmethod
     def from_score(cls, score: float) -> "Grade":
-        """Create a grade from a raw numeric score.
+        """Prepare the numeric score and letter displayed in a scan report.
+        Bound the score before rounding so even an unusually large raw score can be shown safely.
 
         Args:
             score: Raw score before clamping and rounding.
@@ -21,7 +30,7 @@ class Grade:
         Returns:
             Grade with score clamped to 0 through 100 and rounded to two decimals.
         """
-        normalised = max(0.0, min(100.0, _round_half_up(score)))
+        normalised = _round_half_up(max(0.0, min(100.0, score)))
         return cls(score=normalised, letter=cls.letter_for(normalised))
 
     @staticmethod

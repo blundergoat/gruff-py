@@ -1,26 +1,39 @@
-"""Renders findings as GitHub Actions workflow annotations."""
+"""Write GitHub Actions workflow commands for an analysis report.
+
+Use `analyse --format github` to show findings and diagnostics in CI.
+Suppression notices give a reviewer the recorded reason and count for findings withheld from the report.
+"""
 
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
+from gruffpy.analysis.suppression_summary import suppression_audit_text
 from gruffpy.finding.finding import Finding
 
 
 class GithubAnnotationsReporter:
-    """Render findings as ``::error``/``::warning``/``::notice`` lines for GitHub Actions PRs."""
+    """Present the findings and run notes as GitHub Actions annotations.
+
+    The workflow log can surface findings at their file locations.
+    Run diagnostics and suppression notices explain gaps in what the review shows.
+    """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render findings and run diagnostics as GitHub Actions workflow-command lines.
-
-        Findings use error, warning or notice for error, warning or advisory severity, respectively.
+        """Publish findings and run diagnostics as GitHub Actions annotations.
+        Errors, warnings and advisories appear at their respective levels. A notice records any active suppression audit.
 
         Args:
-            report: Report supplying the findings and run diagnostics to annotate.
+            report: Report supplying findings, diagnostics and the optional suppression audit to annotate.
 
         Returns:
-            Annotation lines with a trailing newline, or an empty string when both findings and diagnostics are empty.
+            Annotation lines with a trailing newline, or an empty string when there are no findings, diagnostics or active suppression notices.
         """
         lines = [*(_diagnostic_annotation(item) for item in report.diagnostics)]
+        audit = suppression_audit_text(report.suppressions)
+        # CI readers still need to see why findings were withheld when the findings list is empty.
+        if audit:
+            lines.append(f"::notice title=Sensitive exclusions::{_escape_data(audit)}")
         lines.extend(_annotation(finding) for finding in report.findings)
+        # A scan with nothing to annotate emits no workflow command.
         return "" if not lines else "\n".join(lines) + "\n"
 
 

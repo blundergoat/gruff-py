@@ -25,7 +25,7 @@ pytestmark = [
 
 
 def _run_perf_script_quick(json_out: Path, output_dir: Path) -> subprocess.CompletedProcess:
-    """Run ``scripts/test-performance.sh`` in quick mode with three repeats from the repository root.
+    """Run the quick performance suite from the temporary output directory's parent.
 
     Args:
         json_out: File that receives the script's JSON results.
@@ -45,11 +45,11 @@ def _run_perf_script_quick(json_out: Path, output_dir: Path) -> subprocess.Compl
             "--repeat",
             "3",
             "--json",
-            str(json_out),
+            json_out.name,
             "--output-dir",
-            str(output_dir),
+            output_dir.name,
         ],
-        cwd=str(REPO_ROOT),
+        cwd=json_out.parent,
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
@@ -188,7 +188,16 @@ def test_perf_script_payload_binds_its_runtime_source(
 
     assert len(source["gitCommit"]) == _GIT_COMMIT_LENGTH
     assert isinstance(source["gitDirty"], bool)
-    assert runtime_source["includedPaths"] == ["src/gruffpy", "pyproject.toml", "uv.lock"]
+    assert set(runtime_source["includedPaths"]) == {
+        "src",
+        "tests",
+        ".gitignore",
+        ".gruff-py.yaml",
+        ".gruff.yaml",
+        "gruff-baseline.json",
+        "pyproject.toml",
+        "uv.lock",
+    }
     assert runtime_source["fileCount"] > 0
     assert len(runtime_source["digest"]) == _DIGEST_LENGTH
 
@@ -259,11 +268,11 @@ def test_perf_script_baseline_regression_exits_one(tmp_path: Path) -> None:
             "--repeat",
             "3",
             "--baseline",
-            str(baseline),
+            baseline.name,
             "--output-dir",
-            str(tmp_path / "perf-out"),
+            "perf-out",
         ],
-        cwd=str(REPO_ROOT),
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         env={

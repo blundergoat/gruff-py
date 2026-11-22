@@ -1,11 +1,8 @@
-"""``sensitive-data.database-url-password`` - credentialled DB connection URL.
+"""Check database connection URLs for embedded passwords under `sensitive-data.database-url-password`.
 
-Pattern: ``<scheme>://<user>:<password>@<host>`` where the password is not a
-placeholder (``password``, ``changeme``, ``change-me``, ``xxx``, ``***``,
-``****``, ``dummy``, ``fake``, ``redacted``, blank), and the URL is not a stock
-development pair such as ``postgres:postgres`` on a loopback or single-label host
-(FAMILY-CONTRACT.md section 5). Covers Postgres, MySQL, MariaDB, MongoDB, Redis,
-ClickHouse, and the most common SQLAlchemy-style URLs.
+The rule covers common database and SQLAlchemy-style schemes.
+Placeholders and stock local development pairs are skipped so the review focuses on real-looking credentials.
+A finding points to the URL location without showing the password.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -99,9 +96,8 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for database URLs with an inline password.
-
-        Skip unparseable or placeholder passwords and stock credential pairs on nonempty dotless hosts, 127.0.0.1 or 0.0.0.0.
+        """Report database URLs that carry a literal password in the selected source.
+        A source location leads the reviewer to the setting to fix. The finding shows a redacted preview.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -112,8 +108,10 @@ class DatabaseUrlPasswordRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        # Several connection settings can appear on one line. Each real password needs its own finding.
         for database_url_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(database_url_match.raw)
+            # URLs with no password, a template value or stock local credentials do not merit a credential finding.
             if embedded_password is None or _is_placeholder_password(embedded_password) or _is_stock_development_url(database_url_match.raw):
                 continue
             findings.append(
@@ -122,6 +120,7 @@ class DatabaseUrlPasswordRule(SourceTextRule):
                     message="Database URL with embedded credential.",
                     file_path=unit.file.display_path,
                     line=database_url_match.line,
+                    column=database_url_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,

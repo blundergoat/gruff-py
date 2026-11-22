@@ -24,6 +24,35 @@ ClickDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]
 _command_root: click.Group | None = None
 
 
+class _AnalyseCommand(click.Command):
+    """Teach Click how to read an optional baseline destination.
+
+    `--generate-baseline src` writes the default baseline and scans `src`.
+    Use `--generate-baseline=PATH` when choosing a different output file.
+    """
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Give the bare baseline flag its default without consuming the next operand.
+        Use this before Click parses paths so a command such as `analyse --generate-baseline src` still scans `src`.
+
+        Args:
+            ctx: Click context for this invocation.
+            args: Raw analyse arguments, including any end-of-options marker.
+
+        Returns:
+            Positional arguments left by Click after it parses the options.
+        """
+        # Only the analyse option needs expansion. Leave ordinary operands for Click to interpret.
+        for index, argument in enumerate(args):
+            # The user can use `--` to pass a literal filename that starts with a dash.
+            if argument == "--":
+                break
+            # A caller that leaves off `=PATH` chose the standard destination.
+            if argument == "--generate-baseline":
+                args[index] = f"--generate-baseline={DEFAULT_BASELINE_FILENAME}"
+        return super().parse_args(ctx, args)
+
+
 def was_fail_on_set_on_cli() -> bool:
     """Return True when the user explicitly passed ``--fail-on`` on the command line.
 
@@ -580,16 +609,14 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _option(
         "--generate-baseline",
         "generate_baseline",
-        is_flag=False,
-        flag_value=DEFAULT_BASELINE_FILENAME,
         default=None,
         type=click.Path(path_type=Path),
-        help=f'Write current findings to this baseline JSON file, or to "{DEFAULT_BASELINE_FILENAME}" when given no path.',
+        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}". Use --generate-baseline=PATH for a different file.',
     ),
     _path_option(
         "--generate-baseline-path",
         "generate_baseline_path",
-        "Superseded spelling of --generate-baseline; identical behaviour, and it warns.",
+        "Superseded spelling of --generate-baseline=PATH; identical behaviour, and it warns.",
     ),
     _path_option(
         "--migrate-baseline",
@@ -618,9 +645,16 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "Path to a baseline Infection JSON report for MSI diff mode.",
     ),
     _ignored_int_option("--mutation-budget", "Maximum escaped/timed-out mutants allowed."),
-    _ignored_string_option(
+    _option(
         "--diff",
-        "Filter findings to changed lines. Use working-tree, staged, unstaged, or a base ref.",
+        "diff_mode",
+        default="",
+        help="Filter findings to changed regions. Use working-tree, staged, unstaged, a base ref, or - for unified diff on stdin.",
+    ),
+    _option(
+        "--diff-base",
+        default="",
+        help="The ref a diff is taken against. Canonical spelling of --diff-vs.",
     ),
     _option("--diff-vs", default="", help="Superseded spelling of --diff-base; identical behaviour."),
     _ignored_flag_option("--changed-only", "With --diff-base, compare only changed files."),
@@ -786,7 +820,7 @@ _ANALYSE_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         help=("Fail on unknown rule-level config keys instead of warning and continuing with that rule's defaults."),
     ),
     _argument("paths", nargs=-1, type=click.Path()),
-    _command(),
+    _command(cls=_AnalyseCommand),
 )
 
 _DASHBOARD_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gruffpy.analysis.baseline import BaselineOptions
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
@@ -45,6 +46,8 @@ class AnalysisRunRequest:
         strict_config: When true, unknown rule-level config keys raise instead
             of downgrading to warnings.
         deep_scan_budget: Atomic CLI override in ``LINES:BYTES`` or ``off`` form.
+        min_confidence: Lowest confidence that can trigger the severity gate.
+        fail_on_new: Exit 1 for a finding the applied baseline classifies as new.
     """
 
     paths: tuple[str, ...]
@@ -68,3 +71,5 @@ class AnalysisRunRequest:
     execution_exclude_pillars: tuple[str, ...] = ()
     strict_config: bool = False
     deep_scan_budget: str = ""
+    min_confidence: Confidence = Confidence.LOW
+    fail_on_new: bool = False

@@ -41,12 +41,14 @@ class SecretMatch:
         start_offset: Zero-based start offset in the source text.
         end_offset: Zero-based end offset in the source text.
         line: One-based source line containing the match start.
+        column: One-based character column at the match start.
     """
 
     raw: str
     start_offset: int
     end_offset: int
     line: int
+    column: int
 
 
 def compile_pattern(pattern: str, *, ignore_case: bool = False) -> re.Pattern[str]:
@@ -111,9 +113,8 @@ def is_documented_sample(matched_value: str) -> bool:
 
 
 def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]:
-    """Yield non-overlapping secret matches, excluding exact vendor-documented samples.
-
-    The match's ``line`` is the 1-based line number of the first character.
+    """Find distinct locations for credential-shaped text before making redacted findings.
+    Reviewers can locate each match even when several on one line use the same visible preview.
 
     Args:
         pattern: Compiled sensitive-data pattern to scan with.
@@ -123,15 +124,18 @@ def iter_matches(pattern: re.Pattern[str], source: str) -> Iterator[SecretMatch]
         SecretMatch values with source offsets and one-based line numbers.
     """
     line_offsets = _line_offsets(source)
+    # Keep each match's line and column so a reviewer can distinguish redacted findings on the same line.
     for match in pattern.finditer(source):
         # A vendor-documented sample, e.g. AWS's example key id pasted from its docs, is not a credential, whichever rule found it.
         if is_documented_sample(match.group(0)):
             continue
+        line = _offset_to_line(line_offsets, match.start())
         yield SecretMatch(
             raw=match.group(0),
             start_offset=match.start(),
             end_offset=match.end(),
-            line=_offset_to_line(line_offsets, match.start()),
+            line=line,
+            column=match.start() - line_offsets[line - 1] + 1,
         )
 
 

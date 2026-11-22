@@ -236,16 +236,21 @@ def test_own_workflow_event_guard(body: str, expected: int) -> None:
     assert len(findings) == expected
 
 
-def test_pr_workflow_with_secret_fires():
+@pytest.mark.parametrize(
+    "trigger",
+    ("on: pull_request_target\n", "on: [\n  push,\n  pull_request_target\n]\n", "on:\n- push\n- pull_request_target\n"),
+    ids=("scalar", "multiline-flow", "indentationless-sequence"),
+)
+def test_pr_workflow_with_secret_fires(trigger: str) -> None:
     """Report one finding, naming the secret, for a ``pull_request_target`` workflow that reads a repository secret.
+
+    Args:
+        trigger: The top-level workflow trigger in one of GitHub's valid YAML forms.
 
     Returns:
         None after the assertions pass.
     """
-    src = (
-        "on: pull_request_target\njobs:\n  publish:\n    steps:\n      - run: npm publish\n"
-        "        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n"
-    )
+    src = f"{trigger}jobs:\n  publish:\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}\n"
     findings = GithubActionsSecretsInPrRule().analyse(make_text_unit(src, _WF), default_ctx())
     assert len(findings) == 1
     assert findings[0].metadata["secret"] == "NPM_TOKEN"

@@ -1,7 +1,7 @@
 """The one line-free identity a baseline stores for a finding, ratified for the family in ``contracts/core/finding-identity.v1.json``.
 
 When a user runs ``gruff-py analyse --generate-baseline``, every ordinary finding is named by this identity and nothing positional.
-On the next ``analyse --baseline-path`` a finding that moved lines still matches, while a new sibling never inherits the review.
+On the next ``analyse --baseline PATH``, a finding that moved lines still matches when its declaration keeps its ordinal.
 
 Three decisions live here:
 
@@ -27,6 +27,8 @@ TOOL_LANGUAGE = "py"
 _ORDINAL_SEPARATOR = "#"
 """Joins a symbol to its declaration ordinal; a symbol containing it could forge another symbol's ordinal, so it gets no identity."""
 
+_LAMBDA_POSITION = re.compile(r"<lambda:[0-9]+>")
+
 _MEASURED_VALUE_PATTERN = re.compile(r"[0-9]+(?:[.,][0-9]+)*")
 """Every number a message can state: a length, a count, a percentage, or a version, including groups such as 1,234 or 12.5."""
 
@@ -47,22 +49,30 @@ class BaselineIdentityError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class DeclarationSpan:
-    """One class or function declaration and the lines it covers, used to rank same-named declarations.
+    """Record which source lines belong to a class, function or lambda.
+
+    Baseline matching uses the spans to associate decorator and body findings with the same declaration.
+    The name, including enclosing scopes when known, keeps unrelated declarations apart.
 
     Attributes:
         start: 1-based line the declaration begins on; this is the position an ordinal ranks.
         end: 1-based last line of the declaration body, so a finding inside it resolves to the same position.
-        name: Declared name as Python spells it, matched against the last segment of a finding's symbol.
+        name: Short declaration name, with a shared marker for lambdas.
+        qualified_name: Dotted declaration name when its enclosing scopes are known.
     """
 
     start: int
     end: int
     name: str
+    qualified_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class FindingIdentity:
-    """One finding's durable name, plus the two facts matching needs alongside it.
+    """Carry the durable name used to recognise a reviewed finding in a later scan.
+
+    The report can show the subject so a reviewer can recognise the original finding.
+    The matcher uses the declaration key to detect identities shared by unrelated declarations.
 
     Attributes:
         identity: 16 lowercase hex characters; the only field baseline matching reads.
@@ -120,7 +130,8 @@ def normalise_measured_values(message: str) -> str:
 
 
 def baseline_subject(finding: Finding, ordinal: int) -> str:
-    """Build the identity subject: ``symbol#ordinal`` for a symbol-bearing finding, else the normalised message.
+    """Build the label a baseline uses to recognise a finding on future scans.
+    Use a declaration ordinal for a symbol or a normalized message for a finding that has no symbol.
 
     Args:
         finding: Finding to name; a symbol-bearing finding needs the ordinal ranked for it.
@@ -136,6 +147,7 @@ def baseline_subject(finding: Finding, ordinal: int) -> str:
     symbol = finding.symbol
     # A symbol-less finding uses its message as the subject. Changes limited to the measured numbers can keep the same subject.
     if not symbol:
+        # A finding without either label cannot be matched safely against reviewed debt.
         if not finding.message:
             raise BaselineIdentityError(f"Finding {finding.rule_id} in {finding.file_path} names neither a symbol nor a message.")
         return normalise_measured_values(finding.message)
@@ -147,7 +159,8 @@ def baseline_subject(finding: Finding, ordinal: int) -> str:
     # Defaulting an invalid ordinal to 1 could give this finding the identity of another declaration with the same symbol.
     if ordinal < 1:
         raise BaselineIdentityError(f"{label} without a declaration ordinal.")
-    return f"{symbol}{_ORDINAL_SEPARATOR}{ordinal}"
+    # A lambda's reported label includes its line for navigation, but that line can change between baseline scans.
+    return f"{_LAMBDA_POSITION.sub('<lambda>', symbol)}{_ORDINAL_SEPARATOR}{ordinal}"
 
 
 def compute_identity_for(tool_language: str, rule_id: str, path: str, subject: str) -> str:
@@ -169,10 +182,10 @@ def compute_identity_for(tool_language: str, rule_id: str, path: str, subject: s
 
 
 def declaration_spans(tree: ast.AST | None) -> tuple[DeclarationSpan, ...]:
-    """Collect every class and function declaration in one parsed file, innermost first.
+    """Collect class, function and lambda declarations in one parsed file, innermost first.
 
     The runner uses the closest matching span to give findings on one declaration a shared position.
-    Parsed spans can also reserve ordinal slots for unqualified same-named declarations with no findings.
+    Parsed spans reserve ordinal slots even for matching declarations that produced no findings.
 
     Args:
         tree: Parsed module AST, or ``None`` for a text file or a file that failed to parse.
@@ -181,14 +194,24 @@ def declaration_spans(tree: ast.AST | None) -> tuple[DeclarationSpan, ...]:
         Declarations ordered innermost first, so the first span containing a line belongs to the closest declaration.
         With no tree or no declarations, the tuple is empty and the resolver uses the finding's reported line, or 1 if no positive line is available.
     """
+    # Text-only and bounded scans fall back to reported locations because no parsed declaration spans are available.
     if tree is None:
         return ()
     spans: list[DeclarationSpan] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            continue
-        end = getattr(node, "end_lineno", None) or node.lineno
-        spans.append(DeclarationSpan(start=node.lineno, end=end, name=node.name))
+    pending = [(tree, "")]
+    # Carry each enclosing name through the walk so methods with the same short name can keep separate reviews.
+    while pending:
+        node, prefix = pending.pop()
+        # A finding on a decorator belongs to the same declaration as a finding on the definition line.
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            start = min((decorator.lineno for decorator in node.decorator_list), default=node.lineno)
+            prefix = f"{prefix}.{node.name}" if prefix else node.name
+            spans.append(DeclarationSpan(start, node.end_lineno or node.lineno, node.name, prefix))
+        # Anonymous functions use an ordinal within their scope to keep the identity free of line numbers.
+        elif isinstance(node, ast.Lambda):
+            name = f"{prefix}.<lambda>" if prefix else "<lambda>"
+            spans.append(DeclarationSpan(node.lineno, node.end_lineno or node.lineno, "<lambda>", name))
+        pending.extend((child, prefix) for child in ast.iter_child_nodes(node))
     return tuple(sorted(spans, key=lambda span: (span.end - span.start, span.start)))
 
 
@@ -213,40 +236,59 @@ class DeclarationPositionResolver:
         self._spans_by_file = spans_by_file
 
     def __call__(self, finding: Finding) -> int:
-        """Return the start line of the declaration a finding sits on.
+        """Find the declaration's first line so several findings on it can share one ordinal.
+        When no declaration matches, use the reported location to rank the finding.
 
         Args:
-            finding: The finding to place; the last segment of its symbol names the declaration.
+            finding: The finding whose symbol names its declaration.
 
         Returns:
             The enclosing same-named declaration's start line, or the finding's positive line; 1 if its line is absent or nonpositive.
         """
+        # Findings without a source line use the first position only for ranking their baseline identity.
         line = finding.line if finding.line is not None and finding.line > 0 else 1
         symbol = finding.symbol
         # Without a symbol there is no declaration to rank, and every symbol-less finding of one file shares a key anyway.
         if not symbol:
             return line
-        wanted = symbol.rsplit(".", 1)[-1]
-        for span in self._spans_by_file.get(finding.file_path, ()):
-            if span.name == wanted and span.start <= line <= span.end:
+        # Try the closest matching declaration before enclosing scopes.
+        for span in self._matching_spans(finding.file_path, symbol):
+            # A warning anywhere inside the declaration spends its review at the same position.
+            if span.start <= line <= span.end:
                 return span.start
         return line
 
     def same_named_positions(self, finding: Finding) -> tuple[int, ...]:
-        """List the start line of every declaration in the finding's file that shares its symbol.
+        """List the declaration positions that reserve ordinals for this finding's symbol.
+        Include declarations that produced no findings so a previously reviewed sibling cannot pass its review to them.
 
         Args:
             finding: The finding whose symbol is looked up.
 
         Returns:
             Sorted unique start lines. An empty tuple contributes no extra positions to ordinal ranking.
-            The result is empty for a missing or qualified symbol, or when the file has no matching spans.
-            Spans keep only short names, so using them for a qualified symbol could count methods from other classes.
+            The result is empty for a missing symbol or when the file has no matching declarations.
         """
         symbol = finding.symbol
-        if not symbol or "." in symbol:
-            return ()
-        return tuple(sorted({span.start for span in self._spans_by_file.get(finding.file_path, ()) if span.name == symbol}))
+        return tuple(sorted({span.start for span in self._matching_spans(finding.file_path, symbol)})) if symbol else ()
+
+    def _matching_spans(self, path: str, symbol: str) -> tuple[DeclarationSpan, ...]:
+        """Select declarations that could own the finding's reported symbol.
+        Match the scope of a qualified symbol so a same-named method in another class cannot claim its review.
+
+        Args:
+            path: File containing the declarations.
+            symbol: Finding symbol, with any generated lambda marker.
+
+        Returns:
+            Matching spans in their original innermost-first order.
+        """
+        name = _LAMBDA_POSITION.sub("<lambda>", symbol)
+        spans = self._spans_by_file.get(path, ())
+        # A report on `Widget.validate` must not use the review reserved for `Form.validate`.
+        if "." in name:
+            return tuple(span for span in spans if span.qualified_name == name)
+        return tuple(span for span in spans if span.name == name)
 
 
 def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[DeclarationSpan, ...]]) -> DeclarationPositionResolver:
@@ -260,7 +302,7 @@ def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[Declaratio
 
     Returns:
         A resolver returning the enclosing declaration's start line, or the finding's positive line or 1 when no declaration matches.
-        Its ranking list is empty for absent or qualified symbols; otherwise it lists all same-named declaration positions.
+        Its ranking list is empty for absent symbols. For a qualified symbol it lists positions in the matching scope.
     """
     return DeclarationPositionResolver(spans_by_file)
 
@@ -342,21 +384,26 @@ def _symbol_ordinals(findings: Sequence[Finding], position: Callable[[Finding], 
     """
     positions_by_symbol: dict[tuple[str, str], set[int]] = {}
     same_named = getattr(position, "same_named_positions", None)
+    # Reserve declaration slots before assigning ordinals so a clean sibling cannot shift later reviews.
     for finding in findings:
+        # Findings without an eligible declaration cannot reserve a slot in this ranking.
         if finding.symbol and has_baseline_identity(finding):
-            positions = positions_by_symbol.setdefault((finding.file_path, finding.symbol), set())
+            name = _LAMBDA_POSITION.sub("<lambda>", finding.symbol)
+            positions = positions_by_symbol.setdefault((finding.file_path, name), set())
             positions.add(position(finding))
             # Reserve slots for same-named declarations the resolver supplies, including ones with no findings.
             if same_named is not None:
                 positions.update(same_named(finding))
 
     ordinals: list[int] = []
+    # Emit one ordinal per original finding so the runner can pair it with the right report row.
     for finding in findings:
         # Only findings eligible for a baseline identity with a symbol need ranking. The others keep their input slot with zero.
         if not finding.symbol or not has_baseline_identity(finding):
             ordinals.append(0)
             continue
-        ranked = sorted(positions_by_symbol[(finding.file_path, finding.symbol)])
+        name = _LAMBDA_POSITION.sub("<lambda>", finding.symbol)
+        ranked = sorted(positions_by_symbol[(finding.file_path, name)])
         ordinals.append(ranked.index(position(finding)) + 1)
     return tuple(ordinals)
 

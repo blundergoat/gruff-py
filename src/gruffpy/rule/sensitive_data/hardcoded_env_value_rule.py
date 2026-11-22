@@ -1,15 +1,10 @@
-"""``sensitive-data.hardcoded-env-value`` - .env file with a secret-looking value.
+"""Check `.env` files for literal values in secret-named settings.
 
-Fires on lines of the shape ``KEY=value`` inside ``.env`` / ``.env.*`` files
-where the key name suggests a secret (``KEY``, ``SECRET``, ``TOKEN``, ``PASSWORD``,
-``API_KEY``) and the value has high Shannon entropy. Empty values, placeholders,
-and quoted-string templates with substitution syntax are skipped. The value is
-read from its own line only, so ``KEY=`` with nothing after it stays quiet
-whatever the next line holds.
+The rule distinguishes generated-looking values from placeholders and runtime substitutions.
+Reports name the setting with a fixed redacted preview so a reviewer can locate it safely.
 
-``.env.example``, ``.env.sample``, ``.env.template`` and ``.env.dist`` exist to
-list secret-shaped keys with sample values, so a value there reports only when
-it is shaped like a generated credential rather than merely long.
+- Ordinary `.env` files are checked for likely hardcoded credentials.
+- Template files have a stricter shape check to keep benign sample values quiet.
 """
 
 import re
@@ -55,7 +50,7 @@ _PLACEHOLDER_VALUES: frozenset[str] = frozenset(
     }
 )
 # ``your-key-here``, ``<api-token>`` and a repeated single character such as ``xxxxxxxx`` are placeholders.
-_PLACEHOLDER_PATTERN = re.compile(r"your[-_. a-z0-9]*|<[^<>]*>|(.)\1*", re.IGNORECASE)
+_PLACEHOLDER_PATTERN = re.compile(r"your[-_. ][-_. a-z0-9]*|<[^<>]*>|(.)\1*", re.IGNORECASE)
 _ENTROPY_THRESHOLD = 3.0
 _MIN_VALUE_LENGTH = 12
 _TEMPLATE_SUFFIXES: frozenset[str] = frozenset({"example", "sample", "template", "dist"})
@@ -175,15 +170,15 @@ def _is_env_template(display_path: str) -> bool:
 
 
 def _is_placeholder(value: str) -> bool:
-    """Recognize .env values the rule skips as placeholders.
+    """Recognise the sample spellings this rule skips in a secret-named setting.
+    An unseparated `your` prefix alone cannot make a generated-looking value a placeholder.
 
     Args:
         value: Unquoted right-hand side of the assignment.
 
     Returns:
-        True for empty text, a known placeholder, or your with an optional suffix of ASCII digits, spaces, dots, underscores, hyphens,
-        or letters matching a-z under Python's Unicode case-insensitive regex rules. Text inside one pair of angle brackets, including <>,
-        or a single character with optional repetitions also qualifies. Matching ignores case.
+        True for known placeholders, values like ``your-key-here`` beginning with ``your`` and a separator,
+        text inside one pair of angle brackets, or a repeated single character. Matching ignores case.
     """
     return value.casefold() in _PLACEHOLDER_VALUES or _PLACEHOLDER_PATTERN.fullmatch(value) is not None
 

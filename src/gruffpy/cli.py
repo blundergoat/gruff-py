@@ -19,7 +19,7 @@ from click.shell_completion import get_completion_class
 import gruffpy.cli_dashboard as dashboard_cli
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import BaselineOptions
-from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.report import AnalysisReport, MachineReportContext
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
 from gruffpy.cli_hook import hook as _hook_command
@@ -64,6 +64,7 @@ from gruffpy.command.metric_calibration import (
     render_metric_calibration_text,
 )
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
 from gruffpy.finding.output_format import OutputFormat
 from gruffpy.finding.pillar import Pillar
@@ -85,7 +86,11 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class CliGroup(click.Group):
-    """Root command group with the custom Symfony-style help screen."""
+    """Route terminal invocations to the Click command selected by the user.
+
+    A bare invocation shows the command menu.
+    Subcommands share the same handling for global flags and optional diff values.
+    """
 
     def main(
         self,
@@ -170,7 +175,11 @@ def _normalise_optional_diff_args(args: Sequence[str] | None) -> list[str]:
 
 @dataclass(frozen=True, slots=True)
 class _AnalysisCliRequest:
-    """Bundle of validated ``analyse`` CLI flags before they're handed to ``run_analysis``."""
+    """Carry validated command-line settings to the analysis runner.
+
+    `analyse`, `report` and `summary` share this request.
+    It keeps choices about what to scan separate from how the result is displayed.
+    """
 
     paths: tuple[str, ...]
     config_path: Path | None
@@ -287,17 +296,18 @@ main.add_command(_migrate_config_command)
 def analyse(**kwargs: Any) -> None:
     """Run gruff analysis.
 
+    Use this to check source paths, review findings and enforce a failure threshold from the terminal or CI.
+
     Args:
         kwargs: Click-supplied arguments and options.
     """
     request = _analysis_request(kwargs, output_key="output_format", command_name="analyse")
-    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     report = _run_analysis_for_cli(request)
     _write_stdout(
         _render_report(
             report,
             request.output,
-            project_root=str(_project_root_from_targets(request.paths)),
+            project_root=report.machine_context.project_root,
             report_editor_link=request.report_editor_link,
             report_interactive=request.should_render_interactive,
         )
@@ -433,20 +443,22 @@ def _list_rules_detail(registry: RuleRegistry, rule_id: str, rule_format: str) -
 def report(**kwargs: Any) -> None:
     """Render a gruff-py report to stdout or a file.
 
+    Use this to share a saved scan or inspect findings in the browser with file links rooted at the scanned project.
+
     Args:
         kwargs: Click-supplied arguments and options.
     """
     request = _analysis_request(kwargs, output_key="report_format", command_name="report")
     output_path = cast(Path | None, kwargs["output_path"])
-    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     analysis_report = _run_analysis_for_cli(request)
     rendered = _render_report(
         analysis_report,
         request.output,
-        project_root=str(Path.cwd()),
+        project_root=analysis_report.machine_context.project_root,
         report_editor_link=request.report_editor_link,
         report_interactive=request.should_render_interactive,
     )
+    # A caller who chose an output file gets the report there so it can be opened or shared later.
     if output_path is not None:
         output_path.write_text(rendered)
     else:
@@ -458,6 +470,8 @@ def report(**kwargs: Any) -> None:
 def summary(**kwargs: Any) -> None:
     """Print a compact digest of a scan.
 
+    Use this to triage the main issues without reading every finding from the scan.
+
     Args:
         kwargs: Click-supplied arguments and options.
 
@@ -467,13 +481,14 @@ def summary(**kwargs: Any) -> None:
     top = cast(int, kwargs["top"])
     summary_format = cast(str, kwargs["summary_format"])
     group_by = cast(str, kwargs["group_by"])
+    # The summary needs room for at least one item in each ranked list.
     if top < 1:
         raise click.ClickException("--top must be greater than 0.")
     request = _summary_analysis_request(kwargs, summary_format=summary_format)
-    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config)
     start = time.perf_counter()
     analysis_report = _run_analysis_for_cli(request)
     elapsed_seconds = time.perf_counter() - start
+    # CI can read the JSON digest while a terminal user gets the comparable text summary.
     if summary_format == "json":
         _write_stdout(JsonReporter().render_summary(analysis_report))
     else:
@@ -705,7 +720,7 @@ def _first_present_path(kwargs: Mapping[str, Any], names: tuple[str, ...]) -> Pa
 def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
     """Warn for each superseded option with a value, naming its replacement.
 
-    Warnings go to stderr and leave the command running so existing invocations remain usable during the spelling change.
+    An existing script still runs while stderr tells its maintainer which flag to adopt.
 
     Args:
         kwargs: Parsed Click options for this invocation.
@@ -713,12 +728,17 @@ def _warn_superseded_spellings(kwargs: Mapping[str, Any]) -> None:
     Returns:
         None; detected superseded options produce stderr warnings without stopping the run.
     """
-    for name, replacement in (("baseline_path", "--baseline"), ("diff_vs", "--diff-base"), ("generate_baseline_path", "--generate-baseline")):
-        value = kwargs.get(name)
+    # Check the compatibility spellings the caller may still have in a script or saved command.
+    for option_name, replacement in (
+        ("baseline_path", "--baseline"),
+        ("diff_vs", "--diff-base"),
+        ("generate_baseline_path", "--generate-baseline=PATH"),
+    ):
+        option_value = kwargs.get(option_name)
         # An explicitly empty --diff-vs leaves diff selection unchanged, so it needs no migration warning.
-        if value in (None, ""):
+        if option_value in (None, ""):
             continue
-        typed = "--" + name.replace("_", "-")
+        typed = "--" + option_name.replace("_", "-")
         click.echo(
             f"{typed} is superseded by {replacement} and behaves identically; the old spelling is going away.",
             err=True,
@@ -821,26 +841,32 @@ def _maybe_prompt_to_init_config(
 ) -> None:
     """Offer to write a default .gruff-py.yaml when no configuration is discoverable.
 
-    Skip when configuration is explicit or disabled, prompts or normal output are disabled, or stdin is not a TTY.
-    Send the prompt and confirmation to stderr so structured stdout such as --format json stays parseable.
+    Offer setup only during an interactive scan of an unconfigured project.
+    The prompt and confirmation go to stderr so output such as `--format json` stays parseable.
 
     Args:
         config_path: Explicit --config path that suppresses the offer, or None to allow discovery.
         no_config: Suppress the offer when the caller has disabled configuration.
-        project_root: Dashboard scan root to search and write to, or None to use the current working directory.
+        project_root: Scan root to search and write to, or None to use the current working directory.
 
     Returns:
         None. Writes the default file and announces it on stderr only when the user accepts the prompt.
     """
+    # Passing `--config` or `--no-config` already expresses how the caller wants settings handled.
     if config_path is not None or no_config:
         return
+    # Quiet or noninteractive commands must run without asking to change the project.
     if _state().is_interaction_disabled or _state().should_suppress_output:
         return
+    # A piped invocation has no terminal user to answer the prompt.
     if not sys.stdin.isatty():
         return
+    # A scan launched from outside its project should offer setup in the scanned checkout.
     target_root = project_root if project_root is not None else Path.cwd()
+    # A project with discoverable settings has already completed setup.
     if existing_config_source(target_root) is not None:
         return
+    # Declining the offer lets analysis use defaults without writing anything.
     if not click.confirm(
         "No .gruff-py.yaml found. Generate a default config now?",
         default=False,
@@ -1004,8 +1030,8 @@ def _path_for_root(project_root: Path, path: Path | None) -> Path | None:
 
 
 def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
-    # Presentation selectors filter what is shown; rule and pillar execution selectors control which checks run.
-    """Execute a CLI analysis request and send configuration warnings to stderr when output policy permits.
+    """Run a prepared terminal scan and return a result for the chosen reporter.
+    Configuration warnings go to stderr so machine readers can parse stdout separately.
 
     Args:
         request: Targets, execution and display selectors, output mode, and baseline and diff settings to apply.
@@ -1018,6 +1044,7 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
         click.BadParameter: A supplied display or execution pillar is not recognized.
         ValueError: The parsed minimum Python version is below 3.11, even in JSON mode.
     """
+    # Presentation flags control what readers see without changing the checks, score or verdict.
     display_filter = FindingDisplayFilter(
         min_severity=Severity(request.min_severity) if request.min_severity is not None else None,
         include_pillars=_parse_pillar_values("--show-pillar", request.show_pillar),
@@ -1032,11 +1059,13 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
             f"target {outside_target!r} is outside the launch directory; "
             "gruff-py analyses several targets only from a directory that contains them all"
         )
+        # An automation client still gets the standard envelope when the scan cannot start.
         if request.output is OutputFormat.JSON:
-            return _refused_run_report(request, RunDiagnostic(type="target-error", message=message))
+            return _refused_run_report(request, RunDiagnostic(type="target-error", message=message), Path.cwd())
         click.echo(message, err=True)
         raise SystemExit(2)
     project_root = _project_root_from_targets(request.paths)
+    _maybe_prompt_to_init_config(request.config_path, request.should_skip_config, project_root=project_root)
     try:
         report = run_analysis(
             AnalysisRunRequest(
@@ -1067,11 +1096,14 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
                 execution_exclude_pillars=tuple(pillar.value for pillar in _parse_pillar_values("--exclude-pillar", request.exclude_pillar)),
                 strict_config=request.strict_config,
                 deep_scan_budget=request.deep_scan_budget,
+                min_confidence=Confidence(request.min_confidence or Confidence.LOW),
+                fail_on_new=request.fail_on_new,
             )
         )
     except ConfigError as exc:
+        # A YAML file with the wrong schema version can be returned as a structured refusal to JSON callers.
         if request.output is OutputFormat.JSON:
-            return _config_error_report(request, exc)
+            return _config_error_report(request, exc, project_root)
         # Exit 1 is reserved for completed runs that meet the findings gate; configuration failures remain distinguishable with exit 2.
         click.echo(str(exc), err=True)
         raise SystemExit(2) from exc
@@ -1094,7 +1126,7 @@ def _echo_config_warnings(report: AnalysisReport) -> None:
         click.echo(f"Warning: {warning}", err=True)
 
 
-def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> AnalysisReport:
+def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError, project_root: Path) -> AnalysisReport:
     """Build the JSON refusal report for a configuration-load failure.
 
     The v3 adapter emits a parseable diagnostic instead of stderr prose. Other formats print the error to stderr and exit with code 2.
@@ -1102,22 +1134,28 @@ def _config_error_report(request: _AnalysisCliRequest, exc: ConfigError) -> Anal
     Args:
         request: Failed invocation supplying scan targets and output settings. With no explicit config path, the diagnostic has no separate path.
         exc: Configuration error whose message is copied with occurrences of the project-root prefix removed.
+        project_root: Root inferred from the scan operands.
 
     Returns:
         A report containing the configuration diagnostic and exit code 2, with no findings.
     """
     config_path_str = str(request.config_path) if request.config_path is not None else None
     # Remove the project-root prefix so a path under that root can appear as a relative path in the JSON diagnostic.
-    message = str(exc).replace(f"{_project_root_from_targets(request.paths)}{os.sep}", "")
-    return _refused_run_report(request, RunDiagnostic(type="config-error", message=message, path=config_path_str))
+    message = str(exc).replace(f"{project_root}{os.sep}", "")
+    # A user can supply a config outside the project. Name its file without publishing the host directory.
+    if request.config_path is not None and request.config_path.is_absolute():
+        message = message.replace(str(request.config_path), request.config_path.name)
+    return _refused_run_report(request, RunDiagnostic(type="config-error", message=message, path=config_path_str), Path.cwd())
 
 
-def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic) -> AnalysisReport:
-    """Build a synthetic native analysis report for a run refused before it started.
+def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic, project_root: Path) -> AnalysisReport:
+    """Create the standard JSON envelope when an invocation fails before scanning.
+    Automation gets the diagnostic and exit 2 with no findings or analysed files.
 
     Args:
-        request: The analysis request, for its paths, format, gate and config path.
+        request: Supplies the original paths, output format and gate. An omitted explicit config leaves no config location to report.
         diagnostic: The one run-invalidating diagnostic that explains the refusal.
+        project_root: Root for display paths in the refusal.
 
     Returns:
         A report with no findings, nothing discovered, the diagnostic, and exit code 2.
@@ -1136,6 +1174,7 @@ def _refused_run_report(request: _AnalysisCliRequest, diagnostic: RunDiagnostic)
         findings=(),
         exit_code=2,
         config_path=config_path_str,
+        machine_context=MachineReportContext(project_root=str(project_root)),
     )
 
 

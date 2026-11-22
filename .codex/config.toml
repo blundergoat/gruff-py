@@ -40,6 +40,7 @@ glob_scan_max_depth = 3
 "**/.npmrc" = "deny"
 "**/.netrc" = "deny"
 "**/.git-credentials" = "deny"
+"**/credentials.json" = "deny"
 "**/.config/gh/hosts.yml" = "deny"
 "**/.pgpass" = "deny"
 "**/.pypirc" = "deny"

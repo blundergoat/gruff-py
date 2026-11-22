@@ -74,7 +74,7 @@ selection:
 
 sensitiveExclusions:
   - rule: sensitive-data.aws-access-key
-    path: tests/fixtures/aws-sample.env
+    path: app/aws-sample.env
     reason: Synthetic key used by the loader fixture; not a live credential.
 
 rules:
@@ -130,7 +130,7 @@ excludeRules = ["docs.missing-module-docstring"]
 
 [[tool.gruff-py.sensitiveExclusions]]
 rule = "sensitive-data.aws-access-key"
-path = "tests/fixtures/aws-sample.env"
+path = "app/aws-sample.env"
 reason = "Synthetic key used by the loader fixture; not a live credential."
 
 [tool.gruff-py.rules."size.file-length"]
@@ -237,26 +237,25 @@ Unknown rule IDs and per-rule keys follow the warning policy in
 
 ## Sensitive Data Exclusions
 
-`sensitiveExclusions` is the only configuration that silences a `sensitive-data.*` finding. It is
-deliberately separate from `selection`, so no message- or value-matching key can ever apply to the
-sensitive-data pillar.
+Use `sensitiveExclusions` to record individual findings a reviewer has accepted. Entries match by
+rule and path so a credential value never becomes part of the configuration.
 
 A built-in test-path skip also hides sensitive-data and security findings in test, fixture and example files, and counts each one in `suppressions`.
 It covers every shipping sensitive-data rule.
-A configured entry applies first, so a finding it claims is counted under the entry.
+A configured entry applies first, so a finding it claims is counted under the entry. Recognised
+third-party comments can also suppress findings and contribute their own audit rows.
 
 ```yaml
 sensitiveExclusions:
   - rule: sensitive-data.aws-access-key
-    path: tests/fixtures/aws-sample.env
-    symbol: Fixtures.aws_sample          # optional
+    path: app/aws-sample.env
     reason: Synthetic key used by the loader fixture; not a live credential.
 ```
 
 ```toml
 [[tool.gruff-py.sensitiveExclusions]]
 rule = "sensitive-data.aws-access-key"
-path = "tests/fixtures/aws-sample.env"
+path = "app/aws-sample.env"
 reason = "Synthetic key used by the loader fixture; not a live credential."
 ```
 
@@ -290,12 +289,11 @@ Every one of these is a fatal configuration error naming the entry index and the
 - a second entry with the same `rule`, `path`, and `symbol`, because two entries claiming one
   scope would split the audit count.
 
-A suppressed finding leaves the score and the exit code exactly as an inline `# gruff: disable=`
-directive does, and it is never invisible. Every entry publishes one row in the report's
-`suppressions` array:
+A finding covered by a sensitive exclusion is removed before scoring and exit-code checks. Every
+entry publishes one row in the report's `suppressions` array.
 
 ```json
-{"index": 0, "rule": "sensitive-data.aws-access-key", "paths": ["tests/fixtures/aws-sample.env"],
+{"index": 0, "rule": "sensitive-data.aws-access-key", "paths": ["app/aws-sample.env"],
  "reason": "Synthetic key used by the loader fixture; not a live credential.", "suppressed": 2}
 ```
 
@@ -440,7 +438,7 @@ supported migration with:
 
 ```bash
 gruff-py migrate-config --dry-run
-gruff-py migrate-config
+gruff-py migrate-config --output gruff-py.migrated.yaml
 ```
 
 For `[tool.gruff-py]` in `pyproject.toml`, update `schemaVersion` by hand;
@@ -552,14 +550,17 @@ gruff-py analyse . --generate-baseline --fail-on none
 ```
 
 This writes `gruff-baseline.json` using `gruff.baseline.v3` and leaves the
-current run's findings visible. Future `analyse` and `report` runs apply that
+current run's findings visible. Use `--generate-baseline=PATH` for a different
+destination. A failed scan preserves the existing baseline. Use `--force`
+to replace an unreadable or incompatible file at the default path.
+Future `analyse` and `report` runs apply that
 default baseline automatically, suppressing findings whose line-free identity
 still matches within the count the row accepts. Use `--baseline <path>` on
 `analyse` for an explicit baseline — `report` accepts only the
 `--baseline-path <path>` spelling — or `--no-baseline` to audit without any
 baseline. A `gruff-py.baseline.v1` or `gruff.baseline.v1` file fails closed with
 exit `2` and names
-`gruff-py analyse --migrate-baseline <old> --generate-baseline-path <new path>`,
+`gruff-py analyse --migrate-baseline <old> --generate-baseline=<new path>`,
 which carries the reviews forward and preserves the original.
 
 Generate and apply baselines with the same paths, config, and ignore flags you

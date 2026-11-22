@@ -61,7 +61,8 @@ class PrivateKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Report headers except complete placeholder blocks and matching marker-only assignment pairs.
+        """Report private-key headers that need review in the selected source.
+        Complete placeholder blocks and matching marker-only assignments are skipped so sample markers do not appear as keys.
 
         Args:
             unit: Source file selected for the scan; empty source produces no findings.
@@ -86,6 +87,7 @@ class PrivateKeyRule(SourceTextRule):
                     message="Private-key PEM header in source.",
                     file_path=unit.file.display_path,
                     line=key_header_match.line,
+                    column=key_header_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,

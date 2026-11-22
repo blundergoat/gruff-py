@@ -100,10 +100,33 @@ def test_bounded_python_source_reports_a_nonfatal_budget_diagnostic(
     assert unit.diagnostics[0].type == "bounded-deep-scan"
     assert unit.diagnostics[0].non_fatal is True
     assert (
-        unit.diagnostics[0].message == "path=large.py; lines=3; bytes=20; maxLines=1; maxBytes=10000; override=cli. "
+        unit.diagnostics[0].message == "path=large.py; lines=2; bytes=20; maxLines=1; maxBytes=10000; override=cli. "
         "Text-level rules (size, sensitive-data, config) still ran; masking, block parsing, "
         "AST walking, and other deep script analysis were skipped."
     )
+
+
+@pytest.mark.parametrize("separator", [b"\n", b"\r\n", b"\r"], ids=["lf", "crlf", "cr"])
+def test_line_budget_counts_physical_lines_without_a_phantom_last_line(tmp_path: Path, separator: bytes) -> None:
+    """Treat a two-line module at the exact budget as parseable under each newline convention.
+
+    Args:
+        tmp_path: Receives the Python module at the line limit.
+        separator: Newline bytes used throughout the module, including after its last line.
+
+    Returns:
+        None. Checks for a real Python tree and an empty diagnostic list.
+    """
+    source_path = tmp_path / "module.py"
+    source_path.write_bytes(separator.join((b"first = 1", b"second = 2", b"")))
+
+    unit = PythonFileParser().parse(
+        SourceFile(absolute_path=str(source_path), display_path="module.py"),
+        DeepScanBudget(enabled=True, max_lines=2, max_bytes=10_000, override="cli"),
+    )
+
+    assert isinstance(unit.tree, ast.Module)
+    assert unit.diagnostics == ()
 
 
 def test_non_python_text_never_enters_deep_scan_guard(tmp_path: Path) -> None:

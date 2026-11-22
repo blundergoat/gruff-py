@@ -1,10 +1,8 @@
-"""``docs.ignore-directive-reason`` - suppression comments need a reason.
+"""Check the reasons developers leave beside suppression directives.
 
-A generated file, whose header says it is generated or must not be edited, is
-not the place a reason can be written, so it is skipped. A tracker reference
-such as ``urllib3#3072`` or ``GH-1234`` is a reason. ``noqa`` codes are matched
-case-sensitively, so a neighbouring directive such as ``isort:skip`` is neither
-swallowed into the codes nor mistaken for a rationale.
+A finding points to a directive the reviewer cannot yet assess. A tracker reference can supply that reason.
+Files identified by a generated-file header are skipped because the lasting edit belongs in the generator.
+The rule keeps `noqa` codes separate from neighbouring directives such as `isort:skip`.
 """
 
 import re
@@ -18,8 +16,8 @@ from gruffpy.finding.severity import Severity
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
-from gruffpy.rule.docs._comment_scanner import SourceComment, scan_comments
 from gruffpy.rule.rule import Rule
+from gruffpy.source.comment_scanner import SourceComment, scan_comments
 
 _DIRECTIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # Codes stay uppercase even under IGNORECASE, and a comma may lead into another tool's directive.
@@ -69,7 +67,11 @@ _GENERATED_HEADER_LINES = 10
 
 @dataclass(frozen=True, slots=True)
 class _DirectiveMatch:
-    """A suppression directive comment that lacks an acceptable reason."""
+    """Record a suppression comment and the reason text found beside it.
+
+    The rule uses this record to decide whether the comment needs a finding.
+    The location points a reviewer back to the directive they can amend.
+    """
 
     comment: SourceComment
     directive: str
@@ -78,7 +80,11 @@ class _DirectiveMatch:
 
 
 class IgnoreDirectiveReasonRule(Rule):
-    """Detect suppression comments that do not explain why they are needed."""
+    """Report suppression comments that lack a substantive reason.
+
+    A code reviewer can use the finding to ask why a warning was suppressed at this location.
+    The rule reads actual comment tokens so directive examples inside strings stay quiet.
+    """
 
     ID = "docs.ignore-directive-reason"
 

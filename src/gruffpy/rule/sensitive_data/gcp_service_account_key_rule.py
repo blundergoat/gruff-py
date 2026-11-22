@@ -1,9 +1,7 @@
-"""``sensitive-data.gcp-service-account-key`` - GCP service-account key JSON.
+"""Check for Google Cloud service-account JSON with private-key material.
 
-Detects the Google-issued service-account JSON shape: ``"type":
-"service_account"`` co-occurring with a ``private_key`` value or PEM private-key
-body. The finding is anchored at the service-account marker so it is stable and
-distinct from generic PEM-header evidence.
+The scan looks for the account type marker together with a quoted key field or PEM block.
+The finding points to the marker and uses a redacted preview so reviewers can locate it safely.
 """
 
 import re
@@ -58,9 +56,8 @@ class GcpServiceAccountKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag service-account type markers when the selected private-key text passes the placeholder check.
-
-        Use the first quoted private_key field if it is nonempty. Otherwise, use the first complete PEM block.
+        """Report service-account JSON when the selected private-key field contains more than a placeholder.
+        The report points to the type marker without revealing the key material.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -69,6 +66,7 @@ class GcpServiceAccountKeyRule(SourceTextRule):
         Returns:
             One finding per matched type marker. Empty when no marker matches or the selected key text is missing or looks like a placeholder.
         """
+        # The account type distinguishes these results from generic private-key findings.
         if "service_account" not in unit.source:
             return []
 
@@ -78,12 +76,14 @@ class GcpServiceAccountKeyRule(SourceTextRule):
             return []
 
         definition = self.definition()
+        # Use the type marker as the review location so the report never needs to show the private-key body.
         return [
             Finding(
                 rule_id=definition.id,
                 message="GCP service-account key JSON embeds private-key material.",
                 file_path=unit.file.display_path,
                 line=match.line,
+                column=match.column,
                 severity=definition.default_severity,
                 pillar=definition.pillar,
                 tier=definition.tier,

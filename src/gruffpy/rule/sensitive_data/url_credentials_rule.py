@@ -1,10 +1,7 @@
-"""``sensitive-data.url-credentials`` - HTTP(S) URL with embedded credentials.
+"""Check HTTP and HTTPS URL literals for embedded passwords.
 
-Detects ``http(s)://user:password@host`` URL literals. Database schemes remain
-owned by ``sensitive-data.database-url-password`` so the two rules do not
-duplicate the same finding. A captured password holding template syntax or
-characters that show the capture ran past the userinfo is not a credential, and
-the same URL repeated on the next line is reported once.
+The URL rule skips template syntax so construction examples stay quiet during review.
+It reports the same URL on consecutive lines once. Database schemes belong to the dedicated database URL rule.
 """
 
 import re
@@ -29,8 +26,8 @@ _PATTERN = compile_pattern(
     r"\bhttps?://(?P<user>[^:\s/@]+):(?P<password>[^@\s\"']+)@(?P<host>[^\s\"']+)",
     ignore_case=True,
 )
-# Braces are template placeholders; a backslash, a slash, or a second colon means the capture ran past the userinfo.
-_NON_CREDENTIAL_CHARACTERS: frozenset[str] = frozenset("{}\\/:")
+# Braces indicate a template, while a slash or backslash can cross the userinfo boundary.
+_NON_CREDENTIAL_CHARACTERS: frozenset[str] = frozenset("{}\\/")
 # A percent sign that does not open a two-digit escape is a printf-style placeholder, while ``%40`` stays a real
 # percent-encoded character of a password that must still be reported.
 _TEMPLATE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
@@ -63,7 +60,8 @@ class UrlCredentialsRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for HTTP(S) URLs with inline ``user:password@`` credentials.
+        """Find HTTP and HTTPS URLs that embed a literal password in source.
+        The report uses the source location and a redacted preview so reviewers can replace the inline credential safely.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -75,7 +73,9 @@ class UrlCredentialsRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        # Start with no preceding URL to compare when deciding whether a repeated example needs another finding.
         previous_report: tuple[int, str] | None = None
+        # Check each inline URL so a nearby different credential can still be reported at its own location.
         for credential_match in iter_matches(_PATTERN, unit.source):
             embedded_password = _extract_password(credential_match.raw)
             # Template-like segments and likely placeholders are excluded to avoid reporting URL construction examples.
@@ -94,6 +94,7 @@ class UrlCredentialsRule(SourceTextRule):
                     message=f"HTTP(S) URL embeds an inline credential: {redacted_marker}.",
                     file_path=unit.file.display_path,
                     line=credential_match.line,
+                    column=credential_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
@@ -107,13 +108,14 @@ class UrlCredentialsRule(SourceTextRule):
 
 
 def _extract_password(url: str) -> str | None:
-    """Return the password segment from an HTTP(S) URL userinfo block.
+    """Read the userinfo password so the rule can distinguish literals from URL templates.
+    A password may contain a colon. Placeholders and captures crossing the URL boundary are skipped.
 
     Args:
         url: Matched credential-bearing URL text.
 
     Returns:
-        The captured password as written, or None if there is no password separator or the segment contains a brace, backslash, slash, colon,
+        The captured password as written, or None if there is no password separator or the segment contains a brace, backslash, slash,
         or a percent sign without two following hexadecimal digits.
     """
     before_host = url.split("@", 1)[0]

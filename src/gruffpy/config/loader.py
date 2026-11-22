@@ -90,12 +90,11 @@ LEGACY_MINIMUM_SEVERITY_ERROR = (
 
 
 class ConfigLoader:
-    """Resolve the settings every user command needs before analysis begins.
+    """Choose and validate the settings for a scan before opening source files.
 
-    Discovery chooses YAML, TOML, or registered defaults in documented order.
-    Normal scans warn and remove unsupported rule, threshold, and option keys;
-    strict scans stop on the same exact key. Structural, type, and schema errors
-    always stop because continuing would misrepresent the user's configuration.
+    Discovery uses YAML, TOML or the registry defaults in the documented order.
+    Normal scans warn about unsupported rule settings. `--strict-config` refuses the same settings.
+    A bad schema, type or top-level structure makes either mode stop with a configuration error.
     """
 
     def __init__(
@@ -377,7 +376,8 @@ class ConfigLoader:
 
     @staticmethod
     def _validate_deep_scan_budget(value: Any, source: str) -> None:
-        """Validate the supplied deep-scan budget fields before merging their defaults.
+        """Check values that limit how much Python code the analyser parses deeply.
+        A bad key or limit stops the scan with a config diagnostic before the caller can rely on incomplete results.
 
         Args:
             value: Raw budget table; omitted fields retain their configured defaults.
@@ -389,18 +389,25 @@ class ConfigLoader:
         Raises:
             ConfigError: When the value is not a table, keys are unknown, enabled is not boolean, or a supplied limit is not a positive integer.
         """
+        # The budget is a table so the user can adjust its line and byte limits independently.
         if not isinstance(value, dict):
             raise ConfigError(f"{source} deepScanBudget must be a mapping.")
-        unknown = set(value) - {"enabled", "maxLines", "maxBytes"}
-        if unknown:
-            raise ConfigError(f"Unknown deepScanBudget keys in {source}: {sorted(unknown)}; allowed: ['enabled', 'maxBytes', 'maxLines'].")
+        unknown_keys = set(value) - {"enabled", "maxLines", "maxBytes"}
+        # An accidental numeric key in YAML still needs to appear in a readable configuration diagnostic.
+        if unknown_keys:
+            names = ", ".join(sorted(repr(key) for key in unknown_keys))
+            raise ConfigError(f"Unknown deepScanBudget keys in {source}: {names}; allowed: ['enabled', 'maxBytes', 'maxLines'].")
         enabled = value.get("enabled", True)
+        # Only a boolean can opt a project in or out of bounding deeper checks.
         if not isinstance(enabled, bool):
             raise ConfigError(f"{source} deepScanBudget.enabled must be true or false.")
+        # Validate both limits because exceeding either one changes which checks can run.
         for key in ("maxLines", "maxBytes"):
+            # A limit the user leaves unset keeps the corresponding built-in default.
             if key not in value:
                 continue
             limit = value[key]
+            # Zero and booleans would produce misleading limits. The `enabled` key controls whether the budget applies.
             if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
                 raise ConfigError(f"{source} deepScanBudget.{key} must be a positive integer.")
 

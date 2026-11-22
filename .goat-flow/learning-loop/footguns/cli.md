@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-05
+last_reviewed: 2026-11-22
 ---
 
 ## Footgun: Click optional-value options + variadic positionals stay tempting
@@ -25,6 +25,22 @@ flag_value=...`), check whether the command takes a variadic positional. If it
 does, prefer splitting into a pure boolean flag plus a separately-named
 required-value option (e.g. `--foo` flag + `--foo-path PATH`) and add a
 `CliRunner` test that exercises the `--option-then-positional` shape.
+
+The trap recurred on 2026-11-22 in PR #10. On a temporary copy, `gruff-py
+analyse --generate-baseline target.py` replaced the Python operand with JSON.
+`_AnalyseCommand.parse_args` in `src/gruffpy/cli_options.py` now supplies the
+conventional destination for the bare flag before Click consumes operands.
+`--generate-baseline=PATH` supplies a custom destination in the same token.
+The two forms are covered in `tests/integration/test_cli_smoke.py`.
+
+## Footgun: A rejected source path can break its own JSON diagnostic
+
+**Status:** active | **Created:** 2026-11-22 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Keep path resolution out of later scan steps once discovery rejects an operand, and omit unpublishable diagnostic locations.
+
+Running `analyse --format json loop.py` on a self-referencing `loop.py` symlink exited 1 with no output. Discovery rejected the operand, then the scan scope calculation tried to resolve it again. Treat such a scan as partial and let the JSON report carry the diagnostic even when the missing input has no project-relative location.
+
+The runner makes the scope decision in `src/gruffpy/analysis/runner.py` (`run_analysis`). The JSON writer uses the same permissive path projection for missing inputs as for requested inputs in `src/gruffpy/analysis/machine_contract.py` (`analysis_payload`). The reproduction is in `tests/integration/test_cli_smoke.py` (`test_cli_reports_a_symlink_loop_as_a_fatal_json_diagnostic`).
 
 ## Footgun: cli.py routinely sits within 20 lines of the file-length error threshold
 

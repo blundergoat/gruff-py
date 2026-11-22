@@ -58,14 +58,14 @@ def test_dashboard_round_trips_deep_scan_budget_and_diagnostic(tmp_path: Path) -
     """Carry a ``deepScanBudget`` query value into the shell's form field and into the scan report's CLI-override diagnostic.
 
     Args:
-        tmp_path: Project root holding a one-line module for the budgeted scan.
+        tmp_path: Project root holding a two-line module that exceeds a one-line budget.
 
     Returns:
         None. Checks the echoed form value and the scan diagnostic for the budget override.
     """
     src = tmp_path / "src"
     src.mkdir()
-    (src / "app.py").write_text("value = 1\n")
+    (src / "app.py").write_text("value = 1\nvalue = 2\n")
 
     with _served_dashboard(tmp_path, ("src",)) as base_url:
         shell = _fetch(base_url + "/?deepScanBudget=1%3A10000")

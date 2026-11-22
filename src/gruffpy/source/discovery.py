@@ -1,4 +1,8 @@
-"""Walks a project root and produces the list of ``SourceFile``s the rules will see."""
+"""Choose the source files a scan can analyse under its project root.
+
+Discovery applies the configured path rules, Git ignores and built-in exclusions.
+The returned skip reasons and input errors explain which paths were left out.
+"""
 
 import re
 from collections.abc import Iterable, Iterator
@@ -46,10 +50,10 @@ FALLBACK_IGNORED_DIRECTORIES: tuple[str, ...] = (
     "venv",
 )
 
-# Directories holding third-party copies, and ``dist``, the one build-output name section 7 adds; ``build``,
-# ``coverage`` and ``htmlcov`` stay fallback-only. Like the fallback directories above they match at any depth, but
-# they are skipped even under a governing .gitignore and compared case-insensitively over ASCII, because a committed
-# copy is still someone else's code (FAMILY-CONTRACT.md section 7, amended by precision-floor M04).
+# Family contract section 7 skips third-party copies and `dist` even with a governing `.gitignore`.
+#
+# These names match at any depth and fold ASCII case.
+# `build`, `coverage` and `htmlcov` remain fallback ignores.
 THIRD_PARTY_DIRECTORIES: frozenset[str] = frozenset({"bower_components", "dist", "third-party", "third_party", "vendor", "vendors"})
 
 # Pattern recorded for a minified file such as ``settings.min.json``, which section 7 skips as generated.
@@ -72,7 +76,10 @@ IGNORE_SOURCE_GENERATED = "generated"
 
 @dataclass(frozen=True, slots=True)
 class IgnoreReason:
-    """Why a path was excluded, with the matched glob when the source is config.
+    """Explain which path policy excluded one discovery candidate.
+
+    The report names the source of the decision so a user can find the relevant policy.
+    When known, the matched pattern points to the entry that affected the scan.
 
     Attributes:
         source: One of ``config``, ``gitignore``, ``default``, or ``generated``.
@@ -87,7 +94,10 @@ class IgnoreReason:
 
 @dataclass(frozen=True, slots=True)
 class IgnoredPath:
-    """A skipped path paired with the reason discovery excluded it.
+    """Pair an ignored project path with its reason.
+
+    `check-ignore` can explain the same decision the analysis report makes visible.
+    The pattern can be absent when the policy has no reported match string.
 
     Attributes:
         path: Project-relative display path that was skipped.
@@ -110,7 +120,10 @@ class IgnoredPath:
 
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryResult:
-    """Files and input-path diagnostics produced by source discovery.
+    """Carry discovered files and input problems to the analysis runner.
+
+    The runner opens the accepted files and reports which operands were missing or outside the project.
+    The ignore entries explain deliberate skips separately from errors.
 
     Attributes:
         files: Discovered source files that should be analysed.
@@ -118,25 +131,32 @@ class SourceDiscoveryResult:
         ignored_paths: Requested input paths skipped by ignore handling.
         ignored_path_reasons: The same skipped paths carrying their ignore
             source and matched pattern, one entry per ``ignored_paths`` entry.
+        outside_paths: Operands or file links that resolve outside the project root.
     """
 
     files: tuple[SourceFile, ...]
     missing_paths: tuple[str, ...]
     ignored_paths: tuple[str, ...]
     ignored_path_reasons: tuple[IgnoredPath, ...] = ()
+    outside_paths: tuple[str, ...] = ()
 
     def has_input_errors(self) -> bool:
-        """Return whether any requested path was missing.
+        """Return whether discovery refused an input.
+        The runner uses this to avoid treating an incomplete set of files as a whole-project scan.
 
         Returns:
-            True when source discovery found missing input paths.
+            True when discovery found missing paths or paths outside the root.
         """
-        return bool(self.missing_paths)
+        return bool(self.missing_paths or self.outside_paths)
 
 
 @dataclass(frozen=True, slots=True)
 class _IgnoreDecision:
-    """Whether a path should be skipped, the optional summary path, and the reason."""
+    """Record the result of checking one candidate against the path policies.
+
+    Discovery uses the decision to prune a directory or skip a file.
+    A reportable skip also carries the display path and the reason the user will see.
+    """
 
     is_ignored: bool
     display_path: str | None = None
@@ -160,7 +180,8 @@ class SourceDiscovery:
         include_ignored: bool = False,
         configured_ignore_patterns: Iterable[str] = (),
     ) -> SourceDiscoveryResult:
-        """Discover analyzable source files from requested paths.
+        """Find the files to open for the requested scan.
+        Return the skips and invalid inputs alongside the files so the report can explain any gaps.
 
         Args:
             paths: Requested files or directories, absolute or relative to the project root. An empty list or empty path requests the project root.
@@ -169,37 +190,45 @@ class SourceDiscovery:
             configured_ignore_patterns: Project-config globs that exclude matching paths even when include_ignored is true.
 
         Returns:
-            Discovered source files, missing requests, and reported ignored paths with their reasons. Unsupported types can leave the file list
-            empty without a diagnostic.
+            Discovered source files, missing requests, reported ignores and paths that resolve outside the project. Unsupported types can leave
+            the file list empty without a diagnostic.
         """
         patterns = list(configured_ignore_patterns)
+        # An invocation with no paths scans the selected project root.
         requested = paths or ["."]
         files: dict[str, SourceFile] = {}
         missing: list[str] = []
         ignored: list[IgnoredPath] = []
+        outside: set[str] = set()
 
+        # Each operand can name a file or directory, so keep its input problem separate from the files it yields.
         for raw_path in requested:
             found_paths, missing_path = self._discover_requested_paths(
                 raw_path,
                 include_ignored=include_ignored,
                 patterns=patterns,
                 ignored=ignored,
+                outside=outside,
             )
+            # Report a missing explicit operand by the spelling the caller supplied.
             if missing_path is not None:
                 missing.append(missing_path)
+            # Overlapping operands can find the same file. `_add_file` keeps a single source entry.
             for found_path in found_paths:
                 self._add_file(found_path, files)
 
         sorted_files = tuple(files[k] for k in sorted(files))
-        deduped: dict[str, IgnoredPath] = {}
+        ignore_reasons_by_path: dict[str, IgnoredPath] = {}
+        # Overlapping operands can also skip the same path. Keep the first explanation in the report.
         for entry in ignored:
-            deduped.setdefault(entry.path, entry)
-        reasons = tuple(deduped[path] for path in sorted(deduped))
+            ignore_reasons_by_path.setdefault(entry.path, entry)
+        reasons = tuple(ignore_reasons_by_path[path] for path in sorted(ignore_reasons_by_path))
         return SourceDiscoveryResult(
             files=sorted_files,
             missing_paths=tuple(sorted(missing)),
             ignored_paths=tuple(reason.path for reason in reasons),
             ignored_path_reasons=reasons,
+            outside_paths=tuple(sorted(outside)),
         )
 
     def classify(
@@ -243,11 +272,11 @@ class SourceDiscovery:
         include_ignored: bool,
         patterns: list[str],
         ignored: list[IgnoredPath],
+        outside: set[str],
     ) -> tuple[Iterable[Path], str | None]:
-        """Resolve a requested path into candidate files and diagnostics, extending the shared gitignore cache as matching reaches new directories.
-
-        Existing file operands bypass gitignore, third-party, minified and fallback rules; configured patterns and VCS directories still apply.
-        Directory walks record skipped entries only as the caller consumes them.
+        """Turn one supplied path into files to scan or a reason it cannot be used.
+        An explicitly named file bypasses convenience ignores. Configured paths and VCS directories still apply.
+        A directory records ignored entries as discovery walks it.
 
         Args:
             raw_path: The path as the user supplied it, relative to the project root or absolute; an empty string means the project root. It is
@@ -257,6 +286,7 @@ class SourceDiscovery:
             patterns: Configured paths.ignore globs, which exclude a match even when include_ignored is set.
             ignored: Accumulator that receives an IgnoredPath for the operand itself when it is ignored, and for each reported skip as the returned
                 directory walk is consumed.
+            outside: Accumulator for paths that resolve outside the project.
 
         Returns:
             A pair of the candidate file paths and the missing path. The paths are empty when the operand is missing, ignored, or neither a file nor a
@@ -264,8 +294,13 @@ class SourceDiscovery:
             second item is raw_path when the path does not exist and None otherwise.
         """
         absolute = self._absolute_path(raw_path)
+        # A deleted file or broken symlink is a missing input, not an empty successful scan.
         if not absolute.exists():
             return (), raw_path
+        # A link supplied inside the checkout can still point to a file outside the requested scan boundary.
+        if not self._canonical(absolute).is_relative_to(self._project_root):
+            outside.add(raw_path)
+            return (), None
 
         decision = self._ignore_decision(
             absolute,
@@ -274,14 +309,17 @@ class SourceDiscovery:
             record_file=True,
             explicit_file=absolute.is_file(),
         )
+        # Record a deliberate exclusion separately from an invalid operand.
         if decision.is_ignored:
             self._record_ignored(decision, ignored)
             return (), None
 
+        # Honour a directly supplied file even when its extension would be skipped during directory discovery.
         if absolute.is_file():
             return (absolute,), None
+        # Directory operands expand to supported source files as the caller consumes the walk.
         if absolute.is_dir():
-            return self._walk(absolute, include_ignored, patterns, ignored), None
+            return self._walk(absolute, include_ignored, patterns, ignored, outside), None
         return (), None
 
     def _walk(
@@ -290,11 +328,12 @@ class SourceDiscovery:
         include_ignored: bool,
         patterns: list[str],
         ignored_paths: list[IgnoredPath],
+        outside: set[str],
     ) -> Iterator[Path]:
-        """Walk a directory tree, yielding supported non-ignored files and caching gitignore specs and misses as needed.
+        """Expand a directory operand into supported files that pass discovery policy.
 
-        Ignored directories are pruned, so descendant files and ignored-path records are absent.
-        Symlinked child directories are skipped without a record; unreadable directories contribute no files or ignore records.
+        Ignored and unreadable subdirectories contribute no files. Symlinked child directories are skipped.
+        A symlink to a supported source file outside the project becomes an input error.
 
         Args:
             directory: Existing directory already checked against ignore rules; it is walked even when it is a symlink.
@@ -303,21 +342,34 @@ class SourceDiscovery:
             patterns: Configured paths.ignore globs checked against each entry.
             ignored_paths: Accumulator that receives an IgnoredPath for every directory the ignore rules skip, and for a skipped file only when it
                 matched a configured pattern or is a minified file gruff-py would otherwise scan. A skipped symlinked directory is not recorded.
+            outside: Accumulator for file links that point outside the project.
 
         Yields:
             Each non-ignored file in a listable directory below directory that has a Python or text source type.
         """
         stack: list[Path] = [directory]
+        # Walk only directories already accepted by the path policy.
         while stack:
             current = stack.pop()
+            # Classify each entry so a skipped directory can be explained without listing all of its descendants.
             for entry in self._directory_entries(current):
                 is_dir = entry.is_dir()
-                if is_dir and entry.is_symlink():
-                    continue
+                # Linked entries need a separate check because their target may sit outside the checkout.
+                if entry.is_symlink():
+                    # Skip links that would not yield a supported file. Directory links could also lead back to this walk.
+                    if is_dir or self._source_type(entry) is None or not entry.is_file():
+                        continue
+                    # Report the link the user can fix without exposing the external target's path.
+                    if not self._canonical(entry).is_relative_to(self._project_root):
+                        outside.add((Path(self._display_path(current)) / entry.name).as_posix())
+                        continue
+                # Check ignores before descending so excluded code never reaches a rule.
                 if self._should_skip_entry(entry, include_ignored, patterns, is_dir, ignored_paths):
                     continue
+                # Traverse accepted directories, but pass only analysable files to the parser.
                 if is_dir:
                     stack.append(entry)
+                # A regular file with an unsupported suffix adds no rule input to the scan.
                 elif entry.is_file() and self._source_type(entry) is not None:
                     yield entry
 
@@ -425,17 +477,19 @@ class SourceDiscovery:
 
     @staticmethod
     def _canonical(path: Path) -> Path:
-        """Resolve symlinks and relative segments in a path, falling back to the path as given when resolution raises an OSError.
+        """Find the real target when discovery compares a path with the project root.
+        Retain the input spelling if the filesystem cannot resolve it so discovery can still make an input decision.
 
         Args:
             path: Path to resolve.
 
         Returns:
-            The resolved path, or path unchanged when resolution raises an OSError.
+            The resolved path, or the input path when resolution hits a filesystem error or a symlink loop.
         """
         try:
             return path.resolve()
-        except OSError:
+        except (OSError, RuntimeError):
+            # A symlink loop or inaccessible ancestor can prevent resolution before the parser sees a file.
             return path
 
     def _display_path(self, path: Path) -> str:

@@ -1,8 +1,13 @@
-"""Renders an AnalysisReport as a SARIF 2.1.0 log for code-scanning consumers."""
+"""Render analysis results as a SARIF 2.1.0 log.
+
+Use `analyse --format sarif` when sending a scan to a code-scanning tool or IDE.
+The log records findings, tool diagnostics and available suppression details for review.
+"""
 
 import json
 from typing import Any
 
+from gruffpy.analysis.machine_contract import diagnostic_file_path
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
@@ -16,12 +21,15 @@ from gruffpy.version import TOOL_NAME
 
 
 class SarifReporter:
-    """Render an analysis report as a SARIF 2.1.0 log for GitHub Code Scanning / IDE consumers."""
+    """Translate a completed analysis into a SARIF 2.1.0 log.
+
+    Code-scanning tools use rule IDs and source locations to show findings to reviewers.
+    The invocation outcome and notification list explain a failed or degraded scan.
+    """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render a SARIF 2.1.0 log for code-scanning and IDE consumers.
-
-        Include metadata for every default-registry rule and fallback descriptors for unregistered rules found in normal or suppressed findings.
+        """Export findings and run status to a code-scanning tool or IDE.
+        Rule descriptors explain findings, and in-source suppression records let consumers distinguish hidden results from resolved ones.
 
         Args:
             report: Report whose findings, suppressed findings, diagnostics and run properties populate the SARIF log.
@@ -30,6 +38,7 @@ class SarifReporter:
             Pretty-printed SARIF JSON, trailing newline included.
         """
         rules: dict[str, dict[str, Any]] = {rule.definition().id: _rule_metadata(rule.definition()) for rule in RuleRegistry.defaults().all()}
+        # A result from an unregistered rule still needs a descriptor the code-scanning tool can display.
         for finding in (*report.findings, *(item.finding for item in report.suppressed_findings)):
             rules.setdefault(finding.rule_id, _fallback_rule_metadata(finding))
 
@@ -57,11 +66,14 @@ class SarifReporter:
             ],
             "properties": _run_properties(report),
         }
+        # A parse failure or budget note belongs to the tool invocation and can explain which checks ran.
         if report.diagnostics:
             run["invocations"] = [
                 {
                     "executionSuccessful": all(diagnostic.invalidates_run is False for diagnostic in report.diagnostics),
-                    "toolExecutionNotifications": [_diagnostic_notification(diagnostic) for diagnostic in report.diagnostics],
+                    "toolExecutionNotifications": [
+                        _diagnostic_notification(diagnostic, report.machine_context.project_root) for diagnostic in report.diagnostics
+                    ],
                 }
             ]
         payload = {
@@ -72,28 +84,28 @@ class SarifReporter:
         return json.dumps(payload, indent=4) + "\n"
 
 
-def _diagnostic_notification(diagnostic: RunDiagnostic) -> dict[str, Any]:
-    """Convert a run diagnostic into a SARIF tool execution notification.
-
-    Use note only for invalidates_run=False, otherwise error, matching render's executionSuccessful check.
-    Prefer nonempty file_path over path; add startLine only when a path is selected and a line is known.
+def _diagnostic_notification(diagnostic: RunDiagnostic, project_root: str) -> dict[str, Any]:
+    """Publish one run problem as a SARIF notification.
+    A nonfatal degradation appears as a note. A run-invalidating failure appears as an error, with the same portable location as JSON.
 
     Args:
         diagnostic: Run problem to report; its type becomes the descriptor id and its message the notification text.
+        project_root: Anchor for the diagnostic's artifact URI.
 
     Returns:
-        Notification mapping with descriptor, level and message. A selected path adds one location, even when the input path is an empty string.
-        When the selected path is None, the locations key is omitted.
+        Notification mapping with descriptor, level, message, and a location if the file lies within the project.
     """
     notification: dict[str, Any] = {
         "descriptor": {"id": diagnostic.type},
         "level": "note" if diagnostic.invalidates_run is False else "error",
         "message": {"text": diagnostic.message},
     }
-    path = diagnostic.file_path or diagnostic.path
+    path = diagnostic_file_path(diagnostic, project_root)
+    # A run-level message can be useful without an artifact the IDE can open.
     if path is not None:
-        physical_location: dict[str, Any] = {"artifactLocation": {"uri": _uri(path)}}
-        if diagnostic.line is not None:
+        physical_location: dict[str, Any] = {"artifactLocation": {"uri": path}}
+        # Whole-file problems link to the file without pretending to identify a source line.
+        if diagnostic.line is not None and diagnostic.line > 0:
             physical_location["region"] = {"startLine": diagnostic.line}
         notification["locations"] = [{"physicalLocation": physical_location}]
     return notification
@@ -254,38 +266,42 @@ def _physical_location(finding: Finding) -> dict[str, Any]:
 
 
 def _uri(file_path: str) -> str:
-    """Normalise a file path into the forward-slash form written as a SARIF artifact location URI.
-
-    Backslashes become forward slashes and every leading ./ segment is stripped. The path is not percent-encoded and an absolute path stays absolute.
+    """Normalize the path spelling used by a SARIF finding's source link.
+    The result uses forward slashes and drops leading `./`. Existing absolute paths and characters stay unencoded.
 
     Args:
-        file_path: Finding or diagnostic path as recorded by the analysis run.
+        file_path: Finding path as recorded by the analysis run.
 
     Returns:
         Normalised path string used verbatim as the artifactLocation uri.
     """
     normalized = file_path.replace("\\", "/")
+    # The editor should resolve `./src/app.py` and `src/app.py` as the same project-relative artifact.
     while normalized.startswith("./"):
         normalized = normalized[2:]
     return normalized
 
 
 def _run_properties(report: AnalysisReport) -> dict[str, Any]:
-    """Build the run-level properties bag that carries the gruff analysis schema version and, for a scored report, its composite score and grade.
+    """Attach analysis metadata to the SARIF run for consumers that show a scan summary.
+    The gruff schema version is always present. Scores and the suppression audit are included when available.
 
     Args:
-        report: Analysis report whose score, when present, supplies the composite score and letter grade.
+        report: Supplies the composite score and grade when applicable, along with the suppression audit.
 
     Returns:
-        Properties mapping that always holds gruffSchemaVersion. It holds score and grade only when the report has a composite score; an unscored
-        report omits both keys.
+        Properties with gruffSchemaVersion. A run without a composite omits score and grade, and a run without audit rows omits suppressions.
     """
     properties: dict[str, Any] = {
         "gruffSchemaVersion": ANALYSIS_SCHEMA_VERSION,
     }
+    # An unscored run must leave the grade and score out of downstream summaries.
     if report.score is not None and report.score.composite is not None:
         properties["score"] = report.score.composite.score
         properties["grade"] = report.score.composite.letter
+    # Keep aggregate suppression counts even when an individual result has no surviving SARIF record.
+    if report.suppressions:
+        properties["suppressions"] = [row.to_dict() for row in report.suppressions]
     return properties
 
 

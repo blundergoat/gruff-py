@@ -1,19 +1,17 @@
-"""Shared line-counting helpers for every rule that compares a unit's length with a threshold.
+"""Share code-line counts among rules that measure the size of a file or declaration.
 
-Defined by ADR-002, as amended for FAMILY-CONTRACT section 12's code-lines clause (search: ``Code lines in every line
-count``): a unit's length is the number of code lines it spans. Blank lines, ``#`` comments, PEP 257 docstrings and
-decorator lines never count, so documenting a unit cannot push it over a limit. File, class,
-average-function and test-function length, setup length, the test-to-subject ratio and the maintainability index's
-line term all read the same per-file set of code lines.
+Blank lines, comments, PEP 257 docstrings and decorators stay out of the counts used by ADR-002 and the family contract.
+A reviewer can compare code size without documentation or formatting padding raising the count.
 
-Function length is the one exception (FAMILY-CONTRACT section 12, search: ``Measures that stop counting data or syntax
-as logic``): it counts logical lines, so a literal or a call that spans several lines counts once. Docstrings and
-decorators stay free there too.
+- File and class size use physical lines that carry code or data.
+- Function length uses logical lines so a call or literal can span several lines and still count once.
+- Budget-limited file scans use token-based counts because the AST is unavailable.
 """
 
 import ast
 import io
 import tokenize
+from collections.abc import Iterator
 
 LineCountableNode = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
 
@@ -132,22 +130,140 @@ def logical_lines_for_size(node: LineCountableNode, logical_lines: frozenset[int
 
 
 def fallback_code_line_count(source: str) -> int:
-    """Count source lines without tokenizing or parsing, leaving out blank and visibly commented lines.
+    """Measure file size when the scan budget leaves the AST unavailable.
+    Use token boundaries to keep docstrings and decorators out of the count while still counting multiline data.
 
     Args:
         source: Source text, possibly invalid or truncated.
 
     Returns:
-        Number of nonblank lines whose first non-whitespace character is something other than #.
+        Number of lines carrying code tokens. Malformed input falls back to nonblank, non-comment lines.
     """
-    return len(_fallback_code_lines(source))
+    lines: set[int] = set()
+    may_start_docstring = True
+    try:
+        # Walk statements without building the AST that this scan's budget excluded.
+        for statement in _token_statements(source):
+            header_end = _declaration_colon(statement)
+            # Keep the header line even for a short definition whose docstring starts on that same line.
+            if header_end is not None:
+                _add_token_lines(lines, statement[: header_end + 1])
+                statement = statement[header_end + 1 :]
+                # A header with no inline body moves the docstring check to the first statement below it.
+                if not statement:
+                    may_start_docstring = True
+                    continue
+                may_start_docstring = True
+            # Decorators and opening docstrings are free. A later string expression can still be code or data.
+            if statement[0].string != "@" and not (may_start_docstring and _is_string_statement(statement)):
+                _add_token_lines(lines, statement)
+            may_start_docstring = False
+    except (SyntaxError, tokenize.TokenError):
+        # An unfinished multiline literal can leave token boundaries unknown. Report the approximate size from readable lines.
+        return len(_fallback_code_lines(source))
+    return len(lines)
+
+
+def _token_statements(source: str) -> Iterator[list[tokenize.TokenInfo]]:
+    """Group Python tokens into statements for the budget-limited size check.
+    A call or literal can span several lines. Separators inside expressions stay in the same statement.
+
+    Args:
+        source: Python text, with the same newlines used by the parser.
+
+    Yields:
+        Nonempty token lists without comments, layout, or statement separators.
+    """
+    statement: list[tokenize.TokenInfo] = []
+    depth = 0
+    # Read in source order to separate statements without retaining all the file's tokens.
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        # A separator at the outer level ends one statement, but a nested expression stays together.
+        if token.type == tokenize.NEWLINE or token.exact_type == tokenize.SEMI and depth == 0:
+            # Empty segments add no code lines to the report.
+            if statement:
+                yield statement
+            statement = []
+        # Skip indentation and comments so layout alone cannot raise the measured size.
+        elif token.type not in _IGNORED_TOKEN_TYPES:
+            statement.append(token)
+            depth = _bracket_depth(depth, token)
+    # Include any final statement still buffered when tokenization reaches the end.
+    if statement:
+        yield statement
+
+
+def _declaration_colon(tokens: list[tokenize.TokenInfo]) -> int | None:
+    """Find where a function or class header ends so its first body statement can be checked for a docstring.
+    Colons inside parameters or other bracketed expressions do not end the header.
+
+    Args:
+        tokens: One statement, with an inline suite still present if it has one.
+
+    Returns:
+        The header colon index, or None for a different kind of statement.
+    """
+    introducer = 1 if tokens[0].string == "async" and len(tokens) > 1 else 0
+    # Only class and function bodies can start another docstring after the module's own first statement.
+    if tokens[introducer].string not in {"class", "def"}:
+        return None
+    depth = 0
+    # Read the header through any type annotations or default values before treating a colon as the start of a body.
+    for index, token in enumerate(tokens):
+        # For example, the colon in `arg: str` must not make the rest of the signature look like a docstring.
+        if token.exact_type == tokenize.COLON and depth == 0:
+            return index
+        depth = _bracket_depth(depth, token)
+    return None
+
+
+def _bracket_depth(depth: int, token: tokenize.TokenInfo) -> int:
+    """Track whether the scanner is inside a bracketed expression.
+    The line counter uses this to avoid splitting one multiline call or literal into unrelated statements.
+
+    Args:
+        depth: Number of open brackets.
+        token: Next source token.
+
+    Returns:
+        Updated bracket depth.
+    """
+    return depth + int(token.string in {"(", "[", "{"}) - int(token.string in {")", "]", "}"})
+
+
+def _is_string_statement(tokens: list[tokenize.TokenInfo]) -> bool:
+    """Recognise a plain string expression that can serve as a docstring.
+    A reviewer should see its lines excluded without also excluding strings assigned as data.
+
+    Args:
+        tokens: Tokens on the first statement of a module or declaration body.
+
+    Returns:
+        True for plain string literals, including parenthesized or implicitly concatenated literals.
+    """
+    values = [token for token in tokens if token.string not in {"(", ")"}]
+    return bool(values) and all(token.type == tokenize.STRING and token.string.lstrip("rRuU").startswith(('"', "'")) for token in values)
+
+
+def _add_token_lines(lines: set[int], tokens: list[tokenize.TokenInfo]) -> None:
+    """Add the physical lines covered by the remaining code tokens to the size calculation.
+    Multiline data counts on each occupied line, including lines that happen to begin with `#`.
+
+    Args:
+        lines: Accumulated physical code lines, updated in place.
+        tokens: Code tokens whose line spans contribute to the count. An empty list leaves the measurement unchanged.
+    """
+    # Count each physical line once even when multiple tokens share it.
+    for token in tokens:
+        # A whitespace-only tokenizer error contributes no code or data to the size measure.
+        if token.type != tokenize.ERRORTOKEN or not token.string.isspace():
+            lines.update(range(token.start[0], token.end[0] + 1))
 
 
 def _token_code_lines(source: str, tree: ast.AST | None) -> frozenset[int]:
-    """Find physical lines containing code or data tokens, excluding comments, layout and recognised docstrings.
-
-    Multiline tokens count on every covered line; whitespace-only error tokens do not count.
-    Decorator lines remain for code_line_numbers to remove; tokenization failures use _fallback_code_lines, where docstrings count.
+    """Find the physical lines that affect a file or declaration's size.
+    Count multiline data and exclude recognised docstrings and layout. The caller removes decorator lines.
+    If tokenization fails, report the best available count from nonblank, non-comment lines.
 
     Args:
         source: Full source text of the analysed file.
@@ -156,17 +272,22 @@ def _token_code_lines(source: str, tree: ast.AST | None) -> frozenset[int]:
     Returns:
         One-based line numbers that hold code or data, still including decorator lines.
     """
-    docstring_spans = _docstring_source_spans(tree, source.splitlines())
+    docstring_spans = _docstring_source_spans(tree, source.split("\n"))
     try:
         tokens = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
     except (IndentationError, SyntaxError, tokenize.TokenError):
+        # Broken indentation or an unfinished expression can still yield an approximate count for the file-level rule.
         return _fallback_code_lines(source)
     lines: set[int] = set()
+    # Inspect tokens instead of splitting text so a line inside a data string is measured as data.
     for token in tokens:
+        # Layout and comments do not count against the user's size threshold.
         if token.type in _IGNORED_TOKEN_TYPES:
             continue
+        # Whitespace stays free if the tokenizer emits it as a recovery token.
         if token.type == tokenize.ERRORTOKEN and token.string.isspace():
             continue
+        # Documentation is free even when the first line shares a physical line with executable code.
         if _is_inside_docstring_span(token, docstring_spans):
             continue
         lines.update(range(token.start[0], token.end[0] + 1))

@@ -4,6 +4,7 @@ The suite protects ``AKIA`` and ``ASIA`` detection, documentation placeholders, 
 and the fixed preview users see instead of credential-derived text.
 """
 
+from gruffpy.rule.registry import RuleRegistry
 from gruffpy.rule.sensitive_data.aws_access_key_rule import AwsAccessKeyRule
 from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
 
@@ -32,6 +33,23 @@ def test_asia_session_token_emits():
     src = f"key = '{_ASIA_KEY}'\n"
     findings = AwsAccessKeyRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
+
+
+def test_redacted_keys_on_one_line_keep_distinct_locations() -> None:
+    """Keep both findings through registry deduplication when their values share a redacted preview.
+
+    Returns:
+        None. Checks both one-based locations and the shared redacted preview.
+    """
+    source = f"values = [{_AKIA_KEY!r}, {_ASIA_KEY!r}]\n"
+    all_findings = RuleRegistry.defaults().analyse([make_unit(source)], default_ctx())
+    findings = [finding for finding in all_findings if finding.rule_id == AwsAccessKeyRule.ID]
+
+    assert [(finding.line, finding.column) for finding in findings] == [
+        (1, source.index(_AKIA_KEY) + 1),
+        (1, source.index(_ASIA_KEY) + 1),
+    ]
+    assert {finding.metadata["preview"] for finding in findings} == {"[redacted:aws-access-key]"}
 
 
 def test_documentation_example_key_is_a_documented_sample():

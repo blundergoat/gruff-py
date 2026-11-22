@@ -1,9 +1,7 @@
-"""Agent-hook contract projection for ``gruff.hook.v2``.
+"""Translate analysis results into `gruff.hook.v2` for coding-agent hooks.
 
-The hook contract is intentionally separate from the canonical analysis
-envelope. Hook mode runs the normal analyser, then projects findings into the
-cross-analyser shape an agent PostToolUse hook can render without per-language
-logic.
+The hook uses the normal analyser so agent results come from the same rule engine as a terminal scan.
+This module applies the requested attribution and packages findings, diagnostics and suppressions for the agent.
 """
 
 from __future__ import annotations
@@ -21,6 +19,7 @@ from typing import Any
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
 from gruffpy.analysis.baseline import BaselineOptions
 from gruffpy.analysis.changed_region import ChangedRegionSet, parse_explicit_ranges
+from gruffpy.analysis.machine_contract import diagnostic_file_path, project_relative_path
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.runner import run_analysis
@@ -83,7 +82,11 @@ _MEASURED_METADATA_KEYS = (*_LINE_UNITS_BY_METADATA_KEY, *_COUNT_UNITS_BY_METADA
 
 @dataclass(frozen=True, slots=True)
 class _HookFilterResult:
-    """Findings retained for hook output plus changed-region suppression count."""
+    """Carry the findings and suppression count for a hook response.
+
+    The agent sees the retained findings as review prompts.
+    The count explains how many findings were removed by the changed-region filter.
+    """
 
     findings: tuple[Finding, ...]
     suppressed_count: int
@@ -160,7 +163,7 @@ def fatal_payload(diagnostic_type: str, message: str) -> dict[str, Any]:
     return {
         "contractVersion": HOOK_CONTRACT_VERSION,
         "analyzer": {"name": TOOL_NAME, "version": VERSION},
-        "run": _run_payload(mode="full", scope="file", paths=(), analysed_files=0, baseline_path=None),
+        "run": _run_payload(mode="full", scope="file", paths=(), analysed_files=0, baseline_path=None, project_root="."),
         "findings": [],
         "suppressed": {"count": 0},
         "suppressions": [],
@@ -186,21 +189,21 @@ def _run_payload(
     paths: tuple[str, ...],
     analysed_files: int,
     baseline_path: str | None,
+    project_root: str,
 ) -> dict[str, Any]:
-    """Build the audit block a consumer reads before trusting a verdict.
-
-    Without it a clean payload is ambiguous, because a run that analysed nothing
-    and a run that found nothing look identical on the wire.
+    """Describe the scope and comparison used to reach a hook verdict.
+    The agent can distinguish a scan with zero analysed files from a completed scan that returned no findings.
 
     Args:
         mode: Which region selector chose the work: changed-ranges, diff, since, or full.
         scope: How wide each changed line was taken to be: symbol, hunk, or file.
         paths: The operands as the caller gave them.
         analysed_files: How many files were actually analysed; zero is reported, never hidden.
-        baseline_path: Project-relative baseline that classified the run, or None.
+        baseline_path: Baseline that classified the run, or None when no baseline was applied.
+        project_root: Root used to publish an applied baseline's location when it lies within the project.
 
     Returns:
-        The `run` block of the hook payload.
+        The `run` block. A missing baseline leaves its schema and path null. An applied external baseline is recorded without its host path.
     """
     return {
         "mode": mode,
@@ -210,7 +213,7 @@ def _run_payload(
         "baseline": {
             "applied": baseline_path is not None,
             "schemaVersion": BASELINE_SCHEMA_VERSION if baseline_path is not None else None,
-            "path": baseline_path,
+            "path": project_relative_path(baseline_path, project_root) if baseline_path is not None else None,
         },
     }
 
@@ -226,7 +229,8 @@ def hook_payload(
     baseline_statuses: dict[int, str] | None = None,
     suppressions: tuple[SuppressionSummary, ...] = (),
 ) -> dict[str, Any]:
-    """Project an analysis report into the `gruff.hook.v2` payload.
+    """Translate a completed analysis into the agent's `gruff.hook.v2` response.
+    The hook applies changed-region attribution and reports what it kept, what it suppressed and whether the scan was usable.
 
     Args:
         report: Native analysis report produced by the normal analyser runner
@@ -275,12 +279,13 @@ def hook_payload(
             paths=paths,
             analysed_files=report.files_parsed,
             baseline_path=baseline_path,
+            project_root=report.machine_context.project_root,
         ),
         "findings": [_finding_payload(finding, identities[index], statuses.get(id(finding))) for index, finding in enumerate(findings)],
         "suppressed": {"count": filtered.suppressed_count},
         "suppressions": [_suppression_payload(summary) for summary in suppressions],
         "ignored": {"paths": [detail.to_dict() for detail in report.ignored_path_details]},
-        "diagnostics": [_diagnostic_payload(diagnostic) for diagnostic in report.diagnostics],
+        "diagnostics": [_diagnostic_payload(diagnostic, report.machine_context.project_root) for diagnostic in report.diagnostics],
         "config": {"schemaOk": True, "error": None},
     }
 
@@ -306,18 +311,22 @@ def _suppression_payload(summary: SuppressionSummary) -> dict[str, Any]:
     }
 
 
-def _diagnostic_payload(diagnostic: RunDiagnostic) -> dict[str, Any]:
-    """Project one run diagnostic into the v2 shape, where every entry says what it means for the run.
-
-    Explicit severity distinguishes a budget note from a failure that invalidates the run.
+def _diagnostic_payload(diagnostic: RunDiagnostic, project_root: str) -> dict[str, Any]:
+    """Publish a run diagnostic with the location and severity the agent needs to interpret it.
+    A budget note is a warning and a run-invalidating diagnostic is fatal.
 
     Args:
         diagnostic: One diagnostic the run produced.
+        project_root: Root used to project diagnostic paths.
 
     Returns:
-        The diagnostic fields plus warning severity when invalidates_run is False, or fatal severity otherwise.
+        The diagnostic with project-relative locations and warning severity when invalidates_run is False, or fatal severity otherwise.
     """
     payload: dict[str, Any] = dict(diagnostic.to_dict())
+    payload["file"] = diagnostic_file_path(diagnostic, project_root)
+    # Pre-scan failures may have no operand path. Keep a link only when an input was recorded inside the project.
+    if diagnostic.path is not None:
+        payload["path"] = project_relative_path(diagnostic.path, project_root)
     payload["severity"] = "warning" if diagnostic.invalidates_run is False else "fatal"
     return payload
 
@@ -462,8 +471,10 @@ def stable_identities_from_git_base(
     no_config: bool,
     include_ignored: bool,
     deep_scan_budget: str = "",
+    execution_exclude_rules: tuple[str, ...] = (),
 ) -> Counter[str]:
-    """Analyze the git base tree and count its hook stable identities.
+    """Scan the selected Git tree to establish which findings were already present before the edit.
+    Use the same rules and budget as the working-tree scan so old findings can be distinguished from new ones.
 
     Args:
         project_root: Git working tree where the hook command was invoked.
@@ -475,6 +486,7 @@ def stable_identities_from_git_base(
         include_ignored: Whether default-ignored and gitignored paths are
             included in the base analysis.
         deep_scan_budget: Override text shared with working-tree analysis; empty applies no override to the base scan.
+        execution_exclude_rules: The same invocation rule exclusions used for the working tree.
 
     Returns:
         Counts by hook stable identity. An empty counter means the base was analyzed and produced no findings.
@@ -484,6 +496,7 @@ def stable_identities_from_git_base(
         base_root = Path(tmp)
         _materialize_git_base(project_root, base_root, base_ref, paths)
         base_config_path = config_path
+        # Prefer the working-tree config when no explicit file was supplied so the comparison uses the same rules.
         if not no_config and base_config_path is None:
             base_config_path = existing_config_source(project_root)
         report = run_analysis(
@@ -498,9 +511,12 @@ def stable_identities_from_git_base(
                 display_filter=FindingDisplayFilter(),
                 baseline=BaselineOptions(disabled=True),
                 deep_scan_budget=deep_scan_budget,
+                execution_exclude_rules=execution_exclude_rules,
             )
         )
-        return Counter(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in report.findings)
+        # Use findings before the display floor so visibility settings do not make an unchanged issue look new.
+        findings = report.machine_context.summary_findings
+        return Counter(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in (report.findings if findings is None else findings))
 
 
 def render_json(payload: dict[str, Any]) -> str:

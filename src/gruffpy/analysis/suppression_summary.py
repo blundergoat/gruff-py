@@ -1,12 +1,11 @@
-"""The audit row every suppression class publishes in a report, and the findings section 13c removes.
+"""Keep the audit details that explain fewer findings in a report.
 
-Lives beside the other report value objects rather than in ``gruffpy.suppression`` because
-``gruffpy.analysis.report`` and the suppression channel that fills these rows would otherwise
-import each other. An audit row reads no finding, so no matched value material can reach the
-report (FAMILY-CONTRACT section 5, search: ``**Forbidden material.**``); a ``SuppressedFinding``
-reaches only SARIF, as a result marked suppressed.
+A suppression row holds the scope, reason and count without access to any matched value.
+SARIF can also show a removed finding as suppressed under the shared contract.
+Both records sit beside the analysis report to avoid an import cycle with the filters that create them.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -74,3 +73,30 @@ class SuppressedFinding:
 
     finding: Finding
     justification: str
+
+
+def suppression_audit_text(suppressions: Sequence[SuppressionSummary]) -> str:
+    """Describe how many findings each active suppression removed and why.
+    Terminal, Markdown, browser and CI reports use the same wording so reviewers can trace the decisions across formats.
+
+    Args:
+        suppressions: Audit rows in report order. An empty collection gives the reporter no suppression message.
+
+    Returns:
+        One shared human-readable line, or an empty string if nothing was suppressed.
+    """
+    total = sum(row.suppressed for row in suppressions)
+    # A zero-match exclusion stays in structured output for audit without adding a human-facing notice.
+    if not total:
+        return ""
+    labels = {"built-in": "builtInTestPath", "inline": "inline", "duplicate": "duplicate"}
+    details = "; ".join(
+        (
+            f"{labels[row.source]}[{', '.join(row.paths)}] {row.rule}: {row.suppressed} ({row.reason})"
+            if row.source in labels
+            else f"sensitiveExclusions[{row.index}] {row.rule}: {row.suppressed} ({row.reason})"
+        )
+        for row in suppressions
+        if row.suppressed > 0
+    )
+    return f"Suppressed findings: {total} via {details}"

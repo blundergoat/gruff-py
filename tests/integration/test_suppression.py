@@ -159,52 +159,29 @@ def _analyse_broken_source(tmp_path: Path, source: str) -> tuple[int, dict]:
 
 
 @pytest.mark.parametrize(
-    "suppressed_source",
-    _BROKEN_SOURCE_SUPPRESSION_CASES,
-    ids=("disable-file", "disable-same-line"),
+    "source",
+    (_BROKEN_SOURCE_WITHOUT_SUPPRESSION, *_BROKEN_SOURCE_SUPPRESSION_CASES),
+    ids=("no-directive", "disable-file", "disable-same-line"),
 )
-def test_parse_broken_source_text_findings_obey_suppressions(
+def test_gruff_directives_cannot_hide_sensitive_findings_in_broken_source(
     tmp_path: Path,
     monkeypatch,
-    suppressed_source: str,
+    source: str,
 ) -> None:
-    """Filter a raw-source finding without hiding its parser diagnostic or exit 2.
+    """Keep recoverable sensitive findings and the fatal diagnostic in broken Python source.
 
     Args:
         tmp_path: Temporary project root containing the broken Python file.
         monkeypatch: Fixture that makes the temporary project the CLI working directory.
-        suppressed_source: Broken source carrying the suppression form under test.
+        source: Broken source with or without a Gruff suppression directive.
 
     Returns:
-        None. Checks the parser diagnostic, exit status and AWS finding with and without a suppression directive.
+        None. Checks the parser diagnostic, exit status, and AWS finding.
     """
     monkeypatch.chdir(tmp_path)
 
-    unsuppressed_status, unsuppressed_payload = _analyse_broken_source(
-        tmp_path,
-        _BROKEN_SOURCE_WITHOUT_SUPPRESSION,
-    )
-    # An unsuppressed broken file keeps both the fatal diagnostic and recoverable text evidence.
-    unsuppressed_contract = {
-        "status": unsuppressed_status,
-        "diagnosticTypes": {diagnostic["type"] for diagnostic in unsuppressed_payload["diagnostics"]},
-        "hasAwsFinding": any(finding["ruleId"] == "sensitive-data.aws-access-key" for finding in unsuppressed_payload["findings"]),
-    }
-    assert unsuppressed_contract == {
-        "status": 2,
-        "diagnosticTypes": {"parse-error"},
-        "hasAwsFinding": True,
-    }
+    status, payload = _analyse_broken_source(tmp_path, source)
 
-    suppressed_status, suppressed_payload = _analyse_broken_source(tmp_path, suppressed_source)
-    # A matching directive removes only the source finding; parser failure still owns exit 2.
-    suppressed_contract = {
-        "status": suppressed_status,
-        "diagnosticTypes": {diagnostic["type"] for diagnostic in suppressed_payload["diagnostics"]},
-        "hasAwsFinding": any(finding["ruleId"] == "sensitive-data.aws-access-key" for finding in suppressed_payload["findings"]),
-    }
-    assert suppressed_contract == {
-        "status": 2,
-        "diagnosticTypes": {"parse-error"},
-        "hasAwsFinding": False,
-    }
+    assert status == 2
+    assert {diagnostic["type"] for diagnostic in payload["diagnostics"]} == {"parse-error"}
+    assert any(finding["ruleId"] == "sensitive-data.aws-access-key" for finding in payload["findings"])

@@ -85,6 +85,12 @@ command -v git >/dev/null 2>&1 || { echo "error: git is required for source prov
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 [[ -z "$JSON_PATH" ]] && JSON_PATH="$OUTPUT_DIR/perf-results.json"
+# Preserve paths typed from the launch directory before running workloads in the checkout.
+# For example, `--json results.json` still writes beside the caller when the script is launched by absolute path.
+[[ "$JSON_PATH" == /* ]] || JSON_PATH="$PWD/$JSON_PATH"
+[[ -z "$BASELINE_PATH" || "$BASELINE_PATH" == /* ]] || BASELINE_PATH="$PWD/$BASELINE_PATH"
+[[ -z "$UPDATE_BASELINE_PATH" || "$UPDATE_BASELINE_PATH" == /* ]] || UPDATE_BASELINE_PATH="$PWD/$UPDATE_BASELINE_PATH"
+cd -- "$REPO_ROOT"
 
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 PYTHON_VERSION="$(uv run python -c 'import sys; print(".".join(str(x) for x in sys.version_info[:3]))')"
@@ -110,22 +116,49 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-included = ["src/gruffpy", "pyproject.toml", "uv.lock"]
+included = [
+    "src",
+    "tests",
+    ".gitignore",
+    ".gruff-py.yaml",
+    ".gruff.yaml",
+    "gruff-baseline.json",
+    "pyproject.toml",
+    "uv.lock",
+]
 files: set[Path] = set()
 
 
 def visit(path: Path) -> None:
+    """Collect one runtime input for the benchmark's reproducibility manifest.
+    A missing optional config or baseline contributes nothing. Store symlinks as entries without following them.
+
+    Args:
+        path: Input file or directory from the checkout, which may be absent.
+
+    Returns:
+        None. Adds available input paths to the manifest candidates in place.
+    """
+    # Bytecode caches can appear after a run without changing its runtime inputs.
+    if path.name == "__pycache__":
+        return
+    # Hash a link's spelling instead of following it to files the checkout does not own.
     if path.is_symlink() or path.is_file():
         files.add(path)
         return
-    for child in path.iterdir():
-        visit(child)
+    # Walk source and test trees to include nested ignore rules and uncommitted changes.
+    if path.is_dir():
+        # Each child may affect the measured scan even when Git has never tracked it.
+        for child in path.iterdir():
+            visit(child)
 
 
+# Load the inputs that can change the benchmark. An absent optional file simply contributes no hash.
 for relative in included:
     visit(root / relative)
 
 manifest = []
+# Use the same order on each run so traversal order alone cannot change the digest.
 for path in sorted(files):
     data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
     manifest.append(

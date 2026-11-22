@@ -1,9 +1,8 @@
-"""Create or canonically regenerate the user's ``.gruff-py.yaml`` safely.
+"""Prepare or regenerate the project's `.gruff-py.yaml` for `init`.
 
-Fresh init renders registry defaults plus starter ignores. Forced regeneration
-loads every existing setting strictly, stages the resolved YAML beside the
-target, reloads it for semantic equality, then atomically replaces the file.
-Legacy YAML and TOML remain authoritative and are never shadowed by init.
+A fresh setup starts from registry defaults and the starter ignore list.
+Forced regeneration reloads the staged file to check that existing settings survive before replacing it atomically.
+The command preserves a legacy YAML or TOML file when it still governs the project.
 """
 
 import os
@@ -54,7 +53,7 @@ _ACCEPTED_ABBREVIATIONS_COMMENTS = (
     "  # Configured values replace this seed; they do not merge with it.",
 )
 _SENSITIVE_EXCLUSIONS_COMMENTS = (
-    "# sensitiveExclusions is the only way to silence a sensitive-data finding.",
+    "# Use sensitiveExclusions to record reviewed exceptions for sensitive-data findings.",
     "# Write each entry by hand with rule, path, and reason; symbol is optional.",
     "# No preview or matched value is ever turned into an entry automatically,",
     "# and every entry reports how many findings it suppressed.",

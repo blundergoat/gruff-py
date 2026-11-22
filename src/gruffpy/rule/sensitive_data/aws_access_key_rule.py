@@ -1,10 +1,8 @@
-"""``sensitive-data.aws-access-key`` - AWS access key ID literal.
+"""Check source for AWS access key ID literals under `sensitive-data.aws-access-key`.
 
-Pattern: ``AKIA`` + 16 uppercase alphanumeric chars. AWS access key IDs are
-20-character strings starting with ``AKIA`` (long-term keys) or ``ASIA``
-(session tokens). Both shapes fire, including the key AWS publishes in its own
-documentation: the family reports it in every port, because a key-shaped value
-ending in ``EXAMPLE`` is one alphanumeric run and nothing in it marks a placeholder.
+Long-term and session access key IDs are checked even when present on the same line.
+The exact vendor-documented access key example and fully masked bodies stay quiet.
+Findings show a fixed preview and the source location for the reviewer to inspect.
 """
 
 from gruffpy.finding.confidence import Confidence
@@ -58,9 +56,8 @@ class AwsAccessKeyRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan raw source for ``AKIA``-/``ASIA``-prefixed access key IDs.
-
-        Findings show the source line and a redacted marker. Exact vendor-documented samples and fully masked values are skipped.
+        """Report candidate AWS access key IDs in the selected source file.
+        Keep each location visible for review while the preview masks the matched key.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -71,7 +68,9 @@ class AwsAccessKeyRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        # Report each source location even when every finding has the same redacted AWS preview.
         for access_key_match in iter_matches(_PATTERN, unit.source):
+            # A developer may paste a fully masked key into documentation. It contains no key ID to investigate.
             if access_key_match.raw[4:] == _MASKED_BODY:
                 continue
             findings.append(
@@ -80,6 +79,7 @@ class AwsAccessKeyRule(SourceTextRule):
                     message="AWS access key ID literal in source.",
                     file_path=unit.file.display_path,
                     line=access_key_match.line,
+                    column=access_key_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,

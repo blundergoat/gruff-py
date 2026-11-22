@@ -16,7 +16,10 @@ The complete result of one scan: schema version, tool metadata, run metadata, pa
 
 ### Baseline
 
-A reviewed-finding suppression file. `gruff-py` writes and reads the family-shared `gruff.baseline.v3`; entries match by the ratified line-free finding identity, so a reviewed finding that moves lines stays suppressed without disabling rules, and sensitive findings are never baselined. A 0.5 baseline (`gruff-py.baseline.v1` or `gruff.baseline.v1`) is refused; `gruff-py analyse --migrate-baseline <old> --generate-baseline <new>` carries its reviews into a new file.
+A file of reviewed findings in the shared `gruff.baseline.v3` format. A finding can move lines and stay suppressed when its line-free identity still matches. Sensitive findings are ineligible for baseline review.
+
+Analysis requires v3. To carry reviews from `gruff-py.baseline.v1` or `gruff.baseline.v1` into a separate file, run
+`gruff-py analyse --migrate-baseline old.json --generate-baseline=new.json`.
 
 ### Changed-Code Scan
 

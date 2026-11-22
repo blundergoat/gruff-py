@@ -1,4 +1,8 @@
-"""Source-comment scanning helpers for documentation rules."""
+"""Read Python comments for checks that act on suppression directives.
+
+The scanner uses the source already read for analysis.
+Only real comments can affect a finding or trigger a request for a reason.
+"""
 
 import io
 import tokenize
@@ -7,7 +11,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class SourceComment:
-    """One Python source comment token.
+    """Carry a Python comment and its line number to rules that inspect directives.
+
+    The original token keeps its `#` for exact syntax checks.
+    The stripped text is available to rules that read the comment's meaning.
 
     Attributes:
         line: One-based source line for the comment.
@@ -21,10 +28,11 @@ class SourceComment:
 
 
 def scan_comments(source: str) -> tuple[SourceComment, ...]:
-    """Return real comment tokens from source without reopening files.
+    """Return comment tokens to rules that match or explain suppression directives.
+    Use the scan's existing source so decisions are tied to the same text the rules inspected.
 
     Args:
-        source: Python source text from an AnalysisUnit.
+        source: Python source from the analysis unit. Empty source produces no comment tokens.
 
     Returns:
         Comment tokens with line numbers and stripped bodies. Strings containing # are ignored.
@@ -33,7 +41,9 @@ def scan_comments(source: str) -> tuple[SourceComment, ...]:
     comments: list[SourceComment] = []
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        # Walk the tokens in source order so directives can be associated with their own line or the next one.
         for token in tokens:
+            # A string like `"# nosec"` is source data and cannot hide a finding on that line.
             if token.type != tokenize.COMMENT:
                 continue
             raw = token.string
@@ -45,7 +55,6 @@ def scan_comments(source: str) -> tuple[SourceComment, ...]:
                 )
             )
     except (tokenize.TokenError, SyntaxError):
-        # Bad dedents can raise IndentationError and unfinished input can raise TokenError.
-        # Keep earlier comments available to comment rules and leave syntax reporting to the analysis diagnostics.
+        # If the user scans a file with an unfinished triple-quoted string, keep earlier comments. The parser reports the syntax failure.
         return tuple(comments)
     return tuple(comments)

@@ -1,4 +1,8 @@
-"""Reads source files from disk and turns them into ``AnalysisUnit`` objects."""
+"""Read each discovered file before the analyser runs its rules.
+
+Python files can supply an AST to deeper rules. Text files supply the source needed by text checks.
+Read failures, syntax errors and budget limits travel with the unit for the report to explain.
+"""
 
 import ast
 
@@ -8,14 +12,19 @@ from gruffpy.source.source_file import SourceFile
 
 
 class PythonFileParser:
-    """Read source files and parse Python files into analysis units."""
+    """Turn a discovered source file into input for the analyser's rules.
+
+    Use this parser after discovery has selected the paths for the scan.
+    Its diagnostics tell readers when the file could only receive text checks or could not be read.
+    """
 
     def parse(
         self,
         source_file: SourceFile,
         budget: DeepScanBudget | None = None,
     ) -> AnalysisUnit:
-        """Parse a source file into an analysis unit.
+        """Prepare one discovered file for the checks the user requested.
+        Use the scan budget to choose whether Python rules get an AST or only text, and report why deep checks were skipped.
 
         Args:
             source_file: Source file descriptor to read and parse.
@@ -29,6 +38,7 @@ class PythonFileParser:
             with open(source_file.absolute_path, "rb") as f:
                 source_bytes = f.read()
         except OSError as exc:
+            # A file can be removed between discovery and opening, so the report records an input failure for that file.
             return AnalysisUnit(
                 file=source_file,
                 source="",
@@ -36,13 +46,17 @@ class PythonFileParser:
                 diagnostics=(ParseDiagnostic(message=f"read error: {exc}"),),
             )
 
-        source = source_bytes.decode("utf-8", errors="replace")
+        source = source_bytes.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
+        # A YAML or `.env` file still reaches text checks, with no Python syntax diagnostic.
         if not source_file.is_python():
             return AnalysisUnit(file=source_file, source=source, tree=None)
 
+        # A caller without a budget override gets the default depth limits.
         effective_budget = budget or DeepScanBudget()
-        line_count = 0 if not source else source.count("\n") + 1
+        # A trailing newline ends the last physical line. It does not create another line to count against the budget.
+        line_count = source.count("\n") + (1 if source and not source.endswith("\n") else 0)
+        # Files over either limit stay visible to text checks and report which deep checks were skipped.
         if effective_budget.enabled and (line_count > effective_budget.max_lines or len(source_bytes) > effective_budget.max_bytes):
             return AnalysisUnit(
                 file=source_file,
@@ -68,6 +82,7 @@ class PythonFileParser:
         try:
             tree = ast.parse(source, filename=source_file.display_path)
         except SyntaxError as exc:
+            # An unfinished function can still receive text checks. The syntax diagnostic identifies the line to fix.
             return AnalysisUnit(
                 file=source_file,
                 source=source,
@@ -75,6 +90,7 @@ class PythonFileParser:
                 diagnostics=(ParseDiagnostic(message=str(exc.msg or "syntax error"), line=exc.lineno),),
             )
         except ValueError as exc:
+            # A parser rejection without a source location still needs a file-level diagnostic and a failed scan.
             return AnalysisUnit(
                 file=source_file,
                 source=source,

@@ -1,4 +1,8 @@
-"""Rewrite legacy gruff config key shapes to the current schema (``migrate-config``)."""
+"""Prepare YAML changes for `gruff-py migrate-config`.
+
+The CLI can show this diff for a dry run or write the proposed configuration to a separate file.
+The migration keeps current settings and refuses conflicting gate values that require a user's decision.
+"""
 
 import copy
 import difflib
@@ -26,7 +30,10 @@ _TOML_GUIDANCE = (
 
 @dataclass(frozen=True, slots=True)
 class ConfigMigration:
-    """Outcome of migrating one YAML config file.
+    """Describe the proposed changes to one project's YAML configuration.
+
+    The command uses this result to explain a dry run and name the source file it preserves.
+    When changes are needed, the rendered YAML is ready for the separate output chosen by the user.
 
     Attributes:
         path: The config file the migration targets.
@@ -207,17 +214,25 @@ def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
     Removing secretPreviews also removes the allowlists table if it becomes empty.
 
     Args:
-        migrated: The working document, edited in place. A legacy per-command minimumSeverity mapping replaces any existing failOn value.
+        migrated: The working document, edited in place. A legacy per-command minimumSeverity mapping adds missing exit gates to failOn.
 
     Returns:
         One readable line per rewrite. The list is empty when neither rewrite applies.
+
+    Raises:
+        ConfigError: If the existing failOn value cannot be merged without discarding settings.
     """
     changes: list[str] = []
 
-    gate = migrated.get("minimumSeverity")
+    legacy_gate = migrated.get("minimumSeverity")
     # Only the per-command mapping is the old gate; a bare severity is the 0.6 display floor and keeps its name.
-    if isinstance(gate, dict):
-        migrated["failOn"] = migrated.pop("minimumSeverity")
+    if isinstance(legacy_gate, dict):
+        saved_gate = migrated.get("failOn", {})
+        # Conflicting `analyse` thresholds require a decision. Choosing an arbitrary value could change CI status.
+        if not isinstance(saved_gate, dict) or any(key in saved_gate and saved_gate[key] != value for key, value in legacy_gate.items()):
+            raise ConfigError("minimumSeverity and failOn give conflicting exit gates. Reconcile them before migrating.")
+        migrated["failOn"] = {**legacy_gate, **saved_gate}
+        del migrated["minimumSeverity"]
         changes.append("minimumSeverity: renamed to failOn, the key that gates the exit code in 0.6")
 
     allowlists = migrated.get("allowlists")
@@ -226,6 +241,7 @@ def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
         allowlists.pop("secretPreviews")
         changes.append("allowlists.secretPreviews: removed; section 5 makes category markers unconditional")
 
+        # Omit the table when the retired key was the user's only allowlist setting.
         if not allowlists:
             migrated.pop("allowlists")
 

@@ -1,12 +1,10 @@
-"""Render one analysis journey as a self-contained browser report.
+"""Render one scan as a standalone browser report.
 
-The document keeps all styles and behavior inline while showing scoring mode
-and partial scan context as separate concepts for human inspection.
+Use `report --format html` to open or share a scan in the browser.
+The report explains scoring mode and partial scan context separately so readers can interpret the verdict.
 """
 
-# The inline CSS/JS intentionally mirrors gruff-php's dependency-free reporter
-# style, so long asset strings are kept in this file instead of split across
-# separate static assets.
+# Inlined styles and scripts make the saved report usable as a single file.
 # ruff: noqa: E501 - inline CSS/JS stays self-contained for reports
 
 import html
@@ -16,6 +14,7 @@ from urllib.parse import quote
 from gruffpy.analysis.report import AnalysisReport
 from gruffpy.analysis.run_diagnostic import RunDiagnostic
 from gruffpy.analysis.schema import ANALYSIS_SCHEMA_VERSION
+from gruffpy.analysis.suppression_summary import suppression_audit_text
 from gruffpy.finding.finding import Finding
 from gruffpy.scoring.file_score import FileScore
 from gruffpy.scoring.pillar_score import PillarScore
@@ -132,17 +131,23 @@ class HtmlReporter:
         )
 
     def _diagnostics(self, report: AnalysisReport) -> str:
-        """Render the diagnostics section that lists every run diagnostic recorded on the report.
+        """Show run messages and active suppression counts in the browser report.
+        This section explains an incomplete scan or a smaller-than-expected findings list.
 
         Args:
-            report: Analysis report whose diagnostics are rendered, one row each, in their stored order.
+            report: Supplies diagnostic rows in scan order and any active suppression audit.
 
         Returns:
-            Diagnostics section HTML, or an empty string when the report carries no diagnostics.
+            Section HTML, or an empty string when the report has neither run messages nor active suppression details.
         """
-        if not report.diagnostics:
+        audit = suppression_audit_text(report.suppressions)
+        # A scan with no run messages or applied suppressions has no diagnostics section to show.
+        if not report.diagnostics and not audit:
             return ""
         rows = "".join(_diagnostic_row(diagnostic) for diagnostic in report.diagnostics)
+        # Reviewers can see why results were withheld even when the run had no error.
+        if audit:
+            rows += f'<p class="chart-summary">{_esc(audit)}</p>'
         return (
             '<section class="diagnostics"><h2 class="section-head">diagnostics '
             '<span class="aside">run messages</span></h2>'

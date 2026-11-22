@@ -83,10 +83,8 @@ class ApiKeyPatternRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Scan the raw source text for vendor-specific API key shapes.
-
-        Findings include the vendor and source line for matches in strings, comments, or documentation.
-        The preview uses the vendor's redaction category when available and the bare marker otherwise.
+        """Report recognised API key shapes in the files selected for analysis.
+        Reviewers get a rule and source location with a fixed redacted preview. The raw key does not enter the finding.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -97,6 +95,7 @@ class ApiKeyPatternRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        # Each distinct source location needs its own finding so the reviewer can check it separately.
         for api_key_match in iter_matches(_PATTERN, unit.source):
             # Documentation placeholders stay silent so examples do not clutter real secret review.
             if is_likely_placeholder_secret(api_key_match.raw):
@@ -108,6 +107,7 @@ class ApiKeyPatternRule(SourceTextRule):
                     message=f"{_display_vendor(vendor)}-shaped API key literal in source.",
                     file_path=unit.file.display_path,
                     line=api_key_match.line,
+                    column=api_key_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,

@@ -36,10 +36,6 @@ from gruffpy.hook_contract import (
 )
 from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 
-_SEVERITY_RANK = {Severity.ADVISORY: 0, Severity.WARNING: 1, Severity.ERROR: 2}
-
-_CONFIDENCE_RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}
-
 
 def _apply_hook_decorators(command: Callable[..., Any]) -> Callable[..., Any]:
     """Attach the hook CLI options so the callback can receive the parsed invocation as keyword arguments.
@@ -209,7 +205,8 @@ def _execute_hook(
     gate: _ExitGate,
     paths: tuple[str, ...],
 ) -> None:
-    """Run one hook invocation and exit, so the decorated command stays a thin entry point.
+    """Run the scan a coding agent requested and publish its hook response.
+    The retained findings and diagnostics tell the agent what to fix and whether its gate passed.
 
     Args:
         changed_ranges: Explicit changed line ranges such as 3-3,8-10; None omits this filter.
@@ -235,6 +232,7 @@ def _execute_hook(
     # Lazy import avoids a cli <-> cli_hook import cycle at module load.
     from gruffpy.cli import _write_stdout
 
+    # The hook uses one comparison source so each finding has a clear reason for staying visible.
     if hook_baseline_path is not None and diff_ref:
         click.echo("--baseline and --diff cannot be combined in hook mode.", err=True)
         sys.exit(2)
@@ -247,6 +245,7 @@ def _execute_hook(
             no_config=no_config,
             include_ignored=include_ignored,
             deep_scan_budget=deep_scan_budget,
+            exclude_rule=exclude_rule,
         )
         report = _run_hook_analysis(
             paths=paths,
@@ -256,29 +255,31 @@ def _execute_hook(
             exclude_rule=exclude_rule,
             deep_scan_budget=deep_scan_budget,
         )
-        gated, statuses = _apply_hook_baseline(_findings_before_display_filtering(report), hook_baseline_path)
-        # Build the payload inside the try: a malformed --changed-ranges value
-        # raises ValueError here, which must surface as a controlled exit 2 rather
-        # than an uncaught traceback that breaks the stable hook contract.
+        # A fatal scan offers diagnostics alone. Applying a baseline could hide the original input failure.
+        applied_path = hook_baseline_path if report.exit_code != 2 else None
+        findings = _findings_before_display_filtering(report) if report.exit_code != 2 else ()
+        retained_findings, baseline_statuses = _apply_hook_baseline(findings, applied_path)
         payload = hook_payload(
-            _report_with(report, gated),
+            _with_hook_findings(report, retained_findings),
             paths=paths or (".",),
             changed_ranges=changed_ranges,
             base_stable_identities=base_identities,
             mode=_run_mode(changed_ranges, diff_ref),
-            baseline_path=str(hook_baseline_path) if hook_baseline_path is not None else None,
-            baseline_statuses=statuses,
+            baseline_path=str(applied_path) if applied_path is not None else None,
+            baseline_statuses=baseline_statuses,
             suppressions=report.suppressions,
         )
     except ConfigError as exc:
+        # An incompatible config schema gives the calling agent a configuration diagnostic and exit 2.
         _write_stdout(render_json(config_error_payload(exc)))
         sys.exit(2)
     except BaselineError as exc:
-        # An unreadable or incompatible baseline makes the hook report a fatal error before any findings are published.
+        # A legacy baseline passed to `--baseline` gives the agent a fatal diagnostic before any findings are published.
         _write_stdout(render_json(fatal_payload("baseline", str(exc))))
         click.echo(str(exc), err=True)
         sys.exit(2)
     except ValueError as exc:
+        # An invalid value such as `--changed-ranges=10-3` gives the agent an actionable range error instead of a traceback.
         _write_stdout(render_json(fatal_payload("changed-region", str(exc))))
         click.echo(str(exc), err=True)
         sys.exit(2)
@@ -296,20 +297,23 @@ def _findings_before_display_filtering(report: AnalysisReport) -> tuple[Finding,
         report: Run report holding the displayed findings and any saved pre-display findings.
 
     Returns:
-        The pre-display findings if nonempty, otherwise the report's displayed findings.
+        The pre-display findings when recorded, otherwise the report's displayed findings.
     """
-    return report.machine_context.summary_findings or report.findings
+    findings = report.machine_context.summary_findings
+    # An empty saved list means the scan found nothing. Only an absent list falls back to rendered findings.
+    return report.findings if findings is None else findings
 
 
-def _report_with(report: AnalysisReport, findings: tuple[Finding, ...]) -> AnalysisReport:
-    """Return the report with its findings replaced, leaving every other field alone.
+def _with_hook_findings(report: AnalysisReport, findings: tuple[Finding, ...]) -> AnalysisReport:
+    """Prepare the report for hook rendering with the findings that passed baseline matching.
+    Keep scan diagnostics and audit details so the agent can see what affected the verdict.
 
     Args:
         report: The analysis report the run produced.
-        findings: Replacement findings for hook output, including all findings when no baseline was supplied.
+        findings: Replacement findings for hook output. An empty tuple publishes no findings.
 
     Returns:
-        A copy carrying the gated findings.
+        A copy with the findings selected for hook output.
     """
     return replace(report, findings=findings)
 
@@ -359,14 +363,7 @@ def _apply_hook_baseline(
         findings=findings,
         source="explicit",
     )
-    gated = tuple(result.findings)
-    reviewed = {id(finding) for finding in gated}
-    statuses = {id(finding): "new" for finding in gated}
-    for finding in findings:
-        # A finding the baseline kept back is one the user already reviewed, which is what unchanged means.
-        if id(finding) not in reviewed:
-            statuses[id(finding)] = "unchanged"
-    return gated, statuses
+    return tuple(result.findings), result.statuses
 
 
 def _hook_exit_code(payload: dict[str, object], gate: _ExitGate) -> int:
@@ -379,31 +376,38 @@ def _hook_exit_code(payload: dict[str, object], gate: _ExitGate) -> int:
         gate: What the caller asked the hook to block on.
 
     Returns:
-        1 when enabled diagnostics are present, the new-finding gate matches a finding, or a finding meets both configured floors.
-        Otherwise 0.
+        2 when the run has a fatal diagnostic, 1 when the enabled gate is reached, and 0 otherwise.
     """
     diagnostics = payload.get("diagnostics")
-    # With the diagnostics gate enabled, a published diagnostic can block the run on its own.
-    if gate.fail_on_diagnostics and isinstance(diagnostics, list) and diagnostics:
-        return 1
+    # A list is available in a normal hook response. A missing diagnostic section cannot block on its own.
+    if isinstance(diagnostics, list):
+        # A failed scan takes priority over any finding or diagnostic gate the user enabled.
+        if any(isinstance(item, dict) and item.get("severity") == "fatal" for item in diagnostics):
+            return 2
+        # A caller can opt to block on degraded scans, such as files checked only as text.
+        if gate.fail_on_diagnostics and diagnostics:
+            return 1
 
     rows = payload.get("findings")
+    # Without a findings list, there is no published finding for the agent to act on.
     if not isinstance(rows, list):
         return 0
 
-    severity_floor = _SEVERITY_RANK.get(Severity(gate.fail_on)) if gate.fail_on != "none" else None
-    confidence_floor = _CONFIDENCE_RANK[Confidence(gate.min_confidence)]
+    severity_floor = FailThreshold(gate.fail_on)
+    confidence_floor = Confidence(gate.min_confidence)
 
+    # Any finding in the response can block according to the caller's settings.
     for row in rows:
+        # Shape checks keep an invalid row from being mistaken for a published finding.
         if not isinstance(row, dict):
             continue
+        # Git-only comparisons do not attach a baseline status. This gate requires a new baseline finding.
         if gate.fail_on_new and row.get("baselineStatus") == "new":
             return 1
-        if severity_floor is None:
-            continue
-        severity = _SEVERITY_RANK.get(Severity(str(row.get("severity"))), 0)
-        confidence = _CONFIDENCE_RANK.get(Confidence(str(row.get("confidence"))), 2)
-        if severity >= severity_floor and confidence >= confidence_floor:
+        severity = Severity(str(row["severity"]))
+        confidence = Confidence(str(row["confidence"]))
+        # The ordinary gate needs both the chosen severity and confidence so a heuristic can remain advisory.
+        if severity_floor.is_triggered_by(severity) and confidence.meets(confidence_floor):
             return 1
 
     return 0
@@ -478,6 +482,7 @@ def _hook_base_identities(
     no_config: bool,
     include_ignored: bool,
     deep_scan_budget: str,
+    exclude_rule: tuple[str, ...],
 ) -> Counter[str] | None:
     """Resolve hook base stable identities, with their occurrence counts, for a ``--diff`` run.
 
@@ -490,6 +495,7 @@ def _hook_base_identities(
         no_config: Whether automatic configuration discovery is disabled.
         include_ignored: Whether default-ignored and Git-ignored base paths enter discovery.
         deep_scan_budget: Raw deep-scan override forwarded to keep base and working-tree bounds aligned.
+        exclude_rule: Invocation rule exclusions, shared with the working-tree scan.
 
     Returns:
         Counts of the base tree's hook identities, or None when no diff ref was supplied.
@@ -498,6 +504,7 @@ def _hook_base_identities(
         ValueError: If Git cannot resolve or read the requested base.
         ConfigError: If the base analysis configuration cannot be loaded or validated.
     """
+    # Without `--diff`, baseline matching or a full scan supplies the hook's findings directly.
     if diff_ref:
         return stable_identities_from_git_base(
             project_root=Path.cwd(),
@@ -507,5 +514,6 @@ def _hook_base_identities(
             no_config=no_config,
             include_ignored=include_ignored,
             deep_scan_budget=deep_scan_budget,
+            execution_exclude_rules=_split_repeated_csv(exclude_rule),
         )
     return None

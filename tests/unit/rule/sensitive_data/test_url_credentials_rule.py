@@ -108,13 +108,12 @@ def test_database_url_not_duplicated_by_url_credentials_rule():
         'PROXY = "http://{}:{}@proxy.example.test".format(user, secret)\n',
         'PROXY = f"http://{ENCODED_USER}:{ENCODED_PASSWORD}@proxy.example.test"\n',
         'PROXY = "http://%s:%s@proxy.example.test" % (user, secret)\n',
-        'ROWS = ["http://foo:bar:baz@example.test"]\n',
         'ROWS = ["http://user:pass/extra@example.test"]\n',
     ],
-    ids=["str-format-template", "f-string-template", "printf-template", "second-colon", "path-separator"],
+    ids=["str-format-template", "f-string-template", "printf-template", "path-separator"],
 )
 def test_templated_or_over_captured_password_is_not_a_credential(source: str) -> None:
-    """Report nothing for URL templates and password captures containing a second colon or a slash.
+    """Report nothing for URL templates or matches where a slash ends the authority before the at-sign.
 
     Args:
         source: Python source containing the URL shape to analyse.
@@ -125,17 +124,18 @@ def test_templated_or_over_captured_password_is_not_a_credential(source: str) ->
     assert UrlCredentialsRule().analyse(make_unit(source), default_ctx()) == []
 
 
-def test_real_credentials_still_report_including_percent_escapes() -> None:
-    """Keep reporting literal passwords, including one whose special character is percent-encoded.
+def test_literal_passwords_report_with_percent_escapes_or_additional_colons() -> None:
+    """Report plain passwords and passwords containing an encoded character or an additional colon.
 
     Returns:
-        None after checking for a warning finding on each of the two source lines.
+        None after checking for a warning finding on each source line.
     """
     plain = "http://admin:" + "S3cr3tPassw0rd" + "@db.internal"
     encoded = "https://deploy:" + "S3cr%40tValue42" + "@api.example.test"
-    findings = UrlCredentialsRule().analyse(make_unit(f"PLAIN = {plain!r}\nENCODED = {encoded!r}\n"), default_ctx())
+    colon = "http://admin:" + "S3cr3t:Passw0rd" + "@example.test"
+    findings = UrlCredentialsRule().analyse(make_unit(f"PLAIN = {plain!r}\nENCODED = {encoded!r}\nCOLON = {colon!r}\n"), default_ctx())
 
-    assert [finding.line for finding in findings] == [1, 2]
+    assert [finding.line for finding in findings] == [1, 2, 3]
     assert {finding.severity.value for finding in findings} == {"warning"}
 
 

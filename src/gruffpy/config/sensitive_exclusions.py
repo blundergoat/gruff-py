@@ -1,12 +1,8 @@
-"""Parse and validate the ``sensitiveExclusions`` entries that may hide sensitive-data findings.
+"""Validate the `sensitiveExclusions` a reviewer records for specific files.
 
-``FAMILY-CONTRACT.md`` (search: ``### 13a. Sensitive exclusions``) makes this section the only
-channel that suppresses a sensitive-data finding, and keeps it separate from ``selection`` so the
-ban on value matching is structural rather than a conditional a later edit can drop. Every problem
-here is fatal: a suppression nobody can review is worse for the user than the finding it hides.
-
-The parser never sees a finding, so an entry can only name a rule, a path, and a symbol the user
-wrote down. Message and value keys are rejected by name.
+An entry names a rule, a project-relative path and an optional symbol. The loader never sees a matching finding or its value.
+Bad fields stop the scan because the audit must describe exactly what the user reviewed.
+The configuration rules come from FAMILY-CONTRACT.md section 13a.
 """
 
 import re
@@ -196,7 +192,8 @@ def _parse_rule(
 
 
 def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
-    """Validate the project-relative path used to match findings for this exclusion.
+    """Check the exact project file a reviewed exclusion may cover.
+    A valid path lets the audit name the file a reviewer approved without spreading the exclusion to other files.
 
     Args:
         entry_path: Indexed configuration path used to identify invalid path values.
@@ -204,15 +201,18 @@ def _parse_path(entry_path: str, entry: dict[Any, Any]) -> str:
 
     Returns:
         Path text using forward slashes, with leading ./ segments removed.
-        A path consisting only of those segments becomes empty and matches no nonempty finding path.
 
     Raises:
-        ConfigError: When the raw value is missing or invalid, or its normalized path is absolute, traversing or a glob.
+        ConfigError: When the normalized path is empty, absolute, traversing, a glob, or otherwise invalid.
     """
     path = _normalise_report_path(_required_string(f"{entry_path}.path", entry, "path"))
+    # A setting such as `./` points to the project root and therefore cannot name a reviewed file.
+    if path in {"", "."} or "\0" in path:
+        raise ConfigError(f'Config key "{entry_path}.path" must name one project-relative file.')
     # Absolute paths tie the exclusion to one checkout, even for files inside the project.
     if path.startswith("/") or _WINDOWS_DRIVE_PATTERN.match(path):
         raise ConfigError(f'Config key "{entry_path}.path" must be project-relative; {path!r} is absolute.')
+    # A reviewed exemption can only name a file within the project boundary.
     if ".." in path.split("/"):
         raise ConfigError(f'Config key "{entry_path}.path" must stay inside the project; {path!r} traverses out of it.')
     # A glob would claim files nobody enumerated, which is a blanket suppression.

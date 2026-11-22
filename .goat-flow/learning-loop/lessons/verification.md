@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-10-17
+last_reviewed: 2026-11-22
 ---
 
 ## Lesson: An Edit's new_string must re-include any trailing boundary its old_string captured as context
@@ -342,6 +342,8 @@ rationale after `--` on the same comment, e.g. `# gruff: disable-file=test-quali
 The dogfood gate ships this rule by default, so suppressions without rationale
 look "clean" locally but fail CI's `--fail-on advisory` step. This applies
 symmetrically to `disable`, `disable-next`, and `disable-file`.
+
+**Related trap, 2026-11-22:** An explanatory comment in `src/gruffpy/suppression/filter.py` used the `gruff:` marker in backticks. The edit hook returned `Malformed gruff suppression comment.` Python comments reserve that marker for actual directives. `src/gruffpy/suppression/parser.py` (`_parse_comment`) looks for it anywhere in the comment, including inside backticks. Use “native suppression” when explaining how a directive affects a finding.
 
 ## Lesson: Quote YAML boolean-like strings in dogfood option defaults
 

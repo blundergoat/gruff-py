@@ -48,7 +48,8 @@ class JwtTokenRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``eyJ<header>.<payload>.<signature>``-shaped literals in source.
+        """Report JWT-shaped literals in the selected source file.
+        The location lets reviewers find each occurrence while the preview keeps token contents out of reports.
 
         Args:
             unit: Source file whose raw text is scanned.
@@ -59,6 +60,7 @@ class JwtTokenRule(SourceTextRule):
         """
         definition = self.definition()
         findings: list[Finding] = []
+        # Keep separate source locations for each match so the shared redacted preview does not merge the findings.
         for token_match in iter_matches(_PATTERN, unit.source):
             findings.append(
                 Finding(
@@ -66,6 +68,7 @@ class JwtTokenRule(SourceTextRule):
                     message="JWT-shaped token literal in source.",
                     file_path=unit.file.display_path,
                     line=token_match.line,
+                    column=token_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,

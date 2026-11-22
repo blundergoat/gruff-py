@@ -351,6 +351,43 @@ def test_a_0_5_baseline_fails_closed_and_names_the_migration_command(tmp_path: P
         apply_baseline(project_root=tmp_path, path="legacy.json", findings=[_finding()], source="explicit")
 
 
+def test_duplicate_v3_identity_fails_before_spending_counts(tmp_path: Path) -> None:
+    """Refuse two rows that make conflicting claims about one identity's reviewed count.
+
+    Args:
+        tmp_path: Project root holding the ambiguous baseline.
+
+    Returns:
+        None. Requires a baseline error instead of accepting either count.
+    """
+    rows = [{"identity": "0" * 16, "count": count} for count in (1, 2)]
+    baseline = tmp_path / "duplicate.json"
+    baseline.write_text(json.dumps({"schemaVersion": "gruff.baseline.v3", "toolLanguage": "py", "occurrences": rows}))
+
+    with pytest.raises(BaselineError, match="repeats identity"):
+        apply_baseline(project_root=tmp_path, path=baseline, findings=[], source="explicit")
+
+
+def test_migration_refuses_a_non_object_row_before_writing(tmp_path: Path) -> None:
+    """Reject a damaged legacy baseline without creating an incomplete migration.
+
+    Args:
+        tmp_path: Project root holding the legacy file and its proposed destination.
+
+    Returns:
+        None. Checks the validation error and that migration creates no output.
+    """
+    legacy = tmp_path / "legacy.json"
+    contents = json.loads(_write_legacy_input(tmp_path))
+    contents["findings"].append(None)
+    legacy.write_text(json.dumps(contents))
+    output = tmp_path / "migrated.json"
+
+    with pytest.raises(BaselineError, match="must be a JSON object"):
+        migrate_baseline(project_root=tmp_path, input_path=legacy, output_path=output, findings=[_finding()])
+    assert not output.exists()
+
+
 def test_migration_carries_reviews_forward_and_leaves_its_input_byte_identical(tmp_path: Path) -> None:
     """Check that migration reports one entry, writes a v3 file with the recomputed identity in its first row, and leaves the input byte-identical.
 

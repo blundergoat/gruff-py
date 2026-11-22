@@ -123,13 +123,17 @@ def test_template_sample_value_is_skipped(filename: str) -> None:
     assert HardcodedEnvValueRule().analyse(make_unit(src, f"deploy/{filename}", "text"), default_ctx()) == []
 
 
-def test_template_with_generated_credential_still_emits():
+@pytest.mark.parametrize("value", [_ENV_SECRET, f"your{_ENV_SECRET}"], ids=["generated", "unseparated-your-prefix"])
+def test_template_with_generated_credential_still_emits(value: str) -> None:
     """Report one API_KEY finding for a credential-shaped value in .env.example.
+
+    Args:
+        value: Synthetic credential with or without an unseparated ``your`` prefix.
 
     Returns:
         None after verifying that the template produces the API_KEY finding.
     """
-    src = f"API_KEY={_ENV_SECRET}\n"
+    src = f"API_KEY={value}\n"
     findings = HardcodedEnvValueRule().analyse(make_unit(src, ".env.example", "text"), default_ctx())
     assert [finding.metadata["key"] for finding in findings] == ["API_KEY"]
 

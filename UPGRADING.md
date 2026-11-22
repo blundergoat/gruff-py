@@ -89,13 +89,13 @@ time, so a project using more than one of them moves once. This port's recorded 
    reviewed:
 
    ```bash
-   gruff-py analyse --migrate-baseline gruff-baseline.json --generate-baseline gruff-baseline.v3.json
+   gruff-py analyse --migrate-baseline gruff-baseline.json --generate-baseline=gruff-baseline.v3.json
    ```
 
-   This is the migration the tool demands when it refuses a `0.5` baseline; its own message spells
-   the output flag `--generate-baseline-path`, which behaves identically. It writes a separate
-   file and preserves the original, so swap the two names once you have compared them. The full
-   rationale is in the `CHANGELOG.md` entry for the baseline break.
+   Use `--generate-baseline=PATH` for an explicit output. The bare flag writes
+   the default file and leaves following arguments available as scan targets.
+   Migration preserves the original file so you can compare the two before
+   replacing your default baseline.
 5. Re-run `gruff-py summary .` and compare the finding count with the one you had. A rule
    whose default changed will move it; a rule whose identity changed will not.
 

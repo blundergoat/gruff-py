@@ -29,7 +29,8 @@ def load(data: bytes, module_name: str) -> object:
     third = pickle.loads(data)
     fourth = pickle.loads(data)  # type: ignore
     fifth = pickle.loads(data)  # nosec assert_used
-    print(first, second, third, fourth, fifth)
+    sixth = (pickle.loads(data), "# nosec")
+    print(first, second, third, fourth, fifth, sixth)
     return __import__(module_name)
 '''
 
@@ -40,13 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: docker/login-action@v3 # zizmor: ignore[unpinned-uses]
-      - uses: docker/build-push-action@v6
+      - uses: "docker/build-push-action@v6 # zizmor: ignore[unpinned-uses]"
 """
 
 # Lines the fixture reports on: the second action, a ``# nosec`` naming B301, a ``# type: ignore``, and ``__import__``.
-_UNPINNED_ACTION_LINE = _WORKFLOW.splitlines().index("      - uses: docker/build-push-action@v6") + 1
+_UNPINNED_ACTION_LINE = _WORKFLOW.splitlines().index('      - uses: "docker/build-push-action@v6 # zizmor: ignore[unpinned-uses]"') + 1
 _NAMED_TEST_ID_LINE = _LOADER.splitlines().index("    second = pickle.loads(data)  # nosec B301") + 1
 _NAMED_TEST_NAME_LINE = _LOADER.splitlines().index("    fifth = pickle.loads(data)  # nosec assert_used") + 1
+_STRING_MARKER_LINE = _LOADER.splitlines().index('    sixth = (pickle.loads(data), "# nosec")') + 1
 _TYPE_IGNORE_LINE = _LOADER.splitlines().index("    fourth = pickle.loads(data)  # type: ignore") + 1
 _IMPORT_LINE = _LOADER.splitlines().index("    return __import__(module_name)") + 1
 
@@ -93,7 +95,7 @@ def _analyse(output_format: str) -> str:
 
 @pytest.mark.usefixtures("project")
 def test_comments_suppress_only_what_they_name_and_an_import_reports_once() -> None:
-    """Report only the five security findings remaining after inline suppression and deduplication, with ``__import__`` reported once.
+    """Report security findings beside suppression-shaped strings and report ``__import__`` once.
 
     The JSON audit rows count one inline unpinned-action removal, two inline pickle removals and one duplicate variable-import removal.
 
@@ -108,6 +110,7 @@ def test_comments_suppress_only_what_they_name_and_an_import_reports_once() -> N
         ("app/loader.py", _NAMED_TEST_ID_LINE, "security.unsafe-pickle"),
         ("app/loader.py", _TYPE_IGNORE_LINE, "security.unsafe-pickle"),
         ("app/loader.py", _NAMED_TEST_NAME_LINE, "security.unsafe-pickle"),
+        ("app/loader.py", _STRING_MARKER_LINE, "security.unsafe-pickle"),
         ("app/loader.py", _IMPORT_LINE, "security.dangerous-function-call"),
     ]
     rows = [(row["index"], row["source"], row["paths"], row["rule"], row["suppressed"], row["reason"]) for row in payload["suppressions"]]

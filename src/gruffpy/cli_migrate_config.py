@@ -1,9 +1,7 @@
-"""Click command for ``gruff-py migrate-config``.
+"""Run the terminal workflow for `gruff-py migrate-config`.
 
-The ``migrate-config`` subcommand lives in its own module so its CLI wiring
-sits next to the rewrite logic in :mod:`gruffpy.command.migrate_config`
-without growing :mod:`gruffpy.cli`. It is registered on the root group from
-:mod:`gruffpy.cli`.
+A dry run shows the proposed YAML changes so the user can review them.
+A write goes to the chosen destination while preserving the original configuration for rollback.
 """
 
 from __future__ import annotations
@@ -58,28 +56,37 @@ def migrate_config(dry_run: bool, config_path: Path | None, output_path: Path | 
     try:
         migration = migrate_config_file(project_root=Path.cwd(), config_path=config_path)
     except ConfigError as exc:
+        # If old and new gate settings disagree, show the conflict before offering a converted file.
         raise click.ClickException(str(exc)) from exc
+    # Show discarded legacy settings and other review notes before the proposed diff.
     for note in migration.notes:
         click.echo(f"Note: {note}")
+    # A current input needs no output file, even when the caller named one.
     if not migration.has_changes():
         click.echo(f"{migration.path} is already current; no changes.")
         return
     click.echo("Migration changes:")
+    # Summarise each setting change before showing the full YAML diff.
     for change in migration.changes:
         click.echo(f"  - {change}")
     click.echo("\n" + migration.diff(), nl=False)
+    # Users can copy any YAML rationale they need after reading the warning and reviewing the diff.
     if migration.will_lose_comments():
         click.echo("Note: YAML comments are not preserved by migration; review the diff.")
+    # A dry run is a review step and does not touch either file.
     if dry_run:
         click.echo(f"Dry run: {migration.path} left unchanged.")
         return
     # Require the caller to choose where changed YAML goes so migration preserves the input by default.
     if output_path is None:
         raise click.ClickException("migrate-config needs --output <path> to write the migrated config, or --dry-run to print it.")
-    if output_path.resolve() == migration.path.resolve():
-        raise click.ClickException(f"--output must name a different file from --config; {migration.path} is the copy you may want back.")
     try:
-        output_path.write_text(migration.migrated_text, encoding="utf-8")
+        # Two paths can name the same file through a hard link. Always keep the original as a rollback copy.
+        if output_path.resolve() == migration.path.resolve() or (output_path.exists() and output_path.samefile(migration.path)):
+            raise click.ClickException(f"--output must name a different file from --config; {migration.path} is the copy you may want back.")
+        with click.open_file(str(output_path), mode="w", encoding="utf-8", atomic=True) as output:
+            output.write(migration.migrated_text)
     except OSError as exc:
+        # A destination under a read-only directory gives the operator a write error with the path to change.
         raise click.ClickException(f"Unable to write {output_path}: {exc}") from exc
     click.echo(f"Wrote {output_path}; {migration.path} is unchanged.")

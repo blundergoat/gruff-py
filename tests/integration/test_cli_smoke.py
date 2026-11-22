@@ -694,9 +694,7 @@ def test_analyse_agent_command_ignores_default_baseline_when_disabled(
             "--fail-on",
             "none",
             "--no-config",
-            # The canonical spelling carries its destination, so the scanned path follows it rather than being read as one.
             "--generate-baseline",
-            "gruff-baseline.json",
             "src/sample.py",
         ],
     )
@@ -1636,6 +1634,87 @@ def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
     return cast("dict[str, Any]", json.loads(result.output))
 
 
+def test_cli_bare_baseline_flag_preserves_the_following_source_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Treat a file after a bare baseline flag as the scan target and write only the default baseline.
+
+    Args:
+        tmp_path: Project with one Python source file.
+        monkeypatch: Changes to the fixture project.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "sample.py"
+    original = "value = 1\n"
+    source.write_text(original)
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--fail-on", "none", "--format", "json", "--generate-baseline", source.name])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["run"]["inputs"] == [source.name]
+    assert source.read_text() == original
+    assert (tmp_path / "gruff-baseline.json").is_file()
+
+
+@pytest.mark.parametrize(
+    ("original", "scope", "diagnostic_type"),
+    [
+        ('{"schemaVersion":', ("sample.py",), "baseline-error"),
+        ('{"schemaVersion":"gruff.baseline.v3","toolLanguage":"py","occurrences":[]}', ("missing.py",), "missing-path"),
+        ('{"schemaVersion":"gruff.baseline.v3","toolLanguage":"py","occurrences":[]}', ("--changed-ranges=", "sample.py"), "changed-region"),
+    ],
+)
+def test_cli_failed_generation_preserves_existing_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, original: str, scope: tuple[str, ...], diagnostic_type: str
+) -> None:
+    """Preserve baseline bytes when the scan or an existing default baseline fails validation.
+
+    Args:
+        tmp_path: Project with the previous baseline.
+        monkeypatch: Changes to the fixture project.
+        original: Existing baseline contents, valid or truncated.
+        scope: Scan operands and optional changed-range selection.
+        diagnostic_type: Diagnostic identifying the refusal.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+    baseline = tmp_path / "gruff-baseline.json"
+    baseline.write_text(original)
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", "--generate-baseline", *scope])
+
+    assert result.exit_code == 2, result.output
+    assert json.loads(result.stdout)["diagnostics"][0]["type"] == diagnostic_type
+    assert baseline.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("gate", "expected_exit"),
+    [
+        (("--fail-on", "advisory", "--min-confidence", "high"), 0),
+        (("--fail-on", "advisory", "--min-confidence", "medium"), 1),
+        (("--fail-on", "none", "--fail-on-new"), 1),
+    ],
+)
+def test_cli_analyse_gates_keep_the_findings_in_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gate: tuple[str, ...], expected_exit: int
+) -> None:
+    """Gate a new medium-confidence finding while always reporting it.
+
+    Args:
+        tmp_path: Project missing a README, with an empty v3 baseline.
+        monkeypatch: Changes to the fixture project.
+        gate: Severity, confidence or baseline gate under test.
+        expected_exit: Exit code for the gate's decision.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+    (tmp_path / "gruff-baseline.json").write_text('{"schemaVersion":"gruff.baseline.v3","toolLanguage":"py","occurrences":[]}')
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", "--include-rule", "docs.missing-readme", *gate])
+
+    assert result.exit_code == expected_exit, result.output
+    assert [finding["ruleId"] for finding in json.loads(result.stdout)["findings"]] == ["docs.missing-readme"]
+
+
 def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Write a v3 baseline that counts every reported finding, and report a generated, unapplied default baseline with zero movement.
 
@@ -1963,6 +2042,37 @@ def test_cli_analyse_json_emits_structured_config_error_diagnostic(tmp_path: Pat
     assert "Traceback" not in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("invalid_setting", "message"),
+    [
+        (
+            "sensitiveExclusions:\n  - rule: sensitive-data.aws-access-key\n    path: ./\n    reason: sample fixture\n",
+            "must name one project-relative file",
+        ),
+        ("deepScanBudget:\n  1: true\n  wrong: true\n", "Unknown deepScanBudget keys"),
+    ],
+    ids=("empty-normalized-path", "mixed-budget-keys"),
+)
+def test_cli_malformed_config_still_emits_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, invalid_setting: str, message: str) -> None:
+    """Publish an ordinary config-error envelope for malformed YAML settings.
+
+    Args:
+        tmp_path: Project root that receives the malformed config.
+        monkeypatch: Changes into the fixture project before running analyse.
+        invalid_setting: Invalid YAML setting appended to a recognized schema header.
+        message: Expected error text for that setting.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\n" + invalid_setting)
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json"])
+
+    assert result.exit_code == 2, result.output
+    (diagnostic,) = json.loads(result.stdout)["diagnostics"]
+    assert diagnostic["type"] == "config-error"
+    assert message in diagnostic["message"]
+
+
 def test_cli_analyse_json_config_error_leaves_out_a_target_named_from_a_sibling_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A config that cannot load, with `analyse ../proj` run from a sibling directory, still publishes its envelope.
 
@@ -2147,7 +2257,7 @@ def test_cli_baseline_paths_are_read_from_the_launch_directory(tmp_path: Path, m
     monkeypatch.chdir(project / "a" / "b")
     flags = ["--no-config", "--fail-on", "none"]
 
-    generated = CliRunner().invoke(main, ["analyse", *flags, "--generate-baseline", "../../base.json", "../.."])
+    generated = CliRunner().invoke(main, ["analyse", *flags, "--generate-baseline=../../base.json", "../.."])
     applied = CliRunner().invoke(main, ["analyse", *flags, "--format", "json", "--baseline", "../../base.json", "../.."])
 
     assert generated.exit_code == 0, generated.output
@@ -2686,6 +2796,66 @@ def test_cli_analyse_sarif_format_is_parseable(tmp_path: Path, monkeypatch: pyte
     assert payload["version"] == "2.1.0"
     assert payload["runs"][0]["tool"]["driver"]["name"] == "gruff-py"
     assert payload["runs"][0]["results"][0]["partialFingerprints"]["gruffFingerprint"]
+
+
+def test_cli_reports_outside_source_links_in_json_and_sarif(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a refused source link in both machine formats without publishing its external location.
+
+    Args:
+        tmp_path: Parent of the project and the external source file.
+        monkeypatch: Launches the CLI from the project directory.
+
+    Returns:
+        None. Checks the refusal and surviving diagnostic location in both outputs.
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    external = tmp_path / "outside.py"
+    external.write_text("value = 1\n")
+    try:
+        (project / "link.py").symlink_to(external)
+    except (OSError, NotImplementedError):
+        pytest.skip("creating source symlinks requires platform support")
+    monkeypatch.chdir(project)
+    runner = CliRunner()
+
+    native = runner.invoke(main, ["analyse", "--no-config", "--format", "json", "."])
+    sarif = runner.invoke(main, ["analyse", "--no-config", "--format", "sarif", str(project / "missing.py"), "."])
+
+    assert (native.exit_code, sarif.exit_code) == (2, 2)
+    payload = json.loads(native.stdout)
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["target-error"]
+    assert payload["findings"] == []
+    assert str(external) not in native.stdout + sarif.stdout
+    notifications = json.loads(sarif.stdout)["runs"][0]["invocations"][0]["toolExecutionNotifications"]
+    locations = [item["physicalLocation"]["artifactLocation"]["uri"] for entry in notifications for item in entry.get("locations", [])]
+    assert locations == ["missing.py"]
+
+
+def test_cli_reports_a_symlink_loop_as_a_fatal_json_diagnostic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep JSON readable and exit 2 when an explicitly requested source link points to itself.
+
+    Args:
+        tmp_path: Project containing the circular source link.
+        monkeypatch: Launches the command from the project root.
+
+    Returns:
+        None. Checks the exit, diagnostic type and missing-input count.
+    """
+    source = tmp_path / "loop.py"
+    try:
+        source.symlink_to(source.name)
+    except (OSError, NotImplementedError):
+        pytest.skip("creating source symlinks requires platform support")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--format", "json", source.name])
+
+    assert result.exit_code == 2, result.exception
+    payload = json.loads(result.stdout)
+    assert [diagnostic["type"] for diagnostic in payload["diagnostics"]] == ["missing-path"]
+    assert payload["summary"]["missingPaths"] == 1
+    assert payload["findings"] == []
 
 
 def _sarif_fixture_payload() -> dict:
@@ -3731,6 +3901,45 @@ def test_cli_migrate_config_rewrites_legacy_tiers_to_rubric(tmp_path: Path, monk
     assert migrated["rules"]["complexity.cognitive"]["severity"] == "error"
     # The separate output lets users review the migration while keeping the contents of the legacy config.
     assert (tmp_path / ".gruff-py.yaml").read_text() == original
+
+
+def test_cli_migrate_config_rejects_a_hard_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a legacy config intact when the requested destination shares its inode.
+
+    Args:
+        tmp_path: Project with a legacy config and a hard-linked alias.
+        monkeypatch: Changes to the fixture project.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+    config = tmp_path / ".gruff-py.yaml"
+    original = config.read_bytes()
+    alias = tmp_path / "alias.yaml"
+    alias.hardlink_to(config)
+
+    result = CliRunner().invoke(main, ["migrate-config", "--output", alias.name])
+
+    assert result.exit_code == 1, result.output
+    assert "different file" in result.output
+    assert config.read_bytes() == original
+
+
+def test_cli_migrate_config_refuses_conflicting_gate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse to choose between two different thresholds for the same command.
+
+    Args:
+        tmp_path: Project containing both gate mappings.
+        monkeypatch: Changes to the fixture project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text("minimumSeverity:\n  analyse: advisory\nfailOn:\n  analyse: error\n")
+    destination = tmp_path / "migrated.yaml"
+
+    result = CliRunner().invoke(main, ["migrate-config", "--output", destination.name])
+
+    assert result.exit_code == 1, result.output
+    assert "conflicting exit gates" in result.output
+    assert not destination.exists()
 
 
 def test_cli_analyse_strict_config_passes_after_migration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

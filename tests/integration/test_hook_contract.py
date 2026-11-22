@@ -285,6 +285,7 @@ def test_hook_baseline_with_no_findings_is_accepted(
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
+    assert payload["run"]["baseline"] == {"applied": True, "schemaVersion": "gruff.baseline.v3", "path": "clean-baseline.json"}
     # Nothing existed in the clean base, so a newly added finding is surfaced.
     assert "security.dangerous-function-call" in _rule_ids(payload)
 
@@ -337,7 +338,7 @@ def test_hook_diff_new_only_uses_stable_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Report a file-length finding the working tree newly crosses against ``HEAD``, but not one ``HEAD`` already had before the file grew.
+    """Report new file-length findings against HEAD even when the configured display floor hides them.
 
     Skipped when ``git`` is not on the path.
 
@@ -355,19 +356,37 @@ def test_hook_diff_new_only_uses_stable_identity(
     _git("init")
     _git("config", "user.email", "test@example.com")
     _git("config", "user.name", "Test User")
+    (tmp_path / ".gruff-py.yaml").write_text("schemaVersion: gruff-py.config.v0.1\nminimumSeverity: error\n")
 
     _write_long_file(sample, total_lines=900)
     _git("add", ".")
     _git("commit", "-m", "base under threshold")
     _write_long_file(sample, total_lines=1010)
-    newly_crossed = _hook("--no-config", "--diff", "HEAD", "src/sample.py")
+    newly_crossed = _hook("--diff", "HEAD", "src/sample.py")
     assert "size.file-length" in _rule_ids(newly_crossed)
 
     _git("add", ".")
     _git("commit", "-m", "base over threshold")
     _write_long_file(sample, total_lines=1020)
-    grown = _hook("--no-config", "--diff", "HEAD", "src/sample.py")
+    grown = _hook("--diff", "HEAD", "src/sample.py")
     assert "size.file-length" not in _rule_ids(grown)
+
+
+def test_hook_missing_source_is_fatal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Return exit 2 and a parseable fatal diagnostic for a missing scan operand.
+
+    Args:
+        tmp_path: Working directory without the requested file.
+        monkeypatch: Changes to the fixture project.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["hook", "--no-config", "missing.py"])
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    assert payload["diagnostics"][0]["severity"] == "fatal"
+    assert payload["findings"] == []
 
 
 @pytest.mark.skipif(_GIT is None, reason="git is required for hook --diff conformance")

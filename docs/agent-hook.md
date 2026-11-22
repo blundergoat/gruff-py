@@ -48,10 +48,11 @@ symbol` does, so a finding on an untouched line inside an edited symbol is
 counted in `suppressed.count` rather than returned. Use `analyse --changed-scope
 symbol` when you want whole-symbol attribution instead.
 
-Use `--baseline <hook-json>` or `--diff <ref|working-tree>` for new-only hook
-runs. New-only compares `stableIdentity`, so a file-level metric finding that
-already existed at the base is suppressed when only its measured value changes,
-while a finding that newly crosses its threshold is returned.
+Use `--baseline <path>` with a `gruff.baseline.v3` file written by
+`analyse --generate-baseline`, or use `--diff <ref|working-tree>` to compare
+against a Git tree. A Git comparison keeps findings beyond the base occurrence
+count. With an applied baseline, `--fail-on-new` gates on findings classified as
+new.
 
 Consumers can discover the supported flag names and ordering once:
 

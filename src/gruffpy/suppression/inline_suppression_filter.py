@@ -1,19 +1,24 @@
-"""Apply ``FAMILY-CONTRACT.md`` section 13c: another tool's suppression comment, and one call reported under two rules.
+"""Apply the suppression and duplicate-claim rules in FAMILY-CONTRACT.md section 13c.
 
-A comment naming a check that makes a finding's claim suppresses the finding where it was written, when it sits on
-the reported line or alone on the line above: a bare bandit ``# nosec`` covers every security and sensitive-data
-rule, and zizmor's ``# zizmor: ignore[unpinned-uses]`` covers ``security.github-actions-unpinned-action``. A dynamic
-``__import__`` reported by both ``security.dangerous-function-call`` and ``security.variable-import`` reports once, as
-``security.dangerous-function-call``. Every removal is counted in one audit row per rule and file, after the
-built-in rows, and kept so SARIF can show it as suppressed.
+A third-party directive can cover a finding on the same line or on the next line after a comment-only directive.
+Each removal contributes an audit count. SARIF can also show the original finding as suppressed.
+
+- Bare Bandit suppression comments cover security and sensitive-data findings.
+- Supported zizmor audit names cover their corresponding workflow rules.
+- A dynamic import reported by both rules becomes one dangerous-function-call finding.
 """
 
 import re
+from bisect import bisect_right
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
+import yaml
+from yaml.tokens import ScalarToken
+
 from gruffpy.analysis.suppression_summary import SuppressedFinding, SuppressionSummary
 from gruffpy.finding.finding import Finding
+from gruffpy.source.comment_scanner import scan_comments
 
 INLINE_REASON = "Another tool's suppression comment names this check, so the finding is suppressed where it was written."
 """Reason on each inline audit row; every port publishes these exact words (FAMILY-CONTRACT.md section 13c)."""
@@ -39,24 +44,30 @@ def apply_inline_suppressions(
     suppressions: Sequence[SuppressionSummary],
     sources: Mapping[str, str],
 ) -> tuple[list[Finding], tuple[SuppressionSummary, ...], tuple[SuppressedFinding, ...]]:
-    """Remove the findings another tool's comment covers, then the repeated claims, and count both.
+    """Apply supported third-party comments and merge repeated claims before findings are reported.
+    The audit counts both kinds of removal so reviewers can explain changes in what they see.
 
     Args:
         findings: Findings left after the sensitive exclusions and the test-path skip.
         suppressions: The audit rows so far; this function's rows follow them.
-        sources: Each scanned file's text, keyed by the display path a finding carries.
+        sources: Text by display path. A missing or empty entry offers no suppressing comments for that file.
 
     Returns:
         Tuple ``(kept, summaries, removed)``: the surviving findings, the earlier rows followed by the inline and
         then the repeated-claim rows, and every removed finding with its audit reason.
     """
-    lines_by_file: dict[str, list[str]] = {}
+    comments_by_file: dict[str, tuple[dict[int, str], set[int]]] = {}
     kept: list[Finding] = []
     suppressed: list[SuppressedFinding] = []
+    # Check findings individually because a comment can cover one result while leaving its neighbour visible.
     for finding in findings:
-        lines = lines_by_file.setdefault(finding.file_path, sources.get(finding.file_path, "").splitlines())
-        # A finding leaves only when a comment on its line, or alone on the line above, names a check making its claim.
-        if _is_covered_by_comment(lines, finding):
+        path = finding.file_path
+        # Read directives once per file, even if several rules reported a finding there.
+        if path not in comments_by_file:
+            comments_by_file[path] = _directive_comments(path, sources.get(path, ""))
+        comments, standalone = comments_by_file[path]
+        # Keep an audit entry when the rule is hidden so reviewers can distinguish suppression from a repair.
+        if _is_covered_by_comment(comments, standalone, finding):
             suppressed.append(SuppressedFinding(finding=finding, justification=INLINE_REASON))
             continue
         kept.append(finding)
@@ -68,11 +79,70 @@ def apply_inline_suppressions(
     return kept, (*suppressions, *inline_rows, *duplicate_rows), (*suppressed, *merged)
 
 
-def _is_covered_by_comment(lines: Sequence[str], finding: Finding) -> bool:
-    """Decide whether a nearby inline suppression directive covers the finding.
+def _directive_comments(path: str, source: str) -> tuple[dict[int, str], set[int]]:
+    """Read the third-party suppression comments that can affect findings in this file.
+    Bandit directives are read from Python comments and zizmor directives from YAML comments.
 
     Args:
-        lines: The finding's file, split into lines.
+        path: Display path used to distinguish Bandit Python and zizmor YAML inputs.
+        source: Source text for the file. Empty text yields no comments or matching lines.
+
+    Returns:
+        Comments by line and the subset whose lines contain no code before the comment.
+    """
+    comments: dict[int, str] = {}
+    # A Python literal containing `# nosec` must stay visible to security rules.
+    if path.lower().endswith(".py") and "nosec" in source:
+        comments = {token.line: token.raw for token in scan_comments(source) if _BANDIT_DIRECTIVE.match(token.raw)}
+    # Workflow directives have their own YAML comment syntax and rule names.
+    elif path.lower().endswith((".yaml", ".yml")) and "zizmor:" in source:
+        comments = _yaml_directive_comments(source)
+    # With no recognised directive, no finding can be covered by a preceding comment.
+    if not comments:
+        return comments, set()
+    lines = source.split("\n")
+    return comments, {line for line in comments if lines[line - 1].lstrip().startswith("#")}
+
+
+def _yaml_directive_comments(source: str) -> dict[int, str]:
+    """Find real zizmor comments outside YAML strings and block text.
+    Use the scalar boundaries so a workflow value that quotes a directive does not hide a finding.
+
+    Args:
+        source: Workflow text whose YAML tokens identify the scalar spans.
+
+    Returns:
+        Comment text by line. An unscannable workflow supplies no suppressions.
+    """
+    try:
+        spans = [(token.start_mark.index, token.end_mark.index) for token in yaml.scan(source) if isinstance(token, ScalarToken)]
+    except (yaml.YAMLError, RecursionError):
+        # An unterminated YAML quote hides the boundary between text and comments, so keep all findings visible.
+        return {}
+    starts = [start for start, _ in spans]
+    comments: dict[int, str] = {}
+    offset = 0
+    # Keep the source line number so a real directive covers only the finding next to it.
+    for line_number, line in enumerate(source.split("\n"), 1):
+        # A line may include a quoted example before its actual comment. Check each possible marker.
+        for marker in _ZIZMOR_DIRECTIVE.finditer(line):
+            index = offset + marker.start()
+            preceding_scalar = bisect_right(starts, index) - 1
+            # A marker embedded in a quoted value or block scalar is data and cannot suppress a finding.
+            if preceding_scalar < 0 or index >= spans[preceding_scalar][1]:
+                comments[line_number] = line[marker.start() :]
+                break
+        offset += len(line) + 1
+    return comments
+
+
+def _is_covered_by_comment(comments: dict[int, str], standalone: set[int], finding: Finding) -> bool:
+    """Decide whether the author placed a directive close enough to cover this finding.
+    Only the finding's line or the immediately preceding comment-only line can apply.
+
+    Args:
+        comments: Recognized source comments keyed by line.
+        standalone: Lines that contain only a comment.
         finding: The finding to judge; a file-level finding has no line to carry a comment.
 
     Returns:
@@ -80,30 +150,34 @@ def _is_covered_by_comment(lines: Sequence[str], finding: Finding) -> bool:
         False when the line number is missing or out of range, or neither line contains a covering directive.
     """
     line = finding.line
-    if line is None or line < 1 or line > len(lines):
+    # A file-level finding has no line on which the author could have placed this directive.
+    if line is None or line < 1:
         return False
-    if _has_covering_comment(lines[line - 1], finding.rule_id):
+    # A recognised directive on the exact finding line applies before looking at the preceding line.
+    if _has_covering_comment(comments.get(line, ""), finding.rule_id):
         return True
-    above = lines[line - 2].strip() if line >= 2 else ""
-    return above.startswith("#") and _has_covering_comment(above, finding.rule_id)
+    return line - 1 in standalone and _has_covering_comment(comments[line - 1], finding.rule_id)
 
 
 def _has_covering_comment(line: str, rule_id: str) -> bool:
-    """Determine whether a Bandit or zizmor suppression on this line covers the rule.
+    """Check whether a real comment suppresses the finding's rule under the shared contract.
+    Bare Bandit comments cover security and sensitive-data findings. Zizmor names must map to the exact rule.
 
     Args:
-        line: Source line searched for suppression directives.
+        line: A source comment token or an empty string when no comment was found.
         rule_id: Finding's rule ID, checked by prefix for bare nosec and by exact ID for a mapped zizmor audit.
 
     Returns:
         True when a bare # nosec covers a security or sensitive-data rule, or a zizmor audit maps to the rule.
         False otherwise. A nosec directive naming Bandit tests provides no coverage because FAMILY-CONTRACT.md section 13c maps none of them.
     """
-    is_broad = rule_id.startswith(("security.", "sensitive-data."))
-    for match in _BANDIT_DIRECTIVE.finditer(line):
-        if is_broad and not match.group(1).strip(" \t:,"):
-            return True
-    return any(_ZIZMOR_AUDIT_RULES.get(audit.strip()) == rule_id for match in _ZIZMOR_DIRECTIVE.finditer(line) for audit in match.group(1).split(","))
+    allows_bare_nosec = rule_id.startswith(("security.", "sensitive-data."))
+    bandit = _BANDIT_DIRECTIVE.match(line)
+    # A bare Bandit directive covers security and sensitive data. A named Bandit test has no mapped Gruff rule.
+    if allows_bare_nosec and bandit is not None and not bandit.group(1).strip(" \t:,"):
+        return True
+    zizmor = _ZIZMOR_DIRECTIVE.match(line)
+    return zizmor is not None and any(_ZIZMOR_AUDIT_RULES.get(audit.strip()) == rule_id for audit in zizmor.group(1).split(","))
 
 
 def _merge_repeated_claims(findings: list[Finding]) -> tuple[list[Finding], list[SuppressedFinding]]:

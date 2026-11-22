@@ -8,8 +8,10 @@ import json
 from collections import defaultdict
 
 from gruffpy.analysis.report import AnalysisReport
+from gruffpy.analysis.suppression_summary import suppression_audit_text
 from gruffpy.finding.finding import Finding
 from gruffpy.scoring.pillar_score import PillarScore
+from gruffpy.scoring.score_report import ScoreReport
 
 
 class MarkdownReporter:
@@ -20,9 +22,8 @@ class MarkdownReporter:
     """
 
     def render(self, report: AnalysisReport) -> str:
-        """Render the report as GitHub-compatible Markdown with collapsible severity sections.
-
-        Group findings by severity and file in open details elements so pull-request reviewers can fold each severity section.
+        """Prepare a Markdown report that a pull request reviewer can read and share.
+        The report groups findings by severity and file in collapsible sections and retains diagnostics, filters and suppression details.
 
         Args:
             report: Report supplying findings, diagnostics, filters and scores.
@@ -33,6 +34,7 @@ class MarkdownReporter:
         """
         score = report.score
         counts = report.finding_counts()
+        # A missing score leaves the default scope label and displays no numeric verdict.
         scoring_mode = score.scope if score is not None else "full-project"
         lines = [
             "# gruff-py report",
@@ -50,12 +52,21 @@ class MarkdownReporter:
         if report.filters is not None and report.filters.is_active():
             lines.append(f"**Filters:** `{json.dumps(report.filters.to_dict(), separators=(',', ':'))}`")
 
+        audit = suppression_audit_text(report.suppressions)
+        # Show why findings may be absent even when the scan ran successfully.
+        if audit:
+            lines.extend(("", "## Sensitive exclusions", "", _md(audit)))
+
+        # An incomplete scan should carry its explanation when pasted into a review.
         if report.diagnostics:
             lines.extend(["", "## Diagnostics", ""])
+            # Keep problems in scan order so readers can follow the reported sequence.
             for diagnostic in report.diagnostics:
                 location = diagnostic.file_path or diagnostic.path
+                # Only a source file with a reported line can have a file-and-line label.
                 if diagnostic.file_path is not None and diagnostic.line is not None:
                     location = f"{diagnostic.file_path}:{diagnostic.line}"
+                # Startup problems may have a useful message without a location to show.
                 suffix = "" if location is None else f" `{_md(location)}`"
                 lines.append(f"- **{_md(diagnostic.type)}**{suffix} - {_md(diagnostic.message)}")
 
@@ -68,10 +79,12 @@ class MarkdownReporter:
                 "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
+        # List applicable pillars so reviewers can see why the summary score moved.
         for pillar in _pillar_summary_rows(report):
             lines.append(_pillar_row(pillar))
 
         lines.extend(["", "## Findings", ""])
+        # An empty findings list still gives the reader an explicit verdict for the selected view.
         if not report.findings:
             lines.append("No findings.")
         else:
@@ -80,23 +93,20 @@ class MarkdownReporter:
         return "\n".join(lines) + "\n"
 
 
-def _score_value(score: object | None) -> str:
-    """Format the composite score shown beside the grade in the report header.
+def _score_value(score: ScoreReport | None) -> str:
+    """Format the score beside the grade in the Markdown header.
+    An empty scan displays `n/a`, so it cannot be mistaken for a perfect score.
 
     Args:
-        score: Score report for the run; None for a diagnostic-only report with no score, and any object without a composite attribute is treated the
-            same way.
+        score: Score report for the run, or None when scoring did not run. The report may lack a composite when no score is applicable.
 
     Returns:
-        The composite score with two decimals followed by /100, or n/a when there is no score report or it has no composite attribute.
-
-    Raises:
-        AttributeError: When the score report's composite is None, as on a run that scores no file; that case is not mapped to n/a.
+        The composite score with two decimals followed by /100, or n/a when no composite is available.
     """
-    if score is None or not hasattr(score, "composite"):
+    # A directory with no analysable files has no score to compare with a prior review.
+    if score is None or score.composite is None:
         return "n/a"
-    composite = score.composite
-    return f"{composite.score:.2f}/100"
+    return f"{score.composite.score:.2f}/100"
 
 
 def _pillar_summary_rows(report: AnalysisReport) -> list[PillarScore]:

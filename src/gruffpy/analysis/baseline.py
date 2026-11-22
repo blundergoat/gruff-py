@@ -27,6 +27,7 @@ from gruffpy.finding.baseline_identity import (
     FindingIdentity,
     finding_identities,
     is_baseline_eligible,
+    normalise_measured_values,
 )
 from gruffpy.finding.finding import Finding
 
@@ -56,9 +57,10 @@ class BaselineError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class BaselineOptions:
-    """Carry the user's baseline choices into the analysis pipeline.
+    """Record the baseline operation requested on the command line.
 
-    Use after CLI or API options select generation, migration, application, or no baseline at all.
+    The runner uses these choices before scoring and exit checks.
+    Ordinary scans can apply reviewed findings. Generation and migration write a separate result for review.
 
     Attributes:
         apply_path: Explicit baseline to apply, or ``None`` to fall back to the conventional ``gruff-baseline.json``.
@@ -264,19 +266,22 @@ class BaselineReport:
 
 @dataclass(frozen=True, slots=True)
 class BaselineApplyResult:
-    """Carry the findings a user must still act on back to the runner, with the accounting behind them.
+    """Return the findings that remain after applying reviewed counts.
 
-    An empty findings list means every live finding was already reviewed, or the scan found none at all.
+    The analysis runner sends those findings to scoring and reporting.
+    It can also enforce `--fail-on-new` using the classifications recorded here.
 
     Attributes:
         findings: The gated set: new, collided, and sensitive findings, in scan order.
         report: What moved, for the reporters.
         collisions: Identities that covered two declarations; each becomes a diagnostic the user reads.
+        statuses: Classification keyed by the original finding object's identity.
     """
 
     findings: list[Finding]
     report: BaselineReport
     collisions: tuple[BaselineCollision, ...] = ()
+    statuses: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,7 +321,8 @@ class BaselineStore:
         self._project_root = Path(project_root)
 
     def read(self, path: str | Path) -> BaselineData:
-        """Load the reviewed debt from the baseline the user selected.
+        """Load the reviewed findings from the selected baseline file.
+        Use this before suppressing findings or replacing the default baseline so an unreadable or incompatible file can be reported safely.
 
         Args:
             path: Baseline location relative to the project root, or absolute.
@@ -332,16 +338,16 @@ class BaselineStore:
 
         schema = payload.get("schemaVersion")
         # A 0.5 file fails closed and names the command that carries its reviews forward, so nothing is silently dropped.
-        if schema in LEGACY_BASELINE_SCHEMA_VERSIONS:
+        if isinstance(schema, str) and schema in LEGACY_BASELINE_SCHEMA_VERSIONS:
             raise BaselineError(
                 f'Baseline schema "{schema}" is a 0.5 baseline. Migrate it to a separate file with '
-                f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline <new path>`; the original is preserved."
+                f"`gruff-py analyse --migrate-baseline {display_path} --generate-baseline=<new path>`; the original is preserved."
             )
         # Unsupported or missing schemas are refused; the diagnostic points older files to the migration command.
         if schema != BASELINE_SCHEMA_VERSION:
             raise BaselineError(
                 f'Baseline schemaVersion must be "{BASELINE_SCHEMA_VERSION}"; carry an older file\'s reviews forward '
-                f"with `gruff-py analyse --migrate-baseline {display_path} --generate-baseline <new path>`, "
+                f"with `gruff-py analyse --migrate-baseline {display_path} --generate-baseline=<new path>`, "
                 "which leaves the original untouched."
             )
 
@@ -429,26 +435,29 @@ class BaselineStore:
         return BaselineMigration(written_baseline=written, accepted=len(accepted), sensitive_counted=written.sensitive_total())
 
     def _read_legacy(self, path: str | Path, contents: bytes) -> tuple[dict[str, Any], ...]:
-        """Read the rows of a 0.5 baseline, the only shape a migration accepts as its input.
+        """Read the reviewed rows from a 0.5 baseline selected for migration.
+        Use this when the user supplies `--migrate-baseline` so ambiguous or damaged rows stop the conversion before anything is written.
 
         Args:
             path: The migration input as the user named it; it is only used to name the file in errors, because the bytes are already read.
             contents: Raw bytes of the 0.5 baseline, the same bytes the migration later compares to prove the input was not changed.
 
         Returns:
-            The rows from the file's single row container that are JSON objects, in file order; a row that is not an object is dropped without an
-            error, and an empty container gives an empty tuple.
+            Rows from the file's single container in file order. An empty container gives an empty tuple.
 
         Raises:
             BaselineError: When the bytes are not UTF-8 or valid JSON, the root is not an object or its schemaVersion is not a 0.5 version, more than
-                one of findings, groups and entries is a list, or none of them is.
+                one of findings, groups and entries is a list, none is, or a row is not an object.
         """
         try:
             payload = json.loads(contents.decode("utf-8"))
         # For example, a hand-edited 0.5 baseline may carry a trailing comma the decoder rejects.
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BaselineError(f"Invalid baseline JSON: {_display_path(path)}") from exc
-        if not isinstance(payload, dict) or payload.get("schemaVersion") not in LEGACY_BASELINE_SCHEMA_VERSIONS:
+        # A JSON array can be readable while still lacking the baseline version migration requires.
+        schema = payload.get("schemaVersion") if isinstance(payload, dict) else None
+        # Refuse a v3 file here because it already has the identity scheme migration would generate.
+        if not isinstance(schema, str) or schema not in LEGACY_BASELINE_SCHEMA_VERSIONS:
             raise BaselineError(f"Migration input {_display_path(path)} is not a 0.5 baseline.")
         containers = [container for container in _LEGACY_ROW_CONTAINERS if isinstance(payload.get(container), list)]
         # One container is the supported case; two would migrate differently in different ports, so the file is refused.
@@ -457,10 +466,16 @@ class BaselineStore:
                 f"Migration input {_display_path(path)} carries more than one row container "
                 f"({', '.join(containers)}); a migration input must name exactly one."
             )
+        # An empty review list is valid. A missing list gives the migration nothing it can verify.
         if not containers:
             raise BaselineError(f'Migration input {_display_path(path)} must carry a "findings" or "entries" list.')
         rows = payload[containers[0]]
-        return tuple(row for row in rows if isinstance(row, dict))
+        # Validate all saved reviews before writing any of them to the destination.
+        for index, row in enumerate(rows):
+            # A hand edit or merge can leave a null row. Report its location instead of dropping reviewed debt.
+            if not isinstance(row, dict):
+                raise BaselineError(f"Migration input {_display_path(path)}: {containers[0]}[{index}] must be a JSON object.")
+        return tuple(rows)
 
     def _require_distinct_paths(self, input_path: Path, output_path: Path) -> None:
         """Refuse an output that is the input by spelling, resolved link target, or inode.
@@ -608,8 +623,8 @@ def apply_baseline(
     scan_scope: str = "full-project",
     declaration_position: Callable[[Finding], int] | None = None,
 ) -> BaselineApplyResult:
-    """Separate the debt a user already reviewed from the findings they still need to act on.
-    Findings without identities and collisions stay visible; reviewed counts hide unchanged debt, and partial scans leave resolved debt unjudged.
+    """Spend reviewed counts and keep the findings that still need attention.
+    Same-named declarations use their positions to keep separate reviews apart. A partial scan leaves unseen debt unresolved.
 
     Args:
         project_root: Project root used to locate a relative baseline and display its path.
@@ -620,7 +635,7 @@ def apply_baseline(
         declaration_position: Declaration resolver from the runner; ``None`` ranks by line.
 
     Returns:
-        The gated findings, the report, and every collision the run must name.
+        The retained findings, the report, all collisions and each finding's baseline classification.
 
     Raises:
         BaselineError: When the baseline cannot be read or validated, was written by another port, or constructing a finding identity fails.
@@ -636,12 +651,12 @@ def apply_baseline(
     identities = _identities_or_error(findings, declaration_position)
     groups = _group_by_identity(findings, identities)
     statuses = _classify(findings, identities, groups, baseline.by_identity())
-    gated, counts = _partition(findings, statuses)
+    retained_findings, counts = _partition(findings, statuses)
     # A partial scan can miss findings outside its scope, so only a full scan counts unmatched reviews as resolved.
     resolved_entries, resolved_occurrences = _resolved_surplus(baseline, groups, statuses) if scan_scope == "full-project" else ((), 0)
 
     return BaselineApplyResult(
-        findings=gated,
+        findings=retained_findings,
         report=BaselineReport(
             path=baseline.path,
             generated=False,
@@ -657,13 +672,13 @@ def apply_baseline(
             not_eligible_count=counts["notEligible"],
         ),
         collisions=_collisions(groups),
+        statuses={id(finding): status for finding, status in zip(findings, statuses, strict=True)},
     )
 
 
 def require_overwritable_default_path(project_root: str | Path, path: str | Path, force: bool) -> None:
-    """Check whether an existing baseline can be overwritten at the conventional filename.
-
-    A version 0.5 baseline is left alone rather than destroyed unless the caller forces the write, preserving the rollback copy.
+    """Check whether generation can replace a file at the conventional baseline name.
+    An existing file must be a readable baseline for this port unless the user explicitly supplies `--force`.
 
     Args:
         project_root: Base directory used when the destination path is relative.
@@ -674,28 +689,23 @@ def require_overwritable_default_path(project_root: str | Path, path: str | Path
         None. Checks the existing destination before the caller writes a baseline.
 
     Raises:
-        BaselineError: When an unforced write targets the conventional filename and its existing JSON object has a noncurrent schema string.
+        BaselineError: When the existing file at the conventional path cannot be read as this port's baseline.
     """
     # The caller can bypass overwrite protection by forcing the write or choosing a different filename.
     if force or Path(path).name != DEFAULT_BASELINE_FILENAME:
         return
     absolute_path = Path(path) if Path(path).is_absolute() else Path(project_root) / path
     # Nothing there to protect, which is the ordinary first-generate case.
-    if not absolute_path.is_file():
+    if not absolute_path.exists() and not absolute_path.is_symlink():
         return
     try:
-        existing = json.loads(absolute_path.read_text(encoding="utf-8"))
-    # A read error, invalid UTF-8 or malformed JSON leaves no confirmed schema mismatch to report, so the caller can still attempt the write.
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return
-    schema = existing.get("schemaVersion") if isinstance(existing, dict) else None
-    if not isinstance(schema, str) or schema == BASELINE_SCHEMA_VERSION:
-        return
-    raise BaselineError(
-        f'{_display_path(path)} is a "{schema}" baseline, not "{BASELINE_SCHEMA_VERSION}"; generating over it would destroy '
-        f"the retreat path. Migrate it with `gruff-py analyse --migrate-baseline {_display_path(path)} "
-        "--generate-baseline <new path>`, or pass --force to overwrite it."
-    )
+        existing = BaselineStore(project_root).read(path)
+        # A baseline from another port can be readable but may still contain reviews the caller needs to keep.
+        if existing.tool_language != TOOL_LANGUAGE:
+            raise BaselineError(f"Baseline was written by {existing.tool_language}; this run is {TOOL_LANGUAGE}.")
+    except BaselineError as exc:
+        # A truncated default file, for example, is kept for recovery and the diagnostic explains the explicit override.
+        raise BaselineError(f"Refusing to overwrite {_display_path(path)} without --force to preserve the retreat path. {exc}") from exc
 
 
 def default_baseline_path(project_root: str | Path) -> Path:
@@ -712,7 +722,11 @@ def default_baseline_path(project_root: str | Path) -> Path:
 
 @dataclass(slots=True)
 class _IdentityGroup:
-    """Every occurrence of one identity in this run, plus what it takes to judge them together."""
+    """Collect the occurrences that share one baseline identity.
+
+    The matcher spends reviewed counts within a declaration.
+    If the identity covers different declarations, the report keeps their findings visible.
+    """
 
     indexes: list[int]
     declarations: set[str]
@@ -949,46 +963,80 @@ def _document_payload(data: BaselineData) -> dict[str, Any]:
 
 
 def _accepted_by_legacy(rows: tuple[dict[str, Any], ...], findings: Sequence[Finding]) -> list[Finding]:
-    """Keep the current findings a 0.5 baseline had already accepted, matching only on fields that file actually stored.
-
-    A 0.5 row is matched on its rule and path, narrowed by its symbol and message when it recorded them, and it
-    accepts as many occurrences as the file held. A finding the old baseline never covered stays visible.
+    """Match current findings to prior reviews before writing a migrated baseline.
+    Exact fingerprints take priority. A remaining symbol-less review may match a message whose measured numbers changed.
 
     Args:
-        rows: Object rows from the 0.5 file's row container; only ruleId, file or filePath, symbol and message are read, each row accepts one
-            occurrence, and a row without a ruleId or a file path can accept nothing.
+        rows: Legacy baseline rows, each able to review at most one current occurrence.
         findings: This run's findings, the only candidates a 0.5 row can accept.
 
     Returns:
-        The accepted findings in spend order (lowest line, then column, unlocated last) rather than scan order; empty when no row matches a current
-        finding.
+        Accepted findings, using location order within exact and fallback matches.
     """
-    budget_by_key: dict[tuple[str | None, str | None, str | None, str | None], int] = {}
-    for row in rows:
-        key = (
-            _row_text(row, "ruleId"),
-            _row_text(row, "file") or _row_text(row, "filePath"),
-            _row_text(row, "symbol"),
-            _row_text(row, "message"),
-        )
-        budget_by_key[key] = budget_by_key.get(key, 0) + 1
+    exact_matches, remaining_rows, unmatched_findings = _exact_legacy_matches(rows, sorted(findings, key=_spend_order))
+    reviews_by_key: dict[tuple[str | None, str | None, str | None, str | None], int] = {}
+    # Each unspent row grants one review to a later match if its old fingerprint no longer applies.
+    for row in remaining_rows:
+        symbol = _row_text(row, "symbol")
+        message = _row_text(row, "message")
+        # A file-level measurement can grow while describing the same reviewed problem.
+        if symbol is None and message is not None:
+            message = normalise_measured_values(message)
+        key = (_row_text(row, "ruleId"), _row_text(row, "file") or _row_text(row, "filePath"), symbol, message)
+        reviews_by_key[key] = reviews_by_key.get(key, 0) + 1
 
-    accepted: list[Finding] = []
-    # Lowest line first, so a 0.5 row covering fewer occurrences than exist today accepts the same ones on every port.
-    for finding in sorted(findings, key=_spend_order):
+    accepted = exact_matches
+    # Try the remaining findings in location order to spend each review predictably.
+    for finding in unmatched_findings:
         rule_id, path, symbol, message = finding.rule_id, finding.file_path, finding.symbol, finding.message
-        # Try the most specific row first, then the shapes a sparser 0.5 writer produced, so no accepted debt is lost.
+        # A legacy entry may omit a message or symbol, so try the most specific recorded description first.
         for candidate_key in (
             (rule_id, path, symbol, message),
             (rule_id, path, symbol, None),
-            (rule_id, path, None, message),
+            (rule_id, path, None, normalise_measured_values(message)),
             (rule_id, path, None, None),
         ):
-            if budget_by_key.get(candidate_key, 0) > 0:
-                budget_by_key[candidate_key] -= 1
+            # Once a stored review is spent, later occurrences stay visible unless another review covers them.
+            if reviews_by_key.get(candidate_key, 0) > 0:
+                reviews_by_key[candidate_key] -= 1
                 accepted.append(finding)
                 break
     return accepted
+
+
+def _exact_legacy_matches(rows: tuple[dict[str, Any], ...], findings: list[Finding]) -> tuple[list[Finding], list[dict[str, Any]], list[Finding]]:
+    """Spend exact legacy reviews before a weaker match can claim them.
+    Use the returned unspent rows and findings for fallback matching, so a description change does not claim the same review twice.
+
+    Args:
+        rows: Legacy reviews with optional fingerprint fields.
+        findings: Current occurrences in location order.
+
+    Returns:
+        Exact matches, unspent rows and unmatched findings.
+    """
+    by_fingerprint: dict[tuple[str | None, str | None, str], list[int]] = {}
+    # Older row shapes may lack a fingerprint and are handled by the fallback matcher.
+    for index, row in enumerate(rows):
+        fingerprint = _row_text(row, "fingerprint")
+        # A present fingerprint identifies the review within the same rule and file.
+        if fingerprint is not None:
+            key = (_row_text(row, "ruleId"), _row_text(row, "file") or _row_text(row, "filePath"), fingerprint)
+            by_fingerprint.setdefault(key, []).append(index)
+
+    accepted: list[Finding] = []
+    pending: list[Finding] = []
+    spent: set[int] = set()
+    # Match unchanged findings first so a weaker match cannot use their reviews.
+    for finding in findings:
+        matches = by_fingerprint.get((finding.rule_id, finding.file_path, finding.fingerprint()))
+        # Spending one row leaves other occurrences available for separate review.
+        if matches:
+            spent.add(matches.pop())
+            accepted.append(finding)
+        else:
+            pending.append(finding)
+    return accepted, [row for index, row in enumerate(rows) if index not in spent], pending
 
 
 def _row_text(row: dict[str, Any], key: str) -> str | None:
@@ -1007,7 +1055,8 @@ def _row_text(row: dict[str, Any], key: str) -> str | None:
 
 
 def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
-    """Validate and restore the reviewed rows after the baseline version check.
+    """Read the rows that determine which reviewed findings may stay hidden.
+    The baseline reader calls this after checking its version and refuses duplicate identities whose counts cannot both apply.
 
     Args:
         payload: Decoded v3 baseline root whose schemaVersion has already been checked; only its occurrences list is read here.
@@ -1016,19 +1065,25 @@ def _entries_from_payload(payload: dict[str, Any]) -> tuple[BaselineEntry, ...]:
         One validated row per occurrence, in file order; empty when the file accepted nothing.
 
     Raises:
-        BaselineError: When occurrences is missing or not a list, an occurrence is not a JSON object, or a row fails BaselineEntry.from_dict
-            validation.
+        BaselineError: When occurrences is missing or invalid, a row fails validation, or an identity repeats.
     """
     rows = payload.get("occurrences")
     # Without a list of occurrences there is no deterministic set of reviewed findings to apply.
     if not isinstance(rows, list):
         raise BaselineError('Baseline key "occurrences" must be a list.')
     entries: list[BaselineEntry] = []
+    identities: set[str] = set()
+    # Restore all reviewed counts in file order before any finding can be suppressed.
     for index, row in enumerate(rows):
         # Reject the baseline if a non-object row cannot supply the identity and count needed for matching.
         if not isinstance(row, dict):
             raise BaselineError(f"Baseline occurrences[{index}] must be a JSON object.")
-        entries.append(BaselineEntry.from_dict(row, index))
+        entry = BaselineEntry.from_dict(row, index)
+        # A merge can duplicate a row. Reject it so neither count silently overrides the other.
+        if entry.identity in identities:
+            raise BaselineError(f'Baseline occurrences[{index}] repeats identity "{entry.identity}".')
+        identities.add(entry.identity)
+        entries.append(entry)
     return tuple(entries)
 
 
