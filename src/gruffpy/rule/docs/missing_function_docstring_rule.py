@@ -1,16 +1,11 @@
-"""``docs.missing-function-docstring`` - function/method without a docstring.
+"""Flag functions and methods missing a docstring during `gruff-py analyse` and `hook` runs.
 
-Dunder methods, abstract methods, ``@typing.overload`` stubs, and
-``@<name>.setter``/``@<name>.deleter`` methods are always exempt. ``@property``
-getters require a docstring like any other method.
+Use this rule so reviewers and agents know each callable's contract without reconstructing edge cases from the body.
+Every finding tells the developer only the sections that callable actually needs (intent, parameters, Returns/Yields, and Raises).
 
-The ``everyCallable`` option is on by default. Set to false, it limits the rule
-to public names, those not starting with ``_``, and also exempts pytest-style
-``test_*`` functions in test files. When ``everyCallable`` is on, ``test_*``
-functions in test files report at ``advisory`` severity while production and
-helper callables stay at ``warning``. The message names what the docstring
-should hold: the intent, an entry for each parameter, and a Returns or Yields
-and a Raises section only when the function returns a value or raises.
+- Always exempt: dunder methods, abstract methods, `@typing.overload` stubs, protocol stubs, property setters/deleters, and single-callsite closures.
+- Default scope (`everyCallable: true`): production and helper callables emit `warning`, while `test_*` functions in test files emit `advisory`.
+- Narrow scope (`everyCallable: false`): limits findings to public callables and skips underscore-private helpers and `test_*` functions.
 """
 
 import ast
@@ -50,15 +45,19 @@ FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
 class MissingFunctionDocstringRule(Rule):
-    """Detect public functions and methods that lack documentation."""
+    """Detect functions and methods that lack a docstring describing their contract.
+
+    The analyser runs this rule on every parsed Python file and tailors each finding message to the function's real signature and body.
+    Missing `test_*` docstrings stay visible at `advisory` severity under `everyCallable: true` so they never trip default `--fail-on warning` gates.
+    """
 
     ID = "docs.missing-function-docstring"
 
     def definition(self) -> RuleDefinition:
-        """Return the rule metadata used by the registry and reporters.
+        """Return the rule metadata used by the registry, `list-rules`, and report formatters.
 
         Returns:
-            Definition for the missing function docstring rule.
+            Definition for the missing function docstring rule, with `everyCallable` enabled by default.
         """
         return RuleDefinition(
             id=self.ID,
@@ -75,15 +74,18 @@ class MissingFunctionDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze a Python module for undocumented functions and methods in the configured scope.
+        """Inspect one parsed Python module for undocumented functions and methods in the configured scope.
+
+        Called by the analysis runner during `analyse`, `summary`, `report`, and `hook` scans after AST parsing completes.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer. Its everyCallable option widens the rule.
+            unit: Parsed source file to inspect; `unit.tree` is None for non-Python files, syntax errors, or budget-skipped files.
+            context: Rule execution context supplying the user's `everyCallable` setting.
 
         Returns:
-            Findings for in-scope functions or methods missing docstrings; empty when the tree is absent or none qualify.
+            Findings for in-scope functions missing docstrings; an empty list when the AST is absent or every callable is documented or exempt.
         """
+        # Skip non-Python files, syntax failures, and deep-scan budget skips because no AST is available.
         if unit.tree is None:
             return []
         definition = self.definition()
@@ -95,28 +97,29 @@ class MissingFunctionDocstringRule(Rule):
 
 
 def _undocumented_functions(unit: AnalysisUnit, *, every_callable: bool) -> list[tuple[FunctionNode, list[ast.AST]]]:
-    """Collect every function and method in the parsed module that this rule should report as missing a docstring.
+    """Collect every function and method in the parsed module that should be reported as missing a docstring.
 
-    Nested functions and methods are visited too, in ast.walk order, and each candidate keeps the parent chain computed for it so later steps can
-    reuse it.
+    Walks nested definitions alongside top-level callables and keeps each parent chain so finding generation can format dotted symbol names.
 
     Args:
-        unit: Analysis unit whose parsed tree is walked; the tree must not be None, and the file's display path decides the test-file skip.
-        every_callable: Whether everyCallable includes private names and functions beginning with test_ in test files.
+        unit: Analysis unit whose parsed tree is walked; `unit.tree` must not be None, and `display_path` identifies test files.
+        every_callable: Whether user config includes private names and `test_*` functions in test files.
 
     Returns:
-        Pairs of each reportable function node and its parent chain from the module down to its immediate parent, in walk order; empty when every
-        function is documented, out of scope or exempt.
+        Pairs of reportable function nodes and their parent chains in walk order; an empty list when every callable is documented or exempt.
 
     Raises:
-        AssertionError: When unit.tree is None.
+        AssertionError: When `unit.tree` is None (prevented by the guard in `analyse`).
     """
     assert unit.tree is not None
     candidates: list[tuple[FunctionNode, list[ast.AST]]] = []
+    # Walk the entire module tree so methods and multi-use inner helpers receive the same check as top-level functions.
     for node in ast.walk(unit.tree):
+        # Ignore non-callable AST nodes while walking the module.
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         parents = parent_chain(node)
+        # Keep only callables that are in configured scope, lack a docstring, and fail every exemption.
         if _should_report_missing_function_docstring(node, parents, unit.file.display_path, every_callable=every_callable):
             candidates.append((node, parents))
     return candidates
@@ -129,21 +132,23 @@ def _should_report_missing_function_docstring(
     *,
     every_callable: bool,
 ) -> bool:
-    """Decide whether one function or method is in scope, lacks a docstring and matches no exemption.
+    """Check whether one function or method is in scope, lacks a docstring, and matches no exemption.
 
-    Exemptions cover abstract methods, overload stubs, property setters and deleters, protocol stubs and the single-callsite closure heuristic.
+    Keeps boilerplate stubs (abstract methods, overloads, property setters/deleters, protocol stubs, single-use closures) out of developer reports.
 
     Args:
-        node: Definition whose name, existing docstring and exemption markers determine whether to report a finding.
-        parents: Parent chain of node from the module down to its immediate parent, used by the protocol-stub and nested-closure exemptions.
-        display_path: Display path used to check whether a function with the test_ prefix is in a test file.
-        every_callable: Whether everyCallable is enabled; true includes private names and functions beginning with test_ in test files.
+        node: Callable definition whose name, existing docstring, and exemption markers are checked.
+        parents: Parent chain from module down to immediate parent, used for protocol-stub and nested-closure checks.
+        display_path: Relative file path used to recognize pytest-style `test_*` functions inside test files.
+        every_callable: True includes private helpers and `test_*` functions; False limits findings to public non-test callables.
 
     Returns:
-        True when the function should get a finding; False when it is out of scope, already has a docstring, or matches an exemption.
+        True when the callable should emit a finding; False when out of scope, already documented, or exempt.
     """
+    # Skip dunder methods always, and skip `_private` helpers when the user disabled `everyCallable`.
     if not is_in_documentation_scope(node.name, every_callable=every_callable):
         return False
+    # When the user opts out of `everyCallable`, pytest `test_*` functions stay silent in test files.
     if not every_callable and node.name.startswith("test_") and is_test_file(display_path):
         return False
     return not (
@@ -157,48 +162,50 @@ def _should_report_missing_function_docstring(
 
 
 def _is_single_callsite_closure(node: FunctionNode, parents: list[ast.AST]) -> bool:
-    """Test whether a nested function's name appears as a bare name at most once within its nearest enclosing function.
+    """Check whether a nested helper is referenced at most once inside its enclosing function.
 
-    Search the innermost enclosing function, including when node is a method of a class nested inside that function.
-    Count name nodes outside node, including attribute bases. Attribute names after a dot do not count. Zero occurrences also qualifies.
+    Lets developers write short one-shot callbacks or sort keys inside a function without adding ceremonial docstrings.
 
     Args:
-        node: Function being tested; its own subtree is left out of the count.
-        parents: Parent chain of node from the module down to its immediate parent; the innermost function in it is the scope searched.
+        node: Function being checked; references inside its own body are ignored.
+        parents: Parent chain from module down to immediate parent; the innermost enclosing function defines the search scope.
 
     Returns:
-        True when node has an enclosing function whose subtree, outside node itself, holds at most one bare-name occurrence of node's name; False when
-        no enclosing function exists or the name occurs more than once.
+        True when an enclosing function exists and references `node.name` at most once outside `node`; False for top-level/class methods or reused
+        helpers.
     """
     enclosing = next(
-        (p for p in reversed(parents) if isinstance(p, ast.FunctionDef | ast.AsyncFunctionDef)),
+        (ancestor for ancestor in reversed(parents) if isinstance(ancestor, ast.FunctionDef | ast.AsyncFunctionDef)),
         None,
     )
+    # Top-level functions and ordinary class methods have no enclosing function, so they are never single-callsite closures.
     if enclosing is None:
         return False
     return _name_reference_count_excluding(enclosing, node.name, node) <= 1
 
 
 def _name_reference_count_excluding(root: ast.AST, name: str, exclude: ast.AST) -> int:
-    """Count the bare-name nodes matching an identifier under a root node, skipping one excluded subtree.
+    """Count bare-name references to a nested function inside its enclosing function, skipping the nested body itself.
 
-    Every ast.Name context counts, so an assignment to the name counts as well as a load, while an attribute access such as obj.name does not.
+    Every `ast.Name` context counts (loads and bindings), while attribute accesses such as `obj.name` do not.
 
     Args:
-        root: Node whose descendants are searched; in this rule, the enclosing function.
-        name: Identifier compared against each ast.Name node's id.
-        exclude: Node skipped together with its whole subtree; in this rule, the nested function itself.
+        root: Enclosing function AST whose descendants are walked.
+        name: Nested function name to count.
+        exclude: Nested function AST node skipped along with its entire subtree.
 
     Returns:
-        Number of matching name nodes found outside the excluded subtree; zero when there are none.
+        Count of bare-name references outside the nested function; zero when unused or only called via decorators/return values.
     """
     count = 0
     stack: list[ast.AST] = list(ast.iter_child_nodes(root))
+    # Walk iteratively so deeply nested helper functions do not hit recursion limits while counting call sites.
     while stack:
         current = stack.pop()
+        # Recursive references inside the closure do not count as external uses.
         if current is exclude:
-            # Recursive references inside the closure do not count as external uses.
             continue
+        # Count each bare identifier match in the enclosing scope to tell one-shot helpers from reused ones.
         if isinstance(current, ast.Name) and current.id == name:
             count += 1
         stack.extend(ast.iter_child_nodes(current))
@@ -211,21 +218,21 @@ def _missing_function_docstring_finding(
     node: FunctionNode,
     parents: list[ast.AST],
 ) -> Finding:
-    """Build the finding for one undocumented function at its def-to-end line span, under its qualified symbol.
+    """Build one missing-docstring finding spanning the callable's lines, picking `advisory` severity for `test_*` functions.
 
-    The message comes from _missing_docstring_message; test_* functions in recognized test files emit at advisory severity while all other callables
-    use the rule definition's default severity. The remediation is fixed text and metadata is always empty.
+    Keeps test-function docstring nudges visible in `gruff-py analyse` and `summary` without breaking `--fail-on warning` CI gates.
 
     Args:
-        unit: Analysis unit whose display path becomes the finding's file path and decides test-file advisory severity.
-        definition: Rule definition supplying the rule id, default severity, pillar, tier, confidence and secondary pillars.
-        node: Undocumented function or async function node; its def line and end line set the finding's line span.
-        parents: Parent chain of node from the module down to its immediate parent, used to build the qualified symbol.
+        unit: Analysis unit supplying the display path and deciding whether `test_*` functions downgrade to `advisory`.
+        definition: Rule metadata providing rule ID, default severity, pillar, tier, confidence, and secondary pillars.
+        node: Undocumented function or async function whose start and end lines locate the finding.
+        parents: Enclosing AST nodes used to build the dotted qualified symbol shown in CLI and JSON output.
 
     Returns:
-        Finding for node whose message names its qualified symbol and lists the docstring parts that node needs.
+        Finding naming the callable's qualified symbol and listing only the docstring sections that callable requires.
     """
     symbol = qualified_symbol(node, parents)
+    # Report missing docstrings on pytest `test_*` functions at advisory severity so default warning gates focus on production and helper code.
     severity = Severity.ADVISORY if node.name.startswith("test_") and is_test_file(unit.file.display_path) else definition.default_severity
     return Finding(
         rule_id=definition.id,
@@ -248,25 +255,27 @@ def _missing_function_docstring_finding(
 
 
 def _missing_docstring_message(node: FunctionNode, symbol: str) -> str:
-    """Build the message from the signature and own body, asking only for what this function has.
+    """Tailor the finding message to the callable's signature and body so developers are only asked for applicable sections.
 
     Args:
-        node: Undocumented function node.
-        symbol: Qualified symbol shown in the finding.
+        node: Undocumented function node whose parameters, return behaviour, and raise statements are inspected.
+        symbol: Qualified symbol rendered in the developer-facing message.
 
     Returns:
-        A request for intent and parameter entries, excluding a leading self or cls and names starting with an underscore.
-        Requests Yields for generators, otherwise Returns when _returns_documentable_value is true, and Raises when has_raise_in_body is true.
+        Human-readable prompt listing intent, non-private parameters, Returns/Yields when applicable, and Raises when the body raises.
     """
     wanted = ["a brief intent description"]
     parameters = [name for name in signature_param_names(node) if not name.startswith("_")]
+    # Ask for parameter descriptions only when the callable accepts non-private arguments beyond self/cls.
     if parameters:
         entries = "an entry for parameter" if len(parameters) == 1 else "entries for parameters"
         wanted.append(f"{entries} {quoted_names(parameters)}")
+    # Generators document yielded items; non-generators ask for Returns only when a meaningful value is returned.
     if is_generator(node):
         wanted.append("a Yields section")
     elif _returns_documentable_value(node):
         wanted.append("a Returns section")
+    # Ask for Raises only when the function body contains an explicit `raise` statement.
     if has_raise_in_body(node):
         wanted.append("a Raises section")
     listed = wanted[0] if len(wanted) == 1 else f"{', '.join(wanted[:-1])} and {wanted[-1]}"
@@ -274,16 +283,15 @@ def _missing_docstring_message(node: FunctionNode, symbol: str) -> str:
 
 
 def _returns_documentable_value(node: FunctionNode) -> bool:
-    """Return whether the function hands back a value its docstring should describe.
+    """Decide whether a callable returns a value that callers need documented in a `Returns:` section.
 
     Args:
-        node: Function described by the finding message; its return annotation decides alone when present, otherwise its own return and yield
-            expressions decide.
+        node: Function inspected for a non-None return annotation or an explicit value-bearing return/yield statement.
 
     Returns:
-        True when the function has a return annotation other than a bare None, or, with no annotation, when its own body yields or has a return
-        whose expression is not the literal None; False otherwise.
+        True when callers receive a non-None value; False for `-> None` annotations or procedures with no returned value.
     """
+    # Trust an explicit return type annotation first so `-> None` procedures never get a noisy Returns prompt.
     if has_return_annotation(node):
         return not has_none_only_return(node)
     return returns_value(node)

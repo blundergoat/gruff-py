@@ -148,3 +148,23 @@ def test_non_python_text_never_enters_deep_scan_guard(tmp_path: Path) -> None:
 
     assert unit.tree is None
     assert unit.diagnostics == ()
+
+
+def test_read_error_omits_absolute_host_path(tmp_path: Path) -> None:
+    """Keep host filesystem paths out of read-error diagnostics emitted for missing or unreadable files.
+
+    Args:
+        tmp_path: Temporary project directory holding the absent file path.
+
+    Returns:
+        None. Asserts the parse diagnostic describes the OS failure without exposing the absolute path.
+    """
+    missing_path = tmp_path / "gone.py"
+    unit = PythonFileParser().parse(
+        SourceFile(absolute_path=str(missing_path), display_path="gone.py", type="python"),
+    )
+
+    assert unit.tree is None
+    assert len(unit.diagnostics) == 1
+    assert unit.diagnostics[0].message.startswith("read error: ")
+    assert str(tmp_path) not in unit.diagnostics[0].message

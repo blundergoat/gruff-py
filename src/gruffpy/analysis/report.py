@@ -1,11 +1,10 @@
-"""Native analysis-run value objects projected as the ``gruff.analysis.v3`` schema.
+"""Hold the frozen outcome of one `gruff-py` scan and project it to the `gruff.analysis.v3` contract.
 
-Defines :class:`AnalysisReport` - the frozen outcome of one analysis run, carrying
-requested paths, file counts, findings, score, diagnostics, ignored paths, and exit
-code - and :class:`ReportExtensions` for the optional mutation, diff, trend, baseline,
-and review sections. Every reporter (JSON, SARIF, text) consumes this object, and its
-JSON projection is the cross-implementation ``gruff.analysis.v3`` contract, so the
-field names here are a compatibility surface.
+Every command (`analyse`, `summary`, `report`, `dashboard`, and `hook`) builds an `AnalysisReport` and passes it to its renderer.
+Its JSON serialization matches sibling implementations (`gruff.analysis.v3` and `gruff.summary.v3`), so field names stay fixed.
+
+- `AnalysisReport`: carries discovered/parsed counts, findings, score, diagnostics, suppressions, and the process exit code.
+- `ReportExtensions`: holds optional diff, trend, baseline, mutation, and review payloads omitted from JSON when absent.
 """
 
 from dataclasses import dataclass, field
@@ -123,28 +122,32 @@ class AnalysisReport:
     suppressed_findings: tuple[SuppressedFinding, ...] = ()
 
     def finding_counts(self) -> dict[str, int]:
-        """Return finding counts grouped by severity.
+        """Count published findings by severity so terminal summaries and JSON envelopes show totals at a glance.
 
         Returns:
-            Mapping containing advisory, warning, error, and total counts.
+            Mapping with `advisory`, `warning`, `error`, and `total` counts (all zero when the scan is clean).
         """
         counts = {"advisory": 0, "warning": 0, "error": 0, "total": len(self.findings)}
+        # Tally each published finding under its severity bucket for the CLI header and summary totals.
         for finding in self.findings:
             counts[finding.severity.value] += 1
         return counts
 
     def finding_counts_by_rule(self) -> list[dict[str, Any]]:
-        """Return rows for rules with findings, carrying counts, highest severities, per-severity counts and first-finding confidences.
+        """Group published findings by rule ID for `gruff-py summary --group-by rule` and triage views.
 
-        Sort by descending count and ascending ruleId so identical inputs produce repeatable output.
+        Tracks each rule's total count, worst severity, per-severity breakdown, and first-finding confidence.
+        Rows sort by descending count then ascending `ruleId` so repeated runs print identical order.
 
         Returns:
-            Deterministically ordered list of per-rule rows.
+            Deterministically ordered per-rule summary rows; an empty list when the scan has no findings.
         """
         per_rule: dict[str, dict[str, Any]] = {}
         per_rule_worst: dict[str, Severity] = {}
+        # Aggregate every finding by rule ID so multi-severity rules (such as test vs production docstrings) keep accurate counts.
         for finding in self.findings:
             row = per_rule.get(finding.rule_id)
+            # First time this rule appears: seed its count, per-severity map, worst severity, and confidence.
             if row is None:
                 severity_counts = {"error": 0, "warning": 0, "advisory": 0}
                 severity_counts[finding.severity.value] = 1
@@ -160,29 +163,30 @@ class AnalysisReport:
                 row["count"] += 1
                 row["severityCounts"][finding.severity.value] += 1
                 worst = per_rule_worst[finding.rule_id]
+                # Promote the rule's headline severity when a later finding is more severe than earlier ones.
                 if _SEVERITY_RANK[finding.severity] > _SEVERITY_RANK[worst]:
                     per_rule_worst[finding.rule_id] = finding.severity
                     row["severity"] = finding.severity.value
         return sorted(per_rule.values(), key=lambda row: (-row["count"], row["ruleId"]))
 
     def parse_error_count(self) -> int:
-        """Count parse-error diagnostics for the machine report summary.
+        """Count fatal parse-error diagnostics shown in the summary header and machine JSON envelope.
 
         Returns:
-            Count of diagnostics whose type is parse-error.
+            Number of diagnostics whose type is `parse-error`; zero when every Python file parsed cleanly.
         """
-        return sum(1 for d in self.diagnostics if d.type == "parse-error")
+        return sum(1 for diagnostic in self.diagnostics if diagnostic.type == "parse-error")
 
     def has_findings_at_severity(self, severity: Severity) -> bool:
-        """Return whether the report contains a finding at a severity.
+        """Check whether the scan emitted at least one finding at the requested severity level.
 
         Args:
-            severity: Severity level to search for.
+            severity: Severity level to look for across published findings.
 
         Returns:
-            True when at least one finding has the requested severity.
+            True when any finding matches `severity`; False when none match or the report has no findings.
         """
-        return any(f.severity == severity for f in self.findings)
+        return any(finding.severity == severity for finding in self.findings)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the report to the canonical JSON-compatible payload.

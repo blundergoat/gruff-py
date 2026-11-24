@@ -69,7 +69,10 @@ VALID_SELECTION_KEYS = frozenset(
     }
 )
 VALID_RULE_KEYS = frozenset({"enabled", "threshold", "severity", "thresholds", "options"})
-MIGRATION_HINT = 'Run "gruff-py migrate-config" to rewrite legacy YAML keys. For TOML, edit [tool.gruff-py] in pyproject.toml by hand.'
+MIGRATION_HINT = (
+    'Run "gruff-py migrate-config --output gruff-py.migrated.yaml" (or --dry-run to preview) to rewrite legacy YAML keys. '
+    "For TOML, edit [tool.gruff-py] in pyproject.toml by hand."
+)
 TOML_TOOL_KEY = "gruff-py"
 LEGACY_TOML_TOOL_KEY = "gruff"
 TOML_TABLE = f"[tool.{TOML_TOOL_KEY}]"
@@ -293,7 +296,7 @@ class ConfigLoader:
             raise ConfigError(
                 f"{source} is missing required 'schemaVersion'. "
                 f"Expected {CONFIG_SCHEMA_VERSION!r}; "
-                "run `gruff-py migrate-config` for YAML, or edit "
+                "run `gruff-py migrate-config --output gruff-py.migrated.yaml` for YAML, or edit "
                 "[tool.gruff-py] in TOML by hand."
             )
         value = section["schemaVersion"]
@@ -301,7 +304,7 @@ class ConfigLoader:
             raise ConfigError(
                 f"{source} has schemaVersion {value!r}; "
                 f"expected {CONFIG_SCHEMA_VERSION!r}. "
-                "Run `gruff-py migrate-config` for YAML, or edit "
+                "Run `gruff-py migrate-config --output gruff-py.migrated.yaml` for YAML, or edit "
                 "[tool.gruff-py] in TOML by hand."
             )
 

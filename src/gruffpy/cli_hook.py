@@ -94,7 +94,7 @@ _HOOK_COMMAND_DECORATORS: tuple[Callable[[Callable[..., Any]], Callable[..., Any
         "hook_baseline_path",
         type=click.Path(path_type=Path),
         default=None,
-        help="Hook or analysis JSON file for stableIdentity new-only comparison.",
+        help="Path to a gruff.baseline.v3 file from analyse --generate-baseline.",
     ),
     click.option(
         "--config",

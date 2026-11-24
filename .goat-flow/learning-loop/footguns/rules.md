@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-11-23
+last_reviewed: 2026-11-25
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -250,6 +250,53 @@ coverage lived in
 `tests/unit/rule/dead_code/test_unused_private_function_rule.py` at `4a6eb32` (search:
 `test_project_global_store_before_a_later_load_hides_the_import` and
 `test_project_global_store_does_not_reach_a_module_level_load`).
+
+## Footgun: Six separate test-path helpers disagree across rules (and `naming.identifier-quality` skips none)
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Open each rule's own test-path predicate before assuming test files are skipped consistently across `test/`, `testing/test_*.py`, `*_test.py`, or `conftest.py`.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**hallucination-risk:** high
+
+**Prevention:** Before editing or auditing any test-path exemption, inspect the rule's own helper instead of assuming it shares `is_built_in_test_path` or `docs._helpers.is_test_file`. Exercise `tests/`, singular `test/`, `testing/test_*.py`, `*_test.py`, and `conftest.py` in focused fixtures whenever changing test-path logic.
+
+Six separate helpers currently define "test file" differently across `src/gruffpy/`: `src/gruffpy/suppression/sensitive_exclusion_filter.py` (search: `def is_built_in_test_path`) matches the family list case-insensitively at any depth; `src/gruffpy/rule/docs/_helpers.py` (search: `def is_test_file`) matches `tests/` plus root-only `test_*.py`; `src/gruffpy/rule/naming/short_variable_rule.py` (search: `def _is_test_file`) and `src/gruffpy/rule/naming/abbreviation_rule.py` (search: `def _is_test_file`) match `test`/`tests` plus root-only `test_*.py`; `src/gruffpy/rule/naming/test_naming_consistency_rule.py` (search: `def _is_test_file`) keeps its own copy; and `src/gruffpy/rule/waste/empty_function_rule.py` (search: `def _is_test_path`) is case-sensitive and skips `tests/` and `test_*` only. Meanwhile, `src/gruffpy/rule/naming/identifier_quality_rule.py` (search: `class IdentifierQualityRule`) skips no test paths at all.
+
+Measured on 2026-11-25 against the external Python corpus: `pytest` stores its suite under `testing/test_*.py`, causing `docs.missing-function-docstring` to emit `3,834` warnings versus `10` advisories; across `fastapi`, `django`, `sqlalchemy`, and `pytest`, `1,646` of `1,701` (`96.8%`) `naming.identifier-quality` warnings fired inside test files (`foo`, `FooBaseModel`, `Thing`).
+
+## Footgun: `docs.todo-density` scans raw text with no minimum marker floor
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check marker count, file length, and comment-versus-string context before treating a `docs.todo-density` error as genuine TODO sprawl, and never assume the rule tokenizes comments only.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** When modifying `docs.todo-density` or writing short Python files or test fixtures that mention `TODO`, `FIXME`, `HACK`, `XXX`, or `BUG`, account for raw-source matching across strings and identifiers and for the missing minimum-count floor. Keep self-check fixtures free of those tokens unless explicitly exercising the rule.
+
+`src/gruffpy/rule/docs/todo_density_rule.py` (search: `_MARKER_PATTERN`) runs a regex over raw `unit.source` and compares `marker_count * 1000 / max(1, line_count)` against the default threshold of `10` at `Severity.ERROR`. With no minimum marker floor, a single `TODO` or `BUG` token anywhere in a file shorter than 100 lines exceeds `10/1000` and emits an `error`. Measured on 2026-11-25 on external repositories: single-marker files in `django` (`49` lines, density `20.41`; `68` lines, density `14.71`) and `sqlalchemy` (`97` lines, density `10.31`) each triggered a hard `error`. The rule's exemption list (`_RULE_DEFINITION_FILE_SUFFIXES`) also still names retired `gruffpy/rule/waste/commented_out_code_rule.py`.
+
+## Footgun: Banded rules must not interpolate `threshold_match.severity` into finding messages
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Phrase two-band rule messages around the numeric limit (`above the limit of <N>`) instead of `threshold_match.severity.value`, so lower-band advisory findings never claim they crossed an error threshold and crossing bands preserves `stableIdentity`.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** In any rule routing severity through `banded_severity` (`src/gruffpy/rule/size/_band.py`, search: `def banded_severity`), write `above the limit of <N>` in `Finding.message` rather than copying `above the {threshold_match.severity.value} threshold of` from non-banded rules such as `src/gruffpy/rule/size/average_function_length_rule.py` (search: `high_value_threshold_match`). Verify both lower-band and upper-band wording in `tests/unit/rule/size/test_limit_band.py` (search: `def test_each_rule_just_over_its_limit_reports_the_lower_band_notice`).
+
+`threshold_match.severity` always holds the configured upper-band severity (`error` or `warning`), even when `banded_severity` demotes a `1.0x`-to-`1.5x` breach to `Severity.ADVISORY`. Interpolating `threshold_match.severity.value` caused lower-band advisory findings on `complexity.cognitive` and the six banded `size.*` rules to print `"above the error threshold of 30"` while reporting severity `advisory` (observed on `healthkit` and fixed across all nine banded rules in 0.6.0).
+
+## Footgun: Prose `#` comments mentioning `gruff:` trigger `suppression-parse-error` (exit 2)
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Never write `gruff:` inside an ordinary explanatory `#` comment in `src/` or `tests/`; describe gruff suppressions in plain prose without the colon or keep examples inside docstrings.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before committing inline comments in Python files, avoid the literal substring `gruff:` (case-insensitive) anywhere in a `#` comment unless writing an actual suppression directive. Always run `uv run gruff-py analyse <modified-files> --no-baseline --fail-on advisory` after comment-clarity passes.
+
+`src/gruffpy/suppression/parser.py` (search: `_GRUFF_COMMENT_RE`) matches `\bgruff\s*:\s*(?P<body>.*)` anywhere inside a Python `#` comment token, not only at the start of the comment. Mentioning `` `gruff: disable` `` inside an explanatory comment in `src/gruffpy/rule/docs/ignore_directive_reason_rule.py` triggered `[SUPPRESSION-PARSE-ERROR] Malformed gruff suppression comment.` and exited `2` during dogfood verification on 2026-11-25.
 
 ## Resolved Entries
 

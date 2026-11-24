@@ -1,8 +1,10 @@
-"""``gruff-py summary`` payload + text renderers (pillar rows, grouped rules, hints).
+"""Render terminal and JSON output for the `gruff-py summary` command.
 
-Carved out of ``src/gruffpy/cli.py`` to keep that file under the
-``size.file-length`` 1000-line error threshold; mirrors the
-``src/gruffpy/cli_dashboard.py`` / ``src/gruffpy/cli_list_rules.py`` carve-outs.
+Use this module when a developer runs `gruff-py summary` for a compact repository health check without printing every individual finding.
+It keeps the terminal masthead, pillar grades, top/grouped rules, diagnostics, and baseline hints aligned with `FAMILY-CONTRACT.md`.
+
+- `summary_payload`: returns the canonical findings-free `gruff.summary.v3` JSON envelope.
+- `summary_text`: formats the human-readable terminal summary, including `--group-by rule` severity breakdowns.
 """
 
 from __future__ import annotations
@@ -153,24 +155,26 @@ def summary_text(
 
 
 def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
-    """Align grouped rule counts with their severity and confidence labels.
+    """Format aligned terminal rows for `gruff-py summary --group-by rule` showing count, rule ID, severity, and confidence.
 
     Args:
-        grouped: Text-summary grouping containing rows plus the shown and total counts for its heading.
+        grouped: Grouping dictionary containing `rows`, `shown`, and `total` counts for the section heading.
 
     Returns:
-        A heading and aligned rule rows, or the heading and an explicit none marker when rows are empty.
+        Section heading plus aligned rule rows, or the heading followed by `  none` when the scan produced no findings.
     """
     rows = cast(list[dict[str, Any]], grouped["rows"])
     shown = cast(int, grouped["shown"])
     total = cast(int, grouped["total"])
     header = f"Grouped by rule (showing {shown} of {total}):"
+    # Print an explicit empty-state marker so a clean scan clearly shows zero grouped rules.
     if not rows:
         return [header, "  none"]
     rule_id_width = max(len(row["ruleId"]) for row in rows)
     severity_labels = [_grouped_severity_label(row) for row in rows]
     severity_width = max(8, max(len(label) for label in severity_labels))
     formatted = [header]
+    # Align columns across all displayed rules so developers can scan counts and mixed severities vertically.
     for row, severity_label in zip(rows, severity_labels, strict=True):
         line = f"  {row['count']:>4}  {row['ruleId']:<{rule_id_width}}  {severity_label:<{severity_width}}  {row['confidence']}"
         formatted.append(line.rstrip())
@@ -178,17 +182,22 @@ def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
 
 
 def _grouped_severity_label(row: dict[str, Any]) -> str:
-    """Format one grouped-rule severity cell, showing compact counts when a rule spans multiple severities.
+    """Format one grouped-rule severity cell, showing a per-severity breakdown when a rule emits mixed severities.
+
+    For example, when `docs.missing-function-docstring` emits 7 warning production findings and 11 advisory test findings,
+    this returns `7 warning, 11 advisory` so the developer sees both buckets instead of only the worst severity.
 
     Args:
-        row: Grouped rule entry carrying worst severity and optional per-severity counts.
+        row: Grouped rule entry carrying worst `severity` and optional `severityCounts` mapping.
 
     Returns:
-        The single severity label when all findings share one severity, or an error-warning-advisory breakdown when mixed.
+        Single severity label when all findings share one severity, or a comma-separated `error`/`warning`/`advisory` breakdown when mixed.
     """
     counts = row.get("severityCounts")
+    # Expand the cell into explicit severity counts only when findings span two or more severity levels.
     if isinstance(counts, dict):
         parts = [f"{counts[level]} {level}" for level in ("error", "warning", "advisory") if counts.get(level, 0) > 0]
+        # Keep single-severity rules compact (for example `warning`), while mixed rules show exact counts per level.
         if len(parts) > 1:
             return ", ".join(parts)
     return str(row["severity"])

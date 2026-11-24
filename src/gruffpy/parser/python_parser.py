@@ -23,27 +23,30 @@ class PythonFileParser:
         source_file: SourceFile,
         budget: DeepScanBudget | None = None,
     ) -> AnalysisUnit:
-        """Prepare one discovered file for the checks the user requested.
-        Use the scan budget to choose whether Python rules get an AST or only text, and report why deep checks were skipped.
+        """Read and parse one discovered file into an `AnalysisUnit` for the rule runner.
+
+        Enforces the deep-scan budget so oversized Python files still run fast text rules while recording why AST rules were skipped.
 
         Args:
-            source_file: Source file descriptor to read and parse.
-            budget: AST construction limits; None uses the default DeepScanBudget.
+            source_file: Discovered source file to read and parse.
+            budget: AST construction limits; None applies the default `DeepScanBudget` thresholds.
 
         Returns:
-            An analysis unit with decoded source and a parent-linked AST, or no AST for non-Python files, budget skips or handled errors.
-            Read errors also leave source empty; read and parse errors add fatal diagnostics, while budget skips add a nonfatal diagnostic.
+            AnalysisUnit carrying decoded source and a parent-linked AST when parsed; `tree` is None for non-Python files, budget skips, or errors,
+            and read errors also leave `source` empty alongside a fatal diagnostic.
         """
         try:
-            with open(source_file.absolute_path, "rb") as f:
-                source_bytes = f.read()
+            with open(source_file.absolute_path, "rb") as source_handle:
+                source_bytes = source_handle.read()
         except OSError as exc:
-            # A file can be removed between discovery and opening, so the report records an input failure for that file.
+            # For example, a developer deletes or restricts permissions on a file while a scan is running.
+            # Omit the OS filename so JSON, SARIF, and hook diagnostics never leak an absolute host checkout path.
+            reason = exc.strerror or str(exc).replace(str(source_file.absolute_path), source_file.display_path) or type(exc).__name__
             return AnalysisUnit(
                 file=source_file,
                 source="",
                 tree=None,
-                diagnostics=(ParseDiagnostic(message=f"read error: {exc}"),),
+                diagnostics=(ParseDiagnostic(message=f"read error: {reason}"),),
             )
 
         source = source_bytes.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")

@@ -1,6 +1,6 @@
 ---
 category: docs
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-25
 ---
 
 ## Footgun: `architecture.md` / `README.md` rule counts and default-off claims drift from the live catalogue
@@ -31,6 +31,13 @@ the `cls` parameter entry.
 ## Footgun: Committed docs cite milestone/task codes that point into the gitignored tasks dir
 
 **Status:** active | **Created:** 2026-05-31 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Never write milestone codes (`M01`, `M02`, `M14`) into committed docs or into generator string tables that render committed docs; replace them with release versions, ADR IDs, or plain prose.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-11-25
+
+**Prevention:** Before writing or regenerating any tracked doc (`CHANGELOG.md`, `UPGRADING.md`, `README.md`, `docs/*.md`), grep both the doc and its Python generator (`src/gruffpy/command/rule_docs.py`, search: `_M02_DEFAULT_OFF_REASONS`) for `\bM[0-9]+[a-z]?\b` and replace milestone codes with release versions, ADR IDs, or plain descriptions.
 
 Tracked docs across the repo cite milestone codes (`M01`, `M22`, `M33+M34+M35`,
 etc.) as if they were stable references, but the task files those codes name
@@ -75,3 +82,5 @@ codes in file/folder/identifier *names*): do not cite them in committed code or
 doc *bodies* either. When editing any tracked doc, replace milestone-code
 citations you touch with the stable anchor; leave the goat-plan skill files
 alone, since their job is to document the naming convention itself.
+
+**Recurrence 2026-11-25:** During the `0.6.0` documentation clarity audit, `CHANGELOG.md` and `UPGRADING.md` carried `M02` citations (removed from both files), and `src/gruffpy/command/rule_docs.py` (search: `_M02_DEFAULT_OFF_REASONS`) was found to inject 19 `M02`/`M14` milestone strings directly into generated `docs/rules.md`. Generator string tables leak milestone IDs back into committed docs on every `rule_docs --write` run unless cleaned at the Python source.

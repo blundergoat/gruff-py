@@ -1,10 +1,10 @@
-"""``docs.missing-class-docstring`` - ``class Foo`` without a docstring.
+"""Flag classes missing a class-level docstring during `gruff-py analyse` and `hook` runs.
 
-Exempts Protocols, ABCs, TypedDicts, NamedTuples, Enum-like bases, classes
-nested inside functions or methods in recognized test files, and
-``@dataclass``-decorated classes only when ``class_dataclass_exempt`` is set
-in the rule's options (default false). Public dataclasses carry project-facing
-schema and invariants, so open-source consumers still need class-level context.
+Use this rule so reviewers scanning a repository or pull request can see each class's purpose and invariants without reading every method.
+Structural framework bases and function-local test stubs stay quiet by default, while dataclasses stay flagged unless opted out.
+
+- Always exempt: dunder-named classes, Protocol/ABC/TypedDict/NamedTuple/Enum bases, and classes nested inside functions in test files.
+- Configurable exemption: set `class_dataclass_exempt: true` to skip `@dataclass` and attrs-style classes when field types are self-explanatory.
 """
 
 import ast
@@ -25,15 +25,19 @@ from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
 class MissingClassDocstringRule(Rule):
-    """Detect public classes that lack explanatory class-level documentation."""
+    """Detect classes that lack a class-level docstring explaining their role and invariants.
+
+    The analyser runs this rule on every parsed Python file so developers see undocumented domain types in terminal, JSON, and SARIF output.
+    Configure `class_dataclass_exempt` in `.gruff-py.yaml` or `pyproject.toml` if your team treats dataclass fields as sufficient documentation.
+    """
 
     ID = "docs.missing-class-docstring"
 
     def definition(self) -> RuleDefinition:
-        """Return the rule metadata used by the registry and reporters.
+        """Return the rule metadata used by the registry, `list-rules`, and report formatters.
 
         Returns:
-            Definition for the missing class docstring rule.
+            Definition for the missing class docstring rule, including the default `class_dataclass_exempt` option.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,15 +50,18 @@ class MissingClassDocstringRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Analyze a Python module for undocumented class declarations.
+        """Inspect one parsed Python file for class definitions that still need a docstring.
+
+        Called by the analysis runner during `analyse`, `summary`, `report`, and `hook` runs after parsing produces an AST.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context with rule options.
+            unit: Parsed source file to inspect; `unit.tree` is None for non-Python files, syntax errors, or deep-scan budget skips.
+            context: Rule execution context supplying user config options such as `class_dataclass_exempt`.
 
         Returns:
-            Findings for classes that need docstrings; empty when the tree is absent or no class qualifies.
+            Findings for classes that need docstrings; an empty list when the file has no AST or every class is documented or exempt.
         """
+        # Non-Python files, syntax errors, and budget-skipped files have no AST, so this AST rule stays silent.
         if unit.tree is None:
             return []
         definition = self.definition()
@@ -65,6 +72,7 @@ class MissingClassDocstringRule(Rule):
         )
 
         findings: list[Finding] = []
+        # Emit one finding per undocumented non-exempt class so each appears at its class header line in the CLI report.
         for node in _undocumented_classes(
             unit.tree,
             dataclass_exempt=bool(dataclass_exempt),
@@ -80,16 +88,15 @@ def _undocumented_classes(
     dataclass_exempt: bool,
     display_path: str,
 ) -> list[ast.ClassDef]:
-    """Collect every reportable undocumented class definition in the tree.
+    """Walk the module AST and collect every class definition that should receive a missing-docstring finding.
 
     Args:
-        tree: Parsed module AST, walked with ast.walk so nested classes are inspected.
-        dataclass_exempt: When true, classes carrying a dataclass or attrs-style decorator matched by has_dataclass_decorator are skipped; analyse
-            passes the class_dataclass_exempt option here.
-        display_path: Display path used to skip inline stub classes nested inside functions or methods in recognized test files.
+        tree: Parsed module AST, walked with ast.walk so nested helper classes are checked alongside top-level classes.
+        dataclass_exempt: When true, classes carrying a dataclass or attrs-style decorator are skipped per user configuration.
+        display_path: Relative source path used to exempt inline stub classes defined inside test functions or test methods.
 
     Returns:
-        Reportable class nodes in ast.walk breadth-first order; an empty list when no class qualifies.
+        Reportable class nodes in breadth-first walk order; an empty list when every class is documented or exempt.
     """
     is_test_module = is_test_file(display_path)
     return [
@@ -110,28 +117,28 @@ def _should_report_missing_class_docstring(
     dataclass_exempt: bool,
     is_test_module: bool,
 ) -> bool:
-    """Decide whether one class lacks a docstring and falls outside every exemption the rule applies.
+    """Check whether one class lacks a docstring and falls outside every exemption the rule honours.
 
-    A class is skipped when is_dunder matches its name, when extract_docstring finds any docstring (an empty string still counts as present), when
-    has_framework_base matches one of its bases, or when it is defined inside a function or method in a recognized test file. The dataclass check from
-    has_dataclass_decorator applies only when dataclass_exempt is true.
+    Keeps low-signal test stubs and structural framework types out of the developer's warning list while still flagging domain classes.
 
     Args:
-        node: Class definition to test.
-        dataclass_exempt: When true, a class carrying a dataclass or attrs-style decorator matched by has_dataclass_decorator is not reported; when
-            false, such classes are judged like any other class.
-        is_test_module: Whether the analysed file is a recognized test path.
+        node: Class definition currently being evaluated.
+        dataclass_exempt: When true, `@dataclass` and attrs-style classes are skipped; when false, they require a docstring like other classes.
+        is_test_module: Whether the analysed file sits under a recognized test path.
 
     Returns:
-        True when the class has no docstring and none of the skips above applies, so it should receive a missing class docstring finding; False
-        otherwise.
+        True when the class should produce a finding for the user; False when a docstring exists or an exemption applies.
     """
+    # Internal dunder class names are skipped because they are synthetic or language-level definitions.
     if is_dunder(node.name):
         return False
+    # Any docstring (even an empty literal) means the class is handled by content-quality rules rather than missing-docstring.
     if extract_docstring(node) is not None:
         return False
+    # Protocols, ABCs, TypedDicts, NamedTuples, and Enums are structural declarations that rarely need separate prose.
     if has_framework_base(node):
         return False
+    # For example, a developer defines `class FakeClient:` inside `def test_retry():`; inline test stubs stay quiet.
     if is_test_module and _is_nested_in_function(node):
         return False
     return not (dataclass_exempt and has_dataclass_decorator(node))

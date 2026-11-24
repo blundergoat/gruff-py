@@ -283,12 +283,12 @@ def _different_source_error(source: Path, target: Path) -> str:
     Returns:
         Format-specific recovery guidance for the failed CLI action.
     """
-    # YAML users have a supported in-place migration command.
+    # YAML users have a non-destructive migration command that writes to a separate output file.
     if source.suffix in {".yaml", ".yml"}:
         return (
             f"Existing gruff config found at {source.name}; {target.name} was not created. "
-            "init does not convert config sources. Run `gruff-py migrate-config` to "
-            "update the YAML source in place."
+            "init does not convert config sources. Run `gruff-py migrate-config --output gruff-py.migrated.yaml` "
+            "(or `--dry-run` to preview) to migrate the YAML source."
         )
     return (
         f"Existing gruff config found at {source.name}; {target.name} was not created. "

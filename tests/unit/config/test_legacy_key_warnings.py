@@ -83,7 +83,7 @@ def test_legacy_threshold_warning_lists_accepted_keys_and_migration_hint(tmp_pat
     first = loader.warnings[0]
     assert 'Unknown threshold "rules.complexity.cognitive.thresholds.warning"' in first
     assert 'Accepted keys for "rules.complexity.cognitive": enabled, threshold, severity' in first
-    assert "gruff-py migrate-config" in first
+    assert "gruff-py migrate-config --output" in first
     assert "TOML" in first
     assert "init --force" not in first
 

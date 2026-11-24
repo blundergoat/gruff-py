@@ -17,8 +17,7 @@ Re-run with `--force` only to canonically regenerate a valid existing
 `.gruff-py.yaml`. Every supported loaded setting is preserved, but comments,
 key order, and formatting may change. The command fails closed and leaves files
 unchanged when the target is malformed or when discovery finds `.gruff.yaml`
-or a `pyproject.toml` table instead. Convert legacy YAML with
-`gruff-py migrate-config`; edit `[tool.gruff-py]` TOML by hand.
+or a `pyproject.toml` table instead. Convert legacy YAML with `gruff-py migrate-config --output gruff-py.migrated.yaml` (or `--dry-run` to preview); edit `[tool.gruff-py]` TOML by hand.
 
 The generated file also notes that built-in ignored paths and `.gitignore`
 already apply before `paths.ignore`. After reviewing a first scan, run
@@ -494,11 +493,7 @@ explicit file):
 - `paths.ignore`, `allowlists`, `selection`, per-rule `enabled` and `options`,
   and valid `thresholds` knobs pass through unchanged.
 
-The command prints one line per change plus a unified diff; `--dry-run`
-prints without writing. YAML comments are not preserved when a rewrite
-happens - review the diff before committing. `pyproject.toml`
-`[tool.gruff-py]` blocks are not rewritten; the command prints the equivalent
-hand-edit instructions instead.
+The command prints one line per change plus a unified diff. Pass `--output <path>` to write the migrated file to a new destination (the original file is never modified in place), or `--dry-run` to preview without writing. YAML comments are not preserved when a rewrite happens - review the diff before committing. `pyproject.toml` `[tool.gruff-py]` blocks are not rewritten; the command prints the equivalent hand-edit instructions instead.
 
 ## Ignored Paths
 

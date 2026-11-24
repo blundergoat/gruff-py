@@ -1,8 +1,10 @@
-"""Function/method whose body is ``pass`` or ``...`` only.
+"""Flag stubbed-out functions and methods whose body is only `pass`, `...`, or a constant during `gruff-py analyse` and `hook` runs.
 
-Skipped for: abstract methods, ``@typing.overload`` stubs, methods in
-Protocol/ABC subclasses, functions carrying framework-hook decorators, and
-test-double methods (including classes nested inside test classes or functions).
+Use this rule to catch unfinished AI-generated placeholders and leftover no-op methods before they silently ship.
+Intentional interface declarations and test doubles stay quiet so teams only review suspicious empty bodies.
+
+- Exempt declarations: abstract methods, `@typing.overload` stubs, `Protocol`/ABC/pluggy/`TYPE_CHECKING` stubs, and framework-hook decorators.
+- Exempt test helpers: empty methods inside test-double classes (`Dummy`, `Fake`, `Mock`, `Spy`, `Stub`) or classes nested inside tests.
 """
 
 import ast
@@ -32,17 +34,19 @@ _TEST_DOUBLE_TOKENS: frozenset[str] = frozenset({"dummy", "fake", "mock", "spy",
 
 
 class EmptyFunctionRule(Rule):
-    """Detect functions whose body is only `pass` or `...` outside of abstract or overload stubs."""
+    """Detect functions and methods whose body is only a no-op placeholder (`pass`, `...`, or a constant).
+
+    The analyser runs this rule on every parsed Python file so reviewers catch unfinished stubs before merging.
+    Abstract interfaces, typing overloads, framework hook declarations, and test-double stubs are exempted automatically.
+    """
 
     ID = "waste.empty-function"
 
     def definition(self) -> RuleDefinition:
-        """Describe the empty-function rule as a medium-confidence dead-code warning.
-
-        A lone pass, constant or docstring qualifies, as does a docstring plus one pass or constant. Declaration and test-double exemptions apply.
+        """Return the rule metadata for the registry, `list-rules`, and report formatters.
 
         Returns:
-            Definition for the empty-function rule under the dead-code pillar.
+            Definition for the empty-function warning rule under the dead-code pillar.
         """
         return RuleDefinition(
             id=self.ID,
@@ -54,17 +58,18 @@ class EmptyFunctionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag non-exempt functions and methods with one pass or constant statement, optionally after a docstring. A lone docstring also qualifies.
+        """Scan one parsed Python file for non-exempt placeholder functions and methods.
 
-        Exempts supported abstract methods, overloads, Protocol and TYPE_CHECKING stubs, framework declarations and recognized test-double methods.
+        Called by the analysis runner during `analyse`, `summary`, `report`, and `hook` runs once AST parsing succeeds.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context (unused - no thresholds).
+            unit: Parsed source file to inspect; `unit.tree` is None for non-Python files, syntax errors, or budget-skipped files.
+            context: Rule execution context (unused because this rule has no configurable thresholds).
 
         Returns:
-            One finding per qualifying function, or an empty list when the AST is absent or no function qualifies.
+            One finding per qualifying empty callable; an empty list when the AST is absent or every empty body is exempt.
         """
+        # Skip non-Python files, syntax errors, and budget-skipped files that have no AST to inspect.
         if unit.tree is None:
             return []
         definition = self.definition()
@@ -75,20 +80,23 @@ def _empty_functions(
     tree: ast.AST,
     display_path: str,
 ) -> list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]]:
-    """Collect non-exempt placeholder functions with their enclosing nodes.
+    """Walk the module AST and collect non-exempt empty callables together with their enclosing AST chain.
 
     Args:
-        tree: AST to walk for synchronous and asynchronous function definitions; attached parent links provide their enclosing context.
-        display_path: Source path used to recognize exempt test-double methods.
+        tree: Parsed module AST whose attached parent links supply enclosing classes and test functions.
+        display_path: Relative file path used to limit test-double exemptions to recognized test locations.
 
     Returns:
-        Pairs of reportable function nodes and their outermost-to-innermost ancestor lists, in AST walk order; empty when no function qualifies.
+        Pairs of reportable empty functions and their outermost-to-innermost ancestors; an empty list when none qualify.
     """
     candidates: list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.AST]]] = []
+    # Walk the whole tree so nested helper classes and test-suite methods are checked alongside top-level functions.
     for node in ast.walk(tree):
+        # Skip non-callable AST nodes while walking the module.
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         parents = parent_chain(node)
+        # Keep only functions with placeholder bodies that fall outside all declaration and test-double exemptions.
         if _should_report_empty_function(node, parents, display_path):
             candidates.append((node, parents))
     return candidates
@@ -99,17 +107,17 @@ def _should_report_empty_function(
     parents: list[ast.AST],
     display_path: str,
 ) -> bool:
-    """Decide whether a placeholder function falls outside the supported declaration exemptions.
+    """Decide whether one callable has an empty placeholder body that should be shown to the developer.
 
     Args:
-        node: Function whose body and declaration markers are checked.
-        parents: Outermost-to-innermost ancestors used by the context-dependent exemption predicates.
-        display_path: Source path used to restrict the test-double exemption to recognized test files.
+        node: Function or method whose body and decorators are checked.
+        parents: Outermost-to-innermost ancestors used for protocol, pluggy, TYPE_CHECKING, and test-double exemptions.
+        display_path: Relative source path used to confine the test-double exemption to test files.
 
     Returns:
-        True when _is_empty_body accepts the body and none of the called declaration, framework or test-double exemption predicates accepts the
-        function; False otherwise.
+        True when the body is a no-op placeholder and no declaration or test-double exemption applies; False otherwise.
     """
+    # Real implementations with statements beyond pass/ellipsis/docstring need no further checks.
     if not _is_empty_body(node.body):
         return False
     return not (
@@ -124,71 +132,79 @@ def _should_report_empty_function(
 
 
 def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
-    """Recognize a test helper method by its nearest enclosing class or enclosing test container.
+    """Exempt no-op methods on test-double classes (`Fake*`, `Stub*`, etc.) or classes nested inside tests.
+
+    Prevents `gruff-py analyse` from nagging developers about intentional no-op stubs written to satisfy an interface in unit tests.
 
     Args:
-        parents: Ancestors from outermost to immediate parent; the nearest enclosing class and its outer test containers are inspected.
-        display_path: Source path checked by _is_test_path before any test-double exemption is considered.
+        parents: Ancestors from outermost to immediate parent; walked inward-out so nested stubs check their own class name first.
+        display_path: Relative source path; production files return False immediately so production classes named `Fake*` still scan.
 
     Returns:
-        True when the path is recognized as a test path and the nearest class either carries a dummy, fake, mock, spy or stub token or is nested
-        inside a test class or function; False otherwise.
+        True when the method belongs to a recognized test double or test-nested helper class in a test file; False otherwise.
     """
+    # Never apply test-double exemptions outside test files so production stubs cannot silently slip through.
     if not _is_test_path(display_path):
         return False
-    # parents runs outermost -> immediate, so walk backward to take the innermost
-    # enclosing class: a nested stub (a fake class inside another class) is named by
-    # the inner class, not the outer suite, so the outermost match misses the exemption.
+    # Walk from innermost parent outward so a nested stub inside a suite checks its own name before outer containers.
     for index in range(len(parents) - 1, -1, -1):
         parent_class = parents[index]
+        # Inspect only the nearest enclosing class definition; stop once we classify it.
         if isinstance(parent_class, ast.ClassDef):
+            # A class named like `FakeTransport` or `DummyClock` is an explicit test double.
             if any(token in _TEST_DOUBLE_TOKENS for token in lower_tokens(parent_class.name)):
                 return True
+            # For example, `class LocalClient:` declared inside `def test_timeout():` or `class TestRetry:` is also an inline test double.
             return any(_is_test_container(ancestor) for ancestor in parents[:index])
     return False
 
 
 def _is_test_container(node: ast.AST) -> bool:
-    """Return whether an outer AST node is a test class or enclosing function inside a test file.
+    """Check whether an ancestor node above a nested helper class is a test function or test suite class.
 
     Args:
-        node: Ancestor above a nested class definition.
+        node: Enclosing AST node sitting outside a nested class inside a test file.
 
     Returns:
-        True for an enclosing function definition or a class recognized as a test suite by name or TestCase base; False otherwise.
+        True for an enclosing function or a test-suite class; False for module nodes or non-test helper classes.
     """
+    # Any class declared inside a function/method in a test file is a local fixture or double for that test.
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return True
+    # A class nested inside `class TestFoo:` or a `unittest.TestCase` subclass is scoped to that test suite.
     if isinstance(node, ast.ClassDef):
         return _is_test_class(node)
     return False
 
 
 def _is_test_class(node: ast.ClassDef) -> bool:
-    """Return whether a class declaration follows Python test-suite naming or inherits from TestCase.
+    """Check whether a class follows pytest or unittest test-suite conventions by name or `TestCase` base.
 
     Args:
-        node: Class definition checked as an enclosing test container.
+        node: Class definition evaluated as an enclosing test suite container.
 
     Returns:
-        True when the class name starts with Test or ends with Test/TestCase, or any base class name ends with TestCase; False otherwise.
+        True when the class starts with `Test`, ends with `Test`/`TestCase`, or inherits from a `*TestCase` base; False otherwise.
     """
+    # Recognize standard pytest (`Test*`) and unittest (`*Test`, `*TestCase`) suite names directly.
     if node.name.startswith("Test") or node.name.endswith(("Test", "TestCase")):
         return True
     return any(_base_leaf_name(base).endswith("TestCase") for base in node.bases)
 
 
 def _base_leaf_name(base: ast.expr) -> str:
-    """Extract the final identifier from a simple or dotted base-class expression.
+    """Extract the trailing class identifier from a bare (`TestCase`) or dotted (`unittest.TestCase`) base expression.
 
     Args:
-        base: Base-class AST expression from a ClassDef bases list.
+        base: Base-class AST expression from a class definition's `bases` list.
 
     Returns:
-        The base identifier or attribute name, or an empty string for complex expressions.
+        Trailing identifier string, or an empty string for complex expressions such as calls or subscripts.
     """
+    # Simple imported base such as `class Suite(TestCase):`.
     if isinstance(base, ast.Name):
         return base.id
+    # Module-qualified base such as `class Suite(unittest.TestCase):`.
     if isinstance(base, ast.Attribute):
         return base.attr
     return ""
