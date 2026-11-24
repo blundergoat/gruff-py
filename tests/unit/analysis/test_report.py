@@ -171,8 +171,10 @@ def test_finding_counts_by_rule_includes_severity_and_confidence_from_findings()
 
     by_id = {row["ruleId"]: row for row in rows}
     assert by_id["naming.x"]["severity"] == "advisory"
+    assert by_id["naming.x"]["severityCounts"] == {"error": 0, "warning": 0, "advisory": 2}
     assert by_id["naming.x"]["confidence"] == "medium"
     assert by_id["complexity.y"]["severity"] == "warning"
+    assert by_id["complexity.y"]["severityCounts"] == {"error": 0, "warning": 1, "advisory": 0}
     assert by_id["complexity.y"]["confidence"] == "high"
 
 
@@ -194,6 +196,7 @@ def test_finding_counts_by_rule_reports_worst_severity_when_rule_emits_mixed_ban
     assert rows[0]["ruleId"] == "complexity.cyclomatic"
     assert rows[0]["count"] == 3
     assert rows[0]["severity"] == "error"
+    assert rows[0]["severityCounts"] == {"error": 2, "warning": 1, "advisory": 0}
 
 
 def test_finding_counts_by_rule_worst_severity_independent_of_finding_order():

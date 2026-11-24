@@ -85,31 +85,29 @@ Every analysis and summary document includes `suppressions`, with one
 is empty when no exclusion is configured and no built-in skip applied. See
 [Sensitive Data Exclusions](configuration.md#sensitive-data-exclusions).
 
-The family's built-in test-path skip also publishes rows, after the configured
-ones, numbered from `0` among themselves and marked `source: "built-in"`, which
-a configured row never carries. It adds one row per file and rule it removed,
-because every shipping security and sensitive-data rule skips test, fixture and example files. Text output labels them
-`builtInTestPath[<path>]`.
+After the configured rows, `suppressions` appends three audited skip categories,
+each numbered continuously from `0` and tagged with a `source` field (which
+configured rows never carry):
 
-Another tool's suppression comment that names the same check as a gruff-py rule
-suppresses that finding where it was written (FAMILY-CONTRACT.md section 13c): a
-bare bandit `# nosec` for every security and sensitive-data rule, and zizmor
-`# zizmor: ignore[unpinned-uses]` or `ignore[dangerous-triggers]` for the matching
-workflow rule. The comment must be on the reported line or alone on the line above
-it. A `# nosec` naming a bandit test id, such as `# nosec B301`, suppresses nothing,
-and type-checker comments such as `# type: ignore` are never honoured. A dynamic
-`__import__` that both `security.dangerous-function-call` and
-`security.variable-import` report is reported once, under
-`security.dangerous-function-call`. gruff-py's own `# gruff: disable=` directives
-keep working alongside these comments.
-
-Suppressed findings are counted in one row per file and rule after the built-in rows, numbered
-on from them, with `source: "inline"` and the reason "Another tool's suppression
-comment names this check, so the finding is suppressed where it was written." Each
-merge adds a row with `source: "duplicate"` and the reason "Another rule reports
-the same claim on this line, so the line reports it once." Text output labels them
-`inline[<path>]` and `duplicate[<path>]`, and SARIF keeps each removed finding as a
-result carrying `"suppressions": [{"kind": "inSource", "justification": <reason>}]`.
+- **`source: "built-in"`** — one row per file and rule skipped by the built-in
+  test, fixture, and example exclusion across all shipping security and
+  sensitive-data rules. Text output labels these `builtInTestPath[<path>]`.
+- **`source: "inline"`** — findings silenced by another tool's suppression
+  comment on the reported line or alone on the line above it: bare bandit
+  `# nosec` for security and sensitive-data rules, and zizmor
+  `# zizmor: ignore[unpinned-uses]` or `ignore[dangerous-triggers]` for the
+  matching workflow rule (a `# nosec` naming a test id such as `# nosec B301`
+  suppresses nothing, and `# type: ignore` is never honoured; `# gruff: disable=`
+  continues to work alongside them). Reason: `"Another tool's suppression comment
+  names this check, so the finding is suppressed where it was written."` Text
+  output labels these `inline[<path>]`, and SARIF preserves each entry with
+  `"suppressions": [{"kind": "inSource", "justification": <reason>}]`.
+- **`source: "duplicate"`** — dynamic `__import__` calls matched by both
+  `security.dangerous-function-call` and `security.variable-import` are merged
+  into one `security.dangerous-function-call` finding. Reason: `"Another rule
+  reports the same claim on this line, so the line reports it once."` Text output
+  labels these `duplicate[<path>]`, and SARIF marks the merged entry as
+  suppressed with the same justification.
 
 ## Changed-Region Scoping (native diff mode)
 
@@ -163,12 +161,6 @@ diffs should run a full scan or a companion hunk-scope scan. Full scans emit all
 file-wide findings; hunk scope keeps findings whose reported span intersects the
 changed lines.
 
-Findings use the normative flat shape with one `file` key and optional
-location and symbol keys omitted when unavailable. Ignore evidence lives under
-`paths`: `paths.ignoredPaths` is the string projection of
-`paths.details`, and `paths.missingPaths` lists unresolved requested paths.
-All five ports now share these v3 locations.
-
 ## Hook JSON
 
 `gruff-py hook --format json` emits the separate agent-hook contract rather
@@ -177,7 +169,7 @@ than the native `gruff.analysis.v3` report:
 ```json
 {
   "contractVersion": "gruff.hook.v2",
-  "analyzer": { "name": "gruff-py", "version": "0.5.0" },
+  "analyzer": { "name": "gruff-py", "version": "0.6.0" },
   "run": {
     "mode": "full",
     "scope": "file",

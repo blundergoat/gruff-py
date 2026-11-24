@@ -15,29 +15,35 @@ uv run gruff-py hook src/foo.py \
   --changed-ranges "12-40,88-90"
 ```
 
-`hook` emits `contractVersion: "gruff.hook.v2"` and exits `0` whenever analysis
-ran and nothing reached the gate, because the hook's own `--fail-on` defaults to
-`none` and keeps findings advisory. Three explicit consumer requests raise that
-exit to `1`: `--fail-on <severity>` for a finding at or above that severity and
-`--min-confidence`, `--fail-on-new` for a published finding that is new against
-the applied baseline, and `--fail-on-diagnostics` for any diagnostic at all.
-Exit `2` means the analysis could not run. The payload carries `scope` on every
-finding, normalized threshold metadata (`measured`, `threshold`, `unit`,
-`direction`), non-null `remediation`, `suppressed.count`, `ignored.paths`, and
-`config.schemaOk` / `config.error` for config failures.
+`hook` emits `contractVersion: "gruff.hook.v2"`. Because the hook's own
+`--fail-on` defaults to `none`, findings stay advisory unless the caller opts
+into a gate:
 
-`suppressions` carries one row per configured `sensitiveExclusions` entry, in
-configuration order: `rule`, a single `path` string, `symbol` (always present,
-`null` when the entry names no symbol), `reason`, and `suppressed`. This is not
-the analysis row shape — `analyse` and `summary` publish `index` and a `paths`
-array, and omit `symbol` entirely when the entry names none — so a consumer
-written against `gruff.analysis.v3` cannot read hook rows unchanged.
-For a configured entry, `suppressed` is `0` when it matched nothing, so its row
-means the exclusion is configured, not that it silenced anything.
+- **Exit `0`** — analysis completed and nothing reached the requested gate.
+- **Exit `1`** — an explicit gate tripped: `--fail-on <severity>` (at or above
+  that severity and `--min-confidence`), `--fail-on-new` (any published finding
+  classified as new against the applied baseline), or `--fail-on-diagnostics`
+  (any diagnostic).
+- **Exit `2`** — the analysis could not run.
 
-The hook also carries the built-in rows the analysis publishes, after the configured ones, each with `source: "built-in"`: one per file
-and rule the test-path skip removed, because every shipping sensitive-data rule skips test, fixture and
-example files.
+Every hook finding carries `scope`, normalized threshold metadata (`measured`,
+`threshold`, `unit`, `direction`), and non-null `remediation`. The envelope also
+includes `suppressed.count`, `ignored.paths`, and `config.schemaOk` /
+`config.error` for config failures.
+
+`suppressions` starts with one row per configured `sensitiveExclusions` entry,
+in configuration order: `rule`, a single `path` string, `symbol` (always
+present, `null` when the entry names none), `reason`, and `suppressed`. This
+differs from `analyse` and `summary` — which publish `index` and a `paths` array
+and omit `symbol` when unset — so a `gruff.analysis.v3` consumer cannot read
+hook suppression rows unchanged. A configured row with `suppressed: 0` matched
+nothing; it records that the exclusion is active, not that it hid a finding.
+
+After the configured rows, `suppressions` includes the analysis run's audit rows
+carrying a `source` label: `source: "built-in"` for files skipped by the shared
+test, fixture, and example exclusion across security and sensitive-data rules,
+`source: "inline"` for honoured third-party suppression comments, and
+`source: "duplicate"` for merged duplicate dynamic-import claims.
 
 `--changed-ranges` scopes `hook` at the finding's own reported span: a finding is
 returned when its `line..endLine` intersects a changed range, and whole-file or
@@ -97,13 +103,12 @@ git diff | uv run gruff-py analyse . \
 `--changed-scope symbol` keeps findings in a changed declaration even when the
 finding's primary line is outside the edited hunk. `--changed-scope hunk` is
 stricter and keeps only findings whose reported location intersects the changed
-lines. Under `symbol`, whole-file and class-level aggregate findings are
-attributed to their anchor line or header (for example file line 1 or the class
-declaration), so an edit elsewhere in the file or class suppresses inherited
-aggregate debt. JSON
-changed-region runs publish the excluded count at `summary.suppressedFindings` and
-`diff.filteredFindings` so hooks can show how much same-file debt was left visible
-but non-blocking.
+lines. Under `symbol`, whole-file and class-level aggregate findings are attributed to
+their anchor line or header (such as file line 1 or the class declaration), so
+an edit elsewhere in the file or class suppresses inherited aggregate debt. JSON
+changed-region runs publish the excluded count at `summary.suppressedFindings`
+and `diff.filteredFindings` so hooks can show how much same-file debt was left
+non-blocking.
 
 For CI workflows that must preserve whole-file aggregate signal on pull-request
 diffs, run a full scan or a companion `--changed-scope hunk` scan. Full scans

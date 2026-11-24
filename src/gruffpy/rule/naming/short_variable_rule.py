@@ -2,13 +2,14 @@
 
 Allowed by default: ``i``, ``j``, ``k``, ``n``, ``m``, ``x``, ``y``, ``z``,
 ``e`` (exception), ``_`` (throwaway), ``f`` (file). Configurable via
-``acceptedShortNames`` per-rule option.
+``acceptedShortNames`` per-rule option. PEP 484 ``TypeVar``, ``ParamSpec``,
+and ``TypeVarTuple`` bindings are exempt.
 
-Scope: local assignments (Assign / AnnAssign). Function parameters are
-intentionally NOT scanned - single-char params are common in math-flavoured
-code (``def f(x, y, z): ...``). Test files are exempt; assertion fixtures and
-table-driven rule tests routinely use tiny local placeholders where this
-style warning is noisy.
+Scope: ordinary and annotated assignments (Assign / AnnAssign). Function
+parameters are intentionally NOT scanned - single-char params are common in
+math-flavoured code (``def f(x, y, z): ...``). Test files are exempt;
+assertion fixtures and table-driven rule tests routinely use tiny local
+placeholders where this style warning is noisy.
 """
 
 import ast
@@ -24,6 +25,8 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 
 _DEFAULT_ACCEPTED: tuple[str, ...] = ("i", "j", "k", "n", "m", "x", "y", "z", "e", "_", "f")
+_TYPE_PARAMETER_CONSTRUCTORS: frozenset[str] = frozenset({"TypeVar", "ParamSpec", "TypeVarTuple"})
+_TYPING_MODULES: frozenset[str] = frozenset({"typing", "typing_extensions"})
 
 
 class ShortVariableRule(Rule):
@@ -139,19 +142,42 @@ def _assigned_names(tree: ast.AST) -> list[tuple[str, int]]:
 
 
 def _assignment_names(node: ast.AST) -> list[tuple[str, int]]:
-    """Extract direct target names from an ordinary or annotated assignment.
+    """Extract direct target names from an ordinary or annotated assignment, skipping type-parameter bindings.
 
     Args:
         node: AST node to classify as an ordinary assignment, annotated assignment or unrelated node.
 
     Returns:
-        Name and source-line pairs from supported targets, or an empty list for other nodes.
+        Name and source-line pairs from supported targets, or an empty list for type-parameter calls or other nodes.
     """
     if isinstance(node, ast.Assign):
+        if _is_type_parameter_call(node.value):
+            return []
         return _assign_target_names(node)
     if isinstance(node, ast.AnnAssign):
+        if _is_type_parameter_call(node.value):
+            return []
         return _target_names(node.target)
     return []
+
+
+def _is_type_parameter_call(value: ast.expr | None) -> bool:
+    """Return whether an assignment value constructs a PEP 484 typing parameter.
+
+    Args:
+        value: Assigned expression from an Assign or AnnAssign node, or None for bare annotations.
+
+    Returns:
+        True for bare or typing/typing_extensions-qualified TypeVar, ParamSpec or TypeVarTuple calls; False otherwise.
+    """
+    if not isinstance(value, ast.Call):
+        return False
+    callee = value.func
+    if isinstance(callee, ast.Name):
+        return callee.id in _TYPE_PARAMETER_CONSTRUCTORS
+    if isinstance(callee, ast.Attribute) and isinstance(callee.value, ast.Name):
+        return callee.value.id in _TYPING_MODULES and callee.attr in _TYPE_PARAMETER_CONSTRUCTORS
+    return False
 
 
 def _assign_target_names(node: ast.Assign) -> list[tuple[str, int]]:

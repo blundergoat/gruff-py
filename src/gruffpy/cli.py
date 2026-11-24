@@ -1254,7 +1254,6 @@ _LEGACY_NESTED_FALSE_POSITIVE_RULE_IDS = frozenset(
         "dead-code.exported-but-unreferenced",
         "design.runtime-sys-path-mutation",
         "naming.abbreviation",
-        "security.unsanitized-markdown-interpolation",
         "security.weak-crypto",
         "test-quality.static-analysis-redundant-test",
     }

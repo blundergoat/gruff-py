@@ -107,11 +107,7 @@ def _class_length_finding(
     symbol = qualified_symbol(node, parent_chain(node))
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Class {symbol!r} is {line_count} lines, "
-            f"above the {threshold_match.severity.value} threshold of "
-            f"{_format_number(threshold_match.threshold)}."
-        ),
+        message=f"Class {symbol!r} is {line_count} lines, above the limit of {_format_number(threshold_match.threshold)}.",
         file_path=unit.file.display_path,
         line=_start_line(node),
         severity=banded_severity(band, threshold_match.severity),

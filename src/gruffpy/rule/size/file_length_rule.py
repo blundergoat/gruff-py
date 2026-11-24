@@ -62,11 +62,7 @@ class FileLengthRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message=(
-                    f"File has {line_count} substantive lines, "
-                    f"above the {threshold_match.severity.value} threshold of "
-                    f"{_format_number(threshold_match.threshold)}."
-                ),
+                message=f"File has {line_count} substantive lines, above the limit of {_format_number(threshold_match.threshold)}.",
                 file_path=unit.file.display_path,
                 line=1,
                 severity=banded_severity(band, threshold_match.severity),

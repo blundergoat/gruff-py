@@ -30,7 +30,7 @@ Grouped by rule (showing 4 of 4):
      1  test-quality.parametrize-annotation  advisory  medium
 ```
 
-Columns are count, rule id, default severity, default confidence. Rows sort by count descending, then rule id ascending. `--top N` caps the number of rows (default 10).
+Columns are count, rule id, severity, and confidence. When a rule spans multiple severities in one run (such as banded complexity rules or `docs.missing-function-docstring`), the severity column displays a compact breakdown (`7 error, 11 advisory`) instead of collapsing to the worst severity. Rows sort by count descending, then rule id ascending. `--top N` caps the number of rows (default 10).
 
 `--group-by=rule` changes the text summary only. `summary --format json` emits the
 `gruff.summary.v3` document — the analysis envelope with only its top-level `findings` array

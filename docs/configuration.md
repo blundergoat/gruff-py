@@ -156,7 +156,7 @@ Top-level keys:
 | `minimumPythonVersion` | string | Minimum Python version, currently at least `3.11` |
 | `deepScanBudget` | table | Paired line/byte limits for deep Python analysis; either exceeded bound degrades the file |
 | `paths` | table | Path ignore configuration |
-| `allowlists` | table | Naming and secret-preview allowlists |
+| `allowlists` | table | Naming and dead-code allowlists |
 | `selection` | table | Rule and pillar selection |
 | `sensitiveExclusions` | list of tables | Reviewed scopes where one sensitive-data rule stays quiet (see [Sensitive Data Exclusions](#sensitive-data-exclusions)) |
 | `rules` | table | Per-rule settings |
@@ -240,10 +240,7 @@ Unknown rule IDs and per-rule keys follow the warning policy in
 Use `sensitiveExclusions` to record individual findings a reviewer has accepted. Entries match by
 rule and path so a credential value never becomes part of the configuration.
 
-A built-in test-path skip also hides sensitive-data and security findings in test, fixture and example files, and counts each one in `suppressions`.
-It covers every shipping sensitive-data rule.
-A configured entry applies first, so a finding it claims is counted under the entry. Recognised
-third-party comments can also suppress findings and contribute their own audit rows.
+A built-in test-path skip also hides security and sensitive-data findings in test, fixture, and example files, counting each skip in `suppressions`. It covers every shipping security and sensitive-data rule. A configured `sensitiveExclusions` entry runs first, so any finding it claims is counted under that entry. Recognised third-party comments (`# nosec`, zizmor ignores) can also suppress findings and add their own audit rows.
 
 ```yaml
 sensitiveExclusions:
@@ -335,9 +332,9 @@ Prefer a rename when the short token is temporary, ambiguous, or means
 different things in different modules. The allowlist is a project vocabulary
 contract, not a general exemption for short names.
 
-## Retired Boolean Boundary Options
+## Retired Rule Options (`0.6.0`)
 
-`naming.boolean-prefix` is retired in 0.6.0, including `acceptedBooleanNames`. Remove its settings, selections and suppression comments. It no longer reports Boolean names, and no replacement is enabled. Obsolete rule blocks warn by default or fail with `--strict-config`.
+`naming.boolean-prefix` (including `acceptedBooleanNames`) and `security.unsanitized-markdown-interpolation` (including `labelSanitizers` and `urlSanitizers`) were retired in 0.6.0. Delete their settings, selections, and inline `# gruff: disable=` comments — selections and inline suppressions naming a retired ID exit `2`, while obsolete `rules:` blocks warn by default or fail under `--strict-config`.
 
 ## Tooling And Evaluation Paths
 
@@ -380,17 +377,12 @@ gruff-py analyse tools/ --config .gruff-py-tooling.yaml --fail-on none
 gruff-py analyse tools/ --config .gruff-py-tooling-security.yaml --fail-on advisory
 ```
 
-The guidance run still renders structural findings but does not fail. The
+The guidance run still renders structural findings without failing, while the
 safety run gates every finding from the selected safety pillars. Calibrate the
-tooling config against the real scripts rather than copying the example
-threshold as a universal recommendation.
-
-Remove older file directives naming `naming.boolean-prefix`, retired in 0.6.0; the retired ID makes a suppression invalid. For surviving rules, keep the rationale local and suppress only the named rule. See
-[Suppressing Findings](rules.md#suppressing-findings) for the complete syntax.
-
-## Retired Markdown Link Sanitizers
-
-`security.unsanitized-markdown-interpolation` is retired in 0.6.0. Remove its rule block, including `labelSanitizers` and `urlSanitizers`; these options no longer configure an analyser. Its selection and suppression entries are invalid. Other security rules keep their existing settings.
+tooling config against your real scripts rather than copying the example
+threshold verbatim. For inline suppressions on active rules, keep the rationale
+local and suppress only the named rule; see
+[Suppressing Findings](rules.md#suppressing-findings).
 
 ## Severity Gate
 
@@ -480,11 +472,10 @@ This is useful for CI jobs that must not run with a half-applied config.
 Structural errors - non-table sections, wrong value types, unknown top-level
 keys, and `schemaVersion` mismatches - always fail regardless of the flag.
 
-The loader has no generic option type schema. Once a name is registered, its
-consuming rule owns value and cross-option constraints. A rule may surface
-those constraints as config errors before analysis; for example, the Markdown
-sanitizer options require lists of exact Python call targets and reject empty
-strings, wildcards, and non-text entries.
+The loader has no generic option type schema. Once an option name is registered,
+its consuming rule owns value validation — for example, falling back to its
+built-in defaults or raising a configuration error when an option has the wrong
+type or shape.
 
 ## Migrating Legacy Configs: `gruff-py migrate-config`
 
@@ -500,9 +491,8 @@ explicit file):
 - A per-command `minimumSeverity` map is renamed to `failOn`, the key
   that gates the exit code; a bare `minimumSeverity` severity is the display
   floor and keeps its name.
-- `paths.ignore`, `allowlists`, `selection`, per-rule `enabled` and
-  `options` (including `conventionalModuleNames`), and valid
-  `thresholds` knobs pass through unchanged.
+- `paths.ignore`, `allowlists`, `selection`, per-rule `enabled` and `options`,
+  and valid `thresholds` knobs pass through unchanged.
 
 The command prints one line per change plus a unified diff; `--dry-run`
 prints without writing. YAML comments are not preserved when a rewrite
@@ -512,7 +502,7 @@ hand-edit instructions instead.
 
 ## Ignored Paths
 
-Source discovery applies four layers of exclusions, in order:
+Source discovery applies five layers of exclusions, in order:
 
 1. **Configured `paths.ignore` patterns.** Project-relative globs are
    authoritative for directory walks, explicit file operands, and changed-region

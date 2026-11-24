@@ -221,12 +221,26 @@ def test_message_asks_only_for_what_the_function_has():
 
 
 def test_private_and_test_functions_reported_with_every_callable():
-    """Report an undocumented private function and a test function in a test file when everyCallable is set.
+    """Report an undocumented private function at warning and a test function in a test file at advisory when everyCallable is set.
 
     Returns:
-        None. Asserts that the combined findings name _f and test_service in that order.
+        None. Asserts the combined finding symbols and severities for _f and test_service.
     """
     ctx = every_callable_ctx(MissingFunctionDocstringRule.ID)
     private = MissingFunctionDocstringRule().analyse(make_unit("def _f():\n    return 1\n"), ctx)
     test = MissingFunctionDocstringRule().analyse(make_unit("def test_service():\n    assert service() == 1\n", "tests/test_service.py"), ctx)
-    assert [f.symbol for f in private + test] == ["_f", "test_service"]
+    assert [(f.symbol, f.severity.value) for f in private + test] == [("_f", "warning"), ("test_service", "advisory")]
+
+
+def test_test_method_reports_advisory_while_production_test_prefixed_function_warns():
+    """Demote test_* methods in test files to advisory while keeping test_*-named production functions at warning.
+
+    Returns:
+        None. Asserts advisory severity for TestService.test_returns_value and warning for src/service_helpers.py::test_service.
+    """
+    test_src = 'class TestService:\n    """Suite."""\n    def test_returns_value(self):\n        assert True\n'
+    prod_src = "def test_service():\n    return 1\n"
+    test_findings = MissingFunctionDocstringRule().analyse(make_unit(test_src, "tests/test_service.py"), default_ctx())
+    prod_findings = MissingFunctionDocstringRule().analyse(make_unit(prod_src, "src/service_helpers.py"), default_ctx())
+    assert [(f.symbol, f.severity.value) for f in test_findings] == [("TestService.test_returns_value", "advisory")]
+    assert [(f.symbol, f.severity.value) for f in prod_findings] == [("test_service", "warning")]

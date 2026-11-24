@@ -6,10 +6,11 @@ getters require a docstring like any other method.
 
 The ``everyCallable`` option is on by default. Set to false, it limits the rule
 to public names, those not starting with ``_``, and also exempts pytest-style
-``test_*`` functions in test files. The
-message names what the docstring should hold: the intent, an entry for each
-parameter, and a Returns or Yields and a Raises section only when the function
-returns a value or raises.
+``test_*`` functions in test files. When ``everyCallable`` is on, ``test_*``
+functions in test files report at ``advisory`` severity while production and
+helper callables stay at ``warning``. The message names what the docstring
+should hold: the intent, an entry for each parameter, and a Returns or Yields
+and a Raises section only when the function returns a value or raises.
 """
 
 import ast
@@ -64,7 +65,7 @@ class MissingFunctionDocstringRule(Rule):
             name="Missing function docstring",
             description=(
                 "Flags a public function or method with no docstring; with `everyCallable`, also underscore-private "
-                "functions and methods and `test_*` functions in test files."
+                "functions and methods (warning) and `test_*` functions in test files (advisory)."
             ),
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
@@ -212,11 +213,11 @@ def _missing_function_docstring_finding(
 ) -> Finding:
     """Build the finding for one undocumented function at its def-to-end line span, under its qualified symbol.
 
-    The message comes from _missing_docstring_message; severity, pillar, tier, confidence and secondary pillars come from the rule definition; the
-    remediation is a fixed text and metadata is always empty.
+    The message comes from _missing_docstring_message; test_* functions in recognized test files emit at advisory severity while all other callables
+    use the rule definition's default severity. The remediation is fixed text and metadata is always empty.
 
     Args:
-        unit: Analysis unit whose display path becomes the finding's file path.
+        unit: Analysis unit whose display path becomes the finding's file path and decides test-file advisory severity.
         definition: Rule definition supplying the rule id, default severity, pillar, tier, confidence and secondary pillars.
         node: Undocumented function or async function node; its def line and end line set the finding's line span.
         parents: Parent chain of node from the module down to its immediate parent, used to build the qualified symbol.
@@ -225,12 +226,13 @@ def _missing_function_docstring_finding(
         Finding for node whose message names its qualified symbol and lists the docstring parts that node needs.
     """
     symbol = qualified_symbol(node, parents)
+    severity = Severity.ADVISORY if node.name.startswith("test_") and is_test_file(unit.file.display_path) else definition.default_severity
     return Finding(
         rule_id=definition.id,
         message=_missing_docstring_message(node, symbol),
         file_path=unit.file.display_path,
         line=node.lineno,
-        severity=definition.default_severity,
+        severity=severity,
         pillar=definition.pillar,
         tier=definition.tier,
         confidence=definition.confidence,

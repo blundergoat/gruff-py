@@ -2313,6 +2313,31 @@ def test_cli_summary_group_by_rule_text_replaces_top_rules_block(tmp_path: Path,
     assert "Grouped by rule (showing" in result.output
 
 
+def test_cli_summary_group_by_rule_shows_mixed_severity_breakdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render compact per-severity counts for mixed rules in ``summary --group-by rule`` while keeping single-severity rows unchanged.
+
+    Args:
+        tmp_path: Project root holding one production file and one test file with undocumented functions.
+        monkeypatch: Changes into the project so the summary scans both directories together.
+
+    Returns:
+        None. Asserts mixed-severity formatting for docs.missing-function-docstring and single-severity formatting for docs.missing-module-docstring.
+    """
+    monkeypatch.chdir(tmp_path)
+    src_dir = tmp_path / "src"
+    tests_dir = tmp_path / "tests"
+    src_dir.mkdir()
+    tests_dir.mkdir()
+    (src_dir / "mod.py").write_text("def prod_fn():\n    return 1\n")
+    (tests_dir / "test_mod.py").write_text('"""Tests."""\n\ndef test_one():\n    assert True\n')
+
+    result = CliRunner().invoke(main, ["summary", "--no-config", "--group-by", "rule", "src", "tests"])
+
+    assert result.exit_code == 0, result.output
+    assert "2  docs.missing-function-docstring  1 warning, 1 advisory  high" in result.output
+    assert "1  docs.missing-module-docstring    advisory               high" in result.output
+
+
 def test_cli_summary_group_by_rule_json_keeps_canonical_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Report the ``gruff.summary.v3`` schema under ``--group-by rule``, with no grouped or top-rules key in the JSON.
 

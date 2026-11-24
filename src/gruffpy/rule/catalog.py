@@ -605,7 +605,8 @@ _OPTION_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
     "docs.missing-function-docstring": {
         "everyCallable": (
-            "When true, underscore-private functions and methods and test_* functions in test files also need a docstring. On by default."
+            "When true, underscore-private functions and methods (warning) and test_* functions in test files (advisory) also need a docstring. "
+            "On by default."
         ),
     },
     "docs.missing-param-doc": {

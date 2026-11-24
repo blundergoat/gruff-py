@@ -85,3 +85,35 @@ def test_nested_class_emits():
     findings = MissingClassDocstringRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
     assert findings[0].symbol == "Outer.Inner"
+
+
+def test_inline_class_inside_test_method_is_exempt():
+    """Report nothing for an inline stub class defined inside a test method in a test file.
+
+    Returns:
+        None. Asserts that Metrics inside test_reads_metric produces no class-docstring finding.
+    """
+    src = (
+        "class MetricsTest:\n"
+        '    """Suite doc."""\n'
+        "    def test_reads_metric(self):\n"
+        "        class Metrics:\n"
+        "            value = 1\n"
+        "        assert Metrics.value == 1\n"
+    )
+    findings = MissingClassDocstringRule().analyse(make_unit(src, "tests/test_metrics.py"), default_ctx())
+    assert findings == []
+
+
+def test_top_level_test_class_and_production_local_class_still_warn():
+    """Keep warning on undocumented top-level test classes and function-local classes in production files.
+
+    Returns:
+        None. Asserts both top-level test classes and production local classes report warning severity.
+    """
+    test_src = "class MetricsTest:\n    pass\n"
+    prod_src = 'def build():\n    """Build."""\n    class Local:\n        value = 1\n    return Local\n'
+    test_findings = MissingClassDocstringRule().analyse(make_unit(test_src, "tests/test_metrics.py"), default_ctx())
+    prod_findings = MissingClassDocstringRule().analyse(make_unit(prod_src, "src/metrics.py"), default_ctx())
+    assert [(f.symbol, f.severity.value) for f in test_findings] == [("MetricsTest", "warning")]
+    assert [(f.symbol, f.severity.value) for f in prod_findings] == [("build.Local", "warning")]

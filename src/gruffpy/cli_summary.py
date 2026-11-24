@@ -168,11 +168,30 @@ def _format_grouped_rule_rows(grouped: dict[str, Any]) -> list[str]:
     if not rows:
         return [header, "  none"]
     rule_id_width = max(len(row["ruleId"]) for row in rows)
+    severity_labels = [_grouped_severity_label(row) for row in rows]
+    severity_width = max(8, max(len(label) for label in severity_labels))
     formatted = [header]
-    for row in rows:
-        line = f"  {row['count']:>4}  {row['ruleId']:<{rule_id_width}}  {row['severity']:<8}  {row['confidence']}"
+    for row, severity_label in zip(rows, severity_labels, strict=True):
+        line = f"  {row['count']:>4}  {row['ruleId']:<{rule_id_width}}  {severity_label:<{severity_width}}  {row['confidence']}"
         formatted.append(line.rstrip())
     return formatted
+
+
+def _grouped_severity_label(row: dict[str, Any]) -> str:
+    """Format one grouped-rule severity cell, showing compact counts when a rule spans multiple severities.
+
+    Args:
+        row: Grouped rule entry carrying worst severity and optional per-severity counts.
+
+    Returns:
+        The single severity label when all findings share one severity, or an error-warning-advisory breakdown when mixed.
+    """
+    counts = row.get("severityCounts")
+    if isinstance(counts, dict):
+        parts = [f"{counts[level]} {level}" for level in ("error", "warning", "advisory") if counts.get(level, 0) > 0]
+        if len(parts) > 1:
+            return ", ".join(parts)
+    return str(row["severity"])
 
 
 def _summary_pillar_rows(report: AnalysisReport) -> list[dict[str, Any]]:

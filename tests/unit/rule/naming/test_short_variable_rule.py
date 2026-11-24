@@ -183,3 +183,42 @@ def test_exact_singular_test_directory(display_path: str, exempt: bool) -> None:
     """
     findings = ShortVariableRule().analyse(_unit("q = 1\n", display_path), _ctx())
     assert (not findings) is exempt
+
+
+@pytest.mark.parametrize(
+    "source, exempt",
+    [
+        ('from typing import TypeVar\nT = TypeVar("T")\n', True),
+        ('import typing\nK = typing.TypeVar("K")\n', True),
+        ('from typing import ParamSpec\nP = ParamSpec("P")\n', True),
+        ('import typing_extensions\nP = typing_extensions.ParamSpec("P")\n', True),
+        ('from typing import TypeVarTuple\nS = TypeVarTuple("S")\n', True),
+        ('import typing\nS = typing.TypeVarTuple("S")\n', True),
+        ('from typing import Any, TypeVar\nT: Any = TypeVar("T")\n', True),
+        ('import custom_mod\nT = custom_mod.TypeVar("T")\n', False),
+        ('T = other("T")\n', False),
+    ],
+    ids=[
+        "bare-typevar",
+        "typing-qualified-typevar",
+        "bare-paramspec",
+        "typing-extensions-paramspec",
+        "bare-typevartuple",
+        "typing-qualified-typevartuple",
+        "annotated-typevar",
+        "unrelated-module-typevar",
+        "ordinary-single-char-call",
+    ],
+)
+def test_typing_parameter_bindings_are_exempt(source: str, exempt: bool) -> None:
+    """Exempt PEP 484 TypeVar, ParamSpec and TypeVarTuple bindings while still flagging unrelated single-character assignments.
+
+    Args:
+        source: Module source holding one single-character assignment or annotated assignment.
+        exempt: Whether the rule should produce no findings for that source.
+
+    Returns:
+        None. Asserts that findings are absent exactly when exempt is true.
+    """
+    findings = ShortVariableRule().analyse(_unit(source), _ctx())
+    assert (not findings) is exempt

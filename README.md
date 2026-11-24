@@ -1,10 +1,10 @@
 # gruff-py
 
-`gruff-py` is the Python implementation of **gruff**, an opinionated quality analyser built to **govern AI-generated code so a human can review and trust it**. It walks Python projects, scores findings across quality pillars, and emits reports for terminals, CI annotations, SARIF consumers, static HTML, and a local dashboard.
+`gruff-py` is the Python port of **gruff**, a static quality analyser built to keep AI-generated code legible, safe, and reviewable. It walks Python projects, scores findings across quality pillars, and outputs reports for terminals, CI annotations, SARIF code scanning, static HTML, and a local dashboard.
 
 ## Mission
 
-gruff-py exists to govern **AI-generated code so a human reviewer can sign off on it**. The premise: a coding agent wrote the change, and a person who did *not* write it has to read, review, and trust it. Every rule, severity, and score is tuned for that reviewer's confidence rather than for abstract style. Wired in as a coding-agent hook, gruff-py **guides** the agent through advisory findings and **forces** it through `--fail-on`-gated warning and error findings toward code that is:
+The core premise is simple: a coding agent wrote the change, and a person who did *not* write it has to read, review, and trust it. Every rule, severity, and score serves that reviewer's confidence rather than abstract style. Wired into a coding-agent hook, gruff-py **guides** the agent with advisory findings and **gates** it with `--fail-on` warning and error findings so changes stay:
 
 - **Legible enough to verify** — a reviewer can follow the control flow and confirm it does what was asked, without holding the whole function in their head.
 - **Secure where the eye fails** — it flags the dangerous patterns and leaked secrets human review is worst at catching, because those are the failures the eye skips.
@@ -32,7 +32,9 @@ See [docs/mission.md](https://github.com/blundergoat/gruff-py/blob/main/docs/mis
 | Severity gate | `--fail-on` with `none`, `advisory`, `warning`, `error`; project default via `failOn:` in `.gruff-py.yaml` / `pyproject.toml` |
 | Dashboard | `127.0.0.1:8765` by default |
 
-Finding fingerprints are 16-character SHA-256 derivatives kept compatible with the PHP implementation where the rule identity and finding identity match. Analysis JSON uses the shared `gruff.analysis.v3` schema string; hotspot and config schemas remain language-prefixed. Each JSON finding also exposes a `stableIdentity` field — a line-insensitive companion to `fingerprint` for external diff tooling that needs to match "the same logical finding across line shifts" without re-baselining a moved violation; see [`docs/output-formats.md`](https://github.com/blundergoat/gruff-py/blob/main/docs/output-formats.md#finding-identity) for the input set.
+Finding fingerprints are 16-character SHA-256 prefixes kept byte-compatible with `gruff-php` wherever rule and finding identities match. Analysis JSON uses the shared `gruff.analysis.v3` schema, while hotspot and config schemas stay language-prefixed (`gruff-py.*`).
+
+Each JSON finding also includes `stableIdentity`, a line-insensitive companion to `fingerprint` that lets baselines and external diff tools match the same logical finding across line shifts. See [`docs/output-formats.md`](https://github.com/blundergoat/gruff-py/blob/main/docs/output-formats.md#finding-identity) for the exact fields hashed into each identity.
 
 ## Requirements
 
@@ -194,7 +196,7 @@ Verify the committed catalog without rewriting it:
 uv run python -m gruffpy.command.rule_docs --check docs/rules.md
 ```
 
-`coupling`, `architecture`, and `mutation` are reserved schema or future catalogue names; they do not have shipping rules in `0.6.0`. `modernisation` and `maintainability` also have no shipping rules after the f-string and maintainability-index retirements. The developer-only `metric-calibration` command still reports Halstead volume and maintainability index. See [Rules](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md) for rule IDs, defaults, and remediation guidance.
+`coupling`, `architecture`, and `mutation` are reserved schema names with no shipping rules in `0.6.0`. `modernisation` and `maintainability` also have no shipping rules after the `0.6.0` f-string and maintainability-index retirements (the hidden `metric-calibration` command still computes Halstead volume and maintainability index for tuning). See [Rules](https://github.com/blundergoat/gruff-py/blob/main/docs/rules.md) for rule IDs, defaults, and remediation guidance.
 
 ## Baselines And Changed-Code Scans
 
@@ -248,7 +250,7 @@ Default scans are local source inspections. `gruff-py` parses Python source and 
 
 ## Stability Contract
 
-Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v3`, `gruff.baseline.v3`, `gruff-py.hotspot.v1`, `gruff.hook.v2`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Pre-1.0, a minor bump (`0.4.x` to `0.5.0`) is permitted to break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md), and [`UPGRADING.md`](https://github.com/blundergoat/gruff-py/blob/main/UPGRADING.md) states what each move breaks and how to go back.
+Through the `0.x` line, rule IDs, finding fingerprints, baseline identity, `gruff.analysis.v3`, `gruff.baseline.v3`, `gruff-py.hotspot.v1`, `gruff.hook.v2`, SARIF rendering, and CLI exit semantics are compatibility-sensitive. Before `1.0`, a minor bump (such as `0.5.x` to `0.6.0`) may break them; every break carries a `BREAKING:` marker and a migration path in [`CHANGELOG.md`](https://github.com/blundergoat/gruff-py/blob/main/CHANGELOG.md), and [`UPGRADING.md`](https://github.com/blundergoat/gruff-py/blob/main/UPGRADING.md) explains how to migrate or pin back.
 
 ## How It Compares
 

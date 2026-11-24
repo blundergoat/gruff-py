@@ -1,7 +1,8 @@
 """Function/method whose body is ``pass`` or ``...`` only.
 
 Skipped for: abstract methods, ``@typing.overload`` stubs, methods in
-Protocol/ABC subclasses, and functions carrying framework-hook decorators.
+Protocol/ABC subclasses, functions carrying framework-hook decorators, and
+test-double methods (including classes nested inside test classes or functions).
 """
 
 import ast
@@ -123,25 +124,74 @@ def _should_report_empty_function(
 
 
 def _is_test_double_method(parents: list[ast.AST], display_path: str) -> bool:
-    """Recognize a test helper by the name of its nearest enclosing class.
+    """Recognize a test helper method by its nearest enclosing class or enclosing test container.
 
     Args:
-        parents: Ancestors from outermost to immediate parent; the nearest enclosing class supplies the name.
-        display_path: Source path checked by _is_test_path before any class-name exemption is considered.
+        parents: Ancestors from outermost to immediate parent; the nearest enclosing class and its outer test containers are inspected.
+        display_path: Source path checked by _is_test_path before any test-double exemption is considered.
 
     Returns:
-        True when the path is recognized as a test path and the nearest class name has a dummy, fake, mock, spy or stub token after tokenization and
-        lowercasing; False otherwise.
+        True when the path is recognized as a test path and the nearest class either carries a dummy, fake, mock, spy or stub token or is nested
+        inside a test class or function; False otherwise.
     """
     if not _is_test_path(display_path):
         return False
-    # parents runs outermost -> immediate, so reverse to take the innermost enclosing
-    # class: a nested stub (a fake class inside another class) is named by the
-    # inner class, not the outer suite, so the outermost match misses the exemption.
-    parent_class = next((parent for parent in reversed(parents) if isinstance(parent, ast.ClassDef)), None)
-    if parent_class is None:
-        return False
-    return any(token in _TEST_DOUBLE_TOKENS for token in lower_tokens(parent_class.name))
+    # parents runs outermost -> immediate, so walk backward to take the innermost
+    # enclosing class: a nested stub (a fake class inside another class) is named by
+    # the inner class, not the outer suite, so the outermost match misses the exemption.
+    for index in range(len(parents) - 1, -1, -1):
+        parent_class = parents[index]
+        if isinstance(parent_class, ast.ClassDef):
+            if any(token in _TEST_DOUBLE_TOKENS for token in lower_tokens(parent_class.name)):
+                return True
+            return any(_is_test_container(ancestor) for ancestor in parents[:index])
+    return False
+
+
+def _is_test_container(node: ast.AST) -> bool:
+    """Return whether an outer AST node is a test class or enclosing function inside a test file.
+
+    Args:
+        node: Ancestor above a nested class definition.
+
+    Returns:
+        True for an enclosing function definition or a class recognized as a test suite by name or TestCase base; False otherwise.
+    """
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return True
+    if isinstance(node, ast.ClassDef):
+        return _is_test_class(node)
+    return False
+
+
+def _is_test_class(node: ast.ClassDef) -> bool:
+    """Return whether a class declaration follows Python test-suite naming or inherits from TestCase.
+
+    Args:
+        node: Class definition checked as an enclosing test container.
+
+    Returns:
+        True when the class name starts with Test or ends with Test/TestCase, or any base class name ends with TestCase; False otherwise.
+    """
+    if node.name.startswith("Test") or node.name.endswith(("Test", "TestCase")):
+        return True
+    return any(_base_leaf_name(base).endswith("TestCase") for base in node.bases)
+
+
+def _base_leaf_name(base: ast.expr) -> str:
+    """Extract the final identifier from a simple or dotted base-class expression.
+
+    Args:
+        base: Base-class AST expression from a ClassDef bases list.
+
+    Returns:
+        The base identifier or attribute name, or an empty string for complex expressions.
+    """
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    return ""
 
 
 def _is_test_path(display_path: str) -> bool:

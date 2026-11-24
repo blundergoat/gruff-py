@@ -134,7 +134,7 @@ class AnalysisReport:
         return counts
 
     def finding_counts_by_rule(self) -> list[dict[str, Any]]:
-        """Return rows for rules with findings, carrying counts, highest severities and first-finding confidences.
+        """Return rows for rules with findings, carrying counts, highest severities, per-severity counts and first-finding confidences.
 
         Sort by descending count and ascending ruleId so identical inputs produce repeatable output.
 
@@ -146,15 +146,19 @@ class AnalysisReport:
         for finding in self.findings:
             row = per_rule.get(finding.rule_id)
             if row is None:
+                severity_counts = {"error": 0, "warning": 0, "advisory": 0}
+                severity_counts[finding.severity.value] = 1
                 per_rule[finding.rule_id] = {
                     "ruleId": finding.rule_id,
                     "count": 1,
                     "severity": finding.severity.value,
+                    "severityCounts": severity_counts,
                     "confidence": finding.confidence.value,
                 }
                 per_rule_worst[finding.rule_id] = finding.severity
             else:
                 row["count"] += 1
+                row["severityCounts"][finding.severity.value] += 1
                 worst = per_rule_worst[finding.rule_id]
                 if _SEVERITY_RANK[finding.severity] > _SEVERITY_RANK[worst]:
                     per_rule_worst[finding.rule_id] = finding.severity

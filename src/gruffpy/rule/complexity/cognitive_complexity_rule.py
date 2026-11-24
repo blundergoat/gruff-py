@@ -81,9 +81,7 @@ class CognitiveComplexityRule(Rule):
                 Finding(
                     rule_id=definition.id,
                     message=(
-                        f"Function {symbol!r} has cognitive complexity {score}, "
-                        f"above the {threshold_match.severity.value} threshold of "
-                        f"{_format_number(threshold_match.threshold)}."
+                        f"Function {symbol!r} has cognitive complexity {score}, above the limit of {_format_number(threshold_match.threshold)}."
                     ),
                     file_path=unit.file.display_path,
                     line=fn.lineno,

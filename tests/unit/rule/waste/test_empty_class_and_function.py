@@ -241,3 +241,64 @@ def test_nested_plain_class_in_test_double_outer_still_fires():
         _ctx_for("waste.empty-function"),
     )
     assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "source, display_path, expected_count",
+    [
+        (
+            "import unittest\nclass WrapLabelsTest(unittest.TestCase):\n    class _Tracer:\n        def end_span(self, span):\n            pass\n",
+            "tests/test_eval_labels.py",
+            0,
+        ),
+        (
+            "class TestRunner:\n    class _Client:\n        def close(self):\n            pass\n",
+            "tests/test_runner.py",
+            0,
+        ),
+        (
+            "class OrderTestCase(CustomBase):\n    class _Gateway:\n        def charge(self):\n            pass\n",
+            "tests/test_orders.py",
+            0,
+        ),
+        (
+            "def test_closes_client():\n    class _Client:\n        def close(self):\n            pass\n",
+            "tests/test_runner.py",
+            0,
+        ),
+        (
+            'def _no_after_php_response(session):\n    """Flows without local capture state do nothing."""\n',
+            "src/tools/flow_hooks.py",
+            1,
+        ),
+    ],
+    ids=[
+        "nested-class-in-unittest-case",
+        "nested-class-in-test-prefixed-class",
+        "nested-class-in-testcase-named-class",
+        "nested-class-in-test-function",
+        "production-lone-docstring-still-warns",
+    ],
+)
+def test_nested_test_doubles_exempt_while_production_lone_docstring_warns(
+    source: str,
+    display_path: str,
+    expected_count: int,
+) -> None:
+    """Exempt empty methods on classes nested inside test classes or functions while keeping production lone-docstring warnings.
+
+    Args:
+        source: Module source exercising nested test helpers or a production lone-docstring function.
+        display_path: Display path determining whether the file is treated as a test path.
+        expected_count: Expected number of waste.empty-function findings.
+
+    Returns:
+        None. Asserts exact finding count and warning severity when a finding is expected.
+    """
+    findings = EmptyFunctionRule().analyse(
+        _unit(source, display_path),
+        _ctx_for("waste.empty-function"),
+    )
+    assert len(findings) == expected_count
+    if expected_count:
+        assert findings[0].severity.value == "warning"

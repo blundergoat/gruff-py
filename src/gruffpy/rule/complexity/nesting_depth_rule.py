@@ -86,11 +86,7 @@ class NestingDepthRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} nests {depth} levels deep, "
-                        f"above the {threshold_match.severity.value} threshold of "
-                        f"{_format_number(threshold_match.threshold)}."
-                    ),
+                    message=f"Function {symbol!r} nests {depth} levels deep, above the limit of {_format_number(threshold_match.threshold)}.",
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=banded_severity(band, threshold_match.severity),

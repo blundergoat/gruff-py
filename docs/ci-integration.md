@@ -75,13 +75,13 @@ own diff instead of inheriting or hiding adoption debt. See
 
 ## Ignored Paths and `check-ignore`
 
-`paths.ignore` in `.gruff-py.yaml` is **authoritative in every invocation shape**
-— directory walks, explicit file arguments, and all diff/changed-region modes
-(`--diff`, `--diff -`, `--changed-ranges`, `--since`). A path matching
-`paths.ignore` produces no findings however it is supplied, so a coding-agent
-hook that passes the agent's changed files never surfaces findings for paths the
-project has deliberately excluded. `--include-ignored` opts back into
-default-ignored and `.gitignore`d paths only; it never overrides `paths.ignore`.
+`paths.ignore` in `.gruff-py.yaml` is **authoritative in every invocation
+shape** — directory walks, explicit file arguments, and every diff or
+changed-region mode (`--diff`, `--diff -`, `--changed-ranges`, `--since`). A
+path matching `paths.ignore` never produces findings, so a coding-agent hook
+passing changed files will not report paths the project deliberately excluded.
+`--include-ignored` opts back into default-ignored and `.gitignore`-excluded
+paths only; it never overrides `paths.ignore`.
 
 Skipped paths are reported with a reason. JSON output carries a
 `paths.details` array — one object per skipped path with a canonical `reason`,
@@ -98,8 +98,8 @@ projection of the same rows:
 }
 ```
 
-To ask whether gruff would ignore specific paths *without* running analysis — for
-example from an agent hook deciding whether an edited file is even in scope — use
+To check whether gruff would ignore specific paths without running analysis —
+for example from a hook deciding whether an edited file is in scope — use
 `check-ignore`:
 
 ```sh

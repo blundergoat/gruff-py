@@ -226,6 +226,7 @@ def test_each_rule_just_over_its_limit_reports_the_lower_band_notice(
 
     assert near.metadata["measuredValue"] < 1.5 * limit
     assert (near.metadata[_band.LIMIT_BAND_KEY], near.severity, near.remediation) == (_band.LOWER, Severity.ADVISORY, lower_advice)
+    assert f"above the limit of {limit}." in near.message
 
 
 @pytest.mark.parametrize(BAND_FIELDS, BAND_CASES, ids=_case_id)
@@ -252,12 +253,13 @@ def test_each_rule_at_twice_its_limit_keeps_its_severity_and_says_split_or_simpl
 
     assert far.metadata["measuredValue"] >= 1.5 * limit
     assert (far.metadata[_band.LIMIT_BAND_KEY], far.severity, far.remediation) == (_band.UPPER, Severity.ERROR, upper_advice)
+    assert f"above the limit of {limit}." in far.message
     assert not re.search(r"raise|threshold|ignore|exclude|extract", f"{lower_advice} {upper_advice}", re.IGNORECASE)
 
 
 @pytest.mark.parametrize(("lines", "band", "severity"), [(110, _band.LOWER, Severity.ADVISORY), (160, _band.UPPER, Severity.WARNING)])
 def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: str, severity: Severity) -> None:
-    """Report a 110-line function as advisory and a 160-line one with the configured warning, each message naming the threshold of 100.
+    """Report a 110-line function as advisory and a 160-line one with the configured warning, each message naming the limit of 100.
 
     Args:
         lines: Total function lines requested from the builder, the def line included.
@@ -265,14 +267,15 @@ def test_a_configured_severity_applies_only_in_the_upper_band(lines: int, band: 
         severity: Expected severity: advisory in the lower band, the configured warning in the upper.
 
     Returns:
-        None. Checks the expected band and severity and verifies that the message names the warning threshold of 100.
+        None. Checks the expected band and severity and verifies that the message names the limit of 100 without claiming a threshold severity.
     """
     settings = RuleSettings(enabled=True, severity_threshold=SeverityThreshold(100, Severity.WARNING))
     finding = _only(FunctionLengthRule(), _function_of_statements(lines), settings)
 
     assert (finding.metadata[_band.LIMIT_BAND_KEY], finding.severity) == (band, severity)
-    # The message names the threshold the value crossed, in both bands.
-    assert "above the warning threshold of 100" in finding.message
+    # The message stays constant across bands and names the limit rather than the upper-band severity.
+    assert "above the limit of 100" in finding.message
+    assert "threshold of" not in finding.message
 
 
 def test_function_length_counts_a_multi_line_literal_and_call_once() -> None:
