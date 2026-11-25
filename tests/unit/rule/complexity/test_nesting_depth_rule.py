@@ -118,6 +118,18 @@ def test_try_except_increments_depth():
     assert nesting_depth_for(_first_fn(src)) == 2
 
 
+def test_try_except_star_increments_depth():
+    """Measure depth 2 for an if inside a try or except* block.
+
+    Returns:
+        None after checking the measured depths.
+    """
+    body_branch = "def f():\n    try:\n        if x:\n            pass\n    except* ValueError:\n        pass\n"
+    handler_branch = "def f():\n    try:\n        pass\n    except* ValueError:\n        if x:\n            pass\n"
+    assert nesting_depth_for(_first_fn(body_branch)) == 2
+    assert nesting_depth_for(_first_fn(handler_branch)) == 2
+
+
 def test_match_increments_depth():
     """Measure depth 2 for an if inside a match case.
 

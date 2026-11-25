@@ -18,6 +18,7 @@ from gruffpy.analysis.baseline import (
     apply_baseline,
     default_baseline_path,
     generate_baseline,
+    is_unreviewed_baseline_status,
     migrate_baseline,
     require_overwritable_default_path,
 )
@@ -27,6 +28,7 @@ from gruffpy.analysis.changed_region import (
     changed_regions_from_git,
     filter_findings_for_changed_regions,
     filter_sources_for_changed_regions,
+    is_finding_location_changed,
     parse_explicit_ranges,
     parse_unified_diff,
 )
@@ -178,6 +180,7 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         options=request.baseline if request.baseline is not None else BaselineOptions(),
         scan_scope=scan_scope,
         units=units,
+        changed=changed,
     )
     changed_filter_result = filter_findings_for_changed_regions(
         findings,
@@ -186,9 +189,16 @@ def run_analysis(request: AnalysisRunRequest) -> AnalysisReport:
         request.changed_scope,
     )
     findings = changed_filter_result.findings
-    # If the requested scope fails to resolve, omit findings so the report cannot be mistaken for a successful scoped scan.
+    suppressed_findings = _filter_suppressed_findings_for_changed_regions(
+        suppressed_findings,
+        units,
+        changed,
+        request.changed_scope,
+    )
+    # If the requested scope fails to resolve, omit findings and suppressed results so the report cannot be mistaken for a scoped scan.
     if any(diagnostic.type == CHANGED_REGION_DIAGNOSTIC_TYPE for diagnostic in diagnostics):
         findings = []
+        suppressed_findings = ()
     score = ScoreCalculator().calculate(findings, _evaluated_file_count(units), diff_active=changed.active)
 
     exit_code = compute_exit_code(
@@ -599,6 +609,40 @@ def _with_baseline_identities(findings: list[Finding], units: list[AnalysisUnit]
     ]
 
 
+def _filter_suppressed_findings_for_changed_regions(
+    suppressed_findings: tuple[SuppressedFinding, ...],
+    units: list[AnalysisUnit],
+    changed: ChangedRegionSet,
+    scope: str,
+) -> tuple[SuppressedFinding, ...]:
+    """Scope SARIF in-source suppressed findings to the same changed regions as active findings.
+
+    Keeps diff-scoped SARIF uploads aligned with active findings so untouched ``# nosec`` lines do not appear in PR reports.
+
+    Args:
+        suppressed_findings: Findings removed by inline comments or duplicate merging; empty returns an empty tuple immediately.
+        units: Parsed analysis units used to resolve enclosing declarations under symbol scope; empty skips symbol expansion.
+        changed: Resolved changed-region set from ``--diff``, ``--since``, or ``--changed-ranges``; an inactive set returns all entries unchanged.
+        scope: Changed-region scope selected by the user (``symbol`` or ``hunk``).
+
+    Returns:
+        Suppressed findings whose underlying finding survives changed-region filtering, in input order; empty when none fall in scope.
+    """
+    # A full scan keeps every suppression row, so SARIF lists them all.
+    if not changed.active or not suppressed_findings:
+        return suppressed_findings
+    kept_ids = {
+        id(finding)
+        for finding in filter_findings_for_changed_regions(
+            [entry.finding for entry in suppressed_findings],
+            units,
+            changed,
+            scope,
+        ).findings
+    }
+    return tuple(entry for entry in suppressed_findings if id(entry.finding) in kept_ids)
+
+
 def _handle_baseline(
     *,
     project_root: Path,
@@ -607,6 +651,7 @@ def _handle_baseline(
     options: BaselineOptions,
     scan_scope: str,
     units: list[AnalysisUnit],
+    changed: ChangedRegionSet | None = None,
 ) -> tuple[BaselineReport | None, dict[int, str]]:
     """Apply, generate or migrate the baseline requested for this scan.
     Use this before scoring, with declaration positions that keep same-named findings distinct and diagnostics that prevent unsafe writes.
@@ -618,6 +663,7 @@ def _handle_baseline(
         options: The user's baseline flags; conflicts are refused, generation precedes disabling, and disabled skips application.
         scan_scope: Resolved scope label passed to baseline application.
         units: Parsed units whose declaration spans name each finding by its declaration.
+        changed: Optional changed-region set; when active, unchanged occurrences spend reviewed counts before changed ones.
 
     Returns:
         The generated or applied baseline report and any finding classifications. The report is absent when no baseline operation succeeds.
@@ -653,6 +699,7 @@ def _handle_baseline(
         explicit_path=options.apply_path,
         scan_scope=scan_scope,
         declaration_position=declaration_position,
+        changed=changed,
     )
 
 
@@ -822,6 +869,7 @@ def _apply_baseline_if_present(
     explicit_path: Path | None,
     scan_scope: str,
     declaration_position: Callable[[Finding], int],
+    changed: ChangedRegionSet | None = None,
 ) -> tuple[BaselineReport | None, dict[int, str]]:
     """Apply reviewed counts from an explicit or discovered baseline.
     A malformed or unreadable baseline becomes a run diagnostic and the scan keeps the findings the file would have hidden.
@@ -833,6 +881,7 @@ def _apply_baseline_if_present(
         explicit_path: Baseline path the user supplied; None uses the default baseline when that file exists.
         scan_scope: Resolved scope label passed to baseline application.
         declaration_position: Resolver giving the declaration position each finding is named by.
+        changed: Optional changed-region set; when active, unchanged occurrences spend reviewed counts before changed ones.
 
     Returns:
         The applied baseline report and per-finding classifications, or no report and an empty map when no baseline was applied.
@@ -841,6 +890,8 @@ def _apply_baseline_if_present(
     # With no baseline to apply, findings have no reviewed or new status for the exit gate.
     if selected_path is None:
         return None, {}
+    # During a changed-code scan, let untouched occurrences spend baseline credit before newly edited lines.
+    is_changed = (lambda finding: is_finding_location_changed(finding, changed)) if (changed is not None and changed.active) else None
     try:
         result = apply_baseline(
             project_root=project_root,
@@ -849,17 +900,18 @@ def _apply_baseline_if_present(
             source=source,
             scan_scope=scan_scope,
             declaration_position=declaration_position,
+            is_in_changed_region=is_changed,
         )
     # For example, invalid JSON, a 0.5 layout, or another port's file becomes a diagnostic and leaves findings intact.
     except BaselineError as exc:
         diagnostics.append(RunDiagnostic(type="baseline-error", message=str(exc), path=str(selected_path)))
         return None, {}
-    diagnostics.extend(_collision_diagnostics(result.collisions))
+    diagnostics.extend(collision_diagnostics(result.collisions))
     findings[:] = result.findings
     return result.report, result.statuses
 
 
-def _collision_diagnostics(collisions: tuple[BaselineCollision, ...]) -> list[RunDiagnostic]:
+def collision_diagnostics(collisions: tuple[BaselineCollision, ...]) -> list[RunDiagnostic]:
     """Name every identity shared by multiple declarations so users can identify findings the baseline cannot distinguish.
 
     No colliding finding is suppressed, so one review cannot hide another declaration's finding.
@@ -1073,8 +1125,8 @@ def compute_exit_code(
         return 2
     # Any retained finding can block CI, including one hidden by the eventual display filter.
     for finding in findings:
-        # An applied baseline must explicitly classify the finding as new for this gate to fire.
-        if new_statuses is not None and new_statuses.get(id(finding)) == "new":
+        # Unreviewed findings under an applied baseline (new, collision, or baseline-ineligible) trigger --fail-on-new.
+        if new_statuses is not None and is_unreviewed_baseline_status(new_statuses.get(id(finding))):
             return 1
         # The ordinary gate requires both the chosen severity and the minimum confidence.
         if fail_threshold.is_triggered_by(finding.severity) and finding.confidence.meets(min_confidence):

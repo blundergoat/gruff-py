@@ -666,7 +666,7 @@ _REPORT_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
     _path_option(
         "--baseline-path",
         "baseline_path",
-        f'Apply this baseline JSON file instead of the default "{DEFAULT_BASELINE_FILENAME}".',
+        "Superseded spelling of --baseline; identical behaviour, and it warns.",
     ),
     _option(
         "--no-baseline",
@@ -964,6 +964,13 @@ _REPORT_COMMAND_DECORATORS: tuple[ClickDecorator, ...] = (
         type=click.Choice([s.value for s in Severity]),
         default=None,
         help="Display only findings at or above advisory, warning, or error.",
+    ),
+    _option(
+        "--baseline",
+        "baseline",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Apply this baseline v3 file. Canonical spelling of --baseline-path.",
     ),
     _option(
         "--include-ignored",

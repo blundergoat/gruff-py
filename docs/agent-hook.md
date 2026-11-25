@@ -21,9 +21,9 @@ into a gate:
 
 - **Exit `0`** — analysis completed and nothing reached the requested gate.
 - **Exit `1`** — an explicit gate tripped: `--fail-on <severity>` (at or above
-  that severity and `--min-confidence`), `--fail-on-new` (any published finding
-  classified as new against the applied baseline), or `--fail-on-diagnostics`
-  (any diagnostic).
+  that severity and `--min-confidence`), `--fail-on-new` (any unreviewed finding
+  under `--baseline`, including `new`, `collision`, and `notEligible` secrets,
+  or any survivor of `--diff`), or `--fail-on-diagnostics` (any diagnostic).
 - **Exit `2`** — the analysis could not run.
 
 Every hook finding carries `scope`, normalized threshold metadata (`measured`,
@@ -57,8 +57,10 @@ symbol` when you want whole-symbol attribution instead.
 Use `--baseline <path>` with a `gruff.baseline.v3` file written by
 `analyse --generate-baseline`, or use `--diff <ref|working-tree>` to compare
 against a Git tree. A Git comparison keeps findings beyond the base occurrence
-count. With an applied baseline, `--fail-on-new` gates on findings classified as
-new.
+count (with `baselineStatus: null`). With `--baseline`, `--fail-on-new` gates on
+unreviewed findings (`new`, `collision`, and `notEligible` such as secrets; use
+`sensitiveExclusions` for reviewed secrets). With `--diff`, `--fail-on-new`
+gates on every published survivor of the base comparison.
 
 Consumers can discover the supported flag names and ordering once:
 

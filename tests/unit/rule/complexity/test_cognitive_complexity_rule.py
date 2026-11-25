@@ -196,6 +196,16 @@ def test_try_two_excepts_two():
     assert cognitive_for(_first_fn(src)) == 2
 
 
+def test_try_except_star_scores_like_try_except():
+    """Score except* handlers and nested branches identically to except handlers.
+
+    Returns:
+        None after the assertion passes.
+    """
+    src = "def f(x):\n    try:\n        pass\n    except* ValueError:\n        if x:\n            pass\n    except* KeyError:\n        pass\n"
+    assert cognitive_for(_first_fn(src)) == 4
+
+
 def test_ternary_one():
     """Score a conditional expression at 1.
 

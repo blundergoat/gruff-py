@@ -246,16 +246,15 @@ class DeclarationPositionResolver:
             The enclosing same-named declaration's start line, or the finding's positive line; 1 if its line is absent or nonpositive.
         """
         # Findings without a source line use the first position only for ranking their baseline identity.
-        line = finding.line if finding.line is not None and finding.line > 0 else 1
+        line = _default_declaration_position(finding)
         symbol = finding.symbol
         # Without a symbol there is no declaration to rank, and every symbol-less finding of one file shares a key anyway.
         if not symbol:
             return line
-        # Try the closest matching declaration before enclosing scopes.
-        for span in self._matching_spans(finding.file_path, symbol):
-            # A warning anywhere inside the declaration spends its review at the same position.
-            if span.start <= line <= span.end:
-                return span.start
+        enclosing = self._enclosing_matching_span(finding.file_path, symbol, line)
+        # A warning anywhere inside the declaration spends its review at the same position.
+        if enclosing is not None:
+            return enclosing.start
         return line
 
     def same_named_positions(self, finding: Finding) -> tuple[int, ...]:
@@ -270,25 +269,38 @@ class DeclarationPositionResolver:
             The result is empty for a missing symbol or when the file has no matching declarations.
         """
         symbol = finding.symbol
-        return tuple(sorted({span.start for span in self._matching_spans(finding.file_path, symbol)})) if symbol else ()
+        # A finding without a symbol has no same-named declarations to rank against.
+        if not symbol:
+            return ()
+        name = _LAMBDA_POSITION.sub("<lambda>", symbol)
+        spans = self._spans_by_file.get(finding.file_path, ())
+        # A report on `Widget.validate` must not use the review reserved for `Form.validate`.
+        if "." in name:
+            return tuple(sorted({span.start for span in spans if span.qualified_name == name}))
+        # Match bare symbols only against siblings sharing the enclosing declaration's qualified scope.
+        enclosing = self._enclosing_matching_span(finding.file_path, symbol, _default_declaration_position(finding))
+        # A finding outside every declaration with its name ranks on its own line only.
+        if enclosing is None:
+            return ()
+        return tuple(sorted({span.start for span in spans if span.name == name and span.qualified_name == enclosing.qualified_name}))
 
-    def _matching_spans(self, path: str, symbol: str) -> tuple[DeclarationSpan, ...]:
-        """Select declarations that could own the finding's reported symbol.
-        Match the scope of a qualified symbol so a same-named method in another class cannot claim its review.
+    def _enclosing_matching_span(self, path: str, symbol: str, line: int) -> DeclarationSpan | None:
+        """Select the innermost matching declaration span enclosing the finding line.
 
         Args:
             path: File containing the declarations.
             symbol: Finding symbol, with any generated lambda marker.
+            line: 1-based line number of the finding.
 
         Returns:
-            Matching spans in their original innermost-first order.
+            The closest matching declaration span containing line, or None when no declaration matches.
         """
         name = _LAMBDA_POSITION.sub("<lambda>", symbol)
         spans = self._spans_by_file.get(path, ())
-        # A report on `Widget.validate` must not use the review reserved for `Form.validate`.
+        # Qualified symbols match only declarations with the exact enclosing scope path.
         if "." in name:
-            return tuple(span for span in spans if span.qualified_name == name)
-        return tuple(span for span in spans if span.name == name)
+            return next((span for span in spans if span.qualified_name == name and span.start <= line <= span.end), None)
+        return next((span for span in spans if span.name == name and span.start <= line <= span.end), None)
 
 
 def declaration_position_from_spans(spans_by_file: Mapping[str, tuple[DeclarationSpan, ...]]) -> DeclarationPositionResolver:

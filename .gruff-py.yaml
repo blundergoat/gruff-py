@@ -171,7 +171,7 @@ selection:
   - waste.unreachable-code
   excludePillars: []
   excludeRules: []
-# sensitiveExclusions is the only way to silence a sensitive-data finding.
+# Use sensitiveExclusions to record reviewed exceptions for sensitive-data findings.
 # Write each entry by hand with rule, path, and reason; symbol is optional.
 # No preview or matched value is ever turned into an entry automatically,
 # and every entry reports how many findings it suppressed.

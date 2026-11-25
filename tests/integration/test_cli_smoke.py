@@ -3988,3 +3988,145 @@ def test_cli_analyse_strict_config_passes_after_migration(tmp_path: Path, monkey
 
     assert rerun.exit_code == 0, rerun.output
     assert "Warning:" not in rerun.stderr
+
+
+def test_cli_analyse_fail_on_new_blocks_ineligible_sensitive_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 1 under ``--fail-on none --fail-on-new`` when a sensitive-data finding cannot be baselined.
+
+    Args:
+        tmp_path: Project root holding a module with a synthetic AWS access key and a generated baseline.
+        monkeypatch: Changes into the project so commands use the generated baseline.
+
+    Returns:
+        None. Generates a baseline and checks that ``--fail-on-new`` still exits 1 on the ineligible secret.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    synthetic_key = "AKIA" + "Z7Q9M2X4K8L5N3P6"
+    (src / "keys.py").write_text(f'"""Keys."""\nAWS_KEY = "{synthetic_key}"\n')
+
+    generated = CliRunner().invoke(main, ["analyse", "--no-config", "--no-baseline", "--generate-baseline", "--fail-on", "none", "src"])
+    assert generated.exit_code == 0, generated.output
+
+    gated = CliRunner().invoke(main, ["analyse", "--no-config", "--fail-on", "none", "--fail-on-new", "src"])
+    assert gated.exit_code == 1, gated.output
+
+
+def test_cli_analyse_json_reports_config_error_for_unsupported_python_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a structured JSON ``config-error`` diagnostic and exit 2 when ``minimumPythonVersion`` is below 3.11.
+
+    Args:
+        tmp_path: Project root holding a config with ``minimumPythonVersion: "3.10"`` and a clean module.
+        monkeypatch: Changes into the project so ``analyse`` discovers its config.
+
+    Returns:
+        None. Checks exit code 2 and the JSON ``config-error`` diagnostic payload.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text('schemaVersion: gruff-py.config.v0.1\nminimumPythonVersion: "3.10"\n')
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text('"""Clean module."""\nVALUE = 1\n')
+
+    result = CliRunner().invoke(main, ["analyse", "--format", "json", "src"])
+
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["diagnostics"][0]["type"] == "config-error"
+    assert "3.11" in payload["diagnostics"][0]["message"]
+
+
+def test_cli_analyse_sarif_changed_ranges_filters_inline_suppressions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Filter inline-suppressed SARIF results to changed regions and clear them when changed-range parsing fails.
+
+    Args:
+        tmp_path: Project root holding a module with a ``# nosec`` suppressed call on line 2 and an untouched line 3.
+        monkeypatch: Changes into the project so ``analyse`` resolves relative target paths.
+
+    Returns:
+        None. Checks that unfiltered SARIF carries the suppressed result, narrowed SARIF omits it, and invalid ranges clear results.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_text("# Demo\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text(
+        '"""Server."""\napp.run(host="0.0.0.0")  # nosec\nVALUE = 1\n',
+    )
+
+    unfiltered = CliRunner().invoke(main, ["analyse", "--no-config", "--no-baseline", "--fail-on", "none", "--format", "sarif", "src/app.py"])
+    assert unfiltered.exit_code == 0, unfiltered.output
+    unfiltered_results = json.loads(unfiltered.stdout)["runs"][0]["results"]
+    assert len(unfiltered_results) == 1
+    assert unfiltered_results[0]["suppressions"]
+
+    narrowed = CliRunner().invoke(
+        main,
+        ["analyse", "--no-config", "--no-baseline", "--fail-on", "none", "--format", "sarif", "--changed-ranges", "3-3", "src/app.py"],
+    )
+    assert narrowed.exit_code == 0, narrowed.output
+    narrowed_payload = json.loads(narrowed.stdout)
+    assert narrowed_payload["runs"][0]["results"] == []
+
+    failed = CliRunner().invoke(
+        main,
+        ["analyse", "--no-config", "--no-baseline", "--format", "sarif", "--changed-ranges", "not-a-range", "src/app.py"],
+    )
+    assert failed.exit_code == 2
+    failed_payload = json.loads(failed.stdout)
+    assert failed_payload["runs"][0]["results"] == []
+
+
+def test_cli_report_accepts_canonical_baseline_and_warns_on_legacy_spelling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Accept ``--baseline`` on ``report`` without warning while keeping ``--baseline-path`` as a warning alias.
+
+    Args:
+        tmp_path: Project root holding a sample module and an explicit baseline v3 file.
+        monkeypatch: Changes into the project so commands resolve relative paths.
+
+    Returns:
+        None. Checks both spellings suppress the reviewed finding and only ``--baseline-path`` warns on stderr.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text('"""Sample."""\n\n\ndef work() -> int:\n    return 1\n')
+    baseline_path = tmp_path / "custom-baseline.json"
+    generated = CliRunner().invoke(
+        main,
+        ["analyse", "--no-config", "--no-baseline", f"--generate-baseline={baseline_path}", "--fail-on", "none", "src"],
+    )
+    assert generated.exit_code == 0, generated.output
+
+    canonical = CliRunner().invoke(main, ["report", "--no-config", "--format", "json", "--baseline", str(baseline_path), "src"])
+    assert canonical.exit_code == 0, canonical.output
+    assert json.loads(canonical.stdout)["findings"] == []
+    assert "superseded" not in canonical.stderr
+
+    legacy = CliRunner().invoke(main, ["report", "--no-config", "--format", "json", "--baseline-path", str(baseline_path), "src"])
+    assert legacy.exit_code == 0, legacy.output
+    assert json.loads(legacy.stdout)["findings"] == []
+    assert "--baseline-path is superseded by --baseline" in legacy.stderr
+
+
+def test_cli_migrate_config_output_dash_writes_clean_yaml_to_stdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emit only migrated YAML on stdout when ``migrate-config --output -`` runs, routing commentary to stderr.
+
+    Args:
+        tmp_path: Project root holding the clean legacy project.
+        monkeypatch: Changes into the project so ``migrate-config`` discovers its config.
+
+    Returns:
+        None. Checks that stdout parses cleanly as YAML while stderr carries the migration summary.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write_clean_legacy_project(tmp_path)
+
+    result = CliRunner().invoke(main, ["migrate-config", "--output", "-"])
+
+    assert result.exit_code == 0, result.output
+    migrated = yaml.safe_load(result.stdout)
+    assert isinstance(migrated, dict)
+    assert migrated["rules"]["complexity.cognitive"]["threshold"] == 30
+    assert "Migration changes:" in result.stderr

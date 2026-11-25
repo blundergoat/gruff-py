@@ -1,9 +1,11 @@
 import ast
+import re
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from gruffpy.command.rule_docs import render_rules_markdown
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.finding.confidence import Confidence
@@ -207,6 +209,17 @@ def test_builtin_rule_has_required_docs_metadata(definition: RuleDefinition) -> 
     assert docs.bad_example
     assert docs.good_example
     assert docs.confidence_rationale
+    assert docs.confidence_rationale.lower().startswith(f"{definition.confidence.value} confidence")
+
+
+def test_generated_rule_docs_omit_internal_milestone_labels() -> None:
+    """Ensure generated user-facing rule documentation contains no internal milestone labels.
+
+    Returns:
+        None. Checks that rendered rule docs match no internal milestone codes such as M02 or M14.
+    """
+    rendered = render_rules_markdown()
+    assert re.findall(r"\bM[0-9]{2}\b", rendered) == []
 
 
 def test_medium_and_low_confidence_rules_publish_false_positive_guidance() -> None:

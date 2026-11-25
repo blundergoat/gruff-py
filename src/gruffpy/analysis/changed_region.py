@@ -122,16 +122,13 @@ class _PatchState:
 
 _HUNK_RE = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
-# These findings describe file/class-level or aggregate properties. Their
-# reported spans are useful for full scans and hunk scope, but symbol scope
-# should attribute them to the finding anchor so inherited debt does not survive
-# every body edit.
+# File-level, class-level, and aggregate rules still report full spans during normal and hunk scans.
+# Under symbol scope, attribute them to their anchor line so inherited debt does not resurface on every body edit.
 _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS = frozenset(
     {
         "docs.dataclass-attributes",
         "docs.missing-module-docstring",
         "docs.todo-density",
-        "naming.module-name-mismatch",
         "naming.test-naming-consistency",
         "size.attribute-count",
         "size.average-function-length",
@@ -143,9 +140,8 @@ _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS = frozenset(
 )
 
 
-#: The one type every port publishes when it cannot read the changed-region scope it was asked to analyse,
-#: whether that scope came from ``--changed-ranges``, ``--diff`` or ``--since``, so a consumer reading a scoped
-#: run's failure need not know which analyser produced it (FAMILY-CONTRACT.md section 6).
+#: Shared diagnostic type emitted when ``--changed-ranges``, ``--diff``, or ``--since`` fails to resolve.
+#: Every port publishes this type so CI and hook consumers recognise scoped-run failures uniformly (FAMILY-CONTRACT.md section 6).
 CHANGED_REGION_DIAGNOSTIC_TYPE = "changed-region"
 
 
@@ -477,7 +473,8 @@ def _filter_hunk_findings(
     kept: list[Finding] = []
     suppressed = 0
     for finding in findings:
-        if _is_finding_location_changed(finding, changed):
+        # A finding on a changed line is kept; every other one is counted as hidden by the changed-region filter.
+        if is_finding_location_changed(finding, changed):
             kept.append(finding)
         else:
             suppressed += 1
@@ -505,7 +502,8 @@ def _is_finding_in_symbol_scope(
     """
     if finding.rule_id in _SYMBOL_SCOPE_ANCHOR_ONLY_RULE_IDS:
         return _is_finding_anchor_changed(finding, changed, declarations)
-    if _is_finding_location_changed(finding, changed):
+    # A finding on a changed line is in scope whatever declaration owns it.
+    if is_finding_location_changed(finding, changed):
         return True
     if finding.line is None:
         return changed.is_file_changed(finding.file_path)
@@ -561,7 +559,7 @@ def _declaration_anchor_line(
     return None
 
 
-def _is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) -> bool:
+def is_finding_location_changed(finding: Finding, changed: ChangedRegionSet) -> bool:
     """Test whether a changed hunk overlaps the lines a finding reports.
 
     A missing end line, or one before the start line, narrows the test to the finding's first line.

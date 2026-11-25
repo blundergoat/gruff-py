@@ -5,6 +5,7 @@ a reviewed count is spent lowest line first, a secret is never eligible, another
 baseline is carried forward into a second file that leaves the original byte-identical.
 """
 
+import ast
 import base64
 import hashlib
 import json
@@ -24,6 +25,7 @@ from gruffpy.finding.baseline_identity import (
     DeclarationSpan,
     compute_identity_for,
     declaration_position_from_spans,
+    declaration_spans,
     finding_identities,
     normalise_measured_values,
 )
@@ -195,6 +197,48 @@ def test_a_second_occurrence_beyond_the_reviewed_count_is_new_and_the_lowest_lin
     assert result.report.unchanged_count == 1
     assert result.report.new_count == 1
     assert [finding.line for finding in result.findings] == [90]
+
+
+def test_changed_region_priority_spends_review_on_unchanged_occurrence_first(tmp_path: Path) -> None:
+    """Spend reviewed baseline credit on an untouched occurrence before a newly inserted earlier occurrence.
+
+    Args:
+        tmp_path: Project root holding the baseline generated from one reviewed finding.
+
+    Returns:
+        None. Checks that the changed earlier line is reported as new while the untouched later line stays covered.
+    """
+    generate_baseline(project_root=tmp_path, path="gruff-baseline.json", findings=[_finding(symbol=None, line=90)])
+
+    changed_earlier = _finding(symbol=None, line=10)
+    untouched_later = _finding(symbol=None, line=90)
+    result = apply_baseline(
+        project_root=tmp_path,
+        path="gruff-baseline.json",
+        findings=[changed_earlier, untouched_later],
+        source="explicit",
+        is_in_changed_region=lambda finding: finding.line == 10,
+    )
+
+    assert result.report.unchanged_count == 1
+    assert result.report.new_count == 1
+    assert [finding.line for finding in result.findings] == [10]
+
+
+def test_declaration_position_resolver_keeps_top_level_and_method_ordinals_separate() -> None:
+    """Prevent a class method from shifting the baseline ordinal of a same-named top-level function.
+
+    Returns:
+        None. Checks that adding a same-named class method above a top-level function leaves the function at ordinal 1.
+    """
+    source = "class Widget:\n    def helper(self):\n        return 1\n\ndef helper():\n    return 2\n"
+    resolver = declaration_position_from_spans({"src/example.py": declaration_spans(ast.parse(source))})
+    top_level = _finding(symbol="helper", line=5)
+
+    assert resolver.same_named_positions(top_level) == (5,)
+    (identity,) = finding_identities([top_level], declaration_position=resolver)
+    assert identity is not None
+    assert identity.subject == "helper#1"
 
 
 def test_a_measured_file_level_finding_survives_the_file_growing(tmp_path: Path) -> None:

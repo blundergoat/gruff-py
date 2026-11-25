@@ -526,14 +526,6 @@ _REVIEWED_FALSE_POSITIVE_GUIDANCE: dict[str, tuple[str, str]] = {
         "A table-driven contract test can need many scenarios around one short same-file function, so line ratio overstates duplication.",
         "Split or extract setup, or tune `options.ratio` after reviewing the scenario coverage.",
     ),
-    "waste.commented-out-code": (
-        "Explanatory prose can itself be valid Python after the code-like prefilter, such as a comment written as an assignment or call.",
-        "Rewrite it as prose that does not parse as a statement, or suppress the reviewed comment with its documentation purpose.",
-    ),
-    "waste.one-line-function": (
-        "A strict passthrough wrapper can still be a stable typing, dispatch, monkey-patching, or public compatibility boundary.",
-        "Keep the reviewed wrapper when that boundary is intentional; otherwise inline the call.",
-    ),
 }
 
 # Measured false-positive shapes for rules whose confidence moved below high from their measured precision

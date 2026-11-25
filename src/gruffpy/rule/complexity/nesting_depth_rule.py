@@ -30,6 +30,7 @@ _NESTING_KINDS = (
     ast.AsyncFor,
     ast.While,
     ast.Try,
+    ast.TryStar,
     ast.Match,
     ast.With,
     ast.AsyncWith,
@@ -147,7 +148,8 @@ def _walk(node: ast.AST, current: int) -> int:
         return _deepest_child(node, current)
 
     nested = current + 1
-    if isinstance(node, ast.Try):
+    # A try block adds one level; its except, else and finally bodies sit at that same level, not one deeper.
+    if isinstance(node, ast.Try | ast.TryStar):
         return _walk_try(node, nested)
     if isinstance(node, ast.Match):
         return _walk_match(node, nested)
@@ -182,13 +184,13 @@ def _deepest_child(node: ast.AST, current: int) -> int:
     return deepest
 
 
-def _walk_try(node: ast.Try, current: int) -> int:
-    """Return the deepest depth across a try block's body, except handlers, else and finally clauses.
+def _walk_try(node: ast.Try | ast.TryStar, current: int) -> int:
+    """Return the deepest depth across a try or try-except* block's body, handlers, else and finally clauses.
 
     Every clause is walked at the try's own level, so an except handler body sits at the same level as the try body rather than one deeper.
 
     Args:
-        node: Try statement whose clauses are measured.
+        node: Try or try-except* statement whose clauses are measured.
         current: Depth of the try block itself, already including its own level; the statements of every clause are walked at this depth.
 
     Returns:

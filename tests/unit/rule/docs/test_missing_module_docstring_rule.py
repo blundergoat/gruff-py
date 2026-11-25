@@ -1,3 +1,5 @@
+import pytest
+
 from gruffpy.rule.docs.missing_module_docstring_rule import MissingModuleDocstringRule
 from tests.unit.rule.docs._helpers import default_ctx, make_unit
 
@@ -27,14 +29,21 @@ def test_module_without_docstring_emits_one_finding():
     assert "has no top-of-file" not in findings[0].message
 
 
-def test_test_module_without_docstring_skipped():
-    """Report nothing for an undocumented test module.
+@pytest.mark.parametrize(
+    "display_path",
+    ["tests/test_example.py", "test/example.py", "testing/example.py", "pkg/test_example.py", "pkg/example_test.py"],
+)
+def test_test_module_without_docstring_skipped(display_path: str):
+    """Report nothing for an undocumented test module across conventional test paths.
+
+    Args:
+        display_path: Conventional test-directory or test-filename display path.
 
     Returns:
         None. Asserts that the undocumented test module produces no findings.
     """
     src = "def test_f():\n    pass\n"
-    findings = MissingModuleDocstringRule().analyse(make_unit(src, display_path="tests/test_example.py"), default_ctx())
+    findings = MissingModuleDocstringRule().analyse(make_unit(src, display_path=display_path), default_ctx())
     assert findings == []
 
 

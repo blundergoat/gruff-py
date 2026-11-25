@@ -27,7 +27,6 @@ _FILE_LEVEL_ANCHOR_ONLY_RULE_IDS = (
 
 _CLASS_LEVEL_ANCHOR_ONLY_RULE_IDS = (
     "docs.dataclass-attributes",
-    "naming.module-name-mismatch",
     "size.attribute-count",
     "size.average-function-length",
     "size.class-length",

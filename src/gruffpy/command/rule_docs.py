@@ -60,76 +60,75 @@ _GROUP_ORDER = (
     "Design",
 )
 
-_M02_DEFAULT_OFF_REASONS = {
+_DEFAULT_OFF_REASONS = {
     "test-quality.test-function-too-long": (
-        "Opt-in after M02's bounded repair: nine of twenty-five judged findings were worth acting on, below the 0.70 test-quality floor. "
-        "Explicit enablement retains the literal response-snapshot exemption; default scans omit this rule's findings."
+        "Opt-in: 9 of 25 judged findings were worth acting on, below the 0.70 test-quality precision floor. "
+        "Explicit enablement keeps the literal response-snapshot exemption; default scans omit this rule's findings."
     ),
     "test-quality.setup-bloat": (
-        "Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. "
-        "Explicit enablement retains the production-hook repair; default scans omit this rule's findings."
+        "Opt-in: 7 of 16 judged findings were worth acting on, below the 0.70 test-quality precision floor. "
+        "Explicit enablement keeps the production-hook exemption; default scans omit this rule's findings."
     ),
     "security.unsafe-pickle": (
-        "Opt-in under M02 while its 0.80 security precision floor remains unestablished. "
-        "The local detector cannot infer whether a non-literal payload is a trusted internal cache. "
-        "Explicit enablement retains the existing checks."
+        "Opt-in while its 0.80 security precision floor remains unestablished. "
+        "The local detector cannot infer whether a non-literal payload comes from a trusted internal cache. "
+        "Explicit enablement keeps the existing checks."
     ),
     "naming.generic-function": (
-        "Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. "
-        "Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings."
+        "Opt-in: 28 of 49 judged findings were worth acting on, below the 0.60 naming precision floor. "
+        "Explicit enablement keeps the required-framework-method exemption; default scans omit this rule's findings."
     ),
     "sensitive-data.private-key": (
-        "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
-        "below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair."
+        "Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, "
+        "below the sample minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement keeps the detector active."
     ),
     "security.weak-crypto": (
-        "Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, "
-        "below the minimum needed to assess the 0.80 security precision floor. Explicit enablement retains the repair."
+        "Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, "
+        "below the sample minimum needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
     ),
     "security.hardcoded-framework-secret-key": (
-        "Opt-in under M02: only one current corpus finding remains after the shared test-path exclusion, "
-        "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
+        "Opt-in: only 1 finding remained in the evaluation corpus after the shared test-path exclusion, "
+        "below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
     ),
     "security.insecure-temp-file": (
-        "Opt-in under M02: no current corpus findings remain after the shared test-path exclusion, "
-        "below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector."
+        "Opt-in: no findings remained in the evaluation corpus after the shared test-path exclusion, "
+        "below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
     ),
     "security.silent-except": (
-        "Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. "
-        "The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled."
+        "Opt-in: 21 of 29 judged findings were worth acting on, below the 0.80 security precision floor. "
+        "Default scans omit these findings until the rule is explicitly enabled."
     ),
     "docs.missing-return-doc": (
-        "Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish "
-        "the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending."
+        "Opt-in: 4 of 20 judged findings were worth acting on, below the 0.60 documentation precision floor. "
+        "The rule accepts recognised result prose, while fresh blind validation is still pending."
     ),
-    "complexity.cyclomatic": (
-        "Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor."
-    ),
+    "complexity.cyclomatic": ("Opt-in: 26 of 50 judged upper-band findings were worth acting on, below the 0.60 complexity precision floor."),
     "security.dangerous-function-call": (
-        "Opt-in after M02's blind provenance review remained insufficient: 10 right of 15 judged, with 10 unresolved labels."
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(10 of 15 judged findings were worth acting on, with 10 unresolved)."
     ),
     "security.header-injection": (
-        "Opt-in after M02's blind provenance review remained insufficient: neither of two judged findings was right, "
-        "and one label remained unresolved."
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(0 of 2 judged findings were worth acting on, with 1 unresolved)."
     ),
     "security.unsafe-yaml-load": (
-        "Opt-in after M02's blind provenance review remained insufficient: two right of three judged, with one unresolved label."
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(2 of 3 judged findings were worth acting on, with 1 unresolved)."
     ),
     "security.variable-import": (
-        "Opt-in after M02's blind provenance review remained insufficient: three right of eleven judged, with eight unresolved labels."
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(3 of 11 judged findings were worth acting on, with 8 unresolved)."
     ),
     "security.xxe": (
-        "Opt-in after M02: only three default findings, two right and one unresolved, leave too little evidence for the precision floor."
+        "Opt-in: only 3 findings appeared in evaluation (2 worth acting on and 1 unresolved), "
+        "leaving too little evidence to establish the precision floor."
     ),
     "sensitive-data.database-url-password": (
-        "Opt-in after M02: none of seven judged findings was right, but only eight default findings were available, too few for deletion."
+        "Opt-in: 0 of 7 judged findings were worth acting on across 8 evaluation findings, "
+        "leaving too little evidence to establish the precision floor."
     ),
-    "test-quality.no-assertions": (
-        "Remains opt-in under M02's accepted table: seven right of 36 judged findings do not establish its 0.70 precision floor."
-    ),
-    "test-quality.sut-not-called": (
-        "Remains opt-in under M02's accepted table: nine right of 28 judged findings do not establish its 0.70 precision floor."
-    ),
+    "test-quality.no-assertions": ("Opt-in: 7 of 36 judged findings were worth acting on, below the 0.70 test-quality precision floor."),
+    "test-quality.sut-not-called": ("Opt-in: 9 of 28 judged findings were worth acting on, below the 0.70 test-quality precision floor."),
 }
 
 
@@ -379,8 +378,9 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
-    if not definition.default_enabled and definition.id in _M02_DEFAULT_OFF_REASONS:
-        lines.append(f"- Default-off reason: {_M02_DEFAULT_OFF_REASONS[definition.id]}")
+    # A rule that ships turned off says why, so a reader can decide whether to turn it on.
+    if not definition.default_enabled and definition.id in _DEFAULT_OFF_REASONS:
+        lines.append(f"- Default-off reason: {_DEFAULT_OFF_REASONS[definition.id]}")
     # Show the threshold and severity together because users configure them as a pair.
     if _has_severity_thresholds(definition):
         lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")

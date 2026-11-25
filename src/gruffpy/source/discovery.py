@@ -5,7 +5,7 @@ The returned skip reasons and input errors explain which paths were left out.
 """
 
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,9 +65,8 @@ _MINIFIED_NAME = re.compile(r"\.min\.[^.]+$")
 # Lowercases A-Z only, so every port folds the same names: ``VENDOR`` matches and a non-ASCII look-alike does not.
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
-# Ignore-decision source labels recorded on every skipped path. Shared by the
-# report's ``ignoredPathDetails`` field and the ``check-ignore`` command so a
-# coding agent can see *why* a file was skipped, not only that it was.
+# Ignore-decision source labels recorded on every skipped path.
+# Shared by the report's ``ignoredPathDetails`` field and ``check-ignore`` so users and agents see *why* a path was skipped.
 IGNORE_SOURCE_CONFIG = "config"
 IGNORE_SOURCE_GITIGNORE = "gitignore"
 IGNORE_SOURCE_DEFAULT = "default"
@@ -354,17 +353,16 @@ class SourceDiscovery:
             # Classify each entry so a skipped directory can be explained without listing all of its descendants.
             for entry in self._directory_entries(current):
                 is_dir = entry.is_dir()
-                # Linked entries need a separate check because their target may sit outside the checkout.
-                if entry.is_symlink():
-                    # Skip links that would not yield a supported file. Directory links could also lead back to this walk.
-                    if is_dir or self._source_type(entry) is None or not entry.is_file():
-                        continue
-                    # Report the link the user can fix without exposing the external target's path.
-                    if not self._canonical(entry).is_relative_to(self._project_root):
-                        outside.add((Path(self._display_path(current)) / entry.name).as_posix())
-                        continue
-                # Check ignores before descending so excluded code never reaches a rule.
+                # Skip links that would not yield a supported file. Directory links could also lead back to this walk.
+                if entry.is_symlink() and (is_dir or self._source_type(entry) is None or not entry.is_file()):
+                    continue
+                # Check ignores before external-target containment so excluded symlinks do not abort the scan.
                 if self._should_skip_entry(entry, include_ignored, patterns, is_dir, ignored_paths):
+                    continue
+                # Linked entries accepted by ignore rules must still resolve inside the project root.
+                if entry.is_symlink() and not self._canonical(entry).is_relative_to(self._project_root):
+                    # Report the link the user can fix without exposing the external target's path.
+                    outside.add(self._lexical_display_path(entry))
                     continue
                 # Traverse accepted directories, but pass only analysable files to the parser.
                 if is_dir:
@@ -492,6 +490,27 @@ class SourceDiscovery:
             # A symlink loop or inaccessible ancestor can prevent resolution before the parser sees a file.
             return path
 
+    def _lexical_display_path(self, path: Path) -> str:
+        """Render a candidate path relative to the project root without following a final symlink.
+
+        Args:
+            path: File or directory candidate whose parent sits inside the project root.
+
+        Returns:
+            Forward-slash relative path using the entry's name when its parent resolves inside the project root; otherwise ``_display_path(path)``.
+        """
+        # An ordinary file keeps its usual display path.
+        if not path.is_symlink():
+            return self._display_path(path)
+        parent_canonical = self._canonical(path.parent)
+        try:
+            relative_parent = parent_canonical.relative_to(self._project_root)
+        except ValueError:
+            # For example, when check-ignore classifies a symlink sitting outside the scanned root, fall back to canonical path rendering.
+            return self._display_path(path)
+        relative = Path(path.name) if str(relative_parent) == "." else relative_parent / path.name
+        return relative.as_posix()
+
     def _display_path(self, path: Path) -> str:
         """Render a display path for source-file and ignored-path reports, relative to the project root when possible.
 
@@ -556,21 +575,28 @@ class SourceDiscovery:
         name = path.name.lower()
         return name in TEXT_FILENAMES or (name.startswith("requirements") and name.endswith((".txt", ".in")))
 
-    def _ignored_component_match(self, path: Path, ignored_names: tuple[str, ...]) -> str | None:
+    def _ignored_component_match(
+        self,
+        path: Path,
+        ignored_names: tuple[str, ...],
+        *,
+        display_override: str | None = None,
+    ) -> str | None:
         """Find which of the given directory names appears as whole components of a path, for the VCS and fallback ignore lists.
 
         An entry may span several components and must match a contiguous run of them. Matching is case-sensitive and includes the path's final
         component, so a file named exactly like an entry also matches; a path outside the project root is checked across its absolute components.
 
         Args:
-            path: Candidate file or directory, compared through its display path.
+            path: Candidate file or directory, compared through its display path when ``display_override`` is None.
             ignored_names: Directory names to look for, in priority order; the first entry found anywhere on the path wins regardless of where it
                 occurs.
+            display_override: Precomputed display path (for example, a symlink's lexical in-project path), or None to compute ``_display_path(path)``.
 
         Returns:
             The first entry of ignored_names found on the path, or None when none matches or the path is the project root.
         """
-        display = self._display_path(path).replace("\\", "/")
+        display = (display_override if display_override is not None else self._display_path(path)).replace("\\", "/")
         if display == ".":
             return None
         segments = display.strip("/").split("/")
@@ -582,7 +608,7 @@ class SourceDiscovery:
                     return ignored
         return None
 
-    def _third_party_match(self, path: Path, *, is_dir: bool) -> str | None:
+    def _third_party_match(self, path: Path, *, is_dir: bool, display_override: str | None = None) -> str | None:
         """Return the outermost third-party or build-output directory on path, lowercased.
 
         For a file, only its ancestor directories count. For example, vendor/dist matches vendor even when dist is a file.
@@ -591,11 +617,12 @@ class SourceDiscovery:
         Args:
             path: Candidate whose displayed components are checked, relative to the project root when possible. The root itself has no match.
             is_dir: Whether the candidate itself is a directory, which makes its own name eligible.
+            display_override: Precomputed display path (for example, a symlink's lexical in-project path), or None to compute ``_display_path(path)``.
 
         Returns:
             The matched directory name in lowercase, or None when no directory on the path is in the class.
         """
-        display = self._display_path(path).replace("\\", "/")
+        display = (display_override if display_override is not None else self._display_path(path)).replace("\\", "/")
         if display == ".":
             return None
         segments = display.strip("/").split("/")
@@ -634,19 +661,26 @@ class SourceDiscovery:
                 return False
         return True
 
-    def _configured_pattern(self, path: Path, patterns: list[str]) -> str | None:
+    def _configured_pattern(
+        self,
+        path: Path,
+        patterns: list[str],
+        *,
+        display_override: str | None = None,
+    ) -> str | None:
         """Find the first configured paths.ignore glob that matches a path.
 
         Args:
-            path: Candidate file or directory, compared through its display path; if resolution raises OSError, the original path is used.
+            path: Candidate file or directory, compared through its display path when ``display_override`` is None.
             patterns: Configured paths.ignore globs in configuration order; an empty list matches nothing.
+            display_override: Precomputed display path (for example, a symlink's lexical in-project path), or None to compute ``_display_path(path)``.
 
         Returns:
             The first matching pattern exactly as configured, or None when no pattern matches.
         """
         if not patterns:
             return None
-        display = self._display_path(path).replace("\\", "/")
+        display = (display_override if display_override is not None else self._display_path(path)).replace("\\", "/")
         for pattern in patterns:
             if _is_pattern_match(display, pattern):
                 return pattern
@@ -681,24 +715,33 @@ class SourceDiscovery:
             (pattern None for gitignore), and whose display_path is the path to report or None when the skip is not reported; a kept path carries
             neither.
         """
-        display_path = self._display_path(path)
-        configured = self._configured_pattern(path, patterns)
+        display_path = self._lexical_display_path(path)
+        # An in-project link is also judged by its target, so a link into an ignored folder such as generated/ stays skipped.
+        target_display = self._display_path(path) if path.is_symlink() and self._canonical(path).is_relative_to(self._project_root) else None
+        configured = _match_link_or_target(
+            lambda display: self._configured_pattern(path, patterns, display_override=display), display_path, target_display
+        )
         if configured is not None:
             return _IgnoreDecision(True, display_path, IgnoreReason(IGNORE_SOURCE_CONFIG, configured))
         if is_dir is None:
             is_dir = path.is_dir()
-        vcs_match = self._ignored_component_match(path, VCS_IGNORED_DIRECTORIES)
+        vcs_match = _match_link_or_target(
+            lambda display: self._ignored_component_match(path, VCS_IGNORED_DIRECTORIES, display_override=display), display_path, target_display
+        )
         if vcs_match is not None:
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, vcs_match))
         if include_ignored or explicit_file:
             return _IgnoreDecision(False)
-        if self._is_gitignored(path, is_dir=is_dir):
+        # Check .gitignore on the link's lexical path and, for an in-project link, on its target path too.
+        if self._is_link_or_target_gitignored(path, display_path, target_display, is_dir=is_dir):
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_GITIGNORE, None))
         # A gitignore match above names the reason first; unlike the fallback below, the section 7 classes still apply
         # when a .gitignore governs the path, outermost directory before file name.
-        third_party = self._third_party_match(path, is_dir=is_dir)
+        third_party = _match_link_or_target(
+            lambda display: self._third_party_match(path, is_dir=bool(is_dir), display_override=display), display_path, target_display
+        )
         if third_party is not None:
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, third_party))
@@ -707,11 +750,40 @@ class SourceDiscovery:
             # section 7 requires.
             recorded = display_path if record_file or self._source_type(path) is not None else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, MINIFIED_FILE_PATTERN))
-        default_match = self._ignored_component_match(path, FALLBACK_IGNORED_DIRECTORIES)
+        default_match = _match_link_or_target(
+            lambda display: self._ignored_component_match(path, FALLBACK_IGNORED_DIRECTORIES, display_override=display), display_path, target_display
+        )
         if default_match is not None and self._fallback_applies_at(path):
             recorded = display_path if record_file or is_dir else None
             return _IgnoreDecision(True, recorded, IgnoreReason(IGNORE_SOURCE_DEFAULT, default_match))
         return _IgnoreDecision(False)
+
+    def _is_link_or_target_gitignored(
+        self,
+        path: Path,
+        display_path: str,
+        target_display: str | None,
+        *,
+        is_dir: bool | None = None,
+    ) -> bool:
+        """Check whether ``.gitignore`` matches a path as shown or, for an in-project symlink, its resolved target.
+
+        Args:
+            path: Candidate file or directory being evaluated during discovery or ``check-ignore``.
+            display_path: Lexical in-project display path for a symlink, or canonical display path otherwise.
+            target_display: In-project target display path for a symlink, or None for ordinary files and external links.
+            is_dir: Whether the entry is a directory, forwarded to gitignore directory-only rules; None stats the path.
+
+        Returns:
+            True when ``.gitignore`` ignores either the lexical path or the in-project symlink target; False otherwise.
+        """
+        # Anchor symlinks at their lexical in-project path so .gitignore matches the link instead of an external target.
+        gitignore_path = self._project_root / display_path if path.is_symlink() and not Path(display_path).is_absolute() else path
+        if self._is_gitignored(gitignore_path, is_dir=is_dir):
+            return True
+        if target_display is None or Path(target_display).is_absolute():
+            return False
+        return self._is_gitignored(self._project_root / target_display, is_dir=is_dir)
 
     def _is_gitignored(self, path: Path, *, is_dir: bool | None = None) -> bool:
         """Check the project's gitignore rules, caching ancestor specs and missing files as matching reaches new directories.
@@ -731,6 +803,26 @@ class SourceDiscovery:
             except OSError:
                 is_dir = False
         return self._gitignore.is_ignored(path, is_dir=is_dir)
+
+
+def _match_link_or_target(match: Callable[[str], str | None], display_path: str, target_display: str | None) -> str | None:
+    """Run one ignore check on a path as shown, then on an in-project link's target when the shown path does not match.
+
+    A link such as ``src/model.py -> generated/model.py`` is skipped when either path is ignored, and is still reported under its own path.
+
+    Args:
+        match: Ignore check that takes a display path and returns the matching pattern or directory name, or None.
+        display_path: The path as the user sees it, which for a link is the link's own path.
+        target_display: The link target's project-relative path, or None for an ordinary file or a link pointing outside the project.
+
+    Returns:
+        The first match from the shown path, then from the target; None when neither path is ignored by this check.
+    """
+    found = match(display_path)
+    # Only an in-project link has a second path worth checking.
+    if found is None and target_display is not None:
+        found = match(target_display)
+    return found
 
 
 def _is_pattern_match(display_path: str, pattern: str) -> bool:

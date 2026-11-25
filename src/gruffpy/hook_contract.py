@@ -354,11 +354,11 @@ def _filter_findings_for_hook(
     Raises:
         ValueError: If explicit changed-range syntax is invalid.
     """
-    changed = _changed_region_set(findings, paths, changed_ranges)
+    changed = changed_region_for_hook(findings, paths, changed_ranges)
     kept: list[Finding] = []
     suppressed_count = 0
     scopes = [_scope_for_finding(finding) for finding in findings]
-    covered = _base_covered_findings(findings, scopes, base_stable_identities)
+    covered = _base_covered_findings(findings, scopes, base_stable_identities, changed)
 
     for index, finding in enumerate(findings):
         scope = scopes[index]
@@ -386,8 +386,9 @@ def _base_covered_findings(
     findings: tuple[Finding, ...],
     scopes: list[str],
     base_counts: Counter[str] | None,
+    changed: ChangedRegionSet | None = None,
 ) -> set[int]:
-    """Pick the current findings the base already held, spending each key's base count on its lowest lines first.
+    """Pick the current findings the base already held, spending each key's base count on unchanged locations first.
 
     One base occurrence covers one current occurrence; added duplicates beyond that count remain eligible before region filtering.
 
@@ -395,6 +396,7 @@ def _base_covered_findings(
         findings: Every current finding, before any region filtering.
         scopes: Each finding's hook scope, aligned by index.
         base_counts: Occurrences of each hook stable identity in the base; None when no base was compared.
+        changed: Optional active changed-region set so untouched occurrences spend base credit before edited occurrences.
 
     Returns:
         Indexes of the findings the base covers; empty without a base.
@@ -403,8 +405,23 @@ def _base_covered_findings(
         return set()
     remaining = Counter(base_counts)
     covered: set[int] = set()
-    # Spend lowest line first, so the occurrences a base already had are the ones it covers when an edit appends one.
-    for index in sorted(range(len(findings)), key=lambda position: (findings[position].line or 0, findings[position].column or 0, position)):
+    changed_active = changed is not None and changed.active
+
+    def spend_key(position: int) -> tuple[int, int, int, int]:
+        """Rank occurrences outside changed lines ahead of changed occurrences, then lowest line first.
+
+        Args:
+            position: Index into findings for the candidate occurrence.
+
+        Returns:
+            Sort key ``(changed_rank, line, column, position)``.
+        """
+        finding = findings[position]
+        in_changed = 1 if (changed_active and changed is not None and _is_finding_intersecting_changed_region(finding, changed)) else 0
+        return (in_changed, finding.line or 0, finding.column or 0, position)
+
+    # Spend unchanged locations first (when changed ranges are active), then lowest line first.
+    for index in sorted(range(len(findings)), key=spend_key):
         identity = _hook_stable_identity(findings[index], scopes[index])
         if remaining[identity] > 0:
             remaining[identity] -= 1
@@ -490,18 +507,30 @@ def stable_identities_from_git_base(
 
     Returns:
         Counts by hook stable identity. An empty counter means the base was analyzed and produced no findings.
+
+    Raises:
+        ValueError: When a requested path sits outside the project root, base-tree materialisation fails,
+            or the base analysis exits with a fatal diagnostic.
     """
     base_ref = "HEAD" if diff_ref == "working-tree" else diff_ref
+    relative_paths = _project_relative_git_paths(project_root, paths)
     with tempfile.TemporaryDirectory(prefix="gruff-hook-base-") as tmp:
         base_root = Path(tmp)
-        _materialize_git_base(project_root, base_root, base_ref, paths)
+        materialized_paths = _materialize_git_base(project_root, base_root, base_ref, relative_paths)
+        # Newly added files do not exist in the base tree, so there are no prior findings to subtract.
+        if not materialized_paths:
+            return Counter()
+        base_paths = tuple(path for path in relative_paths if (base_root / path).exists())
+        # None of the edited paths exist in the base revision, such as files added since, so there are no earlier findings.
+        if not base_paths:
+            return Counter()
         base_config_path = config_path
         # Prefer the working-tree config when no explicit file was supplied so the comparison uses the same rules.
         if not no_config and base_config_path is None:
             base_config_path = existing_config_source(project_root)
         report = run_analysis(
             AnalysisRunRequest(
-                paths=paths or (".",),
+                paths=base_paths,
                 config_path=base_config_path,
                 no_config=no_config,
                 output=OutputFormat.JSON,
@@ -514,9 +543,48 @@ def stable_identities_from_git_base(
                 execution_exclude_rules=execution_exclude_rules,
             )
         )
+        fatal = next((diagnostic for diagnostic in report.diagnostics if diagnostic.invalidates_run is not False), None)
+        # A failed base scan must not masquerade as clean history and flag every unchanged finding as new.
+        if fatal is not None or report.exit_code == 2:
+            detail = fatal.message if fatal is not None else "base analysis failed"
+            raise ValueError(f"Base revision {base_ref!r} analysis failed: {detail}")
         # Use findings before the display floor so visibility settings do not make an unchanged issue look new.
         findings = report.machine_context.summary_findings
         return Counter(_hook_stable_identity(finding, _scope_for_finding(finding)) for finding in (report.findings if findings is None else findings))
+
+
+def _project_relative_git_paths(project_root: Path, paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Rewrite hook path operands as project-relative POSIX pathspecs for base-tree materialisation and analysis.
+
+    Args:
+        project_root: Live repository root the operands are validated against.
+        paths: Caller-supplied path operands; empty selects the whole root (``"."``).
+
+    Returns:
+        Deduplicated project-relative POSIX pathspecs usable both by ``git ls-tree`` and by analysis under the temporary base checkout.
+
+    Raises:
+        ValueError: When an operand resolves outside ``project_root``.
+    """
+    # A hook run without path operands checks the whole project.
+    if not paths:
+        return (".",)
+    resolved_root = project_root.resolve()
+    relative_paths: list[str] = []
+    # Rewrite each operand relative to the project, so the same pathspec works in the temporary base checkout.
+    for raw_path in paths:
+        # An empty operand or "." means the whole project.
+        if raw_path in {"", "."}:
+            relative_paths.append(".")
+            continue
+        candidate = Path(raw_path)
+        resolved = candidate.resolve() if candidate.is_absolute() else (resolved_root / candidate).resolve()
+        # An operand such as ../other/app.py cannot be replayed inside this repository's base revision.
+        if not resolved.is_relative_to(resolved_root):
+            raise ValueError(f"Input path resolves outside the project root: {raw_path}")
+        relative = resolved.relative_to(resolved_root).as_posix()
+        relative_paths.append("." if relative == "." else relative)
+    return tuple(dict.fromkeys(relative_paths))
 
 
 def render_json(payload: dict[str, Any]) -> str:
@@ -686,26 +754,27 @@ def _first_present(metadata: dict[str, Any], keys: tuple[str, ...]) -> Any | Non
     return None
 
 
-def _changed_region_set(
+def changed_region_for_hook(
     findings: tuple[Finding, ...],
     paths: tuple[str, ...],
     changed_ranges: str | None,
 ) -> ChangedRegionSet:
-    # Only an absent flag means no filter. An empty value asks to scope the run and names no range, so it
-    # goes to the parser, which refuses it, rather than silently widening the scan to the whole tree.
-    """Resolve explicit hook ranges against requested paths and paths named by findings.
+    """Resolve explicit hook ``--changed-ranges`` against requested paths and paths named by findings.
+
+    Shared by hook baseline credit spending and diff filtering so both agree on which lines count as edited.
 
     Args:
-        findings: Findings whose file paths join the set receiving explicit ranges.
-        paths: Requested path spellings, normalised to forward slashes with outer slashes removed.
-        changed_ranges: Range text to parse; None disables the filter, while empty text is rejected.
+        findings: Findings whose project-relative file paths join the set receiving explicit ranges; empty relies on ``paths`` alone.
+        paths: Requested path spellings, normalised to forward slashes with outer slashes removed; empty relies on ``findings`` alone.
+        changed_ranges: Explicit range text such as ``"3-3,8-10"``; None disables filtering, while an empty string is rejected.
 
     Returns:
-        An inactive set when no range flag was supplied, otherwise an explicit set for the nonempty normalised paths.
+        An inactive set when ``changed_ranges`` is None, otherwise an explicit set covering the nonempty normalised paths.
 
     Raises:
-        ValueError: If explicit changed-range syntax is invalid.
+        ValueError: If explicit changed-range syntax is invalid or empty.
     """
+    # Only an absent --changed-ranges flag disables filtering; an empty string is passed to the parser to fail closed instead of widening the scan.
     if changed_ranges is None:
         return ChangedRegionSet(source="")
     source_paths = {
@@ -754,7 +823,7 @@ def _materialize_git_base(
     target_root: Path,
     base_ref: str,
     paths: tuple[str, ...],
-) -> None:
+) -> list[str]:
     """Write selected files from a Git tree into the base-analysis directory.
 
     Args:
@@ -764,7 +833,7 @@ def _materialize_git_base(
         paths: Git pathspecs selecting files; empty selects the whole tree.
 
     Returns:
-        None; selected files are written beneath target_root.
+        Project-relative paths actually written beneath target_root; empty when none existed in the base tree.
 
     Raises:
         ValueError: If a Git command cannot resolve or read the requested tree.
@@ -775,13 +844,17 @@ def _materialize_git_base(
         project_root,
         ["ls-tree", "-r", "--name-only", base_ref, "--", *pathspecs],
     )
-    for rel_path in tree_paths:
-        if rel_path.startswith("/") or ".." in Path(rel_path).parts:
+    materialized_paths: list[str] = []
+    # Materialise each tracked base file into the temporary directory, rejecting any path that could escape target_root.
+    for relative_path in tree_paths:
+        if relative_path.startswith("/") or ".." in Path(relative_path).parts:
             continue
-        blob = _git_bytes(project_root, ["show", f"{base_ref}:{rel_path}"])
-        target = target_root / rel_path
+        blob = _git_bytes(project_root, ["show", f"{base_ref}:{relative_path}"])
+        target = target_root / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(blob)
+        materialized_paths.append(relative_path)
+    return materialized_paths
 
 
 def _git_lines(project_root: Path, args: list[str]) -> list[str]:

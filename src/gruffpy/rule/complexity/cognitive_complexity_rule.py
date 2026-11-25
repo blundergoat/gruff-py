@@ -286,13 +286,13 @@ class _Counter:
         else:
             self.visit(node.test, nesting)
 
-    def _visit_Try(self, node: ast.Try, nesting: int) -> None:
-        """Add 1 plus the nesting depth for each except handler of a try statement and visit all of its blocks.
+    def _visit_Try(self, node: ast.Try | ast.TryStar, nesting: int) -> None:
+        """Add 1 plus the nesting depth for each except or except* handler of a try statement and visit all of its blocks.
 
         Handler bodies are visited one level deeper; the try body, else block and finally block are visited at the current depth.
 
         Args:
-            node: Try statement to score.
+            node: Try or TryStar statement to score.
             nesting: Nesting depth of the try statement, added to each handler's increment.
 
         Returns:
@@ -309,6 +309,18 @@ class _Counter:
             self.visit(stmt, nesting)
         for stmt in node.finalbody:
             self.visit(stmt, nesting)
+
+    def _visit_TryStar(self, node: ast.TryStar, nesting: int) -> None:
+        """Score a Python 3.11+ try/except* block using the same handler-increment rules as try/except.
+
+        Args:
+            node: TryStar statement to score.
+            nesting: Nesting depth of the try statement, added to each except* handler's increment.
+
+        Returns:
+            None; handler increments and visited statements contribute to this counter's score.
+        """
+        self._visit_Try(node, nesting)
 
     def _visit_IfExp(self, node: ast.IfExp, nesting: int) -> None:
         """Add 1 plus the nesting depth for a conditional expression and visit its three operands one level deeper.

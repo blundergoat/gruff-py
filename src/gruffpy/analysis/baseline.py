@@ -43,8 +43,25 @@ _SENSITIVE_INELIGIBILITY_REASON = (
 _UNLOCATED_SPEND_LINE = 2**31
 """Where a finding with no line sorts when a reviewed count is spent, so an unlocated occurrence is always spent last."""
 
+_UNREVIEWED_BASELINE_STATUSES: frozenset[str] = frozenset({"new", "collision", "notEligible"})
+"""Statuses that remain unreviewed after baseline matching and trigger ``--fail-on-new``."""
+
 _LEGACY_ROW_CONTAINERS = ("findings", "groups", "entries")
 """The three keys the five 0.5 writers used for their row list; a file naming two of them cannot be read alike twice."""
+
+
+def is_unreviewed_baseline_status(status: str | None) -> bool:
+    """Report whether a baseline classification leaves a finding unreviewed for ``--fail-on-new``.
+
+    Used by ``analyse`` and ``hook`` exit gates so new issues, declaration collisions, and ineligible secrets all block CI together.
+
+    Args:
+        status: Baseline status for one finding, or None when no baseline was applied to the scan.
+
+    Returns:
+        True when status is ``new``, ``collision``, or ``notEligible``; False when reviewed (``unchanged``) or absent (None).
+    """
+    return status in _UNREVIEWED_BASELINE_STATUSES
 
 
 class BaselineError(ValueError):
@@ -622,6 +639,7 @@ def apply_baseline(
     source: str,
     scan_scope: str = "full-project",
     declaration_position: Callable[[Finding], int] | None = None,
+    is_in_changed_region: Callable[[Finding], bool] | None = None,
 ) -> BaselineApplyResult:
     """Spend reviewed counts and keep the findings that still need attention.
     Same-named declarations use their positions to keep separate reviews apart. A partial scan leaves unseen debt unresolved.
@@ -633,6 +651,7 @@ def apply_baseline(
         source: Origin label recorded on the report (``explicit``/``default``).
         scan_scope: ``full-project`` when the run covered the whole project, ``partial-scope`` when paths narrowed it.
         declaration_position: Declaration resolver from the runner; ``None`` ranks by line.
+        is_in_changed_region: Predicate for active diff runs so untouched lines spend reviewed counts first; ``None`` uses line order.
 
     Returns:
         The retained findings, the report, all collisions and each finding's baseline classification.
@@ -650,7 +669,7 @@ def apply_baseline(
 
     identities = _identities_or_error(findings, declaration_position)
     groups = _group_by_identity(findings, identities)
-    statuses = _classify(findings, identities, groups, baseline.by_identity())
+    statuses = _classify(findings, identities, groups, baseline.by_identity(), is_in_changed_region=is_in_changed_region)
     retained_findings, counts = _partition(findings, statuses)
     # A partial scan can miss findings outside its scope, so only a full scan counts unmatched reviews as resolved.
     resolved_entries, resolved_occurrences = _resolved_surplus(baseline, groups, statuses) if scan_scope == "full-project" else ((), 0)
@@ -790,6 +809,8 @@ def _classify(
     identities: Sequence[FindingIdentity | None],
     groups: dict[str, _IdentityGroup],
     reviewed_by_identity: dict[str, BaselineEntry],
+    *,
+    is_in_changed_region: Callable[[Finding], bool] | None = None,
 ) -> list[str]:
     """Classify reviewed debt without hiding collisions or ineligible findings.
 
@@ -798,6 +819,7 @@ def _classify(
         identities: Identity slots aligned with findings; None marks an occurrence not eligible for matching.
         groups: Occurrences and declarations collected for each eligible identity.
         reviewed_by_identity: Accepted baseline rows that supply each identity's reviewed count.
+        is_in_changed_region: Predicate ranking untouched lines ahead of edited lines; None orders a full scan by line then column.
 
     Returns:
         One status per finding in scan order: new, unchanged, collision, or notEligible.
@@ -817,23 +839,35 @@ def _classify(
             continue
         reviewed = reviewed_by_identity.get(identity)
         reviewed_count = reviewed.count if reviewed is not None else 0
-        # Spend the reviewed count on the earliest locations first, with unlocated findings sorted last. Ties keep scan order.
-        for position, index in enumerate(sorted(group.indexes, key=lambda item: _spend_order(findings[item]))):
+        # Spend the reviewed count on unchanged locations first (when diff-scoped), then earliest locations; ties keep scan order.
+        ordered_indexes = sorted(
+            group.indexes,
+            key=lambda item: _spend_order(findings[item], is_in_changed_region),
+        )
+        # The reviewed count covers the occurrences outside the edit first, so an extra copy the user just added is the one reported as new.
+        for position, index in enumerate(ordered_indexes):
             statuses[index] = "unchanged" if position < reviewed_count else "new"
     return statuses
 
 
-def _spend_order(finding: Finding) -> tuple[int, int]:
-    """Order one identity's occurrences by line then column; an unlocated finding sorts last.
+def _spend_order(
+    finding: Finding,
+    is_in_changed_region: Callable[[Finding], bool] | None = None,
+) -> tuple[int, int, int]:
+    """Order one identity's occurrences so untouched lines spend reviewed counts before newly edited lines.
+
+    Within each group, occurrences sort by line then column with unlocated findings sorted last.
 
     Args:
         finding: Occurrence whose position decides which reviewed count is spent first.
+        is_in_changed_region: Predicate returning True for occurrences on edited lines; None disables changed-region priority for full scans.
 
     Returns:
-        Line and column sorting key, using zero for an absent column.
+        Tuple ``(region_rank, line, column)``, using zero for an absent column and ``_UNLOCATED_SPEND_LINE`` when line is None.
     """
+    region_rank = 1 if (is_in_changed_region is not None and is_in_changed_region(finding)) else 0
     line = finding.line if finding.line is not None else _UNLOCATED_SPEND_LINE
-    return (line, finding.column if finding.column is not None else 0)
+    return (region_rank, line, finding.column if finding.column is not None else 0)
 
 
 def _partition(findings: Sequence[Finding], statuses: Sequence[str]) -> tuple[list[Finding], dict[str, int]]:

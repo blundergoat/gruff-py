@@ -54,6 +54,7 @@ _USER_CHOSEN_TARGET_MODE = 0o640
 _FULLY_CUSTOMISED_YAML = (
     "schemaVersion: gruff-py.config.v0.1\n"
     "minimumPythonVersion: '3.12'\n"
+    "minimumSeverity: warning\n"
     "failOn:\n  analyse: error\n  report: warning\n  dashboard: advisory\n"
     "outputVolumeHintThreshold: 7\n"
     "paths:\n  ignore:\n    - custom/**\n"
@@ -387,6 +388,8 @@ def test_init_force_preserves_all_supported_semantics(tmp_path: Path) -> None:
 
     assert written_target == target
     assert after == before
+    assert after.display_floor is not None
+    assert after.display_floor.value == "warning"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="umask-derived modes only apply on POSIX.")

@@ -200,7 +200,6 @@ class ConfigLoader:
 
         Raises:
             ConfigError: When the file is missing, its format or settings are invalid, or TOML has no Gruff table.
-            ValueError: When the parsed minimum Python version is below 3.11.
         """
         if not path.exists():
             raise ConfigError(f"Config file does not exist: {path}")
@@ -269,6 +268,9 @@ class ConfigLoader:
         if unknown:
             raise ConfigError(f"Unknown gruff keys in {source}: {sorted(unknown)}")
         ConfigLoader._validate_schema_version(section, source)
+        # A malformed minimumPythonVersion stops the load with a config error instead of being ignored.
+        if "minimumPythonVersion" in section:
+            _parse_python_version(section["minimumPythonVersion"], source=source)
         if "minimumSeverity" in section:
             ConfigLoader._validate_display_floor(section["minimumSeverity"], source)
         if "failOn" in section:
@@ -428,7 +430,6 @@ class ConfigLoader:
 
         Raises:
             ConfigError: When the Python version cannot be parsed, a setting is invalid, or strict mode rejects an override.
-            ValueError: When the requested minimum Python version is below the supported minimum.
         """
         config = self._defaults
 
@@ -1001,24 +1002,33 @@ def _parse_dead_code_allowlist(section: Any) -> DeadCodeAllowlist:
     )
 
 
-def _parse_python_version(value: Any) -> tuple[int, int]:
-    """Parse the minimum Python version used to tailor modernisation findings.
+def _parse_python_version(value: Any, *, source: str | None = None) -> tuple[int, int]:
+    """Parse and validate ``minimumPythonVersion`` from project config before building ``AnalysisConfig``.
+
+    Runs during config loading so invalid or pre-3.11 versions surface as a structured ``ConfigError`` across text, JSON, and hook commands.
 
     Args:
-        value: Raw version string with at least two integer components separated by dots; later components are ignored.
+        value: Raw config value expected to be a dotted version string like ``"3.11"``; extra patch segments are ignored.
+        source: Config file or TOML table label prefixed to validation errors, or None when called without a file context.
 
     Returns:
-        The major and minor components as integers.
+        The ``(major, minor)`` version tuple, guaranteed to be at least ``(3, 11)``.
 
     Raises:
-        ConfigError: When the value is not a string with two components that can be parsed as integers.
+        ConfigError: When the value is not a dotted numeric string or names a Python version below 3.11.
     """
+    prefix = f"{source} " if source else ""
     if isinstance(value, str):
         parts = value.split(".")
         if len(parts) >= 2:
             try:
-                return (int(parts[0]), int(parts[1]))
-            # The shared ConfigError includes the original input and an example, so a separate log would repeat the failure.
+                version = (int(parts[0]), int(parts[1]))
+            # For example, a user writing `minimumPythonVersion: "latest"` falls through to the shared ConfigError showing a valid example.
             except ValueError:
                 pass
-    raise ConfigError(f"minimumPythonVersion must be a string like '3.11', got {value!r}")
+            else:
+                # gruff-py itself needs Python 3.11, so an older target version is refused as ConfigError.
+                if version < (3, 11):
+                    raise ConfigError(f"{prefix}minimumPythonVersion must be at least '3.11', got {value!r}.")
+                return version
+    raise ConfigError(f"{prefix}minimumPythonVersion must be a string like '3.11', got {value!r}")

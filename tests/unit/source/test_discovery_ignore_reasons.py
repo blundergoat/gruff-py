@@ -403,3 +403,71 @@ def test_first_party_names_that_only_resemble_the_classes_stay_in_scope(tmp_path
         "src/admin.mini.py",
         "src/min.py",
     }
+
+
+def test_ignored_external_symlink_does_not_fail_containment(tmp_path: Path) -> None:
+    """Honor .gitignore and paths.ignore on symlinks before checking external-target containment.
+
+    Args:
+        tmp_path: Temporary directory holding both the project root and an outside target file.
+
+    Returns:
+        None. Checks that ignored external symlinks stay out of outside_paths while non-ignored ones still trigger containment.
+    """
+    project = tmp_path / "project"
+    outside = tmp_path / "outside.py"
+    _write(outside, "value = 1\n")
+    _write(project / ".gitignore", "ignored_git_link.py\n")
+    _write(project / "src" / "app.py", "value = 2\n")
+    (project / "ignored_git_link.py").symlink_to(outside)
+    (project / "ignored_config_link.py").symlink_to(outside)
+
+    ignored_run = SourceDiscovery(project).discover(["."], configured_ignore_patterns=["ignored_config_link.py"])
+
+    assert [source.display_path for source in ignored_run.files] == ["src/app.py"]
+    assert ignored_run.outside_paths == ()
+    assert ignored_run.ignored_paths == ("ignored_config_link.py",)
+
+    (project / "live_external_link.py").symlink_to(outside)
+    escaping_run = SourceDiscovery(project).discover(["."], configured_ignore_patterns=["ignored_config_link.py"])
+
+    assert escaping_run.outside_paths == ("live_external_link.py",)
+
+
+def test_in_project_symlink_into_an_ignored_folder_stays_skipped(tmp_path: Path) -> None:
+    """Judge an in-project link by its target too, so a link into a paths.ignore folder is not analysed.
+
+    Args:
+        tmp_path: Temporary project root holding the ignored target folder and the link.
+
+    Returns:
+        None. Checks that the link is skipped and reported under its own path.
+    """
+    _write(tmp_path / "generated" / "model.py", "value = 1\n")
+    _write(tmp_path / "src" / "app.py", "value = 2\n")
+    (tmp_path / "src" / "model.py").symlink_to(tmp_path / "generated" / "model.py")
+
+    run = SourceDiscovery(tmp_path).discover(["src"], configured_ignore_patterns=["generated/**"])
+
+    assert [source.display_path for source in run.files] == ["src/app.py"]
+    assert run.ignored_paths == ("src/model.py",)
+
+
+def test_in_project_symlink_into_a_gitignored_folder_stays_skipped(tmp_path: Path) -> None:
+    """Judge an in-project link by its target against .gitignore too, so a link into a gitignored folder is not analysed.
+
+    Args:
+        tmp_path: Temporary project root holding the .gitignore rule, target folder, and link.
+
+    Returns:
+        None. Checks that only the non-ignored module is discovered and the symlinked gitignored target is skipped.
+    """
+    _write(tmp_path / ".gitignore", "generated/\n")
+    _write(tmp_path / "generated" / "model.py", "value = 1\n")
+    _write(tmp_path / "src" / "app.py", "value = 2\n")
+    (tmp_path / "src" / "model.py").symlink_to(tmp_path / "generated" / "model.py")
+
+    run = SourceDiscovery(tmp_path).discover(["src"])
+
+    assert [source.display_path for source in run.files] == ["src/app.py"]
+    assert run.outside_paths == ()

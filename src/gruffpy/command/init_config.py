@@ -186,10 +186,13 @@ def _scaffold_document(
     document: dict[str, Any] = {
         "schemaVersion": CONFIG_SCHEMA_VERSION,
         "failOn": minimum_severity,
-        "minimumPythonVersion": f"{major}.{minor}",
-        "outputVolumeHintThreshold": config.output_volume_hint_threshold,
-        "paths": {"ignore": list(config.ignored_path_patterns)},
     }
+    # Preserve an explicit minimumSeverity display floor across `gruff-py init --force`, while omitting it from fresh starter configs when unset.
+    if config.display_floor is not None:
+        document["minimumSeverity"] = config.display_floor.value
+    document["minimumPythonVersion"] = f"{major}.{minor}"
+    document["outputVolumeHintThreshold"] = config.output_volume_hint_threshold
+    document["paths"] = {"ignore": list(config.ignored_path_patterns)}
     if config.deep_scan_budget.override == "config":
         document["deepScanBudget"] = {
             "enabled": config.deep_scan_budget.enabled,
@@ -318,7 +321,6 @@ def _validate_and_atomically_replace(
     Raises:
         ConfigError: If staging or replacement fails, strict reload rejects the YAML with ConfigError, or the loaded settings differ.
             The target stays unchanged and no partial target is installed.
-        ValueError: If strict reload rejects a minimum Python version below the supported minimum.
     """
     staged_path = _write_staged_yaml(target, rendered_yaml)
     try:

@@ -60,8 +60,6 @@ BUILT_IN_TEST_PATH_REASON = "Test, fixture and example files hold sample credent
 BUILT_IN_SECURITY_TEST_PATH_REASON = "Test, fixture and example files exercise insecure calls on purpose, so security rules skip them by path."
 """Reason on each security ``builtInTestPath[...]`` audit row; every port publishes these exact words (FAMILY-CONTRACT.md section 13a)."""
 
-# The one sensitive-data rule that still reads test paths, because finding realistic personal data in fixtures is its job.
-_BUILT_IN_TEST_PATH_EXEMPT_RULE = "sensitive-data.pii-test-fixture"
 # Directory names, compared case-insensitively, that make a path test code, e.g. ``tests/`` or ``Fixtures/``.
 _BUILT_IN_TEST_PATH_DIRECTORIES = frozenset({"test", "tests", "__tests__", "spec", "testdata", "fixtures", "examples"})
 # Matches a whole base name that marks a test file in any family language, e.g. ``test_login.py`` or ``login_test.py``.
@@ -75,8 +73,7 @@ def apply_built_in_test_path_skip(
     """Hide sensitive-data and security findings in test, fixture and example files, and publish one audit row per hidden file and rule.
 
     A user scanning a project with sample keys or a deliberate ``subprocess`` call in ``tests/fixtures/`` sees
-    ``builtInTestPath[...]`` rows instead of findings. The skip is never silent, and ``sensitive-data.pii-test-fixture``
-    keeps reading these files (FAMILY-CONTRACT.md section 13a).
+    ``builtInTestPath[...]`` rows instead of findings, so the skip is never silent (FAMILY-CONTRACT.md section 13a).
 
     Args:
         findings: Findings left after the user's exclusions, in report order.
@@ -89,7 +86,7 @@ def apply_built_in_test_path_skip(
     kept: list[Finding] = []
     # Each finding either stays in the report or is folded into its file's audit row.
     for finding in findings:
-        # Only the two pillars' findings in test code are skipped, and never the fixture-PII rule.
+        # Only security and sensitive-data findings in test code are skipped here.
         if _is_skipped_on_test_paths(finding.rule_id) and is_built_in_test_path(finding.file_path):
             file_and_rule = (finding.file_path, finding.rule_id)
             skipped_count_by_file_and_rule[file_and_rule] = skipped_count_by_file_and_rule.get(file_and_rule, 0) + 1
@@ -116,18 +113,15 @@ def apply_built_in_test_path_skip(
 
 
 def _is_skipped_on_test_paths(rule_id: str) -> bool:
-    """Return whether the test-path class covers a rule: every sensitive-data rule but the fixture-PII rule, and every security rule.
+    """Return whether the test-path class covers a rule: every security and sensitive-data rule.
 
     Args:
-        rule_id: The finding's rule id, e.g. ``security.subprocess-shell-true``.
+        rule_id: The finding's rule id, e.g. ``security.shell-injection``.
 
     Returns:
         True when a finding of this rule on a test path is skipped and counted.
     """
-    # Security rules are skipped whole, because a test exercises insecure calls on purpose.
-    if rule_id.startswith("security."):
-        return True
-    return rule_id.startswith("sensitive-data.") and rule_id != _BUILT_IN_TEST_PATH_EXEMPT_RULE
+    return rule_id.startswith(("security.", "sensitive-data."))
 
 
 def is_built_in_test_path(file_path: str) -> bool:

@@ -5,6 +5,7 @@ threshold: 30 code lines, measured with the shared ``lines_for_size`` helper.
 """
 
 import ast
+from pathlib import Path
 
 from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.finding import Finding
@@ -22,7 +23,11 @@ _SETUP_NAMES: frozenset[str] = frozenset({"setUp", "setUpClass", "setup_method",
 
 
 class SetupBloatRule(Rule):
-    """Flag `setUp`, `setup_method`, or fixture functions whose line count exceeds the threshold."""
+    """Flag oversized ``setUp``, ``setup_method``, or fixture functions when a project enables ``test-quality.setup-bloat``.
+
+    Measures code lines against ``maxSetupLines`` (default 30) so reviewers can spot over-shared test state.
+    Plain ``setup`` functions qualify only on test paths so production lifecycle hooks stay quiet.
+    """
 
     ID = "test-quality.setup-bloat"
 
@@ -62,11 +67,13 @@ class SetupBloatRule(Rule):
         definition = self.definition()
         settings = context.settings_for(definition)
         threshold = settings.numeric_threshold("maxSetupLines")
+        setup_path = _project_relative_setup_path(unit, context)
         findings: list[Finding] = []
         for node in ast.walk(unit.tree):
             if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            if not _is_setup(node, unit.file.absolute_path):
+            # Only named setup hooks such as setUp or setup_method, and @pytest.fixture(...) functions, count as setup code.
+            if not _is_setup(node, setup_path):
                 continue
             lines = lines_for_size(node, code_line_numbers(unit.source, unit.tree))
             if lines <= threshold:
@@ -108,18 +115,35 @@ def _is_setup(fn: ast.FunctionDef | ast.AsyncFunctionDef, source_path: str) -> b
     return any((call_target_name(d) or "").split(".")[-1] == "fixture" for d in fn.decorator_list if isinstance(d, ast.Call))
 
 
+def _project_relative_setup_path(unit: AnalysisUnit, context: RuleContext) -> str:
+    """Resolve the unit path relative to the scanned project root for test-path detection.
+
+    Args:
+        unit: Source unit supplying the absolute file path.
+        context: Rule execution context supplying the scanned project root.
+
+    Returns:
+        POSIX path relative to the project root, or the unit's absolute path when the file sits outside that root.
+    """
+    try:
+        return Path(unit.file.absolute_path).relative_to(Path(context.project_root)).as_posix()
+    except ValueError:
+        # For example, scanning an explicit test file outside the project root keeps its full path so test-directory segments survive.
+        return unit.file.absolute_path
+
+
 def _is_test_setup_path(source_path: str) -> bool:
     """Recognize test paths before treating plain ``setup`` as a test hook.
 
     Args:
-        source_path: Full source path, retaining test directories for explicit-file scans.
+        source_path: Project-relative source path, retaining test directories for explicit-file scans inside the root.
 
     Returns:
         True for test directories, conftest.py, or conventional test-file names.
     """
     *directories, filename = source_path.replace("\\", "/").lower().split("/")
     return (
-        any(directory in {"test", "tests"} for directory in directories)
+        any(directory in {"test", "tests", "testing"} for directory in directories)
         or filename == "conftest.py"
         or (filename.startswith("test_") and filename.endswith(".py"))
         or filename.endswith("_test.py")

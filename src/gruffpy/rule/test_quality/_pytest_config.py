@@ -1,12 +1,12 @@
-"""Read pytest and coverage configuration from the project's ``pyproject.toml``.
+"""Read pytest and coverage configuration for a project root.
 
-Project-config rules consume :func:`read_pytest_config` to check whether the
-project pins strict-config flags, escalates deprecation warnings, and declares
-a coverage source, and ``test-quality.no-assertions`` reads which files pytest
-collects. Results are cached per project root via a WeakValueDictionary
-so concurrent rules share the parse.
+Project-config rules use :func:`read_pytest_config` to check ``pyproject.toml`` for strict-config flags, deprecation filters and coverage source.
+``test-quality.no-assertions`` reads ``python_files`` from ``pytest.ini``, ``pyproject.toml``, ``tox.ini`` or ``setup.cfg``, in pytest's order.
+
+Results are cached per project root in a module-level dictionary.
 """
 
+import configparser
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,14 +15,17 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class PytestConfig:
-    """Snapshot of pytest-relevant config in a project.
+    """Snapshot of pytest and coverage settings for one scanned project root.
+
+    Project-config rules read ``addopts``, ``filterwarnings``, and ``coverage_source`` from ``pyproject.toml`` when ``is_present`` is True.
+    ``test-quality.no-assertions`` reads ``python_files`` using pytest's config precedence even when ``pyproject.toml`` has no pytest table.
 
     Attributes:
-        addopts: Parsed ``tool.pytest.ini_options.addopts`` tokens.
-        filterwarnings: Pytest warning-filter entries.
-        coverage_source: Coverage source package entries.
-        python_files: Configured ``python_files`` collection globs; empty means pytest's defaults apply.
-        is_present: Whether pytest configuration was found.
+        addopts: Parsed ``tool.pytest.ini_options.addopts`` tokens; empty when omitted or when ``pyproject.toml`` has no pytest table.
+        filterwarnings: Pytest warning-filter entries from ``pyproject.toml``; empty when omitted.
+        coverage_source: Coverage source package entries from ``pyproject.toml``; empty when omitted.
+        python_files: Configured ``python_files`` collection globs from the winning pytest config file; empty means pytest defaults apply.
+        is_present: True only when ``pyproject.toml`` defines ``[tool.pytest.ini_options]``.
     """
 
     addopts: tuple[str, ...] = ()
@@ -99,41 +102,111 @@ def reset_cache() -> None:
 
 
 def _read(project_root: str) -> PytestConfig:
-    """Read pytest and coverage settings from pyproject.toml without caching.
+    """Read pytest and coverage settings for a project root without caching.
+
+    ``is_present``, ``addopts``, ``filterwarnings``, and ``coverage_source`` come from
+    ``pyproject.toml``. ``python_files`` follows pytest's config-file precedence across
+    ``pytest.ini``, ``pyproject.toml``, ``tox.ini``, and ``setup.cfg``.
 
     Args:
-        project_root: Directory containing the pyproject.toml file to read.
+        project_root: Directory containing the project configuration files to read.
 
     Returns:
-        A snapshot of supported settings. A missing file, a caught OSError or TOMLDecodeError, or a missing tool table yields an empty snapshot.
-        Without tool.pytest.ini_options, is_present is False even if coverage settings were read.
+        A snapshot of supported settings. Missing or unreadable files leave the corresponding fields empty.
+        Without ``tool.pytest.ini_options`` in ``pyproject.toml``, ``is_present`` is False even if INI files or coverage settings exist.
     """
-    path = Path(project_root) / "pyproject.toml"
-    if not path.is_file():
-        return PytestConfig()
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return PytestConfig()
-
-    tool = _as_table(data.get("tool"))
-    if tool is None:
-        return PytestConfig()
-    pytest_section = _nested_table(tool, "pytest", "ini_options")
-    coverage_section = _nested_table(tool, "coverage", "run")
+    root = Path(project_root)
+    pytest_section, coverage_section = _read_pyproject_sections(root / "pyproject.toml")
 
     addopts = _split_str(_table_value(pytest_section, "addopts"))
     filterwarnings = _string_list(_table_value(pytest_section, "filterwarnings"))
     coverage_source = _string_list(_table_value(coverage_section, "source"))
-    python_files = _split_str(_table_value(pytest_section, "python_files"))
+    python_files = _resolve_python_files(root, pytest_section)
 
     return PytestConfig(
         addopts=tuple(addopts),
         filterwarnings=tuple(filterwarnings),
         coverage_source=tuple(coverage_source),
-        python_files=tuple(python_files),
+        python_files=python_files,
         is_present=pytest_section is not None,
     )
+
+
+def _read_pyproject_sections(path: Path) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Read the pytest and coverage tables from ``pyproject.toml`` when present and valid.
+
+    Args:
+        path: Path to ``pyproject.toml`` under the project root.
+
+    Returns:
+        Tuple of ``(tool.pytest.ini_options, tool.coverage.run)`` tables, each None when missing or unreadable.
+    """
+    # A project without pyproject.toml has no pytest or coverage tables to read.
+    if not path.is_file():
+        return None, None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        # For example, a broken or unreadable pyproject.toml leaves pytest project-config checks inactive instead of aborting `analyse`.
+        return None, None
+    tool = _as_table(data.get("tool"))
+    # A pyproject.toml without a [tool] table configures neither pytest nor coverage.
+    if tool is None:
+        return None, None
+    return _nested_table(tool, "pytest", "ini_options"), _nested_table(tool, "coverage", "run")
+
+
+def _resolve_python_files(root: Path, pyproject_pytest_section: dict[str, Any] | None) -> tuple[str, ...]:
+    """Resolve ``python_files`` globs from the four pytest config sources gruff reads, in pytest's precedence order.
+
+    ``pytest.ini`` wins as soon as it exists, then ``pyproject.toml`` ``[tool.pytest.ini_options]``, ``tox.ini`` ``[pytest]`` and ``setup.cfg``.
+    Other pytest sources, such as ``.pytest.ini``, are not read, so a project that sets ``python_files`` only there gets the default globs.
+
+    Args:
+        root: Project root directory holding candidate pytest config files.
+        pyproject_pytest_section: Parsed ``[tool.pytest.ini_options]`` table, or None when absent.
+
+    Returns:
+        Configured ``python_files`` globs from the winning config source, or empty when pytest defaults apply.
+    """
+    pytest_ini = root / "pytest.ini"
+    # An existing pytest.ini takes precedence over pyproject.toml, tox.ini, and setup.cfg even when empty.
+    if pytest_ini.is_file():
+        return _ini_section_python_files(pytest_ini, "pytest") or ()
+    # pyproject.toml wins next whenever it has a [tool.pytest.ini_options] table, even one without python_files.
+    if pyproject_pytest_section is not None:
+        return tuple(_split_str(_table_value(pyproject_pytest_section, "python_files")))
+    # Then tox.ini and setup.cfg are tried in pytest's order; the first with a pytest section wins.
+    for filename, section in (("tox.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+        globs = _ini_section_python_files(root / filename, section)
+        if globs is not None:
+            return globs
+    return ()
+
+
+def _ini_section_python_files(path: Path, section: str) -> tuple[str, ...] | None:
+    """Read ``python_files`` from one INI config section if the file exists and defines that section.
+
+    Args:
+        path: Candidate INI configuration file.
+        section: Section header name to inspect, such as ``pytest`` or ``tool:pytest``.
+
+    Returns:
+        Tuple of globs when the section exists (empty if the key is absent), or None when the file or section is absent or unreadable.
+    """
+    # A missing INI file passes the search on to the next pytest config source.
+    if not path.is_file():
+        return None
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read_string(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, configparser.Error):
+        # For example, a legacy Latin-1 or syntactically invalid setup.cfg falls through to the next source or pytest defaults.
+        return None
+    # A file without the pytest section, such as a tox.ini used only for tox, does not configure pytest.
+    if not parser.has_section(section):
+        return None
+    return tuple(_split_str(parser.get(section, "python_files", fallback=None)))
 
 
 def _as_table(value: object) -> dict[str, Any] | None:

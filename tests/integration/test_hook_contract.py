@@ -646,6 +646,151 @@ def test_hook_reports_ignored_paths_and_config_errors(
     assert payload["config"]["error"]["remediation"]
 
 
+def test_hook_fail_on_new_blocks_ineligible_sensitive_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit 1 under ``hook --fail-on none --fail-on-new`` when a sensitive-data finding cannot be baselined.
+
+    Args:
+        tmp_path: Project root holding a module with a synthetic AWS access key and a generated baseline.
+        monkeypatch: Changes into the project so hook resolves relative paths.
+
+    Returns:
+        None. Generates a baseline and checks that ``--fail-on-new`` exits 1 on the ineligible secret.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    synthetic_key = "AKIA" + "Z7Q9M2X4K8L5N3P6"
+    (src / "keys.py").write_text(f'"""Keys."""\nAWS_KEY = "{synthetic_key}"\n')
+    baseline_path = tmp_path / "gruff-baseline.json"
+    _generate_baseline(baseline_path)
+
+    result = _invoke_hook("--no-config", "--baseline", str(baseline_path), "--fail-on", "none", "--fail-on-new", "--format", "json", "src/keys.py")
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 1, result.output
+    assert any(finding["baselineStatus"] == "notEligible" for finding in payload["findings"])
+
+
+@pytest.mark.skipif(_GIT is None, reason="git binary not installed")
+def test_hook_diff_accepts_absolute_paths_and_gates_fail_on_new(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Normalize in-project absolute paths for ``hook --diff`` and gate surviving findings under ``--fail-on-new``.
+
+    Args:
+        tmp_path: Temporary git repository holding a module with one baseline shell-injection finding.
+        monkeypatch: Changes into the temporary repository.
+
+    Returns:
+        None. Checks that pre-existing findings are subtracted for absolute paths and newly added findings exit 1 under ``--fail-on-new``.
+    """
+    monkeypatch.chdir(tmp_path)
+    _git("init")
+    _git("config", "user.email", "tests@example.invalid")
+    _git("config", "user.name", "Tests")
+    src = tmp_path / "src"
+    src.mkdir()
+    target = src / "app.py"
+    target.write_text('"""Server."""\napp.run(host="0.0.0.0")\n')
+    _git("add", "src/app.py")
+    _git("commit", "-m", "initial")
+
+    clean_result = _invoke_hook("--no-config", "--diff", "HEAD", "--fail-on", "none", "--fail-on-new", "--format", "json", str(target))
+    clean_payload = json.loads(clean_result.stdout)
+    assert clean_result.exit_code == 0, clean_result.output
+    assert clean_payload["findings"] == []
+
+    target.write_text('"""Server."""\napp.run(host="0.0.0.0")\nbackup.run(host="0.0.0.0")\n')
+    new_result = _invoke_hook("--no-config", "--diff", "HEAD", "--fail-on", "none", "--fail-on-new", "--format", "json", str(target))
+    new_payload = json.loads(new_result.stdout)
+    assert new_result.exit_code == 1, new_result.output
+    assert len(new_payload["findings"]) == 1
+    assert new_payload["findings"][0]["baselineStatus"] is None
+
+
+@pytest.mark.skipif(_GIT is None, reason="git binary not installed")
+def test_hook_diff_fails_closed_when_base_revision_cannot_parse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail closed with exit 2 when the ``--diff`` base revision has a fatal parse diagnostic.
+
+    Args:
+        tmp_path: Temporary git repository whose HEAD commit contains invalid Python syntax.
+        monkeypatch: Changes into the temporary repository.
+
+    Returns:
+        None. Checks that a syntax-broken base revision emits a fatal diagnostic instead of masquerading as zero base findings.
+    """
+    monkeypatch.chdir(tmp_path)
+    _git("init")
+    _git("config", "user.email", "tests@example.invalid")
+    _git("config", "user.name", "Tests")
+    src = tmp_path / "src"
+    src.mkdir()
+    target = src / "app.py"
+    target.write_text("def broken(:\n")
+    _git("add", "src/app.py")
+    _git("commit", "-m", "broken base")
+    target.write_text('"""Fixed."""\nVALUE = 1\n')
+
+    result = _invoke_hook("--no-config", "--diff", "HEAD", "--format", "json", "src/app.py")
+    payload = json.loads(result.stdout)
+
+    assert result.exit_code == 2, result.output
+    assert payload["diagnostics"][0]["type"] == "changed-region"
+
+
+@pytest.mark.skipif(_GIT is None, reason="git binary not installed")
+def test_hook_diff_changed_ranges_spends_base_credit_on_unchanged_occurrence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a newly inserted earlier finding visible under ``hook --diff --changed-ranges`` when a matching later finding is untouched.
+
+    Args:
+        tmp_path: Temporary git repository with one pre-existing finding on line 5 and a newly inserted matching finding on line 3.
+        monkeypatch: Changes into the temporary repository.
+
+    Returns:
+        None. Checks that the unchanged later finding spends the base credit while the changed line 3 finding survives.
+    """
+    monkeypatch.chdir(tmp_path)
+    _git("init")
+    _git("config", "user.email", "tests@example.invalid")
+    _git("config", "user.name", "Tests")
+    src = tmp_path / "src"
+    src.mkdir()
+    target = src / "app.py"
+    target.write_text('"""Server."""\nFIRST = 1\nSECOND = 2\nTHIRD = 3\napp.run(host="0.0.0.0")\n')
+    _git("add", "src/app.py")
+    _git("commit", "-m", "initial")
+    target.write_text('"""Server."""\nFIRST = 1\napp.run(host="0.0.0.0")\nTHIRD = 3\napp.run(host="0.0.0.0")\n')
+
+    result = _invoke_hook("--no-config", "--diff", "HEAD", "--changed-ranges", "3-3", "--format", "json", "src/app.py")
+    payload = json.loads(result.stdout)
+
+    assert result.exit_code == 0, result.output
+    assert [finding["line"] for finding in payload["findings"]] == [3]
+
+
+def test_hook_reports_config_error_for_unsupported_python_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emit a structured ``config`` diagnostic and exit 2 when ``minimumPythonVersion`` is below 3.11.
+
+    Args:
+        tmp_path: Project root holding a config with ``minimumPythonVersion: "3.10"`` and a sample module.
+        monkeypatch: Changes into the project so hook discovers its config.
+
+    Returns:
+        None. Checks exit code 2, ``config.schemaOk is False``, and the diagnostic type and message.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".gruff-py.yaml").write_text('schemaVersion: gruff-py.config.v0.1\nminimumPythonVersion: "3.10"\n')
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text('"""Sample."""\nVALUE = 1\n')
+
+    result = _invoke_hook("--format", "json", "src/app.py")
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 2, result.output
+    assert payload["config"]["schemaOk"] is False
+    assert payload["diagnostics"][0]["type"] == "config"
+    assert "3.11" in payload["config"]["error"]["message"]
+
+
 def _generate_baseline(baseline_path: Path) -> None:
     """Write the ratified baseline v3 file the hook applies, the same file a user gets from analyse.
 

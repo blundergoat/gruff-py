@@ -235,10 +235,22 @@ def test_non_assert_helper_does_not_count():
         ("_assert_turn(route(turn), 'local')", 0),
         ("monkeypatch.setattr(service, 'write_event', fail_write)\n    service.answer()", 0),
         ("with patch.object(service, 'write_event', new=fail_write):\n        service.answer()", 0),
+        ("with mock.patch.object(service, 'write_event', new=fail_write):\n        service.answer()", 0),
+        ("with unittest.mock.patch('pkg.write_event', side_effect=fail_write):\n        service.answer()", 0),
+        ("with unittest.mock.patch.object(service, 'write_event', fail_write):\n        service.answer()", 0),
         ("service.answer()", 1),
         ("monkeypatch.setattr(fail_write, 'sentinel', service.answer)", 1),
     ],
-    ids=["private-assertion", "installed-failure-fake", "patched-failure-fake", "uninstalled-fake", "fake-is-patch-target"],
+    ids=[
+        "private-assertion",
+        "installed-failure-fake",
+        "patched-failure-fake",
+        "mock-patch-object-failure-fake",
+        "unittest-mock-patch-failure-fake",
+        "unittest-mock-patch-object-failure-fake",
+        "uninstalled-fake",
+        "fake-is-patch-target",
+    ],
 )
 def test_assertion_helpers_and_installed_raising_fakes(body: str, expected: int) -> None:
     """Recognise assertion helpers and installed failure fakes while reporting tests without recognised verification.
@@ -429,6 +441,67 @@ def test_configured_python_files_replace_the_default_globs(tmp_path: Path) -> No
     default_name, _ = _unit_under(tmp_path, "test_api.py", src)
     assert len(NoAssertionsRule().analyse(configured, context)) == 1
     assert NoAssertionsRule().analyse(default_name, context) == []
+
+
+@pytest.mark.parametrize(
+    ("config_files", "collected_path", "skipped_path"),
+    [
+        (
+            {
+                "pytest.ini": "[pytest]\npython_files = check_*.py\n",
+                "pyproject.toml": '[tool.pytest.ini_options]\npython_files = ["spec_*.py"]\n',
+            },
+            "check_api.py",
+            "spec_api.py",
+        ),
+        (
+            {
+                "pytest.ini": "",
+                "pyproject.toml": '[tool.pytest.ini_options]\npython_files = ["spec_*.py"]\n',
+            },
+            "test_api.py",
+            "spec_api.py",
+        ),
+        (
+            {"tox.ini": "[pytest]\npython_files = check_*.py\n"},
+            "check_api.py",
+            "test_api.py",
+        ),
+        (
+            {
+                "tox.ini": "[tox]\nenvlist = py311\n",
+                "setup.cfg": "[tool:pytest]\npython_files = spec_*.py\n",
+            },
+            "spec_api.py",
+            "test_api.py",
+        ),
+    ],
+    ids=["pytest-ini-beats-pyproject", "empty-pytest-ini-stops-fallback", "tox-ini-pytest", "setup-cfg-fallback"],
+)
+def test_ini_python_files_precedence(
+    tmp_path: Path,
+    config_files: dict[str, str],
+    collected_path: str,
+    skipped_path: str,
+) -> None:
+    """Resolve pytest python_files globs across pytest.ini, pyproject.toml, tox.ini, and setup.cfg in pytest order.
+
+    Args:
+        tmp_path: Temporary project root receiving the configuration files for this case.
+        config_files: Mapping of config filenames to file contents written under tmp_path.
+        collected_path: Relative test filename expected to be collected under the winning configuration.
+        skipped_path: Relative filename expected to be ignored under the winning configuration.
+
+    Returns:
+        None. Checks that the collected file emits one finding while the skipped file emits none.
+    """
+    for filename, contents in config_files.items():
+        (tmp_path / filename).write_text(contents, encoding="utf-8")
+    source = "def test_api(client):\n    client.get('/')\n"
+    collected, context = _unit_under(tmp_path, collected_path, source)
+    skipped, _ = _unit_under(tmp_path, skipped_path, source)
+    assert len(NoAssertionsRule().analyse(collected, context)) == 1
+    assert NoAssertionsRule().analyse(skipped, context) == []
 
 
 @pytest.mark.parametrize(

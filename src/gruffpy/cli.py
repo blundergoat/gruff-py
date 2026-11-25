@@ -1042,7 +1042,6 @@ def _run_analysis_for_cli(request: _AnalysisCliRequest) -> AnalysisReport:
     Raises:
         SystemExit: A handled target or configuration error prevents a non-JSON run; the exit code is 2.
         click.BadParameter: A supplied display or execution pillar is not recognized.
-        ValueError: The parsed minimum Python version is below 3.11, even in JSON mode.
     """
     # Presentation flags control what readers see without changing the checks, score or verdict.
     display_filter = FindingDisplayFilter(

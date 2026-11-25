@@ -1,14 +1,10 @@
 """``test-quality.no-assertions`` - test function with zero assertion-like calls.
 
-Looks for ``assert`` statements, ``self.assertEqual`` / ``self.assertX`` calls,
-``assert_*`` helper calls, and ``pytest.raises`` / ``pytest.warns`` contexts,
-including direct and aliased imports and those inside nested helpers or
-callbacks. A test with none of these is probably testing nothing.
+Recognises ``assert`` statements, ``self.assert*`` calls, ``assert_*`` helpers, and ``pytest.raises`` / ``pytest.warns`` contexts,
+including aliased imports and nested helpers or callbacks.
 
-Only tests a runner would collect are judged: the file must match pytest's
-``python_files`` globs (unittest's ``test*.py`` also admits ``TestCase``
-methods), it must not be importable package code outside a test directory, and
-the function must not be a fixture, a nox session, or an invoke task.
+Judges only runner-collected tests: files matching pytest's ``python_files`` (or unittest's ``test*.py`` for ``TestCase`` methods),
+excluding shipped package modules outside test folders as well as fixtures, nox sessions, and invoke tasks.
 """
 
 import ast
@@ -308,7 +304,7 @@ def _is_recognised_assertion_call(
         imported_pytest_assertions: Extra callee spellings from imports. An empty set leaves the shared and private-name checks in effect.
 
     Returns:
-        True for a shared assertion match, a bare name or one-level attribute starting with _assert at its leaf, or a collected pytest name.
+        True for a shared assertion match, a bare name or dotted attribute chain starting with _assert at its leaf, or a collected pytest name.
     """
     target = _callee_name(call)
     private_assertion = target is not None and target.split(".")[-1].startswith("_assert")
@@ -346,20 +342,24 @@ def _imported_pytest_assertion_callees(tree: ast.AST) -> frozenset[str]:
 
 
 def _callee_name(call: ast.Call) -> str | None:
-    """Return the bare or one-level dotted spelling of a call target.
+    """Return the bare or dotted spelling of a name-rooted call target.
 
     Args:
         call: Call expression whose callee spelling is inspected without resolving imports.
 
     Returns:
-        Callee spelling, or None unless the callee is a name or an attribute on a name.
+        Callee spelling, or None unless the callee is a name or an attribute chain rooted at a name.
     """
-    # Direct imports produce a simple local name.
-    if isinstance(call.func, ast.Name):
-        return call.func.id
-    # An aliased module import can make an assertion helper use a dotted spelling.
-    if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
-        return f"{call.func.value.id}.{call.func.attr}"
+    parts: list[str] = []
+    node: ast.AST = call.func
+    # Walk dotted attribute chains such as unittest.mock.patch.object down to the root name.
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    # Only a dotted path that starts at a plain name, such as self.client.get, can be named; a call result such as make().post cannot.
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
     return None
 
 
@@ -384,7 +384,7 @@ def _collection_for_unit(unit: AnalysisUnit, context: RuleContext) -> _Collectio
 
     Args:
         unit: Parsed source file whose path is matched against collection conventions.
-        context: Rule execution context whose project root locates pyproject.toml and keys the shared config cache populated on first lookup.
+        context: Rule execution context whose project root locates pytest configuration and keys the shared config cache populated on first lookup.
 
     Returns:
         Runner-convention flags. Both false exclude the file from this rule. Missing or empty python_files settings use the default pytest globs.

@@ -469,7 +469,7 @@ docs_drift_check_root() {
   local readme="$docs_root/README.md"
   local rules_doc="$docs_root/docs/rules.md"
   local count pillars ids id_prefixes
-  local claim claims=0 doc token decision link line history relative tracked_check=1
+  local claim claims=0 doc doc_dir doc_rel_dir target token decision link line history relative tracked_check=1
   local documents=() mentioned=() phantom=() bad_decisions=() dead=()
 
   count=$(docs_fact "$facts" count)
@@ -542,25 +542,31 @@ docs_drift_check_root() {
     return 1
   fi
 
-  # Entry-page links: every relative link from the README must name a file or directory tracked in
-  # this repository. A path that exists on disk but escapes the repository, or is not tracked, is
-  # dead for every reader of the published repository. A fixture copy carries the documentation, so
-  # a link into the copy resolves there first.
+  # Documentation links: every relative link in README.md and docs/*.md must point to a tracked repository path.
+  #
+  # A target that escapes the repository or is untracked is dead for readers of the published checkout.
+  # In fixture copies, resolve links inside the synthetic docs tree before checking tracked repository files.
   git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || tracked_check=0
-  while IFS= read -r link; do
-    relative=$(realpath -m --relative-to="$ROOT_DIR" "$ROOT_DIR/$link")
-    if [[ "$relative" == ".." || "$relative" == ../* ]]; then
-      dead+=("$link")
-    elif [[ "$docs_root" != "$ROOT_DIR" && -e "$docs_root/$link" ]]; then
-      continue
-    elif ((tracked_check == 0)); then
-      [[ -e "$ROOT_DIR/$relative" ]] || dead+=("$link")
-    elif ! git -C "$ROOT_DIR" ls-files --error-unmatch -- "$relative" >/dev/null 2>&1; then
-      dead+=("$link")
-    fi
-  done < <(grep -oE '\]\([^)#[:space:]]+' "$readme" | sed 's/^](//' | grep -vE '^(https?://|mailto:)' | sort -u)
+  for doc in "${documents[@]}"; do
+    doc_dir=$(dirname "$doc")
+    doc_rel_dir=${doc_dir#"$docs_root"}
+    doc_rel_dir=${doc_rel_dir#/}
+    while IFS= read -r link; do
+      target="$ROOT_DIR/${doc_rel_dir:+$doc_rel_dir/}$link"
+      relative=$(realpath -m --relative-to="$ROOT_DIR" "$target")
+      if [[ "$relative" == ".." || "$relative" == ../* ]]; then
+        dead+=("${doc#"$docs_root"/}:$link")
+      elif [[ "$docs_root" != "$ROOT_DIR" && -e "$doc_dir/$link" ]]; then
+        continue
+      elif ((tracked_check == 0)); then
+        [[ -e "$ROOT_DIR/$relative" ]] || dead+=("${doc#"$docs_root"/}:$link")
+      elif ! git -C "$ROOT_DIR" ls-files --error-unmatch -- "$relative" >/dev/null 2>&1; then
+        dead+=("${doc#"$docs_root"/}:$link")
+      fi
+    done < <(grep -oE '\]\([^)#[:space:]]+' "$doc" | sed 's/^](//' | grep -vE '^(https?://|mailto:)' | sort -u)
+  done
   if ((${#dead[@]} > 0)); then
-    printf 'docs drift: entry-page link does not resolve: %s\n' "${dead[*]}"
+    printf 'docs drift: documentation link does not resolve: %s\n' "${dead[*]}"
     return 1
   fi
 
@@ -655,7 +661,12 @@ docs_drift_fixture_check() {
   root="$harness/dead-link"
   cp -R "$valid" "$root"
   printf '\n[Missing page](docs/missing-page.md)\n' >>"$root/README.md"
-  expect_docs_drift_rejection dead-link 'entry-page link' "$root" "$facts" || { rm -rf -- "$harness"; return 1; }
+  expect_docs_drift_rejection dead-link 'documentation link' "$root" "$facts" || { rm -rf -- "$harness"; return 1; }
+
+  root="$harness/docs-dead-link"
+  cp -R "$valid" "$root"
+  printf '\n[Missing guide](missing-guide.md)\n' >>"$root/docs/configuration.md"
+  expect_docs_drift_rejection docs-dead-link 'documentation link' "$root" "$facts" || { rm -rf -- "$harness"; return 1; }
 
   # A real decision number with another record's slug must not pass on the number alone.
   root="$harness/borrowed-decision-slug"
@@ -667,10 +678,10 @@ docs_drift_fixture_check() {
   root="$harness/escaping-link"
   cp -R "$valid" "$root"
   printf '\n[Family contract](../FAMILY-CONTRACT.md)\n' >>"$root/README.md"
-  expect_docs_drift_rejection escaping-link 'entry-page link' "$root" "$facts" || { rm -rf -- "$harness"; return 1; }
+  expect_docs_drift_rejection escaping-link 'documentation link' "$root" "$facts" || { rm -rf -- "$harness"; return 1; }
 
   rm -rf -- "$harness"
-  printf '7 mutations rejected'
+  printf '8 mutations rejected'
 }
 
 summary() {

@@ -1,13 +1,10 @@
 """Shared helpers for documentation-pillar rules.
 
-Public-vs-private detection, decorator pattern recognition (property setter /
-deleter), and parameter-name extraction for signature matching. Lives next to
-the rules that consume it so the docs pillar's policy isn't smeared across the
-broader ``_python_dynamism`` helper.
+Owns public-vs-private scope, property accessor detection, parameter-name extraction, and test-path recognition for ``docs.*`` rules.
+Lives beside the documentation rules so their policy stays separate from general Python dynamism helpers.
 """
 
 import ast
-import re
 from collections.abc import Iterator
 
 from gruffpy.rule.context import RuleContext
@@ -162,13 +159,13 @@ def is_test_file(display_path: str) -> bool:
         display_path: Source path shown in findings, matched case-insensitively with either slash style.
 
     Returns:
-        True when the path is under a tests directory or is a bare test_*.py filename.
+        True when the path sits under a test, tests, or testing directory or uses a test_*.py or *_test.py filename.
     """
-    normalized = display_path.replace("\\", "/").lower()
-    name = normalized.rsplit("/", 1)[-1]
-    if normalized.startswith("tests/") or "/tests/" in normalized:
+    *directories, name = display_path.replace("\\", "/").lower().split("/")
+    # Any file under a test folder counts as test code, whatever its name.
+    if any(directory in {"test", "tests", "testing"} for directory in directories):
         return True
-    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")
+    return (name.startswith("test_") or name.endswith("_test.py")) and name.endswith(".py")
 
 
 def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -289,63 +286,3 @@ def _decorator_name(decorator: ast.AST) -> str:
         prefix = _decorator_name(decorator.value)
         return f"{prefix}.{decorator.attr}" if prefix else decorator.attr
     return ""
-
-
-_WORD_PATTERN = re.compile(r"[A-Za-z]+")
-
-_STOP_WORDS: frozenset[str] = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "as",
-        "at",
-        "be",
-        "by",
-        "do",
-        "does",
-        "docstring",
-        "for",
-        "from",
-        "get",
-        "gets",
-        "if",
-        "in",
-        "into",
-        "is",
-        "it",
-        "method",
-        "module",
-        "of",
-        "on",
-        "or",
-        "perform",
-        "return",
-        "returns",
-        "run",
-        "runs",
-        "set",
-        "sets",
-        "that",
-        "the",
-        "this",
-        "thing",
-        "to",
-        "value",
-        "values",
-        "with",
-    }
-)
-
-
-def _content_words(summary: str) -> list[str]:
-    """Return lowercased non-stop-word tokens from summary.
-
-    Args:
-        summary: Text to tokenise; callers pass a parsed docstring summary or the body of a source comment.
-
-    Returns:
-        Each run of ASCII letters, lowercased and kept in order with duplicates, after dropping single-letter words and the module's stop words; empty
-        when no word remains.
-    """
-    return [w.lower() for w in _WORD_PATTERN.findall(summary) if w.lower() not in _STOP_WORDS and len(w) > 1]

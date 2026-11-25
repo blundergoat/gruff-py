@@ -183,7 +183,7 @@ Each rule detail includes the runtime defaults, documentation metadata, and thre
 - Rationale: `complexity.cyclomatic` protects the complexity pillar by flagging cyclomatic complexity before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported cyclomatic complexity directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Remains opt-in after M14's bounded repair: 26 of 50 judged upper-band findings were worth acting on, below its 0.60 precision floor.
+- Default-off reason: Opt-in: 26 of 50 judged upper-band findings were worth acting on, below the 0.60 complexity precision floor.
 - Config threshold: `threshold` = `20`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`
@@ -326,7 +326,7 @@ except ValueError:
 - Default enabled: yes
 - Rationale: Public dataclasses often become reporter, config, or API payload contracts; field names alone rarely explain units, nullability, or stability guarantees.
 - Fix guidance: Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields.
-- Confidence rationale: Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold.
+- Confidence rationale: High confidence: the rule matches public dataclasses at or above the configured field-count threshold and inspects their local docstrings directly.
 - Options: `allow_bullets` = `True`, `min_fields` = `3`, `require_all_fields` = `False`
 - Common false-positive shapes:
   - Dataclass fields documented by an inherited schema or external generator are not visible in the class's local docstring.
@@ -462,7 +462,7 @@ except ValueError:
 - Rationale: `docs.missing-return-doc` protects the documentation pillar by flagging missing return documentation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported missing return documentation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Retained for bounded repair under M02's return-documentation exception: four right of twenty judged findings did not establish the 0.60 floor. The repair accepts recognized result prose; fresh blind validation is pending.
+- Default-off reason: Opt-in: 4 of 20 judged findings were worth acting on, below the 0.60 documentation precision floor. The rule accepts recognised result prose, while fresh blind validation is still pending.
 - Options: `everyCallable` = `False`
 - Common false-positive shapes:
   - An override can inherit its return contract from a documented Protocol or base class while omitting a local result description.
@@ -532,7 +532,7 @@ except ValueError:
 - Rationale: `naming.generic-function` protects the naming pillar by flagging generic function name before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported generic function name directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Opt-in after M02's bounded repair: 28 of 49 judged findings were worth acting on, below the 0.60 naming floor. Explicit enablement retains the required-framework-method repair; default scans omit this rule's findings.
+- Default-off reason: Opt-in: 28 of 49 judged findings were worth acting on, below the 0.60 naming precision floor. Explicit enablement keeps the required-framework-method exemption; default scans omit this rule's findings.
 - Options: `genericFunctions` = `['process', 'handle', 'do', 'run', 'execute', 'perform', 'apply', 'manage', 'operate']`
 - Common false-positive shapes:
   - A framework hook or protocol can require a generic function name such as `run` or `handle` even when the implementation has one clear responsibility.
@@ -550,7 +550,7 @@ except ValueError:
 - Default enabled: yes
 - Rationale: Draft names such as temp, foo, and result1 hide the value or role a reviewer must verify; legitimate domain words such as todo do not prove unfinished work from the identifier alone.
 - Fix guidance: Rename first-token or numbered placeholders for their concrete role; keep legitimate queue/domain names when they already describe the value.
-- Confidence rationale: High confidence: only reviewed first-token placeholder families and numbered base-plus-digit shapes match; exact domain words are not inferred.
+- Confidence rationale: Low confidence: measured precision fell below 0.70 even on the narrow first-token placeholder families and numbered base-plus-digit shapes, so review findings in context.
 - Common false-positive shapes:
   - The rule flags first tokens such as `temp`, `thing`, `foo`, and `bar` even when the full name describes a temporary resource, a test model, or a name used by the test.
     Mitigation: Rename the identifier to lead with its role, as in `temporary_dir`, `IterableChoiceTestModel`, `command_options_for_bar`, or `expected_error_for_short_foo`.
@@ -620,7 +620,7 @@ except ValueError:
 - Rationale: `security.dangerous-function-call` protects the security pillar by flagging dangerous function call before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported dangerous function call directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: 10 right of 15 judged, with 10 unresolved labels.
+- Default-off reason: Opt-in: blind provenance review left insufficient evidence for default-on status (10 of 15 judged findings were worth acting on, with 10 unresolved).
 - Bad example: Code that triggers `security.dangerous-function-call` leaves dangerous function call unaddressed.
 - Good example: Code that satisfies `security.dangerous-function-call` makes dangerous function call explicit or simpler.
 
@@ -855,7 +855,7 @@ except ValueError:
 - Rationale: `security.hardcoded-framework-secret-key` protects the security pillar by flagging hardcoded framework secret_key before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported hardcoded framework secret_key directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in under M02: only one current corpus finding remains after the shared test-path exclusion, below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector.
+- Default-off reason: Opt-in: only 1 finding remained in the evaluation corpus after the shared test-path exclusion, below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active.
 - Security metadata: `cwe` = `['CWE-798', 'CWE-321']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.hardcoded-framework-secret-key` leaves hardcoded framework secret_key unaddressed.
 - Good example: Code that satisfies `security.hardcoded-framework-secret-key` makes hardcoded framework secret_key explicit or simpler.
@@ -871,7 +871,7 @@ except ValueError:
 - Rationale: `security.header-injection` protects the security pillar by flagging header injection before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported header injection directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: neither of two judged findings was right, and one label remained unresolved.
+- Default-off reason: Opt-in: blind provenance review left insufficient evidence for default-on status (0 of 2 judged findings were worth acting on, with 1 unresolved).
 - Common false-positive shapes:
   - A dynamic Flask header name can be selected from an internal allowlist or enum before the assignment, which this local AST check cannot prove.
     Mitigation: Map the validated choice to literal header assignments, or suppress the reviewed sink with the allowlist evidence.
@@ -906,7 +906,7 @@ except ValueError:
 - Rationale: `security.insecure-temp-file` protects the security pillar by flagging insecure temporary file before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported insecure temporary file directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Opt-in under M02: no current corpus findings remain after the shared test-path exclusion, below the minimum of ten needed to assess the 0.80 security precision floor. Explicit enablement retains the detector.
+- Default-off reason: Opt-in: no findings remained in the evaluation corpus after the shared test-path exclusion, below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active.
 - Security metadata: `cwe` = `['CWE-377', 'CWE-379']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
   - A fixed temporary path can be process-private inside an isolated sandbox even though that exclusivity is not visible at the call site.
@@ -999,7 +999,7 @@ except ValueError:
 - Rationale: `security.silent-except` protects the security pillar by flagging silent except before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported silent except directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in after M02's bounded repair: 21 of 29 judged findings were worth acting on, below the 0.80 security floor. The enabled repair preserved every judged-right finding; default scans omit them until the rule is explicitly enabled.
+- Default-off reason: Opt-in: 21 of 29 judged findings were worth acting on, below the 0.80 security precision floor. Default scans omit these findings until the rule is explicitly enabled.
 - Bad example: Code that triggers `security.silent-except` leaves silent except unaddressed.
 - Good example: Code that satisfies `security.silent-except` makes silent except explicit or simpler.
 
@@ -1029,7 +1029,7 @@ except ValueError:
 - Rationale: `security.unsafe-pickle` protects the security pillar by flagging unsafe pickle deserialisation before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unsafe pickle deserialisation directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in under M02 while its 0.80 security precision floor remains unestablished. The local detector cannot infer whether a non-literal payload is a trusted internal cache. Explicit enablement retains the existing checks.
+- Default-off reason: Opt-in while its 0.80 security precision floor remains unestablished. The local detector cannot infer whether a non-literal payload comes from a trusted internal cache. Explicit enablement keeps the existing checks.
 - Bad example: Code that triggers `security.unsafe-pickle` leaves unsafe pickle deserialisation unaddressed.
 - Good example: Code that satisfies `security.unsafe-pickle` makes unsafe pickle deserialisation explicit or simpler.
 
@@ -1044,7 +1044,7 @@ except ValueError:
 - Rationale: `security.unsafe-yaml-load` protects the security pillar by flagging unsafe yaml load before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported unsafe yaml load directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: two right of three judged, with one unresolved label.
+- Default-off reason: Opt-in: blind provenance review left insufficient evidence for default-on status (2 of 3 judged findings were worth acting on, with 1 unresolved).
 - Security metadata: `cwe` = `['CWE-502']`, `owasp` = `['A08:2021-Software and Data Integrity Failures']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.unsafe-yaml-load` leaves unsafe yaml load unaddressed.
 - Good example: Code that satisfies `security.unsafe-yaml-load` makes unsafe yaml load explicit or simpler.
@@ -1060,7 +1060,7 @@ except ValueError:
 - Rationale: `security.variable-import` protects the security pillar by flagging variable import before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported variable import directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Opt-in after M02's blind provenance review remained insufficient: three right of eleven judged, with eight unresolved labels.
+- Default-off reason: Opt-in: blind provenance review left insufficient evidence for default-on status (3 of 11 judged findings were worth acting on, with 8 unresolved).
 - Common false-positive shapes:
   - A dynamic module name can come from a closed plugin registry or internal allowlist that the import expression does not expose.
     Mitigation: Map allowed names to explicit imports, or suppress the reviewed import with the registry boundary that prevents user control.
@@ -1078,7 +1078,7 @@ except ValueError:
 - Rationale: MD5 and SHA1 are broken for signatures, tokens, and password material, but they remain valid for cache keys and content digests. The rule reports them only where surrounding names or arguments imply security-sensitive material, so non-security digests stay quiet without configuration.
 - Fix guidance: Use a KDF (argon2, bcrypt, scrypt, pbkdf2) for passwords and SHA-256 or better for signatures and tokens. When the digest is genuinely non-security, pass the standard-library keyword `usedforsecurity=False` rather than suppressing the rule.
 - Confidence rationale: High confidence: the call target must resolve to a literal weak algorithm, and a security-context smell in the surrounding names or arguments is required before reporting.
-- Default-off reason: Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, below the minimum needed to assess the 0.80 security precision floor. Explicit enablement retains the repair.
+- Default-off reason: Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, below the sample minimum needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active.
 - Security metadata: `cwe` = `['CWE-327', 'CWE-916']`, `owasp` = `['A02:2021-Cryptographic Failures']`, `securitySeverity` = `'medium'`
 - Common false-positive shapes:
   - Reading `sha1().digest_size` to choose a random salt length queries a size rather than hashing security material.
@@ -1101,7 +1101,7 @@ except ValueError:
 - Rationale: `security.xxe` protects the security pillar by flagging xml external entity (xxe) before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported xml external entity (xxe) directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in after M02: only three default findings, two right and one unresolved, leave too little evidence for the precision floor.
+- Default-off reason: Opt-in: only 3 findings appeared in evaluation (2 worth acting on and 1 unresolved), leaving too little evidence to establish the precision floor.
 - Security metadata: `cwe` = `['CWE-611', 'CWE-776']`, `owasp` = `['A05:2021-Security Misconfiguration']`, `securitySeverity` = `'high'`
 - Bad example: Code that triggers `security.xxe` leaves xml external entity (xxe) unaddressed.
 - Good example: Code that satisfies `security.xxe` makes xml external entity (xxe) explicit or simpler.
@@ -1145,7 +1145,7 @@ except ValueError:
 - Rationale: Credentialed database URLs in source usually expose direct data access.
 - Fix guidance: Move real passwords to environment variables or a secret manager; use exact placeholders such as `password`, `change-me`, `dummy`, `fake`, or `redacted` only in examples.
 - Confidence rationale: High confidence: exact URL userinfo pattern with exact placeholder escapes.
-- Default-off reason: Opt-in after M02: none of seven judged findings was right, but only eight default findings were available, too few for deletion.
+- Default-off reason: Opt-in: 0 of 7 judged findings were worth acting on across 8 evaluation findings, leaving too little evidence to establish the precision floor.
 - Bad example: A database URL literal with a real password in the userinfo segment.
 - Good example: `DATABASE_URL = "postgresql://user:change-me@host/db"`
 
@@ -1222,7 +1222,7 @@ except ValueError:
 - Rationale: Private-key headers can identify committed credentials, including incomplete or escaped key material. Two adjacent uppercase parser constants containing only matching BEGIN/END marker literals carry no key body.
 - Fix guidance: Move the private key out of the repository. Rotate the key, store the new one in a secret manager, and reference it at runtime.
 - Confidence rationale: High confidence in the presence of a private-key header. Complete placeholder blocks and exact marker-only assignment pairs are excluded; bare headers and short opaque bodies still require review.
-- Default-off reason: Opt-in after M02's bounded repair: fewer than ten findings remain in the explicitly enabled corpus, below the minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement retains the repair.
+- Default-off reason: Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, below the sample minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement keeps the detector active.
 - Common false-positive shapes:
   - Two consecutive uppercase constant assignments containing only matching private-key BEGIN/END markers.
     Mitigation: The marker-only pair is excluded; opaque content between the assignments and unmatched markers still report.
@@ -1491,7 +1491,7 @@ except ValueError:
 - Rationale: Collected tests without assertions are easy to mistake for coverage.
 - Fix guidance: Assert behaviour directly, use framework assertions, or call a clear `assert_*` helper; keep pytest fixtures and conftest support code as support.
 - Confidence rationale: High confidence: collected-test scope with assertion statements, framework assertions, raises/warns contexts, and `assert_*` helpers.
-- Default-off reason: Remains opt-in under M02's accepted table: seven right of 36 judged findings do not establish its 0.70 precision floor.
+- Default-off reason: Opt-in: 7 of 36 judged findings were worth acting on, below the 0.70 test-quality precision floor.
 - Common false-positive shapes:
   - A test can assert through a matcher that raises on a mismatch without an `assert` name, such as pytest's `result.stderr.fnmatch_lines([...])` in `testing/test_junitxml.py`.
     Mitigation: Call the matcher through an `assert_*` helper, or suppress the reviewed test with `# gruff: disable=test-quality.no-assertions` and the matcher that asserts.
@@ -1581,7 +1581,7 @@ except ValueError:
 - Rationale: `test-quality.setup-bloat` protects the test-quality pillar by flagging setup bloat before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported setup bloat directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Opt-in after M02's bounded repair: seven of sixteen judged findings were worth acting on, below the 0.70 test-quality floor. Explicit enablement retains the production-hook repair; default scans omit this rule's findings.
+- Default-off reason: Opt-in: 7 of 16 judged findings were worth acting on, below the 0.70 test-quality precision floor. Explicit enablement keeps the production-hook exemption; default scans omit this rule's findings.
 - Named thresholds: `maxSetupLines` = `30`
 - Common false-positive shapes:
   - A costly domain fixture can be longer than its deliberately small focused tests without representing accidental shared state.
@@ -1617,7 +1617,7 @@ except ValueError:
 - Rationale: `test-quality.sut-not-called` protects the test-quality pillar by flagging system under test never called before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported system under test never called directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: Medium confidence: the rule uses bounded heuristics with known safe escapes.
-- Default-off reason: Remains opt-in under M02's accepted table: nine right of 28 judged findings do not establish its 0.70 precision floor.
+- Default-off reason: Opt-in: 9 of 28 judged findings were worth acting on, below the 0.70 test-quality precision floor.
 - Common false-positive shapes:
   - A contract test can validate module constants or metadata using only builtins and test helpers, with no callable system under test.
     Mitigation: Assert through the public contract where possible, or suppress the reviewed test with the declarative surface it verifies.
@@ -1635,7 +1635,7 @@ except ValueError:
 - Rationale: `test-quality.test-function-too-long` protects the test-quality pillar by flagging test function too long before it becomes costly to review, maintain, or trust.
 - Fix guidance: Address the reported test function too long directly, or tune this rule with an explicit project configuration override when the project has a documented exception.
 - Confidence rationale: High confidence: the rule matches precise AST or source patterns.
-- Default-off reason: Opt-in after M02's bounded repair: nine of twenty-five judged findings were worth acting on, below the 0.70 test-quality floor. Explicit enablement retains the literal response-snapshot exemption; default scans omit this rule's findings.
+- Default-off reason: Opt-in: 9 of 25 judged findings were worth acting on, below the 0.70 test-quality precision floor. Explicit enablement keeps the literal response-snapshot exemption; default scans omit this rule's findings.
 - Config threshold: `threshold` = `100`, `severity` = `error`
 - Threshold metadata: `measuredValue`, `threshold`, `thresholdDirection`, `thresholdType`
 - Threshold direction: `above`

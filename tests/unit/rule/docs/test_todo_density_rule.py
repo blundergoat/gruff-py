@@ -91,18 +91,6 @@ def test_rule_defining_docs_file_is_exempt():
     assert TodoDensityRule().analyse(unit, default_ctx()) == []
 
 
-def test_rule_defining_commented_out_code_file_is_exempt():
-    """Report nothing for dense markers at the commented-out-code rule's source path.
-
-    Returns:
-        None. Checks that dense markers yield no finding when the fixture uses the commented-out-code rule's display path.
-    """
-    src = _dense_marker_source()
-    unit = make_unit(src, display_path="src/gruffpy/rule/waste/commented_out_code_rule.py")
-
-    assert TodoDensityRule().analyse(unit, default_ctx()) == []
-
-
 def test_same_filename_outside_rule_package_still_emits():
     """Report dense markers in a tools file that shares the marker-density rule's file name.
 

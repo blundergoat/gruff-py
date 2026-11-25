@@ -150,3 +150,16 @@ def test_plain_setup_keeps_test_path_for_explicit_file_input():
     assert len(findings) == 1
     assert findings[0].file_path == "utils.py"
     assert findings[0].metadata["lines"] == MAX_SETUP_LINES + 1
+
+
+def test_plain_setup_ignores_test_named_ancestor_above_project_root():
+    """Ignore host ancestor directories named tests above the scanned project root.
+
+    Returns:
+        None. Checks that a production module under a host tests directory is not treated as a test setup hook.
+    """
+    source = _fixture(MAX_SETUP_LINES + 1).replace("@pytest.fixture()\n", "").replace("shared_config", "setup")
+    unit = make_unit(source, "src/service.py")
+    unit = replace(unit, file=replace(unit.file, absolute_path="/workspace/tests/project/src/service.py"))
+    context = replace(default_ctx(), project_root="/workspace/tests/project")
+    assert SetupBloatRule().analyse(unit, context) == []

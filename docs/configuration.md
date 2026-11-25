@@ -541,8 +541,8 @@ to replace an unreadable or incompatible file at the default path.
 Future `analyse` and `report` runs apply that
 default baseline automatically, suppressing findings whose line-free identity
 still matches within the count the row accepts. Use `--baseline <path>` on
-`analyse` for an explicit baseline — `report` accepts only the
-`--baseline-path <path>` spelling — or `--no-baseline` to audit without any
+`analyse` or `report` for an explicit baseline (`--baseline-path <path>` remains
+accepted as a deprecated alias), or `--no-baseline` to audit without any
 baseline. A `gruff-py.baseline.v1` or `gruff.baseline.v1` file fails closed with
 exit `2` and names
 `gruff-py analyse --migrate-baseline <old> --generate-baseline=<new path>`,

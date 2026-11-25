@@ -1,10 +1,7 @@
 """Curated documentation metadata for built-in rules (`RuleDocs` and overrides).
 
-Split from :mod:`gruffpy.rule.catalog` to keep that module within its own
-file-length rule (the `catalog_related.py` precedent): the catalog keeps the
-registry wiring and generated-docs fallbacks; this module owns the `RuleDocs`
-model and the hand-curated per-rule entries consumed through
-``custom_docs_for``.
+Split from :mod:`gruffpy.rule.catalog` to keep that module within the file-length limit (following `catalog_related.py`).
+The catalog owns registry wiring and generated fallbacks; this module owns `RuleDocs` and hand-curated entries via ``custom_docs_for``.
 """
 
 from dataclasses import dataclass, field
@@ -569,8 +566,8 @@ def _identifier_quality_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         bad_example="`temp = load_tasks()` or `result1 = publish()` hides the value's role.",
         good_example=("`pending_tasks = load_tasks()` is descriptive; `todo = [...]` may be legitimate work-queue vocabulary."),
         confidence_rationale=(
-            "High confidence: only reviewed first-token placeholder families and "
-            "numbered base-plus-digit shapes match; exact domain words are not inferred."
+            "Low confidence: measured precision fell below 0.70 even on the narrow first-token "
+            "placeholder families and numbered base-plus-digit shapes, so review findings in context."
         ),
         config_keys=config_keys,
     )
@@ -676,7 +673,10 @@ def _dataclass_attributes_docs(config_keys: tuple[str, ...]) -> RuleDocs:
         fix_guidance=("Add an `Attributes:` section, Sphinx `:ivar:` entries, or a field bullet list that explains the payload fields."),
         bad_example="`@dataclass class Report: findings: tuple[str, ...]; exit_code: int`",
         good_example="`Attributes:` section documenting `findings` and `exit_code`.",
-        confidence_rationale=("Medium confidence: the rule is limited to public dataclasses above a configurable field-count threshold."),
+        confidence_rationale=(
+            "High confidence: the rule matches public dataclasses at or above the configured "
+            "field-count threshold and inspects their local docstrings directly."
+        ),
         config_keys=config_keys,
     )
 
