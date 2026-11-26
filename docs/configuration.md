@@ -535,8 +535,8 @@ gruff-py analyse . --generate-baseline --fail-on none
 ```
 
 This writes `gruff-baseline.json` using `gruff.baseline.v3` and leaves the
-current run's findings visible. Use `--generate-baseline=PATH` for a different
-destination. A failed scan preserves the existing baseline. Use `--force`
+current run's findings visible. Name a different destination with
+`--generate-baseline reviewed.json` or `--generate-baseline=PATH`. A failed scan preserves the existing baseline. Use `--force`
 to replace an unreadable or incompatible file at the default path.
 Future `analyse` and `report` runs apply that
 default baseline automatically, suppressing findings whose line-free identity

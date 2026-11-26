@@ -1634,6 +1634,26 @@ def _generate_default_baseline(tmp_path: Path) -> dict[str, Any]:
     return cast("dict[str, Any]", json.loads(result.output))
 
 
+def test_cli_baseline_flag_writes_the_json_file_named_next(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write the baseline to a `.json` file named after the flag, the spelling the family CLI cases use for every port.
+
+    Args:
+        tmp_path: Project with one Python source file.
+        monkeypatch: Changes to the fixture project.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+
+    result = CliRunner().invoke(
+        main, ["analyse", "--no-config", "--fail-on", "none", "--format", "json", "--generate-baseline", "reviewed-baseline.json", "."]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["run"]["inputs"] == ["."]
+    assert json.loads((tmp_path / "reviewed-baseline.json").read_text())["schemaVersion"] == "gruff.baseline.v3"
+    assert not (tmp_path / "gruff-baseline.json").exists()
+
+
 def test_cli_bare_baseline_flag_preserves_the_following_source_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat a file after a bare baseline flag as the scan target and write only the default baseline.
 

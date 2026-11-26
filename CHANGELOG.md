@@ -2,7 +2,7 @@
 
 All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning is [SemVer](https://semver.org) with the pre-1.0 caveat: while the project is on `0.MINOR.PATCH`, a minor bump (`0.1.x → 0.2.0`) is permitted to break. Every breaking change carries a `BREAKING:` marker and a migration path regardless of which component moves; the only thing pre-1.0 relaxes is the version-number signal.
 
-## v0.6.0 - 2026-11-25
+## v0.6.0 - 2026-11-27
 
 `0.6.0` is a coordinated family release aligning every machine-readable contract across all five gruff ports and trimming the catalogue from 130 rules across 12 pillars to 94 rules across 10 pillars (67 default-enabled, 27 opt-in, 36 removed). See `UPGRADING.md` for step-by-step migration commands and the retreat path to `0.5.x`.
 
@@ -51,6 +51,7 @@ All notable changes to `gruff-py`. Format: [Keep a Changelog](https://keepachang
 - **Copied tests group into one finding by default** - `test-quality.repeated-structure-missing-parametrize` defaults `groupFindings: true`, reporting three or more copied tests in one lexical container as a single finding listing every member; set `groupFindings: false` for per-test rows.
 - **Lower false-positive rates across complexity, security, sensitive-data, docs, design, and test-quality rules** - `complexity.nesting-depth` treats `elif` chains as one level; `complexity.cyclomatic` skips test files and counts `match` as one decision; 20 vendor-documented sample credentials (matched by SHA-256), masked `AKIA`/`ASIA` AWS keys, stock local dev DB credentials (`sensitive-data.database-url-password`), template URL userinfo (`sensitive-data.url-credentials`), empty-line/placeholder `.env.example` entries (`sensitive-data.hardcoded-env-value`), and marker-only PEM parser constants (`sensitive-data.private-key`) stay quiet; `security.github-actions-secrets-in-pr` targets `pull_request_target` and skips unreachable event-guarded jobs/steps; `security.silent-except` accepts explanatory comments; `security.weak-crypto` skips no-arg `digest_size` constructors; `docs.missing-function-docstring` messages list only the missing sections; `docs.ignore-directive-reason` skips generated files and accepts issue references; `design.runtime-sys-path-mutation` allows top-level mutation in standalone scripts; `dead-code.exported-but-unreferenced` counts references from ignored paths; and test-quality rules accept named `subTest` loops, `pytest.param` ids, raising fakes, class-local assertion helpers, collected test files, plain `setup` outside test paths, and single literal response snapshots.
 - **Safer remediation advice and clearer rule documentation** - Updated fix guidance for `security.insecure-temp-file`, `security.insecure-tls-protocol`, `sensitive-data.jwt-token`, and `security.xxe`; published reviewed false-positive shapes in `list-rules` and `docs/rules.md`; and updated the `docs/rules.md` inline suppression example to name a live rule.
+- **`--generate-baseline` names its own destination** - `--generate-baseline=PATH`, or a following word ending in `.json`, picks the baseline file, as in the other gruff tools; any other following word stays a scan target, so `--generate-baseline src` writes `gruff-baseline.json` and scans `src`. `--generate-baseline-path` still works and warns.
 
 ### Fixed
 

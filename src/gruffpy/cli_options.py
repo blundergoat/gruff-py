@@ -27,12 +27,14 @@ _command_root: click.Group | None = None
 class _AnalyseCommand(click.Command):
     """Teach Click how to read an optional baseline destination.
 
-    `--generate-baseline src` writes the default baseline and scans `src`.
-    Use `--generate-baseline=PATH` when choosing a different output file.
+    - `--generate-baseline reviewed.json` writes that file, the spelling every gruff port accepts.
+    - `--generate-baseline src` writes the default baseline and scans `src`, so a source file is never overwritten with JSON.
+    - `--generate-baseline=PATH` names any other destination.
     """
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
-        """Give the bare baseline flag its default without consuming the next operand.
+        """Give the bare baseline flag its default unless the next word names a `.json` destination.
+
         Use this before Click parses paths so a command such as `analyse --generate-baseline src` still scans `src`.
 
         Args:
@@ -47,9 +49,15 @@ class _AnalyseCommand(click.Command):
             # The user can use `--` to pass a literal filename that starts with a dash.
             if argument == "--":
                 break
-            # A caller that leaves off `=PATH` chose the standard destination.
-            if argument == "--generate-baseline":
-                args[index] = f"--generate-baseline={DEFAULT_BASELINE_FILENAME}"
+            # Every other argument is an operand or an option Click already understands.
+            if argument != "--generate-baseline":
+                continue
+            next_argument = args[index + 1] if index + 1 < len(args) else ""
+            # `--generate-baseline reviewed.json` names the destination, so Click reads the next word as its value.
+            if next_argument.endswith(".json") and not next_argument.startswith("-"):
+                continue
+            # A scan target such as `target.py`, another option, or nothing at all follows, so use the standard destination.
+            args[index] = f"--generate-baseline={DEFAULT_BASELINE_FILENAME}"
         return super().parse_args(ctx, args)
 
 
@@ -611,7 +619,7 @@ _ANALYSIS_COMPAT_DECORATORS: tuple[ClickDecorator, ...] = (
         "generate_baseline",
         default=None,
         type=click.Path(path_type=Path),
-        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}". Use --generate-baseline=PATH for a different file.',
+        help=f'Write current findings to "{DEFAULT_BASELINE_FILENAME}" or to the .json file named next; --generate-baseline=PATH takes any name.',
     ),
     _path_option(
         "--generate-baseline-path",

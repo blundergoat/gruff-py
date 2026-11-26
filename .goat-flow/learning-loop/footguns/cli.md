@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-11-23
+last_reviewed: 2026-11-26
 ---
 
 ## Footgun: Click optional-value options + variadic positionals stay tempting
@@ -32,6 +32,13 @@ analyse --generate-baseline target.py` replaced the Python operand with JSON.
 conventional destination for the bare flag before Click consumes operands.
 `--generate-baseline=PATH` supplies a custom destination in the same token.
 The two forms are covered in `tests/integration/test_cli_smoke.py`.
+
+That fix went too far: on 2026-11-26 the gruff-spec `cli` and `hook` suites
+failed because `--generate-baseline reviewed-baseline.json`, the family
+spelling, scanned the JSON name as a path and exited 2. A next word ending in
+`.json` is now read as the destination; any other word stays a scan target
+(`tests/integration/test_cli_smoke.py`, search:
+`test_cli_baseline_flag_writes_the_json_file_named_next`).
 
 ## Footgun: A rejected source path can break its own JSON diagnostic
 
