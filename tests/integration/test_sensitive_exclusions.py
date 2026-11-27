@@ -264,13 +264,13 @@ def test_same_rule_other_file_survives_when_only_the_sibling_is_excluded(corpus:
 
 
 def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None:
-    """Check the initial warning-gate failure, then the exclusion counts and absence of AWS and JWT findings.
+    """Check that the warning gate fails without exclusions and passes with them, then the exclusion counts and absence of AWS and JWT findings.
 
     Args:
         corpus: Project root where this test writes the exclusion config; already the working directory.
 
     Returns:
-        None. Checks the unconfigured exit status and the configured report's suppression counts and remaining findings.
+        None. Checks both exit statuses and the configured report's suppression counts and remaining findings.
     """
     unconfigured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "warning", "--no-config", "secrets"])
     assert unconfigured.exit_code == 1, unconfigured.output
@@ -290,6 +290,7 @@ def test_suppressed_findings_leave_the_score_and_exit_code(corpus: Path) -> None
     )
     configured = CliRunner().invoke(main, ["analyse", "--format", "json", "--fail-on", "warning", "secrets"])
 
+    assert configured.exit_code == 0, configured.output
     payload = json.loads(configured.stdout)
     assert [row["suppressed"] for row in payload["suppressions"]] == [2, 1, 1, 1]
     assert not [finding for finding in payload["findings"] if finding["ruleId"] in {_AWS_RULE, _JWT_RULE}]

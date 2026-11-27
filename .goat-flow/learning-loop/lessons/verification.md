@@ -37,7 +37,7 @@ when only the function body changed. The focused test failed because
 `src/gruffpy/rule/docs/missing_function_docstring_rule.py`
 (search: `end_line=node.end_lineno`) reports the finding across the whole
 function span, and `src/gruffpy/analysis/changed_region.py`
-(search: `def _is_finding_location_changed`) correctly treats any overlap
+(search: `def is_finding_location_changed`) correctly treats any overlap
 between `line`-`end_line` and the changed hunk as in-scope. The fix was to use
 a single-line security call finding outside the edited hunk but inside the
 changed function for the symbol-vs-hunk regression.

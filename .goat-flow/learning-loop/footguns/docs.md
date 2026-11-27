@@ -37,7 +37,7 @@ the `cls` parameter entry.
 **Incident count:** 2
 **Latest occurrence:** 2026-11-25
 
-**Prevention:** Before writing or regenerating any tracked doc (`CHANGELOG.md`, `UPGRADING.md`, `README.md`, `docs/*.md`), grep both the doc and its Python generator (`src/gruffpy/command/rule_docs.py`, search: `_M02_DEFAULT_OFF_REASONS`) for `\bM[0-9]+[a-z]?\b` and replace milestone codes with release versions, ADR IDs, or plain descriptions.
+**Prevention:** Before writing or regenerating any tracked doc (`CHANGELOG.md`, `UPGRADING.md`, `README.md`, `docs/*.md`), grep both the doc and its Python generator (`src/gruffpy/command/rule_docs.py`, search: `_DEFAULT_OFF_REASONS`) for `\bM[0-9]+[a-z]?\b` and replace milestone codes with release versions, ADR IDs, or plain descriptions.
 
 Tracked docs across the repo cite milestone codes (`M01`, `M22`, `M33+M34+M35`,
 etc.) as if they were stable references, but the task files those codes name
@@ -83,4 +83,4 @@ doc *bodies* either. When editing any tracked doc, replace milestone-code
 citations you touch with the stable anchor; leave the goat-plan skill files
 alone, since their job is to document the naming convention itself.
 
-**Recurrence 2026-11-25:** During the `0.6.0` documentation clarity audit, `CHANGELOG.md` and `UPGRADING.md` carried `M02` citations (removed from both files), and `src/gruffpy/command/rule_docs.py` (search: `_M02_DEFAULT_OFF_REASONS`) was found to inject 19 `M02`/`M14` milestone strings directly into generated `docs/rules.md`. Generator string tables leak milestone IDs back into committed docs on every `rule_docs --write` run unless cleaned at the Python source.
+**Recurrence 2026-11-25:** During the `0.6.0` documentation clarity audit, `CHANGELOG.md` and `UPGRADING.md` carried `M02` citations (removed from both files), and `src/gruffpy/command/rule_docs.py` (search: `_DEFAULT_OFF_REASONS`), whose table was then named `_M02_DEFAULT_OFF_REASONS`, was found to inject 19 `M02`/`M14` milestone strings directly into generated `docs/rules.md`. Generator string tables leak milestone IDs back into committed docs on every `rule_docs --write` run unless cleaned at the Python source.

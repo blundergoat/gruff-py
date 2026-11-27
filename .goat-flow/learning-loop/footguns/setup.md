@@ -1,7 +1,19 @@
 ---
 category: setup
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-28
 ---
+
+## Footgun: the dependency update script leaves pre-commit pins behind and runs no lint
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** After `scripts/dependency-update.sh`, set the `ruff-pre-commit` and `mirrors-mypy` revs in `.pre-commit-config.yaml` to the versions in `uv.lock`, then run `bash scripts/preflight-checks.sh` before committing the lock.
+**Trigger phase:** VERIFY
+
+`scripts/dependency-update.sh` (search: `uv lock "${lock_args[@]}"`) upgrades `uv.lock`, syncs, and runs only `pip-audit`. It never reads `.pre-commit-config.yaml` (search: `ruff-pre-commit`), which pins its own tool versions. By 2026-11-28 the hooks had drifted to ruff `v0.5.0` and mypy `v1.10.0` while the lock ran ruff 0.17 and mypy 2.4.
+
+The same upgrade exposed two gaps the script cannot catch. The mypy hook runs in an isolated environment that installs only its `additional_dependencies`, so with just `click` listed it failed under `strict = true` with 17 errors; it needs every typed import the project uses (`docstring-parser`, `pathspec`, `types-PyYAML`). Separately, the ruff 0.17.1 to 0.17.6 bump added a `SIM102` finding in `src/gruffpy/rule/waste/unreachable_code_rule.py`, which CI's `uv run ruff check src tests` would have failed on.
+
+Newer `ruff-format` hooks also format Python blocks inside Markdown. Keep the hook's `types_or` without `markdown`, or it rewrites aligned pseudo-code in ADRs and goat-flow playbooks on commit.
 
 ## Footgun: uv sync can leave editable console scripts stale or missing
 

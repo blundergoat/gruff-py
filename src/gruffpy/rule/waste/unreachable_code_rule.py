@@ -218,9 +218,8 @@ def _literal_condition_findings(
                 findings.append(_literal_condition_finding(unit, definition, node.body[0], node, "literal-false-condition"))
             elif truthiness is True and node.orelse:
                 findings.append(_literal_condition_finding(unit, definition, node.orelse[0], node, "literal-true-condition"))
-        elif isinstance(node, ast.While):
-            if _is_literal_truthy(node.test) is False and node.body:
-                findings.append(_literal_condition_finding(unit, definition, node.body[0], node, "literal-false-condition"))
+        elif isinstance(node, ast.While) and _is_literal_truthy(node.test) is False and node.body:
+            findings.append(_literal_condition_finding(unit, definition, node.body[0], node, "literal-false-condition"))
     return findings
 
 

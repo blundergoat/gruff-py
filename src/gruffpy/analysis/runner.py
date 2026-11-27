@@ -362,6 +362,7 @@ def _resolve_threshold_and_exclusions(
         # A command with no saved gate keeps the threshold that came with the request.
         if configured_threshold is not None:
             fail_threshold = configured_threshold
+    _require_known_display_rules(config, request.display_filter)
     config = _with_execution_selectors(config, request, registry)
     return config, fail_threshold
 
@@ -421,6 +422,25 @@ def _with_execution_selectors(config: AnalysisConfig, request: AnalysisRunReques
     if excluded_rules == selection.exclude_rules and excluded_pillars == selection.exclude_pillars:
         return config
     return config.with_rule_selection(replace(selection, exclude_rules=excluded_rules, exclude_pillars=excluded_pillars))
+
+
+def _require_known_display_rules(config: AnalysisConfig, display_filter: FindingDisplayFilter) -> None:
+    """Refuse a display filter that names a rule this port does not register.
+
+    Args:
+        config: Effective configuration whose rule table holds every registered rule ID.
+        display_filter: The invocation's display filter, carrying the --show-rule and --hide-rule values.
+
+    Returns:
+        None. Returns normally when every rule the filter names is registered.
+
+    Raises:
+        ConfigError: When --show-rule or --hide-rule names an unknown or retired rule.
+    """
+    unknown_rule_ids = sorted(set(display_filter.include_rules + display_filter.exclude_rules) - config.rules.keys())
+    # A misspelt --show-rule hides every finding and a misspelt --hide-rule hides none, while the score and exit code still count them all.
+    if unknown_rule_ids:
+        raise ConfigError(f"Unknown display rule IDs: {', '.join(unknown_rule_ids)}.")
 
 
 def _discover_and_parse_sources(

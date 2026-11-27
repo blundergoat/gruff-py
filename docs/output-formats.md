@@ -337,6 +337,9 @@ Text reports disclose the hidden count; JSON keeps full-run counts in
 `summary.findings` and reports the presentation delta in
 `displayFilter.hiddenFindings`.
 
+A `--show-rule` or `--hide-rule` value that `list-rules` does not list exits `2`,
+as it does in `--include-rule` and `--exclude-rule`.
+
 ## Exit Codes
 
 `analyse` exits `1` when at least one finding meets `--fail-on`. Use

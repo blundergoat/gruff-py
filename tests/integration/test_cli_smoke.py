@@ -1735,6 +1735,29 @@ def test_cli_analyse_gates_keep_the_findings_in_the_report(
     assert [finding["ruleId"] for finding in json.loads(result.stdout)["findings"]] == ["docs.missing-readme"]
 
 
+@pytest.mark.parametrize(
+    ("flag", "kind"),
+    [("--include-rule", "execution"), ("--exclude-rule", "execution"), ("--show-rule", "display"), ("--hide-rule", "display")],
+)
+def test_cli_analyse_refuses_a_retired_rule_id_in_any_rule_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str, kind: str) -> None:
+    """Exit 2 with a config-error envelope when a rule flag names a rule 0.6 removed, so a stale script cannot run or report the wrong checks.
+
+    Args:
+        tmp_path: Project with one Python source file.
+        monkeypatch: Changes to the fixture project.
+        flag: Rule-selection flag given the retired ID.
+        kind: Selector family the refusal names, execution or display.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sample.py").write_text("value = 1\n")
+
+    result = CliRunner().invoke(main, ["analyse", "--no-config", "--no-baseline", "--format", "json", flag, "test-quality.mystery-guest"])
+
+    assert result.exit_code == 2, result.output
+    diagnostics = json.loads(result.stdout)["diagnostics"]
+    assert [(row["type"], row["message"]) for row in diagnostics] == [("config-error", f"Unknown {kind} rule IDs: test-quality.mystery-guest.")]
+
+
 def test_cli_analyse_generate_baseline_writes_default_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Write a v3 baseline that counts every reported finding, and report a generated, unapplied default baseline with zero movement.
 
