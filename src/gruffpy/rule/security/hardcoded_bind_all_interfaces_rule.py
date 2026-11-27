@@ -49,11 +49,7 @@ class HardcodedBindAllInterfacesRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the wildcard-bind rule as a medium-confidence WARNING.
 
-        WARNING severity because the address is intentional in many
-        legitimate deploys (containers, reverse-proxy backends); medium
-        confidence because the string literal is unambiguous but the
-        deployment context that makes it acceptable is invisible to the
-        analyser.
+        WARNING allows for intentional container and proxy bindings; medium confidence reflects the missing deployment context.
 
         Returns:
             Definition for the wildcard-bind rule under the security
@@ -69,19 +65,16 @@ class HardcodedBindAllInterfacesRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``host=`` kwargs and ``socket.bind`` first-args holding wildcard literals.
+        """Flag wildcard literals in the host keyword of .run or in the first item of a tuple passed as the first positional argument to .bind.
 
-        No framework gate - the wildcard address literal is unambiguous
-        enough to stand alone. Fires once per call site, not once per
-        wildcard occurrence inside a call (so ``run(host='0.0.0.0',
-        debug=False)`` is one finding, not two).
+        Matching uses the attribute name without resolving the receiver type.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per wildcard-bind call site.
+            One finding per matching call. Empty when the parsed tree, a recognised address marker in the source or a matching call is absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -98,6 +91,14 @@ class HardcodedBindAllInterfacesRule(Rule):
 
 
 def _wildcard_bind_address(call: ast.Call) -> str | None:
+    """Extract a wildcard address from a supported run or bind call shape.
+
+    Args:
+        call: Call to check for a wildcard host keyword or first bind tuple argument.
+
+    Returns:
+        Matched wildcard address, or None when neither supported shape contains one.
+    """
     if _is_run_call_with_wildcard_host(call):
         host = call_keyword(call, "host")
         return _string_literal_value(host)
@@ -107,6 +108,14 @@ def _wildcard_bind_address(call: ast.Call) -> str | None:
 
 
 def _is_run_call_with_wildcard_host(call: ast.Call) -> bool:
+    """Recognize a run method with a literal wildcard host keyword.
+
+    Args:
+        call: Call whose method name and host keyword are inspected.
+
+    Returns:
+        True for an attribute named run with a supported wildcard string; false otherwise.
+    """
     if not isinstance(call.func, ast.Attribute) or call.func.attr != "run":
         return False
     host = call_keyword(call, "host")
@@ -117,6 +126,16 @@ def _is_run_call_with_wildcard_host(call: ast.Call) -> bool:
 
 
 def _is_socket_bind_call(call: ast.Call) -> bool:
+    """Recognize an attribute call named bind for tuple-address inspection.
+
+    The name check does not establish that the receiver is a socket.
+
+    Args:
+        call: Call whose callee must be an attribute named bind.
+
+    Returns:
+        True for that attribute-call shape, including unresolved receivers; false otherwise.
+    """
     if not isinstance(call.func, ast.Attribute) or call.func.attr != "bind":
         return False
     target = call_target_name(call)
@@ -126,6 +145,14 @@ def _is_socket_bind_call(call: ast.Call) -> bool:
 
 
 def _wildcard_from_bind_tuple(arg: ast.expr) -> str | None:
+    """Extract a supported wildcard string from the first tuple element.
+
+    Args:
+        arg: First bind argument; only a nonempty tuple is inspected.
+
+    Returns:
+        Wildcard address when the first element is a supported string literal; None otherwise.
+    """
     if not isinstance(arg, ast.Tuple) or not arg.elts:
         return None
     address = _string_literal_value(arg.elts[0])
@@ -135,6 +162,14 @@ def _wildcard_from_bind_tuple(arg: ast.expr) -> str | None:
 
 
 def _string_literal_value(node: ast.expr | None) -> str | None:
+    """Extract a string constant for a bind-address comparison.
+
+    Args:
+        node: Expression to inspect; None represents a missing argument.
+
+    Returns:
+        Constant string value, or None for absent or non-string expressions.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return None
@@ -146,12 +181,20 @@ def _build_finding(
     call: ast.Call,
     address: str,
 ) -> Finding:
+    """Build the finding for a call containing a wildcard bind address.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        call: Matched call supplying the finding's source span.
+        address: Wildcard address returned by the call-shape check.
+
+    Returns:
+        Finding with the call span and matched address in its message and security metadata.
+    """
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Server binding to wildcard address `{address}` - exposes the "
-            "service on every network interface."
-        ),
+        message=(f"Server binding to wildcard address `{address}` - exposes the service on every network interface."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

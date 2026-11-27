@@ -34,11 +34,7 @@ class UnsafeYamlLoadRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unsafe-yaml-load rule as a high-confidence ERROR.
 
-        ERROR severity because ``yaml.load`` without an explicit safe Loader
-        constructs arbitrary Python objects from input - a well-known RCE
-        vector. High confidence because the rule matches both the explicit
-        ``yaml.unsafe_load`` call and the bare ``yaml.load(...)`` form,
-        respecting import aliases.
+        Unsafe YAML loaders can construct Python objects; matching covers recognized direct and aliased call targets.
 
         Returns:
             Definition for the unsafe-yaml-load rule under the security pillar.
@@ -50,23 +46,21 @@ class UnsafeYamlLoadRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``yaml.unsafe_load`` and ``yaml.load`` without a safe Loader.
 
-        Resolves ``import yaml as y`` / ``from yaml import load`` aliases so
-        the rule fires regardless of how PyYAML was imported. ``yaml.load``
-        is safe only when ``Loader=`` is explicitly ``SafeLoader`` /
-        ``CSafeLoader``; ``Loader=Loader/UnsafeLoader/CLoader/CUnsafeLoader``
-        or a missing ``Loader=`` is flagged.
+        Resolve recorded PyYAML import aliases and earlier module-level loader aliases.
+        The Loader keyword or second positional argument can select SafeLoader or CSafeLoader.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsafe ``yaml.load`` / ``yaml.unsafe_load`` call.
+            One finding per matched unsafe call; empty when none match or the unit has no parsed tree.
         """
         if unit.tree is None or "yaml" not in unit.source:
             return []
@@ -113,16 +107,15 @@ class _YamlAliases:
         return cls(collector.imports, tuple(collector.loader_assignments))
 
     def normalize(self, target: str | None) -> str | None:
-        """Rewrite *target* through known PyYAML import aliases.
+        """Expand the leading name of a call target using recorded PyYAML import aliases.
 
-        Used for call targets like ``yaml.load``; ignores loader assignments
-        which require lexical-order resolution via :meth:`resolve_loader`.
+        Use resolve_loader when loader assignments must be checked in source order.
 
         Args:
-            target: Dotted call target, or None when the call is dynamic.
+            target: Bare or dotted call target, or None when the call is dynamic.
 
         Returns:
-            Target rewritten to a ``yaml.*`` form when an alias is known.
+            Alias-expanded target, the original target when its head is unknown, or None for a dynamic call.
         """
         if target is None:
             return None
@@ -136,12 +129,11 @@ class _YamlAliases:
         """Resolve a loader-argument name at a call site.
 
         Args:
-            target: Dotted loader expression at the call site.
-            call_lineno: Source line of the enclosing call; assignments at
-                or after this line are not visible to the call.
+            target: Loader name or dotted expression; None means the expression has no resolvable static target.
+            call_lineno: Line of the enclosing call, used to consider only loader alias assignments on earlier lines.
 
         Returns:
-            Normalized loader target, or *target* when no alias applies.
+            Resolved loader name, the original target when no alias applies, or None when no static target is available.
         """
         normalized = self.normalize(target)
         if normalized != target:
@@ -164,36 +156,48 @@ class _AliasCollector(ast.NodeVisitor):
         self._scope_depth = 0
 
     def _enter_scope(self, node: ast.AST) -> None:
-        """Track entering a nested scope so loader assignments stay module-local.
+        """Visit a nested scope at increased depth and restore the previous depth after visiting its children.
 
         Args:
             node: Function or class node introducing a new lexical scope.
+
+        Returns:
+            None; child traversal may add import aliases to the collector while nested loader assignments remain excluded.
         """
         self._scope_depth += 1
         self.generic_visit(node)
         self._scope_depth -= 1
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Dispatch ``def`` blocks through the scope-tracking helper.
+        """Visit a function while keeping its loader assignments out of the module-level collection.
 
         Args:
-            node: ``FunctionDef`` introducing a new lexical scope.
+            node: Function whose children are visited at nested scope depth.
+
+        Returns:
+            None; child traversal may update the collector's import aliases.
         """
         self._enter_scope(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Dispatch ``async def`` blocks through the scope-tracking helper.
+        """Visit an async function while keeping its loader assignments out of the module-level collection.
 
         Args:
-            node: ``AsyncFunctionDef`` introducing a new lexical scope.
+            node: Async function whose children are visited at nested scope depth.
+
+        Returns:
+            None; child traversal may update the collector's import aliases.
         """
         self._enter_scope(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Dispatch ``class`` blocks through the scope-tracking helper.
+        """Visit a class while keeping its loader assignments out of the module-level collection.
 
         Args:
-            node: ``ClassDef`` introducing a new lexical scope.
+            node: Class whose children are visited at nested scope depth.
+
+        Returns:
+            None; child traversal may update the collector's import aliases.
         """
         self._enter_scope(node)
 
@@ -201,7 +205,10 @@ class _AliasCollector(ast.NodeVisitor):
         """Record ``import yaml`` and ``import yaml as y`` aliases.
 
         Args:
-            node: ``import …`` statement to inspect for PyYAML modules.
+            node: Import statement to inspect for an exact yaml module import.
+
+        Returns:
+            None; matching aliases update the collector's import map.
         """
         _record_yaml_import_aliases(node, self.imports)
         self.generic_visit(node)
@@ -210,7 +217,10 @@ class _AliasCollector(ast.NodeVisitor):
         """Record ``from yaml import …`` aliases.
 
         Args:
-            node: ``from … import …`` statement to inspect.
+            node: From-import statement to inspect for named PyYAML imports.
+
+        Returns:
+            None; named PyYAML imports update the collector's import map, while star imports add nothing.
         """
         if node.module == "yaml":
             _record_yaml_from_import_aliases(node, self.imports)
@@ -220,28 +230,39 @@ class _AliasCollector(ast.NodeVisitor):
         """Record module-level loader assignments such as ``loader = yaml.SafeLoader``.
 
         Args:
-            node: Assignment node whose targets bind a loader name.
+            node: Assignment to inspect for supported module-level loader bindings.
+
+        Returns:
+            None; matching bindings are appended to the collector's loader assignments.
         """
         if self._scope_depth == 0:
-            _record_yaml_loader_assignments(
-                node.targets, node.value, self.imports, self.loader_assignments, node.lineno
-            )
+            _record_yaml_loader_assignments(node.targets, node.value, self.imports, self.loader_assignments, node.lineno)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Record annotated module-level loader assignments.
 
         Args:
-            node: Annotated assignment node whose target binds a loader name.
+            node: Annotated assignment to inspect for supported module-level loader bindings.
+
+        Returns:
+            None; supported bindings update the collector's assignment list, while absent values add nothing.
         """
         if self._scope_depth == 0:
-            _record_yaml_loader_assignments(
-                [node.target], node.value, self.imports, self.loader_assignments, node.lineno
-            )
+            _record_yaml_loader_assignments([node.target], node.value, self.imports, self.loader_assignments, node.lineno)
         self.generic_visit(node)
 
 
 def _record_yaml_import_aliases(node: ast.Import, aliases: dict[str, str]) -> None:
+    """Record exact yaml module imports in the supplied alias map.
+
+    Args:
+        node: Import statement whose module names and local aliases are inspected.
+        aliases: Alias map to mutate with each exact yaml import.
+
+    Returns:
+        None; matching imports update the supplied alias map.
+    """
     for alias in node.names:
         if alias.name != "yaml":
             continue
@@ -249,6 +270,15 @@ def _record_yaml_import_aliases(node: ast.Import, aliases: dict[str, str]) -> No
 
 
 def _record_yaml_from_import_aliases(node: ast.ImportFrom, aliases: dict[str, str]) -> None:
+    """Record named yaml imports in the supplied alias map.
+
+    Args:
+        node: From-import statement already checked by the caller to name the yaml module.
+        aliases: Alias map to mutate with imported names and aliases; star imports are skipped.
+
+    Returns:
+        None; imported names are recorded in the supplied alias map.
+    """
     for alias in node.names:
         if alias.name == "*":
             continue
@@ -262,6 +292,20 @@ def _record_yaml_loader_assignments(
     loader_assignments: list[tuple[int, str, str]],
     lineno: int,
 ) -> None:
+    """Append supported loader bindings to the ordered assignment list.
+
+    Absent values and expressions outside the configured safe or unsafe loader sets add no entries. Existing entries are retained.
+
+    Args:
+        targets: Assignment targets; only direct name targets are recorded.
+        value: Assigned expression, or None when the assignment has no value.
+        imports: Import alias map used to normalize the assigned loader expression.
+        loader_assignments: List to mutate with the line, bound name and recognized loader target.
+        lineno: One-based assignment line used for later lexical-order resolution.
+
+    Returns:
+        None; recognized direct-name bindings are appended to the supplied assignment list.
+    """
     if value is None:
         return
     loader_target = _normalize_with_imports(call_target_name_from_expr(value), imports)
@@ -277,6 +321,16 @@ def _is_unsafe_yaml_call(
     target: str | None,
     aliases: _YamlAliases,
 ) -> bool:
+    """Check whether a normalized YAML call lacks a recognized safe loader.
+
+    Args:
+        call: Call whose loader argument and source line are inspected.
+        target: Normalized call-target spelling, or None for a dynamic target.
+        aliases: Resolver for loader imports and earlier module-level loader assignments.
+
+    Returns:
+        True for unsafe_load or load without a recognized safe loader; False for other targets or safe-loader matches.
+    """
     if target == "yaml.unsafe_load":
         return True
     if target != "yaml.load":
@@ -289,6 +343,15 @@ def _is_unsafe_yaml_call(
 
 
 def _normalize_with_imports(target: str | None, imports: dict[str, str]) -> str | None:
+    """Expand a bare or dotted target's first component using the import alias map.
+
+    Args:
+        target: Bare or dotted target spelling, or None for an unresolved expression.
+        imports: Map from local import names to qualified targets.
+
+    Returns:
+        The rewritten target when its head is known; otherwise the original target, including None.
+    """
     if target is None:
         return None
     parts = target.split(".")
@@ -299,6 +362,14 @@ def _normalize_with_imports(target: str | None, imports: dict[str, str]) -> str 
 
 
 def _loader_argument(call: ast.Call) -> ast.expr | None:
+    """Select the explicitly named Loader argument before the positional fallback.
+
+    Args:
+        call: YAML call whose keyword arguments and second positional argument are inspected.
+
+    Returns:
+        The named Loader value or second positional argument, or None when both are absent.
+    """
     keyword_loader = call_keyword(call, "Loader")
     if keyword_loader is not None:
         return keyword_loader
@@ -314,7 +385,7 @@ def call_target_name_from_expr(node: ast.expr) -> str | None:
         node: Expression to convert into a dotted name.
 
     Returns:
-        Dotted target name, or None when the expression is not static.
+        A bare name or dotted attribute chain rooted in a name, or None for any other expression shape.
     """
     if isinstance(node, ast.Name):
         return node.id
@@ -332,6 +403,17 @@ def _finding(
     call: ast.Call,
     target: str,
 ) -> Finding:
+    """Build the finding for a matched unsafe YAML call.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched call supplying the source range.
+        target: Normalized call-target spelling to include in the message and metadata.
+
+    Returns:
+        A finding with safe-loading remediation and YAML-loader metadata.
+    """
     return Finding(
         rule_id=definition.id,
         message=f"`{target}(...)` can construct arbitrary Python objects from YAML input.",

@@ -12,7 +12,7 @@ Rule: naming.short-variable
   Pillar:    naming
   Tier:      v0.1
   Severity:  advisory (default)
-  Confidence: low
+  Confidence: high
   Enabled by default: yes
 
 Rationale:
@@ -23,6 +23,12 @@ Fix guidance:
   Address the reported short variable name directly, or tune this rule with an
   explicit project configuration override when the project has a documented exception.
 
+Bad example:
+  Code that triggers `naming.short-variable` leaves short variable name unaddressed.
+
+Good example:
+  Code that satisfies `naming.short-variable` makes short variable name explicit or simpler.
+
 Default options:
   acceptedShortNames  list  Single-character identifiers accepted as conventional
                             (loop counters, math axes, exception variables).
@@ -32,10 +38,13 @@ Escape hatches:
   rules.naming.short-variable.enabled                     set false to disable this rule entirely
 
 Confidence:
-  Low confidence: the rule is intentionally conservative and may need tuning.
+  High confidence: the rule matches precise AST or source patterns.
 
 Common false-positive shapes:
-  (none documented yet)
+  - A one-character domain or mathematical symbol can be conventional even when it is
+    not one of the built-in loop, axis, or exception names.
+    Mitigation: Add the exact symbol to `options.acceptedShortNames` with the project's
+    convention, or rename it where the short form is not load-bearing.
 
 Related rules:
   naming.abbreviation
@@ -46,7 +55,7 @@ Related rules:
 
 Every detail view starts with a fixed header (id, name, pillar, tier, severity, confidence, enabled). After the header, sections appear when the rule has data to show:
 
-- **Rationale, Fix guidance, Bad example, Good example** — sourced from the curated `RuleDocs` metadata. Most rules carry auto-generated text; a handful (e.g. `docs.dataclass-attributes`, `docs.complex-branch-rationale`) have hand-written entries.
+- **Rationale, Fix guidance, Bad example, Good example** — sourced from the rule catalogue metadata. Most rules use generated text; selected rules (such as `docs.dataclass-attributes`) carry hand-written entries.
 - **Default options** — appears only when the rule has per-rule options. Each row shows the option name, type, and one-line description.
 - **Escape hatches** — every config key path you can set for this rule, plus `rules.<id>.enabled` to turn it off entirely.
 - **Confidence** — why the rule has its configured confidence rating.
@@ -67,7 +76,7 @@ gruff-py list-rules naming.short-variable --format json | jq '.documentation.opt
 }
 ```
 
-The single-rule JSON payload has `id`, `name`, `pillar`, `tier`, `defaultSeverity`, `confidence`, `defaultEnabled`, `options`, `documentation` (full `RuleDocs`), and `relatedRules`, plus an optional `threshold` (a single value, as on `complexity.cyclomatic`) or `thresholds` (a named map, as on `test-quality.eager-test`) key — present only for rules that define one, so the `naming.short-variable` example above has neither.
+The single-rule JSON payload has `id`, `name`, `pillar`, `tier`, `defaultSeverity`, `confidence`, `defaultEnabled`, `options`, `documentation` and `relatedRules`. A rule with thresholds publishes the named `thresholds` map, as on `complexity.cyclomatic` or `test-quality.excessive-mocking`; a rule with none omits it. The `naming.short-variable` example above has no thresholds.
 
 ## Unknown rule ids
 

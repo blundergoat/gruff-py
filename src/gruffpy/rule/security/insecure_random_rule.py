@@ -45,9 +45,7 @@ class InsecureRandomRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the insecure-random rule as a medium-confidence warning.
 
-        Medium confidence because ``random`` is fine for simulations,
-        sampling, and tests; the heuristic only fires when the *use*
-        smells security-sensitive.
+        Medium confidence reflects legitimate uses in simulations, sampling and tests.
 
         Returns:
             Definition for the insecure-random rule under the security pillar.
@@ -62,19 +60,16 @@ class InsecureRandomRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``random.*`` calls inside security-smelling enclosing context.
+        """Flag supported random calls whose nearest plain assignment or function has a security-related name.
 
-        Walks up the call's parent chain: if the assignment target or
-        enclosing function name passes ``has_security_smell`` (``token``,
-        ``password``, ``api_key``, etc.), the call is flagged with a
-        ``secrets``-module remediation.
+        Plain assignments inspect bare-name targets; matched calls recommend the secrets module.
 
         Args:
             unit: Parsed source file to inspect (with parent links).
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per ``random.X`` call in a security-smelling scope.
+            One finding per matched call, or an empty list when parsing is unavailable or no supported call matches.
         """
         if unit.tree is None or "random" not in unit.source:
             return []
@@ -93,10 +88,7 @@ class InsecureRandomRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"`{target}` used for a security-smelling value - "
-                        f"`random` is not cryptographically secure."
-                    ),
+                    message=(f"`{target}` used for a security-smelling value - `random` is not cryptographically secure."),
                     file_path=unit.file.display_path,
                     line=node.lineno,
                     severity=definition.default_severity,
@@ -104,10 +96,7 @@ class InsecureRandomRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Use the ``secrets`` module: ``secrets.token_hex(32)``, "
-                        "``secrets.choice(...)``, ``secrets.randbelow(...)``."
-                    ),
+                    remediation=("Use the ``secrets`` module: ``secrets.token_hex(32)``, ``secrets.choice(...)``, ``secrets.randbelow(...)``."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),
@@ -116,12 +105,32 @@ class InsecureRandomRule(Rule):
 
 
 def _is_random_call(target: str) -> bool:
+    """Recognize a listed method under the literal random target prefix.
+
+    This check does not resolve import aliases or runtime bindings.
+
+    Args:
+        target: Resolved target spelling to compare with the supported random methods.
+
+    Returns:
+        True when the spelling has the random prefix and a listed remaining method name; false otherwise.
+    """
     if target.startswith("random."):
         return target.split(".", 1)[1] in _RANDOM_METHODS
     return False
 
 
 def _has_security_context_smell(call: ast.Call) -> bool:
+    """Check the nearest plain assignment or function for a security-related name.
+
+    A plain assignment checks only bare-name targets. A nonmatching nearest context stops the search rather than falling through to outer contexts.
+
+    Args:
+        call: Call with parent links used to find the first enclosing plain assignment or function.
+
+    Returns:
+        Whether that first context matches the name heuristic; false if it does not or no such parent exists.
+    """
     parent = getattr(call, "parent", None)
     while parent is not None:
         if isinstance(parent, ast.Assign):

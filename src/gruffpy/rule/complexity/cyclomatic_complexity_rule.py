@@ -12,6 +12,9 @@ Decision points (each +1):
 
 Base value: 1 per function. Nested function definitions are scored
 independently and do NOT contribute to the parent's count.
+
+The shared count above stays radon-aligned for its other consumers. The finding
+rule discounts non-wildcard match cases after the first in each dispatch.
 """
 
 import ast
@@ -31,13 +34,16 @@ from gruffpy.rule.complexity._walks import (
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+from gruffpy.suppression.sensitive_exclusion_filter import is_built_in_test_path
 
 _CYCLOMATIC_CACHE_ATTR = "_gruffpy_cyclomatic_complexity"
 
 
 class CyclomaticComplexityRule(Rule):
-    """Report functions whose McCabe complexity exceeds configured thresholds."""
+    """Report functions over configured complexity thresholds, discounting extra match cases."""
 
     ID = "complexity.cyclomatic"
 
@@ -55,19 +61,26 @@ class CyclomaticComplexityRule(Rule):
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
             default_threshold=20,
+            # The 0.6.0 sample found 26 actionable upper-band findings out of 50, below the 0.60 precision floor.
+            # Enable this rule when a project needs cyclomatic scores alongside complexity.cognitive.
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Analyze function-like nodes for cyclomatic complexity findings.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Source file to inspect; traversal may cache the function list and complexity scores on its AST.
             context: Rule execution context with threshold settings.
 
         Returns:
-            Findings for functions above the configured complexity threshold.
+            Findings above the configured threshold; empty for a missing AST, a built-in test path or no qualifying function.
         """
         if unit.tree is None:
+            return []
+
+        # Built-in test paths are exempt so this metric does not ask callers to split test control flow.
+        if is_built_in_test_path(unit.file.display_path):
             return []
 
         definition = self.definition()
@@ -75,8 +88,9 @@ class CyclomaticComplexityRule(Rule):
 
         findings: list[Finding] = []
         for fn in iter_functions(unit.tree):
-            cc = cyclomatic_for(fn)
+            cc = cyclomatic_for(fn) - _extra_match_cases(fn)
             threshold_match = settings.high_value_threshold_match(cc)
+            band = limit_band(cc, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -85,23 +99,16 @@ class CyclomaticComplexityRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} has cyclomatic complexity {cc}, "
-                        f"above the {threshold_match.severity.value} threshold of "
-                        f"{_format_number(threshold_match.threshold)}."
-                    ),
+                    message=f"Function {symbol!r} has cyclomatic complexity {cc}, above the limit of {_format_number(threshold_match.threshold)}.",
                     file_path=unit.file.display_path,
                     line=fn.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Extract decision branches into helper functions; "
-                        "replace nested conditionals with early returns or dispatch tables."
-                    ),
+                    remediation=band_advice(band, _band.LOWER_FUNCTION, _band.SIMPLIFY_PATH),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "complexity": cc,
@@ -109,6 +116,7 @@ class CyclomaticComplexityRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -122,7 +130,7 @@ def cyclomatic_for(fn: FunctionLike) -> int:
     docstring. Nested function bodies are skipped.
 
     Args:
-        fn: Function, async function, or lambda node to score.
+        fn: Function, async function, or lambda node to score; computed scores are stored on this node and reused on later calls.
 
     Returns:
         Cyclomatic complexity score for the node body.
@@ -138,7 +146,35 @@ def cyclomatic_for(fn: FunctionLike) -> int:
     return count
 
 
+def _extra_match_cases(fn: FunctionLike) -> int:
+    """Count excess non-wildcard cases so this rule charges at most one decision per match.
+
+    The maintainability index and documentation rationale retain the uncapped cyclomatic_for score.
+
+    Args:
+        fn: Function, async function, or lambda node whose matches are counted.
+
+    Returns:
+        The number of non-wildcard cases beyond one, summed over every match in the function.
+    """
+    extra = 0
+    for node in body_nodes(fn):
+        if isinstance(node, ast.Match):
+            cases = sum(1 for case in node.cases if not is_wildcard_pattern(case.pattern))
+            extra += max(cases - 1, 0)
+    return extra
+
+
 def _increment_for(node: ast.AST) -> int:
+    """Return how many decision points one body node adds to the radon-aligned cyclomatic count.
+
+    Args:
+        node: AST node from the body of the function being scored.
+
+    Returns:
+        The node's increment: 1 for an if, for, async for, while, except handler, ternary or assert; 1 for a match case unless its pattern is the bare
+        wildcard; one per operator of a boolean operation; 1 plus one per if clause for a comprehension generator; 0 for any other node.
+    """
     if isinstance(
         node,
         ast.If | ast.For | ast.AsyncFor | ast.While | ast.ExceptHandler | ast.IfExp | ast.Assert,
@@ -154,6 +190,14 @@ def _increment_for(node: ast.AST) -> int:
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message, dropping the decimal point from whole-number floats.
+
+    Args:
+        value: Threshold the measured complexity exceeded, which may arrive as an int or a float.
+
+    Returns:
+        The threshold as text: a fractional float exactly as str renders it, and any whole number, int or float, in integer form such as 20.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

@@ -11,6 +11,19 @@ from gruffpy.finding.severity import Severity
 
 _RULE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
+# Knob names gruff-go already publishes for a single-threshold rubric, keyed by rule id. The
+# family listing shape (M09, ratified 2026-09-09) carries every threshold as a named map; a rubric
+# whose id has no knob name anywhere in the family publishes the one-key map ``{"threshold": N}``
+# so no new permanent public identifier is invented.
+_LISTING_THRESHOLD_KNOB_NAMES: dict[str, str] = {
+    "complexity.cognitive": "maxComplexity",
+    "complexity.cyclomatic": "maxComplexity",
+    "complexity.nesting-depth": "maxDepth",
+    "size.file-length": "maxLines",
+    "size.function-length": "maxLines",
+    "size.parameter-count": "maxParameters",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class RuleDefinition:
@@ -63,9 +76,7 @@ class RuleDefinition:
     def get_description(self) -> str:
         """Return the human-readable description, falling back to the rule name.
 
-        SARIF and other consumers want a sentence - the ``description``
-        field is optional, so reporters call this rather than testing for
-        emptiness themselves.
+        Reporters use this fallback because description is optional.
 
         Returns:
             Non-empty description or the rule's display name.
@@ -75,15 +86,30 @@ class RuleDefinition:
     def threshold_payload(self) -> dict[str, Any]:
         """Return the JSON-projectable threshold shape for output consumers.
 
-        Single-threshold rubrics (ADR-014) project ``{"threshold": value}`` — the
-        severity is carried separately as the rule's ``defaultSeverity``. Named-knob
-        rules project ``{"thresholds": {...}}``; rules with neither project ``{}``.
+        Single-threshold rubrics follow ADR-014 and return a threshold key; severity remains in defaultSeverity.
+        Named-knob rules return a thresholds map; rules with neither return an empty mapping.
 
         Returns:
             Mapping to splat into a rule-metadata payload.
         """
         if self.default_threshold is not None:
             return {"threshold": self.default_threshold}
+        if self.default_thresholds:
+            return {"thresholds": dict(self.default_thresholds)}
+        return {}
+
+    def listing_threshold_payload(self) -> dict[str, Any]:
+        """Return the family listing projection of this rule's thresholds.
+
+        Single values use a family knob name, falling back to threshold; named maps are copied unchanged.
+        With neither form set, the payload is empty. threshold_payload keeps its separate shape for SARIF.
+
+        Returns:
+            A thresholds entry to merge into the rule listing, or an empty mapping when the rule has no threshold defaults.
+        """
+        if self.default_threshold is not None:
+            knob = _LISTING_THRESHOLD_KNOB_NAMES.get(self.id, "threshold")
+            return {"thresholds": {knob: self.default_threshold}}
         if self.default_thresholds:
             return {"thresholds": dict(self.default_thresholds)}
         return {}

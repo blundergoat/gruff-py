@@ -3,11 +3,6 @@
 from typing import Any
 
 _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
-    "security.sql-concatenation": {
-        "cwe": ["CWE-89"],
-        "owasp": ["A03:2021-Injection"],
-        "securitySeverity": "high",
-    },
     "security.disabled-ssl-verification": {
         "cwe": ["CWE-295"],
         "owasp": ["A02:2021-Cryptographic Failures"],
@@ -83,11 +78,6 @@ _RULE_SECURITY_METADATA: dict[str, dict[str, Any]] = {
         "owasp": ["A03:2021-Injection"],
         "securitySeverity": "high",
     },
-    "security.django-mark-safe": {
-        "cwe": ["CWE-79"],
-        "owasp": ["A03:2021-Injection"],
-        "securitySeverity": "medium",
-    },
     "security.django-raw-sql": {
         "cwe": ["CWE-89"],
         "owasp": ["A03:2021-Injection"],
@@ -157,7 +147,7 @@ def finding_security_metadata(
         sink_label: Optional sink taxonomy label for the finding.
 
     Returns:
-        Security taxonomy plus optional source and sink labels.
+        Registered taxonomy plus any nonempty labels. For an unregistered rule, only supplied labels appear, so the mapping may be empty.
     """
     metadata = rule_security_metadata(rule_id)
     if source_label:

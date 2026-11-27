@@ -10,16 +10,32 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(source: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for x.py.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        A unit for x.py with parent links on every non-root AST node.
+    """
     tree = ast.parse(source)
-    # mirror PythonFileParser._attach_parents
+    # Match python_parser._attach_parents so rules can follow enclosing scopes.
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # The parser and fixture add parent dynamically.
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def _ctx(threshold: int = 30) -> RuleContext:
+    """Build a rule context with the function length rule enabled at an error threshold.
+
+    Args:
+        threshold: Value the rule allows before it reports; defaults to 30.
+
+    Returns:
+        A context whose config enables only the function length rule at that threshold.
+    """
     rule = FunctionLengthRule()
     config = AnalysisConfig(
         rules={
@@ -33,6 +49,11 @@ def _ctx(threshold: int = 30) -> RuleContext:
 
 
 def test_under_warning_threshold_emits_no_finding():
+    """Report nothing for a two-line function against a threshold of 5.
+
+    Returns:
+        None. Asserts that a two-line function against a threshold of 5 produces no findings.
+    """
     source = "def f():\n    return 1\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     assert findings == []
@@ -45,6 +66,11 @@ _EXPECTED_REPORTED_LINES = _BODY_STATEMENT_COUNT + 1
 
 
 def test_above_threshold_emits_error():
+    """Report an 11-line function against a threshold of 5 as one error finding on f whose metadata holds the lines, threshold and type.
+
+    Returns:
+        None. Checks for one error on f with the expected line count, threshold and threshold type.
+    """
     body = "\n".join(["    x = 1"] * _BODY_STATEMENT_COUNT)
     source = f"def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=_WARNING_BOUNDARY))
@@ -60,17 +86,29 @@ def test_above_threshold_emits_error():
 
 
 def test_far_above_threshold_emits_error():
-    body = "\n".join(["    x = 1"] * 25)
+    """Report a 31-line function against a threshold of 20 as one error finding in the upper limit band.
+
+    Returns:
+        None. Checks for one upper-band error with a line count of 31 and a threshold of 20.
+    """
+    # 31 lines against 20 is at one and a half times the limit or more, so the finding keeps error severity.
+    body = "\n".join(["    x = 1"] * 30)
     source = f"def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=20))
     assert len(findings) == 1
     f = findings[0]
     assert f.severity == Severity.ERROR
-    assert f.metadata["lines"] == 26
+    assert f.metadata["limitBand"] == "upper"
+    assert f.metadata["lines"] == 31
     assert f.metadata["threshold"] == 20
 
 
 def test_method_in_class_uses_qualified_symbol():
+    """Report a long method once, as C.m.
+
+    Returns:
+        None. Asserts that the method produces one finding with the qualified symbol C.m.
+    """
     body = "\n".join(["        x = 1"] * 8)
     source = f"class C:\n    def m(self):\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
@@ -79,27 +117,67 @@ def test_method_in_class_uses_qualified_symbol():
 
 
 def test_nested_functions_emit_independent_findings():
+    """Report both outer and outer.inner when a long nested function makes both long.
+
+    Returns:
+        None. Checks that both outer and outer.inner appear among the finding symbols.
+    """
     inner_body = "\n".join(["        x = 1"] * 10)
     outer_body = f"    def inner():\n{inner_body}\n    inner()\n"
     source = f"def outer():\n{outer_body}"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     symbols = {f.symbol for f in findings}
-    # outer wraps inner so outer is also long; both should be flagged
     assert "outer" in symbols
     assert "outer.inner" in symbols
 
 
-def test_decorator_lines_counted():
+def test_decorator_lines_are_free_but_still_mark_the_start():
+    """Measure a decorated two-line function at 2 lines while the finding starts at the decorator line.
+
+    Returns:
+        None. Checks that one finding counts two lines and starts at the decorator.
+    """
     source = "@decorator\ndef f():\n    return 1\n"
-    # Span = decorator (1) + def (2) + body (3) = 3 lines total
-    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=2))
+    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=1))
     assert len(findings) == 1
     f = findings[0]
-    assert f.metadata["lines"] == 3
-    assert f.line == 1  # starts at decorator line
+    assert f.metadata["lines"] == 2
+    assert f.line == 1  # the finding still starts at the decorator line
+
+
+def test_function_with_101_code_lines_is_reported_whatever_its_documentation():
+    """Report a documented function with 101 code lines once against a threshold of 100, measuring 101.
+
+    Returns:
+        None. Asserts that one finding counts the documented function's 101 code lines.
+    """
+    docstring = '    """Builds the values.\n\n    Every assignment below is code.\n    """'
+    body = "\n".join(f"    x{i} = {i}" for i in range(100))
+    source = f"def f():\n{docstring}\n{body}\n"
+    findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=100))
+    assert len(findings) == 1
+    assert findings[0].metadata["lines"] == 101
+
+
+def test_documented_short_function_is_not_reported():
+    """Report nothing for a one-statement function with a 53-line docstring and 150 comment lines.
+
+    Returns:
+        None. Asserts that the documentation and comment lines leave the short function below the reporting threshold.
+    """
+    explanation = "\n".join(f"    Line {i} of a long explanation." for i in range(50))
+    docstring = f'    """Returns one.\n\n{explanation}\n    """'
+    comments = "\n".join(f"    # Step {i} of the reasoning." for i in range(150))
+    source = f"def f():\n{docstring}\n{comments}\n    return 1\n"
+    assert FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=100)) == []
 
 
 def test_async_function_flagged():
+    """Report a long async function once, as f.
+
+    Returns:
+        None. Checks that the async function produces one finding with symbol f.
+    """
     body = "\n".join(["    x = 1"] * 10)
     source = f"async def f():\n{body}\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
@@ -108,7 +186,12 @@ def test_async_function_flagged():
 
 
 def test_lambda_is_considered():
-    # Lambda + threshold low enough to flag a single-line lambda.
+    """Report a one-line lambda once against a threshold of 0, with a symbol starting <lambda: and a count of 1.
+
+    Returns:
+        None. Checks for one finding with the lambda symbol prefix and a line count of 1.
+    """
+    # A one-line lambda needs a threshold below 1 because findings require a strict exceedance.
     source = "g = lambda x: x + 1\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=0))
     assert len(findings) == 1
@@ -117,12 +200,22 @@ def test_lambda_is_considered():
 
 
 def test_unit_with_no_tree_returns_empty():
+    """Report nothing for a unit without a parsed tree.
+
+    Returns:
+        None. Asserts that an analysis unit without a parsed tree produces no findings.
+    """
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source="", tree=None)
     assert FunctionLengthRule().analyse(unit, _ctx()) == []
 
 
 def test_findings_carry_fingerprint_and_remediation():
+    """Give the first finding a 16-character fingerprint, a remediation and an end line.
+
+    Returns:
+        None. Checks the first finding's fingerprint length and the presence of remediation and an end line.
+    """
     source = "def f():\n" + "\n".join(["    x = 1"] * 40) + "\n"
     findings = FunctionLengthRule().analyse(_make_unit(source), _ctx(threshold=5))
     f = findings[0]

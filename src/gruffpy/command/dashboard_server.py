@@ -32,6 +32,7 @@ class DashboardState:
         no_config: Whether config loading is disabled.
         include_ignored: Whether ignored files are included in scans.
         report_interactive: Whether generated HTML reports keep interactive controls.
+        deep_scan_budget: Atomic deep-scan override, or empty to use config/defaults.
     """
 
     project: str
@@ -41,6 +42,7 @@ class DashboardState:
     no_config: bool = False
     include_ignored: bool = False
     report_interactive: bool = False
+    deep_scan_budget: str = ""
 
     def to_query(self) -> dict[str, str]:
         """Serialise the state to the dashboard URL query-string shape.
@@ -59,14 +61,14 @@ class DashboardState:
             "noConfig": "1" if self.no_config else "0",
             "includeIgnored": "1" if self.include_ignored else "0",
             "reportInteractive": "1" if self.report_interactive else "0",
+            "deepScanBudget": self.deep_scan_budget,
         }
 
     def merge_query(self, query: dict[str, str]) -> "DashboardState":
-        """Return a new ``DashboardState`` with *query* values layered over the current ones.
+        """Return a new dashboard state with query values overriding recognised fields.
 
-        Each query parameter overrides the corresponding state field; missing
-        keys fall back to ``self``. The ``failOn`` value is sanitised against
-        :class:`FailThreshold` to avoid blindly accepting URL input.
+        Missing keys use current values as defaults. An invalid failOn becomes none, so findings alone do not fail the scan.
+        A supplied blank Boolean flag turns its option off.
 
         Args:
             query: Query parameters parsed from the request (single value each).
@@ -80,12 +82,9 @@ class DashboardState:
             fail_on=_valid_fail_on(query.get("failOn", self.fail_on)),
             config=query.get("config", self.config),
             no_config=_query_bool(query.get("noConfig", self.to_query()["noConfig"])),
-            include_ignored=_query_bool(
-                query.get("includeIgnored", self.to_query()["includeIgnored"])
-            ),
-            report_interactive=_query_bool(
-                query.get("reportInteractive", self.to_query()["reportInteractive"])
-            ),
+            include_ignored=_query_bool(query.get("includeIgnored", self.to_query()["includeIgnored"])),
+            report_interactive=_query_bool(query.get("reportInteractive", self.to_query()["reportInteractive"])),
+            deep_scan_budget=query.get("deepScanBudget", self.deep_scan_budget),
         )
 
 
@@ -103,21 +102,16 @@ def create_dashboard_server(
     initial_state: DashboardState,
     renderer: DashboardPageRenderer | None = None,
 ) -> ThreadingHTTPServer:
-    """Build (but do not start) the threaded HTTP server backing the dashboard.
+    """Bind the threaded dashboard HTTP listener without starting its request loop.
 
-    Returns a ``ThreadingHTTPServer`` so the caller can manage the lifecycle
-    (``serve_forever`` in the foreground, ``server_close`` on shutdown).
-    The handler routes ``/`` to the shell, ``/scan`` to a single analyse
-    run, ``/health`` to a probe, and ``/favicon.ico`` to ``204``.
+    The caller owns serve_forever and server_close; routes serve the shell, scans, health checks and the favicon response.
 
     Args:
         host: Bind address for the listener.
-        port: TCP port for the listener.
-        launch_root: Directory the CLI was invoked from; used to resolve
-            relative ``project`` paths from the form.
+        port: TCP port for the listener. Zero lets the operating system choose a port.
+        launch_root: Directory the CLI was invoked from, used to resolve relative project paths from the form.
         initial_state: Seed state derived from the CLI flags.
-        renderer: Page renderer override (tests inject a stub); defaults
-            to a fresh :class:`DashboardPageRenderer`.
+        renderer: Page renderer override, such as a test stub. None creates a fresh DashboardPageRenderer.
 
     Returns:
         Configured but not yet serving HTTP server.
@@ -131,7 +125,11 @@ def create_dashboard_server(
         server_version = "gruff-dashboard/0.1"
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler hook name
-            """Route GET to shell, scan, health, or 404 (``BaseHTTPRequestHandler`` hook)."""
+            """Write the shell, scan, health, favicon or 404 response for a GET request.
+
+            Returns:
+                None; status, headers and any response body are written to the client.
+            """
             parsed = urlparse(self.path)
             query = _flatten_query(parse_qs(parsed.query, keep_blank_values=True))
             if parsed.path == "/health":
@@ -151,11 +149,14 @@ def create_dashboard_server(
             self._send(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"not found\n")
 
         def log_message(self, format: str, *args: Any) -> None:
-            """Silence ``BaseHTTPRequestHandler``'s default stderr access log.
+            """Silence the base HTTP handler's default stderr access and error logs.
 
             Args:
                 format: Printf-style format from the base handler.
                 args: Format arguments - discarded.
+
+            Returns:
+                None. The handler discards the message instead of writing it to stderr.
             """
             return
 
@@ -179,6 +180,21 @@ def _scan_html(
     initial_state: DashboardState,
     query: dict[str, str],
 ) -> str:
+    """Return the iframe report for one scan of the merged dashboard request state.
+
+    The scan disables the baseline and editor links, uses the default display filter, and shows scan or rendering failures as exit code 2 pages.
+    Invalid project directories also produce exit code 2 pages; ValueError from project-path resolution propagates.
+
+    Args:
+        renderer: Dashboard page renderer that builds error pages and injects scan metadata into the HTML report.
+        launch_root: Resolved directory the dashboard was launched from; relative project values are resolved against it.
+        initial_state: Seed dashboard state from the CLI flags; query values are layered over it before the scan.
+        query: Flattened /scan query parameters, one value per key, that override the seed state.
+
+    Returns:
+        HTML for the iframe: the HTML report with the project root, display command, report exit code and duration injected as dashboard metadata, or
+        a dashboard error page with exit code 2 when the project root is not an existing directory or the scan fails.
+    """
     started_at = time.perf_counter()
     state = initial_state.merge_query(query)
     scan_root = _resolve_project_root(state.project, launch_root)
@@ -205,6 +221,7 @@ def _scan_html(
                 project_root=scan_root,
                 display_filter=FindingDisplayFilter(),
                 baseline=BaselineOptions(disabled=True),
+                deep_scan_budget=state.deep_scan_budget,
             )
         )
         html_text = HtmlReporter(
@@ -220,7 +237,7 @@ def _scan_html(
             exit_code=report.exit_code,
             duration_ms=duration_ms,
         )
-    except Exception as exc:  # pragma: no cover - defensive iframe error path.
+    except Exception as exc:  # pragma: no cover - the iframe shows the failure, so another local error report would duplicate it.
         return renderer.error_html(
             "The scan failed before an HTML report could be rendered.",
             str(exc),
@@ -230,18 +247,53 @@ def _scan_html(
 
 
 def _flatten_query(values: dict[str, list[str]]) -> dict[str, str]:
+    """Reduce parsed query parameters to one value per key, keeping the last value supplied for each key.
+
+    Args:
+        values: Query parameters from parse_qs, mapping each key to every value it appeared with in the URL.
+
+    Returns:
+        Mapping of each key to its last value, or to the empty string when the key has no values.
+    """
     return {key: items[-1] if items else "" for key, items in values.items()}
 
 
 def _query_bool(value: str) -> bool:
+    """Interpret a dashboard query flag as true only for the exact values 1, true, yes or on.
+
+    Args:
+        value: Raw flag value from the query string, or the 1 or 0 encoding produced by DashboardState.to_query.
+
+    Returns:
+        True when value is exactly 1, true, yes or on (case-sensitive); False for any other value, including 0 and the empty string.
+    """
     return value in {"1", "true", "yes", "on"}
 
 
 def _valid_fail_on(value: str) -> str:
+    """Keep a failOn value only when it matches a FailThreshold value, so URL input cannot select an unknown threshold.
+
+    Args:
+        value: failOn value taken from the query, or the current state's fail_on when the query omits it.
+
+    Returns:
+        The matching value or none for an unknown threshold. The none setting disables failure based on finding severity.
+    """
     return value if value in {item.value for item in FailThreshold} else "none"
 
 
 def _resolve_project_root(project: str, launch_root: Path) -> Path | None:
+    """Resolve the dashboard project field to an existing directory, interpreting relative values against the launch root.
+
+    Args:
+        project: Project root text from the dashboard state; a relative value is joined to launch_root, so an empty value resolves to launch_root
+            itself.
+        launch_root: Directory that relative project values are resolved against.
+
+    Returns:
+        The resolved absolute path when it is an existing directory; None when path resolution raises OSError or the resolved path is not a directory.
+        None is the ordinary invalid-directory result, so the caller owns the error response and no local log is added.
+    """
     candidate = Path(project)
     if not candidate.is_absolute():
         candidate = launch_root / candidate
@@ -253,6 +305,17 @@ def _resolve_project_root(project: str, launch_root: Path) -> Path | None:
 
 
 def _parse_paths(paths: str) -> list[str]:
+    """Split the dashboard paths field into scan path arguments, dropping anything that looks like a command-line option.
+
+    Shell-style quoting is honoured; malformed quoting falls back to whitespace splitting.
+    This is normal recovery for form input, so logging the caught parse error would report an already handled condition.
+
+    Args:
+        paths: Raw paths text from the dashboard state.
+
+    Returns:
+        Path arguments with empty parts and parts starting with - removed, or a list holding only . when no path remains.
+    """
     try:
         parts = shlex.split(paths)
     except ValueError:
@@ -262,6 +325,17 @@ def _parse_paths(paths: str) -> list[str]:
 
 
 def _config_path(config: str, project_root: Path, no_config: bool) -> Path | None:
+    """Work out the explicit config file path a dashboard scan passes to analysis, anchoring relative paths at the project root.
+
+    Args:
+        config: Config path text from the dashboard state; empty means no explicit config path.
+        project_root: Resolved project root that a relative config path is joined to.
+        no_config: When true, config loading is disabled and config is ignored.
+
+    Returns:
+        None when no_config skips loading or when an empty config field leaves discovery to analysis.
+        Otherwise, the config path as a Path, joined to project_root if relative.
+    """
     if no_config or config == "":
         return None
     path = Path(config)
@@ -269,6 +343,18 @@ def _config_path(config: str, project_root: Path, no_config: bool) -> Path | Non
 
 
 def _display_command_for(state: DashboardState, paths: list[str]) -> list[str]:
+    """Build the analyse argv shown for a dashboard scan without executing it.
+
+    Include HTML output and the failure threshold, enabled scan options, and paths after --; no_config takes precedence over config.
+
+    Args:
+        state: Merged dashboard state whose fail_on, config, no_config, include_ignored, report_interactive and deep_scan_budget fields select the
+            flags.
+        paths: Parsed scan paths appended after the -- separator.
+
+    Returns:
+        argv list beginning with the tool name and analyse and ending with -- and the paths; the dashboard renderer shell-quotes it for display.
+    """
     command = [TOOL_NAME, "analyse", "--format", "html", "--fail-on", state.fail_on]
     if state.no_config:
         command.append("--no-config")
@@ -278,10 +364,20 @@ def _display_command_for(state: DashboardState, paths: list[str]) -> list[str]:
         command.append("--include-ignored")
     if state.report_interactive:
         command.append("--report-interactive")
+    if state.deep_scan_budget:
+        command.extend(["--deep-scan-budget", state.deep_scan_budget])
     command.append("--")
     command.extend(paths)
     return command
 
 
 def _duration_ms(started_at: float) -> int:
+    """Measure the wall-clock milliseconds elapsed since a scan started, for the scan metadata and error pages the dashboard renders.
+
+    Args:
+        started_at: time.perf_counter value taken when the scan began.
+
+    Returns:
+        Elapsed milliseconds rounded to the nearest integer, never negative.
+    """
     return max(0, int(round((time.perf_counter() - started_at) * 1000)))

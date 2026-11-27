@@ -14,17 +14,16 @@ from gruffpy.config.exceptions import ConfigError
 
 
 def load_gruff_py_yaml(path: Path) -> dict[str, Any]:
-    """Return the parsed dict at *path*, or ``{}`` if the file is empty.
+    """Return the YAML mapping at the supplied path, treating an empty document or YAML null as empty configuration.
 
     Args:
         path: Filesystem path to the YAML config file.
 
     Returns:
-        Parsed top-level mapping, or ``{}`` for an empty file.
+        The top-level mapping, or an empty mapping for an empty document or YAML null.
 
     Raises:
-        ConfigError: On I/O failure, YAML parse error, or when the top-level
-            value is not a mapping (e.g. a list at the file root).
+        ConfigError: On I/O failure, YAML parse error, or a non-null top-level value that is not a mapping.
     """
     try:
         with open(path, encoding="utf-8") as f:

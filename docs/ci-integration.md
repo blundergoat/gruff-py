@@ -12,12 +12,15 @@ on: [push, pull_request]
 jobs:
   analyse:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d  # v10.4.0
       - run: uv sync --all-extras --dev
       - run: uv run gruff-py analyse src tests --format sarif --fail-on none > gruff-py.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934  # v4.39.5
         with:
           sarif_file: gruff-py.sarif
 ```
@@ -37,7 +40,7 @@ every CI job inherits the same gate without repeating the flag:
 
 ```yaml
 schemaVersion: gruff-py.config.v0.1
-minimumSeverity:
+failOn:
   analyse: warning
   report: none
 ```
@@ -59,7 +62,8 @@ Future scans auto-apply `gruff-baseline.json` when present. Use
 ## Diff Flags
 
 Changed-region scans keep findings whose location or enclosing declaration
-overlaps the changed hunk and add `suppressedCount` to JSON output:
+overlaps the changed hunk and publish the excluded count at
+`summary.suppressedFindings` and `diff.filteredFindings`:
 
 ```sh
 uv run gruff-py analyse src/foo.py --format json --changed-ranges "3-3,8-10" --no-baseline
@@ -74,27 +78,31 @@ own diff instead of inheriting or hiding adoption debt. See
 
 ## Ignored Paths and `check-ignore`
 
-`paths.ignore` in `.gruff-py.yaml` is **authoritative in every invocation shape**
-— directory walks, explicit file arguments, and all diff/changed-region modes
-(`--diff`, `--diff -`, `--changed-ranges`, `--since`). A path matching
-`paths.ignore` produces no findings however it is supplied, so a coding-agent
-hook that passes the agent's changed files never surfaces findings for paths the
-project has deliberately excluded. `--include-ignored` opts back into
-default-ignored and `.gitignore`d paths only; it never overrides `paths.ignore`.
+`paths.ignore` in `.gruff-py.yaml` is **authoritative in every invocation
+shape** — directory walks, explicit file arguments, and every diff or
+changed-region mode (`--diff`, `--diff -`, `--changed-ranges`, `--since`). A
+path matching `paths.ignore` never produces findings, so a coding-agent hook
+passing changed files will not report paths the project deliberately excluded.
+`--include-ignored` opts back into default-ignored and `.gitignore`-excluded
+paths only; it never overrides `paths.ignore`.
 
-Skipped paths are reported with a reason. Alongside the back-compatible string
-`ignoredPaths`, JSON output carries an additive `ignoredPathDetails` array — one
-object per skipped path with its `source` (`config` | `gitignore` | `default` |
-`generated`) and the matched `pattern` (for `config` matches):
+Skipped paths are reported with a reason. JSON output carries a
+`paths.details` array — one object per skipped path with a canonical `reason`,
+its `source` (`config` | `gitignore` | `default` | `generated`) and the matched
+`pattern` (for `config` matches). `paths.ignoredPaths` is the ordered path
+projection of the same rows:
 
 ```jsonc
-"ignoredPathDetails": [
-  { "path": "generated/out.py", "source": "config", "pattern": "generated/**" }
-]
+"paths": {
+  "details": [
+    { "path": "generated/out.py", "reason": "config-ignore", "source": "config", "pattern": "generated/**" }
+  ],
+  "ignoredPaths": ["generated/out.py"]
+}
 ```
 
-To ask whether gruff would ignore specific paths *without* running analysis — for
-example from an agent hook deciding whether an edited file is even in scope — use
+To check whether gruff would ignore specific paths without running analysis —
+for example from a hook deciding whether an edited file is in scope — use
 `check-ignore`:
 
 ```sh

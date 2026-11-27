@@ -11,12 +11,25 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str) -> AnalysisUnit:
+    """Parse source into an analysis unit for x.py.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        Analysis unit containing the source and parsed tree for x.py.
+    """
     tree = ast.parse(source)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def _ctx() -> RuleContext:
+    """Build a rule context with the substring vocabulary match rule enabled.
+
+    Returns:
+        Context enabling the substring vocabulary match rule.
+    """
     rule = SubstringVocabularyMatchRule()
     return RuleContext(
         project_root="/",
@@ -25,10 +38,23 @@ def _ctx() -> RuleContext:
 
 
 def _analyse(source: str):
+    """Run the substring vocabulary match rule over source as x.py.
+
+    Args:
+        source: Python source to analyse.
+
+    Returns:
+        The rule's findings, or an empty list when no scan qualifies.
+    """
     return SubstringVocabularyMatchRule().analyse(_unit(source), _ctx())
 
 
 def test_any_scan_over_parameter_lowered_text_fires():
+    """Flag an any() substring scan over a lowered parameter once, naming the vocabulary and text and advising token matching.
+
+    Returns:
+        None after checking the finding count, metadata, and advice.
+    """
     src = (
         'ROUTING_TERMS = ("fee", "form", "file")\n\n'
         "def route(message):\n"
@@ -43,16 +69,22 @@ def test_any_scan_over_parameter_lowered_text_fires():
 
 
 def test_any_scan_directly_over_parameter_fires():
-    src = (
-        'TOPIC_WORDS = frozenset({"refund", "fee"})\n\n'
-        "def classify(text):\n"
-        "    return any(term in text for term in TOPIC_WORDS)\n"
-    )
+    """Flag an any() scan of a frozenset vocabulary directly over a parameter once.
+
+    Returns:
+        None after checking the finding count.
+    """
+    src = 'TOPIC_WORDS = frozenset({"refund", "fee"})\n\ndef classify(text):\n    return any(term in text for term in TOPIC_WORDS)\n'
     findings = _analyse(src)
     assert len(findings) == 1
 
 
 def test_loop_form_fires():
+    """Flag a for loop that tests each vocabulary term with in against a parameter once.
+
+    Returns:
+        None after checking the finding count.
+    """
     src = (
         'TOPIC_WORDS = ("fee", "form")\n\n'
         "def classify(question):\n"
@@ -66,6 +98,11 @@ def test_loop_form_fires():
 
 
 def test_token_membership_after_findall_is_clean():
+    """Report nothing when the terms are checked against re.findall tokens instead of the text.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
     src = (
         "import re\n\n"
         'TERM_SET = ("fee", "form")\n\n'
@@ -77,39 +114,43 @@ def test_token_membership_after_findall_is_clean():
 
 
 def test_same_name_token_reassignment_is_clean():
-    # Reassigning the free-text parameter to a token list under the same name
-    # makes `term in text` list membership, not substring matching - the rule
-    # must not flag the tokenise-then-membership fix it recommends.
-    src = (
-        'TERM_SET = ("fee", "form")\n\n'
-        "def classify(text):\n"
-        "    text = text.split()\n"
-        "    return any(term in text for term in TERM_SET)\n"
-    )
+    """Report nothing when the text parameter is reassigned to its split tokens before the scan.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    # After text.split(), in checks whole tokens under the same name, so the rule should accept its own suggested fix.
+    src = 'TERM_SET = ("fee", "form")\n\ndef classify(text):\n    text = text.split()\n    return any(term in text for term in TERM_SET)\n'
     assert _analyse(src) == []
 
 
 def test_compiled_word_boundary_regex_is_clean():
-    src = (
-        "import re\n\n"
-        '_PATTERN = re.compile(r"\\b(?:fee|form)\\b")\n\n'
-        "def classify(message):\n"
-        "    return bool(_PATTERN.search(message.lower()))\n"
-    )
+    """Report nothing for a compiled word-boundary regex search over the lowered message.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    src = 'import re\n\n_PATTERN = re.compile(r"\\b(?:fee|form)\\b")\n\ndef classify(message):\n    return bool(_PATTERN.search(message.lower()))\n'
     assert _analyse(src) == []
 
 
 def test_phrase_only_vocabulary_is_clean():
-    src = (
-        'PHRASES = ("reset my password", "talk to a human")\n\n'
-        "def route(message):\n"
-        "    return any(term in message for term in PHRASES)\n"
-    )
+    """Report nothing when every vocabulary entry is a multi-word phrase.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    src = 'PHRASES = ("reset my password", "talk to a human")\n\ndef route(message):\n    return any(term in message for term in PHRASES)\n'
     assert _analyse(src) == []
 
 
 def test_non_free_text_name_is_clean():
-    # Marker scans over identifier-ish values are intentional substring checks.
+    """Report nothing for a marker scan over a normalized local derived from the secret parameter.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    # The rule skips this marker scan because neither secret nor normalized has a free-text name token.
     src = (
         'MARKERS = ("dummy", "example")\n\n'
         "def has_marker(secret):\n"
@@ -120,6 +161,11 @@ def test_non_free_text_name_is_clean():
 
 
 def test_call_derived_text_is_clean():
+    """Report nothing when the scanned text comes from a function call, not a parameter.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
     src = (
         'TERMS = ("fee", "form")\n\n'
         "def load():\n"
@@ -132,18 +178,22 @@ def test_call_derived_text_is_clean():
 
 
 def test_local_vocabulary_is_clean():
-    src = (
-        "def route(message):\n"
-        '    terms = ("fee", "form")\n'
-        "    return any(term in message for term in terms)\n"
-    )
+    """Report nothing when the vocabulary is a local tuple, not a module constant.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    src = 'def route(message):\n    terms = ("fee", "form")\n    return any(term in message for term in terms)\n'
     assert _analyse(src) == []
 
 
 def test_nested_function_scan_flagged_once():
-    # The inner function owns the scan and is analysed in its own pass; walking
-    # the outer scope must not re-collect it even though both share the
-    # free-text parameter name `text`.
+    """Flag a scan inside a nested function once, though the outer function shares its text parameter name.
+
+    Returns:
+        None after checking the finding count.
+    """
+    # The scan belongs to the inner pass even when both functions use text, so the outer pass must skip the inner body.
     src = (
         'TERMS = ("fee", "form")\n\n'
         "def outer(text):\n"
@@ -156,9 +206,12 @@ def test_nested_function_scan_flagged_once():
 
 
 def test_dict_typed_parameter_membership_is_clean():
-    # `k in mapping` over a dict-annotated parameter is key membership, not
-    # substring containment, even when the name carries a free-text token
-    # (`tool_input` -> `input`). Regression for a real corpus false positive.
+    """Report nothing for a key-membership scan over a parameter annotated as a dict.
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    # Dict membership checks keys, so the rule skips tool_input even though its name includes the free-text token input.
     src = (
         "from typing import Any\n\n"
         'RANGE_KEYS = ("offset", "limit", "ranges")\n\n'
@@ -169,18 +222,24 @@ def test_dict_typed_parameter_membership_is_clean():
 
 
 def test_str_annotated_parameter_still_fires():
+    """Flag a scan over a parameter annotated as str once.
+
+    Returns:
+        None after checking the finding count.
+    """
     # The collection-annotation guard must not suppress genuine str parameters.
-    src = (
-        'TERMS = ("fee", "form")\n\n'
-        "def classify(message: str) -> bool:\n"
-        "    return any(term in message for term in TERMS)\n"
-    )
+    src = 'TERMS = ("fee", "form")\n\ndef classify(message: str) -> bool:\n    return any(term in message for term in TERMS)\n'
     findings = _analyse(src)
     assert len(findings) == 1
 
 
 def test_optional_collection_parameter_is_clean():
-    # Optional[list[str]] unwraps to list, so `k in tool_input` is membership.
+    """Report nothing for a scan over a parameter annotated Optional[list[str]].
+
+    Returns:
+        None after checking that the rule reports no findings.
+    """
+    # The rule sees the list inside Optional and excludes the parameter from free-text scanning.
     src = (
         "from typing import Optional\n\n"
         'KEYS = ("offset", "limit", "ranges")\n\n'
@@ -191,6 +250,11 @@ def test_optional_collection_parameter_is_clean():
 
 
 def test_union_collection_parameter_is_clean():
+    """Report nothing for a scan over a parameter annotated Union[str, dict].
+
+    Returns:
+        None. Asserts that the vocabulary scan produces no findings for the union-annotated parameter.
+    """
     src = (
         "from typing import Union\n\n"
         'KEYS = ("offset", "limit")\n\n'
@@ -201,6 +265,11 @@ def test_union_collection_parameter_is_clean():
 
 
 def test_definition_is_advisory_medium_confidence_correctness():
+    """Define the rule as an advisory, medium-confidence correctness rule that is enabled by default.
+
+    Returns:
+        None. Asserts the rule's default severity, confidence, pillar, and enabled state.
+    """
     definition = SubstringVocabularyMatchRule().definition()
     assert definition.default_severity.value == "advisory"
     assert definition.confidence.value == "medium"

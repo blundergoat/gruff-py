@@ -1,4 +1,8 @@
-"""Rewrite legacy gruff config key shapes to the current schema (``migrate-config``)."""
+"""Prepare YAML changes for `gruff-py migrate-config`.
+
+The CLI can show this diff for a dry run or write the proposed configuration to a separate file.
+The migration keeps current settings and refuses conflicting gate values that require a user's decision.
+"""
 
 import copy
 import difflib
@@ -26,7 +30,10 @@ _TOML_GUIDANCE = (
 
 @dataclass(frozen=True, slots=True)
 class ConfigMigration:
-    """Outcome of migrating one YAML config file.
+    """Describe the proposed changes to one project's YAML configuration.
+
+    The command uses this result to explain a dry run and name the source file it preserves.
+    When changes are needed, the rendered YAML is ready for the separate output chosen by the user.
 
     Attributes:
         path: The config file the migration targets.
@@ -73,9 +80,7 @@ class ConfigMigration:
             True when a rewrite applies and the original text carries comment
             lines (the data-level re-render cannot preserve them).
         """
-        return self.has_changes() and any(
-            line.lstrip().startswith("#") for line in self.original_text.splitlines()
-        )
+        return self.has_changes() and any(line.lstrip().startswith("#") for line in self.original_text.splitlines())
 
 
 def migrate_config_file(project_root: Path, config_path: Path | None) -> ConfigMigration:
@@ -123,13 +128,29 @@ def migrate_config_file(project_root: Path, config_path: Path | None) -> ConfigM
 
 
 def _resolve_target(project_root: Path, config_path: Path | None) -> Path:
+    """Choose the YAML config file to migrate.
+
+    The explicit path wins when one is given; otherwise the first of .gruff-py.yaml and .gruff.yaml found in the project root is used.
+
+    Args:
+        project_root: Directory searched for .gruff-py.yaml, then .gruff.yaml, when config_path is None; it is also checked for pyproject.toml when
+            neither YAML file exists.
+        config_path: Explicit config path supplied by the user, or None to discover one in project_root; an explicit path is validated and never falls
+            back to discovery.
+
+    Returns:
+        The explicit config_path unchanged when given, otherwise the first YAML config found directly in project_root.
+
+    Raises:
+        ConfigError: When the explicit path has a .toml suffix, or discovery finds no YAML config but pyproject.toml exists (both carry the hand-edit
+            guidance for TOML configs); when the explicit path's suffix is not .yaml or .yml; when the explicit path does not exist; or when discovery
+            finds neither a YAML config nor pyproject.toml, in which case the message points to gruff-py init.
+    """
     if config_path is not None:
         if config_path.suffix == ".toml":
             raise ConfigError(_TOML_GUIDANCE)
         if config_path.suffix not in {".yaml", ".yml"}:
-            raise ConfigError(
-                f"Unsupported config file extension for {config_path}; use .yaml or .yml."
-            )
+            raise ConfigError(f"Unsupported config file extension for {config_path}; use .yaml or .yml.")
         if not config_path.exists():
             raise ConfigError(f"Config file does not exist: {config_path}")
         return config_path
@@ -146,6 +167,19 @@ def _migrate_document(
     document: dict[str, Any],
     defaults: AnalysisConfig,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Deep-copy the config, pin schemaVersion first, and apply key and legacy tier rewrites without mutating the input.
+
+    Record changed schema versions and applied rewrites; skip non-mapping rule sections and note unknown rule mappings left unchanged.
+
+    Args:
+        document: The config mapping parsed from the YAML file; it is deep-copied before any rewrite.
+        defaults: Registry-default analysis config whose rules map decides which rule ids are known and supplies each known rule's default settings
+            for the legacy threshold rewrite.
+
+    Returns:
+        A tuple of the migrated document, the change lines for every rewrite applied (empty when the config is already current), and the notes for
+        unknown rule ids left as-is.
+    """
     changes: list[str] = []
     notes: list[str] = []
     working = copy.deepcopy(document)
@@ -159,18 +193,59 @@ def _migrate_document(
         if key != "schemaVersion":
             migrated[key] = value
 
+    changes.extend(_migrate_zero_six_keys(migrated))
+
     rules = migrated.get("rules")
     if isinstance(rules, dict):
         for rule_id, section in rules.items():
             if not isinstance(section, dict):
                 continue
             if rule_id not in defaults.rules:
-                notes.append(
-                    f"rules.{rule_id}: unknown rule id, left as-is (analysis warns about it)"
-                )
+                notes.append(f"rules.{rule_id}: unknown rule id, left as-is (analysis warns about it)")
                 continue
             changes.extend(_migrate_rule_section(rule_id, section, defaults.rules[rule_id]))
     return migrated, changes, notes
+
+
+def _migrate_zero_six_keys(migrated: dict[str, Any]) -> list[str]:
+    """Convert the retired per-command gate to failOn and remove allowlists.secretPreviews in place.
+
+    A scalar minimumSeverity remains the display floor; FAMILY-CONTRACT.md section 5 requires unconditional category markers.
+    Removing secretPreviews also removes the allowlists table if it becomes empty.
+
+    Args:
+        migrated: The working document, edited in place. A legacy per-command minimumSeverity mapping adds missing exit gates to failOn.
+
+    Returns:
+        One readable line per rewrite. The list is empty when neither rewrite applies.
+
+    Raises:
+        ConfigError: If the existing failOn value cannot be merged without discarding settings.
+    """
+    changes: list[str] = []
+
+    legacy_gate = migrated.get("minimumSeverity")
+    # Only the per-command mapping is the old gate; a bare severity is the 0.6 display floor and keeps its name.
+    if isinstance(legacy_gate, dict):
+        saved_gate = migrated.get("failOn", {})
+        # Conflicting `analyse` thresholds require a decision. Choosing an arbitrary value could change CI status.
+        if not isinstance(saved_gate, dict) or any(key in saved_gate and saved_gate[key] != value for key, value in legacy_gate.items()):
+            raise ConfigError("minimumSeverity and failOn give conflicting exit gates. Reconcile them before migrating.")
+        migrated["failOn"] = {**legacy_gate, **saved_gate}
+        del migrated["minimumSeverity"]
+        changes.append("minimumSeverity: renamed to failOn, the key that gates the exit code in 0.6")
+
+    allowlists = migrated.get("allowlists")
+    # The loader rejects the removed preview key even when its value is empty.
+    if isinstance(allowlists, dict) and "secretPreviews" in allowlists:
+        allowlists.pop("secretPreviews")
+        changes.append("allowlists.secretPreviews: removed; section 5 makes category markers unconditional")
+
+        # Omit the table when the retired key was the user's only allowlist setting.
+        if not allowlists:
+            migrated.pop("allowlists")
+
+    return changes
 
 
 def _migrate_rule_section(
@@ -178,14 +253,25 @@ def _migrate_rule_section(
     section: dict[str, Any],
     default_settings: RuleSettings,
 ) -> list[str]:
+    """Replace legacy warning and error tiers in place; error wins, and rules without severity rubrics only lose those tiers.
+
+    Preserve an explicit threshold and severity, filling missing severity from the winning tier; otherwise replace both from that tier.
+
+    Args:
+        rule_id: Rule id used only to label the returned change line.
+        section: Rule config changed in place. Legacy tiers and any thresholds table they leave empty are removed.
+            The top-level threshold and severity may be set.
+        default_settings: Registry-default settings for the rule; its threshold names decide whether a warning or error key is a real knob rather than
+            a legacy tier, and its severity rubric decides whether the legacy value is converted or only removed.
+
+    Returns:
+        A one-item list holding the change line that describes the removal or conversion, or an empty list when the section has no thresholds mapping
+        or no legacy tiers.
+    """
     thresholds = section.get("thresholds")
     if not isinstance(thresholds, dict):
         return []
-    legacy = {
-        tier: thresholds[tier]
-        for tier in ("warning", "error")
-        if tier in thresholds and tier not in default_settings.thresholds
-    }
+    legacy = {tier: thresholds[tier] for tier in ("warning", "error") if tier in thresholds and tier not in default_settings.thresholds}
     if not legacy:
         return []
     for tier in legacy:
@@ -194,25 +280,14 @@ def _migrate_rule_section(
         del section["thresholds"]
     dropped = ", ".join(f"thresholds.{tier}={value}" for tier, value in sorted(legacy.items()))
     if not _is_rubric(default_settings):
-        return [
-            f"rules.{rule_id}: removed legacy {dropped}; the rule has no severity rubric "
-            "and runs at its defaults"
-        ]
+        return [f"rules.{rule_id}: removed legacy {dropped}; the rule has no severity rubric and runs at its defaults"]
     tier = "error" if "error" in legacy else "warning"
     if "threshold" in section:
         if "severity" in section:
-            return [
-                f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity "
-                "pair is already present"
-            ]
-        # threshold without severity is fatal even in non-strict mode, so fill
-        # the missing half from the legacy tier rather than write a config that
-        # cannot load.
+            return [f"rules.{rule_id}: removed legacy {dropped}; an explicit threshold/severity pair is already present"]
+        # Fill the missing severity from the legacy tier because a threshold alone makes the config unloadable even in lenient mode.
         section["severity"] = tier
-        return [
-            f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and "
-            f"added the missing severity={tier}"
-        ]
+        return [f"rules.{rule_id}: removed legacy {dropped}; kept the existing threshold and added the missing severity={tier}"]
     section["threshold"] = legacy[tier]
     section["severity"] = tier
     note = f"rules.{rule_id}: thresholds.{tier} -> threshold={legacy[tier]}, severity={tier}"
@@ -222,4 +297,13 @@ def _migrate_rule_section(
 
 
 def _is_rubric(settings: RuleSettings) -> bool:
+    """Report whether a rule's default settings carry a severity rubric that a legacy threshold tier can be converted into.
+
+    Args:
+        settings: Registry-default settings for one rule.
+
+    Returns:
+        True when the settings define a single threshold and severity pair; False when the rule has no severity rubric, so legacy tiers are dropped
+        rather than converted.
+    """
     return settings.severity_threshold is not None

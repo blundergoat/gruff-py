@@ -25,9 +25,7 @@ class PytestStrictConfigMissingRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the pytest-strict-config-missing rule as a medium-confidence advisory.
 
-        Medium confidence because while ``--strict-config``/
-        ``--strict-markers`` is a strong default, some projects deliberately
-        accept unknown markers (plugin compatibility shims).
+        Strict flags are a useful default, and some projects deliberately accept unknown markers for plugin compatibility.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -42,18 +40,13 @@ class PytestStrictConfigMissingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Emit a pyproject-anchored finding when pytest lacks ``--strict-config`` or markers.
+        """Report test-bearing units whose pytest configuration has neither --strict-config nor --strict-markers.
 
-        Per-unit: each test-bearing unit contributes one finding (downstream
-        dedup collapses duplicates that share a fingerprint). Gated on at
-        least one test-shaped function being in the unit and on a pytest
-        config block being present; without strict flags, unknown options
-        and markers silently pass.
+        Units without pytest configuration yield no finding. The rule registry keeps the first of the identical findings from qualifying test files.
 
         Args:
-            unit: Parsed source file used to detect test presence.
-            context: Rule execution context supplying the ``project_root``
-                used to locate pyproject.toml.
+            unit: Parsed source file used to detect test presence. A missing AST yields no findings.
+            context: Rule execution context supplying the project root for pyproject.toml settings cached on first lookup.
 
         Returns:
             One pyproject.toml-anchored finding when strict flags are
@@ -68,9 +61,7 @@ class PytestStrictConfigMissingRule(Rule):
         return [
             Finding(
                 rule_id=definition.id,
-                message=(
-                    "Pytest config missing strict flags (`--strict-config` or `--strict-markers`)."
-                ),
+                message=("Pytest config missing strict flags (`--strict-config` or `--strict-markers`)."),
                 file_path="pyproject.toml",
                 line=None,
                 severity=definition.default_severity,
@@ -78,16 +69,22 @@ class PytestStrictConfigMissingRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 remediation=(
-                    'Add `addopts = "--strict-config --strict-markers"` to '
-                    "`[tool.pytest.ini_options]` so unknown options and markers fail fast."
+                    'Add `addopts = "--strict-config --strict-markers"` to `[tool.pytest.ini_options]` so unknown options and markers fail fast.'
                 ),
                 secondary_pillars=definition.secondary_pillars,
-                metadata={"projectRoot": context.project_root},
             ),
         ]
 
 
 def _has_tests(unit: AnalysisUnit) -> bool:
+    """Check whether the unit contains a function in a recognized test-related scope.
+
+    Args:
+        unit: Analysis unit whose parsed tree and test scopes are inspected.
+
+    Returns:
+        True when a test-related function is found, including conftest helpers; false for an unparsed unit or no matching functions.
+    """
     if unit.tree is None:
         return False
     return any(True for _fn, _scope in test_functions(unit))

@@ -1,4 +1,4 @@
-"""Click command for the ``gruff.hook.v1`` agent-hook contract.
+"""Click command for the ``gruff.hook.v2`` agent-hook contract.
 
 The ``hook`` subcommand lives in its own module so its CLI wiring sits next to
 the projection logic in :mod:`gruffpy.hook_contract` without growing
@@ -8,126 +8,460 @@ the projection logic in :mod:`gruffpy.hook_contract` without growing
 from __future__ import annotations
 
 import sys
+from collections import Counter
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any, cast
 
 import click
 
 from gruffpy.analysis.analysis_run_request import AnalysisRunRequest
-from gruffpy.analysis.baseline import BaselineOptions
+from gruffpy.analysis.baseline import (
+    BaselineCollision,
+    BaselineError,
+    BaselineOptions,
+    apply_baseline,
+    is_unreviewed_baseline_status,
+)
+from gruffpy.analysis.changed_region import is_finding_location_changed
 from gruffpy.analysis.report import AnalysisReport
-from gruffpy.analysis.runner import run_analysis
+from gruffpy.analysis.run_diagnostic import RunDiagnostic
+from gruffpy.analysis.runner import collision_diagnostics, run_analysis
 from gruffpy.config.exceptions import ConfigError
+from gruffpy.finding.confidence import Confidence
 from gruffpy.finding.fail_threshold import FailThreshold
+from gruffpy.finding.finding import Finding
 from gruffpy.finding.output_format import OutputFormat
+from gruffpy.finding.severity import Severity
 from gruffpy.hook_contract import (
     capabilities_payload,
+    changed_region_for_hook,
     config_error_payload,
+    fatal_payload,
     hook_payload,
     render_json,
-    stable_identities_from_baseline,
     stable_identities_from_git_base,
 )
 from gruffpy.reporting.finding_display_filter import FindingDisplayFilter
 
 
+def _apply_hook_decorators(command: Callable[..., Any]) -> Callable[..., Any]:
+    """Attach the hook CLI options so the callback can receive the parsed invocation as keyword arguments.
+
+    Args:
+        command: The Click callback the options decorate.
+
+    Returns:
+        The callback with the hook options attached in reverse declaration order.
+    """
+    for decorator in reversed(_HOOK_COMMAND_DECORATORS):
+        command = decorator(command)
+    return command
+
+
+@dataclass(frozen=True, slots=True)
+class _ExitGate:
+    """What the caller asked the hook to block on.
+
+    Severity and confidence are independent floors, so a finding blocks only by
+    clearing both. The baseline dimension sits beside them: an unreviewed
+    finding blocks whatever its severity, because it is what the edit added.
+
+    Attributes:
+        fail_on: Lowest severity that exits 1; ``none`` means no severity does.
+        min_confidence: Lowest confidence that reaches the gate.
+        fail_on_new: Whether a finding the baseline calls new blocks on its own.
+        fail_on_diagnostics: Whether any diagnostic at all blocks.
+    """
+
+    fail_on: str
+    min_confidence: str
+    fail_on_new: bool
+    fail_on_diagnostics: bool
+
+
+_HOOK_COMMAND_DECORATORS: tuple[Callable[[Callable[..., Any]], Callable[..., Any]], ...] = (
+    # The flag stays accepted and Choice-validated; the callback never used its value.
+    click.option(
+        "--format",
+        "hook_format",
+        type=click.Choice(["json"]),
+        default="json",
+        expose_value=False,
+    ),
+    click.option("--capabilities", is_flag=True, default=False, help="Emit hook capabilities JSON."),
+    click.option(
+        "--changed-ranges",
+        type=str,
+        default=None,
+        help='Explicit changed line ranges such as "3-3,8-10".',
+    ),
+    click.option("--diff", "diff_ref", default="", help="Git ref for hook new-only comparison."),
+    click.option(
+        "--baseline",
+        "hook_baseline_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff.baseline.v3 file from analyse --generate-baseline.",
+    ),
+    click.option(
+        "--config",
+        "config_path",
+        type=click.Path(path_type=Path),
+        default=None,
+        help="Path to a gruff YAML or TOML config file.",
+    ),
+    click.option("--no-config", is_flag=True, default=False, help="Skip config loading."),
+    click.option(
+        "--deep-scan-budget",
+        default="",
+        help="Override both deep-scan bounds as LINES:BYTES, or disable with off.",
+    ),
+    click.option(
+        "--include-ignored",
+        is_flag=True,
+        default=False,
+        help="Scan default-ignored and .gitignore paths; config ignores still apply.",
+    ),
+    click.option(
+        "--exclude-rule",
+        multiple=True,
+        help="Execution-level rule IDs to skip; accepts comma-separated or repeated values.",
+    ),
+    click.option(
+        "--fail-on",
+        "fail_on",
+        type=click.Choice(["none", "advisory", "warning", "error"]),
+        default="none",
+        help="Lowest severity that exits 1. The hook default of none keeps findings advisory.",
+    ),
+    click.option(
+        "--min-confidence",
+        "min_confidence",
+        type=click.Choice(["low", "medium", "high"]),
+        default="low",
+        help="Lowest confidence that reaches the exit gate, independent of severity.",
+    ),
+    click.option(
+        "--fail-on-new",
+        is_flag=True,
+        default=False,
+        help="Exit 1 when any published finding is new against the applied baseline.",
+    ),
+    click.option(
+        "--fail-on-diagnostics",
+        is_flag=True,
+        default=False,
+        help="Exit 1 when the run reports any diagnostic, however minor.",
+    ),
+    click.argument("paths", nargs=-1),
+)
+
+
 @click.command("hook", help="Run gruff-py analysis for an agent hook.")
-@click.option("--format", "hook_format", type=click.Choice(["json"]), default="json")
-@click.option("--capabilities", is_flag=True, default=False, help="Emit hook capabilities JSON.")
-@click.option(
-    "--changed-ranges",
-    default="",
-    help='Explicit changed line ranges such as "3-3,8-10".',
-)
-@click.option("--diff", "diff_ref", default="", help="Git ref for hook new-only comparison.")
-@click.option(
-    "--baseline",
-    "hook_baseline_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Hook or analysis JSON file for stableIdentity new-only comparison.",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Path to a gruff YAML or TOML config file.",
-)
-@click.option("--no-config", is_flag=True, default=False, help="Skip config loading.")
-@click.option(
-    "--include-ignored",
-    is_flag=True,
-    default=False,
-    help="Scan default-ignored and .gitignore paths; config ignores still apply.",
-)
-@click.option(
-    "--exclude-rule",
-    multiple=True,
-    help="Execution-level rule IDs to skip; accepts comma-separated or repeated values.",
-)
-@click.argument("paths", nargs=-1)
+@_apply_hook_decorators
 # gruff: disable-next=docs.missing-param-doc -- option help= text documents each flag.
-def hook(
-    hook_format: str,
-    capabilities: bool,
-    changed_ranges: str,
+def hook(**kwargs: Any) -> None:
+    """Serve the gruff.hook.v2 capabilities probe or execute an agent-hook analysis.
+
+    Args:
+        kwargs: Click-parsed hook options and paths; capabilities selects the feature probe.
+
+    Returns:
+        No normal return; capabilities and analysis finish through SystemExit.
+
+    Raises:
+        SystemExit: With zero for capabilities, otherwise the analysis or validation status.
+    """
+    # Lazy import avoids a cli <-> cli_hook import cycle at module load.
+    from gruffpy.cli import _write_stdout
+
+    # A probe wants the feature list and nothing else, so it is answered before any run is described.
+    if bool(kwargs["capabilities"]):
+        _write_stdout(render_json(capabilities_payload()))
+        sys.exit(0)
+
+    _execute_hook(
+        changed_ranges=cast("str | None", kwargs["changed_ranges"]),
+        diff_ref=str(kwargs["diff_ref"]),
+        hook_baseline_path=kwargs["hook_baseline_path"],
+        config_path=kwargs["config_path"],
+        no_config=bool(kwargs["no_config"]),
+        deep_scan_budget=str(kwargs["deep_scan_budget"]),
+        include_ignored=bool(kwargs["include_ignored"]),
+        exclude_rule=tuple(kwargs["exclude_rule"]),
+        gate=_ExitGate(
+            fail_on=str(kwargs["fail_on"]),
+            min_confidence=str(kwargs["min_confidence"]),
+            fail_on_new=bool(kwargs["fail_on_new"]),
+            fail_on_diagnostics=bool(kwargs["fail_on_diagnostics"]),
+        ),
+        paths=tuple(kwargs["paths"]),
+    )
+
+
+def _execute_hook(
+    *,
+    changed_ranges: str | None,
     diff_ref: str,
     hook_baseline_path: Path | None,
     config_path: Path | None,
     no_config: bool,
+    deep_scan_budget: str,
     include_ignored: bool,
     exclude_rule: tuple[str, ...],
+    gate: _ExitGate,
     paths: tuple[str, ...],
 ) -> None:
-    """Run the additive ``gruff.hook.v1`` agent-hook contract."""
-    del hook_format  # --format currently only accepts "json"; reserved for future formats.
+    """Run the scan a coding agent requested and publish its hook response.
+    The retained findings and diagnostics tell the agent what to fix and whether its gate passed.
+
+    Args:
+        changed_ranges: Explicit changed line ranges such as 3-3,8-10; None omits this filter.
+            An empty string is refused instead of widening the scan.
+        diff_ref: Git ref for new-only comparison; empty when no ``--diff`` was given.
+        hook_baseline_path: Ratified baseline v3 file to apply. None skips file-based baseline matching.
+        config_path: Explicit config file, or None to discover the project default.
+        no_config: Whether config discovery is disabled.
+        include_ignored: Include default-ignored and gitignored paths in discovery while keeping configured ignores in effect.
+        deep_scan_budget: Raw budget override from --deep-scan-budget. Empty uses the configured bounds.
+        exclude_rule: Execution-level rule ids to skip, comma-separated or repeated.
+        gate: What the caller asked the hook to block on.
+        paths: Requested hook paths; empty means the current directory.
+
+    Returns:
+        Does not return. Sends hook JSON to stdout unless quiet or silent mode suppresses output, then exits with SystemExit.
+        Conflicting baseline and diff flags produce a stderr error without JSON.
+
+    Raises:
+        SystemExit: Exit code 2 for conflicting baseline and diff flags or a caught ConfigError, BaselineError or ValueError.
+            Otherwise uses the gate-selected exit code.
+    """
     # Lazy import avoids a cli <-> cli_hook import cycle at module load.
     from gruffpy.cli import _write_stdout
 
-    if capabilities:
-        _write_stdout(render_json(capabilities_payload()))
-        sys.exit(0)
+    # The hook uses one comparison source so each finding has a clear reason for staying visible.
     if hook_baseline_path is not None and diff_ref:
         click.echo("--baseline and --diff cannot be combined in hook mode.", err=True)
         sys.exit(2)
 
     try:
-        base_identities = _hook_base_identities(
-            paths=paths,
-            hook_baseline_path=hook_baseline_path,
-            diff_ref=diff_ref,
-            config_path=config_path,
-            no_config=no_config,
-            include_ignored=include_ignored,
-        )
         report = _run_hook_analysis(
             paths=paths,
             config_path=config_path,
             no_config=no_config,
             include_ignored=include_ignored,
             exclude_rule=exclude_rule,
+            deep_scan_budget=deep_scan_budget,
         )
-        # Build the payload inside the try: a malformed --changed-ranges value
-        # raises ValueError here, which must surface as a controlled exit 2 rather
-        # than an uncaught traceback that breaks the stable hook contract.
+        # A fatal live scan offers its own diagnostics; comparing a Git base or baseline could mask the input failure.
+        base_identities = (
+            _hook_base_identities(
+                paths=paths,
+                diff_ref=diff_ref,
+                config_path=config_path,
+                no_config=no_config,
+                include_ignored=include_ignored,
+                deep_scan_budget=deep_scan_budget,
+                exclude_rule=exclude_rule,
+            )
+            if report.exit_code != 2
+            else None
+        )
+        applied_path = hook_baseline_path if report.exit_code != 2 else None
+        findings = _findings_before_display_filtering(report) if report.exit_code != 2 else ()
+        retained_findings, baseline_statuses, collisions = _apply_hook_baseline(
+            findings,
+            applied_path,
+            paths=paths or (".",),
+            changed_ranges=changed_ranges,
+        )
         payload = hook_payload(
-            report,
+            _with_hook_findings(report, retained_findings, collision_diagnostics(collisions)),
             paths=paths or (".",),
             changed_ranges=changed_ranges,
             base_stable_identities=base_identities,
+            mode=_run_mode(changed_ranges, diff_ref),
+            baseline_path=str(applied_path) if applied_path is not None else None,
+            baseline_statuses=baseline_statuses,
+            suppressions=report.suppressions,
         )
     except ConfigError as exc:
+        # An incompatible config schema gives the calling agent a configuration diagnostic and exit 2.
         _write_stdout(render_json(config_error_payload(exc)))
         sys.exit(2)
+    except BaselineError as exc:
+        # A legacy baseline passed to `--baseline` gives the agent a fatal diagnostic before any findings are published.
+        _write_stdout(render_json(fatal_payload("baseline", str(exc))))
+        click.echo(str(exc), err=True)
+        sys.exit(2)
     except ValueError as exc:
+        # An invalid value such as `--changed-ranges=10-3` gives the agent an actionable range error instead of a traceback.
+        _write_stdout(render_json(fatal_payload("changed-region", str(exc))))
         click.echo(str(exc), err=True)
         sys.exit(2)
 
     _write_stdout(render_json(payload))
-    sys.exit(0)
+    sys.exit(_hook_exit_code(payload, gate, has_diff_comparison=bool(diff_ref)))
+
+
+def _findings_before_display_filtering(report: AnalysisReport) -> tuple[Finding, ...]:
+    """Select the findings available to the hook before display filtering.
+
+    A minimumSeverity display floor controls what readers see while the hook still gates on the findings available before presentation.
+
+    Args:
+        report: Run report holding the displayed findings and any saved pre-display findings.
+
+    Returns:
+        The pre-display findings when recorded, otherwise the report's displayed findings.
+    """
+    findings = report.machine_context.summary_findings
+    # An empty saved list means the scan found nothing. Only an absent list falls back to rendered findings.
+    return report.findings if findings is None else findings
+
+
+def _with_hook_findings(
+    report: AnalysisReport,
+    findings: tuple[Finding, ...],
+    extra_diagnostics: list[RunDiagnostic] | tuple[RunDiagnostic, ...] = (),
+) -> AnalysisReport:
+    """Prepare the report for hook rendering with the findings that passed baseline matching.
+    Keep scan diagnostics and audit details so the agent can see what affected the verdict.
+
+    Args:
+        report: The analysis report the run produced.
+        findings: Replacement findings for hook output; an empty tuple publishes no findings.
+        extra_diagnostics: Additional diagnostics (such as baseline-collision notes) to append; empty leaves the report's diagnostics unchanged.
+
+    Returns:
+        A copy with the findings selected for hook output and any extra diagnostics appended.
+    """
+    diagnostics = (*report.diagnostics, *extra_diagnostics) if extra_diagnostics else report.diagnostics
+    return replace(report, findings=findings, diagnostics=diagnostics)
+
+
+def _run_mode(changed_ranges: str | None, diff_ref: str) -> str:
+    """Label the hook run audit so consumers can identify its filtering mode.
+
+    Args:
+        changed_ranges: Raw --changed-ranges text, None when unset.
+        diff_ref: Raw --diff ref, empty when unset.
+
+    Returns:
+        changed-ranges for explicit ranges, diff for a Git comparison without explicit ranges, or full when neither was requested.
+    """
+    # When both selectors are supplied, the run audit names the explicit ranges.
+    if changed_ranges is not None:
+        return "changed-ranges"
+    return "diff" if diff_ref else "full"
+
+
+def _apply_hook_baseline(
+    findings: tuple[Finding, ...],
+    baseline_path: Path | None,
+    *,
+    paths: tuple[str, ...] = (),
+    changed_ranges: str | None = None,
+) -> tuple[tuple[Finding, ...], dict[int, str], tuple[BaselineCollision, ...]]:
+    """Apply a ``--baseline`` file, classifying every finding it covers.
+
+    The hook applies the v3 baseline written by analyse --generate-baseline and refuses incompatible schemas or language ports.
+
+    Args:
+        findings: Findings this run produced; an empty tuple still validates the baseline file when one is named.
+        baseline_path: File the caller named via ``--baseline``, or None to skip file-based baseline matching.
+        paths: Requested hook paths used to anchor explicit ``--changed-ranges``; empty falls back to finding paths only.
+        changed_ranges: Explicit ``--changed-ranges`` text; untouched lines spend baseline credit first when set, while None uses line order.
+
+    Returns:
+        Gated findings, baseline statuses keyed by ``id``, and identity collisions (empty when baseline_path is None).
+
+    Raises:
+        BaselineError: When the file is missing, malformed, in another schema, or written by another port.
+        ValueError: When ``changed_ranges`` syntax is invalid (for example, an empty string or reversed bounds).
+    """
+    # With no baseline named, every finding stands and none carries a status a consumer could misread as reviewed.
+    if baseline_path is None:
+        return findings, {}, ()
+
+    # When the caller scopes the hook with --changed-ranges, spend reviewed counts on untouched lines first so edited lines stay visible.
+    changed = changed_region_for_hook(findings, paths, changed_ranges) if changed_ranges is not None else None
+    is_changed = (lambda finding: is_finding_location_changed(finding, changed)) if (changed is not None and changed.active) else None
+    result = apply_baseline(
+        project_root=Path.cwd(),
+        path=baseline_path,
+        findings=findings,
+        source="explicit",
+        is_in_changed_region=is_changed,
+    )
+    return tuple(result.findings), result.statuses, result.collisions
+
+
+def _hook_exit_code(
+    payload: dict[str, object],
+    gate: _ExitGate,
+    *,
+    has_diff_comparison: bool = False,
+) -> int:
+    """Decide what the hook tells the calling agent, from the findings it published.
+
+    Findings removed by changed-region or baseline filtering cannot block; published diagnostics can block when their gate is enabled.
+
+    Args:
+        payload: The published hook report.
+        gate: What the caller asked the hook to block on.
+        has_diff_comparison: Whether ``--diff`` subtracted base-tree findings, making every published survivor new.
+
+    Returns:
+        2 when the run has a fatal diagnostic, 1 when the enabled gate is reached, and 0 otherwise.
+    """
+    diagnostics = payload.get("diagnostics")
+    # A list is available in a normal hook response. A missing diagnostic section cannot block on its own.
+    if isinstance(diagnostics, list):
+        # A failed scan takes priority over any finding or diagnostic gate the user enabled.
+        if any(isinstance(item, dict) and item.get("severity") == "fatal" for item in diagnostics):
+            return 2
+        # A caller can opt to block on degraded scans, such as files checked only as text.
+        if gate.fail_on_diagnostics and diagnostics:
+            return 1
+
+    rows = payload.get("findings")
+    # Without a findings list, there is no published finding for the agent to act on.
+    if not isinstance(rows, list):
+        return 0
+
+    severity_floor = FailThreshold(gate.fail_on)
+    confidence_floor = Confidence(gate.min_confidence)
+
+    # Any finding in the response can block according to the caller's settings.
+    for row in rows:
+        # Shape checks keep an invalid row from being mistaken for a published finding.
+        if not isinstance(row, dict):
+            continue
+        # Block on any unreviewed baseline finding (new, collision, or notEligible) or any survivor of a valid --diff comparison.
+        baseline_status = row.get("baselineStatus")
+        if gate.fail_on_new and (has_diff_comparison or is_unreviewed_baseline_status(baseline_status if isinstance(baseline_status, str) else None)):
+            return 1
+        severity = Severity(str(row["severity"]))
+        confidence = Confidence(str(row["confidence"]))
+        # The ordinary gate needs both the chosen severity and confidence so a heuristic can remain advisory.
+        if severity_floor.is_triggered_by(severity) and confidence.meets(confidence_floor):
+            return 1
+
+    return 0
 
 
 def _split_repeated_csv(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand repeated comma-separated rule selections without duplicate entries.
+
+    Args:
+        values: Repeated CLI values, each of which may contain comma-separated rule IDs.
+
+    Returns:
+        Trimmed, nonempty selections in first-seen order; empty when no selection remains.
+    """
     items: list[str] = []
     for value in values:
         for item in value.split(","):
@@ -144,7 +478,24 @@ def _run_hook_analysis(
     no_config: bool,
     include_ignored: bool,
     exclude_rule: tuple[str, ...],
+    deep_scan_budget: str,
 ) -> AnalysisReport:
+    """Analyse the working tree for hook output with baseline matching disabled.
+
+    Args:
+        paths: Requested source paths; an empty tuple selects the current directory.
+        config_path: Explicit configuration file, or None for discovery when configuration loading is enabled.
+        no_config: Uses registry defaults when true. An explicit config_path with this flag records a config-error diagnostic.
+        include_ignored: Whether default-ignored and Git-ignored paths enter discovery.
+        exclude_rule: Repeated or comma-separated rule IDs to exclude before rule execution.
+        deep_scan_budget: Raw deep-scan override; empty retains the configured bounds.
+
+    Returns:
+        The working-tree analysis report for subsequent hook filtering and projection.
+
+    Raises:
+        ConfigError: If the analysis configuration cannot be loaded or validated, or the deep-scan override is invalid.
+    """
     return run_analysis(
         AnalysisRunRequest(
             paths=paths,
@@ -157,6 +508,7 @@ def _run_hook_analysis(
             display_filter=FindingDisplayFilter(),
             baseline=BaselineOptions(disabled=True),
             execution_exclude_rules=_split_repeated_csv(exclude_rule),
+            deep_scan_budget=deep_scan_budget,
         )
     )
 
@@ -164,15 +516,34 @@ def _run_hook_analysis(
 def _hook_base_identities(
     *,
     paths: tuple[str, ...],
-    hook_baseline_path: Path | None,
     diff_ref: str,
     config_path: Path | None,
     no_config: bool,
     include_ignored: bool,
-) -> frozenset[str] | None:
-    """Resolve hook base stable identities for ``--baseline`` / ``--diff`` runs."""
-    if hook_baseline_path is not None:
-        return stable_identities_from_baseline(hook_baseline_path)
+    deep_scan_budget: str,
+    exclude_rule: tuple[str, ...],
+) -> Counter[str] | None:
+    """Resolve hook base stable identities, with their occurrence counts, for a ``--diff`` run.
+
+    Diff runs compare hook identities from the Git base; baseline runs use the separate v3 baseline-matching path.
+
+    Args:
+        paths: Requested paths to read from the base tree; empty selects its whole tree.
+        diff_ref: Git base ref, with working-tree meaning HEAD; empty disables the comparison.
+        config_path: Explicit configuration file, or None to discover the working-tree default.
+        no_config: Whether automatic configuration discovery is disabled.
+        include_ignored: Whether default-ignored and Git-ignored base paths enter discovery.
+        deep_scan_budget: Raw deep-scan override forwarded to keep base and working-tree bounds aligned.
+        exclude_rule: Invocation rule exclusions, shared with the working-tree scan.
+
+    Returns:
+        Counts of the base tree's hook identities, or None when no diff ref was supplied.
+
+    Raises:
+        ValueError: If Git cannot resolve or read the requested base.
+        ConfigError: If the base analysis configuration cannot be loaded or validated.
+    """
+    # Without `--diff`, baseline matching or a full scan supplies the hook's findings directly.
     if diff_ref:
         return stable_identities_from_git_base(
             project_root=Path.cwd(),
@@ -181,5 +552,7 @@ def _hook_base_identities(
             config_path=config_path,
             no_config=no_config,
             include_ignored=include_ignored,
+            deep_scan_budget=deep_scan_budget,
+            execution_exclude_rules=_split_repeated_csv(exclude_rule),
         )
     return None

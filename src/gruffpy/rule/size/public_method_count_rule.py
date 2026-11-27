@@ -16,6 +16,8 @@ from gruffpy.rule._python_dynamism import (
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
@@ -28,8 +30,7 @@ class PublicMethodCountRule(Rule):
         """Describe the public-method-count rule with a configurable threshold (default 10).
 
         Returns:
-            Definition under the size pillar; methods starting with ``_``
-            (including dunder methods) are excluded from the count.
+            Definition under the size pillar; names beginning with an underscore, including dunder methods, are excluded from the count.
         """
         return RuleDefinition(
             id=self.ID,
@@ -44,17 +45,15 @@ class PublicMethodCountRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per class whose public-method count exceeds the threshold.
 
-        Only direct methods of the class body are counted - nested classes
-        are reported separately. The metric is a proxy for the size of the
-        class's external API.
+        Counts distinct public method names defined directly in each class; nested classes are assessed separately.
+        Test-class shapes, recognized framework bases and dataclass or attrs-style decorators exempt a class.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Parsed source file to walk; a missing tree yields no findings.
             context: Rule execution context that supplies the threshold.
 
         Returns:
-            One finding per ``ClassDef`` whose public-method count is over
-            threshold.
+            One finding per eligible class over threshold; an empty list when none qualify.
         """
         if unit.tree is None:
             return []
@@ -71,6 +70,7 @@ class PublicMethodCountRule(Rule):
 
             count = _count_public_methods(node)
             threshold_match = settings.high_value_threshold_match(count)
+            band = limit_band(count, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
@@ -79,20 +79,16 @@ class PublicMethodCountRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Class {symbol!r} has {count} public methods, "
-                        f"above the {threshold_match.severity.value} threshold of "
-                        f"{_format_number(threshold_match.threshold)}."
-                    ),
+                    message=f"Class {symbol!r} has {count} public methods, above the limit of {_format_number(threshold_match.threshold)}.",
                     file_path=unit.file.display_path,
                     line=node.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=("Split responsibilities; extract collaborator classes."),
+                    remediation=band_advice(band, _band.LOWER_PUBLIC_METHOD, _band.SPLIT_CLASS),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "publicMethods": count,
@@ -100,6 +96,7 @@ class PublicMethodCountRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -108,6 +105,12 @@ class PublicMethodCountRule(Rule):
 
 
 def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
+    """Decide whether a class is skipped by the public-method count before any method is counted.
+
+    Returns:
+        True when the class is a test class, extends a known framework-style base, or carries a dataclass or attrs-style decorator, so analyse skips
+        it; False when its methods should be counted.
+    """
     # Test classes have one method per test case by design; counting them
     # against an API-surface threshold yields no useful signal. Schema bases
     # (TypedDict, BaseModel, NamedTuple, Enum-like) also do not represent
@@ -116,7 +119,16 @@ def _is_exempt_from_method_count(cls: ast.ClassDef) -> bool:
 
 
 def _count_public_methods(cls: ast.ClassDef) -> int:
-    count = 0
+    """Count the public methods a class defines directly in its own body, the measured value for this rule.
+
+    Only sync and async function definitions that are direct statements of the class body are considered, so methods of nested classes are not
+    included here.
+
+    Returns:
+        Number of distinct method names that do not start with an underscore; 0 when the class defines no public method.
+    """
+    # A property's getter and setter, and an overload's stubs and implementation, share one name: one public method.
+    names: set[str] = set()
     for stmt in cls.body:
         if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
@@ -124,11 +136,19 @@ def _count_public_methods(cls: ast.ClassDef) -> int:
         if name.startswith("_"):
             # Includes single-underscore private and dunder methods.
             continue
-        count += 1
-    return count
+        names.add(name)
+    return len(names)
 
 
 def _format_number(value: int | float) -> str:
+    """Render the matched threshold for the finding message without a trailing .0 on whole numbers.
+
+    Args:
+        value: Threshold taken from the matched severity threshold, as an int or a float.
+
+    Returns:
+        Integer text for integers and finite whole-number floats, so 10.0 renders as 10. Other floats use their usual Python text.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

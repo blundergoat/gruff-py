@@ -8,12 +8,14 @@ from tests.unit.rule.security._helpers import default_ctx, make_text_unit, make_
 
 
 def test_requirement_vcs_dependency_fires_without_leaking_repository_url() -> None:
-    """Git dependencies fire while messages/metadata omit the repository URL."""
+    """Git dependencies fire while messages/metadata omit the repository URL.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "-e git+https://github.com/acme/widget.git@main#egg=widget\n"
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "requirements.txt"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "requirements.txt"), default_ctx())
 
     assert len(findings) == 1
     finding = findings[0]
@@ -28,34 +30,42 @@ def test_requirement_vcs_dependency_fires_without_leaking_repository_url() -> No
 
 
 def test_pyproject_vcs_dependency_fires() -> None:
-    """PEP 621 direct references using git+ schemes trigger the Git rule."""
+    """PEP 621 direct references using git+ schemes trigger the Git rule.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = """[project]
 dependencies = [
     "widget @ git+ssh://git.example.test/acme/widget.git@v1",
 ]
 """
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert len(findings) == 1
     assert findings[0].metadata["dependencyName"] == "widget"
 
 
 def test_non_git_url_dependency_skipped() -> None:
-    """Plain HTTP(S) direct references are left to the direct-URL rule."""
+    """The Git rule reports nothing for an HTTPS artifact reference.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "widget @ https://downloads.example.test/widget-1.0.0.tar.gz\n"
 
-    findings = DependencyGitReferenceRule().analyse(
-        make_text_unit(src, "requirements.txt"), default_ctx()
-    )
+    findings = DependencyGitReferenceRule().analyse(make_text_unit(src, "requirements.txt"), default_ctx())
 
     assert findings == []
 
 
 def test_setup_py_git_dependency_fires_via_registry_python_seam() -> None:
-    """Dependency text rules also inspect parsed setup.py metadata."""
+    """Registry dispatch reports a Git dependency from parsed setup.py metadata.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = """from setuptools import setup
 
 setup(install_requires=[

@@ -1,51 +1,37 @@
 import ast
 import math
 
-from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
-from gruffpy.finding.pillar import Pillar
-from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
-from gruffpy.rule.complexity.maintainability_index_rule import (
-    MaintainabilityIndexRule,
-    maintainability_index_for,
-)
-from gruffpy.rule.context import RuleContext
-from gruffpy.source.source_file import SourceFile
+from gruffpy.command.metric_calibration import _maintainability_index_for
+from gruffpy.rule.size._lines import code_line_numbers
 
 
-def _first_fn(source: str) -> ast.FunctionDef:
+def _mi(source: str) -> float:
+    """Compute the maintainability index of the first top-level, non-async function in source.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        That function's maintainability index.
+
+    Raises:
+        StopIteration: The source has no top-level, non-async function.
+    """
     tree = ast.parse(source)
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
-            return node
-    raise AssertionError("no function found")
-
-
-def _make_unit(source: str) -> AnalysisUnit:
-    tree = ast.parse(source)
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
-    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    return AnalysisUnit(file=file, source=source, tree=tree)
-
-
-def _ctx(threshold: int = 80) -> RuleContext:
-    rule = MaintainabilityIndexRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(
-                enabled=True,
-                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
-            ),
-        }
-    )
-    return RuleContext(project_root="/", config=config)
+    fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef))
+    return _maintainability_index_for(fn, code_line_numbers(source, tree))
 
 
 def _branched_body(branch_count: int, with_elif: bool = False) -> str:
-    """Return a function body that contains ``branch_count`` if/else branches."""
+    """Generate source for a function f with repeated conditional blocks for maintainability index tests.
+
+    Args:
+        branch_count: Number of if statements to generate, each paired with an else or elif.
+        with_elif: Use an elif and longer arithmetic in both arms when true. The default uses else and simpler arithmetic.
+
+    Returns:
+        The function source, which ends by returning x.
+    """
     lines: list[str] = []
     for i in range(branch_count):
         lines.append(f"    if a{i} > b{i}:")
@@ -61,9 +47,13 @@ def _branched_body(branch_count: int, with_elif: bool = False) -> str:
 
 
 def test_trivial_function_has_max_mi():
-    # Simple short function: low HV, CC=1, low LOC -> MI close to 100 (clamped).
+    """Give a function that only returns ``x + 1`` the maximum index of 100.
+
+    Returns:
+        None. Checks that the short function's reported index is 100.
+    """
     src = "def f(x):\n    return x + 1\n"
-    mi = maintainability_index_for(_first_fn(src))
+    mi = _mi(src)
     assert mi == 100.0  # clamped at upper bound
 
 
@@ -71,55 +61,37 @@ _MI_CLAMP_MAX = 100.0
 
 
 def test_mi_formula_matches_canonical_values():
-    """Trace a known case to verify the formula.
+    """Verify the upper clamp with a fixture whose hand-calculated maintainability index exceeds the maximum.
 
-    For `f(x): return x + 1`:
-    - HV = 4.7548..., ln(HV) ~= 1.559
-    - CC = 1
-    - LOC = 2 (def line + return line, raw span)
-    - MI = 171 - 5.2*1.559 - 0.23*1 - 16.2*ln(2)
-         = 171 - 8.107 - 0.23 - 16.2*0.693
-         = 171 - 8.107 - 0.23 - 11.226
-         = 151.4  -> clamped to 100
+    Returns:
+        None. Checks that the raw score exceeds the ceiling and the reported score equals it.
     """
     src = "def f(x):\n    return x + 1\n"
     raw = 171 - 5.2 * math.log(4.7548875) - 0.23 * 1 - 16.2 * math.log(2)
-    assert raw > _MI_CLAMP_MAX  # would clamp
-    assert maintainability_index_for(_first_fn(src)) == _MI_CLAMP_MAX
+    assert raw > _MI_CLAMP_MAX  # A raw score equal to the ceiling would satisfy the output assertion even without clamping.
+    assert _mi(src) == _MI_CLAMP_MAX
 
 
 def test_complex_function_lowers_mi():
-    # Bigger function should have lower (worse) MI.
+    """Score a function with 40 if/else branches below 80.
+
+    Returns:
+        None. Checks the generated function's maintainability index against the cutoff of 80.
+    """
     src = _branched_body(40)
-    mi = maintainability_index_for(_first_fn(src))
-    assert mi < 80.0  # below default warning
+    mi = _mi(src)
+    assert mi < 80.0  # This test's cutoff is higher than the calibration error threshold of 70.
 
 
-def test_warning_finding_emitted_for_low_mi():
-    # Use 40-branch fixture so MI is guaranteed below default warning=80.
-    src = _branched_body(40)
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    finding = findings[0]
-    assert finding.pillar == Pillar.MAINTAINABILITY  # separate pillar
-    assert "maintainabilityIndex" in finding.metadata
-    assert finding.severity in (Severity.WARNING, Severity.ERROR)
+def test_documenting_a_function_leaves_its_index_unchanged():
+    """Keep a ten-branch function's index, below 100, unchanged after a long docstring and ten comment lines are added.
 
-
-def test_error_finding_emitted_for_very_low_mi():
-    # Aggressively low MI: many branches and operators.
-    src = _branched_body(80, with_elif=True)
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
-
-
-def test_lower_threshold_means_worse_mi_is_threshold():
-    # Threshold semantics: lower MI = worse.
-    src = "def f(x):\n    return x + 1\n"
-    # threshold = 100 -> 100 is NOT below 100, no finding
-    findings = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=100))
-    assert findings == []
-    # threshold = 110 -> 100 is below 110, finding emitted
-    findings2 = MaintainabilityIndexRule().analyse(_make_unit(src), _ctx(threshold=110))
-    assert len(findings2) == 1
+    Returns:
+        None after the assertions pass.
+    """
+    plain = _branched_body(10)
+    notes = "\n".join(f"    Branch {i} is explained here." for i in range(30))
+    comments = "".join(f"    # Step {i}.\n" for i in range(10))
+    documented = plain.replace("def f():\n", f'def f():\n    """Pick x from the paired inputs.\n\n{notes}\n    """\n{comments}', 1)
+    assert _mi(plain) < 100.0
+    assert _mi(documented) == _mi(plain)

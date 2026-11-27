@@ -10,6 +10,9 @@ def test_dependency_metadata_files_are_discovered_as_text(tmp_path: Path) -> Non
 
     Args:
         tmp_path: Temporary project root populated with dependency metadata files.
+
+    Returns:
+        None. Writes dependency metadata and notes fixtures, then checks the exact mapping of discovered paths to file types.
     """
     (tmp_path / "requirements.txt").write_text("requests==2.31.0\n")
     (tmp_path / "requirements-dev.txt").write_text("pytest==8.2.0\n")

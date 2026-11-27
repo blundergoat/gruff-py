@@ -102,7 +102,17 @@ class WithLongInit:
         i,
         j,
     ):
-        return a + b + c + d + e + f + g + h + i + j
+        # Ten statements: function length counts statements, so the long signature above is one line of it.
+        total = a + b
+        total += c
+        total += d
+        total += e
+        total += f
+        total += g
+        total += h
+        total += i
+        total += j
+        return total
 
 
 async def big_async():
@@ -177,18 +187,31 @@ def outer_function():
 
 
 def _make_unit(source: str) -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap it as an analysis unit for integration.py.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        A unit for integration.py whose AST nodes carry parent links. Shared AST operator and context nodes retain the last assigned parent.
+        This can overwrite parent links visible in previously parsed trees.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # Match the parser's dynamically added parent links.
     file = SourceFile(absolute_path="/integration.py", display_path="integration.py", type="python")
     return AnalysisUnit(file=file, source=source, tree=tree)
 
 
 def _default_ctx() -> RuleContext:
-    # PMD-aligned production defaults are too generous for the small fixture to
-    # cross. Override the size rubrics that depend on small violations so the
-    # fixture still exercises every rule end-to-end.
+    """Build a rule context that enables every registered rule, with the parameter-count and both function-length thresholds lowered.
+
+    Returns:
+        A context enabling every registered rule with size thresholds chosen for the fixture.
+    """
+    # The fixture's parameter counts and function lengths do not exceed the production limits.
+    # Lower these limits so the fixture can produce findings during registry analysis.
     size_test_thresholds = {
         "size.parameter-count": {"warning": 5, "error": 8},
         "size.function-length": {"warning": 30, "error": 60},
@@ -198,9 +221,20 @@ def _default_ctx() -> RuleContext:
 
 
 def _settings_for(rule, override: dict[str, int] | None, *, enabled: bool = True) -> RuleSettings:
+    """Build settings for rule, mapping a legacy warning and error override onto its threshold shape.
+
+    Args:
+        rule: Rule whose definition supplies the defaults.
+        override: Legacy warning and error thresholds, or None for defaults. A single-threshold rule uses its default if warning is absent.
+            An empty mapping leaves named thresholds unset.
+        enabled: Whether the rule is enabled; defaults to True.
+
+    Returns:
+        Settings with a severity threshold at the override's warning value or the default, or a thresholds mapping.
+    """
     # Single-threshold rubrics (ADR-014) carry their value on severity_threshold;
     # a legacy {"warning": X, "error": Y} override maps to the lower bound as the
-    # single gating value. Named-knob rules keep their `thresholds` mapping.
+    # single gating value. Named-knob rules keep their thresholds mapping.
     definition = rule.definition()
     if definition.default_threshold is not None:
         if override and "warning" in override:
@@ -218,15 +252,31 @@ def _settings_for(rule, override: dict[str, int] | None, *, enabled: bool = True
 def _ctx_with_threshold_overrides(
     overrides: dict[str, dict[str, int]],
 ) -> RuleContext:
+    """Build a rule context that enables every registered rule and accepts per-rule threshold overrides.
+
+    Args:
+        overrides: Threshold mappings keyed by rule ID. Single-threshold rules use warning if present and their default otherwise.
+            Other rules named in overrides receive a copy of their mapping, including when it is empty.
+
+    Returns:
+        A context with every registered rule enabled. Rules absent from overrides keep their default thresholds.
+    """
     registry = RuleRegistry.defaults()
-    rules = {
-        rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id))
-        for rule in registry.all()
-    }
+    rules = {rule.definition().id: _settings_for(rule, overrides.get(rule.definition().id)) for rule in registry.all()}
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
 def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContext:
+    """Build a rule context that enables only the registered rules selected by rule_ids.
+
+    Args:
+        rule_ids: Registered rule IDs to enable. An empty set disables every rule.
+        thresholds: Overrides for enabled rules. Single-threshold rules use warning if present and their default otherwise.
+            Other enabled rules receive a copy of the mapping, including when it is empty.
+
+    Returns:
+        A context whose config enables only those rules.
+    """
     registry = RuleRegistry.defaults()
     rules = {
         rule.definition().id: _settings_for(
@@ -240,33 +290,43 @@ def _ctx_with_only(rule_ids: set[str], thresholds: dict[str, int]) -> RuleContex
 
 
 def _ctx_with_disabled(disabled_id: str) -> RuleContext:
+    """Build a rule context that disables the rule matching disabled_id and enables the remaining registered rules.
+
+    Args:
+        disabled_id: Rule to disable.
+
+    Returns:
+        A context using default thresholds, with every rule enabled if disabled_id matches no registered rule.
+    """
     registry = RuleRegistry.defaults()
-    rules = {
-        rule.definition().id: _settings_for(
-            rule, None, enabled=(rule.definition().id != disabled_id)
-        )
-        for rule in registry.all()
-    }
+    rules = {rule.definition().id: _settings_for(rule, None, enabled=(rule.definition().id != disabled_id)) for rule in registry.all()}
     return RuleContext(project_root="/", config=AnalysisConfig(rules=rules))
 
 
 def test_registry_defaults_contains_all_seven_size_rules():
+    """Register all seven size rules in the default registry.
+
+    Returns:
+        None. Asserts that the default registry contains every expected size rule ID.
+    """
     registry = RuleRegistry.defaults()
     ids = {rule.definition().id for rule in registry.all()}
     assert SIZE_RULE_IDS.issubset(ids)
 
 
 def test_cumulative_fixture_emits_expected_rule_ids():
+    """Report attribute-count, public-method-count, parameter-count and function-length on the fixture, and not file-length.
+
+    Returns:
+        None. Asserts the four expected rule IDs are present and the file-length rule ID is absent.
+    """
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
     ctx = _default_ctx()
     registry = RuleRegistry.defaults()
     findings = registry.analyse([unit], ctx)
     rule_ids = {f.rule_id for f in findings}
-    # Expected hits at the test-calibrated thresholds (see _default_ctx):
-    # - size.attribute-count fires on WideRecord (16 attrs > 15)
-    # - size.public-method-count fires on WidePublicSurface (16 public methods > 10)
-    # - size.parameter-count fires on big_static (10 params > 5)
-    # - size.function-length fires on big_async, outer_function, outer_function.inner_function
+    # WideRecord and WidePublicSurface exceed the default attribute and public method limits, respectively.
+    # The lowered limits flag big_static for parameter count and big_async, outer_function and its nested function for function length.
     assert "size.attribute-count" in rule_ids
     assert "size.public-method-count" in rule_ids
     assert "size.parameter-count" in rule_ids
@@ -276,15 +336,18 @@ def test_cumulative_fixture_emits_expected_rule_ids():
 
 
 def test_cumulative_fixture_findings_carry_symbol_and_metadata_lines():
+    """Give every function-length finding on the fixture a symbol and an integer lines metadata value.
+
+    Returns:
+        None. Asserts that function-length findings exist and each has a nonempty symbol and integer line count.
+    """
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
     fl = [f for f in findings if f.rule_id == "size.function-length"]
     assert fl, "expected function-length findings"
     assert all(f.symbol for f in fl), f"missing symbol on: {fl}"
     assert all("lines" in f.metadata for f in fl), f"missing 'lines' in metadata: {fl}"
-    assert all(isinstance(f.metadata["lines"], int) for f in fl), (
-        f"non-int 'lines' in metadata: {fl}"
-    )
+    assert all(isinstance(f.metadata["lines"], int) for f in fl), f"non-int 'lines' in metadata: {fl}"
 
 
 _THRESHOLD_METADATA_FIXTURE_SRC = """
@@ -304,7 +367,11 @@ class Example:
 
 
 def test_size_threshold_findings_carry_standard_threshold_metadata():
-    """Keep size rule threshold metadata aligned with reporter contracts."""
+    """Require size findings to carry numeric measurements and an error threshold of zero with direction above.
+
+    Returns:
+        None. Asserts that all seven size rules report findings and that every size finding carries the expected threshold metadata.
+    """
     ctx = _ctx_with_only(SIZE_RULE_IDS, thresholds={"warning": 0, "error": 9999})
     findings = RuleRegistry.defaults().analyse([_make_unit(_THRESHOLD_METADATA_FIXTURE_SRC)], ctx)
     size_findings = [f for f in findings if f.rule_id in SIZE_RULE_IDS]
@@ -317,6 +384,11 @@ def test_size_threshold_findings_carry_standard_threshold_metadata():
 
 
 def test_nested_inner_function_emits_independent_finding():
+    """Report both outer_function and outer_function.inner_function for function length on the fixture.
+
+    Returns:
+        None. Asserts that the enclosing and nested functions each appear in the function-length findings.
+    """
     unit = _make_unit(SIZE_PILLAR_FIXTURE)
     ctx = _default_ctx()
     findings = RuleRegistry.defaults().analyse([unit], ctx)
@@ -326,7 +398,12 @@ def test_nested_inner_function_emits_independent_finding():
 
 
 def test_config_override_changes_finding_count():
-    # Default function-length threshold = 100 (PMD-aligned). Override to 5/10 to widen coverage.
+    """Report more function-length findings on the fixture at a threshold of 5 than under the test defaults.
+
+    Returns:
+        None. Asserts that the lower threshold produces more function-length findings on the same fixture.
+    """
+    # Compare a function-length threshold of 5 with the fixture's threshold of 30.
     registry = RuleRegistry.defaults()
     ctx = _ctx_with_threshold_overrides(
         {"size.function-length": {"warning": 5, "error": 10}},
@@ -336,17 +413,27 @@ def test_config_override_changes_finding_count():
 
     default_fn_count = sum(1 for f in default_findings if f.rule_id == "size.function-length")
     override_fn_count = sum(1 for f in overridden_findings if f.rule_id == "size.function-length")
-    # Lower thresholds should expose more functions as oversized.
+    # The registry also runs other rules, so only function-length findings enter this comparison.
     assert override_fn_count > default_fn_count
 
 
 def test_disabling_a_rule_removes_its_findings():
+    """Report no attribute-count finding on the fixture once that rule is disabled.
+
+    Returns:
+        None. Fails if analysis reports an attribute-count finding with the rule disabled.
+    """
     ctx = _ctx_with_disabled("size.attribute-count")
     findings = RuleRegistry.defaults().analyse([_make_unit(SIZE_PILLAR_FIXTURE)], ctx)
     assert all(f.rule_id != "size.attribute-count" for f in findings)
 
 
 def test_abstract_method_does_not_break_function_length():
+    """Report no function-length finding for a one-line abstract method.
+
+    Returns:
+        None. Fails if the one-line abstract method receives a function-length finding.
+    """
     src = """from abc import ABC, abstractmethod
 
 class A(ABC):
@@ -355,5 +442,4 @@ class A(ABC):
 """
     unit = _make_unit(src)
     findings = RuleRegistry.defaults().analyse([unit], _default_ctx())
-    # No size findings expected on this tiny abstract method.
     assert all(f.rule_id != "size.function-length" for f in findings)

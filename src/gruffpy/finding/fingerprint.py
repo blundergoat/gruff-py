@@ -21,9 +21,7 @@ def fingerprint_for(
 ) -> str:
     """Compute the gruff-php-compatible 16-char fingerprint for a finding's identity.
 
-    Payload key order is fixed (ruleId, file, line, endLine, column, symbol)
-    so changing it would invalidate baselines across every implementation -
-    do not reorder.
+    Keep every payload field in its fixed order, including null values, so matching inputs retain cross-port fingerprints.
 
     Args:
         rule_id: Canonical rule id (e.g. ``"size.function-length"``).
@@ -53,28 +51,19 @@ def stable_identity_for(
     symbol: str | None,
     message: str,
 ) -> str:
-    """Compute the line-insensitive 16-char identity for a finding.
+    """Compute the stableIdentity used to match findings across line shifts.
 
-    Pairs with ``fingerprint_for`` per ADR-020: ``fingerprint`` stays the
-    line-precise identity used by baselines and SARIF; ``stableIdentity`` is
-    line-insensitive for external diff tooling that wants "same logical
-    finding" across unrelated line shifts.
-
-    Input set: ``[ruleId, file, symbol]`` when ``symbol`` is not ``None``;
-    ``[ruleId, file, message]`` when ``symbol`` is ``None``. No ``line``,
-    ``end_line``, or ``column`` ever. Encoding matches ``fingerprint_for``
-    byte-for-byte so cross-port consumers see identical digests for the same
-    logical finding.
+    ADR-020 specifies the ordered hash inputs as [ruleId, file, symbol] when a symbol is present and [ruleId, file, message] otherwise.
+    Uses the same PHP-compatible JSON encoding as fingerprint_for so sibling implementations can match the digest.
 
     Args:
         rule_id: Canonical rule id.
         file_path: Display path of the offending file.
-        symbol: Qualified symbol when available; otherwise ``None``.
-        message: Rendered finding message; consulted only when ``symbol`` is
-            ``None`` (symbol-less fallback).
+        symbol: Qualified symbol used in the digest, including an empty string. None uses the message in its place.
+        message: Rendered finding message used in the digest when symbol is None.
 
     Returns:
-        First 16 hex chars of SHA-256(canonical-JSON(payload)).
+        First 16 lowercase hexadecimal characters of the SHA-256 digest of the PHP-compatible JSON payload.
     """
     if symbol is not None:
         payload: dict[str, Any] = {
@@ -92,6 +81,18 @@ def stable_identity_for(
 
 
 def _php_compatible_sha256_prefix(payload: dict[str, Any]) -> str:
+    """Hash a finding payload using PHP-compatible compact JSON escaping.
+
+    Args:
+        payload: Fields in their required insertion order, with JSON-serializable values.
+
+    Returns:
+        The first 16 lowercase SHA-256 hex characters after ASCII and forward-slash escaping.
+
+    Raises:
+        TypeError: If a payload value cannot be encoded as JSON.
+        ValueError: If the payload contains a circular reference.
+    """
     encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
     encoded = encoded.replace("/", r"\/")
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]

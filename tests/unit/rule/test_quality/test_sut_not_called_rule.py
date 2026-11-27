@@ -1,44 +1,58 @@
+import pytest
+
 from gruffpy.rule.test_quality.sut_not_called_rule import SutNotCalledRule
 from tests.unit.rule.test_quality._helpers import default_ctx, make_unit
 
 
 def test_test_with_sut_call_skipped():
+    """Report nothing for a test that calls a function and asserts on its result.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
     src = "def test_foo():\n    result = my_function(42)\n    assert result == 42\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_test_with_only_mocks_emits():
-    src = (
-        "from unittest.mock import Mock\n"
-        "def test_foo():\n"
-        "    mock = Mock()\n"
-        "    mock.assert_called()\n"
-    )
+    """Report one finding for a test that only creates a Mock and checks it was called.
+
+    Returns:
+        None. Asserts that the rule reports exactly one finding.
+    """
+    src = "from unittest.mock import Mock\ndef test_foo():\n    mock = Mock()\n    mock.assert_called()\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_test_with_only_assertions_emits():
+    """Report one finding for a test whose only statement is assert True.
+
+    Returns:
+        None. Asserts that the rule reports exactly one finding.
+    """
     src = "def test_foo():\n    assert True\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_test_with_pytest_raises_and_sut():
-    src = (
-        "import pytest\n"
-        "def test_foo():\n"
-        "    with pytest.raises(ValueError):\n"
-        "        my_function(-1)\n"
-    )
+    """Report nothing for a test that calls a function inside pytest.raises.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    src = "import pytest\ndef test_foo():\n    with pytest.raises(ValueError):\n        my_function(-1)\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_constant_contract_test_reading_imported_name_skipped():
-    # Schema/constant contract tests assert against the *content* of an
-    # imported module-level value (a prompt string, a list of allowed
-    # values). The test is exercising the import; SUT-call detection
-    # should treat the imported-name read as a SUT touch.
+    """Report nothing for a test that asserts on the content of an imported constant.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list.
+    """
+    # The rule counts a read of this module-level import as evidence even though the test calls no function.
     src = (
         "from x import BOOKING_AGENT_SYSTEM_PROMPT\n"
         "def test_prompt_does_not_contain_voice_guidance():\n"
@@ -48,41 +62,45 @@ def test_constant_contract_test_reading_imported_name_skipped():
 
 
 def test_model_fields_inspection_skipped():
-    # Reading `.model_fields` on a pydantic model is exercising the schema
-    # declaration, even though no method is called.
-    src = (
-        "from x import ReferralDetails\n"
-        "def test_legacy_fields_removed():\n"
-        "    assert 'specialist_name' not in ReferralDetails.model_fields\n"
-    )
+    """Report nothing for a test that reads model_fields on a name imported at module level.
+
+    Returns:
+        None. Asserts that the rule returns an empty findings list for the fixture.
+    """
+    # The rule recognizes model_fields by name, so the fixture needs no model definition.
+    src = "from x import ReferralDetails\ndef test_legacy_fields_removed():\n    assert 'specialist_name' not in ReferralDetails.model_fields\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_annotations_access_skipped_regardless_of_receiver():
-    # `__annotations__` access is a schema-inspection accessor; it counts
-    # as a SUT touch no matter where the receiver came from.
-    src = (
-        "def test_annotation_shape():\n"
-        "    class Local:\n"
-        "        x: int\n"
-        "    assert Local.__annotations__['x'] is int\n"
-    )
+    """Report nothing for a test that reads __annotations__ on a class it defines itself.
+
+    Returns:
+        None. Checks that reading a locally defined class's annotations produces no finding.
+    """
+    # __annotations__ access is a schema-inspection accessor; it counts as a SUT touch no matter where the receiver came from.
+    src = "def test_annotation_shape():\n    class Local:\n        x: int\n    assert Local.__annotations__['x'] is int\n"
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_test_using_only_test_framework_imports_still_emits():
-    # Sanity: importing pytest/unittest/mock and only invoking framework
-    # helpers is still a no-SUT test. The framework-module exclusion
-    # prevents the new "imported name read" check from masking these.
+    """Report one finding for a test whose sole statement is assert True and whose module imports only pytest.
+
+    Returns:
+        None. Checks that the rule reports one finding for the pytest-only fixture.
+    """
     src = "import pytest\ndef test_foo():\n    assert True\n"
     findings = SutNotCalledRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_module_level_computed_constant_read_skipped():
-    # Schema/prompt-contract tests read the SUT's source via a module-level
-    # helper at import time and stash it in a constant; tests then assert
-    # against the constant's content. The constant IS the SUT.
+    """Report nothing for a test that asserts on a module constant computed by a module helper.
+
+    Returns:
+        None. Checks that asserting on the module's computed source snapshot produces no finding.
+    """
+    # Reading a source snapshot computed at import time counts as exercising the code under test.
     src = (
         "import pathlib\n"
         "def _read_source():\n"
@@ -92,3 +110,30 @@ def test_module_level_computed_constant_read_skipped():
         "    assert 'must describe' in MODULE_SOURCE\n"
     )
     assert SutNotCalledRule().analyse(make_unit(src), default_ctx()) == []
+
+
+@pytest.mark.parametrize(
+    ("actual", "setup", "expected"),
+    [("normalise(heard)", "", 0), ("heard", "", 1), ("normalise(heard)", "self = another_object\n        ", 1)],
+    ids=["helper-calls-sut", "assertion-only-helper", "rebound-receiver"],
+)
+def test_local_assertion_helper_exercises_the_sut(actual: str, setup: str, expected: int) -> None:
+    """Check that the rule credits a call to the code under test through a local assertion helper only on the original test receiver.
+
+    Args:
+        actual: Expression checked by the custom assertion method.
+        setup: Receiver rebinding inserted before the helper call. An empty string keeps the original receiver.
+        expected: Number of SUT-not-called findings.
+
+    Returns:
+        None. Asserts the expected number of findings for the helper call.
+    """
+    source = (
+        "import unittest\n"
+        "class MishearTest(unittest.TestCase):\n"
+        "    def assert_normalises(self, heard):\n"
+        f"        self.assertIn('flu vaccination', {actual})\n"
+        "    def test_flush_shot(self):\n"
+        f"        {setup}self.assert_normalises('flush shot')\n"
+    )
+    assert len(SutNotCalledRule().analyse(make_unit(source), default_ctx())) == expected

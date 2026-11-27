@@ -17,10 +17,12 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
+from gruffpy.rule.test_quality._control_flow_exemptions import is_subtest_loop
 from gruffpy.rule.test_quality._test_quality_node_helper import (
     test_functions,
     walk_test_body,
 )
+from gruffpy.rule.test_quality._test_quality_scope import TestScopeKind
 
 
 class LoopAssertionWithoutMessageRule(Rule):
@@ -31,9 +33,7 @@ class LoopAssertionWithoutMessageRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the loop-assertion-without-message rule as a medium-confidence advisory.
 
-        Medium confidence: a missing message on a loop assertion is a real
-        debuggability problem, but a fix is often "split into parametrize"
-        rather than "add a message" - so the advice is contextual.
+        A missing message can obscure which iteration failed; parametrization or a message may provide the needed context.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -45,17 +45,16 @@ class LoopAssertionWithoutMessageRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``assert`` statements nested inside ``for``/``while`` loops with no message.
+        """Flag loops containing assertions without messages.
 
-        Walks each loop in a test body and stops at the first message-less
-        assert (one finding per loop); the missing iteration context makes
-        failures hard to attribute.
+        Recognized unittest subTest loops are exempt; each remaining loop contributes at most one finding.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
@@ -65,8 +64,10 @@ class LoopAssertionWithoutMessageRule(Rule):
             return []
         definition = self.definition()
         findings: list[Finding] = []
-        for fn, _scope in test_functions(unit):
+        for fn, scope in test_functions(unit):
             for loop in _iter_loops(fn):
+                if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD and is_subtest_loop(loop, fn):
+                    continue
                 for inner in ast.walk(loop):
                     if not isinstance(inner, ast.Assert) or inner.msg is not None:
                         continue
@@ -75,9 +76,7 @@ class LoopAssertionWithoutMessageRule(Rule):
                     findings.append(
                         Finding(
                             rule_id=definition.id,
-                            message=(
-                                f"Test {symbol!r} has an assertion inside a loop with no message."
-                            ),
+                            message=(f"Test {symbol!r} has an assertion inside a loop with no message."),
                             file_path=unit.file.display_path,
                             line=inner.lineno,
                             severity=definition.default_severity,
@@ -87,16 +86,25 @@ class LoopAssertionWithoutMessageRule(Rule):
                             end_line=inner.end_lineno,
                             symbol=symbol,
                             remediation=(
-                                "Add a message identifying the iteration, or split the "
-                                "cases into a parametrised test."
+                                "Wrap each iteration in `self.subTest(...)`, or add a message identifying the case."
+                                if scope.kind == TestScopeKind.UNITTEST_TEST_METHOD
+                                else "Add a message identifying the iteration, or split the cases into a parametrised test."
                             ),
                             secondary_pillars=definition.secondary_pillars,
                             metadata={},
                         ),
                     )
-                    break  # one finding per loop is enough
+                    break  # One diagnostic directs the reviewer to the loop without reporting every assertion.
         return findings
 
 
-def _iter_loops(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.AST]:
+def _iter_loops(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.For | ast.AsyncFor | ast.While]:
+    """Collect loops from a test body without entering nested function bodies.
+
+    Args:
+        fn: Test whose body is walked for for, async-for and while nodes.
+
+    Returns:
+        Loop nodes in traversal order; an empty list when none appear in the walked body.
+    """
     return [n for n in walk_test_body(fn) if isinstance(n, ast.For | ast.AsyncFor | ast.While)]

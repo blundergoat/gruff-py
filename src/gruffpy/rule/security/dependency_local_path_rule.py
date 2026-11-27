@@ -46,7 +46,7 @@ class DependencyLocalPathRule(SourceTextRule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per local-path dependency declaration.
+            One finding per local-path dependency declaration; empty for unsupported files or when no declaration matches.
         """
         definition = self.definition()
         findings: list[Finding] = []

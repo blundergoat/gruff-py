@@ -5,7 +5,7 @@ Proves that:
 2. The SourceTextRule routing works for sensitive-data without new wiring:
    a planted secret in a .json file is detected, and a .py-only rule does NOT
    fire on the same file.
-3. Findings never leak the raw secret - every metadata.preview is redacted.
+3. Findings never leak raw secret data - every metadata.preview is the fixed marker.
 """
 
 import json
@@ -14,27 +14,25 @@ from dataclasses import replace
 
 from gruffpy.parser.analysis_unit import ParseDiagnostic
 from gruffpy.rule.registry import RuleRegistry
-from tests.unit.rule.sensitive_data._helpers import default_ctx, make_unit
+from tests.unit.rule.sensitive_data._helpers import ctx_enabling, default_ctx, make_unit
 
 _AWS_KEY = "AKIA" + "1234567890ABCDEF"
-_AWS_KEY_PREVIEW = "AKIA...CDEF"
+# Section 5's grammar is closed: the bare marker, one of the seventeen ratified categories, or a
+# connection marker naming only its already-public scheme. Anything else is matched text in a marker.
+_MARKER_GRAMMAR = re.compile(
+    r"^\[redacted(?::(?:private-key|jwt|aws-access-key|github-token|slack-token|stripe-live-key"
+    r"|google-api-key|anthropic-api-key|npm-token|gitlab-token|gcp-service-account|email|phone"
+    r"|payment-card|ssn|medicare|mrn|connection-string:[a-z][a-z0-9+.-]*))?\]$"
+)
 _STRIPE_KEY = "sk_live_" + "abcdefghijklmno" + "pqrstuvwxyz123456"
 _JWT_HEADER = "eyJhbGciOiJIUzI1" + "NiIsInR5cCI6IkpXVCJ9"
 _JWT_PAYLOAD = "eyJzdWIiOiIxMjM0" + "NTY3ODkwIn0"
 _JWT_SIGNATURE = "abcdef123456" + "abcdef"
-_ENTROPY_VALUE = "aB3xF7p1Q9zR4" + "yT8vW2sN5kL6" + "mP0qH1jD8wEr+/="
 _DB_URL = "postgresql://admin:" + "s3cret!" + "@db.example.com/myapp"
 _URL_CREDENTIAL = "https://deploy:" + "rem0teSecret!42" + "@api.example.test/v1"
 _SSN = "412" + "-78-" + "3491"
 _PRIVATE_KEY_HEADER = "-----BEGIN RSA " + "PRIVATE KEY-----"
-_GCP_PRIVATE_KEY_VALUE = (
-    "-----BEGIN "
-    + "PRIVATE KEY-----\\n"
-    + "MIIEv"
-    + ("A" * 120)
-    + "\\n-----END "
-    + "PRIVATE KEY-----\\n"
-)
+_GCP_PRIVATE_KEY_VALUE = "-----BEGIN " + "PRIVATE KEY-----\\n" + "MIIEv" + ("A" * 120) + "\\n-----END " + "PRIVATE KEY-----\\n"
 
 _DANGEROUS_FIXTURE = (
     f"AWS_KEY = '{_AWS_KEY}'\n"
@@ -43,7 +41,6 @@ _DANGEROUS_FIXTURE = (
     f"DB = '{_DB_URL}'\n"
     f"REMOTE = '{_URL_CREDENTIAL}'\n"
     f"SSN = '{_SSN}'\n"
-    f"ENTROPY = '{_ENTROPY_VALUE}'\n"
     f"PRIVATE = '{_PRIVATE_KEY_HEADER}'\n"
     "{\n"
     '  "type": "service_account",\n'
@@ -58,34 +55,48 @@ _EXPECTED_RULE_IDS = {
     "sensitive-data.database-url-password",
     "sensitive-data.gcp-service-account-key",
     "sensitive-data.phi-pattern",
-    "sensitive-data.high-entropy-string",
     "sensitive-data.private-key",
     "sensitive-data.url-credentials",
 }
 
 
 def test_every_sensitive_data_rule_fires_on_dangerous_fixture():
-    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], default_ctx())
-    fired = {f.rule_id for f in findings if f.rule_id.startswith("sensitive-data.")}
+    """Report every expected sensitive-data rule at least once on the dangerous fixture, each with a preview in the marker grammar.
+
+    Returns:
+        None after verifying expected-rule presence and preview-marker grammar.
+    """
+    # Enable the expected rules explicitly so the fixture also exercises detectors that are disabled by default.
+    ctx = ctx_enabling(*sorted(_EXPECTED_RULE_IDS))
+    findings = RuleRegistry.defaults().analyse([make_unit(_DANGEROUS_FIXTURE)], ctx)
+    sensitive_findings = [finding for finding in findings if finding.rule_id.startswith("sensitive-data.")]
+    fired = {finding.rule_id for finding in sensitive_findings}
     missing = _EXPECTED_RULE_IDS - fired
     assert not missing, f"Missing fires: {sorted(missing)}"
+    markers = {str(finding.metadata.get("preview")) for finding in sensitive_findings}
+    assert [marker for marker in markers if _MARKER_GRAMMAR.match(marker) is None] == []
 
 
 def test_aws_key_fires_on_json_file_via_text_seam():
-    """Planted AWS key in a .json file is detected via the SourceTextRule seam."""
+    """Planted AWS key in a .json file is detected via the SourceTextRule seam.
+
+    Returns:
+        None after checking AWS-rule presence and cyclomatic-rule absence for the text file.
+    """
     src = f'{{"region": "us-east-1", "key": "{_AWS_KEY}"}}\n'
-    findings = RuleRegistry.defaults().analyse(
-        [make_unit(src, display_path="aws.json", source_type="text")], default_ctx()
-    )
+    findings = RuleRegistry.defaults().analyse([make_unit(src, display_path="aws.json", source_type="text")], default_ctx())
     text_findings = {f.rule_id for f in findings}
     assert "sensitive-data.aws-access-key" in text_findings
-    # A Python-only rule must NOT fire on this text file. complexity rules require
-    # an AST; they should be inert when tree is None.
+    # The JSON fixture has no syntax tree, so the cyclomatic rule cannot produce a finding.
     assert "complexity.cyclomatic" not in text_findings
 
 
 def test_parse_broken_python_still_runs_source_text_rules():
-    """Keep raw-source findings while AST-only rules stay out of a broken file."""
+    """Report the AWS finding from broken Python and no dangerous-function-call finding under the default configuration.
+
+    Returns:
+        None after checking AWS-rule presence and dangerous-function-call absence.
+    """
     source = f"AWS_KEY = {_AWS_KEY!r}\neval('payload')\ndef broken(:\n"
     broken_unit = replace(
         make_unit(source),
@@ -100,34 +111,28 @@ def test_parse_broken_python_still_runs_source_text_rules():
 
 
 def test_redaction_in_json_output_never_leaks_raw_secret():
-    """Every emitted finding's metadata.preview is redacted; the raw secret never
-    appears in the serialised JSON."""
+    """The serialized AWS finding contains the fixed marker and excludes the raw key, checked fragments and length text.
+
+    Returns:
+        None after verifying the AWS finding count and JSON redaction assertions."""
     src = f"AWS_KEY = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws_findings = [f for f in findings if f.rule_id == "sensitive-data.aws-access-key"]
     assert len(aws_findings) == 1
     payload = json.dumps(aws_findings[0].to_dict())
     assert _AWS_KEY not in payload
-    assert _AWS_KEY_PREVIEW in payload
+    assert "[redacted:aws-access-key]" in payload
+    assert not any(secret_detail in payload for secret_detail in ("AKIA", "CDEF", "20 chars"))
 
 
-def test_redact_preview_shape():
-    """Preview matches `first4...last4 (redacted, N chars)` for secrets ≥ 8 chars."""
+def test_every_secret_uses_a_zero_payload_marker_from_the_ratified_grammar():
+    """The AWS finding preview names its category without including the matched key or its length.
+
+    Returns:
+        None after verifying the AWS preview value and marker grammar.
+    """
     src = f"key = '{_AWS_KEY}'\n"
     findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
     aws = next(f for f in findings if f.rule_id == "sensitive-data.aws-access-key")
-    assert re.match(
-        r"^[A-Za-z0-9]{4}\.\.\.[A-Za-z0-9]{4} \(redacted, \d+ chars\)$", aws.metadata["preview"]
-    )
-
-
-def test_npm_integrity_style_hashes_suppressed():
-    """package-lock.json content is ignored at the discovery layer via the lockfile filter."""
-    # We don't have the discovery layer here, but the integration test for that lives in
-    # the discovery module. We assert that a high-entropy hash in non-lockfile content
-    # still produces a finding (positive control).
-    hash_value = _ENTROPY_VALUE + "abcdef0123456789"
-    src = f"sha512 = {hash_value!r}\n"
-    findings = RuleRegistry.defaults().analyse([make_unit(src)], default_ctx())
-    high_entropy = [f for f in findings if f.rule_id == "sensitive-data.high-entropy-string"]
-    assert len(high_entropy) >= 1
+    assert aws.metadata["preview"] == "[redacted:aws-access-key]"
+    assert _MARKER_GRAMMAR.match(aws.metadata["preview"]) is not None

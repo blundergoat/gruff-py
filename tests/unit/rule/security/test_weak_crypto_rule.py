@@ -26,6 +26,11 @@ _USEDFORSECURITY_ARGUMENT_CASES = (
 
 
 def test_md5_on_password_emits():
+    """Report one finding, with algorithm md5, for an MD5 hash of a password.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\npassword_hash = hashlib.md5(password.encode())\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
@@ -33,22 +38,42 @@ def test_md5_on_password_emits():
 
 
 def test_sha1_in_security_function_emits():
+    """Report one finding for SHA-1 inside a function named sign_token.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\ndef sign_token(payload):\n    return hashlib.sha1(payload).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_md5_for_cache_key_skipped():
+    """Report nothing for MD5 used for a cache key.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\ncache_key = hashlib.md5(content).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_sha256_signature_not_flagged():
+    """Report nothing for a SHA-256 digest assigned to signature.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\nsignature = hashlib.sha256(payload).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_sha256_on_password_emits_with_kdf_metadata():
+    """Report one finding for SHA-256 on a password, with the sha256 algorithm, password-material source and fast-hash sink.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\npassword_hash = hashlib.sha256(password.encode()).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
 
@@ -59,14 +84,22 @@ def test_sha256_on_password_emits_with_kdf_metadata():
 
 
 def test_sha512_in_password_function_emits():
-    src = (
-        "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
-    )
+    """Report one finding for SHA-512 inside a password-hashing function.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
+    src = "import hashlib\ndef hash_password(value):\n    return hashlib.sha512(value).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_sha256_for_generic_content_skipped():
+    """Report nothing for SHA-256 over generic file content.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
     src = "import hashlib\ncontent_digest = hashlib.sha256(file_bytes).hexdigest()\n"
     assert WeakCryptoRule().analyse(make_unit(src), default_ctx()) == []
 
@@ -96,25 +129,47 @@ def test_usedforsecurity_weak_hash_matrix(
         usedforsecurity_argument: Keyword suffix; empty means the user omitted it.
         case_setup: Optional dynamic flag setup; empty means no setup is needed.
         expected_finding_count: Zero only for the literal-false opt-out.
+
+    Returns:
+        None. Successful completion means the assertions passed.
     """
-    source = (
-        f"{hash_import}\n"
-        f"{case_setup}"
-        f"password_hash = {hash_call_target}(password{usedforsecurity_argument}).hexdigest()\n"
-    )
+    source = f"{hash_import}\n{case_setup}password_hash = {hash_call_target}(password{usedforsecurity_argument}).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
     assert len(findings) == expected_finding_count
 
 
 def test_usedforsecurity_false_keeps_fast_password_hash_finding() -> None:
-    """Keep warning when a user stores a password with fast SHA-256."""
-    source = (
-        "import hashlib\n"
-        "password_hash = hashlib.sha256("
-        "password, usedforsecurity=False).hexdigest()\n"
-    )
+    """Report one SHA-256 password-material finding even with usedforsecurity=False.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
+    source = "import hashlib\npassword_hash = hashlib.sha256(password, usedforsecurity=False).hexdigest()\n"
     findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
 
     assert len(findings) == 1
     assert findings[0].metadata["algorithm"] == "sha256"
     assert findings[0].metadata["sourceLabel"] == "password-material"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_finding_count"),
+    (
+        ("import os\nfrom hashlib import sha1\nsalt = os.urandom(sha1().digest_size)\n", 0),
+        ("from hashlib import sha1\npassword_hash = sha1()\npassword_hash.update(password)\n", 1),
+    ),
+    ids=("digest-size", "incremental-password"),
+)
+def test_empty_hash_constructor_size_query_vs_incremental(source: str, expected_finding_count: int) -> None:
+    """Keep size queries quiet without hiding an incremental password hasher.
+
+    Args:
+        source: Caller code that either reads the size or retains the hash for later input.
+        expected_finding_count: Zero for the size query; one for the retained password hasher.
+
+    Returns:
+        None. Successful completion means the assertions passed.
+    """
+    findings = WeakCryptoRule().analyse(make_unit(source), default_ctx())
+
+    assert len(findings) == expected_finding_count

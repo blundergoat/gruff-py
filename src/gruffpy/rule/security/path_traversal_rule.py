@@ -46,9 +46,7 @@ from gruffpy.rule.security._security_taint_helper import TaintAnalyser
 _FRAMEWORK_GATE: frozenset[str] = frozenset({"flask", "django", "fastapi"})
 _SHUTIL_SOURCE_LEAVES: frozenset[str] = frozenset({"copyfile", "copy", "copy2", "move", "rename"})
 _OS_REMOVE_LEAVES: frozenset[str] = frozenset({"remove", "unlink"})
-_PATH_READ_WRITE_LEAVES: frozenset[str] = frozenset(
-    {"read_text", "read_bytes", "write_text", "write_bytes", "open"}
-)
+_PATH_READ_WRITE_LEAVES: frozenset[str] = frozenset({"read_text", "read_bytes", "write_text", "write_bytes", "open"})
 _PATH_CONSTRUCTORS: frozenset[str] = frozenset({"Path", "PurePath", "PosixPath", "PurePosixPath"})
 _PATH_TRAVERSAL_SANITISERS: frozenset[str] = frozenset({"secure_filename", "basename"})
 _SOURCE_NEEDLES: tuple[str, ...] = (
@@ -81,11 +79,7 @@ class PathTraversalRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the path-traversal rule as a high-confidence ERROR.
 
-        ERROR severity because path traversal grants read/write access to
-        files outside the intended directory, including configuration,
-        credentials, and source; high confidence because the matched
-        sinks + intra-procedural taint pinpoint the path argument
-        without ambiguity.
+        Request-tainted paths at supported file sinks can escape the intended directory and expose or modify files.
 
         Returns:
             Definition for the path-traversal rule under the security
@@ -108,7 +102,7 @@ class PathTraversalRule(Rule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per call site whose path argument is tainted.
+            Matched tainted-path findings, or an empty list if parsing, a supported framework import or matching calls are absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -128,6 +122,17 @@ class PathTraversalRule(Rule):
 
 
 def _path_sink_argument(call: ast.Call) -> ast.expr | None:
+    """Select the path expression to query in the taint map for a supported file call.
+
+    For a recognized chained call, use the constructor's first positional argument.
+    Direct sinks use the outer call's first positional argument.
+
+    Args:
+        call: Call expression to inspect for a supported direct or chained sink shape.
+
+    Returns:
+        The first path argument, or None when the target shape or required argument is absent.
+    """
     if _is_path_chained_sink(call):
         assert isinstance(call.func, ast.Attribute)  # noqa: S101  # narrowed by helper
         receiver = call.func.value
@@ -149,6 +154,14 @@ def _path_sink_argument(call: ast.Call) -> ast.expr | None:
 
 
 def _is_path_chained_sink(call: ast.Call) -> bool:
+    """Recognize a supported file method on a call whose target ends in a recognized pathlib constructor name.
+
+    Args:
+        call: Call to check for a supported method and constructor-name suffix.
+
+    Returns:
+        True for the chained syntactic shape, without resolving imports or checking constructor arguments.
+    """
     if not isinstance(call.func, ast.Attribute):
         return False
     if call.func.attr not in _PATH_READ_WRITE_LEAVES:
@@ -167,6 +180,16 @@ def _build_finding(
     unit: AnalysisUnit,
     call: ast.Call,
 ) -> Finding:
+    """Build the finding for a file call whose selected path expression is tainted.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched sink call supplying the target spelling and source range.
+
+    Returns:
+        A finding with path-traversal remediation and filesystem-sink metadata. A target without a dotted name appears as ?.
+    """
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,

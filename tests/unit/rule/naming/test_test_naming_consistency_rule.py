@@ -9,6 +9,15 @@ from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str = "tests/test_x.py") -> AnalysisUnit:
+    """Parse source into an analysis unit at display_path.
+
+    Args:
+        source: Python source to parse.
+        display_path: Project-relative path of the unit; defaults to a test file under tests.
+
+    Returns:
+        A unit holding the parsed tree, without parent links, at display_path.
+    """
     tree = ast.parse(source)
     return AnalysisUnit(
         file=SourceFile(
@@ -22,6 +31,11 @@ def _unit(source: str, display_path: str = "tests/test_x.py") -> AnalysisUnit:
 
 
 def _ctx() -> RuleContext:
+    """Build a rule context with the test naming consistency rule enabled.
+
+    Returns:
+        A context whose config enables only the test naming consistency rule.
+    """
     rule = TestNamingConsistencyRule()
     return RuleContext(
         project_root="/",
@@ -30,6 +44,11 @@ def _ctx() -> RuleContext:
 
 
 def test_mixed_snake_and_camel_fires():
+    """Report a test file mixing one snake-case and one camel-case test name once, with both counts.
+
+    Returns:
+        None after checking for one finding with a count of one for each naming style.
+    """
     src = "def test_foo(): pass\ndef testBar(): pass\n"
     findings = TestNamingConsistencyRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
@@ -38,32 +57,55 @@ def test_mixed_snake_and_camel_fires():
 
 
 def test_consistent_snake_does_not_fire():
+    """Report nothing when every test name is snake case.
+
+    Returns:
+        None after checking that the all-snake-case fixture produces no findings.
+    """
     src = "def test_foo(): pass\ndef test_bar(): pass\n"
     findings = TestNamingConsistencyRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_consistent_camel_does_not_fire():
+    """Report nothing when every test name is camel case.
+
+    Returns:
+        None after checking that the all-camel-case fixture produces no findings.
+    """
     src = "def testFoo(): pass\ndef testBar(): pass\n"
     findings = TestNamingConsistencyRule().analyse(_unit(src), _ctx())
     assert findings == []
 
 
 def test_methods_in_test_class_count():
+    """Report mixed snake-case and camel-case test methods in a test class once.
+
+    Returns:
+        None after checking that the mixed method names in the test class produce one finding.
+    """
     src = "class TestSomething:\n    def test_a(self): pass\n    def testB(self): pass\n"
     findings = TestNamingConsistencyRule().analyse(_unit(src), _ctx())
     assert len(findings) == 1
 
 
 def test_non_test_file_does_not_fire():
+    """Report nothing for mixed test names in a file outside the tests.
+
+    Returns:
+        None after checking that the mixed names in src/foo.py produce no findings.
+    """
     src = "def test_foo(): pass\ndef testBar(): pass\n"
     findings = TestNamingConsistencyRule().analyse(_unit(src, display_path="src/foo.py"), _ctx())
     assert findings == []
 
 
 def test_test_dir_path_recognised():
+    """Report mixed test names once in a file under tests whose name lacks the test_ prefix.
+
+    Returns:
+        None after checking that the mixed names in tests/integration/something.py produce one finding.
+    """
     src = "def test_foo(): pass\ndef testBar(): pass\n"
-    findings = TestNamingConsistencyRule().analyse(
-        _unit(src, display_path="tests/integration/something.py"), _ctx()
-    )
+    findings = TestNamingConsistencyRule().analyse(_unit(src, display_path="tests/integration/something.py"), _ctx())
     assert len(findings) == 1

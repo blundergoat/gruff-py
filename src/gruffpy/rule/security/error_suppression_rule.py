@@ -35,10 +35,7 @@ class ErrorSuppressionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the wide-error-suppression rule as a medium-confidence advisory.
 
-        Advisory rather than warning because there are legitimate cases
-        (top-level event loops, plugin sandboxes) where catching
-        ``Exception`` is intentional - narrower than ``BaseException`` and
-        well-thought-out.
+        Advisory severity allows for intentional broad catches in top-level event loops and plugin sandboxes.
 
         Returns:
             Definition for the wide-error-suppression rule under the
@@ -54,22 +51,16 @@ class ErrorSuppressionRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag wide-exception suppression *shapes* (regardless of handler body).
+        """Flag wide-exception suppression regardless of the handler body.
 
-        Two shapes trigger findings: ``contextlib.suppress(Exception)`` /
-        ``suppress(BaseException)``; and ``except (Exception, ...)`` /
-        ``except (BaseException, ...)`` tuple handlers. The plain
-        ``except Exception:`` shape with a pass-only body is handled by
-        ``security.silent-except`` - this rule complements that one by
-        catching the type-shape signal regardless of body.
+        Matches bare Exception or BaseException names in exception tuples or as positional arguments to suppress calls in synchronous with items.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per wide-suppression shape (``with suppress(...)``
-            or wide-tuple ``except``).
+            One finding per matching context item or wide-exception tuple handler; empty when no tree or match is available.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -82,9 +73,19 @@ class ErrorSuppressionRule(Rule):
                 findings.append(_build_finding(definition, unit, node, "tuple-wide-except"))
         return findings
 
-    def _check_with(
-        self, definition: RuleDefinition, unit: AnalysisUnit, with_stmt: ast.With
-    ) -> list[Finding]:
+    def _check_with(self, definition: RuleDefinition, unit: AnalysisUnit, with_stmt: ast.With) -> list[Finding]:
+        """Collect wide-exception suppression findings from a with statement.
+
+        A match requires a target ending in suppress and a bare wide-exception name among positional arguments; the target's owner is not resolved.
+
+        Args:
+            definition: Rule identity, severity, and classification to copy into the finding.
+            unit: Analysis unit providing the displayed file path.
+            with_stmt: With statement whose context-manager calls are inspected.
+
+        Returns:
+            One finding per matching context item, or an empty list when none match.
+        """
         out: list[Finding] = []
         for item in with_stmt.items:
             if not isinstance(item.context_expr, ast.Call):
@@ -103,7 +104,14 @@ class ErrorSuppressionRule(Rule):
 
 
 def _is_wide_tuple(handler: ast.ExceptHandler) -> bool:
-    """True if the handler catches a tuple including Exception or BaseException."""
+    """True if the handler catches a tuple including Exception or BaseException.
+
+    Args:
+        handler: Exception handler whose tuple elements are checked for bare wide-exception names.
+
+    Returns:
+        True when a tuple contains a bare Exception or BaseException name; false otherwise.
+    """
     if not isinstance(handler.type, ast.Tuple):
         return False
     return any(isinstance(elt, ast.Name) and elt.id in _WIDE for elt in handler.type.elts)
@@ -115,6 +123,17 @@ def _build_finding(
     node: ast.AST,
     label: str,
 ) -> Finding:
+    """Build a finding for a recognized wide-suppression shape.
+
+    Args:
+        definition: Rule identity, severity, and classification to copy into the finding.
+        unit: Analysis unit providing the displayed file path.
+        node: Matched with statement or exception handler providing the source span.
+        label: Suppression shape to include in the message and metadata.
+
+    Returns:
+        Finding at the matched node's location with the supplied shape label.
+    """
     return Finding(
         rule_id=definition.id,
         message=f"Wide-exception suppression: `{label}`.",
@@ -125,10 +144,7 @@ def _build_finding(
         tier=definition.tier,
         confidence=definition.confidence,
         end_line=getattr(node, "end_lineno", None),
-        remediation=(
-            "Narrow the exception type or remove the suppression and handle "
-            "the failure deliberately."
-        ),
+        remediation=("Narrow the exception type or remove the suppression and handle the failure deliberately."),
         secondary_pillars=definition.secondary_pillars,
         metadata={"shape": label},
     )

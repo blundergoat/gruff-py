@@ -75,10 +75,7 @@ class SsrfRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the SSRF rule as a high-confidence ERROR.
 
-        ERROR severity because SSRF is a frequent pivot for AWS metadata
-        exfiltration and internal-network probing; high confidence because
-        the matched sinks + intra-procedural taint reach the URL argument
-        without ambiguity.
+        Request-tainted URLs at supported HTTP clients can expose cloud metadata or reach internal services.
 
         Returns:
             Definition for the SSRF rule under the security pillar.
@@ -100,26 +97,23 @@ class SsrfRule(Rule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            Findings visible to the user, or an empty list when no supported sink is unsafe.
+            Findings for supported URL arguments marked tainted. Empty when the file is skipped or no supported URL argument is marked tainted.
         """
-        # A parse failure or missing client token gives the user no reliable SSRF judgment.
-        if not isinstance(unit.tree, ast.Module) or not any(
-            needle in unit.source for needle in _SOURCE_NEEDLES
-        ):
+        # The source markers avoid a taint pass on files unlikely to contain a supported client call.
+        if not isinstance(unit.tree, ast.Module) or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
         taint_map = TaintAnalyser(_SSRF_SANITISERS).analyse_tree(unit.tree)
         definition = self.definition()
         findings: list[Finding] = []
         # Each parsed call is checked against the small matrix shown in rule documentation.
         for node in ast.walk(unit.tree):
-            # Non-call syntax cannot send a URL, so it never becomes a user finding.
             if not isinstance(node, ast.Call):
                 continue
             user_url = _supported_http_client_url_argument(
                 node,
                 tree=unit.tree,
             )
-            # Unsupported calls and fixed URLs stay out of the user's result list.
+            # A documented client call counts only when request data can still reach its URL argument.
             if user_url is None or not taint_map.is_tainted(user_url):
                 continue
             findings.append(_build_finding(definition, unit, node))
@@ -138,10 +132,11 @@ def _supported_http_client_url_argument(
         tree: Parsed module used to prove the receiver's same-unit import binding.
 
     Returns:
-        Positional or ``url=`` expression, or None for unsupported/missing URL shapes.
+        The URL expression from a supported positional slot or the url keyword.
+        None when the target is unsupported, its client import cannot be verified, or the URL argument is missing.
     """
     target = call_target_name(call)
-    # Dynamic callees cannot be tied to a documented client in the UI.
+    # Dynamic callees provide no stable target spelling for import-binding verification.
     if target is None:
         return None
     required_binding = _required_import_binding(target)
@@ -153,23 +148,23 @@ def _supported_http_client_url_argument(
         canonical_import=required_binding[1],
     ):
         return None
-    # Direct verbs take their URL first, or from the explicit ``url=`` keyword.
+    # Direct verbs take their URL first or from the explicit url keyword.
     if target in _HTTP_VERB_TARGETS:
         return _positional_or_keyword_url(call, positional_index=0)
-    # Generic request methods take method first and URL second, or use ``url=``.
+    # Generic request methods take the method first and the URL second, or use the url keyword.
     if target in _REQUEST_METHOD_TARGETS:
         return _positional_or_keyword_url(call, positional_index=1)
-    # Qualified and bare ``urlopen`` take the URL first; binding is already proved.
+    # Qualified and bare urlopen take the URL first once their import binding is verified.
     if target in (_QUALIFIED_URLOPEN_TARGET, "urlopen"):
         return _positional_or_keyword_url(call, positional_index=0)
     return None
 
 
 def _required_import_binding(target: str) -> tuple[str, str] | None:
-    """Return the lexical root and exact import required by a supported target.
+    """Return the lexical root and canonical import used to verify a supported target.
 
     Args:
-        target: Dotted call spelling from the user's source.
+        target: Bare or dotted call spelling used to select the required import.
 
     Returns:
         Binding/canonical import pair, or None for an unsupported call target.
@@ -255,29 +250,25 @@ def _scope_client_binding_status(
     """Classify one scope's binding as imported, shadowed, or absent.
 
     Args:
-        scope: Lexical module, class, function, or lambda scope.
+        scope: Scope searched for an effective binding of the receiver name.
         binding_name: Receiver root being resolved.
         canonical_import: Exact supported module or callable import.
         call_line: Source line of the candidate sink.
         call_column: Source column of the candidate sink.
-        require_prior_import: Whether this call executes directly in the scope.
+        require_prior_import: Whether bindings in this scope are checked against the call's source position.
 
     Returns:
-        ``supported`` for direct import proof, ``shadowed`` for another
-        binding, or ``unbound`` when this scope does not bind the name. The
-        last effective binding in source order decides, so a canonical import
-        that follows an earlier shadow restores trust.
+        supported for an effective direct canonical import or shadowed for a binding that prevents trusting the import.
+        unbound when the scope supplies no effective binding, so the caller can check an enclosing scope.
+        A later effective canonical import restores trust; later function-local bindings can shadow an earlier call.
     """
-    if isinstance(
-        scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-    ) and binding_name in _parameter_names(scope.args):
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and binding_name in _parameter_names(scope.args):
         return "shadowed"
-    has_retroactive_local_bindings = isinstance(
-        scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-    ) and not _has_external_binding_declaration(scope, binding_name)
+    has_retroactive_local_bindings = isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and not _has_external_binding_declaration(
+        scope, binding_name
+    )
     direct_statement_ids = {id(statement) for statement in _scope_statements(scope)}
-    # The receiver a call sees is the last binding that executed before it, so
-    # scanning to the end lets a canonical import undo an earlier shadow.
+    # Keep scanning because a later effective canonical import can restore trust after a shadow.
     status: _ClientBindingStatus = "unbound"
     for node in _scope_nodes(scope):
         is_after_call = require_prior_import and _is_after_call(
@@ -294,7 +285,7 @@ def _scope_client_binding_status(
                 is_after_call=is_after_call,
                 should_ignore_later_binding=(is_after_call and not has_retroactive_local_bindings),
             )
-            # ``unbound`` means this import never touches the receiver root.
+            # Imports ignored at this call site must leave earlier binding evidence intact.
             if import_status != "unbound":
                 status = import_status
             continue
@@ -332,8 +323,8 @@ def _scope_nodes(
     Args:
         scope: Scope whose bindings are being classified.
 
-    Returns:
-        Iterator over direct-scope syntax and nested declaration names only.
+    Yields:
+        Nodes from the scope body, including nested scope nodes without their descendants.
     """
     if isinstance(scope, ast.Lambda):
         yield from walk_statement_scope(scope.body)
@@ -357,28 +348,23 @@ def _import_binding_status(
         statement: Import syntax in the current lexical scope.
         binding_name: Receiver root being resolved.
         canonical_import: Exact supported module or callable import.
-        is_direct_statement: Whether the import executes directly in the scope.
-        is_after_call: Whether the statement follows a directly executed call.
+        is_direct_statement: Whether the import is a direct statement in this scope's body.
+        is_after_call: Whether source order places the import after the call in a scope where order matters.
         should_ignore_later_binding: Whether source order makes that import irrelevant.
 
     Returns:
-        Supported, shadowed, or unbound for this one import statement.
+        The supported status for a qualifying client import, shadowed for an import that may obscure the client binding,
+        or unbound when this statement leaves the prior binding status unchanged.
     """
     if should_ignore_later_binding:
         return "unbound"
-    if isinstance(statement, ast.ImportFrom) and any(
-        alias.name == "*" for alias in statement.names
-    ):
+    if isinstance(statement, ast.ImportFrom) and any(alias.name == "*" for alias in statement.names):
         return "shadowed"
     status: _ClientBindingStatus = "unbound"
     for imported_alias in statement.names:
         if _visible_import_name(statement, imported_alias) != binding_name:
             continue
-        if (
-            not is_direct_statement
-            or is_after_call
-            or not _is_exact_supported_import(statement, imported_alias, canonical_import)
-        ):
+        if not is_direct_statement or is_after_call or not _is_exact_supported_import(statement, imported_alias, canonical_import):
             return "shadowed"
         status = "supported"
     return status
@@ -396,11 +382,12 @@ def _is_call_shadowed_by_binding(
     Args:
         node: Scope-limited syntax that may bind the receiver.
         binding_name: Supported receiver root whose trust is being protected.
-        is_after_call: Whether the binding follows a directly executed call.
+        is_after_call: Whether source-order checks place this binding after the call. False when source order is ignored.
         has_retroactive_local_bindings: Whether local names bind for the whole scope.
 
     Returns:
-        True when the binding controls the receiver at call time.
+        True for a matching binding at or before the call, or at any position when source order is ignored.
+        When order is checked, only scope-wide local names can shadow an earlier call. Later attribute changes leave that call unaffected.
     """
     if not _has_name_binding(node, binding_name):
         return False
@@ -426,22 +413,19 @@ def _has_external_binding_declaration(
     """
     if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
         return False
-    return any(
-        isinstance(node, (ast.Global, ast.Nonlocal)) and binding_name in node.names
-        for node in _scope_nodes(scope)
-    )
+    return any(isinstance(node, (ast.Global, ast.Nonlocal)) and binding_name in node.names for node in _scope_nodes(scope))
 
 
 def _is_after_call(node: ast.AST, *, call_line: int, call_column: int) -> bool:
-    """Return whether a binding executes after the candidate call.
+    """Compare a binding's source coordinates with the candidate call.
 
     Args:
-        node: Binding syntax carrying a source position.
+        node: Binding syntax whose missing position fields default to the call's corresponding coordinates.
         call_line: One-based line where the call starts.
         call_column: Zero-based column where the call starts.
 
     Returns:
-        True for later lines or a later statement on the same line.
+        True when the resulting source coordinates sort after the call's coordinates; False otherwise.
     """
     node_line = getattr(node, "lineno", call_line)
     node_column = getattr(node, "col_offset", call_column)
@@ -449,13 +433,13 @@ def _is_after_call(node: ast.AST, *, call_line: int, call_column: int) -> bool:
 
 
 def _parameter_names(arguments: ast.arguments) -> set[str]:
-    """Return every parameter name that shadows an outer client import.
+    """Collect all parameter names so callers can check whether a client import is shadowed.
 
     Args:
-        arguments: Function or lambda argument structure.
+        arguments: Parameters declared by the function or lambda being checked for shadowing.
 
     Returns:
-        Set containing positional, keyword-only, variadic, and mapping names.
+        Declared names of positional and keyword-only parameters, including any variadic positional and variadic keyword parameters.
     """
     parameters = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
     names = {parameter.arg for parameter in parameters}
@@ -471,7 +455,7 @@ def _visible_import_name(statement: ast.Import | ast.ImportFrom, alias: ast.alia
 
     Args:
         statement: Import form controlling dotted-name binding semantics.
-        alias: One imported module or member.
+        alias: Import entry whose explicit alias takes precedence over its original name.
 
     Returns:
         Visible lexical name, including explicit aliases.
@@ -496,33 +480,28 @@ def _is_exact_supported_import(
         canonical_import: Required canonical module or callable.
 
     Returns:
-        True for the documented direct spelling only; aliases remain unsupported.
+        True for an unaliased import of the required module or a submodule, or for the absolute from-import of urllib.request.urlopen.
     """
     if alias.asname is not None:
         return False
     if canonical_import == "urllib.request.urlopen":
-        return (
-            isinstance(statement, ast.ImportFrom)
-            and statement.level == 0
-            and statement.module == "urllib.request"
-            and alias.name == "urlopen"
-        )
+        return isinstance(statement, ast.ImportFrom) and statement.level == 0 and statement.module == "urllib.request" and alias.name == "urlopen"
     if not isinstance(statement, ast.Import):
         return False
-    # `import requests.adapters` binds `requests` to the same package `import
-    # requests` binds, so a submodule import proves the client just as directly.
+    # Importing requests.adapters binds the same requests package as importing requests directly.
+    # Either import therefore establishes the client binding.
     return alias.name == canonical_import or alias.name.startswith(f"{canonical_import}.")
 
 
 def _has_name_binding(node: ast.AST, binding_name: str) -> bool:
-    """Return whether non-import syntax replaces a lexical receiver binding.
+    """Check whether syntax binds or deletes a receiver name, or modifies its attributes.
 
     Args:
-        node: Scope-limited AST node.
+        node: Syntax from the scope being checked for a receiver binding or attribute change.
         binding_name: Supported receiver root whose trust is being protected.
 
     Returns:
-        True for assignments, declarations, handlers, or pattern captures.
+        True for a matching name or attribute write or deletion, function or class name, exception handler name, or pattern capture.
     """
     if isinstance(node, ast.Name):
         return node.id == binding_name and isinstance(node.ctx, (ast.Store, ast.Del))
@@ -538,13 +517,13 @@ def _has_name_binding(node: ast.AST, binding_name: str) -> bool:
 
 
 def _attribute_root_name(attribute: ast.Attribute) -> str | None:
-    """Return the root identifier changed by an attribute assignment.
+    """Find the receiver name behind an attribute write or deletion.
 
     Args:
-        attribute: Assignment or deletion target such as ``requests.get``.
+        attribute: Assignment or deletion target such as requests.get.
 
     Returns:
-        Root name, or None when the receiver is dynamically computed.
+        Root identifier, or None if the attribute chain does not start at a name.
     """
     current: ast.expr = attribute
     while isinstance(current, ast.Attribute):
@@ -553,7 +532,7 @@ def _attribute_root_name(attribute: ast.Attribute) -> str | None:
 
 
 def _positional_or_keyword_url(call: ast.Call, *, positional_index: int) -> ast.expr | None:
-    """Return a supported positional URL before falling back to ``url=``.
+    """Return a supported positional URL before falling back to the named url argument.
 
     Args:
         call: Supported HTTP-client call from the user's source.
@@ -562,7 +541,7 @@ def _positional_or_keyword_url(call: ast.Call, *, positional_index: int) -> ast.
     Returns:
         URL expression, or None when the user supplied no supported URL argument.
     """
-    # Positional URLs are the client's primary public calling form.
+    # If both forms appear in source, only the positional expression is checked for taint.
     if len(call.args) > positional_index:
         return call.args[positional_index]
     return call_keyword(call, "url")
@@ -581,15 +560,12 @@ def _build_finding(
         call: Supported HTTP call whose URL is tainted.
 
     Returns:
-        Finding with unchanged remediation and security metadata.
+        Finding with SSRF remediation, the call-target label and HTTP-client security metadata.
     """
     target = call_target_name(call) or "?"
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` receives a user-controlled URL - SSRF risk via "
-            "internal services, cloud metadata, or other reachable targets."
-        ),
+        message=(f"`{target}(...)` receives a user-controlled URL - SSRF risk via internal services, cloud metadata, or other reachable targets."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

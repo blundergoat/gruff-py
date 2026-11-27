@@ -26,12 +26,33 @@ class _PathProbe:
 
 
 def _write(path: Path, text: str = "") -> None:
+    """Write text to a file, creating any missing parent directories.
+
+    Args:
+        path: File to create or overwrite.
+        text: UTF-8 content; empty by default.
+
+    Returns:
+        None. Creates missing parent directories and writes the file as UTF-8.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _is_git_ignored(repo: Path, target: Path) -> bool:
-    """Return True iff ``git check-ignore`` says *target* is ignored in *repo*."""
+    """Return True exactly when git check-ignore reports target as ignored in repo.
+
+    Args:
+        repo: Git repository root the check runs in.
+        target: Path inside the repository, passed to git relative to its root.
+
+    Returns:
+        True when git exits 0, and False when it exits 1.
+
+    Raises:
+        AssertionError: Git is not on the path.
+        RuntimeError: Git exits with any other code; the message carries the code and standard error.
+    """
     assert _GIT is not None
     result = subprocess.run(
         [_GIT, "-C", str(repo), "check-ignore", "-q", str(target.relative_to(repo))],
@@ -45,6 +66,18 @@ def _is_git_ignored(repo: Path, target: Path) -> bool:
 
 
 def _init_repo(root: Path) -> None:
+    """Initialise an empty git repository in a directory.
+
+    Args:
+        root: Directory to initialise.
+
+    Returns:
+        None. Initialises Git metadata in root for the ignore checks.
+
+    Raises:
+        AssertionError: Git is not on the path.
+        subprocess.CalledProcessError: git init exits non-zero.
+    """
     assert _GIT is not None
     subprocess.run(
         [_GIT, "init", "--quiet", str(root)],
@@ -78,13 +111,13 @@ _PATH_PROBES: tuple[_PathProbe, ...] = (
 
 @pytest.fixture
 def corpus(tmp_path: Path) -> Path:
-    """Create a representative gitignore corpus in *tmp_path* and return its root.
+    """Create a representative gitignore corpus in tmp_path and return its root.
 
     Args:
         tmp_path: Pytest-provided per-test directory.
 
     Returns:
-        The same ``tmp_path`` after the gitignore probe tree has been written.
+        The same tmp_path after the gitignore probe tree has been written.
     """
     _write_probe_paths(tmp_path)
     _write_gitignore_files(tmp_path)
@@ -92,6 +125,14 @@ def corpus(tmp_path: Path) -> Path:
 
 
 def _write_gitignore_files(root: Path) -> None:
+    """Write the root, pkg and vendor ignore files, covering negated, anchored, directory and double-star patterns.
+
+    Args:
+        root: Corpus root that receives the three .gitignore files.
+
+    Returns:
+        None. Writes the corpus rules into the root, pkg and vendor .gitignore files.
+    """
     _write(
         root / ".gitignore",
         "\n".join(
@@ -111,6 +152,14 @@ def _write_gitignore_files(root: Path) -> None:
 
 
 def _write_probe_paths(root: Path) -> None:
+    """Create every probe path as an empty file or a directory, skipping probes that name a .gitignore file.
+
+    Args:
+        root: Corpus root that receives the probe tree.
+
+    Returns:
+        None. Creates the probe directories and empty files, leaving .gitignore files for the rule writer.
+    """
     for probe in _PATH_PROBES:
         if probe.rel.endswith(".gitignore"):
             continue
@@ -124,12 +173,21 @@ def _write_probe_paths(root: Path) -> None:
 @pytest.mark.skipif(_GIT is None, reason="git is not available on PATH")
 @pytest.mark.parametrize("probe", _PATH_PROBES, ids=lambda p: f"{p.rel}::is_dir={p.is_dir}")
 def test_matcher_matches_git_check_ignore_on_probe(probe: _PathProbe, corpus: Path) -> None:
+    """Give the same ignore verdict as git check-ignore for each probe path in the corpus.
+
+    Skipped when git is not on the path.
+
+    Args:
+        probe: Path under test and whether it is a directory; the cases span paths that plain, negated, anchored, nested and double-star rules decide.
+        corpus: Corpus root, initialised here as a git repository.
+
+    Returns:
+        None. Asserts that the matcher and git check-ignore agree for the probe.
+    """
     _init_repo(corpus)
     matcher = GitignoreMatcher.from_root(corpus)
 
     target = corpus / probe.rel
     git_verdict = _is_git_ignored(corpus, target)
     matcher_verdict = matcher.is_ignored(target, is_dir=probe.is_dir)
-    assert matcher_verdict == git_verdict, (
-        f"{probe.rel} (is_dir={probe.is_dir}): git={git_verdict} matcher={matcher_verdict}"
-    )
+    assert matcher_verdict == git_verdict, f"{probe.rel} (is_dir={probe.is_dir}): git={git_verdict} matcher={matcher_verdict}"

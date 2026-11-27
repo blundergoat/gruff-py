@@ -34,6 +34,18 @@ _ACCESSOR_COLLISION_EXPRESSIONS = (
 
 
 def _find_call(tree: ast.AST, target_name: str) -> ast.Call:
+    """Return the first call, in ``ast.walk`` order, whose unparsed function ends with target_name.
+
+    Args:
+        tree: Parsed module to search.
+        target_name: Text the call's function must end with.
+
+    Returns:
+        That call node.
+
+    Raises:
+        AssertionError: No call's function ends with target_name.
+    """
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and ast.unparse(node.func).endswith(target_name):
             return node
@@ -41,12 +53,26 @@ def _find_call(tree: ast.AST, target_name: str) -> ast.Call:
 
 
 def _analyse(src: str, sanitisers: frozenset[str] = frozenset()) -> tuple[ast.AST, "TaintAnalyser"]:
+    """Parse src and build a taint analyser for it, without running the analysis.
+
+    Args:
+        src: Python source to parse.
+        sanitisers: Function names the analyser treats as sanitisers; defaults to none.
+
+    Returns:
+        The parsed tree and the analyser, as a pair.
+    """
     tree = ast.parse(src)
     analyser = TaintAnalyser(sanitisers=sanitisers)
     return tree, analyser
 
 
 def test_request_attr_is_a_source():
+    """Mark request.json passed straight to the sink as tainted.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = "from flask import request\ndef view():\n    sink(request.json)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -55,6 +81,11 @@ def test_request_attr_is_a_source():
 
 
 def test_assignment_propagates_taint():
+    """Carry taint from ``request.json`` through an assignment to the sink.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    x = request.json\n    sink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -63,6 +94,11 @@ def test_assignment_propagates_taint():
 
 
 def test_subscript_of_tainted_is_tainted():
+    """Mark a subscript of a tainted value as tainted.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = "from flask import request\ndef view():\n    body = request.json\n    sink(body['url'])\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -71,6 +107,11 @@ def test_subscript_of_tainted_is_tainted():
 
 
 def test_attribute_of_tainted_is_tainted():
+    """Mark an attribute of a tainted value as tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\ndef view():\n    user = request.json\n    sink(user.name)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -79,12 +120,12 @@ def test_attribute_of_tainted_is_tainted():
 
 
 def test_fstring_with_tainted_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    sink(f'http://example.com/{x}')\n"
-    )
+    """Mark an f-string holding a tainted value as tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    sink(f'http://example.com/{x}')\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -92,12 +133,12 @@ def test_fstring_with_tainted_is_tainted():
 
 
 def test_string_concat_with_tainted_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    sink('prefix' + x)\n"
-    )
+    """Mark a concatenation with a tainted value as tainted.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    sink('prefix' + x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -105,12 +146,12 @@ def test_string_concat_with_tainted_is_tainted():
 
 
 def test_percent_format_with_tainted_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    sink('hello %s' % x)\n"
-    )
+    """Mark percent formatting with a tainted value as tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    sink('hello %s' % x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -118,12 +159,12 @@ def test_percent_format_with_tainted_is_tainted():
 
 
 def test_format_call_with_tainted_arg_is_tainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    sink('hello {}'.format(x))\n"
-    )
+    """Mark ``str.format`` with a tainted argument as tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    sink('hello {}'.format(x))\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -131,13 +172,12 @@ def test_format_call_with_tainted_arg_is_tainted():
 
 
 def test_unknown_call_returns_untainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    y = unknown_helper(x)\n"
-        "    sink(y)\n"
-    )
+    """Treat the result of an unknown helper called on a tainted value as untainted.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    y = unknown_helper(x)\n    sink(y)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -145,12 +185,12 @@ def test_unknown_call_returns_untainted():
 
 
 def test_sanitiser_in_allowlist_returns_untainted():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    sink(secure_filename(x))\n"
-    )
+    """Treat the result of an allowlisted sanitiser as untainted.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    sink(secure_filename(x))\n"
     tree, analyser = _analyse(src, sanitisers=frozenset({"secure_filename"}))
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -158,13 +198,12 @@ def test_sanitiser_in_allowlist_returns_untainted():
 
 
 def test_reassignment_to_literal_kills_taint():
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    x = request.args['q']\n"
-        "    x = 'literal'\n"
-        "    sink(x)\n"
-    )
+    """Clear taint when the variable is reassigned to a literal.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view():\n    x = request.args['q']\n    x = 'literal'\n    sink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -172,14 +211,12 @@ def test_reassignment_to_literal_kills_taint():
 
 
 def test_branch_join_is_conservative():
-    src = (
-        "from flask import request\n"
-        "def view(flag):\n"
-        "    x = request.args['q']\n"
-        "    if flag:\n"
-        "        x = 'literal'\n"
-        "    sink(x)\n"
-    )
+    """Treat a variable as untainted after a branch that may reassign it to a literal.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view(flag):\n    x = request.args['q']\n    if flag:\n        x = 'literal'\n    sink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -187,14 +224,12 @@ def test_branch_join_is_conservative():
 
 
 def test_branch_where_both_keep_tainted_remains_tainted():
-    src = (
-        "from flask import request\n"
-        "def view(flag):\n"
-        "    x = request.args['q']\n"
-        "    if flag:\n"
-        "        x = request.args['p']\n"
-        "    sink(x)\n"
-    )
+    """Keep a variable tainted when both paths through a branch leave it tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from flask import request\ndef view(flag):\n    x = request.args['q']\n    if flag:\n        x = request.args['p']\n    sink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -202,6 +237,11 @@ def test_branch_where_both_keep_tainted_remains_tainted():
 
 
 def test_nested_function_resets_scope():
+    """Treat an outer function's tainted variable as untainted inside a nested function.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = (
         "from flask import request\n"
         "def outer():\n"
@@ -217,13 +257,12 @@ def test_nested_function_resets_scope():
 
 
 def test_fastapi_query_default_marks_parameter_as_source():
-    src = (
-        "from fastapi import FastAPI, Query\n"
-        "app = FastAPI()\n"
-        "@app.get('/')\n"
-        "def search(q: str = Query(None)):\n"
-        "    sink(q)\n"
-    )
+    """Mark a FastAPI parameter that defaults to ``Query`` as tainted.
+
+    Returns:
+        None after the assertions pass.
+    """
+    src = "from fastapi import FastAPI, Query\napp = FastAPI()\n@app.get('/')\ndef search(q: str = Query(None)):\n    sink(q)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -231,6 +270,11 @@ def test_fastapi_query_default_marks_parameter_as_source():
 
 
 def test_module_scope_request_attr_propagates():
+    """Carry taint from ``request.json`` through a module-level assignment to the sink.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "from flask import request\nx = request.json\nsink(x)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -239,7 +283,11 @@ def test_module_scope_request_attr_propagates():
 
 
 def test_self_request_attr_recognised_as_source():
-    """A `self.request.json`-style access (Django CBV idiom) is a source."""
+    """Recognise self.request.json as a taint source by receiver shape.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = "class View:\n    def get(self):\n        sink(self.request.json)\n"
     tree, analyser = _analyse(src)
     taint_map = analyser.analyse_tree(tree)
@@ -248,7 +296,11 @@ def test_self_request_attr_recognised_as_source():
 
 
 def test_unrelated_request_attribute_is_not_a_framework_source() -> None:
-    """Keep an application object's request-shaped attribute outside the source set."""
+    """Keep an application object's request-shaped attribute outside the source set.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     source = "def view(other):\n    sink(other.request.json)\n"
     tree, analyser = _analyse(source)
     taint_map = analyser.analyse_tree(tree)
@@ -269,6 +321,9 @@ def test_module_qualified_request_receiver_is_a_source(module_qualified_source: 
 
     Args:
         module_qualified_source: Import statement binding the framework module.
+
+    Returns:
+        None after the assertions pass.
     """
     source = f"{module_qualified_source}\ndef view():\n    sink(flask.request.args['url'])\n"
     tree, analyser = _analyse(source)
@@ -279,7 +334,11 @@ def test_module_qualified_request_receiver_is_a_source(module_qualified_source: 
 
 
 def test_module_qualified_request_receiver_without_an_import_stays_quiet() -> None:
-    """Keep a request-shaped receiver quiet when no import binds the module name."""
+    """Keep a request-shaped receiver quiet when no import binds the module name.
+
+    Returns:
+        None after the assertions pass.
+    """
     source = "def view(flask):\n    sink(flask.request.args['url'])\n"
     tree, analyser = _analyse(source)
     taint_map = analyser.analyse_tree(tree)
@@ -289,7 +348,11 @@ def test_module_qualified_request_receiver_without_an_import_stays_quiet() -> No
 
 
 def test_module_qualified_get_json_is_a_direct_source() -> None:
-    """Read the JSON body through the module-qualified proxy as a direct source."""
+    """Recognise flask.request.get_json() as a direct taint source.
+
+    Returns:
+        None. Asserts that the sink argument from flask.request.get_json() is tainted.
+    """
     source = "import flask\ndef view():\n    sink(flask.request.get_json())\n"
     tree, analyser = _analyse(source)
     taint_map = analyser.analyse_tree(tree)
@@ -300,10 +363,13 @@ def test_module_qualified_get_json_is_a_direct_source() -> None:
 
 @pytest.mark.parametrize("request_value_expression", _REQUEST_ACCESSOR_SOURCE_EXPRESSIONS)
 def test_request_accessor_framework_shape_is_tainted(request_value_expression: str) -> None:
-    """Keep each supported framework accessor visible to security rules.
+    """Classify the tested framework request accessor expressions as tainted.
 
     Args:
-        request_value_expression: Request expression a user passed toward a sink.
+        request_value_expression: Framework accessor expression inserted as the sink argument.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     source = f"def view():\n    sink({request_value_expression})\n"
     tree, analyser = _analyse(source)
@@ -313,13 +379,12 @@ def test_request_accessor_framework_shape_is_tainted(request_value_expression: s
 
 
 def test_request_accessor_assigned_get_json_container_preserves_taint() -> None:
-    """Keep JSON request data tainted when a user reads a key after assignment."""
-    source = (
-        "from flask import request\n"
-        "def view():\n"
-        "    payload = request.get_json()\n"
-        "    sink(payload.get('url'))\n"
-    )
+    """Keep JSON request data tainted when a user reads a key after assignment.
+
+    Returns:
+        None after the assertions pass.
+    """
+    source = "from flask import request\ndef view():\n    payload = request.get_json()\n    sink(payload.get('url'))\n"
     tree, analyser = _analyse(source)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -330,14 +395,15 @@ def test_request_accessor_assigned_get_json_container_preserves_taint() -> None:
 def test_request_accessor_collision_stays_untainted(
     unrelated_accessor_expression: str,
 ) -> None:
-    """Keep generic accessors and unsupported methods out of user findings.
+    """Classify the tested generic accessors and unsupported methods as untainted.
 
     Args:
         unrelated_accessor_expression: Collection call that must not become a source.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
-    source = (
-        f"def view(mapping, cache, object, request):\n    sink({unrelated_accessor_expression})\n"
-    )
+    source = f"def view(mapping, cache, object, request):\n    sink({unrelated_accessor_expression})\n"
     tree, analyser = _analyse(source)
     taint_map = analyser.analyse_tree(tree)
     sink = _find_call(tree, "sink")
@@ -345,7 +411,11 @@ def test_request_accessor_collision_stays_untainted(
 
 
 def test_request_accessor_sanitiser_precedence_returns_untainted() -> None:
-    """Let a consumer-approved accessor sanitiser override request propagation."""
+    """Let a consumer-approved accessor sanitiser override request propagation.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     source = "from flask import request\ndef view():\n    sink(request.args.get('file'))\n"
     tree, default_analyser = _analyse(source)
     sink = _find_call(tree, "sink")

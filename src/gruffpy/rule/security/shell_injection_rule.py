@@ -47,10 +47,7 @@ class ShellInjectionRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the shell-injection rule as a high-confidence ERROR.
 
-        ERROR severity because the pattern is rarely accidental: someone had
-        to write ``shell=True`` with a non-literal command. High confidence
-        because the call shape is precise (target name + ``shell=True``
-        kwarg + dynamic first arg).
+        Nonliteral commands at supported subprocess or os shell-call shapes can allow shell injection.
 
         Returns:
             Definition for the shell-injection rule under the security pillar.
@@ -62,22 +59,21 @@ class ShellInjectionRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            # Off unless a project enables it: right on 3 of 7 judged findings in the 0.6.0 measurement; too few to delete on (ADR-029).
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag subprocess ``shell=True`` with dynamic input, and ``os.system``/``os.popen`` calls.
+        """Flag dynamic commands passed to supported subprocess targets with shell=True or to calls spelled os.system or os.popen.
 
-        Static command strings to ``subprocess(..., shell=True)`` and
-        ``os.system("...")`` are skipped (no injection surface). The
-        subprocess targets covered include ``run``/``call``/``check_call``/
-        ``check_output``/``Popen``/``getoutput``/``getstatusoutput``.
+        Subprocess calls require literal shell=True. Both groups require a first positional command other than a string literal.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per shell-injection call site.
+            One finding per matched call, or an empty list when parsing is unavailable or none match.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -103,10 +99,7 @@ class ShellInjectionRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Pass argv as a list with ``shell=False`` (the default), or "
-                        "use ``shlex.quote`` if a shell really is required."
-                    ),
+                    remediation=("Pass argv as a list with ``shell=False`` (the default), or use ``shlex.quote`` if a shell really is required."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),
@@ -115,6 +108,18 @@ class ShellInjectionRule(Rule):
 
 
 def _shell_injection_label(target: str, call: ast.Call) -> str | None:
+    """Classify a supported shell call with a first positional argument other than a string literal.
+
+    Configured subprocess targets require literal shell=True.
+    Configured os shell targets are checked regardless of that keyword.
+
+    Args:
+        target: Resolved call-target spelling to compare with the configured target sets.
+        call: Call supplying positional arguments and the named shell option.
+
+    Returns:
+        A display label for a matching call, or None when its target, arguments or shell option fail the rule's checks.
+    """
     if target in _SUBPROCESS_TARGETS:
         shell_kw = call_keyword(call, "shell")
         if shell_kw is None or not _is_true_constant(shell_kw):
@@ -134,4 +139,12 @@ def _shell_injection_label(target: str, call: ast.Call) -> str | None:
 
 
 def _is_true_constant(node: ast.expr) -> bool:
+    """Recognize the literal boolean True in an expression.
+
+    Args:
+        node: Expression supplying a possible boolean constant.
+
+    Returns:
+        True only for an AST constant whose value is the True singleton.
+    """
     return isinstance(node, ast.Constant) and node.value is True

@@ -1,9 +1,7 @@
-"""Click command for ``gruff-py migrate-config``.
+"""Run the terminal workflow for `gruff-py migrate-config`.
 
-The ``migrate-config`` subcommand lives in its own module so its CLI wiring
-sits next to the rewrite logic in :mod:`gruffpy.command.migrate_config`
-without growing :mod:`gruffpy.cli`. It is registered on the root group from
-:mod:`gruffpy.cli`.
+A dry run shows the proposed YAML changes so the user can review them.
+A write goes to the chosen destination while preserving the original configuration for rollback.
 """
 
 from __future__ import annotations
@@ -29,49 +27,68 @@ from gruffpy.config.exceptions import ConfigError
     "config_path",
     type=click.Path(path_type=Path),
     default=None,
-    help=(
-        "Path to the YAML config to migrate (.yaml or .yml). Defaults to the "
-        "discovered project config."
-    ),
+    help=("Path to the YAML config to migrate (.yaml or .yml). Defaults to the discovered project config."),
 )
-def migrate_config(dry_run: bool, config_path: Path | None) -> None:
-    """Rewrite legacy config keys to the current schema, printing a diff summary.
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Where to write the migrated config. Required unless --dry-run; the input is never rewritten.",
+)
+def migrate_config(dry_run: bool, config_path: Path | None, output_path: Path | None) -> None:
+    """Print what a YAML migration would change and write it on request.
 
-    Maps the pre-ADR-014 two-tier ``thresholds: {warning, error}`` rubric to a
-    single ``threshold`` plus ``severity`` (the error tier wins when both are
-    present) and pins ``schemaVersion``. Allowlists, ``paths.ignore``,
-    ``selection``, ``minimumSeverity``, per-rule ``enabled`` and ``options``
-    are preserved.
+    Updates schemaVersion and eligible legacy rule tiers, moves per-command minimumSeverity to failOn and removes allowlists.secretPreviews.
+    Preserves paths.ignore and requires a separate output path for changes. FAMILY-CONTRACT.md section 5 governs preview removal.
 
     Args:
-        dry_run: When True, print the diff without writing the file.
-        config_path: Explicit YAML config path, or ``None`` to discover the
-            project config.
+        dry_run: When True, show proposed changes without writing any file.
+        config_path: Explicit YAML config path, or None to discover the project's config file automatically.
+        output_path: Destination for migrated YAML, or ``-`` for stdout YAML with stderr notes; None is allowed for dry runs or current configs.
+
+    Returns:
+        None. Prints migration notes, diff, and write status (to stderr when ``output_path`` is ``-``).
 
     Raises:
-        click.ClickException: When no migratable YAML config exists or the
-            file cannot be parsed or written.
+        click.ClickException: If migration raises ConfigError, a write has no distinct resolved output path, or the output write fails.
     """
+    # When a user pipes `gruff-py migrate-config --output - > .gruff-py.yaml`, keep stdout valid YAML alone and route commentary to stderr.
+    to_stdout = output_path is not None and not dry_run and str(output_path) == "-"
     try:
         migration = migrate_config_file(project_root=Path.cwd(), config_path=config_path)
     except ConfigError as exc:
+        # If old and new gate settings disagree, show the conflict before offering a converted file.
         raise click.ClickException(str(exc)) from exc
+    # Show discarded legacy settings and other review notes before the proposed diff.
     for note in migration.notes:
-        click.echo(f"Note: {note}")
+        click.echo(f"Note: {note}", err=to_stdout)
+    # A current input needs no output file, even when the caller named one.
     if not migration.has_changes():
-        click.echo(f"{migration.path} is already current; no changes.")
+        click.echo(f"{migration.path} is already current; no changes.", err=to_stdout)
         return
-    click.echo("Migration changes:")
+    click.echo("Migration changes:", err=to_stdout)
+    # Summarise each setting change before showing the full YAML diff.
     for change in migration.changes:
-        click.echo(f"  - {change}")
-    click.echo("\n" + migration.diff(), nl=False)
+        click.echo(f"  - {change}", err=to_stdout)
+    click.echo("\n" + migration.diff(), nl=False, err=to_stdout)
+    # Users can copy any YAML rationale they need after reading the warning and reviewing the diff.
     if migration.will_lose_comments():
-        click.echo("Note: YAML comments are not preserved by migration; review the diff.")
+        click.echo("Note: YAML comments are not preserved by migration; review the diff.", err=to_stdout)
+    # A dry run is a review step and does not touch either file.
     if dry_run:
         click.echo(f"Dry run: {migration.path} left unchanged.")
         return
+    # Require the caller to choose where changed YAML goes so migration preserves the input by default.
+    if output_path is None:
+        raise click.ClickException("migrate-config needs --output <path> to write the migrated config, or --dry-run to print it.")
     try:
-        migration.path.write_text(migration.migrated_text, encoding="utf-8")
+        # Two paths can name the same file through a hard link. Always keep the original as a rollback copy.
+        if not to_stdout and (output_path.resolve() == migration.path.resolve() or (output_path.exists() and output_path.samefile(migration.path))):
+            raise click.ClickException(f"--output must name a different file from --config; {migration.path} is the copy you may want back.")
+        with click.open_file(str(output_path), mode="w", encoding="utf-8", atomic=True) as output:
+            output.write(migration.migrated_text)
     except OSError as exc:
-        raise click.ClickException(f"Unable to write {migration.path.name}: {exc}") from exc
-    click.echo(f"Wrote {migration.path}")
+        # For example, writing to a read-only folder or missing parent directory reports the failing path cleanly to the CLI user.
+        raise click.ClickException(f"Unable to write {output_path}: {exc}") from exc
+    click.echo(f"Wrote {output_path}; {migration.path} is unchanged.", err=to_stdout)

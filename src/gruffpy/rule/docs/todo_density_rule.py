@@ -18,10 +18,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 
 _MARKER_PATTERN = re.compile(r"\b(TODO|FIXME|HACK|XXX|BUG)\b")
-_RULE_DEFINITION_FILE_SUFFIXES = (
-    "gruffpy/rule/docs/todo_density_rule.py",
-    "gruffpy/rule/waste/commented_out_code_rule.py",
-)
+_RULE_DEFINITION_FILE_SUFFIXES = ("gruffpy/rule/docs/todo_density_rule.py",)
 
 
 class TodoDensityRule(Rule):
@@ -53,7 +50,8 @@ class TodoDensityRule(Rule):
             context: Rule execution context with threshold settings.
 
         Returns:
-            A density finding when marker count exceeds the configured threshold.
+            One finding when markers per 1000 lines exceed the configured threshold.
+            Empty for absent source, exempt rule modules, no markers or no matching threshold.
         """
         if not unit.source:
             return []
@@ -86,9 +84,7 @@ class TodoDensityRule(Rule):
                 tier=definition.tier,
                 confidence=definition.confidence,
                 end_line=line_count,
-                remediation=(
-                    "Triage outstanding TODOs into tracked issues, or fix and remove them inline."
-                ),
+                remediation=("Triage outstanding TODOs into tracked issues, or fix and remove them inline."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={
                     "markers": marker_count,
@@ -104,5 +100,16 @@ class TodoDensityRule(Rule):
 
 
 def _is_rule_definition_file(display_path: str) -> bool:
+    """Report whether a display path ends with the TODO density rule module path.
+
+    The match normalizes path separators and accepts any prefix, without requiring a directory boundary before the suffix.
+
+    Args:
+        display_path: Display path of the scanned file, taken from unit.file.display_path; Windows-style backslash separators are accepted.
+
+    Returns:
+        True when the normalized path ends with the rule-module suffix, in which case analyse returns no findings for the file; False
+        otherwise.
+    """
     normalized = display_path.replace("\\", "/").removeprefix("./")
     return any(normalized.endswith(suffix) for suffix in _RULE_DEFINITION_FILE_SUFFIXES)

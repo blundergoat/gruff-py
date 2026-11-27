@@ -33,15 +33,13 @@ _PILLAR_ORDER: tuple[Pillar, ...] = (
 
 _PILLAR_NOTES = {
     Pillar.SIZE: "File, class, function, parameter, method, and attribute size",
-    Pillar.COMPLEXITY: "Cyclomatic, cognitive, Halstead, and nesting",
-    Pillar.MAINTAINABILITY: "Maintainability index rule emits under this pillar",
+    Pillar.COMPLEXITY: "Cyclomatic, cognitive, and nesting",
+    Pillar.MAINTAINABILITY: "Reserved after the maintainability-index rule retired",
     Pillar.CORRECTNESS: "Mechanically detectable runtime-defect shapes",
     Pillar.DEAD_CODE: "Unused and waste-oriented rules",
     Pillar.MODERNISATION: "Python syntax and library modernisation opportunities",
     Pillar.NAMING: "Intent-layer names; PEP 8 case style stays with ruff",
-    Pillar.DOCUMENTATION: (
-        "Docstring presence and quality, stale docs, TODO density, README presence"
-    ),
+    Pillar.DOCUMENTATION: ("Docstring presence and quality, stale docs, TODO density, README presence"),
     Pillar.SECURITY: "Heuristic AST-level dangerous patterns",
     Pillar.SENSITIVE_DATA: "Secret, key, PII, and PHI patterns",
     Pillar.TEST_QUALITY: "Pytest-aware test smells and project config checks",
@@ -62,6 +60,130 @@ _GROUP_ORDER = (
     "Design",
 )
 
+_DEFAULT_OFF_REASONS = {
+    "test-quality.test-function-too-long": (
+        "Opt-in: 9 of 25 judged findings were worth acting on, below the 0.70 test-quality precision floor. "
+        "Explicit enablement keeps the literal response-snapshot exemption; default scans omit this rule's findings."
+    ),
+    "test-quality.setup-bloat": (
+        "Opt-in: 7 of 16 judged findings were worth acting on, below the 0.70 test-quality precision floor. "
+        "Explicit enablement keeps the production-hook exemption; default scans omit this rule's findings."
+    ),
+    "security.unsafe-pickle": (
+        "Opt-in while its 0.80 security precision floor remains unestablished. "
+        "The local detector cannot infer whether a non-literal payload comes from a trusted internal cache. "
+        "Explicit enablement keeps the existing checks."
+    ),
+    "naming.generic-function": (
+        "Opt-in: 28 of 49 judged findings were worth acting on, below the 0.60 naming precision floor. "
+        "Explicit enablement keeps the required-framework-method exemption; default scans omit this rule's findings."
+    ),
+    "sensitive-data.private-key": (
+        "Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, "
+        "below the sample minimum needed to assess the 0.80 sensitive-data precision floor. Explicit enablement keeps the detector active."
+    ),
+    "security.weak-crypto": (
+        "Opt-in: fewer than 10 findings remained in the explicitly enabled evaluation corpus, "
+        "below the sample minimum needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
+    ),
+    "security.hardcoded-framework-secret-key": (
+        "Opt-in: only 1 finding remained in the evaluation corpus after the shared test-path exclusion, "
+        "below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
+    ),
+    "security.insecure-temp-file": (
+        "Opt-in: no findings remained in the evaluation corpus after the shared test-path exclusion, "
+        "below the sample minimum of 10 needed to assess the 0.80 security precision floor. Explicit enablement keeps the detector active."
+    ),
+    "security.silent-except": (
+        "Opt-in: 21 of 29 judged findings were worth acting on, below the 0.80 security precision floor. "
+        "Default scans omit these findings until the rule is explicitly enabled."
+    ),
+    "docs.missing-return-doc": (
+        "Opt-in: 4 of 20 judged findings were worth acting on, below the 0.60 documentation precision floor. "
+        "The rule accepts recognised result prose, while fresh blind validation is still pending."
+    ),
+    "complexity.cyclomatic": ("Opt-in: 26 of 50 judged upper-band findings were worth acting on, below the 0.60 complexity precision floor."),
+    "security.dangerous-function-call": (
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(10 of 15 judged findings were worth acting on, with 10 unresolved)."
+    ),
+    "security.header-injection": (
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(0 of 2 judged findings were worth acting on, with 1 unresolved)."
+    ),
+    "security.unsafe-yaml-load": (
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(2 of 3 judged findings were worth acting on, with 1 unresolved)."
+    ),
+    "security.variable-import": (
+        "Opt-in: blind provenance review left insufficient evidence for default-on status "
+        "(3 of 11 judged findings were worth acting on, with 8 unresolved)."
+    ),
+    "security.xxe": (
+        "Opt-in: only 3 findings appeared in evaluation (2 worth acting on and 1 unresolved), "
+        "leaving too little evidence to establish the precision floor."
+    ),
+    "sensitive-data.database-url-password": (
+        "Opt-in: 0 of 7 judged findings were worth acting on across 8 evaluation findings, "
+        "leaving too little evidence to establish the precision floor."
+    ),
+    "test-quality.no-assertions": ("Opt-in: 7 of 36 judged findings were worth acting on, below the 0.70 test-quality precision floor."),
+    "test-quality.sut-not-called": ("Opt-in: 9 of 28 judged findings were worth acting on, below the 0.70 test-quality precision floor."),
+}
+
+
+# Default-on rules whose confidence is inherited, not set from a measurement (precision-floor M07): rule id to the
+# status its measurement reached. The generated docs list them under Confidence evidence.
+_INHERITED_CONFIDENCE: dict[str, str] = {
+    "complexity.nesting-depth": "too-few",
+    "correctness.substring-vocabulary-match": "unmeasured",
+    "correctness.unsafe-numeric-coercion": "unmeasured",
+    "dead-code.unused-private-attribute": "insufficient",
+    "design.runtime-sys-path-mutation": "unmeasured",
+    "design.single-implementor-protocol": "unmeasured",
+    "docs.missing-readme": "unmeasured",
+    "docs.stale-param-doc": "insufficient",
+    "docs.todo-density": "insufficient",
+    "naming.test-naming-consistency": "unmeasured",
+    "security.cors-wildcard-with-credentials": "unmeasured",
+    "security.dependency-git-reference": "too-few",
+    "security.dependency-local-path": "unmeasured",
+    "security.dependency-url-reference": "unmeasured",
+    "security.disabled-ssl-verification": "too-few",
+    "security.error-suppression": "too-few",
+    "security.extract-compact-user-input": "unmeasured",
+    "security.flask-debug-enabled": "too-few",
+    "security.github-actions-broad-permissions": "unmeasured",
+    "security.github-actions-pull-request-target": "unmeasured",
+    "security.github-actions-remote-shell": "unmeasured",
+    "security.hardcoded-bind-all-interfaces": "too-few",
+    "security.insecure-random": "too-few",
+    "security.insecure-tls-protocol": "too-few",
+    "security.jinja2-autoescape-off": "too-few",
+    "security.paramiko-no-host-key-check": "too-few",
+    "security.path-traversal": "unmeasured",
+    "security.ssrf": "too-few",
+    "sensitive-data.aws-access-key": "too-few",
+    "sensitive-data.gcp-service-account-key": "too-few",
+    "sensitive-data.hardcoded-env-value": "unmeasured",
+    "sensitive-data.jwt-token": "unmeasured",
+    "sensitive-data.phi-pattern": "unmeasured",
+    "size.average-function-length": "unmeasured",
+    "test-quality.empty-parametrize": "unmeasured",
+    "test-quality.excessive-mocking": "unmeasured",
+    "test-quality.global-state-mutation": "unmeasured",
+    "test-quality.mock-only-test": "unmeasured",
+    "test-quality.mocking-domain-object": "unmeasured",
+    "test-quality.naming-consistency": "insufficient",
+    "test-quality.pytest-coverage-source-missing": "unmeasured",
+    "test-quality.pytest-deprecations-not-fatal": "unmeasured",
+    "test-quality.pytest-strict-config-missing": "unmeasured",
+    "test-quality.static-analysis-redundant-test": "unmeasured",
+    "test-quality.test-longer-than-sut": "unmeasured",
+    "test-quality.unused-mock": "unmeasured",
+    "waste.unreachable-code": "unmeasured",
+}
+
 
 def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> str:
     """Render deterministic Markdown documentation for the built-in rule catalog.
@@ -77,15 +199,12 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
     if definitions is None:
         definitions = [rule.definition() for rule in RuleRegistry.defaults().all()]
     definitions = sorted(definitions, key=lambda definition: definition.id)
-    # Declared pillars keep the displayed total aligned with user-visible findings.
+    # Pillar totals cover the catalog, including rules disabled by default.
     rule_counts_by_pillar = Counter(definition.pillar for definition in definitions)
     lines = [
         "# Rules",
         "",
-        (
-            f"gruff-py `{VERSION}` registers {len(definitions)} rules across "
-            f"{len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."
-        ),
+        (f"gruff-py `{VERSION}` registers {len(definitions)} rules across {len(rule_counts_by_pillar)} pillars in `RuleRegistry.defaults()`."),
         "",
         "This file is generated from the first-party built-in rule catalog.",
         "Run `uv run python -m gruffpy.command.rule_docs --check docs/rules.md` to verify it.",
@@ -95,24 +214,20 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         "| Pillar | Rule count | Notes |",
         "|---|---:|---|",
     ]
-    # Readers see active pillars in a stable order across generated releases.
+    # Fixed pillar order keeps summaries comparable across regenerated catalogs.
     for pillar in _PILLAR_ORDER:
         registered_rule_count = rule_counts_by_pillar.get(pillar, 0)
-        # An empty pillar is reserved and gives users no rule row to configure.
         if registered_rule_count:
-            lines.append(
-                f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |"
-            )
+            lines.append(f"| `{pillar.value}` | {registered_rule_count} | {_PILLAR_NOTES[pillar]} |")
     lines.extend(["", "## Rule IDs", ""])
     by_group = _definitions_by_group(definitions)
     # Readers browse familiar feature sections before opening individual rule details.
     for group in _GROUP_ORDER:
         items = by_group.get(group, [])
-        # A section with no shipped rules would only add an empty heading for users.
         if not items:
             continue
         lines.extend([f"### {group}", ""])
-        # Each catalog item links the user's rule id to its default-enabled posture.
+        # An unmarked rule is enabled by default.
         for definition in items:
             suffix = " (default off)" if not definition.default_enabled else ""
             lines.append(f"- `{definition.id}`{suffix}")
@@ -121,14 +236,14 @@ def render_rules_markdown(definitions: list[RuleDefinition] | None = None) -> st
         [
             "## Rule Details",
             "",
-            "Each rule detail includes the runtime defaults, documentation metadata, "
-            "and threshold contract where applicable.",
+            "Each rule detail includes the runtime defaults, documentation metadata, and threshold contract where applicable.",
             "",
         ]
     )
     # The detail section gives users the settings and remediation for every listed id.
     for definition in definitions:
         lines.extend(_rule_detail_lines(definition))
+    lines.extend(_confidence_evidence_lines(definitions))
     lines.extend(_suppression_lines())
     lines.extend(_choosing_rules_lines())
     return "\n".join(lines).rstrip() + "\n"
@@ -141,7 +256,7 @@ def check_rules_markdown(path: Path) -> bool:
         path: Markdown file to compare against the freshly rendered output.
 
     Returns:
-        True when the file is byte-identical to ``render_rules_markdown()``.
+        True when the file's decoded text, after newline normalisation, matches the generated documentation.
     """
     return path.read_text() == render_rules_markdown()
 
@@ -159,13 +274,16 @@ def write_rules_markdown(path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for docs generation/checking.
+    """Check rule documentation by default. Use --write to regenerate it. The path defaults to docs/rules.md.
 
     Args:
         argv: Optional argv slice (defaults to ``sys.argv[1:]`` when ``None``).
 
     Returns:
-        ``0`` on success or when docs are current; ``1`` if ``--check`` fails.
+        0 after writing succeeds or when docs are current, or 1 when the default or explicit check finds different text.
+
+    Raises:
+        FileNotFoundError: When the file to check does not exist.
     """
     parser = argparse.ArgumentParser(description="Generate or check docs/rules.md.")
     parser.add_argument("path", nargs="?", default="docs/rules.md")
@@ -174,11 +292,10 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--write", action="store_true", help="Rewrite the docs file.")
     args = parser.parse_args(argv)
     path = Path(args.path)
-    # A contributor chooses write mode after changing the rules shipped to users.
     if args.write:
         write_rules_markdown(path)
         return 0
-    # Release checks compare bytes so stale user documentation fails without a rewrite.
+    # Checking compares decoded text without rewriting stale documentation.
     if args.check or not args.write:
         return 0 if check_rules_markdown(path) else 1
     return 0
@@ -206,7 +323,7 @@ def _group_for(definition: RuleDefinition) -> str:
     """Choose the generated-doc section where a user finds one rule.
 
     Args:
-        definition: One non-empty runtime rule definition.
+        definition: Rule whose id prefix selects the section; unrecognised prefixes use the rule's pillar.
 
     Returns:
         Stable user-facing section heading for the rule.
@@ -242,10 +359,10 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     """Render the settings and guidance a user needs to act on one rule.
 
     Args:
-        definition: One non-empty runtime rule definition to explain.
+        definition: Rule supplying the displayed defaults and the ID used to look up guidance.
 
     Returns:
-        Non-empty Markdown lines for the rule's catalog detail section.
+        A nonempty list of Markdown lines for the rule's catalog detail section, including blank separators.
     """
     docs = documentation_for_rule(definition.id)
     lines = [
@@ -261,14 +378,13 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
         f"- Fix guidance: {docs.fix_guidance}",
         f"- Confidence rationale: {docs.confidence_rationale}",
     ]
-    # Metric rules show the threshold a user can tune for finding severity.
+    # A rule that ships turned off says why, so a reader can decide whether to turn it on.
+    if not definition.default_enabled and definition.id in _DEFAULT_OFF_REASONS:
+        lines.append(f"- Default-off reason: {_DEFAULT_OFF_REASONS[definition.id]}")
+    # Show the threshold and severity together because users configure them as a pair.
     if _has_severity_thresholds(definition):
-        lines.append(
-            "- Config threshold: "
-            f"`threshold` = `{definition.default_threshold!r}`, "
-            f"`severity` = `{definition.default_severity.value}`"
-        )
-    # Named thresholds expose several user-tunable limits instead of one metric cutoff.
+        lines.append(f"- Config threshold: `threshold` = `{definition.default_threshold!r}`, `severity` = `{definition.default_severity.value}`")
+    # Named thresholds document rule-specific settings outside the single threshold and severity pair.
     elif definition.default_thresholds:
         lines.append(f"- Named thresholds: {_inline_mapping(definition.default_thresholds)}")
     # Options explain non-threshold behavior users can configure for this rule.
@@ -281,9 +397,14 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
     # Formula provenance lets reviewers trace how a measured value was calculated.
     if docs.formula_provenance:
         lines.append(f"- Formula provenance: {docs.formula_provenance}")
-    # Security metadata gives users the sink/source context attached to a finding.
+    # The security taxonomy helps readers identify the kinds of issues the rule reports.
     if docs.security_metadata:
         lines.append(f"- Security metadata: {_inline_mapping(docs.security_metadata)}")
+    if docs.false_positive_shapes:
+        lines.append("- Common false-positive shapes:")
+        for false_positive_shape in docs.false_positive_shapes:
+            lines.append(f"  - {false_positive_shape.shape}")
+            lines.append(f"    Mitigation: {false_positive_shape.mitigation}")
     lines.extend(
         [
             f"- Bad example: {docs.bad_example}",
@@ -295,15 +416,15 @@ def _rule_detail_lines(definition: RuleDefinition) -> list[str]:
 
 
 def _inline_mapping(mapping: dict[str, Any]) -> str:
-    """Format option values for a compact user-facing catalog line.
+    """Format named values for a compact user-facing catalog line.
 
     Args:
-        mapping: Option names and values; an empty mapping means no settings.
+        mapping: Catalog names and values, such as rule options or security metadata.
 
     Returns:
-        Sorted inline settings, or ``none`` when users have nothing to configure.
+        Inline code pairs in key order, or the literal none when the mapping is empty.
     """
-    # Sorted settings keep generated diffs predictable for reviewers.
+    # Sorting keys keeps catalog diffs stable when insertion order changes.
     pairs = ", ".join(f"`{key}` = `{value!r}`" for key, value in sorted(mapping.items()))
     # An empty mapping is rendered explicitly instead of leaving a blank catalog value.
     return pairs or "none"
@@ -316,7 +437,7 @@ def _has_severity_thresholds(definition: RuleDefinition) -> bool:
         definition: Runtime rule definition whose threshold contract is displayed.
 
     Returns:
-        ``False`` when no single threshold is available to the user.
+        True when the rule declares a single cutoff and its associated severity. Otherwise, False leaves any named thresholds eligible for display.
     """
     return definition.default_threshold is not None
 
@@ -334,11 +455,38 @@ def _inline_list(values: tuple[str, ...]) -> str:
     return ", ".join(f"`{value}`" for value in values)
 
 
+def _confidence_evidence_lines(definitions: list[RuleDefinition]) -> list[str]:
+    """Render the Confidence evidence section: how confidence follows measured precision, and which rules inherit theirs.
+
+    Args:
+        definitions: Sorted rule definitions being documented; only ids listed in _INHERITED_CONFIDENCE become table rows.
+
+    Returns:
+        Markdown lines for the section, ending with a blank line; the table is empty when no listed rule is documented.
+    """
+    lines = [
+        "## Confidence evidence",
+        "",
+        "A rule's confidence follows its measured precision: high at an error-adjusted score of 0.85 or more, medium from 0.70, "
+        "low below, and a raise needs the lower bound of its 95% interval to clear the new band. These default-on rules have no "
+        "measurement that sets their confidence, so the value below is inherited, not measured:",
+        "",
+        "| Rule | Confidence | Measurement |",
+        "|---|---|---|",
+    ]
+    for definition in definitions:
+        status = _INHERITED_CONFIDENCE.get(definition.id)
+        if status is not None:
+            lines.append(f"| `{definition.id}` | {definition.confidence.value} | {status} |")
+    lines.append("")
+    return lines
+
+
 def _suppression_lines() -> list[str]:
     """Render examples users follow when suppressing reviewed findings.
 
     Returns:
-        Non-empty Markdown lines covering same-line, next-line, and file scope.
+        A non-empty list of Markdown lines, including blank separators, covering same-line, next-line and file scope.
     """
     return [
         "## Suppressing Findings",
@@ -349,7 +497,7 @@ def _suppression_lines() -> list[str]:
         "Suppress one rule on the same line:",
         "",
         "```python",
-        "import os  # gruff: disable=waste.unused-import",
+        'app.run(host="0.0.0.0")  # gruff: disable=security.hardcoded-bind-all-interfaces',
         "```",
         "",
         "Suppress one or more rules on the next physical line:",
@@ -374,7 +522,7 @@ def _choosing_rules_lines() -> list[str]:
     """Render examples users follow when selecting or configuring rules.
 
     Returns:
-        Non-empty Markdown lines for default scans, disabling, and thresholds.
+        A non-empty list of Markdown lines, including blank separators, for default scans, disabling rules and setting thresholds.
     """
     return [
         "## Choosing Rules",
@@ -406,9 +554,9 @@ def _choosing_rules_lines() -> list[str]:
         "",
         "```yaml",
         "rules:",
-        "  test-quality.eager-test:",
+        "  test-quality.excessive-mocking:",
         "    thresholds:",
-        "      maxAssertions: 5",
+        "      maxMocks: 4",
         "```",
         "",
     ]

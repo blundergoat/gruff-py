@@ -36,7 +36,7 @@ class MissingModuleDocstringRule(Rule):
             pillar=Pillar.DOCUMENTATION,
             tier=RuleTier.V01,
             default_severity=Severity.ADVISORY,
-            confidence=Confidence.MEDIUM,
+            confidence=Confidence.HIGH,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
@@ -47,7 +47,7 @@ class MissingModuleDocstringRule(Rule):
             context: Rule execution context supplied by the analyzer.
 
         Returns:
-            A single missing-docstring finding when the module needs one.
+            One finding for a nonempty undocumented module outside tests and re-export shims; empty for other inputs.
         """
         if not isinstance(unit.tree, ast.Module):
             return []
@@ -71,10 +71,7 @@ class MissingModuleDocstringRule(Rule):
                 pillar=definition.pillar,
                 tier=definition.tier,
                 confidence=definition.confidence,
-                remediation=(
-                    "Name what this module owns and what callers can rely on, "
-                    "in one short paragraph at the top of the file."
-                ),
+                remediation=("Name what this module owns and what callers can rely on, in one short paragraph at the top of the file."),
                 secondary_pillars=definition.secondary_pillars,
                 metadata={},
             ),
@@ -82,10 +79,16 @@ class MissingModuleDocstringRule(Rule):
 
 
 def _is_reexport_shim(module: ast.Module, display_path: str) -> bool:
-    """True if *module* looks like an ``__init__.py`` re-export shim.
+    """Decide whether an __init__.py module contains only imports and supported __all__ assignments.
 
-    A shim contains only imports and at most a single ``__all__`` assignment.
-    Anything else (classes, functions, executable code) disqualifies it.
+    Single-target and annotated assignments to __all__ qualify; any other top-level statement disqualifies the module.
+
+    Args:
+        module: Parsed module whose top-level statements are checked one by one.
+        display_path: Display path of the file; only the __init__.py suffix is checked.
+
+    Returns:
+        True when the path has the __init__.py suffix and every top-level statement qualifies, including an empty module; False otherwise.
     """
     if not display_path.endswith("__init__.py"):
         return False
@@ -96,11 +99,7 @@ def _is_reexport_shim(module: ast.Module, display_path: str) -> bool:
             target = node.targets[0]
             if isinstance(target, ast.Name) and target.id == "__all__":
                 continue
-        if (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "__all__"
-        ):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__":
             continue
         return False
     return True

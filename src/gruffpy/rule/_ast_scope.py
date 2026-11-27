@@ -17,18 +17,15 @@ _SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.La
 
 
 def walk_function_scope(function: ast.AST) -> Iterator[ast.AST]:
-    """Yield *function* and every descendant that belongs to its own scope.
+    """Yield the function node and its descendants, stopping below nested defs, async defs, classes and lambdas.
 
-    The function node is yielded first (so callers may inspect its arguments or
-    decorators), then traversal descends through the body but stops at any
-    nested ``def`` / ``class`` / ``lambda`` - those are analysed in their own
-    pass over the module.
+    Arguments and decorators are visited; nested scope nodes are included but their contents are excluded.
 
     Args:
         function: Function-like node whose own scope should be walked.
 
     Returns:
-        Iterator over the function node and its non-nested descendants.
+        Iterator yielding the root and descendants, including nested scope nodes but excluding their children.
     """
     yield function
     for child in ast.iter_child_nodes(function):
@@ -36,23 +33,31 @@ def walk_function_scope(function: ast.AST) -> Iterator[ast.AST]:
 
 
 def walk_statement_scope(node: ast.AST) -> Iterator[ast.AST]:
-    """Yield *node* and its descendants, treating *node* as scope-bounded.
+    """Walk a statement or expression without entering nested defs, async defs, classes or lambdas.
 
-    Unlike :func:`walk_function_scope`, when *node* is itself a nested scope
-    (a statement that is a ``def`` / ``class``) it is yielded but not descended
-    into. Use this when walking individual statements that may themselves
-    introduce a nested scope.
+    A root that introduces a scope is yielded alone; use this for individual statements that may define a nested scope.
 
     Args:
-        node: Statement (or expression) whose enclosing scope should be walked.
+        node: Root statement or expression to traverse without entering nested scopes.
 
     Returns:
-        Iterator over *node* and its descendants outside any nested scope.
+        Iterator yielding the root and descendants, including each nested scope boundary but excluding its children.
     """
     yield from _walk_within_scope(node)
 
 
 def _walk_within_scope(node: ast.AST) -> Iterator[ast.AST]:
+    """Yield node and its descendants in pre-order, including nested scope boundaries but none of their children.
+
+    A def, async def, class or lambda root is yielded alone; its body, decorators, argument defaults and base classes are excluded.
+
+    Args:
+        node: Root of the walk, yielded first; when it is a def, async def, class or lambda node its children are skipped.
+
+    Yields:
+        Each AST node in pre-order: node itself, then every descendant outside a nested scope, with each nested def, async def, class or lambda node
+        included but its contents excluded.
+    """
     yield node
     if isinstance(node, _SCOPE_BOUNDARIES):
         return

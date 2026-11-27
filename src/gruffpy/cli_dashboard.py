@@ -37,6 +37,7 @@ class _DashboardCliRequest:
     should_skip_config: bool
     should_include_ignored: bool
     should_render_interactive: bool
+    deep_scan_budget: str = ""
     # False keeps existing callers fail-closed until a user explicitly opts in.
     has_acknowledged_public_bind: bool = False
 
@@ -51,12 +52,11 @@ def remote_dashboard_bind_warning(
     before the unauthenticated browser dashboard becomes reachable.
 
     Args:
-        dashboard_host: Non-empty host the user asked the dashboard to bind.
+        dashboard_host: Requested bind host. An empty value is treated as non-loopback.
         has_acknowledged_public_bind: Whether the user passed ``--allow-public``.
 
     Returns:
-        Remote-exposure warning for an acknowledged public bind, or None when
-        the host is loopback and the user's local-only journey stays unchanged.
+        Exposure warning for an acknowledged non-loopback bind, or None when a loopback bind needs no warning.
 
     Raises:
         click.ClickException: The user selected a non-loopback host without
@@ -66,7 +66,7 @@ def remote_dashboard_bind_warning(
     if _is_loopback_dashboard_host(dashboard_host):
         return None
 
-    # A remote bind without the flag is likely an accidental dashboard exposure.
+    # An unacknowledged non-loopback bind stops startup before the dashboard can be reached.
     if not has_acknowledged_public_bind:
         raise click.ClickException(
             "Refusing to bind the unauthenticated dashboard to non-loopback host "
@@ -84,15 +84,13 @@ def remote_dashboard_bind_warning(
 def _is_loopback_dashboard_host(dashboard_host: str) -> bool:
     """Decide whether a host keeps the dashboard reachable only from this machine.
 
-    Call from the bind guard so a user binding any loopback address is not asked to
-    acknowledge remote exposure that cannot happen.
+    Call from the bind guard to spare users binding a loopback address from acknowledging remote exposure.
 
     Args:
         dashboard_host: Host the user typed; an unparsable value is treated as remote.
 
     Returns:
-        True for ``localhost`` and every loopback IP, covering the whole ``127.0.0.0/8``
-        range; False sends the user through the acknowledgment gate.
+        True for localhost or a loopback IP, including the full 127.0.0.0/8 range. False sends the user through the acknowledgment gate.
     """
     normalized_dashboard_host = dashboard_host.casefold()
     # A named host resolves at bind time, so only the documented local name is trusted here.
@@ -100,7 +98,7 @@ def _is_loopback_dashboard_host(dashboard_host: str) -> bool:
         return True
     try:
         return ipaddress.ip_address(normalized_dashboard_host).is_loopback
-    # A hostname, or a URL-style bracketed address the socket cannot bind, proves nothing.
+    # Leave the refusal or exposure warning to the bind guard when the host fails IP parsing.
     except ValueError:
         return False
 
@@ -108,17 +106,14 @@ def _is_loopback_dashboard_host(dashboard_host: str) -> bool:
 def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) -> DashboardState:
     """Build the seed ``DashboardState`` with the precedence rule applied.
 
-    Precedence (ADR-019): CLI ``--fail-on`` flag > ``minimumSeverity.dashboard``
-    in the loaded config > Click default. Config-load errors propagate so the
-    user sees them at dashboard startup rather than on the first scan.
+    A CLI threshold overrides failOn.dashboard, which overrides the Click default; configuration failures propagate during startup.
 
     Args:
         request: Validated dashboard CLI request (paths, fail_on, config path).
         project: Resolved project root used as the config-discovery base.
 
     Returns:
-        The initial dashboard form state with the precedence-resolved ``fail_on``
-        and all other request fields threaded through.
+        The dashboard form fields, with the chosen threshold, shell-quoted paths, and an empty config value when no file was selected.
     """
     selected_fail_threshold = request.fail_on
     # An omitted CLI threshold lets the opening form inherit the user's project setting.
@@ -127,7 +122,7 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
         # A configured value replaces the generic Click default shown in the form.
         if configured_fail_threshold is not None:
             selected_fail_threshold = configured_fail_threshold
-    # No paths means scan the project root; no config means use normal discovery.
+    # Empty paths seed a project-root scan; an absent config path leaves discovery to the no_config setting.
     return DashboardState(
         project=str(project),
         paths=" ".join(shlex.quote(path) for path in (request.paths or (".",))),
@@ -136,6 +131,7 @@ def build_initial_dashboard_state(request: _DashboardCliRequest, project: Path) 
         no_config=request.should_skip_config,
         include_ignored=request.should_include_ignored,
         report_interactive=request.should_render_interactive,
+        deep_scan_budget=request.deep_scan_budget,
     )
 
 
@@ -147,7 +143,7 @@ def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -
 
     Args:
         config_path: User-selected config; None asks normal project discovery to choose one.
-        project: Dashboard project root; an empty path follows ``Path``'s current-directory meaning.
+        project: Dashboard project root used to resolve relative config paths and discover configuration.
 
     Returns:
         Configured threshold text, or None when the user has no dashboard-specific setting.
@@ -160,6 +156,4 @@ def _resolve_config_dashboard_fail_on(config_path: Path | None, project: Path) -
     loaded_analysis_config, _ = ConfigLoader(project, default_analysis_config).load(config_path)
     configured_dashboard_threshold = loaded_analysis_config.minimum_severity.get("dashboard")
     # No dashboard key means the form keeps its CLI default instead of showing empty input.
-    return (
-        configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None
-    )
+    return configured_dashboard_threshold.value if configured_dashboard_threshold is not None else None

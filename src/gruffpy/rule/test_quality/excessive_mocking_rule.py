@@ -27,13 +27,10 @@ class ExcessiveMockingRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the excessive-mocking rule with a configurable mock-count threshold (default 4).
 
-        Medium confidence because the line between "appropriately mocked
-        collaborators" and "test is mocking everything" is judgement; high
-        mock counts strongly correlate with brittle, tightly-coupled tests.
+        Medium confidence reflects the judgement involved in deciding how many mocked collaborators a test needs.
 
         Returns:
-            Definition under the test-quality pillar with the ``maxMocks``
-            threshold key.
+            Definition under the test-quality pillar with the maxMocks threshold key.
         """
         return RuleDefinition(
             id=self.ID,
@@ -46,16 +43,11 @@ class ExcessiveMockingRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag test functions whose mock-binding count exceeds the ``maxMocks`` threshold.
-
-        Counts distinct names bound to mock factory results (``Mock``,
-        ``MagicMock``, ``patch``, ``create_autospec``, etc.) via
-        ``find_mock_bindings``.
+        """Flag tests whose number of distinct mock-bound names exceeds maxMocks.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the ``maxMocks``
-                numeric threshold.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
+            context: Rule execution context supplying the maxMocks numeric threshold.
 
         Returns:
             One finding per test whose mock count exceeds the threshold.
@@ -75,10 +67,7 @@ class ExcessiveMockingRule(Rule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Test {symbol!r} creates {mock_count} mocks, above the threshold "
-                        f"of {threshold}."
-                    ),
+                    message=(f"Test {symbol!r} creates {mock_count} mocks, above the threshold of {threshold}."),
                     file_path=unit.file.display_path,
                     line=fn.lineno,
                     severity=definition.default_severity,
@@ -87,10 +76,7 @@ class ExcessiveMockingRule(Rule):
                     confidence=definition.confidence,
                     end_line=fn.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Heavy mocking usually signals coupled design; refactor the SUT "
-                        "or write a higher-level test instead."
-                    ),
+                    remediation=("Heavy mocking usually signals coupled design; refactor the SUT or write a higher-level test instead."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"mockCount": mock_count, "threshold": threshold},
                 ),

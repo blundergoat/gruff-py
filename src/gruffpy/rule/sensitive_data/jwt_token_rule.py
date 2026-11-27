@@ -15,24 +15,25 @@ from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import SourceTextRule
 from gruffpy.rule.sensitive_data._secret_scanner_helper import (
+    category_preview,
     compile_pattern,
     iter_matches,
-    redact_preview,
 )
 
 _PATTERN = compile_pattern(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
 
 
 class JwtTokenRule(SourceTextRule):
-    """Detect ``eyJ<header>.<payload>.<signature>``-shaped JWT literals committed to source."""
+    """Detect JWT-shaped literals committed to source.
+
+    Users encounter this rule when a scan finds three token segments beginning with ``eyJ`` and
+    receive the exact source line plus rotation guidance without any token-derived preview text.
+    """
 
     ID = "sensitive-data.jwt-token"
 
     def definition(self) -> RuleDefinition:
         """Describe the JWT-token rule as a high-confidence warning.
-
-        The ``eyJ`` prefix corresponds to the base64 of the standard JWT
-        header ``{"`` - false positives are rare even on large corpora.
 
         Returns:
             Definition for the JWT-token rule under the sensitive-data pillar.
@@ -47,34 +48,37 @@ class JwtTokenRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``eyJ<header>.<payload>.<signature>``-shaped literals in source.
+        """Report JWT-shaped literals in the selected source file.
+        The location lets reviewers find each occurrence while the preview keeps token contents out of reports.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per JWT-shaped triplet, with a redacted preview.
+            One finding per JWT-shaped triplet other than exact vendor-documented samples, with a redacted preview.
         """
         definition = self.definition()
         findings: list[Finding] = []
-        for match in iter_matches(_PATTERN, unit.source):
+        # Keep separate source locations for each match so the shared redacted preview does not merge the findings.
+        for token_match in iter_matches(_PATTERN, unit.source):
             findings.append(
                 Finding(
                     rule_id=definition.id,
                     message="JWT-shaped token literal in source.",
                     file_path=unit.file.display_path,
-                    line=match.line,
+                    line=token_match.line,
+                    column=token_match.column,
                     severity=definition.default_severity,
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     remediation=(
-                        "Hard-coded JWTs are short-lived but often leak signing intent. "
-                        "Rotate the signing key, then load tokens at runtime."
+                        "Remove the token from source and treat it as a live bearer credential until it expires: "
+                        "revoke it or rotate the signing key, then load tokens at runtime from the environment or a secret manager."
                     ),
                     secondary_pillars=definition.secondary_pillars,
-                    metadata={"preview": redact_preview(match.raw)},
+                    metadata={"preview": category_preview("jwt")},
                 ),
             )
         return findings

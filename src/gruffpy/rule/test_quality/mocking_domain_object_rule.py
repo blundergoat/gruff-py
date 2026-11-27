@@ -32,11 +32,10 @@ class MockingDomainObjectRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the mocking-domain-object rule as a medium-confidence advisory.
 
-        The rule cannot identify "domain" namespaces without project-specific
-        configuration, so it stays silent until ``domain_namespaces`` is set.
+        The rule stays silent until domain_namespaces contains at least one prefix to match.
 
         Returns:
-            Definition with the ``domain_namespaces`` option seeded to an empty list.
+            Definition with domain_namespaces initialized to an empty list.
         """
         return RuleDefinition(
             id=self.ID,
@@ -49,20 +48,17 @@ class MockingDomainObjectRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag mock factory calls whose ``spec=`` / first arg names a configured domain type.
+        """Flag mock-factory calls in recognised test bodies when the selected argument spelling matches a configured domain namespace.
 
-        Resolves dotted names from the factory's positional or ``spec``/
-        ``spec_set`` keyword argument and matches against the
-        ``domain_namespaces`` prefix list; emits nothing when the option is
-        empty.
+        A nameable first positional argument precedes spec and spec_set; an empty domain_namespaces list disables findings.
 
         Args:
-            unit: Parsed source file to inspect.
-            context: Rule execution context supplying the
-                ``domain_namespaces`` list option.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
+            context: Rule execution context supplying the domain_namespaces list option.
 
         Returns:
-            One finding per mock factory targeting a configured domain type.
+            One finding per mock-factory call in the scanned test bodies whose selected argument name equals a configured namespace
+            or starts with that namespace plus a dot.
         """
         if unit.tree is None:
             return []
@@ -79,9 +75,7 @@ class MockingDomainObjectRule(Rule):
                 target_type = _spec_target(node)
                 if target_type is None:
                     continue
-                if not any(
-                    target_type == ns or target_type.startswith(ns + ".") for ns in namespaces
-                ):
+                if not any(target_type == ns or target_type.startswith(ns + ".") for ns in namespaces):
                     continue
                 parents = parent_chain(fn)
                 symbol = qualified_symbol(fn, parents)
@@ -109,7 +103,14 @@ class MockingDomainObjectRule(Rule):
 
 
 def _spec_target(call: ast.Call) -> str | None:
-    """Return the dotted name of the type passed to Mock(spec=...) / create_autospec."""
+    """Extract the first supported spec-argument spelling from a mock factory call.
+
+    Args:
+        call: Recognized mock factory call whose first positional argument is checked before spec and spec_set keywords.
+
+    Returns:
+        First supported name spelling from those arguments, or None when no argument can be named.
+    """
     if call.args:
         name = _dotted(call.args[0])
         if name is not None:
@@ -123,6 +124,14 @@ def _spec_target(call: ast.Call) -> str | None:
 
 
 def _dotted(node: ast.AST) -> str | None:
+    """Build a bare or dotted spelling from a name or attribute expression.
+
+    Args:
+        node: Argument expression whose name components are inspected without resolving imports.
+
+    Returns:
+        Name spelling, using the leaf attribute if its receiver cannot be named; None for other expression kinds.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):

@@ -1,15 +1,25 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
 from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
+from gruffpy.parser.analysis_unit import AnalysisUnit, ParseDiagnostic
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.size.file_length_rule import FileLengthRule
 from gruffpy.source.source_file import SourceFile
 
 
 def _make_unit(line_count: int) -> AnalysisUnit:
+    """Build an analysis unit for x.py holding line_count assignment lines, or an empty unit without a tree for 0.
+
+    Args:
+        line_count: Number of x = 1 lines; 0 gives empty source and no tree.
+
+    Returns:
+        A unit with that many assignment lines and a parsed tree, or empty source and no tree.
+    """
     if line_count == 0:
         source = ""
         tree: ast.AST | None = None
@@ -21,6 +31,14 @@ def _make_unit(line_count: int) -> AnalysisUnit:
 
 
 def _ctx(threshold: int = 400) -> RuleContext:
+    """Build a rule context with the file length rule enabled at an error threshold.
+
+    Args:
+        threshold: Value the rule allows before it reports; defaults to 400.
+
+    Returns:
+        A context whose config enables only the file length rule at that threshold.
+    """
     rule = FileLengthRule()
     config = AnalysisConfig(
         rules={
@@ -34,6 +52,11 @@ def _ctx(threshold: int = 400) -> RuleContext:
 
 
 def test_under_warning_threshold_emits_no_finding():
+    """Report nothing for 50 lines against a threshold of 100.
+
+    Returns:
+        None. Asserts that 50 lines against a threshold of 100 produce no findings.
+    """
     findings = FileLengthRule().analyse(_make_unit(50), _ctx(threshold=100))
     assert findings == []
 
@@ -43,6 +66,11 @@ _FILE_LINES_OVER_WARNING = 150
 
 
 def test_above_threshold_emits_error():
+    """Report 150 lines against a threshold of 100 as one error finding whose metadata holds the lines, threshold and threshold type.
+
+    Returns:
+        None. Checks for one file-length error with the expected line count, threshold and threshold type.
+    """
     findings = FileLengthRule().analyse(
         _make_unit(_FILE_LINES_OVER_WARNING),
         _ctx(threshold=_WARNING_BOUNDARY),
@@ -59,6 +87,11 @@ def test_above_threshold_emits_error():
 
 
 def test_far_above_threshold_emits_error():
+    """Report 300 lines against a threshold of 200 as one error finding carrying those numbers.
+
+    Returns:
+        None. Checks for one error with the expected line count, threshold and error threshold type.
+    """
     findings = FileLengthRule().analyse(_make_unit(300), _ctx(threshold=200))
     assert len(findings) == 1
     finding = findings[0]
@@ -69,6 +102,11 @@ def test_far_above_threshold_emits_error():
 
 
 def test_comment_and_blank_padding_is_free():
+    """Report nothing for 90 code lines padded past a threshold of 100 with comments and blanks.
+
+    Returns:
+        None. Asserts that comment and blank line padding produces no finding.
+    """
     source = "\n".join(["x = 1"] * 90 + ["# note"] * 30 + [""] * 20)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -76,6 +114,11 @@ def test_comment_and_blank_padding_is_free():
 
 
 def test_substantive_lines_over_threshold_still_fire():
+    """Report 101 code lines once, with the finding ending at line 131 after thirty trailing comments.
+
+    Returns:
+        None. Checks for one finding counting 101 code lines and ending after the trailing comments at line 131.
+    """
     source = "\n".join(["x = 1"] * 101 + ["# note"] * 30)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -85,22 +128,36 @@ def test_substantive_lines_over_threshold_still_fire():
     assert findings[0].end_line == 131
 
 
-def test_docstring_lines_are_free_but_data_strings_count():
-    # PEP 257 docstrings are documentation and free; the same literal as data still counts.
+@pytest.mark.parametrize("bounded", [False, True], ids=["parsed", "bounded"])
+def test_docstring_lines_are_free_but_data_strings_count(bounded: bool) -> None:
+    """Report nothing for 90 code lines after a 62-line module docstring, but one finding when those lines are a data string instead.
+
+    Args:
+        bounded: Use the text-only line counter after the deep-scan budget is exceeded.
+
+    Returns:
+        None. Asserts zero findings for the docstring and one for the data string.
+    """
     docstring_body = "\n".join(["'''Module docs.", *(["docs line"] * 60), "'''"])
     source = docstring_body + "\n" + "\n".join(["x = 1"] * 90)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
+    diagnostics = (ParseDiagnostic("test budget", type="bounded-deep-scan", non_fatal=True),) if bounded else ()
+    unit = AnalysisUnit(file=file, source=source, tree=None if bounded else ast.parse(source), diagnostics=diagnostics)
     assert FileLengthRule().analyse(unit, _ctx(threshold=100)) == []
 
     data_lines = ["PAYLOAD = '''start", *(["payload line"] * 60), "'''", *(["x = 1"] * 90)]
     data_source = "\n".join(data_lines)
-    data_unit = AnalysisUnit(file=file, source=data_source, tree=ast.parse(data_source))
+    data_unit = AnalysisUnit(file=file, source=data_source, tree=None if bounded else ast.parse(data_source), diagnostics=diagnostics)
     findings = FileLengthRule().analyse(data_unit, _ctx(threshold=100))
     assert len(findings) == 1
 
 
 def test_hash_prefixed_lines_inside_multiline_data_still_count():
+    """Count a hash-prefixed line inside a multi-line data string, measuring the file at 4 lines.
+
+    Returns:
+        None. Checks for one finding that counts all four lines, including the hash-prefixed data line.
+    """
     source = 'PAYLOAD = """start\n# data\npayload\n"""\n'
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -112,6 +169,11 @@ def test_hash_prefixed_lines_inside_multiline_data_still_count():
 
 
 def test_inline_multiline_docstring_counts_only_code_bearing_header():
+    """Report one finding measuring 1 line for a function whose multi-line docstring starts on the def line.
+
+    Returns:
+        None. Asserts that one finding counts only the definition line shared with the docstring.
+    """
     source = 'def tiny(): """Summary.\nContinuation.\n"""\n'
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -123,6 +185,11 @@ def test_inline_multiline_docstring_counts_only_code_bearing_header():
 
 
 def test_parenthesized_multiline_docstring_is_free():
+    """Report one finding measuring 1 line for a function whose one-line docstring is wrapped in parentheses across three lines.
+
+    Returns:
+        None. Checks for one finding that counts only the definition line and excludes the parenthesized docstring.
+    """
     source = 'def tiny():\n    (\n        "Summary."\n    )\n'
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -134,7 +201,11 @@ def test_parenthesized_multiline_docstring_is_free():
 
 
 def test_one_line_definition_docstring_keeps_its_header_counted():
-    # A docstring sharing the def line must not free that line of code.
+    """Count all 101 def lines that each carry a one-line docstring.
+
+    Returns:
+        None. Checks that the single finding counts all 101 definition lines despite their inline docstrings.
+    """
     source = "\n".join(['def tiny(): """doc"""'] * 101)
     file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
     unit = AnalysisUnit(file=file, source=source, tree=ast.parse(source))
@@ -144,6 +215,11 @@ def test_one_line_definition_docstring_keeps_its_header_counted():
 
 
 def test_finding_carries_fingerprint_and_remediation():
+    """Give the file-length finding a 16-character fingerprint, a remediation and a span from line 1 to 150.
+
+    Returns:
+        None. Checks the first finding's fingerprint length, remediation and source span.
+    """
     findings = FileLengthRule().analyse(_make_unit(150), _ctx(threshold=100))
     finding = findings[0]
     assert len(finding.fingerprint()) == 16

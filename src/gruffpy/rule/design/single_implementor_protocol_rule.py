@@ -78,30 +78,23 @@ class SingleImplementorProtocolRule:
         )
 
     def analyse_project(self, units: list[AnalysisUnit], context: RuleContext) -> list[Finding]:
-        """Analyse the whole project for unnecessary abstractions.
+        """Find unnecessary single-implementor abstractions across the supplied project units.
 
         Args:
             units: Parsed project units to inspect together.
-            context: Rule execution context with configured options.
+            context: Supplies external protocol base names and extra paths to exclude from the analysis.
 
         Returns:
-            Findings for one-implementor abstractions without external type usage.
+            Findings for non-extended abstractions with one implementor and no counted external annotation or value references.
+            A reference is internal if its owner matches either class's qualified or simple name. Empty when no abstraction qualifies.
         """
         settings = context.settings_for(self.definition())
-        external_bases = {
-            base.lower() for base in settings.string_list_option("externalProtocolBases")
-        }
+        external_bases = {base.lower() for base in settings.string_list_option("externalProtocolBases")}
         excluded_paths = tuple(settings.string_list_option("additionalExcludedPaths"))
-        eligible_units = [
-            unit
-            for unit in units
-            if unit.tree is not None and not _is_excluded(unit.file.display_path, excluded_paths)
-        ]
+        eligible_units = [unit for unit in units if unit.tree is not None and not _is_excluded(unit.file.display_path, excluded_paths)]
         classes = _collect_classes(eligible_units)
         abstractions = [info for info in classes if _is_internal_abstraction(info, external_bases)]
-        abstraction_names = {info.fqn for info in abstractions} | {
-            info.simple_name for info in abstractions
-        }
+        abstraction_names = {info.fqn for info in abstractions} | {info.simple_name for info in abstractions}
         extended_abstractions = _extended_abstractions(abstractions, abstraction_names)
         references = _collect_type_references(eligible_units)
         return _findings_for_abstractions(
@@ -121,6 +114,20 @@ def _findings_for_abstractions(
     external_bases: set[str],
     references: list[_TypeReference],
 ) -> list[Finding]:
+    """Build a finding for each non-extended abstraction with exactly one implementor and no external references.
+
+    Abstractions are visited in fqn order, so the findings come out sorted by the flagged abstraction's fqn.
+
+    Args:
+        abstractions: Internal abstractions collected from the eligible units.
+        extended_abstractions: Base names through which one abstraction subclasses another; an abstraction matching one of them is skipped.
+        classes: Every collected class, searched for the implementors of each abstraction.
+        external_bases: Lowercased externalProtocolBases option values, used to keep internal abstractions out of the implementor search.
+        references: Recorded annotation and value references, scanned to count external usage.
+
+    Returns:
+        Findings ordered by abstraction fqn; empty when no abstraction qualifies.
+    """
     findings: list[Finding] = []
     for abstraction in sorted(abstractions, key=lambda item: item.fqn):
         if _is_extended_abstraction(abstraction, extended_abstractions):
@@ -136,9 +143,16 @@ def _findings_for_abstractions(
 
 
 def _is_extended_abstraction(abstraction: _ClassInfo, extended_abstractions: set[str]) -> bool:
-    return (
-        abstraction.fqn in extended_abstractions or abstraction.simple_name in extended_abstractions
-    )
+    """Check whether the abstraction's fqn or simple name is among the base names that other abstractions extend.
+
+    Args:
+        abstraction: Abstraction to test.
+        extended_abstractions: Dotted and last-segment base names collected by _extended_abstractions.
+
+    Returns:
+        True when the abstraction's fqn or simple name is in the set, which makes the caller skip it.
+    """
+    return abstraction.fqn in extended_abstractions or abstraction.simple_name in extended_abstractions
 
 
 def _implementors_for(
@@ -146,6 +160,19 @@ def _implementors_for(
     classes: list[_ClassInfo],
     external_bases: set[str],
 ) -> list[_ClassInfo]:
+    """Collect the classes that name the abstraction among their bases and are not internal abstractions themselves.
+
+    Bases are matched by name with _is_matching_name, so structural Protocol implementations are not found, while a subclass of a same-named class
+    from another module is.
+
+    Args:
+        abstraction: Abstraction whose implementors are wanted; the class itself is excluded by fqn.
+        classes: Every collected class to search.
+        external_bases: Lowercased externalProtocolBases option values, passed to _is_internal_abstraction to exclude other internal abstractions.
+
+    Returns:
+        Matching classes in collection order; the caller flags the abstraction only when exactly one is returned.
+    """
     return [
         info
         for info in classes
@@ -160,18 +187,25 @@ def _external_usage_count(
     implementor: _ClassInfo,
     references: list[_TypeReference],
 ) -> int:
+    """Count the references to an abstraction that are owned outside both the abstraction and its implementor.
+
+    A reference's owner fqn is compared against the fqn and simple name of both classes; references recorded outside any class always count.
+
+    Args:
+        abstraction: Abstraction whose name each reference is matched against with _is_matching_name.
+        implementor: Single implementor whose own references are ignored.
+        references: Recorded annotation and value references to scan.
+
+    Returns:
+        Number of matching references with an outside owner; zero lets the caller flag the abstraction.
+    """
     local_names = {
         abstraction.fqn,
         abstraction.simple_name,
         implementor.fqn,
         implementor.simple_name,
     }
-    return sum(
-        1
-        for reference in references
-        if _is_matching_name(reference.name, abstraction)
-        and reference.owner_class_fqn not in local_names
-    )
+    return sum(1 for reference in references if _is_matching_name(reference.name, abstraction) and reference.owner_class_fqn not in local_names)
 
 
 def _finding_for(
@@ -179,6 +213,18 @@ def _finding_for(
     implementor: _ClassInfo,
     external_usage_count: int,
 ) -> Finding:
+    """Build the finding at the abstraction's class line that names the abstraction and its single implementor.
+
+    Args:
+        abstraction: Flagged abstraction whose file path, class line and fqn locate the finding.
+        implementor: Single implementor, named in the message and the metadata.
+        external_usage_count: External reference count written to the externalUsageCount metadata key and the decision text; the only caller passes
+            zero.
+
+    Returns:
+        Finding carrying the rule's default severity, pillar, tier and confidence, with metadata keys protocolFqn, implementorCount (always 1),
+        implementorFqn, externalUsageCount and decision.
+    """
     definition = SingleImplementorProtocolRule().definition()
     return Finding(
         rule_id=definition.id,
@@ -209,10 +255,33 @@ def _finding_for(
 
 
 def _is_excluded(display_path: str, excluded_paths: tuple[str, ...]) -> bool:
+    """Check whether a display path starts with any configured additionalExcludedPaths prefix.
+
+    The comparison is a plain string prefix match, with no glob syntax or path-segment boundary.
+
+    Args:
+        display_path: Display path of the unit being considered.
+        excluded_paths: Prefixes from the additionalExcludedPaths option; an empty tuple excludes nothing.
+
+    Returns:
+        True when the path matches a prefix, which keeps the unit out of both class and reference collection.
+    """
     return any(display_path.startswith(path) for path in excluded_paths)
 
 
 def _is_internal_abstraction(info: _ClassInfo, external_bases: set[str]) -> bool:
+    """Check whether a class directly subclasses ABC, ABCMeta or Protocol and has no external protocol base.
+
+    Bases are compared by their last dotted segment: ABC, ABCMeta and Protocol match case-sensitively, the configured external bases
+    case-insensitively.
+
+    Args:
+        info: Class whose base names are inspected.
+        external_bases: Lowercased externalProtocolBases option values; any matching base disqualifies the class.
+
+    Returns:
+        True for an internal abstraction, False when no abstraction base is present or an external protocol base is.
+    """
     base_leaves = {_leaf(base) for base in info.bases}
     if not (base_leaves & _ABSTRACTION_BASES):
         return False
@@ -223,6 +292,17 @@ def _extended_abstractions(
     abstractions: list[_ClassInfo],
     abstraction_names: set[str],
 ) -> set[str]:
+    """Collect base names that mark internal abstractions as extended for the finding filter.
+
+    Matching is by name only. A base from another module can mark an abstraction with the same simple name as extended.
+
+    Args:
+        abstractions: Internal abstractions whose bases are scanned.
+        abstraction_names: Fqns and simple names of all abstractions, matched against each base name and its last segment.
+
+    Returns:
+        Each matching base name in both its written and last-segment forms. Empty when no base name matches.
+    """
     extended: set[str] = set()
     for abstraction in abstractions:
         for base in abstraction.bases:
@@ -233,6 +313,14 @@ def _extended_abstractions(
 
 
 def _collect_classes(units: list[AnalysisUnit]) -> list[_ClassInfo]:
+    """Collect classes declared directly in module or class bodies, skipping classes inside functions or control-flow blocks.
+
+    Args:
+        units: Eligible analysis units; a unit whose tree is not an ast.Module is skipped.
+
+    Returns:
+        Class infos in unit order, each class listed before the classes nested in it. Empty when no direct class declarations qualify.
+    """
     classes: list[_ClassInfo] = []
     for unit in units:
         if not isinstance(unit.tree, ast.Module):
@@ -249,6 +337,21 @@ def _collect_classes_from_body(
     stack: tuple[str, ...],
     classes: list[_ClassInfo],
 ) -> None:
+    """Append a class info for each class statement in a body, recursing into class bodies for nested classes.
+
+    Only class statements sitting directly in the body are visited, so classes inside functions or if and try blocks are not collected. Base
+    expressions with no name from _name_for are dropped.
+
+    Args:
+        unit: Analysis unit stored on each class info, which later supplies the finding's file path.
+        module: Dotted module name prefixed to each fqn; empty for a top-level __init__ module, leaving the class names alone.
+        body: Statements scanned for class definitions.
+        stack: Names of the enclosing classes, empty at module level.
+        classes: Output list this function appends to in place.
+
+    Returns:
+        None. Appends the collected class records to classes in place.
+    """
     for stmt in body:
         if not isinstance(stmt, ast.ClassDef):
             continue
@@ -267,6 +370,16 @@ def _collect_classes_from_body(
 
 
 def _collect_type_references(units: list[AnalysisUnit]) -> list[_TypeReference]:
+    """Collect annotation names and loaded value names from every unit with an ast.Module tree via _ReferenceVisitor.
+
+    The visitor does not visit class bases, so naming an abstraction as a base records no reference.
+
+    Args:
+        units: Eligible analysis units; a unit whose tree is not an ast.Module is skipped.
+
+    Returns:
+        One reference per recorded name, each carrying the fqn of its innermost enclosing class or None outside any class.
+    """
     references: list[_TypeReference] = []
     for unit in units:
         if isinstance(unit.tree, ast.Module):
@@ -283,10 +396,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self.class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Visit a class without traversing nested owner state incorrectly.
+        """Append class decorator and body references to the shared list while temporarily extending the class owner stack.
 
         Args:
-            node: Class definition node to inspect.
+            node: Class whose name supplies the owner during traversal. A nested class supplies its own owner.
+
+        Returns:
+            None. Appends references under the active class owner and restores the previous owner stack.
         """
         self.class_stack.append(node.name)
         for decorator in node.decorator_list:
@@ -296,10 +412,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self.class_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Record function annotations and then inspect its body.
+        """Append references from a function's annotations, defaults and body to the shared reference list.
 
         Args:
-            node: Function definition node to inspect.
+            node: Function whose annotations, defaults and body supply references for the current owner.
+
+        Returns:
+            None. Appends the references found in the function to the shared list.
         """
         self._record_function_annotations(node)
         self._visit_function_defaults(node)
@@ -307,10 +426,13 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Record async function annotations and then inspect its body.
+        """Append references from an async function's annotations, defaults and body to the shared reference list.
 
         Args:
-            node: Async function definition node to inspect.
+            node: Async function whose annotations, defaults and body supply references for the current owner.
+
+        Returns:
+            None. Appends the references found in the async function to the shared list.
         """
         self._record_function_annotations(node)
         self._visit_function_defaults(node)
@@ -318,20 +440,26 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        """Record references from an annotated assignment.
+        """Append references from an annotated assignment's annotation and optional value to the shared reference list.
 
         Args:
-            node: Annotated assignment node to inspect.
+            node: Assignment whose annotation and optional right-hand value supply references.
+
+        Returns:
+            None. Appends references from the annotation and any assigned value to the shared list.
         """
         self._record_annotation(node.annotation)
         if node.value is not None:
             self.visit(node.value)
 
     def visit_Name(self, node: ast.Name) -> None:
-        """Record loaded names as value-position references.
+        """Append loaded names to the shared reference list; assignment and deletion targets add no reference.
 
         Args:
-            node: Name expression node to inspect.
+            node: Name occurrence whose access context determines whether its identifier counts as a reference.
+
+        Returns:
+            None. Appends the identifier to the shared reference list when the name is loaded.
         """
         if isinstance(node.ctx, ast.Load):
             self._record_reference(node.id)
@@ -339,14 +467,14 @@ class _ReferenceVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Record dotted value-position references.
 
-        Only ``Load`` context counts, mirroring :meth:`visit_Name`: a store
-        target such as ``module.Renderer = Fake`` (monkeypatching) binds an
-        attribute *named* like the abstraction without referencing it. The
-        loaded inner chain (``module``, or ``a.Renderer`` in
-        ``a.Renderer.x = 1``) is still visited via ``generic_visit``.
+        Only loads count, so the target in module.Renderer = Fake adds no reference to Renderer.
+        The visitor still inspects the loaded inner chain, such as a.Renderer in a.Renderer.x = 1.
 
         Args:
-            node: Attribute expression node to inspect.
+            node: Attribute expression whose loaded name and children are examined.
+
+        Returns:
+            None. Appends recognized references to the visitor's shared list.
         """
         if isinstance(node.ctx, ast.Load):
             name = _name_for(node)
@@ -358,6 +486,14 @@ class _ReferenceVisitor(ast.NodeVisitor):
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
     ) -> None:
+        """Append names from every parameter annotation and the return annotation to the shared reference list, including variadic parameters.
+
+        Args:
+            node: Function or async function definition whose annotations are read.
+
+        Returns:
+            None. Appends references from parameter and return annotations to the shared list.
+        """
         all_args = (
             list(node.args.posonlyargs)
             + list(node.args.args)
@@ -372,28 +508,62 @@ class _ReferenceVisitor(ast.NodeVisitor):
             self._record_annotation(node.returns)
 
     def _visit_function_defaults(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Visit parameter defaults so their loaded names are appended to the shared reference list.
+
+        Args:
+            node: Function or async function definition whose positional and keyword-only defaults are visited; keyword-only parameters without a
+                default are skipped.
+
+        Returns:
+            None. Appends references found in parameter defaults to the shared list.
+        """
         for default in (*node.args.defaults, *node.args.kw_defaults):
             if default is not None:
                 self.visit(default)
 
     def _record_annotation(self, annotation: ast.AST) -> None:
+        """Append extracted annotation names to the shared reference list with the owner reported by _owner_fqn.
+
+        Args:
+            annotation: Annotation expression; a node type without a handler in _ANNOTATION_NAME_HANDLERS records nothing.
+
+        Returns:
+            None. Appends each extracted name with its current owner to the shared reference list.
+        """
         for name in _annotation_names(annotation):
             self._record_reference(name)
 
     def _record_reference(self, name: str) -> None:
+        """Append a reference for a name to the shared list, owned by the innermost enclosing class if there is one.
+
+        Args:
+            name: Bare or dotted name text to record.
+
+        Returns:
+            None. Appends a reference to the shared list with its class owner, or with no owner outside a class.
+        """
         self.references.append(_TypeReference(name=name, owner_class_fqn=self._owner_fqn()))
 
     def _owner_fqn(self) -> str | None:
+        """Build the fqn of the innermost enclosing class, which owns any reference recorded at this point.
+
+        Returns:
+            Module name and class names joined by dots, the class names alone when the module name is empty, or None outside any class.
+        """
         if not self.class_stack:
             return None
-        return (
-            ".".join((self.module, *self.class_stack))
-            if self.module
-            else ".".join(self.class_stack)
-        )
+        return ".".join((self.module, *self.class_stack)) if self.module else ".".join(self.class_stack)
 
 
 def _annotation_names(node: ast.AST) -> set[str]:
+    """Extract the names an annotation expression mentions by dispatching on its exact node type.
+
+    Args:
+        node: Annotation expression or one of its sub-expressions.
+
+    Returns:
+        Extracted names; empty for a node type without a handler, such as a call.
+    """
     handler = _ANNOTATION_NAME_HANDLERS.get(type(node))
     if handler is None:
         return set()
@@ -401,36 +571,94 @@ def _annotation_names(node: ast.AST) -> set[str]:
 
 
 def _name_annotation_names(node: ast.AST) -> set[str]:
+    """Return the identifier of a bare name in an annotation.
+
+    Args:
+        node: ast.Name node, as guaranteed by the handler table.
+
+    Returns:
+        One-element set holding the identifier.
+    """
     assert isinstance(node, ast.Name)
     return {node.id}
 
 
 def _attribute_names(node: ast.AST) -> set[str]:
+    """Adapt _attribute_annotation_names to the ast.AST signature the annotation handler table expects.
+
+    Args:
+        node: ast.Attribute node, as guaranteed by the handler table.
+
+    Returns:
+        Set containing the rendered name and its last segment. If the base has no name, the set contains only the attribute name.
+    """
     assert isinstance(node, ast.Attribute)
     return _attribute_annotation_names(node)
 
 
 def _subscript_annotation_names(node: ast.AST) -> set[str]:
+    """Extract names from both the subscripted value and its slice, such as list and Foo in list[Foo].
+
+    Args:
+        node: ast.Subscript node, as guaranteed by the handler table.
+
+    Returns:
+        Union of the names from the value and the slice.
+    """
     assert isinstance(node, ast.Subscript)
     return _annotation_names(node.value) | _annotation_names(node.slice)
 
 
 def _binop_annotation_names(node: ast.AST) -> set[str]:
+    """Extract names from both operands of a binary operation, such as each member of an A | B union.
+
+    Args:
+        node: ast.BinOp node, as guaranteed by the handler table.
+
+    Returns:
+        Union of the names from the left and right operands.
+    """
     assert isinstance(node, ast.BinOp)
     return _annotation_names(node.left) | _annotation_names(node.right)
 
 
 def _tuple_annotation_names(node: ast.AST) -> set[str]:
+    """Extract names from each tuple element, such as the key and value types in dict[K, V].
+
+    Args:
+        node: ast.Tuple node, as guaranteed by the handler table.
+
+    Returns:
+        Union of the names from every element.
+    """
     assert isinstance(node, ast.Tuple)
     return _sequence_annotation_names(node.elts)
 
 
 def _list_annotation_names(node: ast.AST) -> set[str]:
+    """Extract names from each list element, such as the parameter types in Callable[[A], B].
+
+    Args:
+        node: ast.List node, as guaranteed by the handler table.
+
+    Returns:
+        Union of the names from every element.
+    """
     assert isinstance(node, ast.List)
     return _sequence_annotation_names(node.elts)
 
 
 def _constant_annotation_names(node: ast.AST) -> set[str]:
+    """Return a string constant in an annotation as one name, treating it as a forward reference.
+
+    The string is not parsed, so a quoted expression such as list[Foo] is kept whole and does not match Foo.
+
+    Args:
+        node: ast.Constant node, as guaranteed by the handler table.
+
+    Returns:
+        One-element set holding the string, or an empty set for a non-string constant such as None.
+    """
     assert isinstance(node, ast.Constant)
     return {node.value} if isinstance(node.value, str) else set()
 
@@ -447,11 +675,27 @@ _ANNOTATION_NAME_HANDLERS = {
 
 
 def _attribute_annotation_names(node: ast.Attribute) -> set[str]:
+    """Extract the names an attribute contributes to annotation matching.
+
+    Args:
+        node: Attribute expression found in an annotation.
+
+    Returns:
+        Set containing the name built by _name_for and its last segment. If the base has no name, the set contains only the attribute name.
+    """
     name = _name_for(node)
     return {name, _leaf(name)} if name else set()
 
 
 def _sequence_annotation_names(elements: list[ast.expr]) -> set[str]:
+    """Union the annotation names extracted from each element of a tuple or list.
+
+    Args:
+        elements: Element expressions of the tuple or list.
+
+    Returns:
+        Union of the names from every element; empty for an empty sequence.
+    """
     result: set[str] = set()
     for element in elements:
         result.update(_annotation_names(element))
@@ -459,12 +703,32 @@ def _sequence_annotation_names(elements: list[ast.expr]) -> set[str]:
 
 
 def _is_matching_name(name: str, abstraction: _ClassInfo) -> bool:
-    return (
-        name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
-    )
+    """Match a base or reference name to an abstraction by fqn, simple name or last dotted segment.
+
+    No imports are resolved, so a same-named class from another module also matches.
+
+    Args:
+        name: Base name or reference name text.
+        abstraction: Abstraction whose fqn and simple name are compared.
+
+    Returns:
+        True when the name equals the fqn or simple name, or its last segment equals the simple name.
+    """
+    return name in {abstraction.fqn, abstraction.simple_name} or _leaf(name) == abstraction.simple_name
 
 
 def _name_for(node: ast.AST) -> str:
+    """Build the dotted name text of a base or attribute expression, unwrapping subscripts and calls.
+
+    A subscript yields its subscripted value, so Protocol[T] gives Protocol; a call yields its callee; a string constant is returned verbatim; an
+    attribute whose prefix has no name yields only the attribute.
+
+    Args:
+        node: Expression to name.
+
+    Returns:
+        The bare or dotted name or the original string constant. Empty when the expression, including any unwrapped value or callee, has no name.
+    """
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -480,10 +744,29 @@ def _name_for(node: ast.AST) -> str:
 
 
 def _leaf(name: str) -> str:
+    """Return the last dot-separated segment of a name.
+
+    Args:
+        name: Bare or dotted name text.
+
+    Returns:
+        Text after the final dot, or the whole name when it contains no dot.
+    """
     return name.rsplit(".", 1)[-1]
 
 
 def _module_name(unit: AnalysisUnit) -> str:
+    """Derive the dotted module name used as the fqn prefix from a unit's display path.
+
+    Backslashes become slashes, the .py suffix and a trailing __init__ segment are dropped, and every remaining non-empty path segment becomes part of
+    the name; no package root is detected.
+
+    Args:
+        unit: Analysis unit whose display path is converted.
+
+    Returns:
+        Dotted module name, or an empty string for a top-level __init__.py.
+    """
     path = unit.file.display_path.replace("\\", "/")
     if path.endswith(".py"):
         path = path[:-3]

@@ -36,9 +36,7 @@ class UnusedPrivateAttributeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the unused-private-attribute rule as a medium-confidence warning.
 
-        Medium confidence: ``__x``-style name-mangled attributes accessed via
-        the runtime-mangled name (``self._Cls__x``) are out of scope and can
-        false-positive.
+        Reads written as self._Cls__x are not matched to assignments written as self.__x, which can produce false positives.
 
         Returns:
             Definition for the unused-private-attribute rule under the
@@ -54,19 +52,17 @@ class UnusedPrivateAttributeRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``self._x``-style assignments inside a class that the class never reads.
+        """Flag self._x-style assignments that have no read or deletion anywhere under a candidate class, including in nested scopes.
 
-        Skips dataclasses (fields are intentionally write-only at the type
-        level), framework-base subclasses, and ``_x`` attributes paired with
-        an ``@property x`` getter (the underscore is the backing field).
-        Honours the dead-code allowlist by path, symbol, and decorator.
+        Classes with dataclass-style decorators or framework bases are excluded as candidates.
+        A direct property, getter or setter exempts an attribute with the same name after its leading underscores are stripped.
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplying the allowlist.
+            context: Rule execution context supplying the dead-code allowlist for paths, symbols and decorators.
 
         Returns:
-            One finding per private attribute assigned-but-never-read.
+            One finding per non-exempt private attribute assigned but never read or deleted; empty when the unit has no tree or none qualify.
         """
         if unit.tree is None:
             return []
@@ -86,6 +82,15 @@ class UnusedPrivateAttributeRule(Rule):
 
 
 def _decorator_names(decorators: list[ast.expr]) -> tuple[str, ...]:
+    """List each decorator's dotted name, plus its last segment when dotted, for the allowlist decorator match.
+
+    Args:
+        decorators: Decorator expressions of a candidate class, in source order.
+
+    Returns:
+        Names in decorator order, each dotted name followed by its last segment when the two differ; a decorator that _decorator_repr renders as an
+        empty string is omitted, so the tuple may be empty.
+    """
     names: list[str] = []
     for decorator in decorators:
         full = _decorator_repr(decorator)
@@ -99,13 +104,15 @@ def _decorator_names(decorators: list[ast.expr]) -> tuple[str, ...]:
 
 
 def _candidate_classes(tree: ast.AST) -> list[ast.ClassDef]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef)
-        and not has_framework_base(node)
-        and not has_dataclass_decorator(node)
-    ]
+    """List every class in the tree, nested ones too, unless has_framework_base or has_dataclass_decorator is true.
+
+    Args:
+        tree: Parsed module tree to walk for class definitions.
+
+    Returns:
+        Class nodes in ast.walk order; empty when the tree has no class or every class is excluded.
+    """
+    return [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and not has_framework_base(node) and not has_dataclass_decorator(node)]
 
 
 def _unused_attribute_findings(
@@ -113,6 +120,19 @@ def _unused_attribute_findings(
     definition: RuleDefinition,
     cls: ast.ClassDef,
 ) -> list[Finding]:
+    """Build a finding for each underscore-prefixed self attribute the class assigns but never reads or deletes.
+
+    Assignments and reads come from _scan_class_self_attrs and property names from _collect_property_names; _is_unused_private_attribute makes the
+    per-name decision, which also skips property backing fields. The dead-code allowlist symbol match is left to the caller.
+
+    Args:
+        unit: Analysis unit whose display path the findings report.
+        definition: Rule definition supplying the rule id, default severity, pillar, tier, confidence and secondary pillars copied into each finding.
+        cls: Candidate class whose subtree is scanned and whose qualified symbol prefixes each finding symbol.
+
+    Returns:
+        One finding per qualifying attribute name, in the order the class walk first meets each assignment; empty when no name qualifies.
+    """
     assigned, read = _scan_class_self_attrs(cls)
     property_names = _collect_property_names(cls)
     parents = parent_chain(cls)
@@ -129,6 +149,19 @@ def _is_unused_private_attribute(
     read: set[str],
     property_names: set[str],
 ) -> bool:
+    """Decide whether a self attribute name is underscore-prefixed, not in read, and not a property backing field.
+
+    Stripping all leading underscores identifies backing fields, so a property named x exempts both _x and __x.
+
+    Args:
+        name: Attribute name assigned on self somewhere in the class.
+        read: Attribute names the class reads or deletes on self.
+        property_names: Method names collected from decorators rendered as property or ending in .setter or .getter.
+
+    Returns:
+        True when the name should be reported; False when it lacks a leading underscore, appears in read, or matches a property name after its leading
+        underscores are stripped.
+    """
     if not name.startswith("_"):
         return False
     if name in read:
@@ -143,6 +176,22 @@ def _unused_attribute_finding(
     name: str,
     attribute: ast.Attribute,
 ) -> Finding:
+    """Build the finding for one underscore-prefixed self attribute that the class assigns but never reads.
+
+    The finding symbol is the class symbol and the attribute name joined by a dot, and its metadata records the attribute name under the attribute
+    key.
+
+    Args:
+        unit: Analysis unit whose display path the finding reports.
+        definition: Rule definition supplying the rule id, default severity, pillar, tier, confidence and secondary pillars.
+        class_symbol: Qualified symbol of the class, used in the message and as the finding symbol prefix.
+        name: Attribute name as assigned on self, leading underscores included.
+        attribute: Attribute node of the assignment, whose start and end lines locate the finding.
+
+    Returns:
+        Finding at the rule's default severity whose message names the class and attribute and whose remediation asks to remove the assignment or read
+        the attribute in the class body.
+    """
     return Finding(
         rule_id=definition.id,
         message=(f"Class {class_symbol!r} assigns {name!r} but never reads it."),
@@ -163,11 +212,16 @@ def _unused_attribute_finding(
 def _scan_class_self_attrs(
     cls: ast.ClassDef,
 ) -> tuple[dict[str, tuple[ast.AST, ast.Attribute]], set[str]]:
-    """Return (assigned, read) sets across all methods in *cls*.
+    """Collect the attribute names assigned to, and read or deleted from, a bare self name anywhere in the class.
 
-    ``assigned`` maps name -> (containing-stmt-node, attribute-node) for the
-    first assignment found. ``read`` is the set of names appearing as
-    ``self.<name>`` in Load context."""
+    The walk covers the whole class subtree, nested functions and classes included, and ignores attributes on any receiver other than the bare name
+    self. A Store context counts as an assignment, so an augmented assignment such as ``self._x += 1`` records only an assignment; Load and Del
+    contexts count as reads. For each assigned name only the first assignment the breadth-first walk meets is kept.
+
+    Returns:
+        A pair of a dict mapping each assigned name to a tuple holding its first assignment's attribute node twice, and the set of names read or
+        deleted on self.
+    """
     assigned: dict[str, tuple[ast.AST, ast.Attribute]] = {}
     read: set[str] = set()
     for node in ast.walk(cls):
@@ -182,23 +236,33 @@ def _scan_class_self_attrs(
 
 
 def _collect_property_names(cls: ast.ClassDef) -> set[str]:
-    """Names of methods decorated with @property (or .setter / .getter)."""
+    """Names of methods decorated with @property (or .setter / .getter).
+
+    Returns:
+        Names of methods defined directly in the class body with a decorator rendered exactly as property or ending in .setter or .getter; empty when
+        none match.
+    """
     names: set[str] = set()
     for stmt in cls.body:
         if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         for decorator in stmt.decorator_list:
             decorator_name = _decorator_repr(decorator)
-            if (
-                decorator_name == "property"
-                or decorator_name.endswith(".setter")
-                or decorator_name.endswith(".getter")
-            ):
+            if decorator_name == "property" or decorator_name.endswith(".setter") or decorator_name.endswith(".getter"):
                 names.add(stmt.name)
     return names
 
 
 def _decorator_repr(decorator: ast.AST) -> str:
+    """Render a decorator expression as its dotted name, reducing a call to the expression it calls.
+
+    Args:
+        decorator: Decorator expression, or the callee or attribute base reached while recursing.
+
+    Returns:
+        The dotted name built from names and attributes; an attribute whose base renders empty yields only the attribute name, and any other
+        expression yields an empty string.
+    """
     if isinstance(decorator, ast.Call):
         return _decorator_repr(decorator.func)
     if isinstance(decorator, ast.Name):

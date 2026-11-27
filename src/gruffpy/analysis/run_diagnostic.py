@@ -21,6 +21,8 @@ class RunDiagnostic:
         file_path: Optional file path associated with the diagnostic.
         line: Optional one-based source line.
         path: Optional input path associated with the diagnostic.
+        invalidates_run: False for an informational degradation that must not
+            force exit code 2; None preserves the legacy fatal default.
     """
 
     type: str
@@ -28,6 +30,7 @@ class RunDiagnostic:
     file_path: str | None = None
     line: int | None = None
     path: str | None = None
+    invalidates_run: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return this run problem in the stable report payload shape.
@@ -35,12 +38,16 @@ class RunDiagnostic:
         Use when a JSON-capable reporter prepares diagnostics for the caller.
 
         Returns:
-            JSON-compatible mapping; absent locations remain null for a run-wide problem.
+            JSON-compatible mapping with null for any absent location field.
+            The invalidatesRun key preserves an explicit boolean and is omitted when invalidates_run is None.
         """
-        return {
+        payload = {
             "type": self.type,
             "message": self.message,
             "file": self.file_path,
             "line": self.line,
             "path": self.path,
         }
+        if self.invalidates_run is not None:
+            payload["invalidatesRun"] = self.invalidates_run
+        return payload

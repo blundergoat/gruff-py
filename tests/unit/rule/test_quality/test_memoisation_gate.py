@@ -33,18 +33,26 @@ class MyTestCase:
 
 
 def test_scope_computed_exactly_once_per_unit():
+    """Reset the shared computation counter and require one scope-map computation when the default registry analyses a unit.
+
+    Returns:
+        None. Checks that analysing one unit with the default registry increments the scope computation counter once.
+    """
     reset_compute_count()
     unit = make_unit(_TEST_FIXTURE)
     registry = RuleRegistry.defaults()
     before = compute_count()
     registry.analyse([unit], default_ctx())
     after = compute_count()
-    # Exactly one scope-map computation for this unit, regardless of how many
-    # test-quality rules consumed it.
     assert after - before == 1, f"Expected 1 compute; saw {after - before}"
 
 
 def test_scope_cache_persists_across_calls_for_same_tree():
+    """Reset the shared computation counter and verify that analysing the same unit twice performs no further scope computation.
+
+    Returns:
+        None. Checks that the second analysis of the same unit leaves the scope computation counter unchanged.
+    """
     reset_compute_count()
     unit = make_unit(_TEST_FIXTURE)
     registry = RuleRegistry.defaults()
@@ -52,5 +60,4 @@ def test_scope_cache_persists_across_calls_for_same_tree():
     first = compute_count()
     registry.analyse([unit], default_ctx())
     second = compute_count()
-    # Same tree → cache hit; no additional computation.
     assert second == first, f"Cache miss across analyse calls: {first} -> {second}"

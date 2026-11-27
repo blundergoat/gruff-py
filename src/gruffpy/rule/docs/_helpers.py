@@ -1,22 +1,137 @@
 """Shared helpers for documentation-pillar rules.
 
-Public-vs-private detection, decorator pattern recognition (property setter /
-deleter), and parameter-name extraction for signature matching. Lives next to
-the rules that consume it so the docs pillar's policy isn't smeared across the
-broader ``_python_dynamism`` helper.
+Owns public-vs-private scope, property accessor detection, parameter-name extraction, and test-path recognition for ``docs.*`` rules.
+Lives beside the documentation rules so their policy stays separate from general Python dynamism helpers.
 """
 
 import ast
+from collections.abc import Iterator
+
+from gruffpy.rule.context import RuleContext
+from gruffpy.rule.definition import RuleDefinition
+
+EVERY_CALLABLE_OPTION = "everyCallable"
+"""Rule option that widens a docs rule to every callable; each rule's ``default_options`` sets its own default."""
+
+
+def every_callable_enabled(context: RuleContext, definition: RuleDefinition) -> bool:
+    """Return whether a docs rule's everyCallable option is on for this run.
+
+    Args:
+        context: Rule execution context carrying the resolved rule settings.
+        definition: Definition of the rule that reads the option.
+
+    Returns:
+        True when the resolved settings turn the option on, from the rule's default or the project configuration.
+    """
+    return bool(context.settings_for(definition).options.get(EVERY_CALLABLE_OPTION, False))
+
+
+def is_in_documentation_scope(name: str, *, every_callable: bool) -> bool:
+    """Return whether a callable's name puts it in a docs rule's scope.
+
+    Dunder hooks stay out of scope. Underscore-private names come into scope
+    only when the rule's ``everyCallable`` option is on.
+
+    Args:
+        name: Identifier of the function or method.
+        every_callable: Whether the rule's ``everyCallable`` option is on.
+
+    Returns:
+        True when the rule should inspect the callable.
+    """
+    if is_dunder(name):
+        return False
+    return every_callable or not name.startswith("_")
+
+
+def own_body_nodes(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+    """Yield every node in a function's own body, without entering nested scopes.
+
+    A nested function, lambda or class owns its own ``return`` and ``yield``, so
+    the walk stops at them.
+
+    Args:
+        fn: Function node whose body should be walked.
+
+    Yields:
+        Each node that belongs to the function's own scope.
+    """
+    stack: list[ast.AST] = list(fn.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+            continue
+        yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def is_generator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a function yields from its own body.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when the function's own scope contains ``yield`` or ``yield from``.
+    """
+    return any(isinstance(node, ast.Yield | ast.YieldFrom) for node in own_body_nodes(fn))
+
+
+def returns_value(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a function's own body returns or yields a value.
+
+    A bare ``return`` and ``return None`` are not values.
+
+    Args:
+        fn: Function node to inspect.
+
+    Returns:
+        True when the function returns a value or is a generator.
+    """
+    for node in own_body_nodes(fn):
+        if isinstance(node, ast.Yield | ast.YieldFrom):
+            return True
+        if isinstance(node, ast.Return) and node.value is not None and not _is_none_constant(node.value):
+            return True
+    return False
+
+
+def quoted_names(names: list[str]) -> str:
+    """Return names as a quoted English list, such as 'x', 'y' and 'z'.
+
+    Args:
+        names: Identifiers to list, in order; at least one.
+
+    Returns:
+        A single quoted name, or multiple quoted names with a final "and" and commas between earlier names.
+    """
+    quoted = [repr(name) for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
+def _is_none_constant(node: ast.AST) -> bool:
+    """Return whether an expression is the literal None.
+
+    Args:
+        node: Expression to test; returns_value passes the value of a return statement here.
+
+    Returns:
+        True only when the node is an ast.Constant whose value is None; False for every other node.
+    """
+    return isinstance(node, ast.Constant) and node.value is None
 
 
 def is_dunder(name: str) -> bool:
-    """Return whether a name is a Python double-underscore hook.
+    """Recognize names that the documentation rules treat as double-underscore hooks.
 
     Args:
-        name: Identifier to inspect.
+        name: Identifier whose spelling determines whether the documentation rules treat it as a hook.
 
     Returns:
-        True for names such as ``__init__`` and ``__repr__``.
+        True when the name has at least four characters and starts and ends with two underscores.
     """
     return name.startswith("__") and name.endswith("__") and len(name) >= 4
 
@@ -24,11 +139,10 @@ def is_dunder(name: str) -> bool:
 def is_public(name: str) -> bool:
     """Return whether a name should be treated as public documentation surface.
 
-    Dunder names (``__x__``) are framework hooks, not public API; this returns
-    False for them so the caller can decide whether to treat them specially.
+    Names that start with an underscore, including dunder names, are outside the public documentation surface.
 
     Args:
-        name: Identifier to inspect.
+        name: Identifier whose leading underscore marks it as outside the public documentation surface.
 
     Returns:
         True when the name is public and not a dunder hook.
@@ -42,30 +156,28 @@ def is_test_file(display_path: str) -> bool:
     """Return whether a display path points at a conventional Python test file.
 
     Args:
-        display_path: Project-relative source path shown in findings.
+        display_path: Source path shown in findings, matched case-insensitively with either slash style.
 
     Returns:
-        True when the path is under a tests directory or is a top-level
-        ``test_*.py`` file.
+        True when the path sits under a test, tests, or testing directory or uses a test_*.py or *_test.py filename.
     """
-    normalized = display_path.replace("\\", "/").lower()
-    name = normalized.rsplit("/", 1)[-1]
-    if normalized.startswith("tests/") or "/tests/" in normalized:
+    *directories, name = display_path.replace("\\", "/").lower().split("/")
+    # Any file under a test folder counts as test code, whatever its name.
+    if any(directory in {"test", "tests", "testing"} for directory in directories):
         return True
-    return "/" not in normalized and name.startswith("test_") and name.endswith(".py")
+    return (name.startswith("test_") or name.endswith("_test.py")) and name.endswith(".py")
 
 
 def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function is a property setter or deleter.
+    """Identify functions the documentation rules treat as property setters or deleters by their decorator spelling.
 
-    Setters and deleters inherit documentation from the getter; the docs pillar
-    treats them as exempt from missing-docstring checks.
+    The missing-function-docstring rule treats these accessors as covered by the property's getter documentation.
 
     Args:
-        fn: Function node to inspect.
+        fn: Definition whose decorator spellings determine whether it counts as a setter or deleter.
 
     Returns:
-        True when any decorator resolves to ``setter`` or ``deleter``.
+        True when a decorator's extracted dotted name has setter or deleter as its final component. False otherwise.
     """
     for d in fn.decorator_list:
         name = _decorator_name(d)
@@ -78,9 +190,8 @@ def is_property_setter_or_deleter(fn: ast.FunctionDef | ast.AsyncFunctionDef) ->
 def signature_param_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     """Return the user-facing parameter names for a function.
 
-    Excludes ``self`` / ``cls`` when present as the first positional arg.
-    Includes positional-only, regular positional, keyword-only, ``*args``,
-    and ``**kwargs`` names so docstring matching covers all signature slots.
+    Excludes self or cls as the first positional parameter and includes positional-only, positional, keyword-only, variadic positional
+    and variadic keyword names for docstring matching.
 
     Args:
         fn: Function node whose signature should be inspected.
@@ -103,17 +214,16 @@ def signature_param_names(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[st
 
 
 def has_none_only_return(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function's return annotation is exactly ``None``.
+    """Return whether a function's return annotation is exactly None.
 
-    Used by ``docs.missing-return-doc`` to skip void-typed functions.
-    Functions without any return annotation are NOT considered void here -
-    the rule already requires an explicit non-None annotation before firing.
+    Used by docs.missing-return-doc to skip functions annotated as returning None.
+    With everyCallable enabled, unannotated functions can still be checked when their body returns or yields a value.
 
     Args:
         fn: Function node whose return annotation should be inspected.
 
     Returns:
-        True when the return annotation is explicitly ``None``.
+        True for an explicit None annotation; False when the annotation is absent or different.
     """
     annotation = fn.returns
     if annotation is None:
@@ -136,16 +246,15 @@ def has_return_annotation(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function body contains a direct ``raise`` statement.
+    """Return whether a function body contains a direct raise statement.
 
-    Walks control-flow blocks but stops at nested function/lambda boundaries so
-    a wrapped helper's ``raise`` does not trigger the outer rule.
+    Walks control-flow blocks but stops at nested function/lambda boundaries so a wrapped helper's raise does not trigger the outer rule.
 
     Args:
         fn: Function node whose body should be inspected.
 
     Returns:
-        True when a non-nested raise statement appears in the function body.
+        True when a raise appears outside nested functions and lambdas, including inside a nested class body. False otherwise.
     """
     stack: list[ast.AST] = list(fn.body)
     while stack:
@@ -159,7 +268,16 @@ def has_raise_in_body(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _decorator_name(decorator: ast.AST) -> str:
-    """Return a dotted form of *decorator* (``app.route`` for ``@app.route(...)``)."""
+    """Return a dotted form of decorator, such as app.route for @app.route(...).
+
+    Args:
+        decorator: Decorator expression from a function's decorator list, or the callee or attribute base reached while recursing; a call is resolved
+            through its callee and its arguments are ignored.
+
+    Returns:
+        The dotted name joined from Name and Attribute parts; an empty string when the expression, after unwrapping calls, is neither a Name nor an
+        Attribute, and only the attribute name when an attribute's base resolves to an empty string.
+    """
     if isinstance(decorator, ast.Call):
         return _decorator_name(decorator.func)
     if isinstance(decorator, ast.Name):

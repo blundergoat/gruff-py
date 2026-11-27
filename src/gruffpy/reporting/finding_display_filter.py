@@ -1,6 +1,6 @@
 """Reporter-side filter that applies ``--min-severity`` / pillar selection."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from gruffpy.finding.finding import Finding
 from gruffpy.finding.pillar import Pillar
@@ -31,6 +31,21 @@ class FindingDisplayFilter:
     include_rules: tuple[str, ...] = ()
     exclude_rules: tuple[str, ...] = ()
 
+    def with_configured_floor(self, configured_floor: Severity | None) -> "FindingDisplayFilter":
+        """Apply the configured severity floor unless this filter already has one.
+
+        A command-line floor takes precedence over the project default.
+
+        Args:
+            configured_floor: Project minimumSeverity value, or None to keep this filter unchanged.
+
+        Returns:
+            This filter when a floor is already set or configured_floor is None; otherwise a copy with the configured floor.
+        """
+        if self.min_severity is not None or configured_floor is None:
+            return self
+        return replace(self, min_severity=configured_floor)
+
     def filter_findings(self, findings: list[Finding] | tuple[Finding, ...]) -> list[Finding]:
         """Return only the findings that satisfy every active selector.
 
@@ -43,10 +58,7 @@ class FindingDisplayFilter:
         return [finding for finding in findings if self.is_allowed(finding)]
 
     def is_active(self) -> bool:
-        """Return whether any selector would actually filter findings.
-
-        Used by reporters to skip the per-finding loop when nothing's
-        configured.
+        """Return whether any display selector is configured.
 
         Returns:
             True if at least one min-severity / pillar / rule selector is set.
@@ -62,11 +74,10 @@ class FindingDisplayFilter:
     def to_dict(self) -> dict[str, object]:
         """Serialise the filter shape for inclusion in JSON / SARIF report metadata.
 
-        Enum members are flattened to their ``.value`` strings so the
-        output is JSON-native.
+        Enum members use their value strings so the output is JSON-native.
 
         Returns:
-            Plain dict containing the filter configuration plus an ``active`` flag.
+            Plain dict containing the filter configuration plus an active flag.
         """
         return {
             "active": self.is_active(),
@@ -89,10 +100,7 @@ class FindingDisplayFilter:
         Returns:
             True when the finding should appear in reports.
         """
-        if (
-            self.min_severity is not None
-            and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]
-        ):
+        if self.min_severity is not None and _SEVERITY_RANK[finding.severity] < _SEVERITY_RANK[self.min_severity]:
             return False
         if self.include_pillars and finding.pillar not in self.include_pillars:
             return False

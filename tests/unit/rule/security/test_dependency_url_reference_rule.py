@@ -8,16 +8,18 @@ from tests.unit.rule.security._helpers import default_ctx, make_text_unit
 
 
 def test_pyproject_direct_url_dependency_fires_without_leaking_url() -> None:
-    """Direct URL dependencies fire while messages/metadata omit the raw URL."""
+    """Direct URL dependencies fire while messages/metadata omit the raw URL.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = """[project]
 dependencies = [
     "widget @ https://downloads.example.test/widget-1.0.0.tar.gz",
 ]
 """
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert len(findings) == 1
     finding = findings[0]
@@ -33,41 +35,47 @@ dependencies = [
 
 
 def test_vcs_direct_url_is_left_to_git_rule() -> None:
-    """Git URL dependencies are handled by the VCS-specific rule only."""
+    """The direct-URL rule reports nothing for a Git URL dependency.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = """[project]
 dependencies = [
     "widget @ git+https://github.com/acme/widget.git@main",
 ]
 """
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "pyproject.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "pyproject.toml"), default_ctx())
 
     assert findings == []
 
 
 def test_non_dependency_toml_path_skipped() -> None:
-    """Direct URLs outside dependency metadata do not trigger the rule."""
+    """Direct URLs outside dependency metadata do not trigger the rule.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = 'source = "https://downloads.example.test/tool.tar.gz"\n'
 
-    findings = DependencyUrlReferenceRule().analyse(
-        make_text_unit(src, "config/tool.toml"), default_ctx()
-    )
+    findings = DependencyUrlReferenceRule().analyse(make_text_unit(src, "config/tool.toml"), default_ctx())
 
     assert findings == []
 
 
 def test_url_reference_fires_via_registry_text_seam() -> None:
-    """Registry dispatch routes pyproject text units to the URL rule."""
+    """Registry dispatch routes pyproject text units to the URL rule.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = """[project]
 dependencies = [
     "widget @ https://downloads.example.test/widget-1.0.0.tar.gz",
 ]
 """
 
-    findings = RuleRegistry.defaults().analyse(
-        [make_text_unit(src, "pyproject.toml")], default_ctx()
-    )
+    findings = RuleRegistry.defaults().analyse([make_text_unit(src, "pyproject.toml")], default_ctx())
 
     assert "security.dependency-url-reference" in {finding.rule_id for finding in findings}

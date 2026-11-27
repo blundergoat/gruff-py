@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-06-10
+last_reviewed: 2026-11-25
 ---
 
 ## Pattern: Prove rule-precision relaxations with paired scratch repros
@@ -9,7 +9,8 @@ last_reviewed: 2026-06-10
 quietly changing serialized labels or dropping attack shapes. M02 for
 `security.sql-concatenation` had to silence three audit false positives
 without changing `sourceLabel="dynamic-sql"` / `sinkLabel="sql-execution"` for
-surviving findings.
+surviving findings. That rule was retired in 0.6.0 (ADR-029); the approach
+applies to any rule relaxation.
 
 **Approach:** Add attack counter-fixtures before the rule change, then keep
 separate scratch files for allowed false positives and attack shapes. Run the
@@ -77,3 +78,11 @@ future simplifications must keep distinguishing them. See
 `src/gruffpy/rule/test_quality/multiple_aaa_cycles_rule.py` (`_has_call`)
 and the access-only fixtures in
 `tests/unit/rule/test_quality/test_multiple_aaa_cycles_rule.py`.
+
+## Pattern: Surface mixed-severity rule totals in text summaries without altering `gruff.summary.v3`
+
+**Context:** Two-band rules (`complexity.cognitive`, `size.*`) and context-split rules (`docs.missing-function-docstring` warning on production, advisory on `test_*`) emit multiple severities under one rule ID in a single scan. Showing only the worst severity next to the combined count misleads triage (for example, printing `18 complexity.cognitive error` when only `7` are errors and `11` are advisories), while changing the `gruff.summary.v3` JSON envelope would break the cross-port machine contract.
+
+**Approach:** Preserve `"severity"` as the worst severity on each row of `AnalysisReport.finding_counts_by_rule()` (`src/gruffpy/analysis/report.py`, search: `def finding_counts_by_rule`) and attach an additive `"severityCounts"` dict (`{"error": ..., "warning": ..., "advisory": ...}`). In text rendering (`src/gruffpy/cli_summary.py`, search: `def _grouped_severity_label`), show the single severity label when only one level is non-zero, render a compact breakdown (`7 error, 11 advisory`) when multiple levels are present, and size the severity column dynamically (`max(8, max(...))`) so single-severity tables remain byte-identical. Keep `summary_payload()` returning `report.to_summary_dict()` directly so `gruff.summary.v3` stays untouched, and lock both shapes in `tests/unit/analysis/test_report.py` and `tests/integration/test_cli_smoke.py` (search: `def test_cli_summary_group_by_rule_shows_mixed_severity_breakdown`).
+
+**Created:** 2026-11-25

@@ -1,7 +1,7 @@
 """Allowlist applied to dead-code findings before reporting.
 
-Filters findings emitted by ``dead-code.unused-private-function`` and
-``dead-code.unused-private-attribute``. See ADR-015 for the design contract.
+Filters findings emitted by ``dead-code.unused-private-attribute`` and
+``dead-code.exported-but-unreferenced``. See ADR-015 for the design contract.
 """
 
 import fnmatch
@@ -50,9 +50,7 @@ class DeadCodeAllowlist:
     def matches_decorator(self, decorator_names: tuple[str, ...]) -> bool:
         """Return whether any of *decorator_names* is on the decorator allowlist.
 
-        Callers typically pass both the fully-qualified decorator name
-        (``module.Class.decorator``) and its leaf so the allowlist can be
-        spelled either way.
+        Pass both qualified and leaf decorator names to let allowlists use either spelling.
 
         Args:
             decorator_names: Names of decorators on the candidate symbol.

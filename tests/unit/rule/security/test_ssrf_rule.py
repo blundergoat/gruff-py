@@ -13,18 +13,14 @@ from gruffpy.rule.security.ssrf_rule import SsrfRule
 from tests.unit.rule.security._helpers import default_ctx, make_unit
 
 _SUPPORTED_POSITIONAL_SINKS = (
-    pytest.param(
-        "import requests", "requests.get(target_url)", "requests.get", id="requests-get-positional"
-    ),
+    pytest.param("import requests", "requests.get(target_url)", "requests.get", id="requests-get-positional"),
     pytest.param(
         "import requests",
         "requests.post(target_url)",
         "requests.post",
         id="requests-post-positional",
     ),
-    pytest.param(
-        "import requests", "requests.put(target_url)", "requests.put", id="requests-put-positional"
-    ),
+    pytest.param("import requests", "requests.put(target_url)", "requests.put", id="requests-put-positional"),
     pytest.param(
         "import requests",
         "requests.patch(target_url)",
@@ -56,22 +52,12 @@ _SUPPORTED_POSITIONAL_SINKS = (
         id="requests-request-positional",
     ),
     pytest.param("import httpx", "httpx.get(target_url)", "httpx.get", id="httpx-get-positional"),
-    pytest.param(
-        "import httpx", "httpx.post(target_url)", "httpx.post", id="httpx-post-positional"
-    ),
+    pytest.param("import httpx", "httpx.post(target_url)", "httpx.post", id="httpx-post-positional"),
     pytest.param("import httpx", "httpx.put(target_url)", "httpx.put", id="httpx-put-positional"),
-    pytest.param(
-        "import httpx", "httpx.patch(target_url)", "httpx.patch", id="httpx-patch-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.delete(target_url)", "httpx.delete", id="httpx-delete-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.head(target_url)", "httpx.head", id="httpx-head-positional"
-    ),
-    pytest.param(
-        "import httpx", "httpx.options(target_url)", "httpx.options", id="httpx-options-positional"
-    ),
+    pytest.param("import httpx", "httpx.patch(target_url)", "httpx.patch", id="httpx-patch-positional"),
+    pytest.param("import httpx", "httpx.delete(target_url)", "httpx.delete", id="httpx-delete-positional"),
+    pytest.param("import httpx", "httpx.head(target_url)", "httpx.head", id="httpx-head-positional"),
+    pytest.param("import httpx", "httpx.options(target_url)", "httpx.options", id="httpx-options-positional"),
     pytest.param(
         "import httpx",
         'httpx.request("GET", target_url)',
@@ -141,27 +127,17 @@ _SUPPORTED_KEYWORD_SINKS = (
         "requests.request",
         id="requests-request-keyword-url",
     ),
-    pytest.param(
-        "import httpx", "httpx.get(url=target_url)", "httpx.get", id="httpx-get-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.post(url=target_url)", "httpx.post", id="httpx-post-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.put(url=target_url)", "httpx.put", id="httpx-put-keyword-url"
-    ),
-    pytest.param(
-        "import httpx", "httpx.patch(url=target_url)", "httpx.patch", id="httpx-patch-keyword-url"
-    ),
+    pytest.param("import httpx", "httpx.get(url=target_url)", "httpx.get", id="httpx-get-keyword-url"),
+    pytest.param("import httpx", "httpx.post(url=target_url)", "httpx.post", id="httpx-post-keyword-url"),
+    pytest.param("import httpx", "httpx.put(url=target_url)", "httpx.put", id="httpx-put-keyword-url"),
+    pytest.param("import httpx", "httpx.patch(url=target_url)", "httpx.patch", id="httpx-patch-keyword-url"),
     pytest.param(
         "import httpx",
         "httpx.delete(url=target_url)",
         "httpx.delete",
         id="httpx-delete-keyword-url",
     ),
-    pytest.param(
-        "import httpx", "httpx.head(url=target_url)", "httpx.head", id="httpx-head-keyword-url"
-    ),
+    pytest.param("import httpx", "httpx.head(url=target_url)", "httpx.head", id="httpx-head-keyword-url"),
     pytest.param(
         "import httpx",
         "httpx.options(url=target_url)",
@@ -201,18 +177,12 @@ def _ssrf_findings_for_supported_call(
     Args:
         http_client_import: Direct import required by the supported call shape.
         http_client_call: HTTP call statement the scanner user wrote.
-        target_url_assignment: Source lines that make the URL tainted, fixed, or killed.
+        target_url_assignment: Source that assigns a request URL, assigns a fixed URL, or replaces a request URL with a fixed one.
 
     Returns:
-        SSRF findings the user would receive for the call.
+        SSRF findings for the call. The result is empty when the call uses a fixed URL, including after reassignment.
     """
-    source = (
-        f"{http_client_import}\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        f"    {target_url_assignment}\n"
-        f"    {http_client_call}\n"
-    )
+    source = f"{http_client_import}\nfrom flask import request\ndef fetch():\n    {target_url_assignment}\n    {http_client_call}\n"
     return SsrfRule().analyse(make_unit(source), default_ctx())
 
 
@@ -225,12 +195,15 @@ def test_supported_sink_matrix_positional_url_emits(
     http_client_call: str,
     expected_target: str,
 ) -> None:
-    """Show one SSRF finding for every documented positional URL call.
+    """Expect one SSRF finding per documented client call with a tainted positional URL.
 
     Args:
         http_client_import: Direct import required by the supported call shape.
-        http_client_call: HTTP call statement the scanner user wrote.
-        expected_target: Stable target label the finding should display.
+        http_client_call: HTTP call statement inserted into the fixture function.
+        expected_target: Expected target label in the finding metadata.
+
+    Returns:
+        None. Asserts that the tainted positional URL produces exactly one finding with the expected target label.
     """
     findings = _ssrf_findings_for_supported_call(
         http_client_import,
@@ -249,12 +222,15 @@ def test_supported_sink_matrix_keyword_url_emits(
     http_client_call: str,
     expected_target: str,
 ) -> None:
-    """Show one SSRF finding for every documented ``url=`` call.
+    """Expect one SSRF finding per documented client call with a tainted url= argument.
 
     Args:
         http_client_import: Direct import required by the supported call shape.
-        http_client_call: HTTP call statement the scanner user wrote.
-        expected_target: Stable target label the finding should display.
+        http_client_call: HTTP call statement inserted into the fixture function.
+        expected_target: Expected target label in the finding metadata.
+
+    Returns:
+        None. Asserts that the tainted url= argument produces exactly one finding with the expected target label.
     """
     findings = _ssrf_findings_for_supported_call(
         http_client_import,
@@ -277,8 +253,11 @@ def test_supported_sink_matrix_literal_url_stays_quiet(
 
     Args:
         http_client_import: Direct import required by the supported call shape.
-        http_client_call: HTTP call statement the scanner user wrote.
-        expected_target: Matrix label retained to make each quiet case identifiable.
+        http_client_call: HTTP call statement inserted into the fixture function.
+        expected_target: Target label from the shared matrix, unused in this no-findings check.
+
+    Returns:
+        None. Asserts that a literal URL produces no findings for the supplied client call.
     """
     del expected_target
     findings = _ssrf_findings_for_supported_call(
@@ -298,12 +277,15 @@ def test_supported_sink_matrix_killed_taint_stays_quiet(
     http_client_call: str,
     expected_target: str,
 ) -> None:
-    """Keep every documented HTTP call quiet after the user replaces taint.
+    """Expect no SSRF findings when a request-derived URL is overwritten with a fixed URL.
 
     Args:
         http_client_import: Direct import required by the supported call shape.
-        http_client_call: HTTP call statement the scanner user wrote.
-        expected_target: Matrix label retained to make each quiet case identifiable.
+        http_client_call: HTTP call statement inserted into the fixture function.
+        expected_target: Target label from the shared matrix, unused in this no-findings check.
+
+    Returns:
+        None. Asserts that the client call produces no findings after a fixed URL replaces the request-derived URL.
     """
     del expected_target
     findings = _ssrf_findings_for_supported_call(
@@ -332,11 +314,14 @@ def test_unrelated_receiver_with_http_import_stays_quiet(
     receiver_setup: str,
     receiver_call: str,
 ) -> None:
-    """Do not label application-owned ``get`` or ``request`` calls as SSRF.
+    """Do not label application-owned get or request calls as SSRF.
 
     Args:
         receiver_setup: Local object setup that proves the receiver is application-owned.
         receiver_call: Unrelated method call receiving user-controlled data.
+
+    Returns:
+        None; successful completion means the assertions passed.
     """
     source = (
         "import requests\n"
@@ -353,14 +338,12 @@ def test_unrelated_receiver_with_http_import_stays_quiet(
 
 
 def test_bare_get_is_not_supported_http_sink() -> None:
-    """Keep a bare application ``get(...)`` call out of the HTTP-client matrix."""
-    source = (
-        "import requests\n"
-        "from flask import request\n"
-        "def inspect_receiver():\n"
-        "    target_url = request.args['url']\n"
-        "    get(target_url)\n"
-    )
+    """Expect no SSRF finding for an unbound get call, even when requests is imported.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    source = "import requests\nfrom flask import request\ndef inspect_receiver():\n    target_url = request.args['url']\n    get(target_url)\n"
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
@@ -380,6 +363,9 @@ def test_application_owned_http_module_name_without_import_stays_quiet(
     Args:
         receiver_name: Application variable that resembles a supported module.
         receiver_call: Same-shaped application method receiving tainted data.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     source = (
         "from flask import request\n"
@@ -400,6 +386,9 @@ def test_rebound_http_module_import_stays_quiet(receiver_name: str) -> None:
 
     Args:
         receiver_name: Supported module root replaced by an application object.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     source = (
         f"import {receiver_name}\n"
@@ -417,10 +406,13 @@ def test_rebound_http_module_import_stays_quiet(receiver_name: str) -> None:
 
 @pytest.mark.parametrize("receiver_name", ("requests", "httpx"))
 def test_function_parameter_shadowing_http_module_stays_quiet(receiver_name: str) -> None:
-    """A local parameter is not the otherwise imported HTTP-client module.
+    """Expect no SSRF finding when the call receiver is a parameter that shadows the imported HTTP client module.
 
     Args:
-        receiver_name: Supported module root reused as a callback parameter.
+        receiver_name: Imported HTTP-client name reused as a parameter of the fixture function.
+
+    Returns:
+        None. Asserts no SSRF findings when the call receiver is a parameter that shadows the imported client.
     """
     source = (
         f"import {receiver_name}\n"
@@ -434,14 +426,12 @@ def test_function_parameter_shadowing_http_module_stays_quiet(receiver_name: str
 
 
 def test_module_import_after_function_definition_still_proves_receiver() -> None:
-    """A global import is resolved when the previously defined endpoint runs."""
-    source = (
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-        "import requests\n"
-    )
+    """Expect a finding for requests.get when its module is imported after the function definition.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    source = "from flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\nimport requests\n"
 
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -464,21 +454,15 @@ def test_module_import_after_function_definition_still_proves_receiver() -> None
 def test_submodule_import_still_proves_the_http_client(import_block: str) -> None:
     """A submodule import binds the same package root, so the sink stays visible.
 
-    ``import requests.adapters`` binds ``requests`` exactly as ``import requests``
-    does, and configuring an adapter alongside the package is ordinary usage. If
-    either spelling is read as a shadowing binding the rule goes silent on a real
-    tainted sink.
+    Importing requests.adapters binds requests like importing requests; mistaking either for a shadow hides the tainted sink.
 
     Args:
         import_block: Supported package or submodule import ordering under test.
+
+    Returns:
+        None; successful completion means the assertions passed.
     """
-    source = (
-        f"{import_block}"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-    )
+    source = f"{import_block}from flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\n"
 
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -486,27 +470,23 @@ def test_submodule_import_still_proves_the_http_client(import_block: str) -> Non
 
 
 def test_unrelated_module_sharing_a_client_name_prefix_stays_quiet() -> None:
-    """``requests_oauthlib`` is a different distribution, not the supported client."""
-    source = (
-        "import requests_oauthlib\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    requests.get(target_url)\n"
-    )
+    """Expect no SSRF finding for requests.get when the similarly named import binds only requests_oauthlib.
+
+    Returns:
+        None. Asserts that requests.get yields no findings when the fixture imports requests_oauthlib without importing requests.
+    """
+    source = "import requests_oauthlib\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    requests.get(target_url)\n"
 
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_parent_package_import_alone_does_not_prove_qualified_urlopen() -> None:
-    """``import urllib`` does not bind ``urllib.request``, so the sink stays unproven."""
-    source = (
-        "import urllib\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    target_url = request.args['url']\n"
-        "    urllib.request.urlopen(target_url)\n"
-    )
+    """import urllib does not bind urllib.request, so the sink stays unproven.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    source = "import urllib\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    urllib.request.urlopen(target_url)\n"
 
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
@@ -572,12 +552,14 @@ def test_restoring_module_import_after_shadow_proves_receiver(
 ) -> None:
     """Trust the last module-scope binding a called function actually sees.
 
-    The whole module executes before the endpoint runs, so a canonical import
-    that follows an earlier shadow restores the documented client.
+    A canonical module-level import after a shadow restores the client binding for the call inside the endpoint.
 
     Args:
         source: Module shadow, then the endpoint, then the canonical import.
         expected_target: Documented client spelling reported to the user.
+
+    Returns:
+        None. Fails the test unless exactly one finding carries the expected target.
     """
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -640,12 +622,19 @@ def test_module_shadow_after_import_keeps_call_quiet(source: str) -> None:
 
     Args:
         source: Canonical import replaced by an application binding before use.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_application_owned_urllib_receiver_without_import_stays_quiet() -> None:
-    """A same-shaped application namespace is not `urllib.request`."""
+    """Expect no SSRF finding when an application object only resembles urllib.request.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     source = (
         "from flask import request\n"
         "class RequestClient:\n"
@@ -662,7 +651,11 @@ def test_application_owned_urllib_receiver_without_import_stays_quiet() -> None:
 
 
 def test_rebound_direct_urlopen_import_stays_quiet() -> None:
-    """A local replacement invalidates an earlier bare `urlopen` import."""
+    """A local replacement invalidates an earlier bare urlopen import.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     source = (
         "from urllib.request import urlopen\n"
         "from flask import request\n"
@@ -708,6 +701,9 @@ def test_rebound_http_client_method_stays_quiet(
         client_import: Direct import that initially establishes client trust.
         replacement: Attribute assignment replacing the supported sink.
         client_call: Same-shaped call after the replacement.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     source = (
         f"{client_import}\n"
@@ -743,11 +739,7 @@ def test_rebound_http_client_method_stays_quiet(
             "    requests.get(target_url); requests.get = identity\n",
         ),
         pytest.param(
-            "import requests\n"
-            "from flask import request\n"
-            "target_url = request.args['url']\n"
-            "requests.get(target_url)\n"
-            "requests = object()\n",
+            "import requests\nfrom flask import request\ntarget_url = request.args['url']\nrequests.get(target_url)\nrequests = object()\n",
         ),
         pytest.param(
             "import requests\n"
@@ -782,6 +774,9 @@ def test_later_non_retroactive_rebinding_keeps_earlier_supported_call(
 
     Args:
         source: Direct client call followed by a non-retroactive replacement.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
 
@@ -818,6 +813,9 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
 
     Args:
         source: Function whose later local binding invalidates earlier spelling.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
@@ -826,11 +824,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
     "source",
     (
         pytest.param(
-            "import requests as r\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    r.get(target_url)\n",
+            "import requests as r\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    r.get(target_url)\n",
             id="requests-alias",
         ),
         pytest.param(
@@ -842,11 +836,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
             id="requests-session",
         ),
         pytest.param(
-            "import httpx\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    httpx.Client().get(target_url)\n",
+            "import httpx\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    httpx.Client().get(target_url)\n",
             id="httpx-client",
         ),
         pytest.param(
@@ -869,11 +859,7 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
             id="urllib3-pool",
         ),
         pytest.param(
-            "from requests import get\n"
-            "from flask import request\n"
-            "def fetch():\n"
-            "    target_url = request.args['url']\n"
-            "    get(target_url)\n",
+            "from requests import get\nfrom flask import request\ndef fetch():\n    target_url = request.args['url']\n    get(target_url)\n",
             id="bare-requests-get",
         ),
         pytest.param(
@@ -896,41 +882,45 @@ def test_later_function_local_binding_still_shadows_earlier_spelling(
     ),
 )
 def test_deferred_http_client_shapes_stay_quiet(source: str) -> None:
-    """Keep aliases, client instances, wrappers, and urllib3 out of findings.
+    """Keep aliases, client instances, wrappers, urllib3 calls, and directly imported requests.get out of findings.
 
     Args:
         source: User endpoint containing one deliberately unsupported sink shape.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
     """
     assert SsrfRule().analyse(make_unit(source), default_ctx()) == []
 
 
 def test_requests_get_tainted_url_emits():
-    """Warn when a Flask URL reaches the common ``requests.get`` sink."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    requests.get(url)\n"
-    )
+    """Warn when a Flask URL reaches the common requests.get sink.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "import requests\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    requests.get(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_requests_get_request_accessor_integration_emits() -> None:
-    """Warn when a user sends a Flask query accessor directly to ``requests``."""
-    source = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get(request.args.get('url'))\n"
-    )
+    """Expect an SSRF finding when requests.get receives a value directly from Flask's query accessor.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    source = "import requests\nfrom flask import request\ndef fetch():\n    requests.get(request.args.get('url'))\n"
     findings = SsrfRule().analyse(make_unit(source), default_ctx())
     assert len(findings) == 1
 
 
 def test_requests_post_fstring_url_emits():
-    """Warn when user input is interpolated into a ``requests.post`` URL."""
+    """Warn when user input is interpolated into a requests.post URL.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = (
         "import requests\n"
         "from flask import request\n"
@@ -943,70 +933,66 @@ def test_requests_post_fstring_url_emits():
 
 
 def test_requests_get_literal_url_skipped():
-    """Keep a fixed health-check URL out of the user's SSRF findings."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get('https://api.example.com/healthcheck')\n"
-    )
+    """Keep a fixed health-check URL out of the user's SSRF findings.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "import requests\nfrom flask import request\ndef fetch():\n    requests.get('https://api.example.com/healthcheck')\n"
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_requests_request_method_then_tainted_url_emits():
-    """Warn when ``requests.request`` receives a tainted positional URL."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    requests.request('GET', url)\n"
-    )
+    """Warn when requests.request receives a tainted positional URL.
+
+    Returns:
+        None. Fails the test if the rule returns a finding count other than one.
+    """
+    src = "import requests\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    requests.request('GET', url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_urlopen_tainted_url_emits():
-    """Warn when a directly imported ``urlopen`` receives a tainted URL."""
-    src = (
-        "from urllib.request import urlopen\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    urlopen(url)\n"
-    )
+    """Warn when a directly imported urlopen receives a tainted URL.
+
+    Returns:
+        None. Fails the test unless the directly imported call produces one finding.
+    """
+    src = "from urllib.request import urlopen\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    urlopen(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_httpx_get_tainted_url_emits():
-    """Warn when a Flask URL reaches the common ``httpx.get`` sink."""
-    src = (
-        "import httpx\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    url = request.args['url']\n"
-        "    httpx.get(url)\n"
-    )
+    """Warn when a Flask URL reaches the common httpx.get sink.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "import httpx\nfrom flask import request\ndef fetch():\n    url = request.args['url']\n    httpx.get(url)\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_unknown_wrapper_call_breaks_taint():
-    """Keep unknown wrappers quiet under ADR-017's conservative posture."""
+    """Expect no SSRF finding when an unknown wrapper supplies the request URL, as specified by ADR-017.
+
+    Returns:
+        None. Fails the test if the analyzer reports a finding for the fixture.
+    """
     src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    raw = request.args['url']\n"
-        "    safe = build_url(raw)\n"
-        "    requests.get(safe)\n"
+        "import requests\nfrom flask import request\ndef fetch():\n    raw = request.args['url']\n    safe = build_url(raw)\n    requests.get(safe)\n"
     )
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_reassigned_url_breaks_taint():
-    """Keep a request quiet after the user replaces its tainted URL."""
+    """Expect no SSRF finding after the fixture replaces the user-controlled URL with a fixed URL.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = (
         "import requests\n"
         "from flask import request\n"
@@ -1019,7 +1005,11 @@ def test_reassigned_url_breaks_taint():
 
 
 def test_branch_join_conservative_kills_taint():
-    """Keep branch-ambiguous URLs quiet under the conservative join policy."""
+    """Expect no SSRF finding when only one branch leaves the URL user-controlled.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = (
         "import requests\n"
         "from flask import request\n"
@@ -1033,46 +1023,54 @@ def test_branch_join_conservative_kills_taint():
 
 
 def test_no_http_client_imported_skipped():
-    """Keep an unrelated cache lookup quiet when no HTTP client is used."""
-    src = (
-        "from flask import request\n"
-        "def view():\n"
-        "    payload = request.args['p']\n"
-        "    cache.get(payload)\n"
-    )
+    """Keep an unrelated cache lookup quiet when no HTTP client is used.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "from flask import request\ndef view():\n    payload = request.args['p']\n    cache.get(payload)\n"
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_carries_security_metadata():
-    """Keep the source and sink labels stable for downstream report users."""
-    src = (
-        "import requests\n"
-        "from flask import request\n"
-        "def fetch():\n"
-        "    requests.get(request.args['url'])\n"
-    )
+    """Keep the source and sink labels stable for downstream report users.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "import requests\nfrom flask import request\ndef fetch():\n    requests.get(request.args['url'])\n"
     finding = SsrfRule().analyse(make_unit(src), default_ctx())[0]
     assert finding.metadata["sinkLabel"] == "http-client"
     assert finding.metadata["sourceLabel"] == "user-controlled-url"
 
 
 def test_module_qualified_request_taints_arg():
-    """Warn when the module-qualified Flask proxy reaches ``requests.get``."""
-    src = (
-        "import requests\nimport flask\ndef fetch():\n    requests.get(flask.request.args['url'])\n"
-    )
+    """Expect an SSRF finding when requests.get receives a query value read through flask.request.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
+    src = "import requests\nimport flask\ndef fetch():\n    requests.get(flask.request.args['url'])\n"
     findings = SsrfRule().analyse(make_unit(src), default_ctx())
     assert len(findings) == 1
 
 
 def test_application_object_request_attribute_stays_quiet():
-    """Keep an application object's request-shaped attribute out of SSRF findings."""
+    """Keep an application object's request-shaped attribute out of SSRF findings.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = "import requests\ndef fetch(other):\n    requests.get(other.request.args['url'])\n"
     assert SsrfRule().analyse(make_unit(src), default_ctx()) == []
 
 
 def test_fastapi_query_parameter_taints_arg():
-    """Warn when a FastAPI query parameter reaches ``requests.get``."""
+    """Warn when a FastAPI query parameter reaches requests.get.
+
+    Returns:
+        None; assertion failures report mismatches to the test runner.
+    """
     src = (
         "import requests\n"
         "from fastapi import FastAPI, Query\n"

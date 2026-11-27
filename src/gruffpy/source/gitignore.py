@@ -7,6 +7,16 @@ from pathspec import GitIgnoreSpec
 
 
 def _load_spec(directory: Path) -> GitIgnoreSpec | None:
+    """Parse the .gitignore file that sits directly in a directory into a spec the matcher can apply.
+
+    Undecodable bytes are replaced rather than rejected, so a file with a bad encoding still loads.
+
+    Args:
+        directory: Directory whose own .gitignore file is read; parent and child directories are not consulted.
+
+    Returns:
+        Spec built from the file's lines, or None when the directory has no .gitignore file or reading it fails with an OSError.
+    """
     gitignore = directory / ".gitignore"
     if not gitignore.is_file():
         return None
@@ -14,7 +24,29 @@ def _load_spec(directory: Path) -> GitIgnoreSpec | None:
         content = gitignore.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    return GitIgnoreSpec.from_lines(content.splitlines())
+    return GitIgnoreSpec.from_lines(_usable_lines(content.splitlines()))
+
+
+def _usable_lines(lines: list[str]) -> list[str]:
+    """Drop each .gitignore line pathspec cannot compile, so one bad line costs only itself, as it does in git.
+
+    Git treats a lone ``!`` or a pattern ending in an unescaped backslash as matching nothing; pathspec raises a
+    ValueError for both, which would otherwise end the whole scan with a traceback.
+
+    Args:
+        lines: The file's lines, comments and blank lines included.
+
+    Returns:
+        The lines in their original order, without those pathspec rejects; comments and blank lines are kept.
+    """
+    usable = []
+    for line in lines:
+        try:
+            GitIgnoreSpec.from_lines([line])
+        except ValueError:
+            continue
+        usable.append(line)
+    return usable
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +67,10 @@ class GitignoreMatcher:
         """Create a matcher rooted at a project directory.
 
         Args:
-            root: Project root whose nested ``.gitignore`` files should apply.
+            root: Project root whose nested .gitignore files should apply.
 
         Returns:
-            Matcher with the root ``.gitignore`` loaded when present.
+            Matcher with a cached root spec when its .gitignore is readable; otherwise the root check is cached without a spec.
         """
         resolved = root.resolve() if root.exists() else root
         matcher = cls(root=resolved)
@@ -46,25 +78,24 @@ class GitignoreMatcher:
         return matcher
 
     def has_rules(self) -> bool:
-        """Return whether any gitignore rules have been loaded.
+        """Return whether any readable .gitignore file has been cached, even if it contains no patterns.
 
         Returns:
-            True when at least one applicable ``.gitignore`` file was found.
+            True when at least one parsed spec is cached, including an empty spec; False otherwise.
         """
         return bool(self._specs_by_dir)
 
     def is_ignored(self, path: Path, *, is_dir: bool = False) -> bool:
         """Return whether a path is excluded by project gitignore rules.
 
-        ``is_dir`` should be set when the path refers to a directory so
-        trailing-slash patterns like ``build/`` match correctly.
+        Set is_dir for directory-only patterns; matching lazily caches ancestor .gitignore specs and missing files.
 
         Args:
-            path: File or directory path to check.
+            path: Absolute file or directory path, or a path relative to the matcher's root.
             is_dir: Whether the path should be matched as a directory.
 
         Returns:
-            True when the path is ignored by the applicable gitignore stack.
+            True when applicable rules exclude the path or an ancestor; False for outside-root paths, paths containing .., or no exclusion.
         """
         abs_path = path if path.is_absolute() else self.root / path
         try:
@@ -80,9 +111,7 @@ class GitignoreMatcher:
             ancestor = current_dir / part
             ancestor_is_ignored = None
             for gitignore_dir in applicable_dirs:
-                ancestor_is_ignored = self._is_ignored_by_spec(
-                    gitignore_dir, ancestor, is_dir=True, prior=ancestor_is_ignored
-                )
+                ancestor_is_ignored = self._is_ignored_by_spec(gitignore_dir, ancestor, is_dir=True, prior=ancestor_is_ignored)
             if ancestor_is_ignored is True:
                 return True
             current_dir = ancestor
@@ -102,6 +131,21 @@ class GitignoreMatcher:
         is_dir: bool,
         prior: bool | None,
     ) -> bool | None:
+        """Apply one directory's loaded .gitignore to a path, keeping the verdict from shallower files when this one does not decide.
+
+        Called for each applicable directory from the root downward, so a deeper file's verdict replaces a shallower one only when this spec decides
+        the path.
+
+        Args:
+            gitignore_dir: Directory whose cached .gitignore spec is consulted; a directory with no loaded spec leaves the verdict unchanged.
+            abs_path: Absolute path being checked, made relative to gitignore_dir before matching.
+            is_dir: Whether the path is matched as a directory, so directory-only patterns such as build/ can apply.
+            prior: Verdict from shallower .gitignore files; None means no shallower spec has decided the path.
+
+        Returns:
+            True when this spec ignores the path, False when a negation pattern re-includes it, or prior unchanged when gitignore_dir has no spec, the
+            path is outside or equal to gitignore_dir, no pattern matches, or a directory is matched only by a contents-only /** pattern.
+        """
         spec = self._specs_by_dir.get(gitignore_dir)
         if spec is None:
             return prior
@@ -119,14 +163,25 @@ class GitignoreMatcher:
         rel_str: str,
         is_dir: bool,
     ) -> bool | None:
+        """Ask one gitignore spec for its verdict on a relative path, treating a directory matched only by a trailing /** as undecided.
+
+        pathspec matches a pattern such as build/** against the trailing-slash form of the build directory itself, while git applies it only to what
+        is inside. Returning None lets the caller keep any verdict from a shallower .gitignore.
+
+        Args:
+            spec: Parsed .gitignore spec to check against.
+            rel_str: Forward-slash path relative to the spec's directory, without a trailing slash.
+            is_dir: Whether the path is a directory; when set, a trailing slash is added before matching, and an ignore verdict that comes only from a
+                contents-only /** match is treated as undecided.
+
+        Returns:
+            True when the deciding pattern ignores the path, False when a negation pattern re-includes it, or None when no pattern matches, or when a
+            directory is ignored only by a deciding pattern ending in /** and the path without its trailing slash matches no pattern.
+        """
         result = spec.check_file(_match_path(rel_str, is_dir))
         if result.include is None:
             return None
-        if (
-            is_dir
-            and result.include is True
-            and GitignoreMatcher._is_directory_match_contents_only(spec, rel_str, result.index)
-        ):
+        if is_dir and result.include is True and GitignoreMatcher._is_directory_match_contents_only(spec, rel_str, result.index):
             return None
         return bool(result.include)
 
@@ -136,6 +191,18 @@ class GitignoreMatcher:
         rel_str: str,
         pattern_index: int | None,
     ) -> bool:
+        """Detect a directory whose match was decided by a pattern ending in /**, which git applies to its contents rather than itself.
+
+        Args:
+            spec: Parsed .gitignore spec that produced the directory match.
+            rel_str: Directory path relative to the spec's directory, without a trailing slash, rechecked to see whether any pattern matches it on its
+                own.
+            pattern_index: Index into the spec's patterns of the pattern that decided the trailing-slash match; None means no pattern decided.
+
+        Returns:
+            True when the path without its trailing slash matches nothing and the deciding pattern, ignoring a leading !, ends with /**; False
+            otherwise, including when pattern_index is None.
+        """
         if pattern_index is None:
             return False
         without_slash = spec.check_file(rel_str)
@@ -145,6 +212,17 @@ class GitignoreMatcher:
         return isinstance(pattern, str) and pattern.lstrip("!").endswith("/**")
 
     def _ensure_loaded(self, directory: Path) -> None:
+        """Load and cache a directory's .gitignore the first time the matcher reaches that directory, so each file is read at most once.
+
+        The directory is recorded as loaded even when it has no readable .gitignore, so a missing file is not looked up again; only directories with a
+        spec are added to the spec cache.
+
+        Args:
+            directory: Directory whose .gitignore should be loaded if it has not been checked already.
+
+        Returns:
+            None. Marks an unchecked directory as loaded and caches its parsed spec when available.
+        """
         if directory in self._loaded_dirs:
             return
         self._loaded_dirs.add(directory)
@@ -154,6 +232,16 @@ class GitignoreMatcher:
 
 
 def _relative_gitignore_path(abs_path: Path, gitignore_dir: Path) -> str | None:
+    """Express a path relative to a .gitignore's directory in the forward-slash form gitignore patterns are matched against.
+
+    Args:
+        abs_path: Absolute path being checked.
+        gitignore_dir: Directory holding the .gitignore whose patterns the path will be matched against.
+
+    Returns:
+        Relative path with backslashes converted to forward slashes, or None when the path is outside gitignore_dir or is gitignore_dir itself,
+        meaning that .gitignore has no say.
+    """
     try:
         rel = abs_path.relative_to(gitignore_dir)
     except ValueError:
@@ -165,6 +253,15 @@ def _relative_gitignore_path(abs_path: Path, gitignore_dir: Path) -> str | None:
 
 
 def _match_path(rel_str: str, is_dir: bool) -> str:
+    """Add the trailing slash that marks a directory, so directory-only gitignore patterns such as build/ can match it.
+
+    Args:
+        rel_str: Forward-slash path relative to the .gitignore's directory.
+        is_dir: Whether the path is a directory; when False the path is returned unchanged.
+
+    Returns:
+        rel_str with one trailing slash when is_dir is set and it does not already end in a slash; otherwise rel_str unchanged.
+    """
     if is_dir and not rel_str.endswith("/"):
         return f"{rel_str}/"
     return rel_str

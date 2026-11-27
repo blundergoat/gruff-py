@@ -8,17 +8,19 @@ from gruffpy.command.metric_calibration import (
 )
 
 _TWO_FUNCTION_SAMPLE = (
-    "def simple(value):\n"
-    "    return value\n"
-    "\n"
-    "def branchy(value):\n"
-    "    if value > 0 and value < 10:\n"
-    "        return value + 1\n"
-    "    return value - 1\n"
+    "def simple(value):\n    return value\n\ndef branchy(value):\n    if value > 0 and value < 10:\n        return value + 1\n    return value - 1\n"
 )
 
 
 def _two_function_report(tmp_path: Path):
+    """Build a metric calibration report, with no config, over a project holding one simple and one branchy function.
+
+    Args:
+        tmp_path: Project root that receives src/sample.py.
+
+    Returns:
+        The calibration report for the src folder.
+    """
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text(_TWO_FUNCTION_SAMPLE)
@@ -32,6 +34,14 @@ def _two_function_report(tmp_path: Path):
 
 
 def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) -> None:
+    """Count one discovered file, one parsed file and two functions, with no input errors.
+
+    Args:
+        tmp_path: Project root for the two-function report.
+
+    Returns:
+        None; the report must contain the expected file and function counts without input errors.
+    """
     report = _two_function_report(tmp_path)
     assert (
         report.files_discovered,
@@ -42,8 +52,16 @@ def test_metric_calibration_report_counts_files_and_functions(tmp_path: Path) ->
 
 
 def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> None:
+    """Publish the cyclomatic minimum, median, 99th percentile and maximum for the two functions.
+
+    Args:
+        tmp_path: Project root whose two functions supply the cyclomatic values.
+
+    Returns:
+        None. Checks the reported minimum, median, 99th percentile, and maximum cyclomatic complexity.
+    """
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # Payload values are object; metric rows are mappings.
     cyclomatic = metrics["cyclomatic"]
     assert (cyclomatic["min"], cyclomatic["p50"], cyclomatic["p99"], cyclomatic["max"]) == (
         1,
@@ -54,8 +72,16 @@ def test_metric_calibration_payload_cyclomatic_distribution(tmp_path: Path) -> N
 
 
 def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: Path) -> None:
+    """Publish Halstead volume with one error threshold of 400 and no separate warning or error threshold keys.
+
+    Args:
+        tmp_path: Project root whose report supplies the Halstead entry.
+
+    Returns:
+        None. Checks that Halstead volume has one error threshold of 400 and no separate warning or error threshold keys.
+    """
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # Payload values are object; metric rows are mappings.
     hv = metrics["halsteadVolume"]
     assert hv["threshold"] == 400
     assert hv["thresholdSeverity"] == "error"
@@ -64,18 +90,43 @@ def test_metric_calibration_payload_collapses_single_threshold_rules(tmp_path: P
 
 
 def test_metric_calibration_payload_maintainability_uses_below_direction(tmp_path: Path) -> None:
+    """Publish the maintainability index with a below threshold direction.
+
+    Args:
+        tmp_path: Project root whose report supplies the maintainability entry.
+
+    Returns:
+        None. Checks that the maintainability index uses the below threshold direction.
+    """
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
-    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # metric JSON
+    metrics = {m["name"]: m for m in payload["metrics"]}  # type: ignore[index]  # Payload values are object; metric rows are mappings.
     assert metrics["maintainabilityIndex"]["thresholdDirection"] == "below"
 
 
 def test_metric_calibration_payload_top_cyclomatic_names_branchy(tmp_path: Path) -> None:
+    """Name the branchy function first in the top cyclomatic list.
+    The payload's object-typed top entry maps metric names to lists of row mappings.
+
+    Args:
+        tmp_path: Project root whose branchy function must top the list.
+
+    Returns:
+        None; the first cyclomatic result must name the branchy function.
+    """
     payload = metric_calibration_payload(_two_function_report(tmp_path), top=1)
     top = payload["top"]  # type: ignore[index]  # metric JSON
     assert top["cyclomatic"][0]["symbol"] == "branchy"  # type: ignore[index]  # metric JSON
 
 
 def test_metric_calibration_text_is_human_readable(tmp_path: Path) -> None:
+    """Render the text report with its title, distribution and top-cyclomatic sections and the one function's location text.
+
+    Args:
+        tmp_path: Project root holding one single-return function.
+
+    Returns:
+        None; the rendered report must contain the expected sections and function location.
+    """
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text("def only():\n    return 1\n")
@@ -98,6 +149,14 @@ def test_metric_calibration_text_is_human_readable(tmp_path: Path) -> None:
 
 
 def test_metric_calibration_payload_is_json_serialisable(tmp_path: Path) -> None:
+    """Encode the calibration payload as JSON that carries its schema version.
+
+    Args:
+        tmp_path: Project root holding one single-return function.
+
+    Returns:
+        None. Encodes the payload as JSON and checks that the schema version appears in the result.
+    """
     src = tmp_path / "src"
     src.mkdir()
     (src / "sample.py").write_text("def only():\n    return 1\n")

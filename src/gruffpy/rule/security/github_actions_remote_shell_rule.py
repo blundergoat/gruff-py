@@ -34,9 +34,7 @@ class GithubActionsRemoteShellRule(SourceTextRule):
     def definition(self) -> RuleDefinition:
         """Describe the remote-shell rule as a high-confidence posture warning.
 
-        High confidence because the ``download | shell`` pipeline is matched
-        textually; warning severity because piping installers to a shell is a
-        common-but-risky idiom rather than a guaranteed exploit.
+        High confidence reflects the textual pipeline match; WARNING reflects a risky installation pattern rather than a confirmed exploit.
 
         Returns:
             Definition for the github-actions-remote-shell rule under the
@@ -52,14 +50,14 @@ class GithubActionsRemoteShellRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag each ``curl``/``wget`` download piped into a shell in a workflow.
+        """Scan workflow text for patterns that pipe a curl or wget download into a supported shell.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per remote-download-to-shell pipeline.
+            One finding per text match. Empty for non-workflow files or when there is no match.
         """
         if not is_workflow_file(unit.file.display_path):
             return []
@@ -69,10 +67,7 @@ class GithubActionsRemoteShellRule(SourceTextRule):
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        "CI step pipes a remote download into a shell - the fetched "
-                        "script is unverified and can change between runs."
-                    ),
+                    message=("CI step pipes a remote download into a shell - the fetched script is unverified and can change between runs."),
                     file_path=unit.file.display_path,
                     line=source_line(unit.source, match.start()),
                     severity=definition.default_severity,

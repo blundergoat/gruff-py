@@ -1,16 +1,20 @@
 import ast
 
-from gruffpy.config.analysis_config import AnalysisConfig
-from gruffpy.config.rule_settings import RuleSettings, SeverityThreshold
-from gruffpy.finding.severity import Severity
-from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.complexity._halstead import halstead_for
-from gruffpy.rule.complexity.halstead_volume_rule import HalsteadVolumeRule
-from gruffpy.rule.context import RuleContext
-from gruffpy.source.source_file import SourceFile
 
 
 def _first_fn(source: str) -> ast.FunctionDef:
+    """Return the first top-level, non-async function definition in source.
+
+    Args:
+        source: Python source to parse.
+
+    Returns:
+        That function definition.
+
+    Raises:
+        AssertionError: The source has no top-level, non-async function.
+    """
     tree = ast.parse(source)
     for node in tree.body:
         if isinstance(node, ast.FunctionDef):
@@ -18,29 +22,12 @@ def _first_fn(source: str) -> ast.FunctionDef:
     raise AssertionError("no function found")
 
 
-def _make_unit(source: str) -> AnalysisUnit:
-    tree = ast.parse(source)
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
-    file = SourceFile(absolute_path="/x.py", display_path="x.py", type="python")
-    return AnalysisUnit(file=file, source=source, tree=tree)
-
-
-def _ctx(threshold: int = 180) -> RuleContext:
-    rule = HalsteadVolumeRule()
-    config = AnalysisConfig(
-        rules={
-            rule.definition().id: RuleSettings(
-                enabled=True,
-                severity_threshold=SeverityThreshold(threshold, Severity.ERROR),
-            ),
-        }
-    )
-    return RuleContext(project_root="/", config=config)
-
-
 def test_simple_function_low_volume():
+    """Measure x + 1 as one distinct operator and two distinct operands with a volume of about 4.75.
+
+    Returns:
+        None after the assertions pass.
+    """
     import math
 
     src = "def f(x):\n    return x + 1\n"
@@ -52,6 +39,11 @@ def test_simple_function_low_volume():
 
 
 def test_binop_chain_increases_vocabulary():
+    """Count three operators and four operands in a + b * c - d, all of them distinct.
+
+    Returns:
+        None. Checks that the total and distinct counts agree for both operators and operands.
+    """
     src = "def f(a, b, c, d):\n    return a + b * c - d\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 3  # +, *, -
@@ -61,6 +53,11 @@ def test_binop_chain_increases_vocabulary():
 
 
 def test_compare_operators_counted():
+    """Count a < b < c as two less-than operators, one distinct, and three distinct operands.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "def f(a, b, c):\n    return a < b < c\n"
     metrics = halstead_for(_first_fn(src))
     # Compare node has 2 ops (Lt, Lt)
@@ -70,6 +67,11 @@ def test_compare_operators_counted():
 
 
 def test_boolop_counted():
+    """Count ``a and b`` as one distinct operator and two distinct operands.
+
+    Returns:
+        None. Checks the distinct operator and operand counts for a Boolean conjunction.
+    """
     src = "def f(a, b):\n    return a and b\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 1  # And
@@ -77,6 +79,11 @@ def test_boolop_counted():
 
 
 def test_unary_op_counted():
+    """Count ``-x`` as one distinct operator and one distinct operand.
+
+    Returns:
+        None. Checks the distinct operator and operand counts for unary minus.
+    """
     src = "def f(x):\n    return -x\n"
     metrics = halstead_for(_first_fn(src))
     assert metrics.distinct_operators == 1  # USub
@@ -84,36 +91,26 @@ def test_unary_op_counted():
 
 
 def test_aug_assign_counted_as_operator():
+    """Count one operator in total for a function that applies x += 1 and returns x.
+
+    Returns:
+        None after the assertions pass.
+    """
     src = "def f(x):\n    x += 1\n    return x\n"
     metrics = halstead_for(_first_fn(src))
-    # x += 1 -> one AddAssign operator
-    assert "AddAssign" in {
-        type(node.op).__name__ + "Assign"
-        for node in ast.walk(ast.parse(src))
-        if isinstance(node, ast.AugAssign)
-    }
+    assert "AddAssign" in {type(node.op).__name__ + "Assign" for node in ast.walk(ast.parse(src)) if isinstance(node, ast.AugAssign)}
     assert metrics.total_operators == 1
 
 
 def test_nested_function_not_included():
+    """Count no operators for an outer function whose only operator is in its nested function.
+
+    Returns:
+        None after the assertion passes.
+    """
     src = "def outer():\n    def inner(a, b):\n        return a + b\n    return inner\n"
     metrics = halstead_for(_first_fn(src))
-    # outer's body has no operators
     assert metrics.total_operators == 0
-
-
-def test_huge_function_emits_finding():
-    # Force vocabulary and length high with both BinOps and Compares.
-    # Volume well over the error threshold -> finding.
-    pairs = "\n".join(
-        f"    if a{i} + b{i} == c{i} - d{i}:\n        x{i} = a{i} * b{i} + c{i} / d{i}"
-        for i in range(60)
-    )
-    src = f"def f():\n{pairs}\n"
-    findings = HalsteadVolumeRule().analyse(_make_unit(src), _ctx())
-    assert len(findings) == 1
-    assert findings[0].severity == Severity.ERROR
-    assert findings[0].metadata["halsteadVolume"] > 400
 
 
 _RADON_VOLUMES = {
@@ -128,11 +125,10 @@ _RADON_VOLUMES = {
 
 
 def _halstead_deltas_against_radon() -> list[float]:
-    """Compute per-function ``|gruff - radon| / radon`` deltas for the cc_fixture.
+    """Compute absolute relative Halstead volume errors against radon for the cc_fixture.
 
     Returns:
-        Relative deltas (one per function in ``_RADON_VOLUMES`` that exists in
-        the fixture's parsed AST).
+        Relative deltas, one per non-async function in _RADON_VOLUMES found in the fixture's parsed AST.
     """
     from pathlib import Path
 
@@ -148,11 +144,11 @@ def _halstead_deltas_against_radon() -> list[float]:
 def test_radon_delta_within_threshold():
     """Cross-check Halstead volume against radon 6.0.1 ground-truth.
 
-    Tolerance: ±15% average delta on the ground-truth fixture (relaxed
-    from ±10% due to a documented chained-BoolOp pattern in
-    ``radon_ground_truth.md``; aggregate well under the ±50% kill threshold).
-    Run ``uvx radon hal tests/fixtures/complexity/cc_fixture.py -f`` to
-    refresh radon's numbers; update ``radon_ground_truth.md`` if they change.
+    Allow at most 15% average absolute relative error on the reference fixture.
+    Refresh _RADON_VOLUMES and radon_ground_truth.md with output from uvx radon@6.0.1 hal tests/fixtures/complexity/cc_fixture.py -f.
+
+    Returns:
+        None. Checks that the mean absolute relative difference from the stored Radon volumes is at most 15%.
     """
     deltas = _halstead_deltas_against_radon()
     average = sum(deltas) / len(deltas)

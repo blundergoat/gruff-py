@@ -46,7 +46,7 @@ class DependencyGitReferenceRule(SourceTextRule):
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per Git dependency declaration.
+            One finding per Git dependency declaration; empty for unsupported files or when no declaration matches.
         """
         definition = self.definition()
         findings: list[Finding] = []

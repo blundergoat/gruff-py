@@ -1,6 +1,6 @@
 ---
 category: rules
-last_reviewed: 2026-08-16
+last_reviewed: 2026-11-25
 ---
 
 ## Footgun: `RuleDefinition.description` is a short label, not sentence-level prose
@@ -57,11 +57,10 @@ complexity rules already have `gruffpy.rule.complexity._walks`
 (`body_nodes`, search: `without descending into nested scopes`). The trap is
 recurring - `_walks.py` exists for exactly this reason, and the correctness
 rules re-introduced it. Fixed sites:
-`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`
-(search: `_scan_function`, `_parameter_text_sources`) and
-`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
-(search: `_coercion_calls`, `_float_assignment_sources`,
-`_isfinite_argument_names`).
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py` (search: `_scan_function`)
+together with its `_parameter_text_sources`, and
+`src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py` (search: `_coercion_calls`)
+together with its `_float_assignment_sources` and `_isfinite_argument_names`.
 
 ## Footgun: `dead-code.exported-but-unreferenced` flags `__all__` exports by design - the library noise is not a bug
 
@@ -102,9 +101,9 @@ name carried the `input` free-text token - it is dict-key membership, not
 copy routing.
 
 When a rule interprets a containment or comparison operator semantically, gate
-on the operand's TYPE, not just its name. The fix
-(`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py`, search:
-`_is_collection_annotated`, `_COLLECTION_ANNOTATIONS`) excludes parameters whose
+on the operand's TYPE, not just its name. The fix,
+`src/gruffpy/rule/correctness/substring_vocabulary_match_rule.py` (search: `_is_collection_annotated`)
+with its `_COLLECTION_ANNOTATIONS` set, excludes parameters whose
 annotation head is a known non-`str` collection; `_annotation_head_names` (same
 file) unwraps `dict[..]`, `typing.Dict`, and `X | None` to the head type.
 
@@ -121,12 +120,13 @@ runs exactly when the module is *imported* - the opposite of the entry-point
 case the exemption is for. Walking to the enclosing node and returning early
 ignores which branch the node is in, so the exemption over-applies.
 
-This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py`
-(search: `_is_protected_by_try`) suppressed conversions in a try's
-`else`/`finally`, and `src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py`
-(search: `_is_inside_main_block`) exempted `sys.path` mutations in a main
-guard's `else`. The fix in both threads the child down the parent walk and
-requires `child in current.body` before treating the ancestor as exempting.
+This bit two rules the same way: `src/gruffpy/rule/correctness/unsafe_numeric_coercion_rule.py` (search: `_is_protected_by_try`)
+suppressed conversions in a try's `else`/`finally`, and
+`src/gruffpy/rule/design/runtime_sys_path_mutation_rule.py` (search: `_main_guard_branch`)
+exempted `sys.path` mutations in a main guard's `else`. The fix in both threads
+the child down the parent walk and checks `child in current.body` before
+treating the ancestor as exempting; `_main_guard_branch` returns `"body"` or
+`"else"` so the caller can tell the two apart.
 
 ## Footgun: exemption / safe-guard matchers recognize only the canonical spelling and miss equivalent variants
 
@@ -168,30 +168,6 @@ and bare-name references, and modifier predicates that change safety. Add one
 focused fixture for each supported spelling and rerun the real source that
 exposed the gap.
 
-## Footgun: fixed sentinels collide with decoded user literals
-
-**Status:** active | **Created:** 2026-07-16 | **Evidence:** OBSERVED
-
-Rules that flatten an AST template into text can accidentally use a character
-the parser also produces from a user literal. The Markdown interpolation rule
-used one NUL character for every dynamic slot; a source escape such as
-`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
-then exceeded the dynamic-expression list and both f-string and `.format()`
-paths raised `IndexError` instead of returning findings.
-
-The repaired implementation chooses a NUL run absent from each template's
-decoded static text in
-`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py`
-(search: `def _placeholder_absent_from`) and threads that exact token through
-slot matching. The collision controls live in
-`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
-(search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`).
-
-When an analyzer needs an internal marker inside user-derived text, prove the
-marker is absent after parsing and decoding, or keep structural components
-separate instead of using a fixed sentinel. Test the literal marker itself in
-every supported source spelling.
-
 ## Footgun: flow-state walkers dispatch on statement type and silently skip whole node classes
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** OBSERVED
@@ -204,12 +180,20 @@ two-directional and silent: a proved value assigned inside the skipped statement
 reads as raw, and a rebinding that should destroy trust stays invisible.
 
 `MarkdownSanitizerProvenance._scan_control_statement`
-(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py`, search:
+(`src/gruffpy/rule/security/_markdown_sanitizer_provenance.py` at `1f02afe`, search:
 `def _scan_control_statement`) named `If`, `For`, `While`, `With`, and `Try` but
 omitted `ast.Match` and `ast.TryStar`. A sanitizer rebound inside a `case` body
 stayed trusted, so `security.unsanitized-markdown-interpolation` suppressed the
 finding for a defeated helper. Ruff, mypy, and the full pytest run stayed green
-throughout, because no fixture used either statement form.
+throughout, because no fixture used either statement form. ADR-029 retired that
+rule in 0.6.0 (`7f146cc`).
+
+The same trap applies to any live dispatcher that decides which statement
+bodies to inspect. The class-body allowlist in
+`src/gruffpy/rule/test_quality/static_analysis_redundant_test_rule.py`
+(search: `def _is_compound_statement`) names `ast.AsyncFor`, `ast.AsyncWith`,
+`ast.TryStar`, and `ast.Match` beside their siblings, so a member rebound
+inside any compound body is treated as ambiguous.
 
 `ast.TryStar` is the specific language trap: `except*` parses to a distinct node
 class that is not a subclass of `ast.Try`, so `isinstance(node, ast.Try)`
@@ -218,9 +202,10 @@ synchronous counterparts.
 
 Mitigation: when adding or extending a statement dispatcher, enumerate every
 statement type that binds a name or branches control flow, and add `match` and
-`except*` fixtures beside the `if` and `try` ones. Regression coverage lives in
-`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py`
-(search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`).
+`except*` fixtures beside the `if` and `try` ones. The retired rule's regression
+coverage lived in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `test_match_case_rebinding_a_sanitizer_removes_its_proof`.
 
 ## Footgun: dropping a `global`/`nonlocal` store silently makes a name immortal
 
@@ -237,8 +222,8 @@ lives in the inner body. Code that handles the split by skipping the store
 keeps only the outer answer, so every later load in that body resolves to the
 outer import as if the store never ran.
 
-`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py`,
-search: `def _build_binding_events`) did exactly that: a `continue` dropped any
+`_build_binding_events` (`src/gruffpy/rule/dead_code/private_function_liveness.py` at `4a6eb32`,
+search: `def _build_binding_events`; the module was removed with the rule in 0.6.0, `.goat-flow/learning-loop/decisions/ADR-029-rules-wrong-more-often-than-right-are-retired.md` (search: "dead-code.unused-private-function")) did exactly that: a `continue` dropped any
 store whose name appeared in `_externally_declared_names`. Four shapes of
 `dead-code.unused-private-function` finding went missing, measured against the
 registry path - `global` then store then load in one function; the same at
@@ -258,14 +243,89 @@ same name.
 Mitigation: record the store in the declaring scope, and give the resolver the
 declared-name map so a load with no store ordered before it keeps walking
 outward instead of reading the name as a local
-(`_active_binding`, search: `def _active_binding`). Cover both directions -
-loads the store precedes, and loads it cannot be ordered against. Regression
-coverage lives in
-`tests/unit/rule/dead_code/test_unused_private_function_rule.py` (search:
+(`_active_binding` at `4a6eb32`, search: `def _active_binding`; live scope-declaration check in `src/gruffpy/rule/security/ssrf_rule.py` (search: "def _has_external_binding_declaration")). Cover both directions -
+loads the store precedes, and loads it cannot be ordered against. Live `global`
+order-preservation coverage sits in `tests/unit/rule/security/test_ssrf_rule.py` (search: "def test_later_non_retroactive_rebinding_keeps_earlier_supported_call"); the retired dead-code regression
+coverage lived in
+`tests/unit/rule/dead_code/test_unused_private_function_rule.py` at `4a6eb32` (search:
 `test_project_global_store_before_a_later_load_hides_the_import` and
 `test_project_global_store_does_not_reach_a_module_level_load`).
 
+## Footgun: Six separate test-path helpers disagree across rules (and `naming.identifier-quality` skips none)
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Open each rule's own test-path predicate before assuming test files are skipped consistently across `test/`, `testing/test_*.py`, `*_test.py`, or `conftest.py`.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**hallucination-risk:** high
+
+**Prevention:** Before editing or auditing any test-path exemption, inspect the rule's own helper instead of assuming it shares `is_built_in_test_path` or `docs._helpers.is_test_file`. Exercise `tests/`, singular `test/`, `testing/test_*.py`, `*_test.py`, and `conftest.py` in focused fixtures whenever changing test-path logic.
+
+Six separate helpers currently define "test file" differently across `src/gruffpy/`: `src/gruffpy/suppression/sensitive_exclusion_filter.py` (search: `def is_built_in_test_path`) matches the family list case-insensitively at any depth; `src/gruffpy/rule/docs/_helpers.py` (search: `def is_test_file`) matches `tests/` plus root-only `test_*.py`; `src/gruffpy/rule/naming/short_variable_rule.py` (search: `def _is_test_file`) and `src/gruffpy/rule/naming/abbreviation_rule.py` (search: `def _is_test_file`) match `test`/`tests` plus root-only `test_*.py`; `src/gruffpy/rule/naming/test_naming_consistency_rule.py` (search: `def _is_test_file`) keeps its own copy; and `src/gruffpy/rule/waste/empty_function_rule.py` (search: `def _is_test_path`) is case-sensitive and skips `tests/` and `test_*` only. Meanwhile, `src/gruffpy/rule/naming/identifier_quality_rule.py` (search: `class IdentifierQualityRule`) skips no test paths at all.
+
+Measured on 2026-11-25 against the external Python corpus: `pytest` stores its suite under `testing/test_*.py`, causing `docs.missing-function-docstring` to emit `3,834` warnings versus `10` advisories; across `fastapi`, `django`, `sqlalchemy`, and `pytest`, `1,646` of `1,701` (`96.8%`) `naming.identifier-quality` warnings fired inside test files (`foo`, `FooBaseModel`, `Thing`).
+
+## Footgun: `docs.todo-density` scans raw text with no minimum marker floor
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check marker count, file length, and comment-versus-string context before treating a `docs.todo-density` error as genuine TODO sprawl, and never assume the rule tokenizes comments only.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** When modifying `docs.todo-density` or writing short Python files or test fixtures that mention `TODO`, `FIXME`, `HACK`, `XXX`, or `BUG`, account for raw-source matching across strings and identifiers and for the missing minimum-count floor. Keep self-check fixtures free of those tokens unless explicitly exercising the rule.
+
+`src/gruffpy/rule/docs/todo_density_rule.py` (search: `_MARKER_PATTERN`) runs a regex over raw `unit.source` and compares `marker_count * 1000 / max(1, line_count)` against the default threshold of `10` at `Severity.ERROR`. With no minimum marker floor, a single `TODO` or `BUG` token anywhere in a file shorter than 100 lines exceeds `10/1000` and emits an `error`. Measured on 2026-11-25 on external repositories: single-marker files in `django` (`49` lines, density `20.41`; `68` lines, density `14.71`) and `sqlalchemy` (`97` lines, density `10.31`) each triggered a hard `error`. The rule's exemption list (`_RULE_DEFINITION_FILE_SUFFIXES`) also still names retired `gruffpy/rule/waste/commented_out_code_rule.py`.
+
+## Footgun: Banded rules must not interpolate `threshold_match.severity` into finding messages
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Phrase two-band rule messages around the numeric limit (`above the limit of <N>`) instead of `threshold_match.severity.value`, so lower-band advisory findings never claim they crossed an error threshold and crossing bands preserves `stableIdentity`.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** In any rule routing severity through `banded_severity` (`src/gruffpy/rule/size/_band.py`, search: `def banded_severity`), write `above the limit of <N>` in `Finding.message` rather than copying `above the {threshold_match.severity.value} threshold of` from non-banded rules such as `src/gruffpy/rule/size/average_function_length_rule.py` (search: `high_value_threshold_match`). Verify both lower-band and upper-band wording in `tests/unit/rule/size/test_limit_band.py` (search: `def test_each_rule_just_over_its_limit_reports_the_lower_band_notice`).
+
+`threshold_match.severity` always holds the configured upper-band severity (`error` or `warning`), even when `banded_severity` demotes a `1.0x`-to-`1.5x` breach to `Severity.ADVISORY`. Interpolating `threshold_match.severity.value` caused lower-band advisory findings on `complexity.cognitive` and the six banded `size.*` rules to print `"above the error threshold of 30"` while reporting severity `advisory` (observed on `healthkit` and fixed across all nine banded rules in 0.6.0).
+
+## Footgun: Prose `#` comments mentioning `gruff:` trigger `suppression-parse-error` (exit 2)
+
+**Status:** active | **Created:** 2026-11-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Never write `gruff:` inside an ordinary explanatory `#` comment in `src/` or `tests/`; describe gruff suppressions in plain prose without the colon or keep examples inside docstrings.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before committing inline comments in Python files, avoid the literal substring `gruff:` (case-insensitive) anywhere in a `#` comment unless writing an actual suppression directive. Always run `uv run gruff-py analyse <modified-files> --no-baseline --fail-on advisory` after comment-clarity passes.
+
+`src/gruffpy/suppression/parser.py` (search: `_GRUFF_COMMENT_RE`) matches `\bgruff\s*:\s*(?P<body>.*)` anywhere inside a Python `#` comment token, not only at the start of the comment. Mentioning `` `gruff: disable` `` inside an explanatory comment in `src/gruffpy/rule/docs/ignore_directive_reason_rule.py` triggered `[SUPPRESSION-PARSE-ERROR] Malformed gruff suppression comment.` and exited `2` during dogfood verification on 2026-11-25.
+
 ## Resolved Entries
+
+## Footgun: fixed sentinels collide with decoded user literals
+
+**Status:** resolved | **Created:** 2026-07-16 | **Resolved:** 2026-10-17 | **Evidence:** OBSERVED
+
+Resolved by removal: ADR-029 retired `security.unsanitized-markdown-interpolation`
+in 0.6.0 (`7f146cc`), deleting the rule and its placeholder code.
+
+Rules that flatten an AST template into text can accidentally use a character
+the parser also produces from a user literal. The Markdown interpolation rule
+used one NUL character for every dynamic slot; a source escape such as
+`"prefix\\x00{label}"` decoded to that same character. Placeholder counts
+then exceeded the dynamic-expression list and both f-string and `.format()`
+paths raised `IndexError` instead of returning findings.
+
+The repaired implementation chose a NUL run absent from each template's
+decoded static text
+(`src/gruffpy/rule/security/unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `def _placeholder_absent_from`) and threaded that exact token through
+slot matching. The collision controls lived in
+`tests/unit/rule/security/test_unsanitized_markdown_interpolation_rule.py` at `1f02afe`,
+search: `def test_static_nul_does_not_collide_with_dynamic_slot_placeholders`.
+
+When an analyzer needs an internal marker inside user-derived text, prove the
+marker is absent after parsing and decoding, or keep structural components
+separate instead of using a fixed sentinel. Test the literal marker itself in
+every supported source spelling.
 
 ## Footgun: static declaration evidence is not proof of runtime existence
 
@@ -307,5 +367,5 @@ regression tests in
 search: `test_class_body_conditional_rebinding_makes_member_ambiguous`,
 search: `test_match_case_body_rebinding_makes_class_ambiguous`,
 search: `test_match_capture_pattern_makes_class_ambiguous`). Prove the guard with
-a crafted fixture before trusting it - see `.goat-flow/learning-loop/lessons/verification.md`
+a crafted fixture before trusting it - see `.goat-flow/learning-loop/lessons/rule-verification.md`
 (search: `crafted fixture`).

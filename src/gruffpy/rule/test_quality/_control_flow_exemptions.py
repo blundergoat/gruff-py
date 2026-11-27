@@ -1,101 +1,71 @@
-"""Shared false-positive guards for test control-flow rules."""
+"""Shared false-positive guard for unittest subtest loops in test-quality rules.
+
+Used by ``test-quality.loop-assertion-without-message`` so loops wrapped in ``with self.subTest(...)`` stay quiet.
+Each subTest context already labels the failing iteration for the developer, making an extra assert message redundant.
+"""
 
 import ast
 
-_FIXTURE_NAME_MARKERS: tuple[str, ...] = (
-    "case",
-    "cases",
-    "file",
-    "files",
-    "fixture",
-    "fixtures",
-    "path",
-    "paths",
-    "sample",
-    "samples",
-    "scenario",
-    "scenarios",
-)
-_GUARD_SKIP_CALLS: frozenset[str] = frozenset(
-    {"pytest.skip", "skip", "self.skipTest", "unittest.skip"}
-)
 
-
-def is_fixture_loop(
+def is_subtest_loop(
     node: ast.For | ast.AsyncFor | ast.While,
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    """Return whether *node* is a bounded fixture/table sweep.
+    """Recognise a loop whose body gives each statement unittest case context.
 
     Args:
-        node: Loop statement found inside a test function.
-        fn: Owning test function, used to discover local/module fixture tables.
+        node: Candidate loop in a unittest test method.
+        fn: Owning method. Its first positional parameter names the receiver. No such parameter or a name store for it disqualifies the loop.
 
     Returns:
-        True when the loop is data-driven fixture coverage rather than
-        assertion-hiding control flow.
+        True for a nonempty for or async-for body of with statements, each using receiver.subTest with an argument that refers to a loop target.
+        Only a simple target name or a direct named element of a tuple or list target counts.
+        Loops with an else block or any if or match descendant in the body return False; while loops also return False.
     """
-    if isinstance(node, ast.While):
+    if isinstance(node, ast.While) or node.orelse or _contains_branch(node.body):
         return False
-    if _contains_branch(node.body):
+    parameters = [*fn.args.posonlyargs, *fn.args.args]
+    if not parameters:
         return False
-    if not _is_fixture_iterable(
-        node.iter, _literal_collection_bindings(fn), _target_names(node.target)
-    ):
+    receiver = parameters[0].arg
+    if any(isinstance(n, ast.Name) and n.id == receiver and isinstance(n.ctx, ast.Store) for n in ast.walk(fn)):
         return False
-    assertions = _assertions_in(node.body)
-    return not assertions or all(assertion.msg is not None for assertion in assertions)
+    bound_names = _target_names(node.target)
+    return bool(node.body) and all(_is_subtest_statement(statement, receiver, bound_names) for statement in node.body)
 
 
-def is_guard_clause(node: ast.If | ast.Match) -> bool:
-    """Return whether a branch exits/skips rather than changing expectations.
+def _is_subtest_statement(statement: ast.stmt, receiver: str, bound_names: frozenset[str]) -> bool:
+    """Recognize a with statement whose subTest arguments refer to a loop target.
 
     Args:
-        node: Conditional node found inside a test function.
+        statement: Loop-body statement to inspect for a matching with context.
+        receiver: Name of the owning unittest method's TestCase receiver.
+        bound_names: Loop-target names whose references establish case context.
 
     Returns:
-        True for simple ``if`` guards whose body only returns, raises, breaks,
-        continues, or calls a recognised skip helper.
+        True when a matching subTest context argument contains a bound name; false otherwise.
     """
-    if isinstance(node, ast.Match) or node.orelse:
+    if not isinstance(statement, ast.With):
         return False
-    return bool(node.body) and all(_is_guard_statement(statement) for statement in node.body)
-
-
-def _literal_collection_bindings(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
-    bindings: set[str] = set()
-    for scope in (_module_root(fn), fn):
-        for statement in getattr(scope, "body", []):
-            bindings.update(_literal_collection_targets(statement))
-    return frozenset(bindings)
-
-
-def _literal_collection_targets(statement: ast.stmt) -> set[str]:
-    if isinstance(statement, ast.Assign) and _is_literal_collection(statement.value):
-        return {
-            target.id
-            for target in statement.targets
-            if isinstance(target, ast.Name) and _is_fixtureish_name(target.id)
-        }
-    if (
-        isinstance(statement, ast.AnnAssign)
-        and statement.value is not None
-        and isinstance(statement.target, ast.Name)
-        and _is_fixtureish_name(statement.target.id)
-        and _is_literal_collection(statement.value)
-    ):
-        return {statement.target.id}
-    return set()
-
-
-def _module_root(node: ast.AST) -> ast.AST:
-    current = node
-    while hasattr(current, "parent"):
-        current = current.parent
-    return current
+    for item in statement.items:
+        call = item.context_expr
+        if not isinstance(call, ast.Call) or _call_name(call) != f"{receiver}.subTest":
+            continue
+        values = [*call.args, *(keyword.value for keyword in call.keywords)]
+        if any(isinstance(n, ast.Name) and n.id in bound_names for value in values for n in ast.walk(value)):
+            return True
+    return False
 
 
 def _target_names(target: ast.expr) -> frozenset[str]:
+    """Extract names directly bound by a loop target.
+
+    Args:
+        target: Loop assignment target inspected for names used by the subtest-loop exemption.
+
+    Returns:
+        A frozen set containing the simple name or direct names from a tuple or list. Other shapes and nested unpacking contribute no names.
+    """
     if isinstance(target, ast.Name):
         return frozenset({target.id})
     if isinstance(target, ast.Tuple | ast.List):
@@ -103,69 +73,27 @@ def _target_names(target: ast.expr) -> frozenset[str]:
     return frozenset()
 
 
-def _is_fixture_iterable(
-    expr: ast.expr,
-    bindings: frozenset[str],
-    target_names: frozenset[str],
-) -> bool:
-    if _is_literal_collection(expr):
-        return any(_is_fixtureish_name(name) for name in target_names)
-    if isinstance(expr, ast.Name):
-        return expr.id in bindings
-    if isinstance(expr, ast.Call):
-        return _is_fixture_call(expr, bindings, target_names)
-    return False
-
-
-def _is_fixture_call(
-    call: ast.Call,
-    bindings: frozenset[str],
-    target_names: frozenset[str],
-) -> bool:
-    name = _call_name(call)
-    if name in {"glob", "Path.glob", "Path.rglob", "Path.iterdir"}:
-        return True
-    if name in {"list", "set", "sorted", "tuple"} and call.args:
-        first = call.args[0]
-        return isinstance(first, ast.expr) and _is_fixture_iterable(first, bindings, target_names)
-    return name.endswith((".glob", ".rglob", ".iterdir"))
-
-
-def _is_literal_collection(expr: ast.AST) -> bool:
-    return isinstance(expr, ast.List | ast.Tuple | ast.Set | ast.Dict)
-
-
-def _is_fixtureish_name(name: str) -> bool:
-    lowered = name.lower()
-    return any(marker in lowered for marker in _FIXTURE_NAME_MARKERS)
-
-
 def _contains_branch(statements: list[ast.stmt]) -> bool:
-    return any(
-        isinstance(node, ast.If | ast.Match)
-        for statement in statements
-        for node in ast.walk(statement)
-    )
+    """Recognize if or match nodes in supplied statements and their descendants.
 
+    Args:
+        statements: Statement roots to walk, including any nested scopes beneath them.
 
-def _assertions_in(statements: list[ast.stmt]) -> list[ast.Assert]:
-    return [
-        node
-        for statement in statements
-        for node in ast.walk(statement)
-        if isinstance(node, ast.Assert)
-    ]
-
-
-def _is_guard_statement(statement: ast.stmt) -> bool:
-    if isinstance(statement, ast.Return | ast.Raise | ast.Break | ast.Continue):
-        return True
-    if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
-        return _call_name(statement.value) in _GUARD_SKIP_CALLS
-    return False
+    Returns:
+        True when a supplied statement or any descendant is an if or match node; false otherwise.
+    """
+    return any(isinstance(node, ast.If | ast.Match) for statement in statements for node in ast.walk(statement))
 
 
 def _call_name(call: ast.Call) -> str:
+    """Extract a call target's available name and attribute components.
+
+    Args:
+        call: Call whose callee syntax is read without import or runtime resolution.
+
+    Returns:
+        A dotted spelling, trailing attributes for an unsupported root, or an empty string when no components are named.
+    """
     parts: list[str] = []
     node: ast.AST = call.func
     while isinstance(node, ast.Attribute):

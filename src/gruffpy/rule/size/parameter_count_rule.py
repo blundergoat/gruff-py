@@ -11,6 +11,8 @@ from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
 from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
+from gruffpy.rule.size import _band
+from gruffpy.rule.size._band import LIMIT_BAND_KEY, band_advice, banded_severity, limit_band, limit_in_force
 from gruffpy.rule.size._lines import parent_chain, qualified_symbol
 
 
@@ -23,8 +25,8 @@ class ParameterCountRule(Rule):
         """Describe the parameter-count rule with a configurable arity threshold (default 10).
 
         Returns:
-            Definition under the size pillar; parameter count includes
-            ``*args``/``**kwargs`` but excludes ``self``/``cls``.
+            Definition under the size pillar; variable positional and keyword parameters each count once.
+            Only a leading positional self or cls is excluded, and only when a class occurs in the ancestor chain.
         """
         return RuleDefinition(
             id=self.ID,
@@ -39,13 +41,11 @@ class ParameterCountRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Emit one finding per function whose total parameter arity exceeds the threshold.
 
-        Counts positional-only + positional + keyword-only + ``*args`` +
-        ``**kwargs``. Method receivers (``self``/``cls``) are excluded so a
-        9-parameter free function and a 9-parameter method compare on equal
-        footing.
+        Counts positional-only, positional and keyword-only parameters, plus one each for variable positional and keyword parameters.
+        A leading positional self or cls is excluded when any ancestor is a class.
 
         Args:
-            unit: Parsed source file to walk.
+            unit: Parsed source file to walk; a missing tree yields no findings.
             context: Rule execution context that supplies the threshold.
 
         Returns:
@@ -66,29 +66,23 @@ class ParameterCountRule(Rule):
             symbol = qualified_symbol(node, parents)
             count = _count_parameters(node, parents)
             threshold_match = settings.high_value_threshold_match(count)
+            band = limit_band(count, limit_in_force(settings))
             if threshold_match is None:
                 continue
 
             findings.append(
                 Finding(
                     rule_id=definition.id,
-                    message=(
-                        f"Function {symbol!r} has {count} parameters, "
-                        f"above the {threshold_match.severity.value} threshold of "
-                        f"{_format_number(threshold_match.threshold)}."
-                    ),
+                    message=f"Function {symbol!r} has {count} parameters, above the limit of {_format_number(threshold_match.threshold)}.",
                     file_path=unit.file.display_path,
                     line=node.lineno,
-                    severity=threshold_match.severity,
+                    severity=banded_severity(band, threshold_match.severity),
                     pillar=definition.pillar,
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
                     symbol=symbol,
-                    remediation=(
-                        "Group related parameters into a dataclass or context object, "
-                        "or split the function."
-                    ),
+                    remediation=band_advice(band, _band.LOWER_PARAMETER, _band.GROUP_PARAMETERS),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={
                         "parameters": count,
@@ -96,6 +90,7 @@ class ParameterCountRule(Rule):
                         "threshold": threshold_match.threshold,
                         "thresholdDirection": "above",
                         "thresholdType": threshold_match.severity.value,
+                        LIMIT_BAND_KEY: band,
                     },
                 ),
             )
@@ -104,6 +99,18 @@ class ParameterCountRule(Rule):
 
 
 def _count_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> int:
+    """Count a function's parameters, dropping a leading self or cls receiver when the function sits inside a class.
+
+    Positional-only, positional and keyword-only parameters each count once, and *args and **kwargs add one each when present. The receiver is dropped
+    only when the first positional parameter is literally named self or cls.
+
+    Args:
+        fn: Function definition whose parameters are counted.
+        parents: Ancestor chain of fn, from outermost to immediate parent, used to decide whether fn is a method.
+
+    Returns:
+        Number of parameters measured against the rule threshold, excluding any dropped receiver.
+    """
     args = fn.args
     positional = list(args.posonlyargs) + list(args.args)
     if positional and _is_method(fn, parents):
@@ -119,10 +126,29 @@ def _count_parameters(fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[
 
 
 def _is_method(_fn: ast.FunctionDef | ast.AsyncFunctionDef, parents: list[ast.AST]) -> bool:
+    """Report whether any ancestor of the function is a class definition, so its receiver can be excluded.
+
+    The check looks at the whole ancestor chain, not only the immediate parent, so a function nested inside a method also counts as a method.
+
+    Args:
+        _fn: Function definition being checked; it is not read, only the ancestor chain decides the result.
+        parents: Ancestor chain of the function, from outermost to immediate parent.
+
+    Returns:
+        True when any ancestor is a class definition, otherwise False.
+    """
     return any(isinstance(p, ast.ClassDef) for p in parents)
 
 
 def _format_number(value: int | float) -> str:
+    """Render a threshold for the finding message, dropping the decimal part when the value is a whole number.
+
+    Args:
+        value: Threshold value to render; an integer or a float.
+
+    Returns:
+        Integer text for integers and finite whole-number floats, so 10.0 renders as 10. Other floats use their usual Python text.
+    """
     if isinstance(value, float) and not value.is_integer():
         return str(value)
     return str(int(value))

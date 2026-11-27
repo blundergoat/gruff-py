@@ -59,21 +59,28 @@ class StaleParamDocRule(Rule):
 
         Args:
             unit: Parsed source file to inspect.
-            context: Rule execution context supplied by the analyzer.
+            context: Required by the rule interface and unused by this check.
 
         Returns:
-            Findings for documented parameters absent from function signatures.
+            One finding per stale documented parameter; empty when the tree is absent or no stale entries are found.
         """
         if unit.tree is None:
             return []
         definition = self.definition()
-        return [
-            _stale_param_finding(unit, definition, stale_param)
-            for stale_param in _stale_parameters(unit.tree)
-        ]
+        return [_stale_param_finding(unit, definition, stale_param) for stale_param in _stale_parameters(unit.tree)]
 
 
 def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
+    """Collect stale parameter entries throughout the module tree, including nested functions and methods.
+
+    Entries follow ast.walk order. Overload stubs and property setters or deleters are skipped.
+
+    Args:
+        tree: Parsed module tree of the analysis unit; the rule calls this only when the unit has a tree.
+
+    Returns:
+        Stale parameter entries from checked definitions, or an empty list when none documents a name missing from its signature.
+    """
     stale: list[_StaleParam] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -83,6 +90,18 @@ def _stale_parameters(tree: ast.AST) -> list[_StaleParam]:
 
 
 def _stale_parameters_for_function(node: FunctionNode) -> list[_StaleParam]:
+    """Find the documented parameter names of one function that match no name in its signature.
+
+    Overloads, property setters and deleters, and missing, blank or unparseable docstrings are skipped; None names are ignored.
+    Leading asterisks are removed before documented names are compared with signature_param_names.
+
+    Args:
+        node: Function or async function definition whose docstring entries are compared with its signature.
+
+    Returns:
+        One stale parameter entry per unmatched documented name, carrying the node, its qualified symbol, the name as the docstring parser returned it
+        and the detected docstring style; empty when the function is skipped or every documented name matches.
+    """
     if is_overload_stub(node) or is_property_setter_or_deleter(node):
         return []
     text = extract_docstring(node)
@@ -102,9 +121,16 @@ def _stale_parameters_for_function(node: FunctionNode) -> list[_StaleParam]:
 
 
 def _normalise_param_name(name: str) -> str:
-    # Docstring parsers preserve `*args` / `**kwargs` literally; signature_param_names
-    # returns the bare identifier. Strip the leading `*` / `**` so a docstring
-    # entry for `*keys` matches a signature varargs slot named `keys`.
+    """Remove every leading asterisk from a documented parameter name before it is compared with signature names.
+
+    Args:
+        name: Documented parameter name as the docstring parser returned it.
+
+    Returns:
+        The name with all leading asterisks removed; unchanged when it has none.
+    """
+    # Parsed varargs entries keep leading asterisks, while signature_param_names returns bare names.
+    # Removing the asterisks lets documented varargs names match their signature slots.
     return name.lstrip("*")
 
 
@@ -113,12 +139,24 @@ def _stale_param_finding(
     definition: RuleDefinition,
     stale_param: _StaleParam,
 ) -> Finding:
+    """Build the finding that reports one stale parameter entry against the line range of its function definition.
+
+    The message names the function's qualified symbol and the documented parameter, while severity, pillar, tier, confidence and secondary pillars all
+    come from the rule definition.
+
+    Args:
+        unit: Analysis unit whose display path becomes the finding's file path.
+        definition: Rule definition supplying the rule ID, default severity, pillar, tier, confidence and secondary pillars.
+        stale_param: Stale parameter entry supplying the function node for the start and end lines, the qualified symbol, and the documented name and
+            docstring style.
+
+    Returns:
+        Finding spanning the function's start and end lines, with a remediation to remove or rename the entry and metadata holding the documented
+        parameter name and the docstring style value.
+    """
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"Function {stale_param.symbol!r} docstring documents parameter "
-            f"{stale_param.name!r}, which is not in the signature."
-        ),
+        message=(f"Function {stale_param.symbol!r} docstring documents parameter {stale_param.name!r}, which is not in the signature."),
         file_path=unit.file.display_path,
         line=stale_param.node.lineno,
         severity=definition.default_severity,

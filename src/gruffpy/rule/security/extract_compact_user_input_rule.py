@@ -25,9 +25,7 @@ from gruffpy.rule.definition import RuleDefinition
 from gruffpy.rule.rule import Rule
 from gruffpy.rule.security._security_node_helper import imported_module_names
 
-_REQUEST_ATTRS: frozenset[str] = frozenset(
-    {"json", "form", "args", "GET", "POST", "data", "query_params", "values"}
-)
+_REQUEST_ATTRS: frozenset[str] = frozenset({"json", "form", "args", "GET", "POST", "data", "query_params", "values"})
 
 
 class ExtractCompactUserInputRule(Rule):
@@ -38,10 +36,7 @@ class ExtractCompactUserInputRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the splat-unpacked-user-input rule as a medium-confidence warning.
 
-        Medium confidence because the rule matches by attribute name alone
-        (``request.json``, ``.form``, etc.) without verifying that ``request``
-        is actually a web-framework request object; a local variable named
-        ``request`` will also trip the rule.
+        Medium confidence reflects syntax-based request receivers; their runtime types and data origins are not verified.
 
         Returns:
             Definition for the extract-compact-user-input rule under the
@@ -57,20 +52,16 @@ class ExtractCompactUserInputRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``f(**request.<attr>)`` patterns across major web frameworks.
+        """Flag calls that unpack supported request attributes into keyword arguments.
 
-        Splatting user-controlled dicts into kwargs is Python's analogue of
-        PHP's ``extract()`` - the attacker chooses the parameter names that
-        get bound. Covers Flask/Django/FastAPI access patterns (``.json``,
-        ``.form``, ``.args``, ``.GET``/``.POST``/``.data``,
-        ``.query_params``, ``.values``).
+        Treat request, self.request, and imported-name request receivers as potential user input; receiver types are not verified.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per call site that splats a request attribute.
+            One finding per call site that unpacks a supported request attribute. Empty when syntax is unavailable or no call matches.
         """
         if unit.tree is None or "request" not in unit.source or "**" not in unit.source:
             return []
@@ -88,10 +79,7 @@ class ExtractCompactUserInputRule(Rule):
                 findings.append(
                     Finding(
                         rule_id=definition.id,
-                        message=(
-                            "User-controlled dict splatted into a function's keyword "
-                            "arguments (`**request.<attr>`)."
-                        ),
+                        message=("User-controlled dict splatted into a function's keyword arguments (`**request.<attr>`)."),
                         file_path=unit.file.display_path,
                         line=node.lineno,
                         severity=definition.default_severity,
@@ -100,8 +88,7 @@ class ExtractCompactUserInputRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         remediation=(
-                            "Extract explicit fields by name (`request.json['x']`) and "
-                            "pass them positionally or via known keyword arguments."
+                            "Extract explicit fields by name (`request.json['x']`) and pass them positionally or via known keyword arguments."
                         ),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={},
@@ -112,18 +99,16 @@ class ExtractCompactUserInputRule(Rule):
 
 
 def _is_request_attribute(node: ast.expr, imported_modules: frozenset[str]) -> bool:
-    """True for ``request.<attr>``, ``self.request.<attr>``, or ``<imported>.request.<attr>``.
+    """Recognize supported request attributes on request, self.request, or an imported name's request receiver.
 
-    Matches the receiver policy in ``_security_taint_helper`` so the two
-    request-detecting rules agree on the shape. An application object's
-    ``other.request`` binds a parameter or local, not an imported module.
+    Use the same receiver shapes as _security_taint_helper; imports are checked by bound name, without runtime type or shadowing analysis.
 
     Args:
         node: Expression splatted into a callee's keyword arguments.
         imported_modules: Names bound by an import in the same file.
 
     Returns:
-        True for a recognised request receiver; false for application objects.
+        True for a supported attribute and receiver shape; false otherwise.
     """
     if not isinstance(node, ast.Attribute):
         return False

@@ -1,6 +1,6 @@
 ---
 category: docs
-last_reviewed: 2026-06-14
+last_reviewed: 2026-11-25
 ---
 
 ## Footgun: `architecture.md` / `README.md` rule counts and default-off claims drift from the live catalogue
@@ -10,13 +10,13 @@ last_reviewed: 2026-06-14
 
 Hand-written rule-count summaries and capability claims in the docs go stale because the catalogue is the source of truth, not the prose. Measured 2026-05-30: `gruff-py list-rules --format json` reports **115** rules, but `.goat-flow/architecture.md` (search: `instantiates the full rule catalogue`) says "103 rules across 10 active pillars", and `README.md` says "116 rules" in one place (search: `rules across 11 pillars`) and "115" in another (search: `catalogue contains`). `.goat-flow/learning-loop/decisions/ADR-021-reviewability-profile.md` (search: `some `test-quality` members ship default-off`) also claims a subset of test-quality rules ship default-off — but no rule sets `default_enabled=False`: `src/gruffpy/rule/definition.py` (search: `default_enabled: bool = True`) and a grep of `src/gruffpy/rule/` for `default_enabled=False` returns nothing.
 
-The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a rule lands or retires (removing `complexity.npath` under ADR-021 took the count to 114; later pillar work raises it), reconcile all three doc surfaces in one pass. Group the per-pillar table by `Pillar`, not rule-ID prefix: `complexity.maintainability-index` → `maintainability`, every `docs.*` → `documentation`, every `waste.*` → `dead-code`, so counting `docs/rules.md` headers by prefix gives wrong per-pillar numbers (e.g. complexity 5-by-prefix vs 4-by-pillar, dead-code 3 vs 11). Authoritative counts come from iterating `RuleRegistry.defaults().all()` grouped on `definition().pillar.value` (2026-06-14 0.4.1 bump: 130 rules, 12 pillars).
+The non-obvious failure mode is that an agent reading these docs for rule facts (catalogue size, the default-off set) reasons from stale numbers — e.g. assuming it can opt-out a "default-off" test-quality rule that is actually default-on, or mis-stating the count in release notes. Verify rule facts against `gruff-py list-rules` / `RuleRegistry.defaults()`, never the prose. When a rule lands or retires (removing `complexity.npath` under ADR-021 took the count to 114; later pillar work raises it), reconcile all three doc surfaces in one pass. Group the per-pillar table by `Pillar`, not rule-ID prefix: every `docs.*` → `documentation` and every `waste.*` → `dead-code`, so counting `docs/rules.md` headers by prefix gives wrong per-pillar numbers (at 0.4.1, dead-code counted 3 by prefix vs 11 by pillar). Authoritative counts come from iterating `RuleRegistry.defaults().all()` grouped on `definition().pillar.value` (2026-06-14 0.4.1 bump: 130 rules, 12 pillars).
 
 ## Footgun: Docs parameter rules treat leading cls as an implicit receiver
 
 **Status:** active | **Created:** 2026-05-18 | **Evidence:** OBSERVED
 
-`src/gruffpy/rule/docs/_helpers.py` (`signature_param_names`) intentionally
+`src/gruffpy/rule/docs/_helpers.py` (search: `def signature_param_names`) intentionally
 removes a leading `self` or `cls` parameter before docstring matching. That
 policy also applies to module-level helper functions whose first parameter is
 named `cls`.
@@ -31,6 +31,13 @@ the `cls` parameter entry.
 ## Footgun: Committed docs cite milestone/task codes that point into the gitignored tasks dir
 
 **Status:** active | **Created:** 2026-05-31 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Never write milestone codes (`M01`, `M02`, `M14`) into committed docs or into generator string tables that render committed docs; replace them with release versions, ADR IDs, or plain prose.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-11-25
+
+**Prevention:** Before writing or regenerating any tracked doc (`CHANGELOG.md`, `UPGRADING.md`, `README.md`, `docs/*.md`), grep both the doc and its Python generator (`src/gruffpy/command/rule_docs.py`, search: `_DEFAULT_OFF_REASONS`) for `\bM[0-9]+[a-z]?\b` and replace milestone codes with release versions, ADR IDs, or plain descriptions.
 
 Tracked docs across the repo cite milestone codes (`M01`, `M22`, `M33+M34+M35`,
 etc.) as if they were stable references, but the task files those codes name
@@ -56,8 +63,7 @@ in a managed file is only as durable as the vendor's next release, so evidence
 for this footgun should anchor in project-owned files.
 
 The 2026-08-09 drop is the repair of the last `src`/`tests` occurrence: a
-comment in `tests/unit/finding/test_stable_identity.py` (now search:
-`emits stable identities`) cited a gitignored milestone as the precondition for
+comment in `tests/unit/finding/test_stable_identity.py` (search: `emits stable identities`) cited a gitignored milestone as the precondition for
 a cross-port ground-truth fixture. It blocked release closeout's stale-name
 audit twice before an operator approved the comment-only reword to name the
 real precondition instead. No committed code or test now carries a milestone
@@ -76,3 +82,5 @@ codes in file/folder/identifier *names*): do not cite them in committed code or
 doc *bodies* either. When editing any tracked doc, replace milestone-code
 citations you touch with the stable anchor; leave the goat-plan skill files
 alone, since their job is to document the naming convention itself.
+
+**Recurrence 2026-11-25:** During the `0.6.0` documentation clarity audit, `CHANGELOG.md` and `UPGRADING.md` carried `M02` citations (removed from both files), and `src/gruffpy/command/rule_docs.py` (search: `_DEFAULT_OFF_REASONS`), whose table was then named `_M02_DEFAULT_OFF_REASONS`, was found to inject 19 `M02`/`M14` milestone strings directly into generated `docs/rules.md`. Generator string tables leak milestone IDs back into committed docs on every `rule_docs --write` run unless cleaned at the Python source.

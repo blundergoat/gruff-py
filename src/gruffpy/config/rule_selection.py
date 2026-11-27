@@ -28,15 +28,13 @@ class RuleSelection:
     def is_allowed(self, definition: "RuleDefinition") -> bool:
         """Return whether *definition* survives both include and exclude selectors.
 
-        Include selectors are OR'd (any tier/pillar/rule match passes).
-        Exclude selectors always win - a rule explicitly excluded never
-        runs, regardless of include matches.
+        Any matching include admits a rule. With no includes, all rules are eligible. A matching exclusion always wins.
 
         Args:
-            definition: Rule definition to test.
+            definition: Rule whose tier, pillar and ID are checked against the selectors.
 
         Returns:
-            True when the rule should be registered and run.
+            True when the selectors allow this rule to run if it is enabled.
         """
         if not self._is_included(definition):
             return False
@@ -45,20 +43,23 @@ class RuleSelection:
         return definition.id not in self.exclude_rules
 
     def _is_included(self, definition: "RuleDefinition") -> bool:
+        """Match a rule against the include lists before exclusions are applied.
+
+        Args:
+            definition: Registered rule whose tier, pillar and id are compared with the include selectors.
+
+        Returns:
+            True when every include list is empty or any include selector matches; exclusions are checked by the caller.
+        """
         if not self.tiers and not self.pillars and not self.rules:
             return True
-        return (
-            definition.tier.value in self.tiers
-            or definition.pillar.value in self.pillars
-            or definition.id in self.rules
-        )
+        return definition.tier.value in self.tiers or definition.pillar.value in self.pillars or definition.id in self.rules
 
     def to_dict(self) -> dict[str, list[str]]:
         """Serialise the selection into the camelCase shape used in report metadata.
 
         Returns:
-            Plain dict with include and exclude lists for tiers, pillars,
-            and rule ids.
+            A new mapping containing tier, pillar and rule include lists, plus pillar and rule exclusion lists.
         """
         return {
             "tiers": list(self.tiers),

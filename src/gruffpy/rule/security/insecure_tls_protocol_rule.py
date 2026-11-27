@@ -39,10 +39,11 @@ _SOURCE_NEEDLES: tuple[str, ...] = (
     "PROTOCOL_SSLv23",
 )
 _REMEDIATION = (
-    "Use a modern TLS protocol - prefer `ssl.PROTOCOL_TLS_CLIENT` or "
-    "`ssl.PROTOCOL_TLS_SERVER`, or `ssl.PROTOCOL_TLSv1_2` if a specific "
-    "version is required. SSLv2, SSLv3, TLSv1, and TLSv1.1 have known "
-    "vulnerabilities and are deprecated."
+    "Use `ssl.create_default_context()` or `ssl.PROTOCOL_TLS_CLIENT` / "
+    "`ssl.PROTOCOL_TLS_SERVER`, and when a floor is required set "
+    "`context.minimum_version = ssl.TLSVersion.TLSv1_2`. SSLv2, SSLv3, TLSv1 "
+    "and TLSv1.1 have known weaknesses, and every version-pinned `PROTOCOL_*` "
+    "constant is deprecated."
 )
 
 
@@ -54,10 +55,7 @@ class InsecureTlsProtocolRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the insecure-TLS-protocol rule as a high-confidence ERROR.
 
-        ERROR severity because SSLv2/v3 and TLSv1/v1.1 are known-broken
-        protocols; high confidence because the matched attribute names are
-        unambiguous - they exist only to be passed to SSL context
-        constructors.
+        Explicit weak-protocol attribute names support high confidence in the matched syntactic shape.
 
         Returns:
             Definition for the insecure-TLS-protocol rule under the security
@@ -75,18 +73,14 @@ class InsecureTlsProtocolRule(Rule):
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
         """Flag ``ssl.PROTOCOL_<weak>`` attribute references.
 
-        The rule matches the ``ssl.<weak-protocol>`` attribute shape
-        anywhere it appears (assignment, argument, return). The
-        ``from ssl import PROTOCOL_TLSv1`` shape followed by a bare-name
-        reference is intentionally not matched - that import shape is rare
-        and the false-positive cost of bare-name reuse would dominate.
+        Only literal ssl attribute references are matched; bare imported names and module aliases are not resolved.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per insecure-protocol attribute reference.
+            One finding per matched attribute, or an empty list when parsing is unavailable or none match.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -108,6 +102,16 @@ def _build_finding(
     unit: AnalysisUnit,
     node: ast.Attribute,
 ) -> Finding:
+    """Build the finding for a matched deprecated ssl protocol attribute.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        node: Matched attribute whose name and source range identify the protocol reference.
+
+    Returns:
+        A finding with the protocol target, TLS remediation and handshake metadata.
+    """
     target = f"ssl.{node.attr}"
     return Finding(
         rule_id=definition.id,

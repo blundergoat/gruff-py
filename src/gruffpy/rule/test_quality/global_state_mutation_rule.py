@@ -30,9 +30,7 @@ class GlobalStateMutationRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the global-state-mutation rule as a medium-confidence warning.
 
-        Medium confidence because v0.1 detects only the explicit ``global``
-        declaration shape - direct module-level rebinding without ``global``
-        is not yet caught.
+        Only explicit global declarations are detected; other forms of module-state mutation are outside this rule.
 
         Returns:
             Definition tagging this rule under the test-quality pillar.
@@ -47,19 +45,16 @@ class GlobalStateMutationRule(Rule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag test functions that declare ``global`` to rebind a module-level name.
+        """Flag explicit global declarations in test bodies, including nested class bodies. The scan stops at nested function boundaries.
 
-        Stops at the first ``global`` statement per test (one finding per
-        function is enough); module-level state leaks across tests and breaks
-        order-independence.
+        Only the first declaration contributes a finding, so its names define the reported metadata.
 
         Args:
-            unit: Parsed source file to inspect.
+            unit: Parsed source file to inspect. A missing AST yields no findings.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per test that uses ``global``, with the affected
-            names captured in metadata.
+            One finding per test with a declaration in its scanned body, with the first declaration's names captured in metadata.
         """
         if unit.tree is None:
             return []
@@ -83,10 +78,7 @@ class GlobalStateMutationRule(Rule):
                         confidence=definition.confidence,
                         end_line=node.end_lineno,
                         symbol=symbol,
-                        remediation=(
-                            "Replace global state with explicit parameters or a fixture; "
-                            "isolate tests so order doesn't matter."
-                        ),
+                        remediation=("Replace global state with explicit parameters or a fixture; isolate tests so order doesn't matter."),
                         secondary_pillars=definition.secondary_pillars,
                         metadata={"names": list(node.names)},
                     ),

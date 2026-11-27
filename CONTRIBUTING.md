@@ -40,22 +40,25 @@ When adding or changing a rule:
 
 Be careful with:
 
-- `gruff.analysis.v2`
+- `gruff.analysis.v3`
+- `gruff.summary.v3`
+- `gruff.baseline.v3`
+- `gruff.hook.v2`
 - `gruff-py.hotspot.v1`
-- `gruff-py.baseline.v1`
 - finding fingerprint inputs
 - rule IDs
 - score weights and grade bands
 - report format names
 
-Changes in those areas should be intentional and called out in the changelog.
+Changes in those areas should be intentional and called out in `CHANGELOG.md`.
 
-The schema-string prefixes are deliberately mixed: analysis and summary use the
-language-neutral `gruff.*` family (e.g. `gruff.analysis.v2`) so cross-port JSON
-consumers share one string, while baseline, hotspot, and config stay
-language-prefixed (`gruff-py.*`). Do not "unify" the language-prefixed strings to
-finish an apparent migration — that split is intentional, and any change must be
-coordinated across the sibling implementations.
+The schema-string prefixes are intentionally split: analysis, summary, baseline,
+and hook use the language-neutral `gruff.*` family (such as `gruff.analysis.v3`)
+so cross-port consumers share one identifier, while hotspot and config stay
+language-prefixed (`gruff-py.*`). Do not rename the language-prefixed strings on
+your own — any change must be coordinated across the sibling implementations.
+`gruff-py.baseline.v1` and `gruff.baseline.v1` are legacy inputs that fail
+closed, not current outputs.
 
 ## Commit Style
 

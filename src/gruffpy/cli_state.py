@@ -46,18 +46,18 @@ def state(ctx: click.Context | None = None) -> CliState:
     """Find the terminal choices attached to the nearest Click context.
 
     Use from any subcommand callback; no explicit context searches Click's active command.
-    With no parent state, defaults leave output and interaction enabled.
+    When no context supplies CLI state, defaults leave output and interaction enabled.
 
     Args:
         ctx: Explicit context; None searches the active command. No active command uses defaults.
 
     Returns:
-        Shared CLI state - never ``None``.
+        The nearest context's existing CLI state, or a fresh default state when none is attached.
     """
     current = ctx or click.get_current_context(silent=True)
-    # Each subcommand inherits the first shared state attached by its nearest parent command.
+    # A subcommand without its own CLI state can reuse terminal choices from a parent context.
     while current is not None:
-        # A matching context gives this callback the terminal choices made at the root.
+        # The nearest settings take precedence if several contexts supply CLI state.
         if isinstance(current.obj, CliState):
             return current.obj
         current = current.parent

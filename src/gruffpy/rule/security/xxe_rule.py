@@ -48,10 +48,10 @@ _UNSAFE_XML_TARGETS: frozenset[str] = frozenset(
 )
 _SOURCE_NEEDLES: tuple[str, ...] = ("xml", "lxml", "etree", "minidom", "pulldom", "sax")
 _REMEDIATION = (
-    "Replace stdlib/lxml XML parsers with the corresponding `defusedxml` "
-    "module (e.g. `from defusedxml.ElementTree import parse`). defusedxml "
-    "disables external-entity resolution and DTD processing, blocking XXE, "
-    "billion-laughs, and external-DTD attacks."
+    "Replace stdlib or lxml XML parsers with the matching `defusedxml` module "
+    "(for example `from defusedxml.ElementTree import parse`). defusedxml refuses "
+    "entity declarations and external references by default; pass "
+    "`forbid_dtd=True` to reject DTDs as well."
 )
 _XML_MODULE_PREFIXES: tuple[str, ...] = ("xml.", "lxml.")
 
@@ -64,11 +64,6 @@ class XxeRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the XXE rule as a high-confidence ERROR.
 
-        ERROR severity because XXE is a well-documented exfiltration and SSRF
-        vector on un-hardened parsers; high confidence because the matched
-        call targets exist only to parse XML and the defusedxml allowlist
-        cleanly removes the migration false-positive class.
-
         Returns:
             Definition for the XXE rule under the security pillar.
         """
@@ -79,24 +74,20 @@ class XxeRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.ERROR,
             confidence=Confidence.HIGH,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag calls to XXE-vulnerable XML parsers, allowlisting defusedxml files.
+        """Flag XML parser call targets after resolving aliases from direct module-body imports.
 
-        Walks top-level imports to build an alias map (``ET`` →
-        ``xml.etree.ElementTree``, ``etree`` → ``lxml.etree``, etc.) and
-        normalises each call target through the map before checking it
-        against the unsafe-target set. Any ``import defusedxml`` /
-        ``from defusedxml`` in the file suppresses the rule for the whole
-        file, on the assumption the migration is in progress.
+        A direct defusedxml import suppresses findings for the file.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per unsafe XML parser call.
+            One finding per matched unsafe parser call, or an empty list when none qualify or syntax is absent.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -116,6 +107,16 @@ class XxeRule(Rule):
 
 
 def _has_defusedxml_import(tree: ast.AST) -> bool:
+    """Check direct module-body imports for defusedxml or one of its submodules.
+
+    A positive result suppresses this rule for the entire file; nested imports are not inspected.
+
+    Args:
+        tree: Syntax tree whose direct module-body import statements are inspected.
+
+    Returns:
+        True for a matching direct import; False for non-module trees or when no direct import matches.
+    """
     if not isinstance(tree, ast.Module):
         return False
     for node in tree.body:
@@ -123,11 +124,7 @@ def _has_defusedxml_import(tree: ast.AST) -> bool:
             for alias in node.names:
                 if alias.name == "defusedxml" or alias.name.startswith("defusedxml."):
                     return True
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and (node.module == "defusedxml" or node.module.startswith("defusedxml."))
-        ):
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and (node.module == "defusedxml" or node.module.startswith("defusedxml.")):
             return True
     return False
 
@@ -146,7 +143,7 @@ class _XmlAliases:
             tree: Module AST to inspect for XML imports.
 
         Returns:
-            Alias map keyed by local name with fully-qualified targets.
+            Resolver holding local names and their qualified targets. It leaves targets unchanged without a module tree or qualifying imports.
         """
         aliases: dict[str, str] = {}
         if not isinstance(tree, ast.Module):
@@ -179,6 +176,15 @@ class _XmlAliases:
 
 
 def _record_import(node: ast.Import, aliases: dict[str, str]) -> None:
+    """Record aliases for direct XML module imports in the supplied map.
+
+    Args:
+        node: Import statement to inspect for xml, lxml or their submodules.
+        aliases: Alias map to mutate; matching imports are recorded only when they have an explicit alias.
+
+    Returns:
+        None; matching imports update aliases in place.
+    """
     for alias in node.names:
         if not alias.name.startswith(_XML_MODULE_PREFIXES) and alias.name not in {"xml", "lxml"}:
             continue
@@ -187,6 +193,15 @@ def _record_import(node: ast.Import, aliases: dict[str, str]) -> None:
 
 
 def _record_from_import(node: ast.ImportFrom, aliases: dict[str, str]) -> None:
+    """Record named imports from XML modules in the supplied alias map.
+
+    Args:
+        node: From-import statement to inspect for xml, lxml or their submodules. A relative import with no module name adds no alias.
+        aliases: Alias map to mutate with qualified imported names; star imports are skipped.
+
+    Returns:
+        None; matching imports update aliases in place.
+    """
     module = node.module
     if module is None:
         return
@@ -205,12 +220,20 @@ def _build_finding(
     call: ast.Call,
     target: str,
 ) -> Finding:
+    """Build the finding for a matched XML parser call.
+
+    Args:
+        definition: Rule metadata supplying identity and classification.
+        unit: Source unit supplying the displayed file path.
+        call: Matched parser call supplying the source range.
+        target: Normalized parser target to include in the message and metadata.
+
+    Returns:
+        A finding with XML-parser remediation and external-entity metadata.
+    """
     return Finding(
         rule_id=definition.id,
-        message=(
-            f"`{target}(...)` parses XML without external-entity protections - "
-            "XXE / billion-laughs risk."
-        ),
+        message=(f"`{target}(...)` parses XML without external-entity protections - XXE / billion-laughs risk."),
         file_path=unit.file.display_path,
         line=call.lineno,
         severity=definition.default_severity,

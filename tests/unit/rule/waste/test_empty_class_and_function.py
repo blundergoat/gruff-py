@@ -1,19 +1,30 @@
 import ast
 
+import pytest
+
 from gruffpy.config.analysis_config import AnalysisConfig
 from gruffpy.config.rule_settings import RuleSettings
 from gruffpy.parser.analysis_unit import AnalysisUnit
 from gruffpy.rule.context import RuleContext
-from gruffpy.rule.waste.empty_class_rule import EmptyClassRule
 from gruffpy.rule.waste.empty_function_rule import EmptyFunctionRule
 from gruffpy.source.source_file import SourceFile
 
 
 def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
+    """Parse source, link every non-root AST node to its parent and wrap the result as an analysis unit.
+
+    Args:
+        source: Python module source to parse.
+        display_path: Path the unit displays; its absolute path is the same path under /.
+
+    Returns:
+        An analysis unit whose non-root tree nodes carry parent links.
+        Attaching links can overwrite parents on shared AST operator and context nodes, including nodes in previously parsed trees.
+    """
     tree = ast.parse(source)
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent  # type: ignore[attr-defined]  # AST parent links
+            child.parent = parent  # type: ignore[attr-defined]  # The rule uses this extra AST attribute to find enclosing nodes.
     return AnalysisUnit(
         file=SourceFile(absolute_path=f"/{display_path}", display_path=display_path, type="python"),
         source=source,
@@ -22,89 +33,26 @@ def _unit(source: str, display_path: str = "x.py") -> AnalysisUnit:
 
 
 def _ctx_for(rule_id: str) -> RuleContext:
+    """Build a context whose config holds only the given rule's settings, with that rule enabled.
+
+    Args:
+        rule_id: Identifier of the rule to enable.
+
+    Returns:
+        A context rooted at / with that one-rule config.
+    """
     return RuleContext(
         project_root="/",
         config=AnalysisConfig(rules={rule_id: RuleSettings(enabled=True)}),
     )
 
 
-def test_empty_class_pass_fires():
-    src = "class C:\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert len(findings) == 1
-    assert findings[0].symbol == "C"
-
-
-def test_empty_class_ellipsis_fires():
-    src = "class C:\n    ...\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert len(findings) == 1
-
-
-def test_protocol_marker_class_does_not_fire():
-    src = "from typing import Protocol\nclass P(Protocol):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_abc_marker_class_does_not_fire():
-    src = "from abc import ABC\nclass C(ABC):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_exception_marker_class_does_not_fire():
-    src = "class ConfigError(Exception):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_subclass_of_custom_error_does_not_fire():
-    # Exception ancestry by Python naming convention: a base whose name ends in
-    # Error/Exception/Warning is treated as exception-flavoured even when its own
-    # definition isn't in this file (e.g. RuntimeError, or a project-defined
-    # `class VoiceTurnError(Exception)`).
-    src = (
-        "class VoiceTurnError(Exception):\n"
-        "    pass\n"
-        "class VoiceTurnTimeoutError(VoiceTurnError):\n"
-        "    pass\n"
-    )
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_subclass_of_runtime_error_does_not_fire():
-    src = "class ScenarioRunError(RuntimeError):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_subclass_of_user_warning_does_not_fire():
-    src = "class BazWarning(UserWarning):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_internal_marker_base_class_does_not_fire():
-    src = "from abc import ABC\nclass Rule(ABC): ...\nclass SourceTextRule(Rule):\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_dataclass_with_pass_body_does_not_fire():
-    src = "from dataclasses import dataclass\n@dataclass\nclass C:\n    pass\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
-def test_class_with_body_does_not_fire():
-    src = "class C:\n    x = 1\n"
-    findings = EmptyClassRule().analyse(_unit(src), _ctx_for("waste.empty-class"))
-    assert findings == []
-
-
 def test_empty_function_pass_fires():
+    """Report one finding, naming f, for a function whose body is only pass.
+
+    Returns:
+        None. Asserts that a pass-only function produces one finding naming f.
+    """
     src = "def f():\n    pass\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert len(findings) == 1
@@ -112,49 +60,78 @@ def test_empty_function_pass_fires():
 
 
 def test_empty_function_ellipsis_fires():
+    """Report one finding for a function whose body is only an ellipsis.
+
+    Returns:
+        None. Asserts that an ellipsis-only function produces one finding.
+    """
     src = "def f():\n    ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert len(findings) == 1
 
 
 def test_abstract_method_does_not_fire():
-    src = (
-        "from abc import ABC, abstractmethod\n"
-        "class A(ABC):\n"
-        "    @abstractmethod\n"
-        "    def m(self): ...\n"
-    )
+    """Report nothing for an @abstractmethod whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that an abstract method with an ellipsis body produces no findings.
+    """
+    src = "from abc import ABC, abstractmethod\nclass A(ABC):\n    @abstractmethod\n    def m(self): ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_overload_stub_does_not_fire():
+    """Report nothing for an @overload stub followed by its implementation.
+
+    Returns:
+        None. Asserts that an overload stub followed by its implementation produces no findings.
+    """
     src = "from typing import overload\n@overload\ndef f(x: int) -> int: ...\ndef f(x): return x\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_protocol_method_stub_does_not_fire():
+    """Report nothing for a Protocol method whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that a Protocol method with an ellipsis body produces no findings.
+    """
     src = "from typing import Protocol\nclass P(Protocol):\n    def m(self):\n        ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_pytest_fixture_does_not_fire():
+    """Report nothing for a pytest.fixture function whose body is an ellipsis.
+
+    Returns:
+        None. Asserts that a pytest fixture with an ellipsis body produces no findings.
+    """
     src = "import pytest\n@pytest.fixture\ndef setup():\n    ...\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_function_with_body_does_not_fire():
+    """Report nothing for a function that returns a value.
+
+    Returns:
+        None. Asserts that a function returning a value produces no findings.
+    """
     src = "def f():\n    return 1\n"
     findings = EmptyFunctionRule().analyse(_unit(src), _ctx_for("waste.empty-function"))
     assert findings == []
 
 
 def test_function_with_docstring_and_pass_fires():
-    # Docstring + pass should still count as empty (the docstring is just a
-    # comment for the purposes of this rule).
+    """Report one finding for a function whose body is a docstring and pass.
+
+    Returns:
+        None. Asserts that a function containing only a docstring and pass produces one finding.
+    """
+    # Docstring + pass should still count as empty (the docstring is just a comment for the purposes of this rule).
     src = '''def f():
     """A function."""
     pass
@@ -164,6 +141,11 @@ def test_function_with_docstring_and_pass_fires():
 
 
 def test_test_double_empty_method_does_not_fire():
+    """Report nothing for the empty close method of a FakeTerminal class in a file under tests/.
+
+    Returns:
+        None. Asserts that the empty FakeTerminal.close method produces no findings under tests/.
+    """
     src = "class FakeTerminal:\n    def close(self):\n        pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),
@@ -173,6 +155,11 @@ def test_test_double_empty_method_does_not_fire():
 
 
 def test_production_test_double_name_still_fires():
+    """Report one finding for the empty close method of a FakeTerminal class in a file under src/.
+
+    Returns:
+        None. Asserts that the fixture with an empty FakeTerminal.close method under src/ produces one finding.
+    """
     src = "class FakeTerminal:\n    def close(self):\n        pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "src/gruffpy/terminal.py"),
@@ -181,7 +168,59 @@ def test_production_test_double_name_still_fires():
     assert len(findings) == 1
 
 
+@pytest.mark.parametrize(
+    "source, exempt",
+    [
+        (
+            'from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            True,
+        ),
+        ('def pytest_exception_interact(node):\n    """Plugin hook specification."""\n', False),
+        (
+            'from elsewhere import HookspecMarker\nhookspec = HookspecMarker("pytest")\n'
+            'def pytest_exception_interact(node):\n    """Plugin hook specification."""\n',
+            False,
+        ),
+        ('from pluggy import HookspecMarker\nhookspec = HookspecMarker("pytest")\ndef ordinary(node):\n    """Unimplemented function."""\n', False),
+        ("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    def instance_dict(instance): ...\n", True),
+        ('import typing\nif typing.TYPE_CHECKING:\n    async def instance_dict(instance):\n        """Typing declaration."""\n        ...\n', True),
+        ("if TYPE_CHECKING:\n    pass\nelse:\n    def instance_dict(instance): ...\n", False),
+        ("if TYPE_CHECKING:\n    def instance_dict(instance): pass\n", False),
+        ("if DEBUG:\n    def instance_dict(instance): ...\n", False),
+    ],
+    ids=[
+        "pluggy-hookspec",
+        "hook-name-without-marker",
+        "non-pluggy-marker",
+        "pluggy-marker-ordinary-function",
+        "type-checking-stub",
+        "typing-attribute-async-stub",
+        "type-checking-else-branch",
+        "type-checking-pass-body",
+        "unrelated-guard",
+    ],
+)
+def test_source_proven_declarations(source: str, exempt: bool) -> None:
+    """Report nothing for a pluggy hook specification or an ellipsis stub under TYPE_CHECKING, and findings for each near miss.
+
+    Args:
+        source: Module source with one empty function: a hook specification, a type-checking stub or a near miss of either.
+        exempt: Whether the rule should report nothing.
+
+    Returns:
+        None. Asserts that findings are absent exactly when exempt is true.
+    """
+    findings = EmptyFunctionRule().analyse(_unit(source), _ctx_for("waste.empty-function"))
+    assert (not findings) is exempt
+
+
 def test_nested_inner_test_double_class_exempts_its_method():
+    """Report nothing for the empty method of a FakeClient class nested in a plain class, in a test file.
+
+    Returns:
+        None. Asserts that an empty method on a nested FakeClient in a test file produces no findings.
+    """
     src = "class Suite:\n    class FakeClient:\n        def close(self):\n            pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),
@@ -191,9 +230,75 @@ def test_nested_inner_test_double_class_exempts_its_method():
 
 
 def test_nested_plain_class_in_test_double_outer_still_fires():
+    """Report one finding for the empty method of a plain class nested in a FakeSuite class, in a test file.
+
+    Returns:
+        None. Asserts that the test fixture with an empty method on Helper inside FakeSuite produces one finding.
+    """
     src = "class FakeSuite:\n    class Helper:\n        def close(self):\n            pass\n"
     findings = EmptyFunctionRule().analyse(
         _unit(src, "tests/unit/test_terminal.py"),
         _ctx_for("waste.empty-function"),
     )
     assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    "source, display_path, expected_count",
+    [
+        (
+            "import unittest\nclass WrapLabelsTest(unittest.TestCase):\n    class _Tracer:\n        def end_span(self, span):\n            pass\n",
+            "tests/test_eval_labels.py",
+            0,
+        ),
+        (
+            "class TestRunner:\n    class _Client:\n        def close(self):\n            pass\n",
+            "tests/test_runner.py",
+            0,
+        ),
+        (
+            "class OrderTestCase(CustomBase):\n    class _Gateway:\n        def charge(self):\n            pass\n",
+            "tests/test_orders.py",
+            0,
+        ),
+        (
+            "def test_closes_client():\n    class _Client:\n        def close(self):\n            pass\n",
+            "tests/test_runner.py",
+            0,
+        ),
+        (
+            'def _no_after_php_response(session):\n    """Flows without local capture state do nothing."""\n',
+            "src/tools/flow_hooks.py",
+            1,
+        ),
+    ],
+    ids=[
+        "nested-class-in-unittest-case",
+        "nested-class-in-test-prefixed-class",
+        "nested-class-in-testcase-named-class",
+        "nested-class-in-test-function",
+        "production-lone-docstring-still-warns",
+    ],
+)
+def test_nested_test_doubles_exempt_while_production_lone_docstring_warns(
+    source: str,
+    display_path: str,
+    expected_count: int,
+) -> None:
+    """Exempt empty methods on classes nested inside test classes or functions while keeping production lone-docstring warnings.
+
+    Args:
+        source: Module source exercising nested test helpers or a production lone-docstring function.
+        display_path: Display path determining whether the file is treated as a test path.
+        expected_count: Expected number of waste.empty-function findings.
+
+    Returns:
+        None. Asserts exact finding count and warning severity when a finding is expected.
+    """
+    findings = EmptyFunctionRule().analyse(
+        _unit(source, display_path),
+        _ctx_for("waste.empty-function"),
+    )
+    assert len(findings) == expected_count
+    if expected_count:
+        assert findings[0].severity.value == "warning"

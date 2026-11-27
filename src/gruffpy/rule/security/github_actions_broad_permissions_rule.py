@@ -45,14 +45,14 @@ class GithubActionsBroadPermissionsRule(SourceTextRule):
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag each ``permissions: write-all`` grant in a workflow file.
+        """Scan workflow text for a permissions: write-all pattern that starts at the beginning of a line after any indentation.
 
         Args:
             unit: Source file whose raw text is scanned.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per ``write-all`` permissions grant.
+            One finding per text match. Empty for non-workflow files or when there is no match.
         """
         if not is_workflow_file(unit.file.display_path):
             return []

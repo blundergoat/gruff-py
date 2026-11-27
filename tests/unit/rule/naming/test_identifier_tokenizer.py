@@ -47,6 +47,15 @@ from gruffpy.rule.naming._identifier_tokenizer import lower_tokens, tokenize
     ],
 )
 def test_tokenize(identifier: str, expected: list[str]) -> None:
+    """Split an identifier into its snake-case, camel-case, acronym and digit tokens, dropping underscores.
+
+    Args:
+        identifier: Identifier to split; the cases cover empty, underscore-only, snake, camel, acronym, digit and dunder shapes.
+        expected: Tokens the case expects, in order.
+
+    Returns:
+        None after checking the ordered tokens, including an empty list for empty or underscore-only input.
+    """
     assert tokenize(identifier) == expected
 
 
@@ -59,4 +68,13 @@ def test_tokenize(identifier: str, expected: list[str]) -> None:
     ids=["acronym_prefix", "mixed_snake_camel"],
 )
 def test_lower_tokens(identifier: str, expected: list[str]) -> None:
+    """Split an identifier into lower-cased tokens.
+
+    Args:
+        identifier: Identifier with an acronym prefix or mixed snake and camel case.
+        expected: Lower-cased tokens the case expects, in order.
+
+    Returns:
+        None after checking that the lowercase tokens match the expected sequence.
+    """
     assert lower_tokens(identifier) == expected

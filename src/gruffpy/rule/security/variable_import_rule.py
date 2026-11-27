@@ -24,9 +24,7 @@ from gruffpy.rule.security._security_node_helper import (
     module_string_constants,
 )
 
-_VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset(
-    {"importlib.import_module", "__import__", "import_module"}
-)
+_VARIABLE_IMPORT_TARGETS: frozenset[str] = frozenset({"importlib.import_module", "__import__", "import_module"})
 _SOURCE_NEEDLES: tuple[str, ...] = ("import_module", "__import__")
 
 
@@ -38,9 +36,7 @@ class VariableImportRule(Rule):
     def definition(self) -> RuleDefinition:
         """Describe the variable-import rule as a medium-confidence warning.
 
-        Medium confidence because plugin loaders and command dispatchers
-        legitimately import dynamically; the rule fires on the shape and
-        leaves the allowlist enforcement to the application.
+        Dynamic imports can be legitimate plugin or command dispatch; findings leave allowlist enforcement to the application.
 
         Returns:
             Definition for the variable-import rule under the security pillar.
@@ -52,23 +48,21 @@ class VariableImportRule(Rule):
             tier=RuleTier.V01,
             default_severity=Severity.WARNING,
             confidence=Confidence.MEDIUM,
+            default_enabled=False,
         )
 
     def analyse(self, unit: AnalysisUnit, context: RuleContext) -> list[Finding]:
-        """Flag ``importlib.import_module(name)`` and ``__import__(name)`` with non-literal name.
+        """Check module names passed to importlib.import_module, bare import_module, and __import__.
 
-        ``exec("import " + ...)`` lands under
-        ``security.dangerous-function-call`` and is intentionally not
-        duplicated here. Literal arguments and expressions built only from
-        same-module ALL-CAPS string constants are skipped (equivalent to a
-        normal import).
+        String literals and supported expressions built from same-module ALL-CAPS string constants are skipped.
 
         Args:
             unit: Parsed source file to inspect.
             context: Rule execution context (unused - no thresholds).
 
         Returns:
-            One finding per dynamic-module-name import call.
+            One finding per matched call whose first positional argument is neither a string literal nor a recognized fixed string.
+            An empty list means no call qualifies or the file has no parsed tree.
         """
         if unit.tree is None or not any(needle in unit.source for needle in _SOURCE_NEEDLES):
             return []
@@ -97,10 +91,7 @@ class VariableImportRule(Rule):
                     tier=definition.tier,
                     confidence=definition.confidence,
                     end_line=node.end_lineno,
-                    remediation=(
-                        "Validate the module name against an explicit allowlist before "
-                        "passing it to ``importlib.import_module``."
-                    ),
+                    remediation=("Validate the module name against an explicit allowlist before passing it to ``importlib.import_module``."),
                     secondary_pillars=definition.secondary_pillars,
                     metadata={"target": target},
                 ),
